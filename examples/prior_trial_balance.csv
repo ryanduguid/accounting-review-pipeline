@@ -1,0 +1,8 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-06-30,Acme Demo Pty Ltd,Assets,100,Operating Bank,1000,10000.00,0.00,105000.00,0.00
+2026-06-30,Acme Demo Pty Ltd,Assets,110,Trade Debtors,1100,11000.00,0.00,73000.00,0.00
+2026-06-30,Acme Demo Pty Ltd,Liabilities,200,Trade Creditors,2000,0.00,8000.00,0.00,56000.00
+2026-06-30,Acme Demo Pty Ltd,Revenue,300,Sales Revenue,4000,0.00,12000.00,0.00,116000.00
+2026-06-30,Acme Demo Pty Ltd,Expenses,400,Cost of Sales,5000,7000.00,0.00,72000.00,0.00
+2026-06-30,Acme Demo Pty Ltd,Expenses,500,Operating Expenses,6000,10000.00,0.00,78000.00,0.00
+2026-06-30,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,18000.00,0.00,156000.00

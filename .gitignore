@@ -1,0 +1,18 @@
+# Never commit a client's ledger export, workpaper, credentials, or generated review pack.
+*.csv
+!examples/*.csv
+!schemas/*.csv
+outputs/
+review-notes/
+.env
+.env.*
+!.env.example
+*.token
+*.tokens
+*.pem
+__pycache__/
+.pytest_cache/
+.venv/
+build/
+dist/
+*.egg-info/
