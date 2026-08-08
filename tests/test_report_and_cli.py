@@ -40,6 +40,21 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
                 reason="Demo only.",
                 reviewer_action="Review.",
             ),
+            ExceptionItem(
+                control="period_variance",
+                status="REVIEW",
+                tenant="-2+3",
+                account_id="@SUM(A1)",
+                account_code="+1-1",
+                account_name="-cmd|xyz",
+                current_value=Decimal("2000"),
+                prior_value=Decimal("0"),
+                difference=Decimal("2000"),
+                threshold=Decimal("100"),
+                percentage_change=None,
+                reason="Demo only.",
+                reviewer_action="Review.",
+            ),
         ),
         acknowledgement=None,
     )
@@ -50,11 +65,18 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert first["json"].read_text(encoding="utf-8") == second["json"].read_text(encoding="utf-8")
     assert first["summary"].read_text(encoding="utf-8") == second["summary"].read_text(encoding="utf-8")
     with first["exceptions"].open(encoding="utf-8", newline="") as source:
-        row = next(csv.DictReader(source))
-    assert row["tenant"] == "'=untrusted"
-    assert row["account_id"] == "'@123"
-    assert row["account_code"] == "'-1000"
-    assert row["account_name"] == "'+unsafe"
+        rows = list(csv.DictReader(source))
+    # '=' is always neutralised; '+', '-', '@' followed by a plain identifier
+    # pass through so account codes and IDs stay joinable in Excel/Power BI.
+    assert rows[0]["tenant"] == "'=untrusted"
+    assert rows[0]["account_id"] == "@123"
+    assert rows[0]["account_code"] == "-1000"
+    assert rows[0]["account_name"] == "+unsafe"
+    # '+', '-', '@' followed by formula-capable text must still be neutralised.
+    assert rows[1]["tenant"] == "'-2+3"
+    assert rows[1]["account_id"] == "'@SUM(A1)"
+    assert rows[1]["account_code"] == "'+1-1"
+    assert rows[1]["account_name"] == "'-cmd|xyz"
 
 
 def test_cli_writes_review_pack_and_returns_attention_exit_code(tmp_path: Path) -> None:
