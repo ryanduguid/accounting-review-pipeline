@@ -79,6 +79,47 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert rows[1]["account_name"] == "'-cmd|xyz"
 
 
+def test_markdown_table_escapes_pipes_and_newlines(tmp_path: Path) -> None:
+    pack = CloseReviewPack(
+        status="REVIEW",
+        current_report_dates=("2026-07-31",),
+        prior_report_dates=("2026-06-30",),
+        source_hashes={"current_trial_balance": "abc"},
+        absolute_threshold=Decimal("1000"),
+        percentage_threshold=Decimal("0.10"),
+        reconciliation_tolerance=Decimal("0.01"),
+        exceptions=(
+            ExceptionItem(
+                control="period_variance",
+                status="REVIEW",
+                tenant="Acme | Demo",
+                account_id="100",
+                account_code="1000",
+                account_name="Bank | Operating",
+                current_value=Decimal("1000"),
+                prior_value=Decimal("0"),
+                difference=Decimal("1000"),
+                threshold=Decimal("100"),
+                percentage_change=None,
+                reason="Line one.\nLine two | with pipe.",
+                reviewer_action="Review.",
+            ),
+        ),
+        acknowledgement=None,
+    )
+
+    outputs = write_review_pack(pack, tmp_path / "pack")
+    summary = outputs["summary"].read_text(encoding="utf-8")
+    data_row = next(line for line in summary.splitlines() if line.startswith("| REVIEW |"))
+
+    # Unescaped pipes would split the row into extra columns; the table row
+    # must keep exactly six cells with every embedded pipe escaped.
+    assert data_row.count("|") - data_row.count("\\|") == 7
+    assert "Acme \\| Demo" in data_row
+    assert "Bank \\| Operating" in data_row
+    assert "Line one. Line two \\| with pipe." in data_row
+
+
 def test_cli_writes_review_pack_and_returns_attention_exit_code(tmp_path: Path) -> None:
     output = tmp_path / "pack"
     exit_code = main(

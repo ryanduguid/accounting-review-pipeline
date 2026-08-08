@@ -78,6 +78,11 @@ def _as_json(pack: CloseReviewPack) -> dict:
     }
 
 
+def _md_cell(value: str) -> str:
+    """Flatten embedded newlines and escape pipes so a value cannot break a table row."""
+    return " ".join(value.split()).replace("|", "\\|")
+
+
 def _as_markdown(pack: CloseReviewPack) -> str:
     blocked = sum(item.status == "BLOCKED" for item in pack.exceptions)
     review = sum(item.status == "REVIEW" for item in pack.exceptions)
@@ -111,9 +116,10 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         ]
         for item in pack.exceptions:
             account = " / ".join(piece for piece in (item.account_code, item.account_name) if piece) or item.account_id or "—"
-            account = account.replace("|", "\\|")
-            reason = item.reason.replace("|", "\\|")
-            lines.append(f"| {item.status} | {item.control} | {item.tenant or '—'} | {account} | {_money(item.difference) or '—'} | {reason} |")
+            account = _md_cell(account)
+            reason = _md_cell(item.reason)
+            tenant = _md_cell(item.tenant or "—")
+            lines.append(f"| {item.status} | {item.control} | {tenant} | {account} | {_money(item.difference) or '—'} | {reason} |")
     lines += ["", "## Human acknowledgement", ""]
     if pack.acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
