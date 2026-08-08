@@ -88,8 +88,9 @@ def load_canonical_tb(path: Path) -> list[TrialBalanceRow]:
         for row_number, values in enumerate(reader, start=2):
             if None in values:
                 raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
+            raw_date = _text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path)
             try:
-                report_date = date.fromisoformat(_text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path))
+                report_date = date.fromisoformat(raw_date)
             except ValueError as exc:
                 raise ControlInputError(f"{path}: row {row_number} has an invalid ISO ReportDate.") from exc
             row = TrialBalanceRow(
