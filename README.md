@@ -104,7 +104,7 @@ An acknowledgement is evidence of a human action only. It **never** changes `REV
 ## Data and operational boundaries
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` deliberately blocks CSVs outside `examples/` and generated packs.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` deliberately blocks CSVs outside `examples/` and `schemas/`, and blocks generated packs.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage, and client authorisation are deliberately outside this MVP.
 - Do not use this as tax, financial, audit, or legal advice. It is a configurable review aid that requires professional judgement.
 
@@ -126,5 +126,7 @@ The next layers are deliberately separated from the control engine:
 2. A tax-change impact monitor that records authoritative source versions, produces drafts for human review, and never turns legislation changes into an automatic client conclusion.
 
 See [docs/follow-on-safety-layers.md](docs/follow-on-safety-layers.md) for the intended boundary contracts.
+
+Built with AI assistance (Claude); design, review, and testing by the author.
 
 MIT licensed.
