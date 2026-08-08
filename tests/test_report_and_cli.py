@@ -5,6 +5,8 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from closecontrol.cli import main
 from closecontrol.engine import CloseReviewPack, review_close
 from closecontrol.models import ExceptionItem
@@ -151,3 +153,22 @@ def test_cli_returns_one_for_malformed_input(tmp_path: Path) -> None:
     ])
 
     assert exit_code == 1
+
+
+def test_cli_returns_one_for_usage_errors(capsys, tmp_path: Path) -> None:
+    # A typo'd flag must exit 1 (invalid command configuration), never 2,
+    # which the exit contract reserves for a pack needing review.
+    assert main(["review", "--no-such-flag"]) == 1
+    # A missing required argument is the same contract.
+    assert main(["review", "--current", str(EXAMPLES / "current_trial_balance.csv")]) == 1
+    # An unknown subcommand as well.
+    assert main(["frobnicate"]) == 1
+    capsys.readouterr()
+
+
+def test_cli_help_still_exits_zero(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--help"])
+
+    assert excinfo.value.code == 0
+    capsys.readouterr()
