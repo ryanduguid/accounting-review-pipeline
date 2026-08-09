@@ -4,7 +4,7 @@ The close-control engine is deliberately a local review-pack generator. It shoul
 
 ## Xero AI Review Gateway
 
-The intended next component is [`xero-ai-review-gateway`](../../xero-ai-review-gateway), a fixed-policy, synthetic-data demonstration of how a future AI assistant can receive a bounded variance-review result without controlling Xero.
+The intended next component is [`xero-ai-review-gateway`](https://github.com/ryanduguid/xero-ai-review-gateway), a fixed-policy, synthetic-data demonstration of how a future AI assistant can receive a bounded variance-review result without controlling Xero.
 
 ```text
 Authorised human-operated read-only export
@@ -23,7 +23,7 @@ The gateway must not accept a natural-language tool request, an arbitrary Xero/M
 
 ## AU Tax Change Impact Monitor
 
-The intended next component is [`au-tax-change-impact-monitor`](../../au-tax-change-impact-monitor), a provenance-first synthetic demonstration that turns version metadata into a technical-review queue.
+The intended next component is [`au-tax-change-impact-monitor`](https://github.com/ryanduguid/au-tax-change-impact-monitor), a provenance-first synthetic demonstration that turns version metadata into a technical-review queue.
 
 ```text
 Reviewed source-index metadata + reviewed Register observation
