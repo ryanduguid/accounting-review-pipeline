@@ -118,6 +118,8 @@ python -m build
 
 The test suite covers schema gates, exact balancing, variance and metadata exceptions, mapping and subledger checks, deterministic pack generation, acknowledgement parsing, and the command-line exit contract.
 
+Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.10, 3.12, and 3.13, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
+
 ## Roadmap
 
 The next layers are deliberately separated from the control engine:
