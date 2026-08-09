@@ -38,7 +38,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        # argparse exits with 2 on usage errors, but this tool's exit contract
+        # reserves 2 for a pack needing review; remap usage errors to 1.
+        # --help and -h exit with 0 and must keep doing so, so re-raise
+        # anything that is not a usage error.
+        if exc.code == 2:
+            return 1
+        raise
     if args.command != "review":  # pragma: no cover - argparse currently has one subcommand.
         parser.error("unknown command")
     try:
