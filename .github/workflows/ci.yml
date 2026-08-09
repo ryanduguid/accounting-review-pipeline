@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7
+        with:
+          version: "0.12.2"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Verify the dependency lock
+        run: uv lock --check
+
+      - name: Install the locked development environment
+        run: uv sync --locked --all-extras
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Build source and wheel distributions
+        if: matrix.python-version == '3.13'
+        run: uv build
+
+      - name: Smoke-test built wheel
+        if: matrix.python-version == '3.13'
+        shell: bash
+        run: |
+          wheel_venv="$RUNNER_TEMP/monthly-close-wheel-venv"
+          uv venv "$wheel_venv"
+          uv pip install --python "$wheel_venv/bin/python" --no-deps dist/*.whl
+          "$wheel_venv/bin/close-control" --help
+
+          set +e
+          "$wheel_venv/bin/close-control" review \
+            --current examples/current_trial_balance.csv \
+            --prior examples/prior_trial_balance.csv \
+            --mapping examples/account_mapping.csv \
+            --subledger examples/subledger_balances.csv \
+            --absolute-threshold 10000 \
+            --percentage-threshold 0.10 \
+            --reconciliation-tolerance 0.01 \
+            --review-note examples/review_note.json \
+            --output "$RUNNER_TEMP/monthly-close-demo"
+          exit_code=$?
+          set -e
+
+          test "$exit_code" -eq 2
+          test -s "$RUNNER_TEMP/monthly-close-demo/close-summary.md"
+          test -s "$RUNNER_TEMP/monthly-close-demo/exceptions.csv"
+          test -s "$RUNNER_TEMP/monthly-close-demo/close-review-pack.json"
