@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import re
+import unicodedata
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -60,6 +61,10 @@ def _text(value: str | None, *, field: str, row_number: int, path: Path) -> str:
     text = (value or "").strip()
     if not text:
         raise ControlInputError(f"{path}: row {row_number} has an empty {field}.")
+    if any(unicodedata.category(character) in {"Cc", "Cf"} for character in text):
+        raise ControlInputError(
+            f"{path}: row {row_number} {field} contains a control or formatting character."
+        )
     return text
 
 
@@ -111,6 +116,14 @@ def load_canonical_tb(path: Path) -> list[TrialBalanceRow]:
             rows.append(row)
     if not rows:
         raise ControlInputError(f"{path}: no trial-balance rows were supplied.")
+    tenants = {row.tenant for row in rows}
+    report_dates = {row.report_date for row in rows}
+    if len(tenants) != 1:
+        raise ControlInputError(f"{path}: a canonical trial balance must contain exactly one tenant.")
+    if len(report_dates) != 1:
+        raise ControlInputError(
+            f"{path}: a canonical trial balance must contain exactly one ReportDate."
+        )
     return rows
 
 
@@ -158,6 +171,10 @@ def load_reviewer_acknowledgement(path: Path | None) -> ReviewerAcknowledgement 
         raise ControlInputError(f"Review-note file does not exist: {path}.")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise ControlInputError(f"{path}: review note is not valid UTF-8 text.") from exc
+    except OSError as exc:
+        raise ControlInputError(f"{path}: review note cannot be read ({exc}).") from exc
     except json.JSONDecodeError as exc:
         raise ControlInputError(f"{path}: review note is not valid JSON.") from exc
     if not isinstance(payload, dict) or set(payload) != {"reviewer_initials", "reviewed_on", "comment"}:

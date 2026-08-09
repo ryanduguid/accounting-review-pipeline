@@ -3,7 +3,10 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from closecontrol.engine import review_close
+from closecontrol.errors import ControlInputError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,3 +104,36 @@ def test_source_hashes_change_when_source_changes(tmp_path: Path) -> None:
     second = review_close(current_path=copied, prior_path=EXAMPLES / "prior_trial_balance.csv")
 
     assert first.source_hashes["current_trial_balance"] != second.source_hashes["current_trial_balance"]
+
+
+def test_period_comparison_rejects_different_tenants(tmp_path: Path) -> None:
+    prior = tmp_path / "prior.csv"
+    source = (EXAMPLES / "prior_trial_balance.csv").read_text(encoding="utf-8")
+    prior.write_text(source.replace("Acme Demo Pty Ltd", "Other Tenant Pty Ltd"), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="same tenant"):
+        review_close(current_path=EXAMPLES / "current_trial_balance.csv", prior_path=prior)
+
+
+def test_period_comparison_rejects_non_prior_date(tmp_path: Path) -> None:
+    prior = tmp_path / "prior.csv"
+    source = (EXAMPLES / "prior_trial_balance.csv").read_text(encoding="utf-8")
+    prior.write_text(source.replace("2026-06-30", "2026-07-31"), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="must be earlier"):
+        review_close(current_path=EXAMPLES / "current_trial_balance.csv", prior_path=prior)
+
+
+def test_review_note_cannot_predate_the_pack_it_claims_to_review(tmp_path: Path) -> None:
+    note = tmp_path / "review.json"
+    note.write_text(
+        '{"reviewer_initials":"RD","reviewed_on":"2026-07-30","comment":"Reviewed."}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ControlInputError, match="cannot be earlier"):
+        review_close(
+            current_path=EXAMPLES / "current_trial_balance.csv",
+            prior_path=EXAMPLES / "prior_trial_balance.csv",
+            acknowledgement_path=note,
+        )

@@ -42,3 +42,30 @@ def test_empty_report_date_is_reported_as_empty_not_invalid_iso(tmp_path: Path) 
 
     with pytest.raises(ControlInputError, match="empty ReportDate"):
         load_canonical_tb(blank_date)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ("2026-07-31,Acme Demo Pty Ltd,Assets,110", "2026-07-30,Acme Demo Pty Ltd,Assets,110", "one ReportDate"),
+        ("2026-07-31,Acme Demo Pty Ltd,Assets,110", "2026-07-31,Other Tenant,Assets,110", "one tenant"),
+    ],
+)
+def test_loader_rejects_mixed_period_or_tenant_scope(
+    tmp_path: Path, old: str, new: str, message: str
+) -> None:
+    source = (ROOT / "examples" / "current_trial_balance.csv").read_text(encoding="utf-8")
+    bad = tmp_path / "mixed.csv"
+    bad.write_text(source.replace(old, new), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match=message):
+        load_canonical_tb(bad)
+
+
+def test_loader_rejects_invisible_formatting_in_identifiers(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "current_trial_balance.csv").read_text(encoding="utf-8")
+    bad = tmp_path / "bidi.csv"
+    bad.write_text(source.replace("Operating Bank", "Operating\u202e Bank"), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="control or formatting"):
+        load_canonical_tb(bad)

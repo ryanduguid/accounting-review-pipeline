@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import re
 from pathlib import Path
 
 from .engine import CloseReviewPack
@@ -35,21 +34,17 @@ def _exception_dict(item: ExceptionItem) -> dict[str, str]:
     }
 
 
-_INERT_REMAINDER = re.compile(r"[\w.]*")
-
-
 def _csv_safe(value: str) -> str:
     """Keep source-controlled text inert when an exceptions CSV is opened in a spreadsheet.
 
-    '=' is always neutralised. '+', '-', and '@' are neutralised only when the
-    rest of the value could be read as a formula; plain identifiers such as the
-    account code '-1000' or the ID '@123' pass through unchanged so that Excel
-    and Power BI joins keep working.
+    Spreadsheet applications can interpret every value beginning with '=',
+    '+', '-', or '@' as a formula or coerce it into another type. Prefix all
+    four trigger characters so both execution and identifier corruption are
+    prevented. The apostrophe is part of the CSV value and therefore explicit
+    to downstream non-spreadsheet consumers.
     """
     stripped = value.lstrip()
-    if stripped.startswith("="):
-        return "'" + value
-    if stripped.startswith(("+", "-", "@")) and not _INERT_REMAINDER.fullmatch(stripped[1:]):
+    if stripped.startswith(("=", "+", "-", "@")):
         return "'" + value
     return value
 
@@ -125,9 +120,9 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
     else:
         lines += [
-            f"- Reviewer initials: {pack.acknowledgement.reviewer_initials}",
+            f"- Reviewer initials: {_md_cell(pack.acknowledgement.reviewer_initials)}",
             f"- Reviewed on: {pack.acknowledgement.reviewed_on.isoformat()}",
-            f"- Comment: {pack.acknowledgement.comment}",
+            f"- Comment: {_md_cell(pack.acknowledgement.comment)}",
             "- Effect: acknowledgement records a human action only; it does not change the control status or approve a close.",
         ]
     lines.append("")
