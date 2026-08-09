@@ -24,12 +24,6 @@ class CloseReviewPack:
     acknowledgement: ReviewerAcknowledgement | None
 
 
-def _money(value: Decimal | None) -> str | None:
-    if value is None:
-        return None
-    return f"{value:.2f}"
-
-
 def _percent_change(current: Decimal, prior: Decimal) -> Decimal | None:
     if prior == ZERO:
         return None

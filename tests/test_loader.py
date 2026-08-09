@@ -33,3 +33,12 @@ def test_loader_rejects_duplicate_control_key(tmp_path: Path) -> None:
 def test_amount_parser_rejects_ambiguous_or_formula_values(value: str) -> None:
     with pytest.raises(ControlInputError):
         parse_money(value, field="Debit", row_number=2, path=Path("input.csv"))
+
+
+def test_empty_report_date_is_reported_as_empty_not_invalid_iso(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "current_trial_balance.csv").read_text(encoding="utf-8")
+    blank_date = tmp_path / "blank_date.csv"
+    blank_date.write_text(source.replace("2026-07-31,Acme Demo Pty Ltd,Assets,100", ",Acme Demo Pty Ltd,Assets,100"), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="empty ReportDate"):
+        load_canonical_tb(blank_date)
