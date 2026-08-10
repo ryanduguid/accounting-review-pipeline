@@ -151,7 +151,41 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert rows[2]["account_name"] == "'-B12"
 
 
-def test_markdown_table_escapes_pipes_and_newlines(tmp_path: Path) -> None:
+def _table_cells(row: str) -> list[str]:
+    """Split a Markdown table row into cells the way a CommonMark parser does.
+
+    A backslash consumes the character after it, so `\\|` is one literal pipe
+    inside a cell and `\\\\|` is one literal backslash followed by a live
+    delimiter. Counting occurrences of the substring `\\|` cannot tell those two
+    apart - it scores `\\\\|` as an escaped pipe - so the row has to be scanned
+    rather than counted. Leading and trailing delimiters are optional in GFM and
+    produce no cell.
+    """
+    cells: list[str] = []
+    current: list[str] = []
+    index = 0
+    while index < len(row):
+        character = row[index]
+        if character == "\\" and index + 1 < len(row):
+            current.append(row[index + 1])
+            index += 2
+            continue
+        if character == "|":
+            cells.append("".join(current))
+            current = []
+            index += 1
+            continue
+        current.append(character)
+        index += 1
+    cells.append("".join(current))
+    if cells and not cells[0].strip():
+        cells = cells[1:]
+    if cells and not cells[-1].strip():
+        cells = cells[:-1]
+    return [cell.strip() for cell in cells]
+
+
+def test_markdown_table_escapes_pipes_backslashes_and_newlines(tmp_path: Path) -> None:
     pack = CloseReviewPack(
         status="REVIEW",
         current_report_dates=("2026-07-31",),
@@ -167,7 +201,10 @@ def test_markdown_table_escapes_pipes_and_newlines(tmp_path: Path) -> None:
                 tenant="Acme | Demo",
                 account_id="100",
                 account_code="1000",
-                account_name="Bank | Operating",
+                # A backslash immediately before a pipe: escaping the pipe alone
+                # renders '\\|', which a parser reads as an escaped backslash
+                # and then a live delimiter.
+                account_name="Bank \\| Operating",
                 current_value=Decimal("1000"),
                 prior_value=Decimal("0"),
                 difference=Decimal("1000"),
@@ -182,14 +219,106 @@ def test_markdown_table_escapes_pipes_and_newlines(tmp_path: Path) -> None:
 
     outputs = write_review_pack(pack, tmp_path / "pack")
     summary = outputs["summary"].read_text(encoding="utf-8")
+    lines = summary.splitlines()
+    header_row = next(line for line in lines if line.startswith("| Status |"))
+    data_row = next(line for line in lines if line.startswith("| REVIEW |"))
+
+    # An extra cell shifts every column after it, so the reviewer reads the
+    # value under the wrong heading. The row must parse to the same six cells
+    # the header declares, each holding the value it was given.
+    assert _table_cells(header_row) == ["Status", "Control", "Tenant", "Account", "Difference", "Reason"]
+    assert _table_cells(data_row) == [
+        "REVIEW",
+        "period_variance",
+        "Acme | Demo",
+        "1000 / Bank \\| Operating",
+        "1000.00",
+        "Line one. Line two | with pipe.",
+    ]
+
+
+def test_a_backslash_before_a_pipe_in_a_source_csv_cannot_shift_a_summary_column(tmp_path: Path) -> None:
+    # The account name is ordinary canonical-CSV text: the loader accepts it,
+    # so the summary table's structure has to survive it.
+    name = "Bank \\| 0.00 | Agreed to bank statement; no action."
+    header = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit"
+    current = tmp_path / "current.csv"
+    prior = tmp_path / "prior.csv"
+    current.write_text(
+        "\n".join([
+            header,
+            f'2026-07-31,Acme Demo Pty Ltd,Assets,1770,"{name}",1770,0.00,0.00,900000.00,0.00',
+            "2026-07-31,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,900000.00",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    prior.write_text(
+        "\n".join([
+            header,
+            f'2026-06-30,Acme Demo Pty Ltd,Assets,1770,"{name}",1770,0.00,0.00,100000.00,0.00',
+            "2026-06-30,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,100000.00",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+
+    pack = review_close(
+        current_path=current,
+        prior_path=prior,
+        absolute_threshold=Decimal("10000"),
+        percentage_threshold=Decimal("0.10"),
+    )
+    summary = write_review_pack(pack, tmp_path / "pack")["summary"].read_text(encoding="utf-8")
+    data_row = next(
+        line for line in summary.splitlines() if line.startswith("| REVIEW |") and "1770" in line
+    )
+
+    cells = _table_cells(data_row)
+    assert len(cells) == 6
+    # The 800,000.00 movement stays under Difference; without the backslash
+    # escape it lands under Reason and the account name's own text is read as
+    # the difference.
+    assert cells[3] == f"1770 / {name}"
+    assert cells[4] == "800000.00"
+    assert cells[5].startswith("YTD net balance moved beyond")
+
+
+def test_a_missing_tenant_account_or_difference_renders_as_ascii(tmp_path: Path) -> None:
+    pack = CloseReviewPack(
+        status="REVIEW",
+        current_report_dates=("2026-07-31",),
+        prior_report_dates=("2026-06-30",),
+        source_hashes={"current_trial_balance": "abc"},
+        absolute_threshold=Decimal("1000"),
+        percentage_threshold=Decimal("0.10"),
+        reconciliation_tolerance=Decimal("0.01"),
+        exceptions=(
+            ExceptionItem(
+                control="period_comparison",
+                status="REVIEW",
+                tenant="",
+                account_id="",
+                account_code="",
+                account_name="",
+                current_value=None,
+                prior_value=None,
+                difference=None,
+                threshold=None,
+                percentage_change=None,
+                reason="Demo only.",
+                reviewer_action="Review.",
+            ),
+        ),
+        acknowledgement=None,
+    )
+
+    summary = write_review_pack(pack, tmp_path / "pack")["summary"].read_text(encoding="utf-8")
     data_row = next(line for line in summary.splitlines() if line.startswith("| REVIEW |"))
 
-    # Unescaped pipes would split the row into extra columns; the table row
-    # must keep exactly six cells with every embedded pipe escaped.
-    assert data_row.count("|") - data_row.count("\\|") == 7
-    assert "Acme \\| Demo" in data_row
-    assert "Bank \\| Operating" in data_row
-    assert "Line one. Line two \\| with pipe." in data_row
+    # An em dash placeholder is unencodable on a console or scheduler log whose
+    # code page is not UTF-8, so the pack's own runtime text stays ASCII; only
+    # source-supplied names may carry anything wider.
+    assert summary.isascii()
+    assert _table_cells(data_row) == ["REVIEW", "period_comparison", "n/a", "n/a", "n/a", "Demo only."]
 
 
 def test_acknowledgement_cannot_inject_markdown_structure(tmp_path: Path) -> None:
@@ -231,6 +360,30 @@ def test_a_failed_pack_write_rolls_back_to_the_previous_run(tmp_path: Path, bloc
     for name, content in survivors.items():
         assert (output / name).read_bytes() == content
     assert sorted(item.name for item in output.iterdir()) == PACK_FILES
+
+
+def test_a_failed_write_removes_a_pack_file_that_had_no_previous_version(tmp_path: Path) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_single_exception_pack(digest="aaa", difference="15000.00"), output)
+    # The directory holds only part of a previous pack: this file was deleted,
+    # or the run that should have written it was interrupted.
+    (output / "close-review-pack.json").unlink()
+    survivor = (output / "close-summary.md").read_bytes()
+    stand_in = output / "exceptions.csv"
+    stand_in.unlink()
+    stand_in.mkdir()
+    (stand_in / "held-open.txt").write_text("locked", encoding="utf-8")
+
+    with pytest.raises(OSError):
+        write_review_pack(_single_exception_pack(digest="bbb", difference="85000.00"), output)
+
+    # Rolling back only the files that had something to restore would leave this
+    # run's close-review-pack.json beside the previous run's close-summary.md -
+    # the mixed pack the staging exists to prevent, with nothing on the face of
+    # either file to tell a reviewer they describe different trial balances.
+    assert not (output / "close-review-pack.json").exists()
+    assert (output / "close-summary.md").read_bytes() == survivor
+    assert sorted(item.name for item in output.iterdir()) == ["close-summary.md", "exceptions.csv"]
 
 
 def test_a_staging_write_that_dies_part_way_leaves_no_orphan(monkeypatch, tmp_path: Path) -> None:

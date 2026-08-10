@@ -40,6 +40,8 @@ Money is parsed into `Decimal`, not `float`. The integrity controls compare debi
 | Missing supplied mapping | `REVIEW` | Grouped review should not silently omit a new account. |
 | Supplied subledger difference | `REVIEW` | An out-of-tolerance control-account difference needs supporting reconciliation. |
 
+Account movement is raised only when a YTD variance clears both the absolute and the percentage threshold. The one carve-out is a nil prior YTD balance, which leaves no percentage change to compute: the absolute threshold decides alone, `percentage_change` stays blank, and the exception reason names the absolute threshold only.
+
 ## Deterministic evidence
 
 The output has no wall-clock generated timestamp. It records source filenames only by role and SHA-256 digest, report dates, thresholds, ordered exceptions, and an optional review acknowledgement. Given identical inputs and options, the content is identical.
