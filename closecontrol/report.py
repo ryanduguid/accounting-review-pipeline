@@ -68,20 +68,38 @@ def _exception_dict(item: ExceptionItem) -> dict[str, str]:
 
 
 _INERT_REMAINDER = re.compile(r"[\w.]*")
+# ASCII letters then digits is A1 notation, which a sheet resolves to a cell
+# rather than reading as text, so "A1" is not the plain identifier the word
+# character test alone would call it. The bounds are Excel's own column and row
+# limits; a wider shape names no cell and stays with the identifier test.
+_CELL_REFERENCE = re.compile(r"[A-Za-z]{1,3}[0-9]{1,7}")
+
+
+def _plain_identifier(remainder: str) -> bool:
+    return bool(_INERT_REMAINDER.fullmatch(remainder)) and not _CELL_REFERENCE.fullmatch(remainder)
 
 
 def _csv_safe(value: str) -> str:
     """Keep source-controlled text inert when an exceptions CSV is opened in a spreadsheet.
 
-    '=' is always neutralised. '+', '-', and '@' are neutralised only when the
-    rest of the value could be read as a formula; plain identifiers such as the
-    account code '-1000' or the ID '@123' pass through unchanged so that Excel
-    and Power BI joins keep working.
+    '=' is always neutralised. '+', '-' and '@' are neutralised unless what
+    follows them is a plain identifier - word characters and dots, and not an
+    A1-style cell reference. The account code '-1000' and the ID '@123' pass
+    through unchanged so that Excel and Power BI joins keep working; '-A1',
+    which a sheet resolves to whatever cell A1 holds, does not.
+
+    That pass-through is narrow by construction rather than a test for
+    everything a spreadsheet can evaluate, and this docstring should not be
+    read as claiming otherwise. A bare word remainder such as '+unsafe' is
+    still let through: a sheet reads it as a defined name instead of as text,
+    which costs display fidelity in that one cell and calls nothing. Every
+    payload that can reach outside the sheet - DDE, WEBSERVICE, HYPERLINK, a
+    pipe, a bracket - carries a character the identifier test rejects.
     """
     stripped = value.lstrip()
     if stripped.startswith("="):
         return "'" + value
-    if stripped.startswith(("+", "-", "@")) and not _INERT_REMAINDER.fullmatch(stripped[1:]):
+    if stripped.startswith(("+", "-", "@")) and not _plain_identifier(stripped[1:]):
         return "'" + value
     return value
 
