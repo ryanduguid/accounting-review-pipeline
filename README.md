@@ -29,7 +29,7 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later.
-- Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised only where the rest of the value could be read as a formula, so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI. Reviewer-note text is flattened before Markdown rendering.
+- Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised unless the rest of the value is a plain identifier — word characters and dots, and not an A1-style cell reference — so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI, while `-A1` is quoted. That pass-through is narrow by construction, not a test for everything a spreadsheet can evaluate: `+unsafe` still passes through and reads as a defined name rather than as text, which costs display fidelity in that cell and calls nothing. Every payload that reaches outside the sheet carries a character the identifier test rejects. Reviewer-note text is flattened before Markdown rendering.
 - `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
 - The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced — a reviewer holding `exceptions.csv` open is the usual cause — the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
 - Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a percent is flattened to `0.00`.
@@ -102,6 +102,8 @@ If a reviewer wants the pack to record that it was read, supply a separate JSON 
   "comment": "Reviewed demo exceptions; no client close was approved by this example."
 }
 ```
+
+`reviewed_on` must not be earlier than the current `ReportDate`. A note dated before the period it claims to review is rejected as a malformed input: the run stops with exit `1` and writes no pack.
 
 An acknowledgement is evidence of a human action only. It **never** changes `REVIEW` or `BLOCKED` to `PASS`, and it never asserts that a period has been closed.
 
