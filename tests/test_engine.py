@@ -70,7 +70,10 @@ def test_demo_pack_raises_exactly_the_expected_exceptions() -> None:
     # Exception count and membership are the product of a materiality engine, so
     # they are pinned account by account and in emitted order. Account 200 moves
     # -9,000.00 at 16.07%: it clears the percentage threshold but not the
-    # $10,000 absolute one, and both must be met before an account is raised.
+    # $10,000 absolute one, and both must be met before an account is raised -
+    # except against a nil prior balance, where there is no percentage to
+    # compute and the absolute threshold decides alone (see
+    # test_movement_from_a_nil_prior_balance_is_always_material_by_percentage).
     pack = _demo_pack()
 
     assert [(item.control, item.account_id) for item in pack.exceptions] == [
@@ -168,8 +171,17 @@ def test_movement_from_a_nil_prior_balance_is_always_material_by_percentage(tmp_
     assert variances["777"].percentage_change is None
     assert variances["777"].prior_value == Decimal("0.00")
     assert variances["777"].difference == Decimal("900000.00")
+    # The exception must not claim a percentage threshold was cleared while its
+    # own percentage_change column is blank: the reviewer would go looking for a
+    # percentage the pack never computed.
+    assert variances["777"].reason == (
+        "YTD net balance moved beyond the configured absolute threshold; "
+        "no percentage change could be computed from the prior YTD balance, "
+        "so the percentage threshold was not tested."
+    )
     # The mirror case, a balance falling to nil, has a defined percentage.
     assert variances["888"].percentage_change == Decimal("1")
+    assert variances["888"].reason == "YTD net balance moved beyond both configured materiality thresholds."
 
 
 def test_totals_that_balance_only_under_exact_decimal_arithmetic_pass(tmp_path: Path) -> None:

@@ -185,6 +185,14 @@ def review_close(
             difference = current.ytd_net - prior.ytd_net
             percentage = _percent_change(current.ytd_net, prior.ytd_net)
             material_by_amount = difference != ZERO and abs(difference) >= absolute_threshold
+            # A nil prior balance leaves no percentage change to compute, so the
+            # percentage gate cannot be applied and the absolute gate decides
+            # alone. The exception says which gates were actually tested: the
+            # two-threshold wording alongside a blank percentage_change column
+            # would tell the reviewer a percentage test passed that never ran.
+            # The wording follows `percentage is None` rather than the nil prior
+            # balance itself, so it stays true for the defensive None that
+            # _percent_change returns if the division cannot be represented.
             material_by_percentage = percentage is None or percentage >= percentage_threshold
             if material_by_amount and material_by_percentage:
                 exceptions.append(
@@ -195,7 +203,11 @@ def review_close(
                         difference=difference,
                         threshold=absolute_threshold,
                         percentage_change=percentage,
-                        reason="YTD net balance moved beyond both configured materiality thresholds.",
+                        reason=(
+                            "YTD net balance moved beyond both configured materiality thresholds."
+                            if percentage is not None
+                            else "YTD net balance moved beyond the configured absolute threshold; no percentage change could be computed from the prior YTD balance, so the percentage threshold was not tested."
+                        ),
                         reviewer_action="Investigate the driver, retain supporting evidence, and document the reviewer conclusion.",
                     )
                 )
