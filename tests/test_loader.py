@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,19 @@ def test_loader_rejects_duplicate_control_key(tmp_path: Path) -> None:
 def test_amount_parser_rejects_ambiguous_or_formula_values(value: str) -> None:
     with pytest.raises(ControlInputError):
         parse_money(value, field="Debit", row_number=2, path=Path("input.csv"))
+
+
+@pytest.mark.parametrize(
+    "value", ["0.1234567890123456789", "123456789012345678.01", "9007199254740993.00"]
+)
+def test_amount_parser_keeps_every_supplied_digit(value: str) -> None:
+    # Each of these values loses digits through a binary float. Money must reach
+    # the controls as the exact decimal the source file supplied.
+    parsed = parse_money(value, field="Debit", row_number=2, path=Path("input.csv"))
+
+    assert isinstance(parsed, Decimal)
+    assert parsed == Decimal(value)
+    assert str(parsed) == value
 
 
 def test_empty_report_date_is_reported_as_empty_not_invalid_iso(tmp_path: Path) -> None:

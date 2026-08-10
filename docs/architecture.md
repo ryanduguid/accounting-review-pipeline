@@ -48,4 +48,4 @@ The acknowledgement is separate from calculation and never flips `REVIEW` or `BL
 
 ## Data handling
 
-The repository contains fabricated data. Its `.gitignore` blocks ordinary CSV files outside `examples/` and `schemas/`, the three generated review-pack files by name, token-like files, and environment files. Client exports and review packs belong in an access-controlled local location outside the repository.
+The repository contains fabricated data. Its `.gitignore` blocks ordinary CSV files outside `examples/` and `schemas/`, the three generated review-pack files by name — `exceptions.csv` explicitly inside those two directories as well, since their fixture negations would otherwise re-include it — token-like files, and environment files. Client exports and review packs belong in an access-controlled local location outside the repository.

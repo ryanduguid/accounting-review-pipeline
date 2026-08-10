@@ -10,6 +10,14 @@ review-notes/
 # anything, so a pack written into the checkout was committable.
 close-review-pack.json
 close-summary.md
+# exceptions.csv is a generated pack file, not a fixture. The two negations
+# above re-include every CSV in these directories, so --output pointed at
+# either of them left the exception detail committable.
+examples/exceptions.csv
+schemas/exceptions.csv
+# Staged pack files. One is left behind only if a run is killed mid-write or a
+# rollback cannot put a previous file back; it may hold either run's content.
+*.partial
 .env
 .env.*
 !.env.example
