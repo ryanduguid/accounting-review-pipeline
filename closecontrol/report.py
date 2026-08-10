@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from pathlib import Path
 
 from .engine import CloseReviewPack
@@ -34,17 +35,21 @@ def _exception_dict(item: ExceptionItem) -> dict[str, str]:
     }
 
 
+_INERT_REMAINDER = re.compile(r"[\w.]*")
+
+
 def _csv_safe(value: str) -> str:
     """Keep source-controlled text inert when an exceptions CSV is opened in a spreadsheet.
 
-    Spreadsheet applications can interpret every value beginning with '=',
-    '+', '-', or '@' as a formula or coerce it into another type. Prefix all
-    four trigger characters so both execution and identifier corruption are
-    prevented. The apostrophe is part of the CSV value and therefore explicit
-    to downstream non-spreadsheet consumers.
+    '=' is always neutralised. '+', '-', and '@' are neutralised only when the
+    rest of the value could be read as a formula; plain identifiers such as the
+    account code '-1000' or the ID '@123' pass through unchanged so that Excel
+    and Power BI joins keep working.
     """
     stripped = value.lstrip()
-    if stripped.startswith(("=", "+", "-", "@")):
+    if stripped.startswith("="):
+        return "'" + value
+    if stripped.startswith(("+", "-", "@")) and not _INERT_REMAINDER.fullmatch(stripped[1:]):
         return "'" + value
     return value
 

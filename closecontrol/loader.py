@@ -57,11 +57,19 @@ def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], pa
         raise ControlInputError(f"{path}: canonical schema mismatch ({'; '.join(detail)}).")
 
 
+def _has_control_or_format_character(text: str, *, allow_line_breaks: bool = False) -> bool:
+    permitted = {"\t", "\n", "\r"} if allow_line_breaks else set()
+    return any(
+        character not in permitted and unicodedata.category(character) in {"Cc", "Cf"}
+        for character in text
+    )
+
+
 def _text(value: str | None, *, field: str, row_number: int, path: Path) -> str:
     text = (value or "").strip()
     if not text:
         raise ControlInputError(f"{path}: row {row_number} has an empty {field}.")
-    if any(unicodedata.category(character) in {"Cc", "Cf"} for character in text):
+    if _has_control_or_format_character(text):
         raise ControlInputError(
             f"{path}: row {row_number} {field} contains a control or formatting character."
         )
@@ -186,6 +194,19 @@ def load_reviewer_acknowledgement(path: Path | None) -> ReviewerAcknowledgement 
         raise ControlInputError(f"{path}: reviewer_initials must be a non-empty string of at most 12 characters.")
     if not isinstance(comment, str) or not comment.strip():
         raise ControlInputError(f"{path}: comment must be a non-empty string.")
+    # The review note is untrusted input that ends up in close-summary.md as
+    # evidence. A Cf character such as U+202E can reorder how a reviewer's own
+    # words render, so reject the same character classes the CSV loaders do.
+    # A comment is free text, so its line breaks and tabs stay legal — the
+    # markdown writer already flattens and escapes them.
+    if _has_control_or_format_character(initials):
+        raise ControlInputError(
+            f"{path}: reviewer_initials contains a control or formatting character."
+        )
+    if _has_control_or_format_character(comment, allow_line_breaks=True):
+        raise ControlInputError(
+            f"{path}: comment contains a control or formatting character."
+        )
     if not isinstance(reviewed_on, str):
         raise ControlInputError(f"{path}: reviewed_on must be an ISO date string.")
     try:

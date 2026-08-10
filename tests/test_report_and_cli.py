@@ -68,12 +68,13 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert first["summary"].read_text(encoding="utf-8") == second["summary"].read_text(encoding="utf-8")
     with first["exceptions"].open(encoding="utf-8", newline="") as source:
         rows = list(csv.DictReader(source))
-    # Every spreadsheet formula trigger is neutralised. This also preserves
-    # leading '+'/'-' identifiers as text instead of letting Excel coerce them.
+    # '=' is always neutralised. '+', '-' and '@' are neutralised only when the
+    # remainder could be read as a formula, so plain identifiers such as the
+    # account code '-1000' and the ID '@123' stay joinable in Excel and Power BI.
     assert rows[0]["tenant"] == "'=untrusted"
-    assert rows[0]["account_id"] == "'@123"
-    assert rows[0]["account_code"] == "'-1000"
-    assert rows[0]["account_name"] == "'+unsafe"
+    assert rows[0]["account_id"] == "@123"
+    assert rows[0]["account_code"] == "-1000"
+    assert rows[0]["account_name"] == "+unsafe"
     assert rows[1]["tenant"] == "'-2+3"
     assert rows[1]["account_id"] == "'@SUM(A1)"
     assert rows[1]["account_code"] == "'+1-1"

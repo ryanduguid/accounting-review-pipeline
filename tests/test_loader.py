@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from closecontrol.errors import ControlInputError
-from closecontrol.loader import load_canonical_tb, parse_money
+from closecontrol.loader import (
+    load_canonical_tb,
+    load_reviewer_acknowledgement,
+    parse_money,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,3 +74,27 @@ def test_loader_rejects_invisible_formatting_in_identifiers(tmp_path: Path) -> N
 
     with pytest.raises(ControlInputError, match="control or formatting"):
         load_canonical_tb(bad)
+
+
+@pytest.mark.parametrize("field", ["reviewer_initials", "comment"])
+def test_review_note_rejects_invisible_formatting(tmp_path: Path, field: str) -> None:
+    values = {"reviewer_initials": "RD", "reviewed_on": "2026-07-30", "comment": "Reviewed."}
+    values[field] = values[field] + "\u202e"
+    note = tmp_path / "note.json"
+    note.write_text(json.dumps(values), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="control or formatting"):
+        load_reviewer_acknowledgement(note)
+
+
+def test_review_note_accepts_plain_text(tmp_path: Path) -> None:
+    note = tmp_path / "note.json"
+    note.write_text(
+        json.dumps({"reviewer_initials": "RD", "reviewed_on": "2026-07-30", "comment": "Reviewed."}),
+        encoding="utf-8",
+    )
+
+    acknowledgement = load_reviewer_acknowledgement(note)
+
+    assert acknowledgement is not None
+    assert acknowledgement.reviewer_initials == "RD"
