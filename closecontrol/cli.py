@@ -61,9 +61,15 @@ def main(argv: list[str] | None = None) -> int:
             percentage_threshold=args.percentage_threshold,
             reconciliation_tolerance=args.reconciliation_tolerance,
         )
-        outputs = write_review_pack(pack, args.output)
     except (ControlInputError, ValueError) as exc:
         print(f"close-control: input error: {exc}", file=sys.stderr)
+        return 1
+    try:
+        outputs = write_review_pack(pack, args.output)
+    except OSError as exc:
+        # An unusable --output is a caller error, not a crash: report it on the
+        # same failure path as a malformed input instead of a raw traceback.
+        print(f"close-control: output error: {exc}", file=sys.stderr)
         return 1
     print(f"close-control: {pack.status}; {len(pack.exceptions)} exception(s)")
     for name, path in outputs.items():

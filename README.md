@@ -30,6 +30,9 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later.
 - Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised only where the rest of the value could be read as a formula, so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI. Reviewer-note text is flattened before Markdown rendering.
+- `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
+- The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced — a reviewer holding `exceptions.csv` open is the usual cause — the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
+- Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a percent is flattened to `0.00`.
 
 ## Quick demo
 
@@ -56,7 +59,7 @@ The demo exits `2` because its deliberately fabricated exceptions need human rev
 - `exceptions.csv` — filterable exception detail for Excel or Power BI.
 - `close-review-pack.json` — structured evidence, thresholds, source hashes, and any supplied review acknowledgement.
 
-Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file or invalid command configuration.
+Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
 
 ## Canonical trial-balance contract
 
@@ -105,7 +108,7 @@ An acknowledgement is evidence of a human action only. It **never** changes `REV
 ## Data and operational boundaries
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name wherever `--output` points them.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name wherever `--output` points them, including inside those two fixture directories.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage, and client authorisation are deliberately outside this MVP.
 - Do not use this as tax, financial, audit, or legal advice. It is a configurable review aid that requires professional judgement.
 
