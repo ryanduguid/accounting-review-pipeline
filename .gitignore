@@ -4,6 +4,12 @@
 !schemas/*.csv
 outputs/
 review-notes/
+
+# A review pack goes wherever --output points, not only to outputs/.
+# exceptions.csv is caught by *.csv above; these two were not caught by
+# anything, so a pack written into the checkout was committable.
+close-review-pack.json
+close-summary.md
 .env
 .env.*
 !.env.example
