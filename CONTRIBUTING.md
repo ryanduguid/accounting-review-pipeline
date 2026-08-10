@@ -5,7 +5,7 @@ Contributions should preserve this project's narrow role: a local, deterministic
 ## Data boundary
 
 - Use fabricated fixtures only. Do not commit client trial balances, subledgers, workpapers, review packs, credentials, `.env` files, tokens, or screenshots from a live accounting system.
-- Keep fabricated CSV fixtures under `examples/`; the repository's `.gitignore` blocks ordinary CSV files elsewhere.
+- Keep fabricated CSV fixtures under `examples/`, and header-only schema references under `schemas/`; the repository's `.gitignore` blocks ordinary CSV files outside those two directories.
 - Treat source CSV content and optional review notes as untrusted input. Changes must retain the existing fail-closed validation and spreadsheet-formula safeguards.
 
 ## Local verification
