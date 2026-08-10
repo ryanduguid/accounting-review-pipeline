@@ -128,9 +128,24 @@ def _as_json(pack: CloseReviewPack) -> dict:
     }
 
 
+# A missing tenant, account or difference is shown as text rather than as an em
+# dash: runtime output stays ASCII so a pack still reads on a console or in a
+# scheduler log whose code page has no dash to render.
+_ABSENT = "n/a"
+
+
 def _md_cell(value: str) -> str:
-    """Flatten embedded newlines and escape pipes so a value cannot break a table row."""
-    return " ".join(value.split()).replace("|", "\\|")
+    r"""Flatten embedded newlines and escape a value so it cannot break a table row.
+
+    Backslashes are escaped before pipes. A Markdown parser reads a backslash as
+    consuming the character after it, so escaping the pipe alone turns source
+    text of `\|` into `\\|` - an escaped backslash followed by a live delimiter -
+    which adds a cell to the row and shifts every column after it. Doubling the
+    backslash first leaves `\\\|`, which reads as one backslash and one literal
+    pipe. Order matters: escaping pipes first and backslashes second would
+    re-escape the backslashes this function just added.
+    """
+    return " ".join(value.split()).replace("\\", "\\\\").replace("|", "\\|")
 
 
 def _as_markdown(pack: CloseReviewPack) -> str:
@@ -165,11 +180,11 @@ def _as_markdown(pack: CloseReviewPack) -> str:
             "| --- | --- | --- | --- | ---: | --- |",
         ]
         for item in pack.exceptions:
-            account = " / ".join(piece for piece in (item.account_code, item.account_name) if piece) or item.account_id or "—"
+            account = " / ".join(piece for piece in (item.account_code, item.account_name) if piece) or item.account_id or _ABSENT
             account = _md_cell(account)
             reason = _md_cell(item.reason)
-            tenant = _md_cell(item.tenant or "—")
-            lines.append(f"| {item.status} | {item.control} | {tenant} | {account} | {_money(item.difference) or '—'} | {reason} |")
+            tenant = _md_cell(item.tenant or _ABSENT)
+            lines.append(f"| {item.status} | {item.control} | {tenant} | {account} | {_money(item.difference) or _ABSENT} | {reason} |")
     lines += ["", "## Human acknowledgement", ""]
     if pack.acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
