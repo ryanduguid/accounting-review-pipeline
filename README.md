@@ -17,7 +17,7 @@ Explicit exception queue
 Human review and workpaper acknowledgement
 ```
 
-The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export). It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
+The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
 
 ## Why this exists
 
@@ -29,6 +29,7 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later.
+- Spreadsheet-facing CSV text beginning with `=`, `+`, `-`, or `@` is neutralised with a leading apostrophe; reviewer-note text is flattened before Markdown rendering.
 
 ## Quick demo
 

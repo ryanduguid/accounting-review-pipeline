@@ -125,9 +125,9 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
     else:
         lines += [
-            f"- Reviewer initials: {pack.acknowledgement.reviewer_initials}",
+            f"- Reviewer initials: {_md_cell(pack.acknowledgement.reviewer_initials)}",
             f"- Reviewed on: {pack.acknowledgement.reviewed_on.isoformat()}",
-            f"- Comment: {pack.acknowledgement.comment}",
+            f"- Comment: {_md_cell(pack.acknowledgement.comment)}",
             "- Effect: acknowledgement records a human action only; it does not change the control status or approve a close.",
         ]
     lines.append("")
