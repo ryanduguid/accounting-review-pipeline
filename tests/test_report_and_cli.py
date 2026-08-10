@@ -101,6 +101,21 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
                 reason="Demo only.",
                 reviewer_action="Review.",
             ),
+            ExceptionItem(
+                control="period_variance",
+                status="REVIEW",
+                tenant="-A1",
+                account_id="@a1",
+                account_code="+XFD1048576",
+                account_name="-B12",
+                current_value=Decimal("3000"),
+                prior_value=Decimal("0"),
+                difference=Decimal("3000"),
+                threshold=Decimal("100"),
+                percentage_change=None,
+                reason="Demo only.",
+                reviewer_action="Review.",
+            ),
         ),
         acknowledgement=None,
     )
@@ -114,9 +129,10 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert sorted(item.name for item in (tmp_path / "one").iterdir()) == PACK_FILES
     with first["exceptions"].open(encoding="utf-8-sig", newline="") as source:
         rows = list(csv.DictReader(source))
-    # '=' is always neutralised. '+', '-' and '@' are neutralised only when the
-    # remainder could be read as a formula, so plain identifiers such as the
-    # account code '-1000' and the ID '@123' stay joinable in Excel and Power BI.
+    # '=' is always neutralised. '+', '-' and '@' are neutralised unless the
+    # remainder is a plain identifier - word characters and dots, and not an
+    # A1-style cell reference - so the account code '-1000' and the ID '@123'
+    # stay joinable in Excel and Power BI.
     assert rows[0]["tenant"] == "'=untrusted"
     assert rows[0]["account_id"] == "@123"
     assert rows[0]["account_code"] == "-1000"
@@ -125,6 +141,14 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert rows[1]["account_id"] == "'@SUM(A1)"
     assert rows[1]["account_code"] == "'+1-1"
     assert rows[1]["account_name"] == "'-cmd|xyz"
+    # An all-word-character remainder is not enough on its own: A1 notation is
+    # a reference to another cell, so a sheet would show that cell's contents
+    # in place of the account code the reviewer is filtering on. The bounds are
+    # the sheet's own: 'XFD1048576' is the last cell, and case does not matter.
+    assert rows[2]["tenant"] == "'-A1"
+    assert rows[2]["account_id"] == "'@a1"
+    assert rows[2]["account_code"] == "'+XFD1048576"
+    assert rows[2]["account_name"] == "'-B12"
 
 
 def test_markdown_table_escapes_pipes_and_newlines(tmp_path: Path) -> None:
