@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal, DivisionByZero, InvalidOperation
 from pathlib import Path
 
+from .errors import ControlInputError
 from .loader import load_canonical_tb, load_mapping, load_reviewer_acknowledgement, load_subledger, sha256_file
 from .models import ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow
 
@@ -130,6 +131,23 @@ def review_close(
     subledger = load_subledger(subledger_path)
     acknowledgement = load_reviewer_acknowledgement(acknowledgement_path)
 
+    current_tenant = current_rows[0].tenant
+    prior_tenant = prior_rows[0].tenant
+    current_date = current_rows[0].report_date
+    prior_date = prior_rows[0].report_date
+    if current_tenant != prior_tenant:
+        raise ControlInputError(
+            "Current and prior trial balances must contain the same tenant."
+        )
+    if prior_date >= current_date:
+        raise ControlInputError(
+            "Prior trial-balance ReportDate must be earlier than the current ReportDate."
+        )
+    if acknowledgement is not None and acknowledgement.reviewed_on < current_date:
+        raise ControlInputError(
+            "Review-note reviewed_on cannot be earlier than the current ReportDate."
+        )
+
     current_by_key = {row.key: row for row in current_rows}
     prior_by_key = {row.key: row for row in prior_rows}
     exceptions = _integrity_exceptions(current_rows, "Current") + _integrity_exceptions(prior_rows, "Prior")
@@ -138,7 +156,8 @@ def review_close(
         current = current_by_key.get(key)
         prior = prior_by_key.get(key)
         display_row = current or prior
-        assert display_row is not None
+        if display_row is None:  # Defensive: key came from one of the two maps.
+            raise RuntimeError("period comparison produced a key without a source row")
         if current is None:
             exceptions.append(
                 _exception(
