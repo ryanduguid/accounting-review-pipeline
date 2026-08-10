@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
+import os
 import re
 from pathlib import Path
 
@@ -10,7 +12,17 @@ from .models import ExceptionItem
 
 
 def _money(value) -> str:
-    return "" if value is None else f"{value:.2f}"
+    """Render a monetary Decimal with at least two decimal places, never fewer than it has.
+
+    A fixed two-place render reports a 0.0040 difference against a 0.001
+    tolerance as "0.00 exceeds 0.00" and leaves the reviewer no way back to the
+    real figures, which defeats the exact-decimal arithmetic behind them.
+    """
+    if value is None:
+        return ""
+    exponent = value.as_tuple().exponent
+    places = max(2, -exponent) if isinstance(exponent, int) else 2
+    return f"{value:.{places}f}"
 
 
 def _percentage(value) -> str:
@@ -97,8 +109,8 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         "",
         f"- Current report date(s): {', '.join(pack.current_report_dates)}",
         f"- Prior report date(s): {', '.join(pack.prior_report_dates)}",
-        f"- Material variance thresholds: ${pack.absolute_threshold:.2f} and {pack.percentage_threshold * 100:.2f}%",
-        f"- Reconciliation tolerance: ${pack.reconciliation_tolerance:.2f}",
+        f"- Material variance thresholds: ${_money(pack.absolute_threshold)} and {_percentage(pack.percentage_threshold)}",
+        f"- Reconciliation tolerance: ${_money(pack.reconciliation_tolerance)}",
         f"- Exceptions: {len(pack.exceptions)} total; {blocked} blocked; {review} requiring review.",
         "",
         "## Source evidence",
@@ -134,21 +146,70 @@ def _as_markdown(pack: CloseReviewPack) -> str:
     return "\n".join(lines)
 
 
+def _as_csv(pack: CloseReviewPack) -> str:
+    fields = list(_exception_dict(ExceptionItem("", "PASS", "", "", "", "", None, None, None, None, None, "", "")).keys())
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fields)
+    writer.writeheader()
+    for item in pack.exceptions:
+        row = _exception_dict(item)
+        for field in ("tenant", "account_id", "account_code", "account_name"):
+            row[field] = _csv_safe(row[field])
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
+def _remove_quietly(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        # Cleanup is best effort; the caller re-raises the original failure.
+        pass
+
+
 def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path]:
+    """Write the three pack files so a failed run cannot leave two runs mixed together.
+
+    Each file is rendered in full, staged beside its destination, and only then
+    moved into place. If a move fails - a locked exceptions.csv is the usual
+    cause - the whole pack is removed rather than left as one file from this run
+    beside two from the last one, because all three carry the same SHA-256
+    provenance framing and a reviewer cannot tell them apart.
+
+    exceptions.csv carries a UTF-8 byte-order mark to match the canonical input
+    files, so a spreadsheet that falls back to the Windows ANSI code page does
+    not turn a tenant or account name into mojibake.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "close-review-pack.json"
     summary_path = output_dir / "close-summary.md"
     exceptions_path = output_dir / "exceptions.csv"
+    rendered = (
+        (json_path, json.dumps(_as_json(pack), indent=2, sort_keys=True) + "\n", "utf-8", None),
+        (summary_path, _as_markdown(pack), "utf-8", None),
+        (exceptions_path, _as_csv(pack), "utf-8-sig", ""),
+    )
 
-    json_path.write_text(json.dumps(_as_json(pack), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    summary_path.write_text(_as_markdown(pack), encoding="utf-8")
-    fields = list(_exception_dict(ExceptionItem("", "PASS", "", "", "", "", None, None, None, None, None, "", "")).keys())
-    with exceptions_path.open("w", encoding="utf-8", newline="") as destination:
-        writer = csv.DictWriter(destination, fieldnames=fields)
-        writer.writeheader()
-        for item in pack.exceptions:
-            row = _exception_dict(item)
-            for field in ("tenant", "account_id", "account_code", "account_name"):
-                row[field] = _csv_safe(row[field])
-            writer.writerow(row)
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for destination, text, encoding, newline in rendered:
+            staged_path = destination.with_name(destination.name + ".partial")
+            staged_path.write_text(text, encoding=encoding, newline=newline)
+            staged.append((staged_path, destination))
+    except OSError:
+        for staged_path, _ in staged:
+            _remove_quietly(staged_path)
+        raise
+
+    moved: list[Path] = []
+    try:
+        for staged_path, destination in staged:
+            os.replace(staged_path, destination)
+            moved.append(destination)
+    except OSError:
+        for staged_path, destination in staged:
+            _remove_quietly(staged_path)
+            if moved:
+                _remove_quietly(destination)
+        raise
     return {"json": json_path, "summary": summary_path, "exceptions": exceptions_path}

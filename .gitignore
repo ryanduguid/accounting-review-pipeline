@@ -10,6 +10,8 @@ review-notes/
 # anything, so a pack written into the checkout was committable.
 close-review-pack.json
 close-summary.md
+# Staged pack files, left behind only if a run is killed mid-write.
+*.partial
 .env
 .env.*
 !.env.example

@@ -11,6 +11,32 @@ from closecontrol.errors import ControlInputError
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
+HEADER = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit"
+TENANT = "Acme Demo Pty Ltd"
+
+
+def _write(path: Path, rows: list[str]) -> Path:
+    path.write_text("\n".join([HEADER, *rows]) + "\n", encoding="utf-8")
+    return path
+
+
+def _variance_pair(tmp_path: Path, current_ytd: str, prior_ytd: str = "100000.00") -> dict[str, Path]:
+    """Two balanced one-account trial balances whose only difference is account 110's YTD position."""
+    prior = _write(
+        tmp_path / "prior.csv",
+        [
+            f"2026-06-30,{TENANT},Assets,110,Trade Debtors,1100,0.00,0.00,{prior_ytd},0.00",
+            f"2026-06-30,{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,{prior_ytd}",
+        ],
+    )
+    current = _write(
+        tmp_path / "current.csv",
+        [
+            f"2026-07-31,{TENANT},Assets,110,Trade Debtors,1100,0.00,0.00,{current_ytd},0.00",
+            f"2026-07-31,{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,{current_ytd}",
+        ],
+    )
+    return {"current_path": current, "prior_path": prior}
 
 
 def _demo_pack():
@@ -40,6 +66,130 @@ def test_demo_pack_is_review_not_approval() -> None:
     assert all(item.status == "REVIEW" for item in pack.exceptions)
 
 
+def test_demo_pack_raises_exactly_the_expected_exceptions() -> None:
+    # Exception count and membership are the product of a materiality engine, so
+    # they are pinned account by account and in emitted order. Account 200 moves
+    # -9,000.00 at 16.07%: it clears the percentage threshold but not the
+    # $10,000 absolute one, and both must be met before an account is raised.
+    pack = _demo_pack()
+
+    assert [(item.control, item.account_id) for item in pack.exceptions] == [
+        ("account_mapping", "500"),
+        ("period_variance", "100"),
+        ("period_variance", "110"),
+        ("period_variance", "300"),
+        ("period_variance", "500"),
+        ("period_variance", "900"),
+        ("subledger_reconciliation", "200"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("current_ytd", "absolute", "percentage", "expected"),
+    [
+        # The absolute gate includes a movement sitting exactly on the threshold.
+        ("110000.00", "10000", "0", True),
+        ("109999.99", "10000", "0", False),
+        ("110000.01", "10000", "0", True),
+        # So does the percentage gate: 10,000 on 100,000 is exactly 0.10.
+        ("110000.00", "0", "0.10", True),
+        ("109999.99", "0", "0.10", False),
+        # Both gates must be met. One alone is not an exception.
+        ("109000.00", "10000", "0.05", False),
+        ("115000.00", "10000", "0.90", False),
+    ],
+)
+def test_variance_thresholds_are_inclusive_and_must_both_be_met(
+    tmp_path: Path, current_ytd: str, absolute: str, percentage: str, expected: bool
+) -> None:
+    pack = review_close(
+        **_variance_pair(tmp_path, current_ytd),
+        absolute_threshold=Decimal(absolute),
+        percentage_threshold=Decimal(percentage),
+    )
+
+    raised = [item for item in pack.exceptions if item.control == "period_variance" and item.account_id == "110"]
+    assert bool(raised) is expected
+
+
+@pytest.mark.parametrize(
+    ("subledger_balance", "expected"),
+    [("99999.99", False), ("99999.98", True), ("100000.01", False), ("100000.02", True)],
+)
+def test_reconciliation_tolerance_excludes_a_difference_exactly_on_the_tolerance(
+    tmp_path: Path, subledger_balance: str, expected: bool
+) -> None:
+    subledger = tmp_path / "subledger.csv"
+    subledger.write_text(
+        f"Tenant,AccountID,SubledgerBalance\n{TENANT},110,{subledger_balance}\n",
+        encoding="utf-8",
+    )
+
+    pack = review_close(
+        **_variance_pair(tmp_path, "100000.00"),
+        subledger_path=subledger,
+        reconciliation_tolerance=Decimal("0.01"),
+    )
+
+    raised = [item for item in pack.exceptions if item.control == "subledger_reconciliation"]
+    assert bool(raised) is expected
+
+
+def test_movement_from_a_nil_prior_balance_is_always_material_by_percentage(tmp_path: Path) -> None:
+    # A percentage change is undefined against a nil prior balance, so the
+    # percentage gate must let it through rather than drop it. A clearing or
+    # suspense account funded for the first time in the period is exactly what a
+    # close reviewer needs to see.
+    prior = _write(
+        tmp_path / "prior.csv",
+        [
+            f"2026-06-30,{TENANT},Assets,100,Operating Bank,1000,0.00,0.00,100000.00,0.00",
+            f"2026-06-30,{TENANT},Assets,777,New Clearing,1770,0.00,0.00,0.00,0.00",
+            f"2026-06-30,{TENANT},Assets,888,Old Clearing,1880,0.00,0.00,50000.00,0.00",
+            f"2026-06-30,{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,150000.00",
+        ],
+    )
+    current = _write(
+        tmp_path / "current.csv",
+        [
+            f"2026-07-31,{TENANT},Assets,100,Operating Bank,1000,0.00,0.00,100000.00,0.00",
+            f"2026-07-31,{TENANT},Assets,777,New Clearing,1770,900000.00,0.00,900000.00,0.00",
+            f"2026-07-31,{TENANT},Assets,888,Old Clearing,1880,0.00,50000.00,0.00,0.00",
+            f"2026-07-31,{TENANT},Equity,900,Retained Earnings,3000,0.00,850000.00,0.00,1000000.00",
+        ],
+    )
+
+    pack = review_close(
+        current_path=current, prior_path=prior, absolute_threshold=Decimal("10000")
+    )
+
+    variances = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}
+    assert set(variances) == {"777", "888", "900"}
+    assert variances["777"].percentage_change is None
+    assert variances["777"].prior_value == Decimal("0.00")
+    assert variances["777"].difference == Decimal("900000.00")
+    # The mirror case, a balance falling to nil, has a defined percentage.
+    assert variances["888"].percentage_change == Decimal("1")
+
+
+def test_totals_that_balance_only_under_exact_decimal_arithmetic_pass(tmp_path: Path) -> None:
+    # 0.10 + 0.20 == 0.30 is true in Decimal and false in binary floating point.
+    # Parsing money through float would report this balanced trial balance as
+    # BLOCKED, which is the failure the README's exact-Decimal claim rules out.
+    rows = [
+        "{date},{tenant},Assets,110,Trade Debtors,1100,0.00,0.00,0.10,0.00",
+        "{date},{tenant},Assets,120,Other Debtors,1200,0.00,0.00,0.20,0.00",
+        "{date},{tenant},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,0.30",
+    ]
+    prior = _write(tmp_path / "prior.csv", [row.format(date="2026-06-30", tenant=TENANT) for row in rows])
+    current = _write(tmp_path / "current.csv", [row.format(date="2026-07-31", tenant=TENANT) for row in rows])
+
+    pack = review_close(current_path=current, prior_path=prior)
+
+    assert pack.status == "PASS"
+    assert pack.exceptions == ()
+
+
 def test_unbalanced_current_trial_balance_blocks_review(tmp_path: Path) -> None:
     destination = tmp_path / "current.csv"
     source = (EXAMPLES / "current_trial_balance.csv").read_text(encoding="utf-8")
@@ -49,6 +199,38 @@ def test_unbalanced_current_trial_balance_blocks_review(tmp_path: Path) -> None:
 
     assert pack.status == "BLOCKED"
     assert any(item.control == "trial_balance_integrity" and item.status == "BLOCKED" for item in pack.exceptions)
+
+
+@pytest.mark.parametrize(
+    ("file_name", "old", "new", "period"),
+    [
+        ("current_trial_balance.csv", "15000.00,0.00,120000.00,0.00", "15000.00,0.00,120000.01,0.00", "Current"),
+        ("prior_trial_balance.csv", "10000.00,0.00,105000.00,0.00", "10000.00,0.00,105000.01,0.00", "Prior"),
+    ],
+)
+def test_unbalanced_ytd_columns_block_review_while_movement_still_balances(
+    tmp_path: Path, file_name: str, old: str, new: str, period: str
+) -> None:
+    # Only the YTD pair is perturbed, so the movement control stays satisfied and
+    # the YTD control is the sole thing standing between the reviewer and a
+    # year-to-date position that does not balance.
+    paths = {
+        "current_path": EXAMPLES / "current_trial_balance.csv",
+        "prior_path": EXAMPLES / "prior_trial_balance.csv",
+    }
+    destination = tmp_path / file_name
+    destination.write_text(
+        (EXAMPLES / file_name).read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+    )
+    paths["current_path" if file_name.startswith("current") else "prior_path"] = destination
+
+    pack = review_close(**paths)
+
+    integrity = [item for item in pack.exceptions if item.control == "trial_balance_integrity"]
+    assert pack.status == "BLOCKED"
+    assert [item.reason for item in integrity] == [f"{period} YTD debit and credit totals do not balance."]
+    assert integrity[0].status == "BLOCKED"
+    assert integrity[0].difference == Decimal("0.01")
 
 
 def test_account_metadata_change_raises_review_exception(tmp_path: Path) -> None:

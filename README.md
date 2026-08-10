@@ -30,6 +30,9 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later.
 - Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised only where the rest of the value could be read as a formula, so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI. Reviewer-note text is flattened before Markdown rendering.
+- `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
+- The three pack files are written as a set. If one of them cannot be replaced, the pack is removed rather than left half describing one trial balance and half describing another.
+- Amounts are rendered with at least two decimal places and never fewer than the value carries, so a tolerance or difference finer than one cent still reaches the reviewer.
 
 ## Quick demo
 
@@ -56,7 +59,7 @@ The demo exits `2` because its deliberately fabricated exceptions need human rev
 - `exceptions.csv` — filterable exception detail for Excel or Power BI.
 - `close-review-pack.json` — structured evidence, thresholds, source hashes, and any supplied review acknowledgement.
 
-Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file or invalid command configuration.
+Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
 
 ## Canonical trial-balance contract
 
