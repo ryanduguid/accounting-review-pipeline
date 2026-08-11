@@ -23,16 +23,16 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 A close can be technically balanced and still need review. This tool keeps the evidence visible:
 
-- Exact `Decimal` arithmetic—not binary floating point—for money controls.
+- Exact `Decimal` arithmetic for money controls, never binary floating point.
 - Schema, duplicate-key, date, and numeric gates fail closed.
 - Current-period and YTD debits must exactly equal credits.
 - Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
 - A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and leave `percentage_change` blank, rather than reporting that a percentage test passed that never ran.
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later.
-- Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised unless the rest of the value is a plain identifier — word characters and dots, and not an A1-style cell reference — so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI, while `-A1` is quoted. That pass-through is narrow by construction, not a test for everything a spreadsheet can evaluate: `+unsafe` still passes through and reads as a defined name rather than as text, which costs display fidelity in that cell and calls nothing. Every payload that reaches outside the sheet carries a character the identifier test rejects. Text rendered into `close-summary.md` — reviewer-note text and every exception table cell — is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads.
+- Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised unless the rest of the value is a plain identifier (word characters and dots, and not an A1-style cell reference), so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI, while `-A1` is quoted. That pass-through is narrow by construction, not a test for everything a spreadsheet can evaluate: `+unsafe` still passes through and reads as a defined name rather than as text, which costs display fidelity in that cell and calls nothing. Every payload that reaches outside the sheet carries a character the identifier test rejects. Text rendered into `close-summary.md` (reviewer-note text and every exception table cell) is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads.
 - `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
-- The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced — a reviewer holding `exceptions.csv` open is the usual cause — the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
+- The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
 - Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a percent is flattened to `0.00`.
 
 ## Quick demo
@@ -56,9 +56,9 @@ close-control review \
 
 The demo exits `2` because its deliberately fabricated exceptions need human review. It writes:
 
-- `close-summary.md` — a concise, deterministic review pack.
-- `exceptions.csv` — filterable exception detail for Excel or Power BI.
-- `close-review-pack.json` — structured evidence, thresholds, source hashes, and any supplied review acknowledgement.
+- `close-summary.md`: a concise, deterministic review pack.
+- `exceptions.csv`: filterable exception detail for Excel or Power BI.
+- `close-review-pack.json`: structured evidence, thresholds, source hashes, and any supplied review acknowledgement.
 
 Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
 
