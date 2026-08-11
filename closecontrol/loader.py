@@ -102,7 +102,13 @@ def load_canonical_tb(path: Path) -> list[TrialBalanceRow]:
     with path.open("r", encoding="utf-8-sig", newline="") as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, CANONICAL_COLUMNS, path)
-        for row_number, values in enumerate(reader, start=2):
+        for values in reader:
+            # line_num, not an enumerate counter. DictReader silently
+            # skips blank rows, so a counter drifts below the real file
+            # line from the first blank line onwards and every message
+            # after it names the wrong row. start=2 shows the intent was
+            # always the physical line, with the header as line 1.
+            row_number = reader.line_num
             if None in values:
                 raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
             raw_date = _text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path)
@@ -148,7 +154,13 @@ def load_mapping(path: Path | None) -> dict[str, str]:
     with path.open("r", encoding="utf-8-sig", newline="") as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, MAPPING_COLUMNS, path)
-        for row_number, values in enumerate(reader, start=2):
+        for values in reader:
+            # line_num, not an enumerate counter. DictReader silently
+            # skips blank rows, so a counter drifts below the real file
+            # line from the first blank line onwards and every message
+            # after it names the wrong row. start=2 shows the intent was
+            # always the physical line, with the header as line 1.
+            row_number = reader.line_num
             account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
             review_group = _text(values["ReviewGroup"], field="ReviewGroup", row_number=row_number, path=path)
             if account_id in mapping:
@@ -166,7 +178,13 @@ def load_subledger(path: Path | None) -> dict[tuple[str, str], Decimal]:
     with path.open("r", encoding="utf-8-sig", newline="") as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, SUBLEDGER_COLUMNS, path)
-        for row_number, values in enumerate(reader, start=2):
+        for values in reader:
+            # line_num, not an enumerate counter. DictReader silently
+            # skips blank rows, so a counter drifts below the real file
+            # line from the first blank line onwards and every message
+            # after it names the wrong row. start=2 shows the intent was
+            # always the physical line, with the header as line 1.
+            row_number = reader.line_num
             tenant = _text(values["Tenant"], field="Tenant", row_number=row_number, path=path)
             account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
             key = (tenant, account_id)
