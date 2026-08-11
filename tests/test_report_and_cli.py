@@ -12,6 +12,8 @@ import pytest
 
 from closecontrol.cli import main
 from closecontrol.engine import CloseReviewPack, review_close
+from closecontrol.errors import ControlInputError
+from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
 from closecontrol.report import write_review_pack
 
@@ -672,3 +674,26 @@ def test_a_review_note_surrogate_is_refused_instead_of_crashing(tmp_path: Path) 
     assert code == 1
     assert list(work.glob("*.partial")) == []
     assert list(work.glob("close-*")) == []
+
+
+def test_a_blank_line_does_not_shift_the_reported_row_number(tmp_path: Path) -> None:
+    """DictReader silently skips blank rows, so an enumerate counter drifts
+    below the physical file line from the first blank line onwards and every
+    later error names a row the reader cannot find."""
+    csv_path = tmp_path / "current.csv"
+    csv_path.write_text(
+        "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,"
+        "Debit,Credit,YTDDebit,YTDCredit\n"
+        "2026-07-31,Acme,Assets,100,Operating Bank,1000,0.00,0.00,1000.00,0.00\n"
+        "\n"
+        "2026-07-31,Acme,Assets,110,,1100,0.00,0.00,500.00,0.00\n",
+        encoding="utf-8",
+        newline="",
+    )
+
+    with pytest.raises(ControlInputError) as caught:
+        load_canonical_tb(csv_path)
+
+    # The offending record is physically on line 4: header, row, blank, row.
+    assert "row 4" in str(caught.value)
+    assert "row 3" not in str(caught.value)
