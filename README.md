@@ -1,5 +1,7 @@
 # Monthly Close Control Plane
 
+[![tests](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+
 A small, **review-first** monthly-close control pack for a validated trial-balance export. It turns current and prior period trial balances into deterministic integrity checks, variance exceptions, reconciliation exceptions, and a human-review pack.
 
 It is intentionally narrow:
