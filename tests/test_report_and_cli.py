@@ -617,3 +617,58 @@ def test_cli_help_still_exits_zero(capsys) -> None:
 
     assert excinfo.value.code == 0
     capsys.readouterr()
+
+
+def test_a_source_file_sharing_a_pack_name_is_refused_not_destroyed(tmp_path: Path) -> None:
+    """--subledger <dir>/exceptions.csv --output <dir> used to overwrite the
+    source with the generated exceptions file and still report success, so the
+    source_sha256 in the pack described a file that no longer existed."""
+    work = tmp_path / "client"
+    work.mkdir()
+    shutil.copy(EXAMPLES / "current_trial_balance.csv", work / "current.csv")
+    shutil.copy(EXAMPLES / "prior_trial_balance.csv", work / "prior.csv")
+    subledger = work / "exceptions.csv"
+    subledger.write_text(
+        "Tenant,AccountID,SubledgerBalance\nAcme Demo Pty Ltd,110,85000.00\n",
+        encoding="utf-8",
+    )
+    before = subledger.read_bytes()
+
+    code = main([
+        "review",
+        "--current", str(work / "current.csv"),
+        "--prior", str(work / "prior.csv"),
+        "--subledger", str(subledger),
+        "--output", str(work),
+    ])
+
+    assert code == 1
+    assert subledger.read_bytes() == before
+    assert not (work / "close-review-pack.json").exists()
+
+
+def test_a_review_note_surrogate_is_refused_instead_of_crashing(tmp_path: Path) -> None:
+    """A lone surrogate survived the control-character gate (category Cs), then
+    UnicodeEncodeError - a ValueError, not an OSError - escaped both the staging
+    cleanup and the CLI handler, leaving a .partial holding the whole pack."""
+    work = tmp_path / "client"
+    work.mkdir()
+    note = tmp_path / "note.json"
+    # written as bytes so the file holds the six-character escape; json.loads
+    # is what turns it into a lone surrogate.
+    note.write_bytes(
+        b'{"reviewer_initials":"RD","reviewed_on":"2026-08-08",'
+        rb'"comment":"Reviewed \ud800 demo."}'
+    )
+
+    code = main([
+        "review",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--review-note", str(note),
+        "--output", str(work),
+    ])
+
+    assert code == 1
+    assert list(work.glob("*.partial")) == []
+    assert list(work.glob("close-*")) == []
