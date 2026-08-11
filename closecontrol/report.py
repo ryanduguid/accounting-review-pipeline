@@ -276,6 +276,10 @@ def _swap_into_place(staged_path: Path, destination: Path) -> Path | None:
     return parked
 
 
+PACK_FILE_NAMES = ("close-review-pack.json", "close-summary.md", "exceptions.csv")
+"""The three names write_review_pack claims in its output directory."""
+
+
 def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path]:
     """Write the three pack files so a failed run cannot leave two runs mixed together.
 
@@ -285,7 +289,10 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
     rolled back to the content they replaced, so the directory holds the whole
     previous pack rather than one file from this run beside two from the last
     one; all three carry the same SHA-256 provenance framing and a reviewer
-    cannot tell them apart. No file this run did not write is ever deleted.
+    cannot tell them apart. Apart from the three destinations themselves, no
+    file is ever deleted; a caller that points a source path at one of
+    PACK_FILE_NAMES inside output_dir destroys that source, which is why the
+    CLI refuses that combination before the run starts.
 
     Rollback is best effort against a second failure, and a run killed outright
     can leave a `.partial` file behind, so a stray `.partial` may hold either
@@ -314,7 +321,11 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
             # is cleaned up rather than left as a truncated orphan.
             staged.append((staged_path, destination))
             staged_path.write_text(text, encoding=encoding, newline=newline)
-    except OSError:
+    except BaseException:
+        # Not just OSError: a render that cannot be encoded raises
+        # UnicodeEncodeError, a ValueError, and used to walk out of here
+        # leaving a .partial holding the whole pack - tenant, accounts and
+        # balances - in a directory the caller believes the run never wrote to.
         for staged_path, _ in staged:
             _remove_quietly(staged_path)
         raise
