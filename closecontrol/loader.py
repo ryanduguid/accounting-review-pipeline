@@ -60,7 +60,11 @@ def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], pa
 def _has_control_or_format_character(text: str, *, allow_line_breaks: bool = False) -> bool:
     permitted = {"\t", "\n", "\r"} if allow_line_breaks else set()
     return any(
-        character not in permitted and unicodedata.category(character) in {"Cc", "Cf"}
+        # Cs catches a lone surrogate. json.loads produces one from a paired
+        # backslash-u escape in the D800-DFFF range, and no UTF-8 encoder
+        # downstream will accept it.
+        character not in permitted
+        and unicodedata.category(character) in {"Cc", "Cf", "Cs"}
         for character in text
     )
 
