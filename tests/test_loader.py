@@ -9,7 +9,9 @@ import pytest
 from closecontrol.errors import ControlInputError
 from closecontrol.loader import (
     load_canonical_tb,
+    load_mapping,
     load_reviewer_acknowledgement,
+    load_subledger,
     parse_money,
 )
 
@@ -52,6 +54,66 @@ def test_amount_parser_keeps_every_supplied_digit(value: str) -> None:
     assert isinstance(parsed, Decimal)
     assert parsed == Decimal(value)
     assert str(parsed) == value
+
+
+def test_loader_accepts_exported_codeless_bank_account(tmp_path: Path) -> None:
+    exported = tmp_path / "trial-balance.csv"
+    exported.write_text(
+        "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,"
+        "Debit,Credit,YTDDebit,YTDCredit\n"
+        "2026-07-31,Demo Company,Assets,bank-guid,Business Bank Account,,"
+        "0.00,0.00,125.00,0.00\n",
+        encoding="utf-8",
+    )
+
+    [row] = load_canonical_tb(exported)
+
+    assert row.key == ("Demo Company", "bank-guid")
+    assert row.account_code == ""
+
+
+@pytest.mark.parametrize("field", ["Tenant", "Section", "AccountID", "AccountName"])
+def test_codeless_account_support_does_not_relax_required_identity_fields(
+    tmp_path: Path, field: str
+) -> None:
+    columns = [
+        "ReportDate", "Tenant", "Section", "AccountID", "AccountName",
+        "AccountCode", "Debit", "Credit", "YTDDebit", "YTDCredit",
+    ]
+    values = [
+        "2026-07-31", "Demo Company", "Assets", "bank-guid",
+        "Business Bank Account", "", "0.00", "0.00", "125.00", "0.00",
+    ]
+    values[columns.index(field)] = ""
+    exported = tmp_path / "trial-balance.csv"
+    exported.write_text(
+        ",".join(columns) + "\n" + ",".join(values) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ControlInputError, match=rf"empty {field}"):
+        load_canonical_tb(exported)
+
+
+@pytest.mark.parametrize(
+    ("loader", "header", "row"),
+    [
+        (load_mapping, "AccountID,ReviewGroup", "bank-guid,Cash,unexpected"),
+        (
+            load_subledger,
+            "Tenant,AccountID,SubledgerBalance",
+            "Demo Company,bank-guid,125.00,unexpected",
+        ),
+    ],
+)
+def test_optional_csv_loaders_reject_surplus_cells(
+    tmp_path: Path, loader: object, header: str, row: str
+) -> None:
+    csv_path = tmp_path / "optional.csv"
+    csv_path.write_text(f"{header}\n{row}\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="more fields than its header"):
+        loader(csv_path)  # type: ignore[operator]
 
 
 def test_empty_report_date_is_reported_as_empty_not_invalid_iso(tmp_path: Path) -> None:
