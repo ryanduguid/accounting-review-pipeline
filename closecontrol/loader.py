@@ -69,9 +69,16 @@ def _has_control_or_format_character(text: str, *, allow_line_breaks: bool = Fal
     )
 
 
-def _text(value: str | None, *, field: str, row_number: int, path: Path) -> str:
+def _text(
+    value: str | None,
+    *,
+    field: str,
+    row_number: int,
+    path: Path,
+    allow_empty: bool = False,
+) -> str:
     text = (value or "").strip()
-    if not text:
+    if not text and not allow_empty:
         raise ControlInputError(f"{path}: row {row_number} has an empty {field}.")
     if _has_control_or_format_character(text):
         raise ControlInputError(
@@ -122,7 +129,13 @@ def load_canonical_tb(path: Path) -> list[TrialBalanceRow]:
                 section=_text(values["Section"], field="Section", row_number=row_number, path=path),
                 account_id=_text(values["AccountID"], field="AccountID", row_number=row_number, path=path),
                 account_name=_text(values["AccountName"], field="AccountName", row_number=row_number, path=path),
-                account_code=_text(values["AccountCode"], field="AccountCode", row_number=row_number, path=path),
+                account_code=_text(
+                    values["AccountCode"],
+                    field="AccountCode",
+                    row_number=row_number,
+                    path=path,
+                    allow_empty=True,
+                ),
                 debit=parse_money(values["Debit"], field="Debit", row_number=row_number, path=path),
                 credit=parse_money(values["Credit"], field="Credit", row_number=row_number, path=path),
                 ytd_debit=parse_money(values["YTDDebit"], field="YTDDebit", row_number=row_number, path=path),
@@ -161,6 +174,8 @@ def load_mapping(path: Path | None) -> dict[str, str]:
             # after it names the wrong row. start=2 shows the intent was
             # always the physical line, with the header as line 1.
             row_number = reader.line_num
+            if None in values:
+                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
             account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
             review_group = _text(values["ReviewGroup"], field="ReviewGroup", row_number=row_number, path=path)
             if account_id in mapping:
@@ -185,6 +200,8 @@ def load_subledger(path: Path | None) -> dict[tuple[str, str], Decimal]:
             # after it names the wrong row. start=2 shows the intent was
             # always the physical line, with the header as line 1.
             row_number = reader.line_num
+            if None in values:
+                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
             tenant = _text(values["Tenant"], field="Tenant", row_number=row_number, path=path)
             account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
             key = (tenant, account_id)
