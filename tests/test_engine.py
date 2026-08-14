@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import pytest
 
 from closecontrol.engine import review_close
 from closecontrol.errors import ControlInputError
+from closecontrol.loader import SourceSnapshot
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -298,6 +300,71 @@ def test_source_hashes_change_when_source_changes(tmp_path: Path) -> None:
     second = review_close(current_path=copied, prior_path=EXAMPLES / "prior_trial_balance.csv")
 
     assert first.source_hashes["current_trial_balance"] != second.source_hashes["current_trial_balance"]
+
+
+def test_every_source_digest_is_bound_to_the_exact_bytes_parsed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source_paths = {
+        "current_trial_balance": tmp_path / "current.csv",
+        "prior_trial_balance": tmp_path / "prior.csv",
+        "account_mapping": tmp_path / "mapping.csv",
+        "subledger": tmp_path / "subledger.csv",
+        "review_note": tmp_path / "review-note.json",
+    }
+    examples = {
+        "current_trial_balance": EXAMPLES / "current_trial_balance.csv",
+        "prior_trial_balance": EXAMPLES / "prior_trial_balance.csv",
+        "account_mapping": EXAMPLES / "account_mapping.csv",
+        "subledger": EXAMPLES / "subledger_balances.csv",
+        "review_note": EXAMPLES / "review_note.json",
+    }
+    original_bytes = {}
+    for role, destination in source_paths.items():
+        content = examples[role].read_bytes()
+        destination.write_bytes(content)
+        original_bytes[role] = content
+
+    replacement = b"replaced after the immutable read\n"
+    real_text = SourceSnapshot.text
+
+    def text_then_replace(
+        snapshot: SourceSnapshot, *, label: str, encoding: str
+    ) -> str:
+        text = real_text(snapshot, label=label, encoding=encoding)
+        snapshot.path.write_bytes(replacement)
+        return text
+
+    monkeypatch.setattr(SourceSnapshot, "text", text_then_replace)
+
+    pack = review_close(
+        current_path=source_paths["current_trial_balance"],
+        prior_path=source_paths["prior_trial_balance"],
+        mapping_path=source_paths["account_mapping"],
+        subledger_path=source_paths["subledger"],
+        acknowledgement_path=source_paths["review_note"],
+        absolute_threshold=Decimal("10000"),
+        percentage_threshold=Decimal("0.10"),
+        reconciliation_tolerance=Decimal("0.01"),
+    )
+
+    assert pack.source_hashes == {
+        role: hashlib.sha256(content).hexdigest()
+        for role, content in original_bytes.items()
+    }
+    assert all(path.read_bytes() == replacement for path in source_paths.values())
+    # These values can only come from the original snapshots. The replacement
+    # bytes are not valid inputs for any of the five loaders.
+    assert pack.acknowledgement is not None
+    assert pack.acknowledgement.reviewer_initials == "RD"
+    assert [
+        item.account_id for item in pack.exceptions if item.control == "account_mapping"
+    ] == ["500"]
+    assert [
+        item.account_id
+        for item in pack.exceptions
+        if item.control == "subledger_reconciliation"
+    ] == ["200"]
 
 
 def test_period_comparison_rejects_different_tenants(tmp_path: Path) -> None:

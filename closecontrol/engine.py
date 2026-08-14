@@ -5,7 +5,13 @@ from decimal import Decimal, DivisionByZero, InvalidOperation
 from pathlib import Path
 
 from .errors import ControlInputError
-from .loader import load_canonical_tb, load_mapping, load_reviewer_acknowledgement, load_subledger, sha256_file
+from .loader import (
+    SourceSnapshot,
+    load_canonical_tb,
+    load_mapping,
+    load_reviewer_acknowledgement,
+    load_subledger,
+)
 from .models import ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow
 
 
@@ -125,11 +131,31 @@ def review_close(
         if not value.is_finite() or value < ZERO:
             raise ValueError(f"{name} must be a finite non-negative decimal.")
 
-    current_rows = load_canonical_tb(current_path)
-    prior_rows = load_canonical_tb(prior_path)
-    mapping = load_mapping(mapping_path)
-    subledger = load_subledger(subledger_path)
-    acknowledgement = load_reviewer_acknowledgement(acknowledgement_path)
+    # Each source is read once. Parsing and provenance use the same immutable
+    # bytes, so replacing a file while the review runs cannot make calculations
+    # from one version travel with the digest of another.
+    current_source = SourceSnapshot.capture(current_path, label="Trial-balance file")
+    current_rows = load_canonical_tb(current_source)
+    prior_source = SourceSnapshot.capture(prior_path, label="Trial-balance file")
+    prior_rows = load_canonical_tb(prior_source)
+    mapping_source = (
+        SourceSnapshot.capture(mapping_path, label="Mapping file")
+        if mapping_path is not None
+        else None
+    )
+    mapping = load_mapping(mapping_source)
+    subledger_source = (
+        SourceSnapshot.capture(subledger_path, label="Subledger file")
+        if subledger_path is not None
+        else None
+    )
+    subledger = load_subledger(subledger_source)
+    acknowledgement_source = (
+        SourceSnapshot.capture(acknowledgement_path, label="Review-note file")
+        if acknowledgement_path is not None
+        else None
+    )
+    acknowledgement = load_reviewer_acknowledgement(acknowledgement_source)
 
     current_tenant = current_rows[0].tenant
     prior_tenant = prior_rows[0].tenant
@@ -279,15 +305,15 @@ def review_close(
             )
 
     source_hashes = {
-        "current_trial_balance": sha256_file(current_path),
-        "prior_trial_balance": sha256_file(prior_path),
+        "current_trial_balance": current_source.sha256,
+        "prior_trial_balance": prior_source.sha256,
     }
-    if mapping_path is not None:
-        source_hashes["account_mapping"] = sha256_file(mapping_path)
-    if subledger_path is not None:
-        source_hashes["subledger"] = sha256_file(subledger_path)
-    if acknowledgement_path is not None:
-        source_hashes["review_note"] = sha256_file(acknowledgement_path)
+    if mapping_source is not None:
+        source_hashes["account_mapping"] = mapping_source.sha256
+    if subledger_source is not None:
+        source_hashes["subledger"] = subledger_source.sha256
+    if acknowledgement_source is not None:
+        source_hashes["review_note"] = acknowledgement_source.sha256
 
     ordered = tuple(sorted(exceptions, key=lambda item: (item.status != "BLOCKED", item.control, item.tenant, item.account_id, item.reason)))
     return CloseReviewPack(
