@@ -20,6 +20,8 @@ sha256sum --check SHA256SUMS
 gh attestation verify monthly_close_control_plane-0.1.1-py3-none-any.whl -R ryanduguid/monthly-close-control-plane
 gh attestation verify monthly_close_control_plane-0.1.1-py3-none-any.whl -R ryanduguid/monthly-close-control-plane --predicate-type https://spdx.dev/Document/v2.3
 gh release view v0.1.1 -R ryanduguid/monthly-close-control-plane --json isImmutable
+gh release verify v0.1.1 -R ryanduguid/monthly-close-control-plane
+gh release verify-asset v0.1.1 monthly_close_control_plane-0.1.1-py3-none-any.whl -R ryanduguid/monthly-close-control-plane
 ```
 
 If any gate fails, inspect it before touching the tag or draft. Never move a published tag.
