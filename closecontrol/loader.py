@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -28,6 +30,37 @@ CANONICAL_COLUMNS = (
 MAPPING_COLUMNS = ("AccountID", "ReviewGroup")
 SUBLEDGER_COLUMNS = ("Tenant", "AccountID", "SubledgerBalance")
 _ACCOUNTING_NUMBER = re.compile(r"^[-+]?\$?(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?$")
+
+
+@dataclass(frozen=True, slots=True)
+class SourceSnapshot:
+    """One immutable read of a source file and the digest of those exact bytes."""
+
+    path: Path
+    content: bytes
+    sha256: str
+
+    @classmethod
+    def capture(cls, path: Path, *, label: str) -> SourceSnapshot:
+        try:
+            content = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise ControlInputError(f"{label} does not exist: {path}.") from exc
+        except OSError as exc:
+            raise ControlInputError(f"{label} could not be read: {path} ({exc}).") from exc
+        return cls(path=path, content=content, sha256=hashlib.sha256(content).hexdigest())
+
+    def text(self, *, label: str, encoding: str) -> str:
+        try:
+            return self.content.decode(encoding)
+        except UnicodeDecodeError as exc:
+            raise ControlInputError(f"{label} could not be read as UTF-8: {self.path}.") from exc
+
+
+def _snapshot(path: Path | SourceSnapshot, *, label: str) -> SourceSnapshot:
+    if isinstance(path, SourceSnapshot):
+        return path
+    return SourceSnapshot.capture(path, label=label)
 
 
 def sha256_file(path: Path) -> str:
@@ -101,12 +134,14 @@ def parse_money(value: str | None, *, field: str, row_number: int, path: Path) -
     return result
 
 
-def load_canonical_tb(path: Path) -> list[TrialBalanceRow]:
-    if not path.is_file():
-        raise ControlInputError(f"Trial-balance file does not exist: {path}.")
+def load_canonical_tb(path: Path | SourceSnapshot) -> list[TrialBalanceRow]:
+    snapshot = _snapshot(path, label="Trial-balance file")
+    path = snapshot.path
     rows: list[TrialBalanceRow] = []
     seen: set[tuple[str, str]] = set()
-    with path.open("r", encoding="utf-8-sig", newline="") as source:
+    with io.StringIO(
+        snapshot.text(label="Trial-balance file", encoding="utf-8-sig"), newline=""
+    ) as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, CANONICAL_COLUMNS, path)
         for values in reader:
@@ -158,13 +193,15 @@ def load_canonical_tb(path: Path) -> list[TrialBalanceRow]:
     return rows
 
 
-def load_mapping(path: Path | None) -> dict[str, str]:
+def load_mapping(path: Path | SourceSnapshot | None) -> dict[str, str]:
     if path is None:
         return {}
-    if not path.is_file():
-        raise ControlInputError(f"Mapping file does not exist: {path}.")
+    snapshot = _snapshot(path, label="Mapping file")
+    path = snapshot.path
     mapping: dict[str, str] = {}
-    with path.open("r", encoding="utf-8-sig", newline="") as source:
+    with io.StringIO(
+        snapshot.text(label="Mapping file", encoding="utf-8-sig"), newline=""
+    ) as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, MAPPING_COLUMNS, path)
         for values in reader:
@@ -184,13 +221,15 @@ def load_mapping(path: Path | None) -> dict[str, str]:
     return mapping
 
 
-def load_subledger(path: Path | None) -> dict[tuple[str, str], Decimal]:
+def load_subledger(path: Path | SourceSnapshot | None) -> dict[tuple[str, str], Decimal]:
     if path is None:
         return {}
-    if not path.is_file():
-        raise ControlInputError(f"Subledger file does not exist: {path}.")
+    snapshot = _snapshot(path, label="Subledger file")
+    path = snapshot.path
     rows: dict[tuple[str, str], Decimal] = {}
-    with path.open("r", encoding="utf-8-sig", newline="") as source:
+    with io.StringIO(
+        snapshot.text(label="Subledger file", encoding="utf-8-sig"), newline=""
+    ) as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, SUBLEDGER_COLUMNS, path)
         for values in reader:
@@ -211,17 +250,15 @@ def load_subledger(path: Path | None) -> dict[tuple[str, str], Decimal]:
     return rows
 
 
-def load_reviewer_acknowledgement(path: Path | None) -> ReviewerAcknowledgement | None:
+def load_reviewer_acknowledgement(
+    path: Path | SourceSnapshot | None,
+) -> ReviewerAcknowledgement | None:
     if path is None:
         return None
-    if not path.is_file():
-        raise ControlInputError(f"Review-note file does not exist: {path}.")
+    snapshot = _snapshot(path, label="Review-note file")
+    path = snapshot.path
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except UnicodeDecodeError as exc:
-        raise ControlInputError(f"{path}: review note is not valid UTF-8 text.") from exc
-    except OSError as exc:
-        raise ControlInputError(f"{path}: review note cannot be read ({exc}).") from exc
+        payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ControlInputError(f"{path}: review note is not valid JSON.") from exc
     if not isinstance(payload, dict) or set(payload) != {"reviewer_initials", "reviewed_on", "comment"}:
