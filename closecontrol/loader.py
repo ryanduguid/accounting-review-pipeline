@@ -63,14 +63,6 @@ def _snapshot(path: Path | SourceSnapshot, *, label: str) -> SourceSnapshot:
     return SourceSnapshot.capture(path, label=label)
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], path: Path) -> None:
     if fieldnames is None:
         raise ControlInputError(f"{path}: CSV has no header row.")
