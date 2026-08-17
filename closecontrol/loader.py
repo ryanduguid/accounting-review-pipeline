@@ -6,6 +6,7 @@ import io
 import json
 import re
 import unicodedata
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -82,6 +83,25 @@ def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], pa
         raise ControlInputError(f"{path}: canonical schema mismatch ({'; '.join(detail)}).")
 
 
+def _read_csv_rows(
+    snapshot: SourceSnapshot, required: tuple[str, ...], *, label: str
+) -> Iterator[tuple[int, dict[str, str | None]]]:
+    path = snapshot.path
+    with io.StringIO(snapshot.text(label=label, encoding="utf-8-sig"), newline="") as source:
+        reader = csv.DictReader(source)
+        _require_columns(reader.fieldnames, required, path)
+        for values in reader:
+            # reader.line_num, not an enumerate counter. DictReader silently
+            # skips blank rows, so a counter drifts below the real file line
+            # from the first blank line onwards and every message after it
+            # names the wrong row; line_num reports the physical line, with
+            # the header as line 1.
+            row_number = reader.line_num
+            if None in values:
+                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
+            yield row_number, values
+
+
 def _has_control_or_format_character(text: str, *, allow_line_breaks: bool = False) -> bool:
     permitted = {"\t", "\n", "\r"} if allow_line_breaks else set()
     return any(
@@ -131,47 +151,34 @@ def load_canonical_tb(path: Path | SourceSnapshot) -> list[TrialBalanceRow]:
     path = snapshot.path
     rows: list[TrialBalanceRow] = []
     seen: set[tuple[str, str]] = set()
-    with io.StringIO(
-        snapshot.text(label="Trial-balance file", encoding="utf-8-sig"), newline=""
-    ) as source:
-        reader = csv.DictReader(source)
-        _require_columns(reader.fieldnames, CANONICAL_COLUMNS, path)
-        for values in reader:
-            # line_num, not an enumerate counter. DictReader silently
-            # skips blank rows, so a counter drifts below the real file
-            # line from the first blank line onwards and every message
-            # after it names the wrong row. start=2 shows the intent was
-            # always the physical line, with the header as line 1.
-            row_number = reader.line_num
-            if None in values:
-                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
-            raw_date = _text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path)
-            try:
-                report_date = date.fromisoformat(raw_date)
-            except ValueError as exc:
-                raise ControlInputError(f"{path}: row {row_number} has an invalid ISO ReportDate.") from exc
-            row = TrialBalanceRow(
-                report_date=report_date,
-                tenant=_text(values["Tenant"], field="Tenant", row_number=row_number, path=path),
-                section=_text(values["Section"], field="Section", row_number=row_number, path=path),
-                account_id=_text(values["AccountID"], field="AccountID", row_number=row_number, path=path),
-                account_name=_text(values["AccountName"], field="AccountName", row_number=row_number, path=path),
-                account_code=_text(
-                    values["AccountCode"],
-                    field="AccountCode",
-                    row_number=row_number,
-                    path=path,
-                    allow_empty=True,
-                ),
-                debit=parse_money(values["Debit"], field="Debit", row_number=row_number, path=path),
-                credit=parse_money(values["Credit"], field="Credit", row_number=row_number, path=path),
-                ytd_debit=parse_money(values["YTDDebit"], field="YTDDebit", row_number=row_number, path=path),
-                ytd_credit=parse_money(values["YTDCredit"], field="YTDCredit", row_number=row_number, path=path),
-            )
-            if row.key in seen:
-                raise ControlInputError(f"{path}: duplicate control key Tenant={row.tenant!r}, AccountID={row.account_id!r}.")
-            seen.add(row.key)
-            rows.append(row)
+    for row_number, values in _read_csv_rows(snapshot, CANONICAL_COLUMNS, label="Trial-balance file"):
+        raw_date = _text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path)
+        try:
+            report_date = date.fromisoformat(raw_date)
+        except ValueError as exc:
+            raise ControlInputError(f"{path}: row {row_number} has an invalid ISO ReportDate.") from exc
+        row = TrialBalanceRow(
+            report_date=report_date,
+            tenant=_text(values["Tenant"], field="Tenant", row_number=row_number, path=path),
+            section=_text(values["Section"], field="Section", row_number=row_number, path=path),
+            account_id=_text(values["AccountID"], field="AccountID", row_number=row_number, path=path),
+            account_name=_text(values["AccountName"], field="AccountName", row_number=row_number, path=path),
+            account_code=_text(
+                values["AccountCode"],
+                field="AccountCode",
+                row_number=row_number,
+                path=path,
+                allow_empty=True,
+            ),
+            debit=parse_money(values["Debit"], field="Debit", row_number=row_number, path=path),
+            credit=parse_money(values["Credit"], field="Credit", row_number=row_number, path=path),
+            ytd_debit=parse_money(values["YTDDebit"], field="YTDDebit", row_number=row_number, path=path),
+            ytd_credit=parse_money(values["YTDCredit"], field="YTDCredit", row_number=row_number, path=path),
+        )
+        if row.key in seen:
+            raise ControlInputError(f"{path}: duplicate control key Tenant={row.tenant!r}, AccountID={row.account_id!r}.")
+        seen.add(row.key)
+        rows.append(row)
     if not rows:
         raise ControlInputError(f"{path}: no trial-balance rows were supplied.")
     tenants = {row.tenant for row in rows}
@@ -191,25 +198,12 @@ def load_mapping(path: Path | SourceSnapshot | None) -> dict[str, str]:
     snapshot = _snapshot(path, label="Mapping file")
     path = snapshot.path
     mapping: dict[str, str] = {}
-    with io.StringIO(
-        snapshot.text(label="Mapping file", encoding="utf-8-sig"), newline=""
-    ) as source:
-        reader = csv.DictReader(source)
-        _require_columns(reader.fieldnames, MAPPING_COLUMNS, path)
-        for values in reader:
-            # line_num, not an enumerate counter. DictReader silently
-            # skips blank rows, so a counter drifts below the real file
-            # line from the first blank line onwards and every message
-            # after it names the wrong row. start=2 shows the intent was
-            # always the physical line, with the header as line 1.
-            row_number = reader.line_num
-            if None in values:
-                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
-            account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
-            review_group = _text(values["ReviewGroup"], field="ReviewGroup", row_number=row_number, path=path)
-            if account_id in mapping:
-                raise ControlInputError(f"{path}: duplicate AccountID {account_id!r}.")
-            mapping[account_id] = review_group
+    for row_number, values in _read_csv_rows(snapshot, MAPPING_COLUMNS, label="Mapping file"):
+        account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
+        review_group = _text(values["ReviewGroup"], field="ReviewGroup", row_number=row_number, path=path)
+        if account_id in mapping:
+            raise ControlInputError(f"{path}: duplicate AccountID {account_id!r}.")
+        mapping[account_id] = review_group
     return mapping
 
 
@@ -219,26 +213,13 @@ def load_subledger(path: Path | SourceSnapshot | None) -> dict[tuple[str, str], 
     snapshot = _snapshot(path, label="Subledger file")
     path = snapshot.path
     rows: dict[tuple[str, str], Decimal] = {}
-    with io.StringIO(
-        snapshot.text(label="Subledger file", encoding="utf-8-sig"), newline=""
-    ) as source:
-        reader = csv.DictReader(source)
-        _require_columns(reader.fieldnames, SUBLEDGER_COLUMNS, path)
-        for values in reader:
-            # line_num, not an enumerate counter. DictReader silently
-            # skips blank rows, so a counter drifts below the real file
-            # line from the first blank line onwards and every message
-            # after it names the wrong row. start=2 shows the intent was
-            # always the physical line, with the header as line 1.
-            row_number = reader.line_num
-            if None in values:
-                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
-            tenant = _text(values["Tenant"], field="Tenant", row_number=row_number, path=path)
-            account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
-            key = (tenant, account_id)
-            if key in rows:
-                raise ControlInputError(f"{path}: duplicate subledger key Tenant={tenant!r}, AccountID={account_id!r}.")
-            rows[key] = parse_money(values["SubledgerBalance"], field="SubledgerBalance", row_number=row_number, path=path)
+    for row_number, values in _read_csv_rows(snapshot, SUBLEDGER_COLUMNS, label="Subledger file"):
+        tenant = _text(values["Tenant"], field="Tenant", row_number=row_number, path=path)
+        account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
+        key = (tenant, account_id)
+        if key in rows:
+            raise ControlInputError(f"{path}: duplicate subledger key Tenant={tenant!r}, AccountID={account_id!r}.")
+        rows[key] = parse_money(values["SubledgerBalance"], field="SubledgerBalance", row_number=row_number, path=path)
     return rows
 
 
