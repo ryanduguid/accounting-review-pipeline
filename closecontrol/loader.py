@@ -273,7 +273,7 @@ def load_reviewer_acknowledgement(
     # The review note is untrusted input that ends up in close-summary.md as
     # evidence. A Cf character such as U+202E can reorder how a reviewer's own
     # words render, so reject the same character classes the CSV loaders do.
-    # A comment is free text, so its line breaks and tabs stay legal — the
+    # A comment is free text, so its line breaks and tabs stay legal. The
     # markdown writer already flattens and escapes them.
     if _has_control_or_format_character(initials):
         raise ControlInputError(
