@@ -231,7 +231,7 @@ def load_reviewer_acknowledgement(
     snapshot = _snapshot(path, label="Review-note file")
     path = snapshot.path
     try:
-        payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8"))
+        payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise ControlInputError(f"{path}: review note is not valid JSON.") from exc
     if not isinstance(payload, dict) or set(payload) != {"reviewer_initials", "reviewed_on", "comment"}:
@@ -246,7 +246,7 @@ def load_reviewer_acknowledgement(
     # The review note is untrusted input that ends up in close-summary.md as
     # evidence. A Cf character such as U+202E can reorder how a reviewer's own
     # words render, so reject the same character classes the CSV loaders do.
-    # A comment is free text, so its line breaks and tabs stay legal — the
+    # A comment is free text, so its line breaks and tabs stay legal. The
     # markdown writer already flattens and escapes them.
     if _has_control_or_format_character(initials):
         raise ControlInputError(

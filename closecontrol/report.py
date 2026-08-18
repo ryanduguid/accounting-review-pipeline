@@ -35,7 +35,7 @@ def _money(value) -> str:
 def _percentage(value) -> str:
     """Render a ratio as a percentage at two places, or enough to show its leading digit.
 
-    A percentage threshold finer than a hundredth of a percent otherwise reads
+    A percentage threshold finer than a hundredth of a per cent otherwise reads
     as "0.00%" in all three files, the same loss of the configured figure that
     _money exists to avoid. The scale follows the leading significant digit
     rather than the exponent, because percentage_change is a division result
