@@ -258,7 +258,7 @@ def load_reviewer_acknowledgement(
     snapshot = _snapshot(path, label="Review-note file")
     path = snapshot.path
     try:
-        payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8"))
+        payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise ControlInputError(f"{path}: review note is not valid JSON.") from exc
     if not isinstance(payload, dict) or set(payload) != {"reviewer_initials", "reviewed_on", "comment"}:
