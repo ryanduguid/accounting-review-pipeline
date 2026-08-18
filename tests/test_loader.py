@@ -174,3 +174,15 @@ def test_review_note_accepts_plain_text(tmp_path: Path) -> None:
 
     assert acknowledgement is not None
     assert acknowledgement.reviewer_initials == "RD"
+
+
+def test_review_note_with_utf8_bom_parses_same_as_without(tmp_path: Path) -> None:
+    payload = json.dumps(
+        {"reviewer_initials": "RD", "reviewed_on": "2026-07-30", "comment": "Reviewed."}
+    )
+    plain = tmp_path / "note.json"
+    plain.write_text(payload, encoding="utf-8")
+    with_bom = tmp_path / "note_bom.json"
+    with_bom.write_text(payload, encoding="utf-8-sig")
+
+    assert load_reviewer_acknowledgement(with_bom) == load_reviewer_acknowledgement(plain)
