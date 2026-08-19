@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal, DivisionByZero, InvalidOperation
 from pathlib import Path
 
-from .errors import ControlInputError
+from .errors import DateMismatchError, SchemaError
 from .loader import (
     SourceSnapshot,
     load_canonical_tb,
@@ -308,15 +308,15 @@ def review_close(
     current_date = current_rows[0].report_date
     prior_date = prior_rows[0].report_date
     if current_tenant != prior_tenant:
-        raise ControlInputError(
+        raise SchemaError(
             "Current and prior trial balances must contain the same tenant."
         )
     if prior_date >= current_date:
-        raise ControlInputError(
+        raise DateMismatchError(
             "Prior trial-balance ReportDate must be earlier than the current ReportDate."
         )
     if acknowledgement is not None and acknowledgement.reviewed_on < current_date:
-        raise ControlInputError(
+        raise DateMismatchError(
             "Review-note reviewed_on cannot be earlier than the current ReportDate."
         )
 

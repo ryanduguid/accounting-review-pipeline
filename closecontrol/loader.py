@@ -12,7 +12,13 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from .errors import ControlInputError
+from .errors import (
+    ControlInputError,
+    DateMismatchError,
+    DuplicateKeyError,
+    NumericGateError,
+    SchemaError,
+)
 from .models import ReviewerAcknowledgement, TrialBalanceRow
 
 
@@ -66,10 +72,10 @@ def _snapshot(path: Path | SourceSnapshot, *, label: str) -> SourceSnapshot:
 
 def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], path: Path) -> None:
     if fieldnames is None:
-        raise ControlInputError(f"{path}: CSV has no header row.")
+        raise SchemaError(f"{path}: CSV has no header row.")
     duplicate_headers = sorted({name for name in fieldnames if fieldnames.count(name) > 1})
     if duplicate_headers:
-        raise ControlInputError(f"{path}: duplicate column heading(s): {', '.join(duplicate_headers)}.")
+        raise SchemaError(f"{path}: duplicate column heading(s): {', '.join(duplicate_headers)}.")
     actual = set(fieldnames)
     expected = set(required)
     missing = sorted(expected - actual)
@@ -80,7 +86,7 @@ def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], pa
             detail.append(f"missing {', '.join(missing)}")
         if unexpected:
             detail.append(f"unexpected {', '.join(unexpected)}")
-        raise ControlInputError(f"{path}: canonical schema mismatch ({'; '.join(detail)}).")
+        raise SchemaError(f"{path}: canonical schema mismatch ({'; '.join(detail)}).")
 
 
 def _read_csv_rows(
@@ -98,7 +104,7 @@ def _read_csv_rows(
             # the header as line 1.
             row_number = reader.line_num
             if None in values:
-                raise ControlInputError(f"{path}: row {row_number} has more fields than its header.")
+                raise SchemaError(f"{path}: row {row_number} has more fields than its header.")
             yield row_number, values
 
 
@@ -124,9 +130,9 @@ def _text(
 ) -> str:
     text = (value or "").strip()
     if not text and not allow_empty:
-        raise ControlInputError(f"{path}: row {row_number} has an empty {field}.")
+        raise SchemaError(f"{path}: row {row_number} has an empty {field}.")
     if _has_control_or_format_character(text):
-        raise ControlInputError(
+        raise SchemaError(
             f"{path}: row {row_number} {field} contains a control or formatting character."
         )
     return text
@@ -135,14 +141,14 @@ def _text(
 def parse_money(value: str | None, *, field: str, row_number: int, path: Path) -> Decimal:
     raw = (value or "").strip()
     if not raw or not _ACCOUNTING_NUMBER.fullmatch(raw):
-        raise ControlInputError(f"{path}: row {row_number} has invalid {field}: {raw!r}.")
+        raise NumericGateError(f"{path}: row {row_number} has invalid {field}: {raw!r}.")
     normalised = raw.replace("$", "").replace(",", "")
     try:
         result = Decimal(normalised)
     except InvalidOperation as exc:  # Defensive: the regex should already reject malformed input.
-        raise ControlInputError(f"{path}: row {row_number} has invalid {field}: {raw!r}.") from exc
+        raise NumericGateError(f"{path}: row {row_number} has invalid {field}: {raw!r}.") from exc
     if not result.is_finite():
-        raise ControlInputError(f"{path}: row {row_number} has non-finite {field}: {raw!r}.")
+        raise NumericGateError(f"{path}: row {row_number} has non-finite {field}: {raw!r}.")
     return result
 
 
@@ -156,7 +162,7 @@ def load_canonical_tb(path: Path | SourceSnapshot) -> list[TrialBalanceRow]:
         try:
             report_date = date.fromisoformat(raw_date)
         except ValueError as exc:
-            raise ControlInputError(f"{path}: row {row_number} has an invalid ISO ReportDate.") from exc
+            raise SchemaError(f"{path}: row {row_number} has an invalid ISO ReportDate.") from exc
         row = TrialBalanceRow(
             report_date=report_date,
             tenant=_text(values["Tenant"], field="Tenant", row_number=row_number, path=path),
@@ -176,17 +182,17 @@ def load_canonical_tb(path: Path | SourceSnapshot) -> list[TrialBalanceRow]:
             ytd_credit=parse_money(values["YTDCredit"], field="YTDCredit", row_number=row_number, path=path),
         )
         if row.key in seen:
-            raise ControlInputError(f"{path}: duplicate control key Tenant={row.tenant!r}, AccountID={row.account_id!r}.")
+            raise DuplicateKeyError(f"{path}: duplicate control key Tenant={row.tenant!r}, AccountID={row.account_id!r}.")
         seen.add(row.key)
         rows.append(row)
     if not rows:
-        raise ControlInputError(f"{path}: no trial-balance rows were supplied.")
+        raise SchemaError(f"{path}: no trial-balance rows were supplied.")
     tenants = {row.tenant for row in rows}
     report_dates = {row.report_date for row in rows}
     if len(tenants) != 1:
-        raise ControlInputError(f"{path}: a canonical trial balance must contain exactly one tenant.")
+        raise SchemaError(f"{path}: a canonical trial balance must contain exactly one tenant.")
     if len(report_dates) != 1:
-        raise ControlInputError(
+        raise DateMismatchError(
             f"{path}: a canonical trial balance must contain exactly one ReportDate."
         )
     return rows
@@ -202,7 +208,7 @@ def load_mapping(path: Path | SourceSnapshot | None) -> dict[str, str]:
         account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
         review_group = _text(values["ReviewGroup"], field="ReviewGroup", row_number=row_number, path=path)
         if account_id in mapping:
-            raise ControlInputError(f"{path}: duplicate AccountID {account_id!r}.")
+            raise DuplicateKeyError(f"{path}: duplicate AccountID {account_id!r}.")
         mapping[account_id] = review_group
     return mapping
 
@@ -218,7 +224,7 @@ def load_subledger(path: Path | SourceSnapshot | None) -> dict[tuple[str, str], 
         account_id = _text(values["AccountID"], field="AccountID", row_number=row_number, path=path)
         key = (tenant, account_id)
         if key in rows:
-            raise ControlInputError(f"{path}: duplicate subledger key Tenant={tenant!r}, AccountID={account_id!r}.")
+            raise DuplicateKeyError(f"{path}: duplicate subledger key Tenant={tenant!r}, AccountID={account_id!r}.")
         rows[key] = parse_money(values["SubledgerBalance"], field="SubledgerBalance", row_number=row_number, path=path)
     return rows
 
@@ -233,33 +239,34 @@ def load_reviewer_acknowledgement(
     try:
         payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
-        raise ControlInputError(f"{path}: review note is not valid JSON.") from exc
+        raise SchemaError(f"{path}: review note is not valid JSON.") from exc
     if not isinstance(payload, dict) or set(payload) != {"reviewer_initials", "reviewed_on", "comment"}:
-        raise ControlInputError(f"{path}: review note must contain exactly reviewer_initials, reviewed_on, and comment.")
+        raise SchemaError(f"{path}: review note must contain exactly reviewer_initials, reviewed_on, and comment.")
     initials = payload["reviewer_initials"]
     comment = payload["comment"]
     reviewed_on = payload["reviewed_on"]
     if not isinstance(initials, str) or not initials.strip() or len(initials.strip()) > 12:
-        raise ControlInputError(f"{path}: reviewer_initials must be a non-empty string of at most 12 characters.")
+        raise SchemaError(f"{path}: reviewer_initials must be a non-empty string of at most 12 characters.")
     if not isinstance(comment, str) or not comment.strip():
-        raise ControlInputError(f"{path}: comment must be a non-empty string.")
+        raise SchemaError(f"{path}: comment must be a non-empty string.")
     # The review note is untrusted input that ends up in close-summary.md as
     # evidence. A Cf character such as U+202E can reorder how a reviewer's own
     # words render, so reject the same character classes the CSV loaders do.
     # A comment is free text, so its line breaks and tabs stay legal. The
-    # markdown writer already flattens and escapes them.
+    # markdown writer escapes each line and quotes a multi-line comment so it
+    # cannot forge document structure.
     if _has_control_or_format_character(initials):
-        raise ControlInputError(
+        raise SchemaError(
             f"{path}: reviewer_initials contains a control or formatting character."
         )
     if _has_control_or_format_character(comment, allow_line_breaks=True):
-        raise ControlInputError(
+        raise SchemaError(
             f"{path}: comment contains a control or formatting character."
         )
     if not isinstance(reviewed_on, str):
-        raise ControlInputError(f"{path}: reviewed_on must be an ISO date string.")
+        raise SchemaError(f"{path}: reviewed_on must be an ISO date string.")
     try:
         reviewed_date = date.fromisoformat(reviewed_on)
     except ValueError as exc:
-        raise ControlInputError(f"{path}: reviewed_on must be an ISO date.") from exc
+        raise SchemaError(f"{path}: reviewed_on must be an ISO date.") from exc
     return ReviewerAcknowledgement(initials.strip(), reviewed_date, comment.strip())

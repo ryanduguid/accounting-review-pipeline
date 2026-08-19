@@ -148,6 +148,28 @@ def _md_cell(value: str) -> str:
     return " ".join(value.split()).replace("\\", "\\\\").replace("|", "\\|")
 
 
+def _md_note_lines(comment: str) -> list[str]:
+    r"""Render a reviewer comment without collapsing its line structure.
+
+    A one-line comment stays inline on the list item. A multi-line comment is
+    rendered as an indented blockquote under the item, one quoted line per
+    source line, so a reviewer's paragraph breaks survive into the pack.
+    Each line still gets the backslash-then-pipe escaping of _md_cell, and a
+    line that starts with '#' is escaped so quoted text cannot forge a
+    document heading. The quote marker keeps every continuation line inside
+    the acknowledgement item rather than loose in the document.
+    """
+    if "\n" not in comment and "\r" not in comment:
+        return [f"- Comment: {_md_cell(comment)}"]
+    lines = ["- Comment:"]
+    for raw in comment.splitlines():
+        line = _md_cell(raw)
+        if line.startswith("#"):
+            line = "\\" + line
+        lines.append(f"  > {line}".rstrip())
+    return lines
+
+
 def _as_markdown(pack: CloseReviewPack) -> str:
     blocked = sum(item.status == "BLOCKED" for item in pack.exceptions)
     review = sum(item.status == "REVIEW" for item in pack.exceptions)
@@ -192,7 +214,7 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         lines += [
             f"- Reviewer initials: {_md_cell(pack.acknowledgement.reviewer_initials)}",
             f"- Reviewed on: {pack.acknowledgement.reviewed_on.isoformat()}",
-            f"- Comment: {_md_cell(pack.acknowledgement.comment)}",
+            *_md_note_lines(pack.acknowledgement.comment),
             "- Effect: acknowledgement records a human action only; it does not change the control status or approve a close.",
         ]
     lines.append("")
