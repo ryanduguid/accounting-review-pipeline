@@ -676,6 +676,45 @@ def test_exceptions_csv_carries_a_byte_order_mark_for_spreadsheet_readers(tmp_pa
     assert row["account_name"] == "Kaff\u00e9 Konto"
 
 
+def test_exceptions_csv_and_json_carry_the_review_group_column(tmp_path: Path) -> None:
+    # The --mapping file's ReviewGroup is the grouping a reviewer filters by,
+    # so the pack must carry it on every exception; blank when the run had no
+    # mapping to consult.
+    with_mapping = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        mapping_path=EXAMPLES / "account_mapping.csv",
+        absolute_threshold=Decimal("10000"),
+    )
+    outputs = write_review_pack(with_mapping, tmp_path / "mapped")
+    with outputs["exceptions"].open(encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source)
+        assert "review_group" in (reader.fieldnames or [])
+        rows = list(reader)
+    by_account = {(row["control"], row["account_id"]): row["review_group"] for row in rows}
+    assert by_account[("period_variance", "100")] == "Cash and cash equivalents"
+    assert by_account[("period_variance", "110")] == "Receivables"
+    # Account 500 has no mapping row, so its group stays blank.
+    assert by_account[("account_mapping", "500")] == ""
+    payload = json.loads(outputs["json"].read_text(encoding="utf-8"))
+    json_variance = next(
+        item for item in payload["exceptions"]
+        if item["control"] == "period_variance" and item["account_id"] == "100"
+    )
+    assert json_variance["review_group"] == "Cash and cash equivalents"
+
+    without_mapping = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        absolute_threshold=Decimal("10000"),
+    )
+    outputs = write_review_pack(without_mapping, tmp_path / "unmapped")
+    with outputs["exceptions"].open(encoding="utf-8-sig", newline="") as source:
+        unmapped_rows = list(csv.DictReader(source))
+    assert unmapped_rows
+    assert all(row["review_group"] == "" for row in unmapped_rows)
+
+
 def test_cli_writes_review_pack_and_returns_attention_exit_code(tmp_path: Path) -> None:
     output = tmp_path / "pack"
     exit_code = main(

@@ -58,13 +58,13 @@ It runs against a repo-stored synthetic trial balance and fails the job when the
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
 
 ```text
-close-control: REVIEW; 7 exception(s)
+close-control: REVIEW; 8 exception(s)
   json: outputs/demo/close-review-pack.json
   summary: outputs/demo/close-summary.md
   exceptions: outputs/demo/exceptions.csv
 ```
 
-`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to three of the seven rows):
+`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to four of the eight rows):
 
 ```markdown
 # Monthly Close Review Pack
@@ -79,13 +79,14 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 - Prior report date(s): 2026-06-30
 - Material variance thresholds: $10000.00 and 10.00%
 - Reconciliation tolerance: $0.01
-- Exceptions: 7 total; 0 blocked; 7 requiring review.
+- Exceptions: 8 total; 0 blocked; 8 requiring review.
 
 ## Exceptions
 
 | Status | Control | Tenant | Account | Difference | Reason |
 | --- | --- | --- | --- | ---: | --- |
 | REVIEW | account_mapping | Acme Demo Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
+| REVIEW | financial_year_reset | n/a | n/a | n/a | Current ReportDate 2026-07-31 and prior ReportDate 2026-06-30 fall in different Australian financial years (1 July to 30 June). YTD figures reset on 1 July, so this YTD-vs-YTD comparison crosses a year reset and the period_variance verdicts for profit-and-loss-style rows are not meaningful. |
 | REVIEW | period_variance | Acme Demo Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
 | REVIEW | subledger_reconciliation | Acme Demo Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
 ```
@@ -93,8 +94,8 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 `exceptions.csv` carries the same exceptions with full numeric detail. The Operating Bank variance row (wrapped here for readability):
 
 ```csv
-control,status,tenant,account_id,account_code,account_name,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
-period_variance,REVIEW,Acme Demo Pty Ltd,100,1000,Operating Bank,120000.00,105000.00,15000.00,10000.00,14.29%,
+control,status,tenant,account_id,account_code,account_name,review_group,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
+period_variance,REVIEW,Acme Demo Pty Ltd,100,1000,Operating Bank,Cash and cash equivalents,120000.00,105000.00,15000.00,10000.00,14.29%,
   YTD net balance moved beyond both configured materiality thresholds.,
   "Investigate the driver, retain supporting evidence, and document the reviewer conclusion."
 ```
@@ -109,6 +110,7 @@ The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.0
     {
       "account_code": "1000",
       "account_name": "Operating Bank",
+      "review_group": "Cash and cash equivalents",
       "control": "period_variance",
       "current_value": "120000.00",
       "prior_value": "105000.00",
@@ -192,7 +194,7 @@ A close can be technically balanced and still need review. This tool keeps the e
 
 ### What formula neutralisation covers, exactly
 
-The escaping in `exceptions.csv` applies to the four source-controlled text fields: `tenant`, `account_id`, `account_code`, and `account_name`. For those fields:
+The escaping in `exceptions.csv` applies to the five source-controlled text fields: `tenant`, `account_id`, `account_code`, `account_name`, and `review_group`. For those fields:
 
 Neutralised (prefixed with an apostrophe so a spreadsheet reads them as text):
 
