@@ -53,13 +53,20 @@ def _exception(
     reason: str,
     reviewer_action: str,
 ) -> ExceptionItem:
+    # One extraction for the row-or-blank fields instead of a per-field
+    # conditional; behaviour is identical for both a present and an absent row.
+    tenant, account_id, account_code, account_name = (
+        (row.tenant, row.account_id, row.account_code, row.account_name)
+        if row is not None
+        else ("", "", "", "")
+    )
     return ExceptionItem(
         control=control,
         status=status,
-        tenant=row.tenant if row else "",
-        account_id=row.account_id if row else "",
-        account_code=row.account_code if row else "",
-        account_name=row.account_name if row else "",
+        tenant=tenant,
+        account_id=account_id,
+        account_code=account_code,
+        account_name=account_name,
         current_value=current_value,
         prior_value=prior_value,
         difference=difference,
