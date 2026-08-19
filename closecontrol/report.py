@@ -61,7 +61,7 @@ def _exception_dict(item: ExceptionItem) -> dict[str, str]:
         "prior_value": _money(item.prior_value),
         "difference": _money(item.difference),
         "threshold": _money(item.threshold),
-        "percentage_change": _percentage(item.percentage_change),
+        "percentage_change": _percentage_cell(item),
         "reason": item.reason,
         "reviewer_action": item.reviewer_action,
     }
@@ -132,6 +132,32 @@ def _as_json(pack: CloseReviewPack) -> dict:
 # dash: runtime output stays ASCII so a pack still reads on a console or in a
 # scheduler log whose code page has no dash to render.
 _ABSENT = "n/a"
+
+# A period_variance exception whose prior YTD balance was nil has no percentage
+# to render: the engine leaves percentage_change as None and its reason names
+# the absolute gate as the only one tested. A blank cell in that position reads
+# as "no change", so the pack states the condition instead. The sentinel keeps
+# the existing ASCII "n/a" convention and cannot parse as a number, so a
+# spreadsheet or JSON consumer cannot mistake it for a zero percentage.
+_PRIOR_ZERO_PERCENTAGE = "n/a (prior period zero)"
+
+
+def _percentage_cell(item: ExceptionItem) -> str:
+    """Render an exception's percentage_change, naming the prior-zero case.
+
+    Only a period_variance exception with a nil prior value gets the sentinel:
+    every other control (integrity, mapping, metadata, reconciliation) carries
+    percentage_change=None because a percentage is not part of that control at
+    all, and those cells stay empty as before.
+    """
+    if (
+        item.percentage_change is None
+        and item.control == "period_variance"
+        and item.prior_value is not None
+        and item.prior_value == 0
+    ):
+        return _PRIOR_ZERO_PERCENTAGE
+    return _percentage(item.percentage_change)
 
 
 def _md_cell(value: str) -> str:
