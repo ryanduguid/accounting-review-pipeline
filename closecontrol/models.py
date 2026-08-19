@@ -50,6 +50,9 @@ class ExceptionItem:
     percentage_change: Decimal | None
     reason: str
     reviewer_action: str
+    # The ReviewGroup from the optional --mapping file for this exception's
+    # account; blank when no mapping was supplied or the account is unmapped.
+    review_group: str = ""
 
 
 @dataclass(frozen=True)
