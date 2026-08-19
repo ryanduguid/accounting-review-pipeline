@@ -48,6 +48,33 @@ def test_malformed_money_raises_the_numeric_gate_type() -> None:
         parse_money("=1+1", field="Debit", row_number=2, path=Path("input.csv"))
 
 
+def test_subledger_balances_pass_through_the_same_money_gate_as_tb_columns(
+    tmp_path: Path,
+) -> None:
+    # load_subledger routes SubledgerBalance through parse_money, so the
+    # injection and format gates that protect the TB money columns protect the
+    # subledger too. This test pins that path: a refactor that reads the value
+    # with Decimal() or float() directly would let a formula-leading or
+    # malformed value into the reconciliation control.
+    malformed = tmp_path / "malformed.csv"
+    # A quoted "612,00": ambiguous European-style formatting that Decimal()
+    # would reject inconsistently and float() would misread.
+    malformed.write_text(
+        'Tenant,AccountID,SubledgerBalance\nDemo Company,bank-guid,"612,00"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(NumericGateError, match="invalid SubledgerBalance"):
+        load_subledger(malformed)
+
+    formula = tmp_path / "formula.csv"
+    formula.write_text(
+        "Tenant,AccountID,SubledgerBalance\nDemo Company,bank-guid,=1+1\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(NumericGateError, match="invalid SubledgerBalance"):
+        load_subledger(formula)
+
+
 def test_load_canonical_trial_balance_uses_stable_tenant_account_key() -> None:
     rows = load_canonical_tb(ROOT / "examples" / "current_trial_balance.csv")
 

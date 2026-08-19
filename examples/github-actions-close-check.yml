@@ -1,0 +1,82 @@
+# Example: scheduled close check with GitHub Actions.
+#
+# Copy this file to .github/workflows/ in your own repository and adjust the
+# paths. It runs close-control against a synthetic trial balance stored in the
+# repository and fails the job when the pack is BLOCKED.
+#
+# Exit codes, from closecontrol/cli.py:
+#   0  every control passed (PASS)
+#   1  malformed input, invalid command configuration, or unwritable --output
+#   2  the pack needs human attention (REVIEW or BLOCKED)
+#
+# REVIEW and BLOCKED share exit code 2, so the exit code alone cannot single
+# out BLOCKED. The step below treats exit 1 and 2 as job-stopping, then reads
+# overall_status from close-review-pack.json to distinguish the two: BLOCKED
+# fails the job, REVIEW is reported and left for a human.
+#
+# Store only fabricated or synthetic data in the repository. Never commit a
+# client trial balance.
+
+name: scheduled-close-check
+
+on:
+  schedule:
+    # 06:00 UTC on the first day of each month, after a typical close export.
+    - cron: "0 6 1 * *"
+  # Allow a manual run from the Actions tab while testing the workflow.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  close-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install close-control
+        run: python -m pip install monthly-close-control-plane
+        # For a checkout of this repository itself, use:
+        # run: python -m pip install .
+
+      - name: Run the close review
+        id: review
+        # The && / || pair captures the exit code without tripping the shell's
+        # exit-on-error mode, so this step always succeeds and the status step
+        # below decides the job outcome.
+        run: |
+          close-control review \
+            --current examples/current_trial_balance.csv \
+            --prior examples/prior_trial_balance.csv \
+            --absolute-threshold 10000 \
+            --percentage-threshold 0.10 \
+            --output outputs/close-check && code=0 || code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on BLOCKED, report REVIEW
+        run: |
+          code="${{ steps.review.outputs.exit_code }}"
+          if [ "$code" = "1" ]; then
+            echo "close-control reported a malformed input or configuration." >&2
+            exit 1
+          fi
+          status=$(python -c "import json; print(json.load(open('outputs/close-check/close-review-pack.json'))['overall_status'])")
+          echo "Overall status: $status (exit code $code)"
+          if [ "$status" = "BLOCKED" ]; then
+            echo "The trial balance failed an integrity gate. Fix the source export." >&2
+            exit 1
+          fi
+          # PASS ends the job green. REVIEW also ends green here: exceptions
+          # need a human, and the uploaded pack is the review queue.
+
+      - name: Upload the review pack
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: close-review-pack
+          path: outputs/close-check/
