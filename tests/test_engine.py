@@ -62,6 +62,7 @@ def test_demo_pack_is_review_not_approval() -> None:
     assert pack.acknowledgement.reviewer_initials == "RD"
     assert {item.control for item in pack.exceptions} == {
         "account_mapping",
+        "financial_year_reset",
         "period_variance",
         "subledger_reconciliation",
     }
@@ -80,6 +81,10 @@ def test_demo_pack_raises_exactly_the_expected_exceptions() -> None:
 
     assert [(item.control, item.account_id) for item in pack.exceptions] == [
         ("account_mapping", "500"),
+        # The demo fixtures compare 2026-06-30 against 2026-07-31, which
+        # straddles the 30 June financial-year reset, so the pack carries the
+        # crossing flag alongside the account-level exceptions.
+        ("financial_year_reset", ""),
         ("period_variance", "100"),
         ("period_variance", "110"),
         ("period_variance", "300"),
@@ -195,8 +200,8 @@ def test_totals_that_balance_only_under_exact_decimal_arithmetic_pass(tmp_path: 
         "{date},{tenant},Assets,120,Other Debtors,1200,0.00,0.00,0.20,0.00",
         "{date},{tenant},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,0.30",
     ]
-    prior = _write(tmp_path / "prior.csv", [row.format(date="2026-06-30", tenant=TENANT) for row in rows])
-    current = _write(tmp_path / "current.csv", [row.format(date="2026-07-31", tenant=TENANT) for row in rows])
+    prior = _write(tmp_path / "prior.csv", [row.format(date="2026-04-30", tenant=TENANT) for row in rows])
+    current = _write(tmp_path / "current.csv", [row.format(date="2026-05-31", tenant=TENANT) for row in rows])
 
     pack = review_close(current_path=current, prior_path=prior)
 
@@ -383,6 +388,73 @@ def test_period_comparison_rejects_non_prior_date(tmp_path: Path) -> None:
 
     with pytest.raises(ControlInputError, match="must be earlier"):
         review_close(current_path=EXAMPLES / "current_trial_balance.csv", prior_path=prior)
+
+
+def _dated_pair(tmp_path: Path, prior_date: str, current_date: str) -> dict[str, Path]:
+    """Two balanced one-account trial balances at caller-chosen report dates."""
+    prior = _write(
+        tmp_path / "prior.csv",
+        [
+            f"{prior_date},{TENANT},Assets,110,Trade Debtors,1100,0.00,0.00,100000.00,0.00",
+            f"{prior_date},{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,100000.00",
+        ],
+    )
+    current = _write(
+        tmp_path / "current.csv",
+        [
+            f"{current_date},{TENANT},Assets,110,Trade Debtors,1100,0.00,0.00,100000.00,0.00",
+            f"{current_date},{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,0.00,100000.00",
+        ],
+    )
+    return {"current_path": current, "prior_path": prior}
+
+
+@pytest.mark.parametrize(
+    ("prior_date", "current_date"),
+    [
+        # Consecutive month ends inside FY2025 (1 July 2025 to 30 June 2026).
+        ("2026-04-30", "2026-05-31"),
+        # The last two month ends of the same financial year.
+        ("2026-05-31", "2026-06-30"),
+        # Both sides of a calendar-year end, which is mid financial year.
+        ("2025-12-31", "2026-01-31"),
+    ],
+)
+def test_report_dates_inside_one_financial_year_raise_no_reset_flag(
+    tmp_path: Path, prior_date: str, current_date: str
+) -> None:
+    pack = review_close(**_dated_pair(tmp_path, prior_date, current_date))
+
+    assert not [item for item in pack.exceptions if item.control == "financial_year_reset"]
+
+
+@pytest.mark.parametrize(
+    ("prior_date", "current_date"),
+    [
+        # 30 June against 31 July: the archetypal one-month straddle.
+        ("2026-06-30", "2026-07-31"),
+        # A whole financial year apart still crosses exactly one reset rule.
+        ("2025-10-31", "2026-10-31"),
+    ],
+)
+def test_report_dates_across_a_financial_year_reset_raise_a_review_flag(
+    tmp_path: Path, prior_date: str, current_date: str
+) -> None:
+    # YTD figures for P&L accounts restart from nil on 1 July, so a YTD-vs-YTD
+    # comparison across the reset weighs a full year against a month or two.
+    # The engine has no section-aware rules to correct for that, so it must
+    # flag the whole comparison rather than issue verdicts it cannot stand
+    # behind.
+    pack = review_close(**_dated_pair(tmp_path, prior_date, current_date))
+
+    flags = [item for item in pack.exceptions if item.control == "financial_year_reset"]
+    assert len(flags) == 1
+    assert flags[0].status == "REVIEW"
+    assert pack.status == "REVIEW"
+    assert "different Australian financial years" in flags[0].reason
+    assert "not meaningful" in flags[0].reason
+    assert prior_date in flags[0].reason
+    assert current_date in flags[0].reason
 
 
 def test_review_note_cannot_predate_the_pack_it_claims_to_review(tmp_path: Path) -> None:

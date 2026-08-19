@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal, DivisionByZero, InvalidOperation
 from pathlib import Path
 
@@ -29,6 +30,48 @@ class CloseReviewPack:
     reconciliation_tolerance: Decimal
     exceptions: tuple[ExceptionItem, ...]
     acknowledgement: ReviewerAcknowledgement | None
+
+
+def _financial_year(when: date) -> int:
+    """The Australian financial year a date falls in, keyed by its starting calendar year.
+
+    The financial year runs 1 July to 30 June, so 2026-06-30 is the last day
+    of FY2025 and 2026-07-01 is the first day of FY2026.
+    """
+    return when.year if when.month >= 7 else when.year - 1
+
+
+def _financial_year_reset_exceptions(
+    current_date: date, prior_date: date
+) -> list[ExceptionItem]:
+    """Flag a YTD comparison whose two report dates straddle a 30 June reset.
+
+    YTD balances for profit-and-loss accounts restart from nil on 1 July, so a
+    comparison across the reset puts a full year of activity against one or two
+    months and every period_variance verdict on a P&L-style row follows that
+    mismatch rather than the business. The engine cannot tell which rows reset
+    without section-aware rules it does not have, so it flags the whole
+    comparison honestly instead of guessing.
+    """
+    if _financial_year(current_date) == _financial_year(prior_date):
+        return []
+    return [
+        _exception(
+            "financial_year_reset", "REVIEW", None,
+            reason=(
+                f"Current ReportDate {current_date.isoformat()} and prior ReportDate "
+                f"{prior_date.isoformat()} fall in different Australian financial years "
+                "(1 July to 30 June). YTD figures reset on 1 July, so this YTD-vs-YTD "
+                "comparison crosses a year reset and the period_variance verdicts for "
+                "profit-and-loss-style rows are not meaningful."
+            ),
+            reviewer_action=(
+                "Do not rely on period_variance results for revenue and expense rows in this pack. "
+                "Compare two report dates inside one financial year, or review the movement against "
+                "a source that does not reset at year end."
+            ),
+        )
+    ]
 
 
 def _percent_change(current: Decimal, prior: Decimal) -> Decimal | None:
@@ -330,6 +373,7 @@ def review_close(
     current_by_key = {row.key: row for row in current_rows}
     prior_by_key = {row.key: row for row in prior_rows}
     exceptions = _integrity_exceptions(current_rows, "Current") + _integrity_exceptions(prior_rows, "Prior")
+    exceptions += _financial_year_reset_exceptions(current_date, prior_date)
     exceptions += _period_comparison_exceptions(
         current_by_key, prior_by_key, absolute_threshold, percentage_threshold
     )

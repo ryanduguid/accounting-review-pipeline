@@ -58,13 +58,13 @@ It runs against a repo-stored synthetic trial balance and fails the job when the
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
 
 ```text
-close-control: REVIEW; 7 exception(s)
+close-control: REVIEW; 8 exception(s)
   json: outputs/demo/close-review-pack.json
   summary: outputs/demo/close-summary.md
   exceptions: outputs/demo/exceptions.csv
 ```
 
-`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to three of the seven rows):
+`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to four of the eight rows):
 
 ```markdown
 # Monthly Close Review Pack
@@ -79,13 +79,14 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 - Prior report date(s): 2026-06-30
 - Material variance thresholds: $10000.00 and 10.00%
 - Reconciliation tolerance: $0.01
-- Exceptions: 7 total; 0 blocked; 7 requiring review.
+- Exceptions: 8 total; 0 blocked; 8 requiring review.
 
 ## Exceptions
 
 | Status | Control | Tenant | Account | Difference | Reason |
 | --- | --- | --- | --- | ---: | --- |
 | REVIEW | account_mapping | Acme Demo Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
+| REVIEW | financial_year_reset | n/a | n/a | n/a | Current ReportDate 2026-07-31 and prior ReportDate 2026-06-30 fall in different Australian financial years (1 July to 30 June). YTD figures reset on 1 July, so this YTD-vs-YTD comparison crosses a year reset and the period_variance verdicts for profit-and-loss-style rows are not meaningful. |
 | REVIEW | period_variance | Acme Demo Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
 | REVIEW | subledger_reconciliation | Acme Demo Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
 ```
