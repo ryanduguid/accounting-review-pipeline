@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from closecontrol.errors import ControlInputError
+from closecontrol.errors import (
+    ControlInputError,
+    DateMismatchError,
+    DuplicateKeyError,
+    NumericGateError,
+    SchemaError,
+)
 from closecontrol.loader import (
     load_canonical_tb,
     load_mapping,
@@ -17,6 +23,29 @@ from closecontrol.loader import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_typed_input_errors_subclass_the_flat_control_input_error() -> None:
+    # Existing `except ControlInputError` handlers must keep catching every
+    # typed gate, so each subclass stays inside the original hierarchy.
+    for typed in (SchemaError, DuplicateKeyError, DateMismatchError, NumericGateError):
+        assert issubclass(typed, ControlInputError)
+        assert issubclass(typed, ValueError)
+
+
+def test_duplicate_control_key_raises_the_duplicate_key_type(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "current_trial_balance.csv").read_text(encoding="utf-8")
+    duplicate = tmp_path / "duplicate.csv"
+    lines = source.splitlines()
+    duplicate.write_text("\n".join(lines + [lines[1]]) + "\n", encoding="utf-8")
+
+    with pytest.raises(DuplicateKeyError, match="duplicate control key"):
+        load_canonical_tb(duplicate)
+
+
+def test_malformed_money_raises_the_numeric_gate_type() -> None:
+    with pytest.raises(NumericGateError, match="invalid Debit"):
+        parse_money("=1+1", field="Debit", row_number=2, path=Path("input.csv"))
 
 
 def test_load_canonical_trial_balance_uses_stable_tenant_account_key() -> None:

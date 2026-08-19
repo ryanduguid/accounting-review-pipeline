@@ -2,7 +2,13 @@
 
 [![tests](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-A small, **review-first** monthly-close control pack for a validated trial-balance export. It turns current and prior period trial balances into deterministic integrity checks, variance exceptions, reconciliation exceptions, and a human-review pack.
+A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
+
+- `close-summary.md` answers "what needs my attention this close?": a concise, deterministic review pack with an overall status, the thresholds used, source evidence, and an exception table a reviewer reads top to bottom.
+- `exceptions.csv` answers "which accounts, by how much, and why?": filterable exception detail for Excel or Power BI, one row per exception with values, differences, thresholds, and a suggested reviewer action.
+- `close-review-pack.json` answers "what exactly did this run look at?": structured evidence, thresholds, source hashes, and any supplied review acknowledgement, for archiving or downstream tooling.
+
+The pack surfaces material YTD variances, new and missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences as explicit exceptions. Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 
 It is intentionally narrow:
 
@@ -20,22 +26,6 @@ Human review and workpaper acknowledgement
 ```
 
 The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
-
-## Why this exists
-
-A close can be technically balanced and still need review. This tool keeps the evidence visible:
-
-- Exact `Decimal` arithmetic for money controls, never binary floating point.
-- Schema, duplicate-key, date, and numeric gates fail closed.
-- Current-period and YTD debits must exactly equal credits.
-- Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
-- A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and leave `percentage_change` blank, rather than reporting that a percentage test passed that never ran.
-- Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
-- Source SHA-256 digests travel with the generated review pack so its source files can be identified later. Each digest is calculated from the same immutable byte snapshot the loader parses, so a file replaced during a run cannot be misidentified as the source of the calculations.
-- Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised unless the rest of the value is a plain identifier (word characters and dots, and not an A1-style cell reference), so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI, while `-A1` is quoted. That pass-through is narrow by construction, not a test for everything a spreadsheet can evaluate: `+unsafe` still passes through and reads as a defined name rather than as text, which costs display fidelity in that cell and calls nothing. Every payload that reaches outside the sheet carries a character the identifier test rejects. Text rendered into `close-summary.md` (reviewer-note text and every exception table cell) is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads.
-- `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
-- The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
-- Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a per cent is flattened to `0.00`.
 
 ## Quick demo
 
@@ -56,13 +46,84 @@ close-control review \
   --output outputs/demo
 ```
 
-The demo exits `2` because its deliberately fabricated exceptions need human review. It writes:
-
-- `close-summary.md`: a concise, deterministic review pack.
-- `exceptions.csv`: filterable exception detail for Excel or Power BI.
-- `close-review-pack.json`: structured evidence, thresholds, source hashes, and any supplied review acknowledgement.
+The demo exits `2` because its deliberately fabricated exceptions need human review. It writes the three pack files described above.
 
 Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
+
+## Worked example
+
+Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
+
+```text
+close-control: REVIEW; 7 exception(s)
+  json: outputs/demo/close-review-pack.json
+  summary: outputs/demo/close-summary.md
+  exceptions: outputs/demo/exceptions.csv
+```
+
+`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to three of the seven rows):
+
+```markdown
+# Monthly Close Review Pack
+
+**Overall status: REVIEW**
+
+This pack is a review aid. It does not approve a close, post a journal, make a payment, lodge a return, or lock a period.
+
+## Scope
+
+- Current report date(s): 2026-07-31
+- Prior report date(s): 2026-06-30
+- Material variance thresholds: $10000.00 and 10.00%
+- Reconciliation tolerance: $0.01
+- Exceptions: 7 total; 0 blocked; 7 requiring review.
+
+## Exceptions
+
+| Status | Control | Tenant | Account | Difference | Reason |
+| --- | --- | --- | --- | ---: | --- |
+| REVIEW | account_mapping | Acme Demo Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
+| REVIEW | period_variance | Acme Demo Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
+| REVIEW | subledger_reconciliation | Acme Demo Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
+```
+
+`exceptions.csv` carries the same exceptions with full numeric detail. The Operating Bank variance row (wrapped here for readability):
+
+```csv
+control,status,tenant,account_id,account_code,account_name,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
+period_variance,REVIEW,Acme Demo Pty Ltd,100,1000,Operating Bank,120000.00,105000.00,15000.00,10000.00,14.29%,
+  YTD net balance moved beyond both configured materiality thresholds.,
+  "Investigate the driver, retain supporting evidence, and document the reviewer conclusion."
+```
+
+The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.00 to $120,000.00, a $15,000.00 (14.29%) change that clears both the $10,000.00 absolute threshold and the 10% threshold, so a human must investigate the driver and document a conclusion.
+
+`close-review-pack.json` records the same exception as structured evidence next to the thresholds and the source digests (abridged):
+
+```json
+{
+  "exceptions": [
+    {
+      "account_code": "1000",
+      "account_name": "Operating Bank",
+      "control": "period_variance",
+      "current_value": "120000.00",
+      "prior_value": "105000.00",
+      "difference": "15000.00",
+      "percentage_change": "14.29%",
+      "threshold": "10000.00",
+      "status": "REVIEW",
+      "tenant": "Acme Demo Pty Ltd"
+    }
+  ],
+  "overall_status": "REVIEW",
+  "thresholds": {
+    "absolute_variance": "10000.00",
+    "percentage_variance": "10.00%",
+    "reconciliation_tolerance": "0.01"
+  }
+}
+```
 
 ## Canonical trial-balance contract
 
@@ -109,6 +170,38 @@ If a reviewer wants the pack to record that it was read, supply a separate JSON 
 `reviewed_on` must not be earlier than the current `ReportDate`. A note dated before the period it claims to review is rejected as a malformed input: the run stops with exit `1` and writes no pack.
 
 An acknowledgement is evidence of a human action only. It **never** changes `REVIEW` or `BLOCKED` to `PASS`, and it never asserts that a period has been closed.
+
+## Design and integrity
+
+A close can be technically balanced and still need review. This tool keeps the evidence visible:
+
+- Exact `Decimal` arithmetic for money controls, never binary floating point.
+- Schema, duplicate-key, date, and numeric gates fail closed.
+- Current-period and YTD debits must exactly equal credits.
+- Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
+- A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and leave `percentage_change` blank, rather than reporting that a percentage test passed that never ran.
+- Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
+- Source SHA-256 digests travel with the generated review pack so its source files can be identified later. Each digest is calculated from the same immutable byte snapshot the loader parses, so a file replaced during a run cannot be misidentified as the source of the calculations.
+- Spreadsheet-facing CSV text beginning with `=` is always neutralised with a leading apostrophe. `+`, `-` and `@` are neutralised unless the rest of the value is a plain identifier (word characters and dots, and not an A1-style cell reference), so an account code like `-1000` or an ID like `@123` stays joinable in Excel and Power BI, while `-A1` is quoted. That pass-through is narrow by construction, not a test for everything a spreadsheet can evaluate: `+unsafe` still passes through and reads as a defined name rather than as text, which costs display fidelity in that cell and calls nothing. Every payload that reaches outside the sheet carries a character the identifier test rejects. Every exception table cell rendered into `close-summary.md` is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads. A reviewer-note comment keeps its line breaks: a multi-line comment renders as an indented blockquote under the acknowledgement item, with each line escaped the same way and a leading `#` escaped so quoted text cannot forge a document heading.
+- `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
+- The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
+- Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a per cent is flattened to `0.00`.
+
+### What formula neutralisation covers, exactly
+
+The escaping in `exceptions.csv` applies to the four source-controlled text fields: `tenant`, `account_id`, `account_code`, and `account_name`. For those fields:
+
+Neutralised (prefixed with an apostrophe so a spreadsheet reads them as text):
+
+- Any value whose first non-space character is `=`, always. `=SUM(A1)` becomes `'=SUM(A1)`.
+- A value starting with `+`, `-` or `@` when anything after that first character falls outside word characters and dots: spaces, parentheses, pipes, brackets, quotes, or any other operator. `-A1+B2`, `+1+2`, and `@HYPERLINK(...)` are all quoted.
+- A value starting with `+`, `-` or `@` whose remainder is an A1-style cell reference (one to three ASCII letters then one to seven digits). `-A1` is quoted even though it is only word characters, because a sheet resolves `A1` to a cell.
+
+Passed through unchanged:
+
+- A value starting with `+`, `-` or `@` whose remainder is a plain identifier: word characters and dots only, and not an A1-style cell reference. `-1000`, `@123`, and `-total.opening` stay as they are so Excel and Power BI joins keep working.
+- That includes a bare word such as `+unsafe`. A sheet reads it as a defined name instead of as text, which costs display fidelity in that one cell and calls nothing: every payload that can reach outside the sheet (DDE, `WEBSERVICE`, `HYPERLINK`, a pipe, a bracket) carries a character the identifier test rejects.
+- Numeric and free-text fields the tool renders itself (`current_value`, `difference`, `reason`, `reviewer_action`, and the rest) are not passed through this escaping; the tool controls their content and they never begin with a formula trigger.
 
 ## Data and operational boundaries
 
