@@ -35,6 +35,7 @@ Money is parsed into `Decimal`, not `float`. The integrity controls compare debi
 | Canonical schema, ISO date, text key and Decimal parse | Input error; no pack | A close pack must not reinterpret a changed export. |
 | Duplicate `(Tenant, AccountID)` | Input error; no pack | A duplicate could double-count the same account. |
 | Current and prior debit/credit equality | `BLOCKED` | Variance analysis cannot make an unbalanced TB trustworthy. |
+| Report dates in different Australian financial years | `REVIEW` | YTD figures reset on 1 July, so a comparison across the reset puts a full year against a month and its variance verdicts on P&L-style rows mean nothing. |
 | Account movement | `REVIEW` | A high variance is an investigation trigger, not an error by itself. |
 | New/missing account or metadata drift | `REVIEW` | Chart-of-accounts changes can be legitimate but must be explained. |
 | Missing supplied mapping | `REVIEW` | Grouped review should not silently omit a new account. |
