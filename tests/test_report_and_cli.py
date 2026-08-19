@@ -488,6 +488,117 @@ def test_a_percentage_carrying_full_division_precision_still_renders_short(tmp_p
     assert payload["exceptions"][0]["percentage_change"] == "33.33%"
 
 
+def test_a_prior_zero_percentage_renders_as_an_explicit_sentinel_not_a_blank(tmp_path: Path) -> None:
+    # A period_variance exception against a nil prior balance carries
+    # percentage_change=None. A blank cell in the CSV or JSON reads as
+    # "no change", so the pack must state the condition in text that cannot
+    # parse as a number.
+    pack = CloseReviewPack(
+        status="REVIEW",
+        current_report_dates=("2026-07-31",),
+        prior_report_dates=("2026-06-30",),
+        source_hashes={"current_trial_balance": "abc"},
+        absolute_threshold=Decimal("1000"),
+        percentage_threshold=Decimal("0.10"),
+        reconciliation_tolerance=Decimal("0.01"),
+        exceptions=(
+            ExceptionItem(
+                control="period_variance",
+                status="REVIEW",
+                tenant="Acme Demo Pty Ltd",
+                account_id="777",
+                account_code="1770",
+                account_name="New Clearing",
+                current_value=Decimal("900000.00"),
+                prior_value=Decimal("0.00"),
+                difference=Decimal("900000.00"),
+                threshold=Decimal("10000"),
+                percentage_change=None,
+                reason="Demo only.",
+                reviewer_action="Review.",
+            ),
+        ),
+        acknowledgement=None,
+    )
+
+    outputs = write_review_pack(pack, tmp_path / "pack")
+
+    payload = json.loads(outputs["json"].read_text(encoding="utf-8"))
+    assert payload["exceptions"][0]["percentage_change"] == "n/a (prior period zero)"
+    with outputs["exceptions"].open(encoding="utf-8-sig", newline="") as source:
+        row = next(csv.DictReader(source))
+    assert row["percentage_change"] == "n/a (prior period zero)"
+    # The sentinel must never be readable as a number by a downstream consumer.
+    with pytest.raises(Exception):
+        Decimal(row["percentage_change"])
+
+
+def test_controls_without_a_percentage_still_render_an_empty_percentage_cell(tmp_path: Path) -> None:
+    # The sentinel names one specific condition. A control that never computes
+    # a percentage (reconciliation here, prior_value holds the subledger
+    # balance) keeps its empty cell; writing the sentinel there would claim a
+    # prior-period condition the control never evaluated.
+    pack = _single_exception_pack()
+
+    outputs = write_review_pack(pack, tmp_path / "pack")
+
+    payload = json.loads(outputs["json"].read_text(encoding="utf-8"))
+    assert payload["exceptions"][0]["percentage_change"] == ""
+    with outputs["exceptions"].open(encoding="utf-8-sig", newline="") as source:
+        row = next(csv.DictReader(source))
+    assert row["percentage_change"] == ""
+
+
+def test_a_nil_prior_variance_from_the_engine_reaches_the_pack_with_the_sentinel(tmp_path: Path) -> None:
+    # End to end: the engine leaves percentage_change as None for a nil prior
+    # balance and the writers must carry the explicit sentinel, not a blank.
+    header = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit"
+    current = tmp_path / "current.csv"
+    prior = tmp_path / "prior.csv"
+    prior.write_text(
+        "\n".join([
+            header,
+            "2026-06-30,Acme Demo Pty Ltd,Assets,777,New Clearing,1770,0.00,0.00,0.00,0.00",
+            "2026-06-30,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,0.00",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    current.write_text(
+        "\n".join([
+            header,
+            "2026-07-31,Acme Demo Pty Ltd,Assets,777,New Clearing,1770,900000.00,0.00,900000.00,0.00",
+            "2026-07-31,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,900000.00,0.00,900000.00",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    pack = review_close(
+        current_path=current,
+        prior_path=prior,
+        absolute_threshold=Decimal("10000"),
+    )
+
+    outputs = write_review_pack(pack, tmp_path / "pack")
+
+    payload = json.loads(outputs["json"].read_text(encoding="utf-8"))
+    variance = next(
+        item for item in payload["exceptions"]
+        if item["control"] == "period_variance" and item["account_id"] == "777"
+    )
+    assert variance["percentage_change"] == "n/a (prior period zero)"
+    with outputs["exceptions"].open(encoding="utf-8-sig", newline="") as source:
+        rows = list(csv.DictReader(source))
+    csv_variance = next(
+        row for row in rows
+        if row["control"] == "period_variance" and row["account_id"] == "777"
+    )
+    assert csv_variance["percentage_change"] == "n/a (prior period zero)"
+    # The markdown table has no percentage column; its Reason cell already
+    # states that the percentage threshold was not tested, so the summary
+    # carries the same fact in prose.
+    summary = outputs["summary"].read_text(encoding="utf-8")
+    assert "so the percentage threshold was not tested" in summary
+
+
 def test_amounts_that_are_not_decimals_still_render(tmp_path: Path) -> None:
     # CloseReviewPack and ExceptionItem are frozen dataclasses with no runtime
     # type enforcement, so a library caller can hand the writer an int or float.
