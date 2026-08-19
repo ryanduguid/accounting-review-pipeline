@@ -50,6 +50,9 @@ The demo exits `2` because its deliberately fabricated exceptions need human rev
 
 Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
 
+To run the check on a schedule in CI, copy [examples/github-actions-close-check.yml](examples/github-actions-close-check.yml) into `.github/workflows/`.
+It runs against a repo-stored synthetic trial balance and fails the job when the pack is `BLOCKED`.
+
 ## Worked example
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
