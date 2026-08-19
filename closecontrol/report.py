@@ -57,6 +57,7 @@ def _exception_dict(item: ExceptionItem) -> dict[str, str]:
         "account_id": item.account_id,
         "account_code": item.account_code,
         "account_name": item.account_name,
+        "review_group": item.review_group,
         "current_value": _money(item.current_value),
         "prior_value": _money(item.prior_value),
         "difference": _money(item.difference),
@@ -254,7 +255,7 @@ def _as_csv(pack: CloseReviewPack) -> str:
     writer.writeheader()
     for item in pack.exceptions:
         row = _exception_dict(item)
-        for field in ("tenant", "account_id", "account_code", "account_name"):
+        for field in ("tenant", "account_id", "account_code", "account_name", "review_group"):
             row[field] = _csv_safe(row[field])
         writer.writerow(row)
     return buffer.getvalue()

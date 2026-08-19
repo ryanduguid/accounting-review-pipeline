@@ -457,6 +457,102 @@ def test_report_dates_across_a_financial_year_reset_raise_a_review_flag(
     assert current_date in flags[0].reason
 
 
+def test_exceptions_carry_the_mapped_review_group(tmp_path: Path) -> None:
+    paths = _variance_pair(tmp_path, "150000.00")
+    mapping = tmp_path / "mapping.csv"
+    mapping.write_text(
+        "AccountID,ReviewGroup\n110,Receivables\n900,Equity\n",
+        encoding="utf-8",
+    )
+
+    pack = review_close(
+        **paths,
+        mapping_path=mapping,
+        absolute_threshold=Decimal("10000"),
+    )
+
+    variances = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}
+    assert variances["110"].review_group == "Receivables"
+    assert variances["900"].review_group == "Equity"
+    # An exception that names no account, such as the reset flag these
+    # crossing dates raise, stays blank rather than borrowing a group.
+    flags = [item for item in pack.exceptions if item.control == "financial_year_reset"]
+    assert flags and flags[0].review_group == ""
+
+
+def test_review_group_stays_blank_without_a_mapping(tmp_path: Path) -> None:
+    pack = review_close(
+        **_variance_pair(tmp_path, "150000.00"),
+        absolute_threshold=Decimal("10000"),
+    )
+
+    assert pack.exceptions
+    assert all(item.review_group == "" for item in pack.exceptions)
+
+
+def test_an_unmapped_account_keeps_a_blank_review_group(tmp_path: Path) -> None:
+    paths = _variance_pair(tmp_path, "150000.00")
+    mapping = tmp_path / "mapping.csv"
+    mapping.write_text("AccountID,ReviewGroup\n110,Receivables\n", encoding="utf-8")
+
+    pack = review_close(
+        **paths,
+        mapping_path=mapping,
+        absolute_threshold=Decimal("10000"),
+    )
+
+    unmapped = [item for item in pack.exceptions if item.control == "account_mapping"]
+    assert [item.account_id for item in unmapped] == ["900"]
+    assert unmapped[0].review_group == ""
+
+
+def test_a_movement_from_a_nil_prior_ytd_balance_is_raised_by_the_absolute_gate_alone(tmp_path: Path) -> None:
+    # Pin: 0 -> material. With a nil prior YTD balance no percentage exists,
+    # and `percentage is None or percentage >= percentage_threshold` in the
+    # engine deliberately treats the untestable gate as passed, so the
+    # absolute gate decides alone. This is intended fail-closed behaviour,
+    # not a bug: dropping the row because a percentage cannot be computed
+    # would hide a first-funding of a clearing or suspense account.
+    pack = review_close(
+        **_variance_pair(tmp_path, "50000.00", prior_ytd="0.00"),
+        absolute_threshold=Decimal("10000"),
+        percentage_threshold=Decimal("0.10"),
+    )
+
+    raised = [item for item in pack.exceptions if item.control == "period_variance" and item.account_id == "110"]
+    assert len(raised) == 1
+    assert raised[0].percentage_change is None
+    assert raised[0].difference == Decimal("50000.00")
+
+
+def test_a_material_balance_falling_to_nil_is_still_raised(tmp_path: Path) -> None:
+    # Pin: material -> 0. The prior balance is non-nil, so the percentage is
+    # defined (exactly 1) and both gates fire in the ordinary way.
+    pack = review_close(
+        **_variance_pair(tmp_path, "0.00", prior_ytd="50000.00"),
+        absolute_threshold=Decimal("10000"),
+        percentage_threshold=Decimal("0.10"),
+    )
+
+    raised = [item for item in pack.exceptions if item.control == "period_variance" and item.account_id == "110"]
+    assert len(raised) == 1
+    assert raised[0].percentage_change == Decimal("1")
+    assert raised[0].difference == Decimal("-50000.00")
+
+
+def test_a_nil_to_nil_balance_raises_nothing(tmp_path: Path) -> None:
+    # Pin: 0 -> 0. The difference is nil, so `difference != ZERO` in the
+    # absolute gate fails first and the percentage-is-None arm never gets the
+    # chance to raise a phantom exception for a dormant account.
+    pack = review_close(
+        **_variance_pair(tmp_path, "0.00", prior_ytd="0.00"),
+        absolute_threshold=Decimal("10000"),
+        percentage_threshold=Decimal("0.10"),
+    )
+
+    assert not [item for item in pack.exceptions if item.control == "period_variance"]
+
+
 def test_review_note_cannot_predate_the_pack_it_claims_to_review(tmp_path: Path) -> None:
     note = tmp_path / "review.json"
     note.write_text(

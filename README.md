@@ -94,8 +94,8 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 `exceptions.csv` carries the same exceptions with full numeric detail. The Operating Bank variance row (wrapped here for readability):
 
 ```csv
-control,status,tenant,account_id,account_code,account_name,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
-period_variance,REVIEW,Acme Demo Pty Ltd,100,1000,Operating Bank,120000.00,105000.00,15000.00,10000.00,14.29%,
+control,status,tenant,account_id,account_code,account_name,review_group,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
+period_variance,REVIEW,Acme Demo Pty Ltd,100,1000,Operating Bank,Cash and cash equivalents,120000.00,105000.00,15000.00,10000.00,14.29%,
   YTD net balance moved beyond both configured materiality thresholds.,
   "Investigate the driver, retain supporting evidence, and document the reviewer conclusion."
 ```
@@ -110,6 +110,7 @@ The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.0
     {
       "account_code": "1000",
       "account_name": "Operating Bank",
+      "review_group": "Cash and cash equivalents",
       "control": "period_variance",
       "current_value": "120000.00",
       "prior_value": "105000.00",
@@ -193,7 +194,7 @@ A close can be technically balanced and still need review. This tool keeps the e
 
 ### What formula neutralisation covers, exactly
 
-The escaping in `exceptions.csv` applies to the four source-controlled text fields: `tenant`, `account_id`, `account_code`, and `account_name`. For those fields:
+The escaping in `exceptions.csv` applies to the five source-controlled text fields: `tenant`, `account_id`, `account_code`, `account_name`, and `review_group`. For those fields:
 
 Neutralised (prefixed with an apostrophe so a spreadsheet reads them as text):
 

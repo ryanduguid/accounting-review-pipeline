@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, DivisionByZero, InvalidOperation
 from pathlib import Path
@@ -382,6 +382,17 @@ def review_close(
     if mapping_path is not None:
         exceptions += _mapping_exceptions(current_rows, mapping)
     exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
+
+    # The mapping's ReviewGroup travels with every exception that names an
+    # account it covers, so a reviewer can filter exceptions.csv or the JSON
+    # pack by reporting group. The column stays blank when no mapping was
+    # supplied or the account is unmapped; the account_mapping control already
+    # raises the unmapped case on its own.
+    if mapping:
+        exceptions = [
+            replace(item, review_group=mapping.get(item.account_id, ""))
+            for item in exceptions
+        ]
 
     source_hashes = {
         "current_trial_balance": current_source.sha256,
