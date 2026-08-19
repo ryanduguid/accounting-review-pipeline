@@ -337,7 +337,43 @@ def test_acknowledgement_cannot_inject_markdown_structure(tmp_path: Path) -> Non
 
     summary = write_review_pack(pack, tmp_path / "pack")["summary"].read_text(encoding="utf-8")
     assert "\n## Forged approval" not in summary
-    assert "Reviewed. ## Forged approval \\| yes" in summary
+    # A multi-line comment renders as a blockquote: each source line survives
+    # on its own quoted line, the pipe is escaped, and the leading '#' is
+    # escaped so the quoted text cannot become a document heading.
+    assert "- Comment:\n  > Reviewed.\n  > \\## Forged approval \\| yes" in summary
+
+
+def test_multi_line_reviewer_comment_keeps_its_line_structure(tmp_path: Path) -> None:
+    source = (EXAMPLES / "review_note.json").read_text(encoding="utf-8")
+    note = tmp_path / "review.json"
+    payload = json.loads(source)
+    payload["comment"] = "Variance driver confirmed.\nDebtors follow-up booked for next close.\nNo journal was posted."
+    note.write_text(json.dumps(payload), encoding="utf-8")
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        acknowledgement_path=note,
+    )
+
+    summary = write_review_pack(pack, tmp_path / "pack")["summary"].read_text(encoding="utf-8")
+    assert (
+        "- Comment:\n"
+        "  > Variance driver confirmed.\n"
+        "  > Debtors follow-up booked for next close.\n"
+        "  > No journal was posted.\n"
+        "- Effect:" in summary
+    )
+
+
+def test_single_line_reviewer_comment_stays_inline(tmp_path: Path) -> None:
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        acknowledgement_path=EXAMPLES / "review_note.json",
+    )
+
+    summary = write_review_pack(pack, tmp_path / "pack")["summary"].read_text(encoding="utf-8")
+    assert "- Comment: Reviewed fabricated demo exceptions only" in summary
 
 
 @pytest.mark.parametrize("blocked", PACK_FILES)
