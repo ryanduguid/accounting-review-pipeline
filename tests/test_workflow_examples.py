@@ -34,10 +34,22 @@ EXPECTED_EXTERNAL_PINS = {
     ),
 }
 
-USES_LINE = re.compile(
-    r"^\s*(?:-\s*)?uses:\s*(?P<value>.*?)(?:\s+#\s*(?P<comment>.*?))?\s*$"
+USES_KEY_LINE = re.compile(r"^\s*(?:-\s*)?uses:\s*(?P<value>.*?)\s*$")
+RUN_KEY_LINE = re.compile(r"^\s*(?:-\s*)?run:\s*(?P<command>.+?)\s*$")
+RUN_BLOCK_HEADER = re.compile(r"^(?P<indent> *)(?:-\s*)?run:\s*[>|][0-9+-]*\s*$")
+BLOCK_SCALAR_HEADER = re.compile(
+    r"^(?P<indent> *)(?:-\s*)?[A-Za-z0-9_.-]+:\s*[>|][0-9+-]*\s*$"
 )
-RUN_LINE = re.compile(r"^\s*(?:-\s*)?run:\s*(?P<command>.+?)\s*$")
+FLOW_MAPPING_LINE = re.compile(r"^\s*-\s*\{(?P<body>.*)\}\s*$")
+PERSIST_CREDENTIALS_LINE = re.compile(
+    r"^\s*persist-credentials:\s*(?P<value>.*?)\s*$"
+)
+PERMISSIONS_LINE = re.compile(
+    r"^(?P<indent> *)(?P<sequence>-\s*)?permissions:\s*(?P<value>.*?)\s*$"
+)
+MAPPING_ENTRY = re.compile(
+    r"^(?P<indent> *)(?P<key>[A-Za-z0-9_.-]+):\s*(?P<value>.*?)\s*$"
+)
 PINNED_ACTION = re.compile(
     r"(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)"
     r"@(?P<sha>[0-9a-fA-F]{40})"
@@ -53,6 +65,54 @@ def _unquote(value: str) -> str:
     return value
 
 
+def _split_yaml_comment(line: str) -> tuple[str, str | None]:
+    if line.startswith("#"):
+        return "", line[1:].strip()
+    marker = re.search(r"\s+#", line)
+    if marker is None:
+        return line.rstrip(), None
+    return line[: marker.start()].rstrip(), line[marker.end() :].strip()
+
+
+def _block_scalar_spans(lines: list[str]) -> dict[int, list[int]]:
+    # This is deliberately a bounded structural scanner, not a YAML parser. It
+    # recognises only the security-bearing shapes used by this copyable example
+    # and fails closed when those keys use an unsupported shape.
+    spans: dict[int, list[int]] = {}
+    index = 0
+    while index < len(lines):
+        code, _ = _split_yaml_comment(lines[index])
+        match = BLOCK_SCALAR_HEADER.fullmatch(code)
+        if not match:
+            index += 1
+            continue
+
+        header_indent = len(match.group("indent"))
+        content: list[int] = []
+        following = index + 1
+        while following < len(lines):
+            if not lines[following].strip():
+                content.append(following)
+                following += 1
+                continue
+            following_indent = len(lines[following]) - len(lines[following].lstrip())
+            if following_indent <= header_indent:
+                break
+            content.append(following)
+            following += 1
+        spans[index] = content
+        index = following
+    return spans
+
+
+def _scalar_content_lines(lines: list[str]) -> set[int]:
+    return {
+        line_number
+        for content in _block_scalar_spans(lines).values()
+        for line_number in content
+    }
+
+
 def _install_command(project_version: str) -> str:
     requirement = (
         f"{PACKAGE_NAME} @ "
@@ -64,57 +124,230 @@ def _install_command(project_version: str) -> str:
 
 
 def _active_uses(text: str) -> list[tuple[int, str, str | None]]:
+    lines = text.splitlines()
+    scalar_content = _scalar_content_lines(lines)
     found: list[tuple[int, str, str | None]] = []
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        match = USES_LINE.fullmatch(line)
+    for index, line in enumerate(lines):
+        if index in scalar_content:
+            continue
+        code, comment = _split_yaml_comment(line)
+        match = USES_KEY_LINE.fullmatch(code)
         if match:
             found.append(
                 (
-                    line_number,
+                    index + 1,
                     _unquote(match.group("value")),
-                    match.group("comment"),
+                    comment,
                 )
             )
+            continue
+
+        flow = FLOW_MAPPING_LINE.fullmatch(code)
+        if not flow:
+            continue
+        body = flow.group("body")
+        flow_uses = [
+            _unquote(match.group("value"))
+            for match in re.finditer(
+                r"(?:^|,)\s*uses\s*:\s*(?P<value>.*?)(?=\s*,|$)", body
+            )
+        ]
+        if re.search(r"(?:^|,)\s*uses\s*:", body) and not flow_uses:
+            flow_uses = [code.strip()]
+        found.extend((index + 1, value, comment) for value in flow_uses)
     return found
 
 
 def _checkout_does_not_persist_credentials(text: str) -> bool:
     lines = text.splitlines()
+    scalar_content = _scalar_content_lines(lines)
+    checkout_lines: list[int] = []
+    persist_lines: list[int] = []
     for index, line in enumerate(lines):
-        match = USES_LINE.fullmatch(line)
-        if not match or not _unquote(match.group("value")).startswith("actions/checkout@"):
+        if index in scalar_content:
             continue
+        code, _ = _split_yaml_comment(line)
+        uses = USES_KEY_LINE.fullmatch(code)
+        if uses and _unquote(uses.group("value")).startswith("actions/checkout@"):
+            checkout_lines.append(index)
+        if PERSIST_CREDENTIALS_LINE.fullmatch(code):
+            persist_lines.append(index)
 
-        step_indent = len(line) - len(line.lstrip())
-        block: list[str] = []
-        for following in lines[index + 1 :]:
-            stripped = following.lstrip()
-            following_indent = len(following) - len(stripped)
-            if stripped.startswith("-") and following_indent <= step_indent:
-                break
-            block.append(following)
-
-        return any(
-            re.fullmatch(r"\s*persist-credentials:\s*false\s*", following)
-            for following in block
-        )
-    return False
-
-
-def _has_read_only_top_level_permissions(text: str) -> bool:
-    lines = text.splitlines()
-    permission_blocks = [index for index, line in enumerate(lines) if line == "permissions:"]
-    if len(permission_blocks) != 1:
+    if len(checkout_lines) != 1:
+        return False
+    checkout_index = checkout_lines[0]
+    checkout_code, _ = _split_yaml_comment(lines[checkout_index])
+    if not checkout_code.lstrip().startswith("- uses:"):
         return False
 
-    values: list[str] = []
-    for line in lines[permission_blocks[0] + 1 :]:
-        if line and not line.startswith((" ", "#")):
+    step_indent = len(checkout_code) - len(checkout_code.lstrip())
+    step_lines: list[int] = []
+    for index in range(checkout_index + 1, len(lines)):
+        if index in scalar_content:
+            continue
+        code, _ = _split_yaml_comment(lines[index])
+        if not code.strip():
+            continue
+        indent = len(code) - len(code.lstrip())
+        if indent < step_indent or (indent == step_indent and code.lstrip().startswith("-")):
             break
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#"):
-            values.append(stripped)
-    return values == ["contents: read"]
+        step_lines.append(index)
+
+    with_lines = [
+        index
+        for index in step_lines
+        if len(lines[index]) - len(lines[index].lstrip()) == step_indent + 2
+        and _split_yaml_comment(lines[index])[0].strip() == "with:"
+    ]
+    if len(with_lines) != 1:
+        return False
+
+    with_index = with_lines[0]
+    with_indent = step_indent + 2
+    bound_persist_lines: list[int] = []
+    for index in range(with_index + 1, len(lines)):
+        if index in scalar_content:
+            continue
+        code, _ = _split_yaml_comment(lines[index])
+        if not code.strip():
+            continue
+        indent = len(code) - len(code.lstrip())
+        if indent <= with_indent:
+            break
+        match = PERSIST_CREDENTIALS_LINE.fullmatch(code)
+        if indent == with_indent + 2 and match and _unquote(match.group("value")) == "false":
+            bound_persist_lines.append(index)
+
+    return len(bound_persist_lines) == 1 and persist_lines == bound_persist_lines
+
+
+def _mapping_entries_after(
+    lines: list[str],
+    index: int,
+    key_indent: int,
+    scalar_content: set[int],
+) -> list[tuple[str, str]] | None:
+    entries: list[tuple[str, str]] = []
+    for following in range(index + 1, len(lines)):
+        if following in scalar_content:
+            return None
+        code, _ = _split_yaml_comment(lines[following])
+        if not code.strip():
+            continue
+        indent = len(code) - len(code.lstrip())
+        if indent <= key_indent:
+            break
+        match = MAPPING_ENTRY.fullmatch(code)
+        if indent != key_indent + 2 or not match or not match.group("value"):
+            return None
+        entries.append((match.group("key"), _unquote(match.group("value"))))
+    return entries
+
+
+def _inline_mapping_entries(value: str) -> list[tuple[str, str]] | None:
+    if re.fullmatch(r"\{\s*contents\s*:\s*read\s*\}", value):
+        return [("contents", "read")]
+    if value == "{}":
+        return []
+    return None
+
+
+def _job_for_line(lines: list[str], index: int, scalar_content: set[int]) -> str | None:
+    for preceding in range(index - 1, -1, -1):
+        if preceding in scalar_content:
+            continue
+        code, _ = _split_yaml_comment(lines[preceding])
+        if not code.strip():
+            continue
+        indent = len(code) - len(code.lstrip())
+        if indent == 2:
+            match = re.fullmatch(r"  (?P<job>[A-Za-z0-9_.-]+):\s*", code)
+            return match.group("job") if match else None
+        if indent == 0:
+            return None
+    return None
+
+
+def _permissions_are_read_only(text: str) -> bool:
+    lines = text.splitlines()
+    scalar_content = _scalar_content_lines(lines)
+    occurrences: list[tuple[int, int, bool, list[tuple[str, str]] | None]] = []
+    for index, line in enumerate(lines):
+        if index in scalar_content:
+            continue
+        code, _ = _split_yaml_comment(line)
+        match = PERMISSIONS_LINE.fullmatch(code)
+        if match:
+            sequence = match.group("sequence") is not None
+            key_indent = len(match.group("indent")) + (2 if sequence else 0)
+            value = _unquote(match.group("value"))
+            mapping = (
+                _mapping_entries_after(lines, index, key_indent, scalar_content)
+                if not value
+                else _inline_mapping_entries(value)
+            )
+            occurrences.append((index, key_indent, sequence, mapping))
+        elif re.search(r"(?:^|[\s{,])permissions\s*:", code):
+            return False
+
+    expected = [("contents", "read")]
+    top_level = [item for item in occurrences if item[1] == 0 and not item[2]]
+    if len(top_level) != 1 or top_level[0][3] != expected:
+        return False
+
+    job_permission_counts: Counter[str] = Counter()
+    for index, key_indent, sequence, mapping in occurrences:
+        if key_indent == 0 and not sequence:
+            continue
+        if sequence or key_indent != 4 or mapping != expected:
+            return False
+        job = _job_for_line(lines, index, scalar_content)
+        if job is None:
+            return False
+        job_permission_counts[job] += 1
+    return all(count == 1 for count in job_permission_counts.values())
+
+
+def _active_package_installs(text: str) -> tuple[list[str], bool]:
+    lines = text.splitlines()
+    spans = _block_scalar_spans(lines)
+    scalar_content = {
+        line_number for content in spans.values() for line_number in content
+    }
+    commands: list[str] = []
+    package_install_in_block = False
+    for index, line in enumerate(lines):
+        if index in scalar_content:
+            continue
+        code, _ = _split_yaml_comment(line)
+        if RUN_BLOCK_HEADER.fullmatch(code):
+            active_lines = [
+                lines[line_number].strip()
+                for line_number in spans.get(index, [])
+                if lines[line_number].strip()
+                and not lines[line_number].lstrip().startswith("#")
+            ]
+            active_block = "\n".join(active_lines)
+            if "pip install" in active_block and PACKAGE_NAME in active_block:
+                package_install_in_block = True
+            continue
+
+        run = RUN_KEY_LINE.fullmatch(code)
+        if run:
+            command = _unquote(run.group("command"))
+            if "pip install" in command and PACKAGE_NAME in command:
+                commands.append(command)
+            continue
+
+        flow = FLOW_MAPPING_LINE.fullmatch(code)
+        if (
+            flow
+            and re.search(r"(?:^|,)\s*run\s*:", flow.group("body"))
+            and "pip install" in flow.group("body")
+            and PACKAGE_NAME in flow.group("body")
+        ):
+            commands.append("unsupported flow-style package install")
+    return commands, package_install_in_block
 
 
 def _has_client_data_warning(text: str) -> bool:
@@ -163,20 +396,20 @@ def _workflow_errors(text: str, *, project_version: str) -> list[str]:
             f"expected {expected_pins!r}, got {actual_pins!r}"
         )
 
-    install_commands = []
-    for line in text.splitlines():
-        match = RUN_LINE.fullmatch(line)
-        if match and "pip install" in match.group("command") and PACKAGE_NAME in match.group("command"):
-            install_commands.append(match.group("command"))
+    install_commands, package_install_in_block = _active_package_installs(text)
     expected_install = _install_command(project_version)
     if install_commands != [expected_install]:
         errors.append(
             "the active package install must be the one reviewed immutable release-asset "
             f"reference; expected {expected_install!r}, got {install_commands!r}"
         )
+    if package_install_in_block:
+        errors.append("package installation must not be hidden in a block-scalar run command")
 
-    if not _has_read_only_top_level_permissions(text):
-        errors.append("top-level workflow permissions must remain exactly contents: read")
+    if not _permissions_are_read_only(text):
+        errors.append(
+            "top-level and effective job permissions must remain exactly contents: read"
+        )
     if not _checkout_does_not_persist_credentials(text):
         errors.append("checkout must set persist-credentials: false")
     if not _has_client_data_warning(text):
@@ -331,6 +564,144 @@ def test_commented_unsafe_lines_are_not_active_configuration() -> None:
     text = _secure_workflow() + (
         "      # - uses: actions/checkout@main\n"
         "      # - run: python -m pip install monthly-close-control-plane\n"
+    )
+
+    _assert_workflow(text)
+
+
+def test_adversarial_checkout_credentials_moved_to_env_are_rejected() -> None:
+    text = _secure_workflow().replace(
+        "        with:\n          persist-credentials: false",
+        "        env:\n          persist-credentials: false",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_adversarial_job_permission_escalation_is_rejected() -> None:
+    text = _secure_workflow().replace(
+        "  close-check:\n    steps:",
+        "  close-check:\n    permissions:\n      contents: write\n    steps:",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_adversarial_flow_style_external_action_is_rejected() -> None:
+    text = _secure_workflow() + "      - {uses: actions/cache@v4}\n"
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_adversarial_block_scalar_unversioned_install_is_rejected() -> None:
+    text = _secure_workflow() + (
+        "      - name: Unsafe second install\n"
+        "        run: |\n"
+        "          python -m pip install monthly-close-control-plane\n"
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (
+            "        with:\n          persist-credentials: false\n",
+            "",
+        ),
+        (
+            "          persist-credentials: false",
+            "          persist-credentials: false\n          persist-credentials: true",
+        ),
+    ],
+)
+def test_checkout_credentials_must_be_unique_and_inside_with(old: str, new: str) -> None:
+    text = _secure_workflow().replace(old, new)
+    if not new:
+        text += "persist-credentials: false\n"
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_job_may_repeat_the_exact_read_only_permissions() -> None:
+    text = _secure_workflow().replace(
+        "  close-check:\n    steps:",
+        "  close-check:\n    permissions:\n      contents: read\n    steps:",
+    )
+
+    _assert_workflow(text)
+
+
+@pytest.mark.parametrize(
+    "permission_mapping",
+    [
+        "permissions: write-all",
+        "permissions: {}",
+        "permissions:\n      contents: read\n      actions: write",
+    ],
+)
+def test_job_permissions_must_not_override_the_exact_read_only_policy(
+    permission_mapping: str,
+) -> None:
+    text = _secure_workflow().replace(
+        "  close-check:\n    steps:",
+        f"  close-check:\n    {permission_mapping}\n    steps:",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_step_permission_override_is_rejected() -> None:
+    text = _secure_workflow().replace(
+        "      - uses: actions/setup-python@",
+        "      - permissions:\n          contents: write\n        uses: actions/setup-python@",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+@pytest.mark.parametrize("uses", ["./local-action", "'${{ matrix.action }}'"])
+def test_flow_style_local_actions_and_whole_expressions_keep_their_exemption(
+    uses: str,
+) -> None:
+    _assert_workflow(_secure_workflow() + f"      - {{uses: {uses}}}\n")
+
+
+def test_a_second_reviewed_install_is_still_rejected() -> None:
+    text = _secure_workflow() + (
+        "      - name: Duplicate install\n"
+        f"        run: {_install_command('0.1.1')}\n"
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_a_reviewed_install_in_a_block_scalar_is_rejected() -> None:
+    text = _secure_workflow() + (
+        "      - name: Duplicate block install\n"
+        "        run: |\n"
+        f"          {_install_command('0.1.1')}\n"
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_a_commented_install_inside_a_block_scalar_is_not_active() -> None:
+    text = _secure_workflow() + (
+        "      - name: Harmless block comment\n"
+        "        run: |\n"
+        "          # python -m pip install monthly-close-control-plane\n"
+        "          echo done\n"
     )
 
     _assert_workflow(text)
