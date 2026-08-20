@@ -21,7 +21,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8"]
+dev = ["build>=1.2", "pytest>=8", "PyYAML>=6.0.3,<7"]
 
 [project.scripts]
 close-control = "closecontrol.cli:main"
