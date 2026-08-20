@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import yaml
 from yaml.constructor import ConstructorError
-from yaml.nodes import MappingNode
+from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 from yaml.resolver import BaseResolver
 
 try:
@@ -23,7 +23,6 @@ EXAMPLES = ROOT / "examples"
 WORKFLOW = EXAMPLES / "github-actions-close-check.yml"
 
 PACKAGE_NAME = "monthly-close-control-plane"
-NORMALISED_PACKAGE_NAME = "monthly-close-control-plane"
 RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
 
 EXPECTED_EXTERNAL_PINS = {
@@ -46,15 +45,11 @@ PINNED_ACTION = re.compile(
     r"@(?P<sha>[0-9a-fA-F]{40})"
 )
 WHOLE_EXPRESSION = re.compile(r"\$\{\{.+\}\}")
-REQUIREMENT_NAME = re.compile(
-    r"^(?P<name>[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)"
-    r"(?=\s*@|[<>=!~]|$)"
+PACKAGE_MENTION = re.compile(
+    r"monthly[-_.]close[-_.]control[-_.]plane",
+    re.IGNORECASE,
 )
 PIP_EXECUTABLE = re.compile(r"pip(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE)
-PYTHON_EXECUTABLE = re.compile(
-    r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE
-)
-SHELL_OPERATOR = re.compile(r"[;&|]+")
 
 
 class StrictWorkflowLoader(yaml.SafeLoader):
@@ -113,10 +108,6 @@ StrictWorkflowLoader.add_constructor(
 )
 
 
-def _normalise_distribution_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
 def _requirement(project_version: str) -> str:
     return (
         f"{PACKAGE_NAME} @ "
@@ -135,6 +126,29 @@ def _load_workflow(text: str) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise TypeError("workflow root must be a mapping")
     return loaded
+
+
+def _uses_scalar_nodes(text: str) -> list[ScalarNode]:
+    root = yaml.compose(text, Loader=StrictWorkflowLoader)
+    if root is None:
+        raise TypeError("workflow must not be empty")
+
+    found: list[ScalarNode] = []
+    pending = [root]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, MappingNode):
+            for key_node, value_node in node.value:
+                if (
+                    isinstance(key_node, ScalarNode)
+                    and key_node.value == "uses"
+                    and isinstance(value_node, ScalarNode)
+                ):
+                    found.append(value_node)
+                pending.append(value_node)
+        elif isinstance(node, SequenceNode):
+            pending.extend(node.value)
+    return found
 
 
 def _workflow_surfaces(
@@ -186,6 +200,7 @@ def _workflow_surfaces(
 def _validate_uses(
     text: str,
     uses_values: list[tuple[str, Any]],
+    uses_nodes: list[ScalarNode],
     steps: list[dict[str, Any]],
     errors: list[str],
 ) -> None:
@@ -213,12 +228,20 @@ def _validate_uses(
             f"expected {expected_pins!r}, got {actual_pins!r}"
         )
 
+    source_lines = text.splitlines()
     for action, (sha, release) in EXPECTED_EXTERNAL_PINS.items():
-        pattern = re.compile(
-            rf"(?m)^\s*(?:-\s*)?(?:uses|['\"]uses['\"]):\s*"
-            rf"['\"]?{re.escape(action)}@{sha}['\"]?\s+#\s*{re.escape(release)}\s*$"
-        )
-        if len(pattern.findall(text)) != 1:
+        reference = f"{action}@{sha}"
+        matching_nodes = [node for node in uses_nodes if node.value == reference]
+        labelled = False
+        if len(matching_nodes) == 1:
+            node = matching_nodes[0]
+            if node.start_mark.line == node.end_mark.line:
+                trailing_text = source_lines[node.end_mark.line][node.end_mark.column :]
+                labelled = re.fullmatch(
+                    rf"\s+#\s*{re.escape(release)}\s*",
+                    trailing_text,
+                ) is not None
+        if not labelled:
             errors.append(
                 f"{action} must retain exactly one adjacent reviewed release comment {release}"
             )
@@ -248,38 +271,12 @@ def _executable_name(token: str) -> str:
     return token.replace("\\", "/").rsplit("/", 1)[-1]
 
 
-def _pip_install_invocations(tokens: list[str]) -> list[tuple[int, int]]:
-    invocations: list[tuple[int, int]] = []
-    index = 0
-    while index < len(tokens):
-        executable = _executable_name(tokens[index])
-        if (
-            PYTHON_EXECUTABLE.fullmatch(executable)
-            and index + 3 < len(tokens)
-            and tokens[index + 1] == "-m"
-            and PIP_EXECUTABLE.fullmatch(_executable_name(tokens[index + 2]))
-            and tokens[index + 3].lower() == "install"
-        ):
-            invocations.append((index, index + 4))
-            index += 4
-            continue
-        if (
-            PIP_EXECUTABLE.fullmatch(executable)
-            and index + 1 < len(tokens)
-            and tokens[index + 1].lower() == "install"
-        ):
-            invocations.append((index, index + 2))
-            index += 2
-            continue
-        index += 1
-    return invocations
-
-
-def _requirement_name(token: str) -> str | None:
-    match = REQUIREMENT_NAME.match(token)
-    if not match:
-        return None
-    return _normalise_distribution_name(match.group("name"))
+def _pip_token_indices(tokens: list[str]) -> list[int]:
+    return [
+        index
+        for index, token in enumerate(tokens)
+        if PIP_EXECUTABLE.fullmatch(_executable_name(token))
+    ]
 
 
 def _validate_package_installs(
@@ -287,49 +284,30 @@ def _validate_package_installs(
     project_version: str,
     errors: list[str],
 ) -> None:
-    target_requirements: list[str] = []
+    pip_invocations: list[tuple[list[str], int]] = []
     ambiguous_mentions: list[str] = []
     for command in run_commands:
         try:
             tokens = _shell_tokens(command)
         except ValueError as exc:
-            if NORMALISED_PACKAGE_NAME in _normalise_distribution_name(command):
+            if PACKAGE_MENTION.search(command):
                 errors.append(f"ambiguous package-related run command: {exc}")
             continue
 
-        target_positions = {
-            index
-            for index, token in enumerate(tokens)
-            if _requirement_name(token) == NORMALISED_PACKAGE_NAME
-        }
-        associated_positions: set[int] = set()
-        invocations = _pip_install_invocations(tokens)
-        for invocation_index, (_command_start, arguments_start) in enumerate(invocations):
-            arguments_end = len(tokens)
-            if invocation_index + 1 < len(invocations):
-                arguments_end = invocations[invocation_index + 1][0]
-            for index in range(arguments_start, arguments_end):
-                if SHELL_OPERATOR.fullmatch(tokens[index]):
-                    arguments_end = index
-                    break
-            for index in range(arguments_start, arguments_end):
-                if index in target_positions:
-                    associated_positions.add(index)
-                    target_requirements.append(tokens[index])
+        invocation_indices = _pip_token_indices(tokens)
+        pip_invocations.extend((tokens, index) for index in invocation_indices)
+        if not invocation_indices and PACKAGE_MENTION.search(" ".join(tokens)):
+            ambiguous_mentions.append(command)
 
-        ambiguous_mentions.extend(
-            tokens[index] for index in sorted(target_positions - associated_positions)
-        )
-
-    expected = _requirement(project_version)
-    if target_requirements != [expected]:
+    expected_tokens = ["python", "-m", "pip", "install", _requirement(project_version)]
+    if len(pip_invocations) != 1 or pip_invocations[0][0] != expected_tokens:
         errors.append(
-            "the active package install must be exactly one reviewed immutable "
-            f"release-asset reference; expected {expected!r}, got {target_requirements!r}"
+            "the workflow must contain exactly one pip invocation and its complete "
+            f"token vector must be {expected_tokens!r}; got {pip_invocations!r}"
         )
     if ambiguous_mentions:
         errors.append(
-            "package references outside a recognised pip install are ambiguous: "
+            "package or wheel references outside a recognised pip invocation are ambiguous: "
             f"{ambiguous_mentions!r}"
         )
 
@@ -350,6 +328,7 @@ def _workflow_errors(text: str, *, project_version: str) -> list[str]:
     errors: list[str] = []
     try:
         workflow = _load_workflow(text)
+        uses_nodes = _uses_scalar_nodes(text)
     except (yaml.YAMLError, TypeError) as exc:
         return [f"workflow must be strict, duplicate-free YAML: {exc}"]
 
@@ -358,7 +337,7 @@ def _workflow_errors(text: str, *, project_version: str) -> list[str]:
         errors.append("top-level permissions must be exactly contents: read")
 
     uses_values, run_commands, steps = _workflow_surfaces(workflow, errors)
-    _validate_uses(text, uses_values, steps, errors)
+    _validate_uses(text, uses_values, uses_nodes, steps, errors)
     _validate_package_installs(run_commands, project_version, errors)
     if not _has_client_data_warning(text):
         errors.append("the fabricated-data and never-commit-client-data warning must remain")
@@ -474,6 +453,51 @@ def test_action_release_comment_mutations_are_rejected(action: str, mutation: st
         _assert_workflow(
             _secure_workflow().replace(original, f"{action}@{sha}{suffix}")
         )
+
+
+@pytest.mark.parametrize(
+    "requirement",
+    [
+        _requirement("0.1.1").replace(PACKAGE_NAME, f"{PACKAGE_NAME}[dev]", 1),
+        _requirement("0.1.1").partition(" @ ")[2],
+    ],
+)
+def test_final_review_additional_pip_install_forms_are_rejected(
+    requirement: str,
+) -> None:
+    with pytest.raises(AssertionError):
+        _assert_workflow(
+            _secure_workflow()
+            + f'      - run: python -m pip install "{requirement}"\n'
+        )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        _secure_workflow().replace("pip install", "pip install --no-deps"),
+        _secure_workflow() + "      - run: pip3 install requests\n",
+    ],
+)
+def test_pip_inventory_requires_one_exact_token_vector(text: str) -> None:
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+def test_final_review_release_label_is_bound_to_actual_uses_node() -> None:
+    checkout, (sha, release) = next(iter(EXPECTED_EXTERNAL_PINS.items()))
+    text = _secure_workflow().replace(
+        f"{checkout}@{sha} # {release}",
+        f"{checkout}@{sha}",
+    ) + f"""      - name: Harmless provenance text
+        run: |
+          cat <<'EOF'
+          uses: {checkout}@{sha} # {release}
+          EOF
+"""
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
 
 
 @pytest.mark.parametrize(
