@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
+from yaml.constructor import ConstructorError
+from yaml.nodes import MappingNode
+from yaml.resolver import BaseResolver
 
 try:
     import tomllib
@@ -17,6 +23,7 @@ EXAMPLES = ROOT / "examples"
 WORKFLOW = EXAMPLES / "github-actions-close-check.yml"
 
 PACKAGE_NAME = "monthly-close-control-plane"
+NORMALISED_PACKAGE_NAME = "monthly-close-control-plane"
 RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
 
 EXPECTED_EXTERNAL_PINS = {
@@ -34,320 +41,297 @@ EXPECTED_EXTERNAL_PINS = {
     ),
 }
 
-USES_KEY_LINE = re.compile(r"^\s*(?:-\s*)?uses:\s*(?P<value>.*?)\s*$")
-RUN_KEY_LINE = re.compile(r"^\s*(?:-\s*)?run:\s*(?P<command>.+?)\s*$")
-RUN_BLOCK_HEADER = re.compile(r"^(?P<indent> *)(?:-\s*)?run:\s*[>|][0-9+-]*\s*$")
-BLOCK_SCALAR_HEADER = re.compile(
-    r"^(?P<indent> *)(?:-\s*)?[A-Za-z0-9_.-]+:\s*[>|][0-9+-]*\s*$"
-)
-FLOW_MAPPING_LINE = re.compile(r"^\s*-\s*\{(?P<body>.*)\}\s*$")
-PERSIST_CREDENTIALS_LINE = re.compile(
-    r"^\s*persist-credentials:\s*(?P<value>.*?)\s*$"
-)
-PERMISSIONS_LINE = re.compile(
-    r"^(?P<indent> *)(?P<sequence>-\s*)?permissions:\s*(?P<value>.*?)\s*$"
-)
-MAPPING_ENTRY = re.compile(
-    r"^(?P<indent> *)(?P<key>[A-Za-z0-9_.-]+):\s*(?P<value>.*?)\s*$"
-)
 PINNED_ACTION = re.compile(
     r"(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)"
     r"@(?P<sha>[0-9a-fA-F]{40})"
 )
-SEMANTIC_RELEASE = re.compile(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?")
 WHOLE_EXPRESSION = re.compile(r"\$\{\{.+\}\}")
+REQUIREMENT_NAME = re.compile(
+    r"^(?P<name>[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)"
+    r"(?=\s*@|[<>=!~]|$)"
+)
+PIP_EXECUTABLE = re.compile(r"pip(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE)
+PYTHON_EXECUTABLE = re.compile(
+    r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE
+)
+SHELL_OPERATOR = re.compile(r"[;&|]+")
 
 
-def _unquote(value: str) -> str:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        return value[1:-1]
-    return value
+class StrictWorkflowLoader(yaml.SafeLoader):
+    """Safe loader with duplicate-key rejection and workflow-safe booleans."""
 
 
-def _split_yaml_comment(line: str) -> tuple[str, str | None]:
-    if line.startswith("#"):
-        return "", line[1:].strip()
-    marker = re.search(r"\s+#", line)
-    if marker is None:
-        return line.rstrip(), None
-    return line[: marker.start()].rstrip(), line[marker.end() :].strip()
+# PyYAML follows YAML 1.1 and otherwise treats the workflow key `on` as true.
+# Keep booleans for actual true/false values while leaving on/off/yes/no as text.
+StrictWorkflowLoader.yaml_implicit_resolvers = {
+    first: [
+        resolver
+        for resolver in resolvers
+        if resolver[0] != "tag:yaml.org,2002:bool"
+    ]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+StrictWorkflowLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
+    list("tTfF"),
+)
 
 
-def _block_scalar_spans(lines: list[str]) -> dict[int, list[int]]:
-    # This is deliberately a bounded structural scanner, not a YAML parser. It
-    # recognises only the security-bearing shapes used by this copyable example
-    # and fails closed when those keys use an unsupported shape.
-    spans: dict[int, list[int]] = {}
-    index = 0
-    while index < len(lines):
-        code, _ = _split_yaml_comment(lines[index])
-        match = BLOCK_SCALAR_HEADER.fullmatch(code)
-        if not match:
-            index += 1
-            continue
-
-        header_indent = len(match.group("indent"))
-        content: list[int] = []
-        following = index + 1
-        while following < len(lines):
-            if not lines[following].strip():
-                content.append(following)
-                following += 1
-                continue
-            following_indent = len(lines[following]) - len(lines[following].lstrip())
-            if following_indent <= header_indent:
-                break
-            content.append(following)
-            following += 1
-        spans[index] = content
-        index = following
-    return spans
+def _construct_unique_mapping(
+    loader: StrictWorkflowLoader,
+    node: MappingNode,
+    deep: bool = False,
+) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found an unhashable mapping key",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
 
 
-def _scalar_content_lines(lines: list[str]) -> set[int]:
-    return {
-        line_number
-        for content in _block_scalar_spans(lines).values()
-        for line_number in content
-    }
+StrictWorkflowLoader.add_constructor(
+    BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
 
 
-def _install_command(project_version: str) -> str:
-    requirement = (
+def _normalise_distribution_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _requirement(project_version: str) -> str:
+    return (
         f"{PACKAGE_NAME} @ "
         "https://github.com/ryanduguid/monthly-close-control-plane/releases/download/"
         f"v{project_version}/monthly_close_control_plane-{project_version}-py3-none-any.whl"
         f"#sha256={RELEASE_ASSET_SHA256}"
     )
-    return f'python -m pip install "{requirement}"'
 
 
-def _active_uses(text: str) -> list[tuple[int, str, str | None]]:
-    lines = text.splitlines()
-    scalar_content = _scalar_content_lines(lines)
-    found: list[tuple[int, str, str | None]] = []
-    for index, line in enumerate(lines):
-        if index in scalar_content:
+def _install_command(project_version: str) -> str:
+    return f'python -m pip install "{_requirement(project_version)}"'
+
+
+def _load_workflow(text: str) -> dict[str, Any]:
+    loaded = yaml.load(text, Loader=StrictWorkflowLoader)
+    if not isinstance(loaded, dict):
+        raise TypeError("workflow root must be a mapping")
+    return loaded
+
+
+def _workflow_surfaces(
+    workflow: dict[str, Any],
+    errors: list[str],
+) -> tuple[list[tuple[str, Any]], list[str], list[dict[str, Any]]]:
+    uses_values: list[tuple[str, Any]] = []
+    run_commands: list[str] = []
+    steps_seen: list[dict[str, Any]] = []
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict) or not jobs:
+        errors.append("jobs must be a non-empty mapping")
+        return uses_values, run_commands, steps_seen
+
+    expected_permissions = {"contents": "read"}
+    for job_name, job in jobs.items():
+        if not isinstance(job_name, str) or not isinstance(job, dict):
+            errors.append("every job must have a string name and mapping value")
             continue
-        code, comment = _split_yaml_comment(line)
-        match = USES_KEY_LINE.fullmatch(code)
-        if match:
-            found.append(
-                (
-                    index + 1,
-                    _unquote(match.group("value")),
-                    comment,
-                )
+        if "permissions" in job and job["permissions"] != expected_permissions:
+            errors.append(
+                f"job {job_name!r} permissions must be absent or exactly contents: read"
+            )
+        if "uses" in job:
+            uses_values.append((f"job {job_name}", job["uses"]))
+
+        steps = job.get("steps", [])
+        if not isinstance(steps, list):
+            errors.append(f"job {job_name!r} steps must be a list")
+            continue
+        for index, step in enumerate(steps):
+            label = f"job {job_name} step {index + 1}"
+            if not isinstance(step, dict):
+                errors.append(f"{label} must be a mapping")
+                continue
+            steps_seen.append(step)
+            if "permissions" in step:
+                errors.append(f"{label} must not declare unsupported step permissions")
+            if "uses" in step:
+                uses_values.append((label, step["uses"]))
+            if "run" in step:
+                if isinstance(step["run"], str):
+                    run_commands.append(step["run"])
+                else:
+                    errors.append(f"{label} run value must be a string")
+    return uses_values, run_commands, steps_seen
+
+
+def _validate_uses(
+    text: str,
+    uses_values: list[tuple[str, Any]],
+    steps: list[dict[str, Any]],
+    errors: list[str],
+) -> None:
+    actual_pins: list[tuple[str, str]] = []
+    for label, value in uses_values:
+        if not isinstance(value, str):
+            errors.append(f"{label} uses value must be a string")
+            continue
+        if value.startswith("./") or WHOLE_EXPRESSION.fullmatch(value):
+            continue
+        match = PINNED_ACTION.fullmatch(value)
+        if not match:
+            errors.append(
+                f"{label} external uses value must end in an exact 40-character commit SHA"
             )
             continue
+        actual_pins.append((match.group("action"), match.group("sha")))
 
-        flow = FLOW_MAPPING_LINE.fullmatch(code)
-        if not flow:
-            continue
-        body = flow.group("body")
-        flow_uses = [
-            _unquote(match.group("value"))
-            for match in re.finditer(
-                r"(?:^|,)\s*uses\s*:\s*(?P<value>.*?)(?=\s*,|$)", body
-            )
-        ]
-        if re.search(r"(?:^|,)\s*uses\s*:", body) and not flow_uses:
-            flow_uses = [code.strip()]
-        found.extend((index + 1, value, comment) for value in flow_uses)
-    return found
-
-
-def _checkout_does_not_persist_credentials(text: str) -> bool:
-    lines = text.splitlines()
-    scalar_content = _scalar_content_lines(lines)
-    checkout_lines: list[int] = []
-    persist_lines: list[int] = []
-    for index, line in enumerate(lines):
-        if index in scalar_content:
-            continue
-        code, _ = _split_yaml_comment(line)
-        uses = USES_KEY_LINE.fullmatch(code)
-        if uses and _unquote(uses.group("value")).startswith("actions/checkout@"):
-            checkout_lines.append(index)
-        if PERSIST_CREDENTIALS_LINE.fullmatch(code):
-            persist_lines.append(index)
-
-    if len(checkout_lines) != 1:
-        return False
-    checkout_index = checkout_lines[0]
-    checkout_code, _ = _split_yaml_comment(lines[checkout_index])
-    if not checkout_code.lstrip().startswith("- uses:"):
-        return False
-
-    step_indent = len(checkout_code) - len(checkout_code.lstrip())
-    step_lines: list[int] = []
-    for index in range(checkout_index + 1, len(lines)):
-        if index in scalar_content:
-            continue
-        code, _ = _split_yaml_comment(lines[index])
-        if not code.strip():
-            continue
-        indent = len(code) - len(code.lstrip())
-        if indent < step_indent or (indent == step_indent and code.lstrip().startswith("-")):
-            break
-        step_lines.append(index)
-
-    with_lines = [
-        index
-        for index in step_lines
-        if len(lines[index]) - len(lines[index].lstrip()) == step_indent + 2
-        and _split_yaml_comment(lines[index])[0].strip() == "with:"
+    expected_pins = [
+        (action, sha) for action, (sha, _release) in EXPECTED_EXTERNAL_PINS.items()
     ]
-    if len(with_lines) != 1:
-        return False
+    if Counter(actual_pins) != Counter(expected_pins):
+        errors.append(
+            "external action pins must exactly match the reviewed action/SHA set; "
+            f"expected {expected_pins!r}, got {actual_pins!r}"
+        )
 
-    with_index = with_lines[0]
-    with_indent = step_indent + 2
-    bound_persist_lines: list[int] = []
-    for index in range(with_index + 1, len(lines)):
-        if index in scalar_content:
-            continue
-        code, _ = _split_yaml_comment(lines[index])
-        if not code.strip():
-            continue
-        indent = len(code) - len(code.lstrip())
-        if indent <= with_indent:
-            break
-        match = PERSIST_CREDENTIALS_LINE.fullmatch(code)
-        if indent == with_indent + 2 and match and _unquote(match.group("value")) == "false":
-            bound_persist_lines.append(index)
-
-    return len(bound_persist_lines) == 1 and persist_lines == bound_persist_lines
-
-
-def _mapping_entries_after(
-    lines: list[str],
-    index: int,
-    key_indent: int,
-    scalar_content: set[int],
-) -> list[tuple[str, str]] | None:
-    entries: list[tuple[str, str]] = []
-    for following in range(index + 1, len(lines)):
-        if following in scalar_content:
-            return None
-        code, _ = _split_yaml_comment(lines[following])
-        if not code.strip():
-            continue
-        indent = len(code) - len(code.lstrip())
-        if indent <= key_indent:
-            break
-        match = MAPPING_ENTRY.fullmatch(code)
-        if indent != key_indent + 2 or not match or not match.group("value"):
-            return None
-        entries.append((match.group("key"), _unquote(match.group("value"))))
-    return entries
-
-
-def _inline_mapping_entries(value: str) -> list[tuple[str, str]] | None:
-    if re.fullmatch(r"\{\s*contents\s*:\s*read\s*\}", value):
-        return [("contents", "read")]
-    if value == "{}":
-        return []
-    return None
-
-
-def _job_for_line(lines: list[str], index: int, scalar_content: set[int]) -> str | None:
-    for preceding in range(index - 1, -1, -1):
-        if preceding in scalar_content:
-            continue
-        code, _ = _split_yaml_comment(lines[preceding])
-        if not code.strip():
-            continue
-        indent = len(code) - len(code.lstrip())
-        if indent == 2:
-            match = re.fullmatch(r"  (?P<job>[A-Za-z0-9_.-]+):\s*", code)
-            return match.group("job") if match else None
-        if indent == 0:
-            return None
-    return None
-
-
-def _permissions_are_read_only(text: str) -> bool:
-    lines = text.splitlines()
-    scalar_content = _scalar_content_lines(lines)
-    occurrences: list[tuple[int, int, bool, list[tuple[str, str]] | None]] = []
-    for index, line in enumerate(lines):
-        if index in scalar_content:
-            continue
-        code, _ = _split_yaml_comment(line)
-        match = PERMISSIONS_LINE.fullmatch(code)
-        if match:
-            sequence = match.group("sequence") is not None
-            key_indent = len(match.group("indent")) + (2 if sequence else 0)
-            value = _unquote(match.group("value"))
-            mapping = (
-                _mapping_entries_after(lines, index, key_indent, scalar_content)
-                if not value
-                else _inline_mapping_entries(value)
+    for action, (sha, release) in EXPECTED_EXTERNAL_PINS.items():
+        pattern = re.compile(
+            rf"(?m)^\s*(?:-\s*)?(?:uses|['\"]uses['\"]):\s*"
+            rf"['\"]?{re.escape(action)}@{sha}['\"]?\s+#\s*{re.escape(release)}\s*$"
+        )
+        if len(pattern.findall(text)) != 1:
+            errors.append(
+                f"{action} must retain exactly one adjacent reviewed release comment {release}"
             )
-            occurrences.append((index, key_indent, sequence, mapping))
-        elif re.search(r"(?:^|[\s{,])permissions\s*:", code):
-            return False
 
-    expected = [("contents", "read")]
-    top_level = [item for item in occurrences if item[1] == 0 and not item[2]]
-    if len(top_level) != 1 or top_level[0][3] != expected:
-        return False
-
-    job_permission_counts: Counter[str] = Counter()
-    for index, key_indent, sequence, mapping in occurrences:
-        if key_indent == 0 and not sequence:
-            continue
-        if sequence or key_indent != 4 or mapping != expected:
-            return False
-        job = _job_for_line(lines, index, scalar_content)
-        if job is None:
-            return False
-        job_permission_counts[job] += 1
-    return all(count == 1 for count in job_permission_counts.values())
+    checkout_steps = [
+        step
+        for step in steps
+        if isinstance(step.get("uses"), str)
+        and step["uses"].startswith("actions/checkout@")
+    ]
+    if len(checkout_steps) != 1:
+        errors.append("workflow must contain exactly one checkout step")
+        return
+    inputs = checkout_steps[0].get("with")
+    if not isinstance(inputs, dict) or inputs.get("persist-credentials") is not False:
+        errors.append("checkout with.persist-credentials must be the Boolean false")
 
 
-def _active_package_installs(text: str) -> tuple[list[str], bool]:
-    lines = text.splitlines()
-    spans = _block_scalar_spans(lines)
-    scalar_content = {
-        line_number for content in spans.values() for line_number in content
-    }
-    commands: list[str] = []
-    package_install_in_block = False
-    for index, line in enumerate(lines):
-        if index in scalar_content:
-            continue
-        code, _ = _split_yaml_comment(line)
-        if RUN_BLOCK_HEADER.fullmatch(code):
-            active_lines = [
-                lines[line_number].strip()
-                for line_number in spans.get(index, [])
-                if lines[line_number].strip()
-                and not lines[line_number].lstrip().startswith("#")
-            ]
-            active_block = "\n".join(active_lines)
-            if "pip install" in active_block and PACKAGE_NAME in active_block:
-                package_install_in_block = True
-            continue
+def _shell_tokens(command: str) -> list[str]:
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    return list(lexer)
 
-        run = RUN_KEY_LINE.fullmatch(code)
-        if run:
-            command = _unquote(run.group("command"))
-            if "pip install" in command and PACKAGE_NAME in command:
-                commands.append(command)
-            continue
 
-        flow = FLOW_MAPPING_LINE.fullmatch(code)
+def _executable_name(token: str) -> str:
+    return token.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def _pip_install_invocations(tokens: list[str]) -> list[tuple[int, int]]:
+    invocations: list[tuple[int, int]] = []
+    index = 0
+    while index < len(tokens):
+        executable = _executable_name(tokens[index])
         if (
-            flow
-            and re.search(r"(?:^|,)\s*run\s*:", flow.group("body"))
-            and "pip install" in flow.group("body")
-            and PACKAGE_NAME in flow.group("body")
+            PYTHON_EXECUTABLE.fullmatch(executable)
+            and index + 3 < len(tokens)
+            and tokens[index + 1] == "-m"
+            and PIP_EXECUTABLE.fullmatch(_executable_name(tokens[index + 2]))
+            and tokens[index + 3].lower() == "install"
         ):
-            commands.append("unsupported flow-style package install")
-    return commands, package_install_in_block
+            invocations.append((index, index + 4))
+            index += 4
+            continue
+        if (
+            PIP_EXECUTABLE.fullmatch(executable)
+            and index + 1 < len(tokens)
+            and tokens[index + 1].lower() == "install"
+        ):
+            invocations.append((index, index + 2))
+            index += 2
+            continue
+        index += 1
+    return invocations
+
+
+def _requirement_name(token: str) -> str | None:
+    match = REQUIREMENT_NAME.match(token)
+    if not match:
+        return None
+    return _normalise_distribution_name(match.group("name"))
+
+
+def _validate_package_installs(
+    run_commands: list[str],
+    project_version: str,
+    errors: list[str],
+) -> None:
+    target_requirements: list[str] = []
+    ambiguous_mentions: list[str] = []
+    for command in run_commands:
+        try:
+            tokens = _shell_tokens(command)
+        except ValueError as exc:
+            if NORMALISED_PACKAGE_NAME in _normalise_distribution_name(command):
+                errors.append(f"ambiguous package-related run command: {exc}")
+            continue
+
+        target_positions = {
+            index
+            for index, token in enumerate(tokens)
+            if _requirement_name(token) == NORMALISED_PACKAGE_NAME
+        }
+        associated_positions: set[int] = set()
+        invocations = _pip_install_invocations(tokens)
+        for invocation_index, (_command_start, arguments_start) in enumerate(invocations):
+            arguments_end = len(tokens)
+            if invocation_index + 1 < len(invocations):
+                arguments_end = invocations[invocation_index + 1][0]
+            for index in range(arguments_start, arguments_end):
+                if SHELL_OPERATOR.fullmatch(tokens[index]):
+                    arguments_end = index
+                    break
+            for index in range(arguments_start, arguments_end):
+                if index in target_positions:
+                    associated_positions.add(index)
+                    target_requirements.append(tokens[index])
+
+        ambiguous_mentions.extend(
+            tokens[index] for index in sorted(target_positions - associated_positions)
+        )
+
+    expected = _requirement(project_version)
+    if target_requirements != [expected]:
+        errors.append(
+            "the active package install must be exactly one reviewed immutable "
+            f"release-asset reference; expected {expected!r}, got {target_requirements!r}"
+        )
+    if ambiguous_mentions:
+        errors.append(
+            "package references outside a recognised pip install are ambiguous: "
+            f"{ambiguous_mentions!r}"
+        )
 
 
 def _has_client_data_warning(text: str) -> bool:
@@ -364,57 +348,20 @@ def _has_client_data_warning(text: str) -> bool:
 
 def _workflow_errors(text: str, *, project_version: str) -> list[str]:
     errors: list[str] = []
-    actual_pins: list[tuple[str, str, str | None]] = []
+    try:
+        workflow = _load_workflow(text)
+    except (yaml.YAMLError, TypeError) as exc:
+        return [f"workflow must be strict, duplicate-free YAML: {exc}"]
 
-    for line_number, value, comment in _active_uses(text):
-        if value.startswith("./") or WHOLE_EXPRESSION.fullmatch(value):
-            continue
+    expected_permissions = {"contents": "read"}
+    if workflow.get("permissions") != expected_permissions:
+        errors.append("top-level permissions must be exactly contents: read")
 
-        match = PINNED_ACTION.fullmatch(value)
-        if not match:
-            errors.append(
-                f"line {line_number}: external uses value must end in an exact 40-character "
-                f"commit SHA, got {value!r}"
-            )
-            continue
-
-        action = match.group("action")
-        sha = match.group("sha")
-        if comment is None or not SEMANTIC_RELEASE.fullmatch(comment):
-            errors.append(
-                f"line {line_number}: {action} must retain a full semantic-version comment"
-            )
-        actual_pins.append((action, sha, comment))
-
-    expected_pins = [
-        (action, sha, release)
-        for action, (sha, release) in EXPECTED_EXTERNAL_PINS.items()
-    ]
-    if Counter(actual_pins) != Counter(expected_pins):
-        errors.append(
-            "external action pins must exactly match the reviewed action/SHA/release set; "
-            f"expected {expected_pins!r}, got {actual_pins!r}"
-        )
-
-    install_commands, package_install_in_block = _active_package_installs(text)
-    expected_install = _install_command(project_version)
-    if install_commands != [expected_install]:
-        errors.append(
-            "the active package install must be the one reviewed immutable release-asset "
-            f"reference; expected {expected_install!r}, got {install_commands!r}"
-        )
-    if package_install_in_block:
-        errors.append("package installation must not be hidden in a block-scalar run command")
-
-    if not _permissions_are_read_only(text):
-        errors.append(
-            "top-level and effective job permissions must remain exactly contents: read"
-        )
-    if not _checkout_does_not_persist_credentials(text):
-        errors.append("checkout must set persist-credentials: false")
+    uses_values, run_commands, steps = _workflow_surfaces(workflow, errors)
+    _validate_uses(text, uses_values, steps, errors)
+    _validate_package_installs(run_commands, project_version, errors)
     if not _has_client_data_warning(text):
         errors.append("the fabricated-data and never-commit-client-data warning must remain")
-
     return errors
 
 
@@ -426,6 +373,7 @@ def _assert_workflow(text: str, *, project_version: str = "0.1.1") -> None:
 def _secure_workflow() -> str:
     return f"""# Store only fabricated or synthetic data in the repository. Never commit a
 # client trial balance.
+on: workflow_dispatch
 permissions:
   contents: read
 jobs:
@@ -441,7 +389,7 @@ jobs:
 """
 
 
-def _repository_versions() -> tuple[str, str, str]:
+def _repository_versions() -> tuple[str, str, str, str]:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     root_packages = [
@@ -449,7 +397,8 @@ def _repository_versions() -> tuple[str, str, str]:
         for package in lock["package"]
         if package["name"] == PACKAGE_NAME and package.get("source") == {"editable": "."}
     ]
-    assert len(root_packages) == 1, "uv.lock must contain exactly one editable root package"
+    yaml_packages = [package for package in lock["package"] if package["name"] == "pyyaml"]
+    assert len(root_packages) == len(yaml_packages) == 1
 
     release_heading = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8").splitlines()[0]
     release_match = re.fullmatch(r"# v(?P<version>\d+\.\d+\.\d+)", release_heading)
@@ -458,6 +407,7 @@ def _repository_versions() -> tuple[str, str, str]:
         project["project"]["version"],
         root_packages[0]["version"],
         release_match.group("version"),
+        yaml_packages[0]["version"],
     )
 
 
@@ -467,14 +417,29 @@ def test_copyable_workflow_discovery_is_not_vacuous() -> None:
     assert workflows == [WORKFLOW]
 
 
-def test_repository_version_owners_agree() -> None:
-    project_version, lock_version, release_version = _repository_versions()
+def test_repository_versions_and_yaml_dev_dependency_agree() -> None:
+    project_version, lock_version, release_version, yaml_version = _repository_versions()
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert project_version == lock_version == release_version == "0.1.1"
+    assert "PyYAML>=6.0.3,<7" in project["project"]["optional-dependencies"]["dev"]
+    assert yaml_version == yaml.__version__ == "6.0.3"
+
+
+def test_strict_loader_keeps_on_as_text_and_rejects_duplicate_keys() -> None:
+    loaded = _load_workflow(_secure_workflow())
+    duplicate = _secure_workflow().replace(
+        "  contents: read", "  contents: read\n  contents: write", 1
+    )
+
+    assert "on" in loaded
+    assert True not in loaded
+    with pytest.raises(ConstructorError, match="duplicate key 'contents'"):
+        _load_workflow(duplicate)
 
 
 def test_committed_copyable_workflow_uses_only_reviewed_immutable_dependencies() -> None:
-    project_version, _, _ = _repository_versions()
+    project_version, _, _, _ = _repository_versions()
 
     _assert_workflow(WORKFLOW.read_text(encoding="utf-8"), project_version=project_version)
 
@@ -482,7 +447,6 @@ def test_committed_copyable_workflow_uses_only_reviewed_immutable_dependencies()
 @pytest.mark.parametrize("action", EXPECTED_EXTERNAL_PINS)
 @pytest.mark.parametrize("replacement_kind", ["tag", "main", "short-sha", "other-sha"])
 def test_action_pin_mutations_are_rejected(action: str, replacement_kind: str) -> None:
-    text = _secure_workflow()
     sha, release = EXPECTED_EXTERNAL_PINS[action]
     replacements = {
         "tag": release,
@@ -492,22 +456,134 @@ def test_action_pin_mutations_are_rejected(action: str, replacement_kind: str) -
     }
 
     with pytest.raises(AssertionError):
-        _assert_workflow(text.replace(f"{action}@{sha}", f"{action}@{replacements[replacement_kind]}"))
+        _assert_workflow(
+            _secure_workflow().replace(
+                f"{action}@{sha}", f"{action}@{replacements[replacement_kind]}"
+            )
+        )
 
 
 @pytest.mark.parametrize("action", EXPECTED_EXTERNAL_PINS)
-@pytest.mark.parametrize("comment_mutation", ["remove", "alter"])
-def test_action_release_comment_mutations_are_rejected(
-    action: str, comment_mutation: str
-) -> None:
-    text = _secure_workflow()
+@pytest.mark.parametrize("mutation", ["remove", "alter"])
+def test_action_release_comment_mutations_are_rejected(action: str, mutation: str) -> None:
     sha, release = EXPECTED_EXTERNAL_PINS[action]
     original = f"{action}@{sha} # {release}"
-    replacement_comment = "" if comment_mutation == "remove" else f" # {release}-changed"
-    replacement = f"{action}@{sha}{replacement_comment}"
+    suffix = "" if mutation == "remove" else f" # {release}-changed"
 
     with pytest.raises(AssertionError):
-        _assert_workflow(text.replace(original, replacement))
+        _assert_workflow(
+            _secure_workflow().replace(original, f"{action}@{sha}{suffix}")
+        )
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        "      - uses: ./local-action\n",
+        "      - uses: ${{ matrix.action }}\n",
+        "      - {uses: ./local-action}\n",
+        "      - {'uses': '${{ matrix.action }}'}\n",
+    ],
+)
+def test_local_actions_and_whole_value_expressions_are_allowed(step: str) -> None:
+    _assert_workflow(_secure_workflow() + step)
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        "      - uses: actions/checkout@${{ matrix.ref }}\n",
+        "      - uses: example/unknown@" + "1" * 40 + "\n",
+        '      - "uses": actions/checkout@v4\n',
+        '      - {"uses": actions/checkout@v4}\n',
+    ],
+)
+def test_unreviewed_external_action_forms_are_rejected(step: str) -> None:
+    with pytest.raises(AssertionError):
+        _assert_workflow(_secure_workflow() + step)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "suffix"),
+    [
+        (
+            "        with:\n          persist-credentials: false",
+            "        env:\n          persist-credentials: false",
+            "",
+        ),
+        (
+            "        with:\n          persist-credentials: false\n",
+            "",
+            "persist-credentials: false\n",
+        ),
+        (
+            "          persist-credentials: false",
+            "          persist-credentials: false\n          persist-credentials: true",
+            "",
+        ),
+        ("persist-credentials: false", 'persist-credentials: "false"', ""),
+    ],
+)
+def test_checkout_credentials_must_be_boolean_false_in_with(
+    old: str, new: str, suffix: str
+) -> None:
+    with pytest.raises(AssertionError):
+        _assert_workflow(_secure_workflow().replace(old, new) + suffix)
+
+
+@pytest.mark.parametrize(
+    "permission_override",
+    [
+        "    permissions:\n      contents: write\n",
+        "    permissions: write-all\n",
+        "    permissions: {}\n",
+        "    permissions:\n      contents: read\n      actions: write\n",
+        '    "permissions": {contents: write}\n',
+        '    "permissions":\n      contents: write\n',
+    ],
+)
+def test_job_permission_overrides_must_not_broaden_policy(
+    permission_override: str,
+) -> None:
+    text = _secure_workflow().replace(
+        "  close-check:\n    steps:",
+        f"  close-check:\n{permission_override}    steps:",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+@pytest.mark.parametrize(
+    "permission_override",
+    [
+        "    permissions:\n      contents: read\n",
+        '    "permissions": {contents: read}\n',
+    ],
+)
+def test_job_may_repeat_exact_read_only_permissions(permission_override: str) -> None:
+    text = _secure_workflow().replace(
+        "  close-check:\n    steps:",
+        f"  close-check:\n{permission_override}    steps:",
+    )
+
+    _assert_workflow(text)
+
+
+def test_step_permissions_and_duplicate_step_keys_are_rejected() -> None:
+    step_permissions = _secure_workflow().replace(
+        "      - uses: actions/setup-python@",
+        "      - permissions:\n          contents: write\n        uses: actions/setup-python@",
+    )
+    duplicate_uses = _secure_workflow().replace(
+        "      - uses: actions/setup-python@",
+        "      - uses: actions/checkout@v4\n        uses: actions/setup-python@",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(step_permissions)
+    with pytest.raises(AssertionError, match="duplicate key 'uses'"):
+        _assert_workflow(duplicate_uses)
 
 
 @pytest.mark.parametrize(
@@ -542,169 +618,39 @@ def test_registry_style_install_requirements_are_rejected(requirement: str) -> N
         _assert_workflow(text)
 
 
+@pytest.mark.parametrize(
+    "step",
+    [
+        "      - run: python -m pip  install monthly-close-control-plane\n",
+        "      - run: pip3 install monthly-close-control-plane\n",
+        "      - run: python -m pip install monthly_close_control_plane\n",
+        "      - run: python -m pip install Monthly-Close-Control-Plane\n",
+        '      - "run": python -m pip install monthly-close-control-plane\n',
+        '      - {"run": "python -m pip install monthly-close-control-plane"}\n',
+        "      - run: |\n          python -m pip install monthly-close-control-plane\n",
+        f"      - run: {_install_command('0.1.1')}\n",
+    ],
+)
+def test_additional_equivalent_package_installs_are_rejected(step: str) -> None:
+    with pytest.raises(AssertionError):
+        _assert_workflow(_secure_workflow() + step)
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        "      # - run: python -m pip install monthly-close-control-plane\n",
+        "      - run: |\n          # python -m pip install monthly-close-control-plane\n          echo done\n",
+        "      - run: |\n          echo done # python -m pip install monthly-close-control-plane\n",
+    ],
+)
+def test_commented_package_installs_are_inactive(step: str) -> None:
+    _assert_workflow(_secure_workflow() + step)
+
+
 def test_workflow_package_version_must_match_project_version() -> None:
     with pytest.raises(AssertionError):
         _assert_workflow(_secure_workflow(), project_version="0.1.2")
-
-
-@pytest.mark.parametrize("uses", ["./local-action", "${{ matrix.action }}"])
-def test_local_actions_and_whole_value_expressions_are_allowed(uses: str) -> None:
-    _assert_workflow(_secure_workflow() + f"      - uses: {uses}\n")
-
-
-@pytest.mark.parametrize(
-    "uses", ["actions/checkout@${{ matrix.ref }}", "example/unknown@" + "1" * 40]
-)
-def test_embedded_expressions_and_unreviewed_external_actions_are_rejected(uses: str) -> None:
-    with pytest.raises(AssertionError):
-        _assert_workflow(_secure_workflow() + f"      - uses: {uses}\n")
-
-
-def test_commented_unsafe_lines_are_not_active_configuration() -> None:
-    text = _secure_workflow() + (
-        "      # - uses: actions/checkout@main\n"
-        "      # - run: python -m pip install monthly-close-control-plane\n"
-    )
-
-    _assert_workflow(text)
-
-
-def test_adversarial_checkout_credentials_moved_to_env_are_rejected() -> None:
-    text = _secure_workflow().replace(
-        "        with:\n          persist-credentials: false",
-        "        env:\n          persist-credentials: false",
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_adversarial_job_permission_escalation_is_rejected() -> None:
-    text = _secure_workflow().replace(
-        "  close-check:\n    steps:",
-        "  close-check:\n    permissions:\n      contents: write\n    steps:",
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_adversarial_flow_style_external_action_is_rejected() -> None:
-    text = _secure_workflow() + "      - {uses: actions/cache@v4}\n"
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_adversarial_block_scalar_unversioned_install_is_rejected() -> None:
-    text = _secure_workflow() + (
-        "      - name: Unsafe second install\n"
-        "        run: |\n"
-        "          python -m pip install monthly-close-control-plane\n"
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [
-        (
-            "        with:\n          persist-credentials: false\n",
-            "",
-        ),
-        (
-            "          persist-credentials: false",
-            "          persist-credentials: false\n          persist-credentials: true",
-        ),
-    ],
-)
-def test_checkout_credentials_must_be_unique_and_inside_with(old: str, new: str) -> None:
-    text = _secure_workflow().replace(old, new)
-    if not new:
-        text += "persist-credentials: false\n"
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_job_may_repeat_the_exact_read_only_permissions() -> None:
-    text = _secure_workflow().replace(
-        "  close-check:\n    steps:",
-        "  close-check:\n    permissions:\n      contents: read\n    steps:",
-    )
-
-    _assert_workflow(text)
-
-
-@pytest.mark.parametrize(
-    "permission_mapping",
-    [
-        "permissions: write-all",
-        "permissions: {}",
-        "permissions:\n      contents: read\n      actions: write",
-    ],
-)
-def test_job_permissions_must_not_override_the_exact_read_only_policy(
-    permission_mapping: str,
-) -> None:
-    text = _secure_workflow().replace(
-        "  close-check:\n    steps:",
-        f"  close-check:\n    {permission_mapping}\n    steps:",
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_step_permission_override_is_rejected() -> None:
-    text = _secure_workflow().replace(
-        "      - uses: actions/setup-python@",
-        "      - permissions:\n          contents: write\n        uses: actions/setup-python@",
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-@pytest.mark.parametrize("uses", ["./local-action", "'${{ matrix.action }}'"])
-def test_flow_style_local_actions_and_whole_expressions_keep_their_exemption(
-    uses: str,
-) -> None:
-    _assert_workflow(_secure_workflow() + f"      - {{uses: {uses}}}\n")
-
-
-def test_a_second_reviewed_install_is_still_rejected() -> None:
-    text = _secure_workflow() + (
-        "      - name: Duplicate install\n"
-        f"        run: {_install_command('0.1.1')}\n"
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_a_reviewed_install_in_a_block_scalar_is_rejected() -> None:
-    text = _secure_workflow() + (
-        "      - name: Duplicate block install\n"
-        "        run: |\n"
-        f"          {_install_command('0.1.1')}\n"
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_workflow(text)
-
-
-def test_a_commented_install_inside_a_block_scalar_is_not_active() -> None:
-    text = _secure_workflow() + (
-        "      - name: Harmless block comment\n"
-        "        run: |\n"
-        "          # python -m pip install monthly-close-control-plane\n"
-        "          echo done\n"
-    )
-
-    _assert_workflow(text)
 
 
 @pytest.mark.parametrize(
@@ -712,7 +658,6 @@ def test_a_commented_install_inside_a_block_scalar_is_not_active() -> None:
     [
         ("contents: read", "contents: write"),
         ("contents: read", "contents: read\n  actions: write"),
-        ("persist-credentials: false", "persist-credentials: true"),
         ("Never commit a\n# client trial balance.", "Client data may be committed."),
     ],
 )
