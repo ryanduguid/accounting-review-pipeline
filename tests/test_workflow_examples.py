@@ -521,6 +521,21 @@ def test_alias_review_anchor_cannot_lend_its_label_to_a_uses_alias() -> None:
         _assert_workflow(text)
 
 
+def test_inverse_workflow_alias_label_case_is_rejected() -> None:
+    checkout, (sha, release) = next(iter(EXPECTED_EXTERNAL_PINS.items()))
+    text = _secure_workflow().replace(
+        "on: workflow_dispatch",
+        f"env:\n  CHECKOUT_REF: &checkout_ref {checkout}@{sha}\n"
+        "on: workflow_dispatch",
+    ).replace(
+        f"uses: {checkout}@{sha} # {release}",
+        f"uses: *checkout_ref # {release}",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
 @pytest.mark.parametrize("reference_kind", ["anchor", "merge-alias"])
 def test_yaml_reference_tokens_are_rejected(reference_kind: str) -> None:
     texts = {
