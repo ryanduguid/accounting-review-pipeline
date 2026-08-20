@@ -11,6 +11,7 @@ import yaml
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 from yaml.resolver import BaseResolver
+from yaml.tokens import AliasToken, AnchorToken
 
 try:
     import tomllib
@@ -122,6 +123,11 @@ def _install_command(project_version: str) -> str:
 
 
 def _load_workflow(text: str) -> dict[str, Any]:
+    if any(
+        isinstance(token, (AnchorToken, AliasToken))
+        for token in yaml.scan(text, Loader=StrictWorkflowLoader)
+    ):
+        raise TypeError("workflow anchors and aliases are not allowed")
     loaded = yaml.load(text, Loader=StrictWorkflowLoader)
     if not isinstance(loaded, dict):
         raise TypeError("workflow root must be a mapping")
@@ -498,6 +504,57 @@ def test_final_review_release_label_is_bound_to_actual_uses_node() -> None:
 
     with pytest.raises(AssertionError):
         _assert_workflow(text)
+
+
+def test_alias_review_anchor_cannot_lend_its_label_to_a_uses_alias() -> None:
+    checkout, (sha, release) = next(iter(EXPECTED_EXTERNAL_PINS.items()))
+    text = _secure_workflow().replace(
+        "on: workflow_dispatch",
+        f"env:\n  CHECKOUT_REF: &checkout_ref {checkout}@{sha} # {release}\n"
+        "on: workflow_dispatch",
+    ).replace(
+        f"uses: {checkout}@{sha} # {release}",
+        "uses: *checkout_ref",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(text)
+
+
+@pytest.mark.parametrize("reference_kind", ["anchor", "merge-alias"])
+def test_yaml_reference_tokens_are_rejected(reference_kind: str) -> None:
+    texts = {
+        "anchor": _secure_workflow().replace(
+            "on: workflow_dispatch",
+            "name: &workflow_name Close check\non: workflow_dispatch",
+        ),
+        "merge-alias": _secure_workflow()
+        .replace(
+            "permissions:\n  contents: read",
+            "permissions: &read_permissions\n  contents: read",
+        )
+        .replace(
+            "  close-check:\n    steps:",
+            "  close-check:\n    permissions:\n"
+            "      <<: *read_permissions\n    steps:",
+        ),
+    }
+
+    with pytest.raises(AssertionError):
+        _assert_workflow(texts[reference_kind])
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "      # Literal &anchor and *alias text\n",
+        "      - run: |\n          echo 'Literal &anchor and *alias text'\n",
+        '      - name: "Literal &anchor and *alias text"\n        run: echo safe\n',
+        "      - name: Literal A&B and 2*3\n        run: echo safe\n",
+    ],
+)
+def test_yaml_reference_characters_in_scalar_text_are_allowed(suffix: str) -> None:
+    _assert_workflow(_secure_workflow() + suffix)
 
 
 @pytest.mark.parametrize(
