@@ -8,7 +8,7 @@ import argparse
 import csv
 import sys
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -35,6 +35,17 @@ class AccountRow:
         return self.ytd_debit - self.ytd_credit
 
 
+
+def _money(raw: object, field: str) -> Decimal:
+    try:
+        value = Decimal(str(raw if raw not in (None, "") else "0"))
+    except InvalidOperation as exc:
+        raise ValueError(f"{field} is not a decimal amount: {raw!r}") from exc
+    if not value.is_finite():
+        raise ValueError(f"{field} is not a finite decimal amount: {raw!r}")
+    return value
+
+
 def parse_trial_balance(csv_path: Path) -> List[AccountRow]:
     rows: List[AccountRow] = []
     with open(csv_path, "r", encoding="utf-8-sig") as f:
@@ -47,10 +58,10 @@ def parse_trial_balance(csv_path: Path) -> List[AccountRow]:
             account_name = r.get("AccountName", r.get("Account", ""))
             account_code = r.get("AccountCode", r.get("Code", ""))
             
-            debit = Decimal(str(r.get("Debit", "0") or "0"))
-            credit = Decimal(str(r.get("Credit", "0") or "0"))
-            ytd_debit = Decimal(str(r.get("YTDDebit", debit) or debit))
-            ytd_credit = Decimal(str(r.get("YTDCredit", credit) or credit))
+            debit = _money(r.get("Debit", "0"), "Debit")
+            credit = _money(r.get("Credit", "0"), "Credit")
+            ytd_debit = _money(r.get("YTDDebit", debit), "YTDDebit")
+            ytd_credit = _money(r.get("YTDCredit", credit), "YTDCredit")
             
             rows.append(AccountRow(
                 report_date=report_date,
@@ -179,10 +190,10 @@ Financial ratios calculated against Year-To-Date turnover of **${benchmarks['tur
 
 | Operating Metric | Actual Amount | % of Turnover | ATO Benchmark Typical Range | Variance / Health |
 | :--- | :---: | :---: | :---: | :---: |
-| **Gross Profit** | `${benchmarks['gross_profit']:,.2f}` | **{benchmarks['gross_profit_margin_pct']}%** | 45.0% - 65.0% | Normal Range |
-| **Cost of Sales** | `${benchmarks['cost_of_sales']:,.2f}` | **{benchmarks['cos_pct']}%** | 35.0% - 55.0% | Within Tolerance |
-| **Labour & Wages** | `${benchmarks['labour_costs']:,.2f}` | **{benchmarks['labour_pct']}%** | 15.0% - 30.0% | Normal Range |
-| **Rent & Occupancy**| `${benchmarks['rent_costs']:,.2f}` | **{benchmarks['rent_pct']}%** | 3.0% - 8.0% | Within Tolerance |
+| **Gross Profit** | `${benchmarks['gross_profit']:,.2f}` | **{benchmarks['gross_profit_margin_pct']}%** | Use ato-benchmark-compare | Not evaluated |
+| **Cost of Sales** | `${benchmarks['cost_of_sales']:,.2f}` | **{benchmarks['cos_pct']}%** | Use ato-benchmark-compare | Not evaluated |
+| **Labour & Wages** | `${benchmarks['labour_costs']:,.2f}` | **{benchmarks['labour_pct']}%** | Use ato-benchmark-compare | Not evaluated |
+| **Rent & Occupancy**| `${benchmarks['rent_costs']:,.2f}` | **{benchmarks['rent_pct']}%** | Use ato-benchmark-compare | Not evaluated |
 
 ---
 
@@ -201,7 +212,22 @@ Financial ratios calculated against Year-To-Date turnover of **${benchmarks['tur
     return md
 
 
-def main():
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="openaccountants-au",
+        description="Quarantined. Use close-control and ato-benchmark-compare.",
+    )
+    parser.parse_args()
+    print(
+        "openaccountants-au is quarantined. It printed canned ATO range "
+        "verdicts and is not a benchmark engine. Use close-control for the "
+        "close pack and ato-benchmark-compare for range tests.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+def _legacy_review_main() -> int:
     parser = argparse.ArgumentParser(prog="openaccountants-au", description="OpenAccountants Australian Review Tool")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
     
@@ -213,7 +239,7 @@ def main():
     
     if args.command != "review":
         parser.print_help()
-        sys.exit(0)
+        return 1
         
     tb_path = Path(args.tb)
     if not tb_path.exists():
@@ -228,7 +254,8 @@ def main():
     out_path = Path(args.output)
     out_path.write_text(report_md, encoding="utf-8")
     print(f"Review packet generated successfully -> {args.output}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

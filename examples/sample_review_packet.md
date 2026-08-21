@@ -26,10 +26,10 @@ Financial ratios calculated against Year-To-Date turnover of **$130,000.00**:
 
 | Operating Metric | Actual Amount | % of Turnover | ATO Benchmark Typical Range | Variance / Health |
 | :--- | :---: | :---: | :---: | :---: |
-| **Gross Profit** | `$50,000.00` | **38.5%** | 45.0% - 65.0% | Normal Range |
-| **Cost of Sales** | `$80,000.00` | **61.5%** | 35.0% - 55.0% | Within Tolerance |
-| **Labour & Wages** | `$0.00` | **0.0%** | 15.0% - 30.0% | Normal Range |
-| **Rent & Occupancy**| `$0.00` | **0.0%** | 3.0% - 8.0% | Within Tolerance |
+| **Gross Profit** | `$50,000.00` | **38.5%** | 45.0% - 65.0% | Not evaluated |
+| **Cost of Sales** | `$80,000.00` | **61.5%** | 35.0% - 55.0% | Not evaluated |
+| **Labour & Wages** | `$0.00` | **0.0%** | 15.0% - 30.0% | Not evaluated |
+| **Rent & Occupancy**| `$0.00` | **0.0%** | 3.0% - 8.0% | Not evaluated |
 
 ---
 
