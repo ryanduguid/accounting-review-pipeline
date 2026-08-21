@@ -21,9 +21,9 @@ human reviewer evidence and acknowledgement/escalation
 
 The gateway must not accept a natural-language tool request, an arbitrary Xero/MCP command, a token, or an accounting-system mutation. It has no authority to create a journal, payment, invoice, BAS, contact, or period lock. Its model-facing result excludes tenant names, account names/codes, source paths, and unbounded source text.
 
-## AU Tax Change Impact Monitor
+## Tax Radar AU
 
-The intended next component is [`au-tax-change-impact-monitor`](https://github.com/ryanduguid/au-tax-change-impact-monitor), a provenance-first synthetic demonstration that turns version metadata into a technical-review queue.
+The intended next component is [`Tax Radar AU`](https://github.com/ryanduguid/tax-radar-au), a provenance-first synthetic demonstration that turns version metadata into a technical-review queue.
 
 ```text
 Reviewed source-index metadata + reviewed Register observation
