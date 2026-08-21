@@ -194,10 +194,10 @@ Financial ratios calculated against Year-To-Date turnover of **${benchmarks['tur
 
 | Operating Metric | Actual Amount | % of Turnover | ATO Benchmark Typical Range | Variance / Health |
 | :--- | :---: | :---: | :---: | :---: |
-| **Gross Profit** | `${benchmarks['gross_profit']:,.2f}` | **{benchmarks['gross_profit_margin_pct']}%** | 45.0% - 65.0% | Normal Range |
-| **Cost of Sales** | `${benchmarks['cost_of_sales']:,.2f}` | **{benchmarks['cos_pct']}%** | 35.0% - 55.0% | Within Tolerance |
-| **Labour & Wages** | `${benchmarks['labour_costs']:,.2f}` | **{benchmarks['labour_pct']}%** | 15.0% - 30.0% | Normal Range |
-| **Rent & Occupancy**| `${benchmarks['rent_costs']:,.2f}` | **{benchmarks['rent_pct']}%** | 3.0% - 8.0% | Within Tolerance |
+| **Gross Profit** | `${benchmarks['gross_profit']:,.2f}` | **{benchmarks['gross_profit_margin_pct']}%** | Use ato-benchmark-compare | Not evaluated |
+| **Cost of Sales** | `${benchmarks['cost_of_sales']:,.2f}` | **{benchmarks['cos_pct']}%** | 35.0% - 55.0% | Not evaluated |
+| **Labour & Wages** | `${benchmarks['labour_costs']:,.2f}` | **{benchmarks['labour_pct']}%** | 15.0% - 30.0% | Not evaluated |
+| **Rent & Occupancy**| `${benchmarks['rent_costs']:,.2f}` | **{benchmarks['rent_pct']}%** | 3.0% - 8.0% | Not evaluated |
 
 ---
 
