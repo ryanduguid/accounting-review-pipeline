@@ -118,6 +118,22 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
                 reason="Demo only.",
                 reviewer_action="Review.",
             ),
+            ExceptionItem(
+                control="period_variance",
+                status="REVIEW",
+                tenant=" \t=1+1",
+                account_id="\t+SUM(A1)",
+                account_code="  -42",
+                account_name="'=already-safe",
+                current_value=Decimal("4000"),
+                prior_value=Decimal("0"),
+                difference=Decimal("4000"),
+                threshold=Decimal("100"),
+                percentage_change=None,
+                reason="Demo only.",
+                reviewer_action="Review.",
+                review_group="  @unsafe",
+            ),
         ),
         acknowledgement=None,
     )
@@ -131,26 +147,31 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert sorted(item.name for item in (tmp_path / "one").iterdir()) == PACK_FILES
     with first["exceptions"].open(encoding="utf-8-sig", newline="") as source:
         rows = list(csv.DictReader(source))
-    # '=' is always neutralised. '+', '-' and '@' are neutralised unless the
-    # remainder is a plain identifier - word characters and dots, and not an
-    # A1-style cell reference - so the account code '-1000' and the ID '@123'
-    # stay joinable in Excel and Power BI.
+    # Every formula-leading text field is neutralised, including values that
+    # resemble identifiers or numbers. Monetary output fields are separate and
+    # remain numeric text without an apostrophe.
     assert rows[0]["tenant"] == "'=untrusted"
-    assert rows[0]["account_id"] == "@123"
-    assert rows[0]["account_code"] == "-1000"
-    assert rows[0]["account_name"] == "+unsafe"
+    assert rows[0]["account_id"] == "'@123"
+    assert rows[0]["account_code"] == "'-1000"
+    assert rows[0]["account_name"] == "'+unsafe"
+    assert rows[0]["current_value"] == "1000.00"
     assert rows[1]["tenant"] == "'-2+3"
     assert rows[1]["account_id"] == "'@SUM(A1)"
     assert rows[1]["account_code"] == "'+1-1"
     assert rows[1]["account_name"] == "'-cmd|xyz"
-    # An all-word-character remainder is not enough on its own: A1 notation is
-    # a reference to another cell, so a sheet would show that cell's contents
-    # in place of the account code the reviewer is filtering on. The bounds are
-    # the sheet's own: 'XFD1048576' is the last cell, and case does not matter.
+    # Cell-reference-shaped values are representative formula-leading text;
+    # the guard does not need to interpret or bound the remainder.
     assert rows[2]["tenant"] == "'-A1"
     assert rows[2]["account_id"] == "'@a1"
     assert rows[2]["account_code"] == "'+XFD1048576"
     assert rows[2]["account_name"] == "'-B12"
+    # Leading whitespace cannot bypass the guard, and a value already prefixed
+    # with an apostrophe is not double-neutralised.
+    assert rows[3]["tenant"] == "' \t=1+1"
+    assert rows[3]["account_id"] == "'\t+SUM(A1)"
+    assert rows[3]["account_code"] == "'  -42"
+    assert rows[3]["account_name"] == "'=already-safe"
+    assert rows[3]["review_group"] == "'  @unsafe"
 
 
 def _table_cells(row: str) -> list[str]:
