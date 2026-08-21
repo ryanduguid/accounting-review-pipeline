@@ -18,7 +18,10 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Topic :: Office/Business :: Financial :: Accounting",
 ]
-dependencies = []
+[project.urls]
+Homepage = "https://github.com/ryanduguid/monthly-close-control-plane"
+Repository = "https://github.com/ryanduguid/monthly-close-control-plane.git"
+Issues = "https://github.com/ryanduguid/monthly-close-control-plane/issues"
 
 [project.optional-dependencies]
 dev = ["build>=1.2", "pytest>=8", "PyYAML>=6.0.3,<7"]

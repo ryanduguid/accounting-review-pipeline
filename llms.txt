@@ -1,0 +1,17 @@
+# monthly-close-control-plane
+> High-density context for LLM agents, financial controllers, and accounting automation pipelines.
+
+## Package Overview
+- **Repository**: https://github.com/ryanduguid/monthly-close-control-plane
+- **CLI Commands**: `close-control`, `openaccountants-au`
+- **Domain**: Deterministic monthly close control plane and integrity framework for verified trial balance exports.
+- **Accounting Standards**: AASB 101 Presentation of Financial Statements, double-entry mathematical invariants.
+
+## Core Modules & Controls
+- `closecontrol.engine`: Core reconciliation validation engine evaluating balance invariant predicates across accounting periods.
+- `closecontrol.validators`: Deterministic verification that debits equal credits, movement reconciles to year-to-date balances, and retained earnings align.
+- `closecontrol.pipeline_cli`: Automation harness for multi-entity Australian accounting practice close workflows.
+
+## Architectural Invariants
+1. **Review-First Policy**: All reconciliation anomalies and trial balance discrepancies are surfaced transparently as structured review exceptions before period locking.
+2. **Immutable Period Anchoring**: Historical closed periods are cryptographically verified against regression.
