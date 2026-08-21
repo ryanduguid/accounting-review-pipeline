@@ -4,14 +4,16 @@
 ## Package Overview
 - **Repository**: https://github.com/ryanduguid/monthly-close-control-plane
 - **CLI Commands**: `close-control`, `openaccountants-au`
-- **Domain**: Deterministic monthly close control plane and integrity framework for verified trial balance exports.
-- **Accounting Standards**: AASB 101 Presentation of Financial Statements, double-entry mathematical invariants.
+- **Domain**: Local, deterministic review-pack generation for current and prior validated trial-balance exports.
+- **Control Basis**: Double-entry balance checks, material year-to-date variance review, account-change review, mapping checks, and optional subledger reconciliation.
 
 ## Core Modules & Controls
-- `closecontrol.engine`: Core reconciliation validation engine evaluating balance invariant predicates across accounting periods.
-- `closecontrol.validators`: Deterministic verification that debits equal credits, movement reconciles to year-to-date balances, and retained earnings align.
-- `closecontrol.pipeline_cli`: Automation harness for multi-entity Australian accounting practice close workflows.
+- `closecontrol.engine`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
+- `closecontrol.loader`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
+- `closecontrol.report`: Writes JSON, Markdown, and CSV review-pack files, including source evidence and any supplied human acknowledgement.
+- `closecontrol.pipeline_cli`: Provides the separate `openaccountants-au` integrity and benchmark review command.
 
-## Architectural Invariants
-1. **Review-First Policy**: All reconciliation anomalies and trial balance discrepancies are surfaced transparently as structured review exceptions before period locking.
-2. **Immutable Period Anchoring**: Historical closed periods are cryptographically verified against regression.
+## Architectural Boundaries
+1. **Review-First Policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.
+2. **Source Provenance**: SHA-256 digests identify the exact source snapshots used for a run. They do not prove that a period is closed or prevent later ledger changes.
+3. **No Operational Authority**: The package does not post journals, make payments, lodge returns, distribute reports, approve a close, or lock a period.
