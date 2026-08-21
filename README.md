@@ -53,6 +53,8 @@ Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, an
 To run the check on a schedule in CI, copy [examples/github-actions-close-check.yml](examples/github-actions-close-check.yml) into `.github/workflows/`.
 It runs against a repo-stored synthetic trial balance and fails the job when the pack is `BLOCKED`.
 
+To run this pack against the sibling gateway's same-financial-year sample CSVs (not the Acme June/July demo pair, which crosses the 1 July reset), see [examples/close-loop.md](examples/close-loop.md). That loop is local files only; it does not connect to Xero.
+
 ## Worked example
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
@@ -227,12 +229,18 @@ The test suite covers schema gates, exact balancing, variance and metadata excep
 
 Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.10, 3.11, 3.12, and 3.13, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
 
+## Related
+
+The next layers exist as separate repositories. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
+
+- [xero-ai-review-gateway](https://github.com/ryanduguid/xero-ai-review-gateway) — a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
+- [au-tax-change-impact-monitor](https://github.com/ryanduguid/au-tax-change-impact-monitor) — a provenance-first monitor that turns source-version metadata into a technical-review queue.
+
+[examples/close-loop.md](examples/close-loop.md) runs close-control and the sibling gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.
+
 ## Roadmap
 
-The next layers are deliberately separated from the control engine:
-
-1. A safe, read-only Xero AI review gateway with a defined query allowlist, redaction boundary, source evidence, and no mutation tools.
-2. A tax-change impact monitor that records authoritative source versions, produces drafts for human review, and never turns legislation changes into an automatic client conclusion.
+The next layers are deliberately separated from the control engine; they already live in the sibling repositories above. The close-loop example runs the gateway on local files only.
 
 See [docs/follow-on-safety-layers.md](docs/follow-on-safety-layers.md) for the intended boundary contracts.
 
