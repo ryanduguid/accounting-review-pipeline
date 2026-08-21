@@ -6,7 +6,7 @@ import io
 import json
 import re
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -70,7 +70,9 @@ def _snapshot(path: Path | SourceSnapshot, *, label: str) -> SourceSnapshot:
     return SourceSnapshot.capture(path, label=label)
 
 
-def _require_columns(fieldnames: list[str] | None, required: tuple[str, ...], path: Path) -> None:
+def _require_columns(
+    fieldnames: Sequence[str] | None, required: tuple[str, ...], path: Path
+) -> None:
     if fieldnames is None:
         raise SchemaError(f"{path}: CSV has no header row.")
     duplicate_headers = sorted({name for name in fieldnames if fieldnames.count(name) > 1})
