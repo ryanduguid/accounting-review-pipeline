@@ -25,6 +25,7 @@ dev = ["build>=1.2", "pytest>=8", "PyYAML>=6.0.3,<7"]
 
 [project.scripts]
 close-control = "closecontrol.cli:main"
+openaccountants-au = "closecontrol.pipeline_cli:main"
 
 [tool.setuptools]
 packages = ["closecontrol"]
