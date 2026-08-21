@@ -9,9 +9,9 @@ ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebi
 ```
 
 1. `close-control review` in this repository, pointed at the sibling gateway's same-financial-year sample pair.
-2. `xero-ai-review-gateway evaluate` in [`xero-ai-review-gateway`](https://github.com/ryanduguid/xero-ai-review-gateway), still pointed at **that package's bundled** `samples/` context. Do not pass this repo's `examples/` as `--context`.
+2. `elizabeth-anne-alexander evaluate` in [`ElizabethAnneAlexander`](https://github.com/ryanduguid/ElizabethAnneAlexander), still pointed at **that package's bundled** `samples/` context. Do not pass this repo's `examples/` as `--context`.
 
-A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). Set `XERO_AI_REVIEW_GATEWAY_ROOT` if the gateway checkout is not a sibling of this repository.
+A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). Set `ELIZABETH_ANNE_ALEXANDER_ROOT` if the gateway checkout is not a sibling of this repository.
 
 ## Why the Acme June/July files cannot feed the gateway
 
@@ -28,8 +28,8 @@ Use the gateway's same-FY pair instead:
 
 | Role | File | ReportDate |
 | --- | --- | --- |
-| Current | `xero_ai_review_gateway/samples/inputs/sample-tb-2026-06-30.csv` | 2026-06-30 |
-| Prior | `xero_ai_review_gateway/samples/inputs/sample-tb-2026-05-31.csv` | 2026-05-31 |
+| Current | `elizabeth_anne_alexander/samples/inputs/sample-tb-2026-06-30.csv` | 2026-06-30 |
+| Prior | `elizabeth_anne_alexander/samples/inputs/sample-tb-2026-05-31.csv` | 2026-05-31 |
 
 Both dates sit in FY2025 (1 July 2025 to 30 June 2026). Close-control should report `REVIEW` with no `financial_year_reset` exception.
 
@@ -39,8 +39,8 @@ From this repository root, after `python -m pip install -e ".[dev]"`:
 
 ```bash
 close-control review \
-  --current ../xero-ai-review-gateway/xero_ai_review_gateway/samples/inputs/sample-tb-2026-06-30.csv \
-  --prior ../xero-ai-review-gateway/xero_ai_review_gateway/samples/inputs/sample-tb-2026-05-31.csv \
+  --current ../ElizabethAnneAlexander/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-06-30.csv \
+  --prior ../ElizabethAnneAlexander/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-05-31.csv \
   --output outputs/gateway-tb-loop
 ```
 
@@ -53,7 +53,7 @@ Do not pass this repo's Acme mapping, subledger, or review note: those fixtures 
 Install the sibling package, then run its documented evaluate. Relative `samples/` and `policy/` paths resolve against the bundled package data, not against this checkout's `examples/`:
 
 ```bash
-xero-ai-review-gateway evaluate \
+elizabeth-anne-alexander evaluate \
   --context samples/contexts/sample-monthly-variance.context.json \
   --request samples/requests/sample-revenue-variance.request.json \
   --policy policy/demo-policy-v1.json \

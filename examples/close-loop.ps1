@@ -1,12 +1,12 @@
 # Local-file monthly close loop. No Xero OAuth.
 #
-# 1. close-control review of the sibling xero-ai-review-gateway same-FY sample TBs
+# 1. close-control review of the sibling ElizabethAnneAlexander same-FY sample TBs
 #    into outputs/gateway-tb-loop (relative to this repository).
-# 2. xero-ai-review-gateway evaluate against that package's bundled samples/
+# 2. elizabeth-anne-alexander evaluate against that package's bundled samples/
 #    context, if the CLI is on PATH or importable. Context is never this repo's
 #    examples/ (the Acme June/July pair crosses the 1 July FY reset).
 #
-# Set XERO_AI_REVIEW_GATEWAY_ROOT when the gateway checkout is not a sibling.
+# Set ELIZABETH_ANNE_ALEXANDER_ROOT when the gateway checkout is not a sibling.
 
 [CmdletBinding()]
 param(
@@ -29,13 +29,13 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
 
 if (-not $GatewayRoot) {
-    $GatewayRoot = $env:XERO_AI_REVIEW_GATEWAY_ROOT
+    $GatewayRoot = $env:ELIZABETH_ANNE_ALEXANDER_ROOT
 }
 if (-not $GatewayRoot) {
-    $GatewayRoot = Join-Path (Split-Path -Parent $RepoRoot) "xero-ai-review-gateway"
+    $GatewayRoot = Join-Path (Split-Path -Parent $RepoRoot) "ElizabethAnneAlexander"
 }
 
-$SampleDir = Join-Path $GatewayRoot "xero_ai_review_gateway"
+$SampleDir = Join-Path $GatewayRoot "elizabeth_anne_alexander"
 $SampleDir = Join-Path $SampleDir "samples"
 $SampleDir = Join-Path $SampleDir "inputs"
 $CurrentCsv = Join-Path $SampleDir "sample-tb-2026-06-30.csv"
@@ -46,7 +46,7 @@ if (-not ((Test-Path -LiteralPath $CurrentCsv) -and (Test-Path -LiteralPath $Pri
 Cannot find the gateway same-FY sample TBs:
   $CurrentCsv
   $PriorCsv
-Clone xero-ai-review-gateway as a sibling of this repository, or set XERO_AI_REVIEW_GATEWAY_ROOT.
+Clone ElizabethAnneAlexander as a sibling of this repository, or set ELIZABETH_ANNE_ALEXANDER_ROOT.
 Do not substitute examples/current_trial_balance.csv and examples/prior_trial_balance.csv: that Acme June/July pair crosses the 1 July financial-year reset and cannot feed the gateway.
 "@
 }
@@ -100,23 +100,23 @@ $EvaluateArgs = @(
     "--out", "build/gateway-tb-loop"
 )
 
-$gatewayCmd = Get-Command xero-ai-review-gateway -ErrorAction SilentlyContinue
+$gatewayCmd = Get-Command elizabeth-anne-alexander -ErrorAction SilentlyContinue
 $gatewayModule = $false
 if ($null -eq $gatewayCmd) {
     $python = Get-Command python -ErrorAction SilentlyContinue
     if ($null -ne $python) {
-        & $python.Source -c "import xero_ai_review_gateway.cli" 2>$null
+        & $python.Source -c "import elizabeth_anne_alexander.cli" 2>$null
         $gatewayModule = ($LASTEXITCODE -eq 0)
     }
 }
 
 if ($null -ne $gatewayCmd -or $gatewayModule) {
-    Write-Host "xero-ai-review-gateway evaluate (bundled package samples/, not close-control examples/)"
-    Invoke-NamedOrModuleCli -CommandName "xero-ai-review-gateway" -ModuleName "xero_ai_review_gateway.cli" -Arguments $EvaluateArgs
+    Write-Host "elizabeth-anne-alexander evaluate (bundled package samples/, not close-control examples/)"
+    Invoke-NamedOrModuleCli -CommandName "elizabeth-anne-alexander" -ModuleName "elizabeth_anne_alexander.cli" -Arguments $EvaluateArgs
     if ($LASTEXITCODE -ne 0) {
-        throw "xero-ai-review-gateway evaluate failed with exit code $LASTEXITCODE."
+        throw "elizabeth-anne-alexander evaluate failed with exit code $LASTEXITCODE."
     }
 }
 else {
-    Write-Host "Skipping gateway evaluate: xero-ai-review-gateway is not on PATH and the package is not importable."
+    Write-Host "Skipping gateway evaluate: elizabeth-anne-alexander is not on PATH and the package is not importable."
 }
