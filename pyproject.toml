@@ -19,12 +19,13 @@ classifiers = [
   "Topic :: Office/Business :: Financial :: Accounting",
 ]
 [project.urls]
-Homepage = "https://github.com/ryanduguid/monthly-close-control-plane"
-Repository = "https://github.com/ryanduguid/monthly-close-control-plane.git"
-Issues = "https://github.com/ryanduguid/monthly-close-control-plane/issues"
+Homepage = "https://github.com/ryanduguid/RussellMathews"
+Repository = "https://github.com/ryanduguid/RussellMathews.git"
+Issues = "https://github.com/ryanduguid/RussellMathews/issues"
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8", "PyYAML>=6.0.3,<7"]
+dev = [
+    "ruff>=0.11", "mypy>=1.14","build>=1.2", "pytest>=8", "PyYAML>=6.0.3,<7"]
 
 [project.scripts]
 close-control = "closecontrol.cli:main"
@@ -36,3 +37,19 @@ packages = ["closecontrol"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["closecontrol", "tests"]
+
+[tool.ruff.lint]
+# First-enablement set: syntax and undefined-name errors only (E9, F82).
+# Keep Decimal("10.00") money literals and existing import layout.
+select = ["E9", "F82"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["closecontrol"]
+ignore_missing_imports = true
+pretty = true
+
