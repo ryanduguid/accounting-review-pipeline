@@ -737,6 +737,67 @@ def test_cli_writes_review_pack_and_returns_attention_exit_code(tmp_path: Path) 
     assert payload["acknowledgement"]["effect"].startswith("Acknowledgement is evidence")
 
 
+def test_workbench_writes_the_existing_review_pack_and_hands_off_to_the_reviewer(
+    capsys, tmp_path: Path
+) -> None:
+    """A missing workbench façade would make the command unrecognised.
+
+    The workbench must keep the existing review engine and pack writer as the
+    one source of truth: a reviewer receives the same three artefacts and an
+    explicit reminder that the pack is not an approval.
+    """
+    output = tmp_path / "workbench-pack"
+
+    exit_code = main([
+        "workbench",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--mapping", str(EXAMPLES / "account_mapping.csv"),
+        "--subledger", str(EXAMPLES / "subledger_balances.csv"),
+        "--review-note", str(EXAMPLES / "review_note.json"),
+        "--absolute-threshold", "10000",
+        "--percentage-threshold", "0.10",
+        "--output", str(output),
+    ])
+
+    assert exit_code == 2
+    assert {path.name for path in output.iterdir()} == set(PACK_FILES)
+    payload = json.loads((output / "close-review-pack.json").read_text(encoding="utf-8"))
+    assert payload["overall_status"] == "REVIEW"
+    stdout = capsys.readouterr().out
+    assert "close-control workbench: REVIEW; 8 exception(s)" in stdout
+    assert "Review close-summary.md, exceptions.csv, and close-review-pack.json." in stdout
+    assert "does not approve or close a period" in stdout
+
+
+def test_workbench_refuses_a_source_that_would_be_replaced_by_the_pack(
+    tmp_path: Path
+) -> None:
+    """Removing the shared collision preflight would destroy a supplied source."""
+    work = tmp_path / "workbench-client"
+    work.mkdir()
+    shutil.copy(EXAMPLES / "current_trial_balance.csv", work / "current.csv")
+    shutil.copy(EXAMPLES / "prior_trial_balance.csv", work / "prior.csv")
+    subledger = work / "exceptions.csv"
+    subledger.write_text(
+        "Tenant,AccountID,SubledgerBalance\nAcme Demo Pty Ltd,110,85000.00\n",
+        encoding="utf-8",
+    )
+    before = subledger.read_bytes()
+
+    code = main([
+        "workbench",
+        "--current", str(work / "current.csv"),
+        "--prior", str(work / "prior.csv"),
+        "--subledger", str(subledger),
+        "--output", str(work),
+    ])
+
+    assert code == 1
+    assert subledger.read_bytes() == before
+    assert not (work / "close-review-pack.json").exists()
+
+
 def test_cli_returns_one_for_malformed_input(tmp_path: Path) -> None:
     bad = tmp_path / "bad.csv"
     bad.write_text("wrong,header\n", encoding="utf-8")
