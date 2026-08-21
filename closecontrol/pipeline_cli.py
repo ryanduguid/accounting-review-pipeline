@@ -79,12 +79,12 @@ def parse_trial_balance(csv_path: Path) -> List[AccountRow]:
 
 
 def run_integrity_checks(rows: List[AccountRow]) -> Dict[str, Any]:
-    total_debit = sum(r.debit for r in rows)
-    total_credit = sum(r.credit for r in rows)
+    total_debit = sum((r.debit for r in rows), Decimal("0"))
+    total_credit = sum((r.credit for r in rows), Decimal("0"))
     movement_diff = total_debit - total_credit
 
-    total_ytd_debit = sum(r.ytd_debit for r in rows)
-    total_ytd_credit = sum(r.ytd_credit for r in rows)
+    total_ytd_debit = sum((r.ytd_debit for r in rows), Decimal("0"))
+    total_ytd_credit = sum((r.ytd_credit for r in rows), Decimal("0"))
     ytd_diff = total_ytd_debit - total_ytd_credit
 
     is_movement_balanced = abs(movement_diff) < Decimal("0.01")
