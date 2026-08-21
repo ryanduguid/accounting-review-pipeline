@@ -25,7 +25,7 @@ Explicit exception queue
 Human review and workpaper acknowledgement
 ```
 
-The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
+The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/JohnSpenceOgilvy). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
 
 ## Quick demo
 
