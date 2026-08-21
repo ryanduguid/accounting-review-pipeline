@@ -159,10 +159,8 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
     assert rows[1]["account_id"] == "'@SUM(A1)"
     assert rows[1]["account_code"] == "'+1-1"
     assert rows[1]["account_name"] == "'-cmd|xyz"
-    # An all-word-character remainder is not enough on its own: A1 notation is
-    # a reference to another cell, so a sheet would show that cell's contents
-    # in place of the account code the reviewer is filtering on. The bounds are
-    # the sheet's own: 'XFD1048576' is the last cell, and case does not matter.
+    # Cell-reference-shaped values are representative formula-leading text;
+    # the guard does not need to interpret or bound the remainder.
     assert rows[2]["tenant"] == "'-A1"
     assert rows[2]["account_id"] == "'@a1"
     assert rows[2]["account_code"] == "'+XFD1048576"
