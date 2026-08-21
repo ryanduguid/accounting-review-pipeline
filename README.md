@@ -55,6 +55,34 @@ It runs against a repo-stored synthetic trial balance and fails the job when the
 
 To run this pack against the sibling gateway's same-financial-year sample CSVs (not the Acme June/July demo pair, which crosses the 1 July reset), see [examples/close-loop.md](examples/close-loop.md). That loop is local files only; it does not connect to Xero.
 
+## Local close workbench
+
+`close-control workbench` is a local façade over the same validation, control
+engine, and three-file writer used by `close-control review`. It is useful when
+the close process starts with two already-created canonical exports in an
+access-controlled directory outside this repository:
+
+```bash
+close-control workbench \
+  --current C:\close-data\current.csv \
+  --prior C:\close-data\prior.csv \
+  --mapping C:\close-data\account-mapping.csv \
+  --subledger C:\close-data\subledger.csv \
+  --output C:\close-data\review-pack
+```
+
+It writes exactly `close-summary.md`, `exceptions.csv`, and
+`close-review-pack.json`. Open or import `exceptions.csv` in Excel or Power
+Query if useful, then investigate and document conclusions through your normal
+workpaper process. The command never starts Excel, creates a workbook, calls
+Xero, reads OAuth credentials or tokens, calls an AI service, posts anything,
+or copies the supplied sources. It records review evidence only; it does not
+approve or close a period.
+
+Keep inputs and output outside the checkout: repository fixtures remain
+fabricated, and the existing `.gitignore` rules deliberately prevent ordinary
+exports and generated packs becoming repository content.
+
 ## Worked example
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:

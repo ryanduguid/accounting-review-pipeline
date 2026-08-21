@@ -22,6 +22,32 @@ Human reviewer ---------- investigate, document, decide
 
 The application cannot cross the final boundary. It has no code to create a journal, post a transaction, make a payment, lodge a return, lock a period, email a report, call an accounting API, or declare approval.
 
+## Local workbench façade
+
+`close-control workbench` is a second local entry point to the same loader,
+control engine, source/output collision guard, and three-file review-pack
+writer as `close-control review`. It accepts the same already-created
+canonical CSV inputs and returns the same status and exit codes; it adds only a
+concise reviewer handoff to the console.
+
+```text
+Human-operated read-only export, outside repository
+             |
+             v
+close-control workbench --- existing review_close() / write_review_pack()
+             |
+             v
+close-summary.md + exceptions.csv + close-review-pack.json
+             |
+             v
+Human reviewer opens or imports the exception detail
+```
+
+The façade does not launch Excel, create a workbook, import VBA, run Power
+Query, access Xero or OAuth tokens, call a model or AI gateway, copy inputs, or
+write to an accounting system. It is not a new data contract or a workflow
+approval state: the three existing local artefacts remain the only outputs.
+
 ## Source contract
 
 The canonical source has the same normalised contract as the companion Xero trial-balance exporter. `Tenant + AccountID` is the stable key because account codes and display names can change. The loader rejects unknown columns rather than silently accepting a different report shape.
