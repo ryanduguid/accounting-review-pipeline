@@ -20,19 +20,26 @@ def _non_negative_decimal(value: str) -> Decimal:
     return result
 
 
+def _add_close_arguments(command: argparse.ArgumentParser) -> None:
+    """Add the one validated input contract shared by close entry points."""
+    command.add_argument("--current", required=True, type=Path, help="current-period canonical trial-balance CSV")
+    command.add_argument("--prior", required=True, type=Path, help="prior-period canonical trial-balance CSV")
+    command.add_argument("--mapping", type=Path, help="optional AccountID,ReviewGroup mapping CSV")
+    command.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
+    command.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
+    command.add_argument("--output", required=True, type=Path, help="directory for the generated review pack")
+    command.add_argument("--absolute-threshold", type=_non_negative_decimal, default=Decimal("1000"), help="minimum absolute YTD variance for review")
+    command.add_argument("--percentage-threshold", type=_non_negative_decimal, default=Decimal("0.10"), help="minimum proportional YTD variance for review, e.g. 0.10")
+    command.add_argument("--reconciliation-tolerance", type=_non_negative_decimal, default=Decimal("0.01"), help="maximum permitted GL/subledger difference")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create a review-first monthly close control pack from validated trial-balance exports.")
     commands = parser.add_subparsers(dest="command", required=True)
     review = commands.add_parser("review", help="run integrity, variance, mapping, and optional reconciliation controls")
-    review.add_argument("--current", required=True, type=Path, help="current-period canonical trial-balance CSV")
-    review.add_argument("--prior", required=True, type=Path, help="prior-period canonical trial-balance CSV")
-    review.add_argument("--mapping", type=Path, help="optional AccountID,ReviewGroup mapping CSV")
-    review.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
-    review.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
-    review.add_argument("--output", required=True, type=Path, help="directory for the generated review pack")
-    review.add_argument("--absolute-threshold", type=_non_negative_decimal, default=Decimal("1000"), help="minimum absolute YTD variance for review")
-    review.add_argument("--percentage-threshold", type=_non_negative_decimal, default=Decimal("0.10"), help="minimum proportional YTD variance for review, e.g. 0.10")
-    review.add_argument("--reconciliation-tolerance", type=_non_negative_decimal, default=Decimal("0.01"), help="maximum permitted GL/subledger difference")
+    _add_close_arguments(review)
+    workbench = commands.add_parser("workbench", help="run the local close-review workbench")
+    _add_close_arguments(workbench)
     return parser
 
 
@@ -48,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command != "review":  # pragma: no cover - argparse currently has one subcommand.
+    if args.command not in {"review", "workbench"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
     # write_review_pack replaces its three destinations and deletes what it
     # parked aside. If a source file IS one of those destinations, that source
@@ -94,9 +101,13 @@ def main(argv: list[str] | None = None) -> int:
         # OSError and used to escape as a traceback.
         print(f"close-control: output error: {exc}", file=sys.stderr)
         return 1
-    print(f"close-control: {pack.status}; {len(pack.exceptions)} exception(s)")
+    prefix = "close-control workbench" if args.command == "workbench" else "close-control"
+    print(f"{prefix}: {pack.status}; {len(pack.exceptions)} exception(s)")
     for name, path in outputs.items():
         print(f"  {name}: {path}")
+    if args.command == "workbench":
+        print("Review close-summary.md, exceptions.csv, and close-review-pack.json.")
+        print("This pack records review evidence only; it does not approve or close a period.")
     return 0 if pack.status == "PASS" else 2
 
 
