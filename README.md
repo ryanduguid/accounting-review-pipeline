@@ -1,6 +1,8 @@
-# Monthly Close Control Plane
+# Russell Mathews
 
-[![tests](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![tests](https://github.com/ryanduguid/RussellMathews/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/RussellMathews/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+
+The repository name is the public project identity; the `monthly-close-control-plane` distribution and `close-control` command remain compatibility identifiers.
 
 A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
 
