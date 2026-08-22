@@ -32,7 +32,7 @@ def _gateway_sample_inputs() -> Path | None:
     candidates = []
     if configured:
         candidates.append(Path(configured))
-    candidates.append(ROOT.parent / "ElizabethAnneAlexander")
+    candidates.append(ROOT.parent / "xero-ai-review-gateway")
     for root in candidates:
         inputs = root / "elizabeth_anne_alexander" / "samples" / "inputs"
         if (inputs / GATEWAY_SAMPLE_CURRENT).is_file() and (inputs / GATEWAY_SAMPLE_PRIOR).is_file():
@@ -54,7 +54,7 @@ def test_gateway_same_fy_samples_review_without_year_reset() -> None:
     # feed the gateway. This pin uses the gateway's May/June Demo Entity pair.
     inputs = _gateway_sample_inputs()
     if inputs is None:
-        pytest.skip("sibling ElizabethAnneAlexander checkout is missing")
+        pytest.skip("sibling xero-ai-review-gateway checkout is missing")
 
     current_path = inputs / GATEWAY_SAMPLE_CURRENT
     prior_path = inputs / GATEWAY_SAMPLE_PRIOR
