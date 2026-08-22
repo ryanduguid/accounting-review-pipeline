@@ -9,7 +9,7 @@ ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebi
 ```
 
 1. `close-control review` in this repository, pointed at the sibling gateway's same-financial-year sample pair.
-2. `elizabeth-anne-alexander evaluate` in [`ElizabethAnneAlexander`](https://github.com/ryanduguid/ElizabethAnneAlexander), still pointed at **that package's bundled** `samples/` context. Do not pass this repo's `examples/` as `--context`.
+2. `elizabeth-anne-alexander evaluate` in [`xero-ai-review-gateway`](https://github.com/ryanduguid/xero-ai-review-gateway), still pointed at **that package's bundled** `samples/` context. Do not pass this repo's `examples/` as `--context`.
 
 A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). Set `ELIZABETH_ANNE_ALEXANDER_ROOT` if the gateway checkout is not a sibling of this repository.
 
@@ -39,8 +39,8 @@ From this repository root, after `python -m pip install -e ".[dev]"`:
 
 ```bash
 close-control review \
-  --current ../ElizabethAnneAlexander/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-06-30.csv \
-  --prior ../ElizabethAnneAlexander/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-05-31.csv \
+  --current ../xero-ai-review-gateway/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-06-30.csv \
+  --prior ../xero-ai-review-gateway/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-05-31.csv \
   --output outputs/gateway-tb-loop
 ```
 

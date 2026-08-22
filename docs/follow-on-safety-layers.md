@@ -2,9 +2,9 @@
 
 The close-control engine is deliberately a local review-pack generator. It should not grow into a broad accounting-system integration simply because the next work involves AI or source monitoring. The next layers are separate repositories with their own boundary contracts.
 
-## ElizabethAnneAlexander
+## xero-ai-review-gateway
 
-The intended next component is [`ElizabethAnneAlexander`](https://github.com/ryanduguid/ElizabethAnneAlexander), a fixed-policy, synthetic-data demonstration of how a future AI assistant can receive a bounded variance-review result without controlling Xero.
+The intended next component is [`xero-ai-review-gateway`](https://github.com/ryanduguid/xero-ai-review-gateway), a fixed-policy, synthetic-data demonstration of how a future AI assistant can receive a bounded variance-review result without controlling Xero.
 
 ```text
 Authorised human-operated read-only export
