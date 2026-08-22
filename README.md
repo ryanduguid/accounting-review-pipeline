@@ -262,8 +262,8 @@ Continuous integration verifies the committed `uv.lock`, runs the test suite on 
 
 The next layers exist as separate repositories. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
 
-- [ElizabethAnneAlexander](https://github.com/ryanduguid/ElizabethAnneAlexander) — a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
-- [Tax Radar AU](https://github.com/ryanduguid/tax-radar-au) — a provenance-first monitor that turns source-version metadata into a technical-review queue.
+- [ElizabethAnneAlexander](https://github.com/ryanduguid/ElizabethAnneAlexander) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
+- [Tax Radar AU](https://github.com/ryanduguid/tax-radar-au) - a provenance-first monitor that turns source-version metadata into a technical-review queue.
 
 [examples/close-loop.md](examples/close-loop.md) runs close-control and the sibling gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.
 
