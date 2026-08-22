@@ -19,9 +19,9 @@ classifiers = [
   "Topic :: Office/Business :: Financial :: Accounting",
 ]
 [project.urls]
-Homepage = "https://github.com/ryanduguid/RussellMathews"
-Repository = "https://github.com/ryanduguid/RussellMathews.git"
-Issues = "https://github.com/ryanduguid/RussellMathews/issues"
+Homepage = "https://github.com/ryanduguid/monthly-close-control-plane"
+Repository = "https://github.com/ryanduguid/monthly-close-control-plane.git"
+Issues = "https://github.com/ryanduguid/monthly-close-control-plane/issues"
 
 [project.optional-dependencies]
 dev = [

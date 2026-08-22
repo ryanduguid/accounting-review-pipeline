@@ -1,6 +1,6 @@
 # Local-file monthly close loop. No Xero OAuth.
 #
-# 1. close-control review of the sibling ElizabethAnneAlexander same-FY sample TBs
+# 1. close-control review of the sibling xero-ai-review-gateway same-FY sample TBs
 #    into outputs/gateway-tb-loop (relative to this repository).
 # 2. elizabeth-anne-alexander evaluate against that package's bundled samples/
 #    context, if the CLI is on PATH or importable. Context is never this repo's
@@ -32,7 +32,7 @@ if (-not $GatewayRoot) {
     $GatewayRoot = $env:ELIZABETH_ANNE_ALEXANDER_ROOT
 }
 if (-not $GatewayRoot) {
-    $GatewayRoot = Join-Path (Split-Path -Parent $RepoRoot) "ElizabethAnneAlexander"
+    $GatewayRoot = Join-Path (Split-Path -Parent $RepoRoot) "xero-ai-review-gateway"
 }
 
 $SampleDir = Join-Path $GatewayRoot "elizabeth_anne_alexander"
@@ -46,7 +46,7 @@ if (-not ((Test-Path -LiteralPath $CurrentCsv) -and (Test-Path -LiteralPath $Pri
 Cannot find the gateway same-FY sample TBs:
   $CurrentCsv
   $PriorCsv
-Clone ElizabethAnneAlexander as a sibling of this repository, or set ELIZABETH_ANNE_ALEXANDER_ROOT.
+Clone xero-ai-review-gateway as a sibling of this repository, or set ELIZABETH_ANNE_ALEXANDER_ROOT.
 Do not substitute examples/current_trial_balance.csv and examples/prior_trial_balance.csv: that Acme June/July pair crosses the 1 July financial-year reset and cannot feed the gateway.
 "@
 }

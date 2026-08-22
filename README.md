@@ -1,6 +1,6 @@
 # Russell Mathews
 
-[![tests](https://github.com/ryanduguid/RussellMathews/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/RussellMathews/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![tests](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 The repository name is the public project identity; the `monthly-close-control-plane` distribution and `close-control` command remain compatibility identifiers.
 
@@ -27,7 +27,7 @@ Explicit exception queue
 Human review and workpaper acknowledgement
 ```
 
-The first MVP accepts the canonical CSV written by [JohnSpenceOgilvy](https://github.com/ryanduguid/JohnSpenceOgilvy) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
+The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
 
 ## Quick demo
 
@@ -262,7 +262,7 @@ Continuous integration verifies the committed `uv.lock`, runs the test suite on 
 
 The next layers exist as separate repositories. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
 
-- [ElizabethAnneAlexander](https://github.com/ryanduguid/ElizabethAnneAlexander) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
+- [xero-ai-review-gateway](https://github.com/ryanduguid/xero-ai-review-gateway) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
 - [Tax Radar AU](https://github.com/ryanduguid/tax-radar-au) - a provenance-first monitor that turns source-version metadata into a technical-review queue.
 
 [examples/close-loop.md](examples/close-loop.md) runs close-control and the sibling gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.

@@ -45,7 +45,7 @@ def parse_trial_balance(csv_path: Path) -> List[AccountRow]:
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for r in reader:
-            # Handle both JohnSpenceOgilvy schema and simple TB schemas
+            # Handle both xero-trial-balance-export schema and simple TB schemas
             report_date = r.get("ReportDate", "")
             tenant = r.get("Tenant", "Entity")
             section = r.get("Section", "")
