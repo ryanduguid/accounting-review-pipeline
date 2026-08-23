@@ -89,6 +89,28 @@ Keep inputs and output outside the checkout: repository fixtures remain
 fabricated, and the existing `.gitignore` rules deliberately prevent ordinary
 exports and generated packs becoming repository content.
 
+## Viewing an existing pack
+
+`close-control view` is the read-only half of the workbench: it loads a
+generated pack, proves the three files still agree with each other, and prints
+a review sheet. It never writes, renames or deletes anything, and it cannot
+change what the engine computed.
+
+```bash
+close-control view --pack-dir C:\\close-data\\review-pack
+```
+
+Before displaying anything it fails closed on: a missing artefact; JSON that is
+not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated
+top-level members; a threshold or source digest that no longer parses as the
+writer rendered it; a `close-summary.md` whose overall status, source-evidence
+digests or review-boundary statement disagree with the JSON (including a second,
+conflicting status line); and an `exceptions.csv` whose header, row count or
+any cell disagrees with the JSON exceptions, honouring the writer's
+formula-injection guard exactly. On success the sheet ends with the SHA-256 of
+each artefact's exact bytes, so the displayed evidence can itself be archived.
+Exit code is 0 when a pack was verified and shown, 1 when verification failed.
+
 ## Worked example
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
