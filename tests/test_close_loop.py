@@ -50,7 +50,7 @@ def test_canonical_columns_match_the_ten_column_contract() -> None:
 
 
 def test_gateway_same_fy_samples_review_without_year_reset() -> None:
-    # Close-control's own Acme June/July fixtures straddle 1 July and cannot
+    # Close-control's own Varrock June/July fixtures straddle 1 July and cannot
     # feed the gateway. This pin uses the gateway's May/June Demo Entity pair.
     inputs = _gateway_sample_inputs()
     if inputs is None:
