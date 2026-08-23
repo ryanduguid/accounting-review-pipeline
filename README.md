@@ -278,4 +278,4 @@ The next layers are deliberately separated from the control engine; they already
 See [docs/follow-on-safety-layers.md](docs/follow-on-safety-layers.md) for the intended boundary contracts.
 
 
-MIT licensed.
+MIT licensed. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
