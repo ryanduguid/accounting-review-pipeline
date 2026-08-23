@@ -103,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     prefix = "close-control workbench" if args.command == "workbench" else "close-control"
     print(f"{prefix}: {pack.status}; {len(pack.exceptions)} exception(s)")
+    if pack.status == "PASS" and not pack.exceptions:
+        print(f"{prefix}: Nothing interesting happens.")
     for name, path in outputs.items():
         print(f"  {name}: {path}")
     if args.command == "workbench":

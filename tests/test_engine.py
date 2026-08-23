@@ -14,7 +14,7 @@ from closecontrol.loader import SourceSnapshot
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 HEADER = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit"
-TENANT = "Acme Demo Pty Ltd"
+TENANT = "Varrock Ventures Pty Ltd"
 
 
 def _write(path: Path, rows: list[str]) -> Path:
@@ -276,13 +276,13 @@ def test_new_and_missing_accounts_raise_period_comparison_exceptions(tmp_path: P
     # exceptions come from the account existing in one period but not the other.
     current = tmp_path / "current.csv"
     current.write_text(
-        "\n".join([header, *rows, "2026-07-31,Acme Demo Pty Ltd,Assets,777,Brand New Clearing,1770,0.00,0.00,0.00,0.00"]) + "\n",
+        "\n".join([header, *rows, "2026-07-31,Varrock Ventures Pty Ltd,Assets,777,Brand New Clearing,1770,0.00,0.00,0.00,0.00"]) + "\n",
         encoding="utf-8",
     )
     prior_header, *prior_rows = (EXAMPLES / "prior_trial_balance.csv").read_text(encoding="utf-8").splitlines()
     prior = tmp_path / "prior.csv"
     prior.write_text(
-        "\n".join([prior_header, *prior_rows, "2026-06-30,Acme Demo Pty Ltd,Assets,888,Old Suspense,1880,0.00,0.00,0.00,0.00"]) + "\n",
+        "\n".join([prior_header, *prior_rows, "2026-06-30,Varrock Ventures Pty Ltd,Assets,888,Old Suspense,1880,0.00,0.00,0.00,0.00"]) + "\n",
         encoding="utf-8",
     )
 
@@ -375,7 +375,7 @@ def test_every_source_digest_is_bound_to_the_exact_bytes_parsed(
 def test_period_comparison_rejects_different_tenants(tmp_path: Path) -> None:
     prior = tmp_path / "prior.csv"
     source = (EXAMPLES / "prior_trial_balance.csv").read_text(encoding="utf-8")
-    prior.write_text(source.replace("Acme Demo Pty Ltd", "Other Tenant Pty Ltd"), encoding="utf-8")
+    prior.write_text(source.replace("Varrock Ventures Pty Ltd", "Falador Freight Pty Ltd"), encoding="utf-8")
 
     with pytest.raises(ControlInputError, match="same tenant"):
         review_close(current_path=EXAMPLES / "current_trial_balance.csv", prior_path=prior)

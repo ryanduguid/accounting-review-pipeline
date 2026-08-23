@@ -13,14 +13,14 @@ ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebi
 
 A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). Set `ELIZABETH_ANNE_ALEXANDER_ROOT` if the gateway checkout is not a sibling of this repository.
 
-## Why the Acme June/July files cannot feed the gateway
+## Why the Varrock June/July files cannot feed the gateway
 
 This repo's quick-demo pair is the wrong pair for the gateway step:
 
-- `examples/prior_trial_balance.csv` is Acme Demo Pty Ltd at 2026-06-30
-- `examples/current_trial_balance.csv` is Acme Demo Pty Ltd at 2026-07-31
+- `examples/prior_trial_balance.csv` is Varrock Ventures Pty Ltd at 2026-06-30
+- `examples/current_trial_balance.csv` is Varrock Ventures Pty Ltd at 2026-07-31
 
-Those dates straddle the Australian financial-year reset on 1 July. Close-control will still write a pack, and it will raise `financial_year_reset` because YTD figures restart. The gateway **refuses** a current/prior pair in different financial years (unless they are the same calendar day and month, for a year-on-year comparison). Feeding it the Acme files would not be a variance review; it would be a blocked run.
+Those dates straddle the Australian financial-year reset on 1 July. Close-control will still write a pack, and it will raise `financial_year_reset` because YTD figures restart. The gateway **refuses** a current/prior pair in different financial years (unless they are the same calendar day and month, for a year-on-year comparison). Feeding it the Varrock files would not be a variance review; it would be a blocked run.
 
 The gateway also does not take arbitrary CSV paths as `--context`. `evaluate` resolves `--context`, `--request`, and `--policy` against data bundled inside the installed package. Those bundled manifests already name the May/June Demo Entity samples. Pointing `--context` at close-control `examples/` is unsupported.
 
@@ -46,7 +46,7 @@ close-control review \
 
 Leave the default materiality thresholds ($1,000 absolute and 10%). The command exits `2` because the pack is `REVIEW`, not because the files are invalid. It writes `close-summary.md`, `exceptions.csv`, and `close-review-pack.json` under `outputs/gateway-tb-loop`.
 
-Do not pass this repo's Acme mapping, subledger, or review note: those fixtures belong to a different tenant and a different date pair.
+Do not pass this repo's Varrock mapping, subledger, or review note: those fixtures belong to a different tenant and a different date pair.
 
 ## Command 2: gateway evaluate (bundled context)
 

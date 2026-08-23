@@ -26,7 +26,7 @@ PACK_FILES = ["close-review-pack.json", "close-summary.md", "exceptions.csv"]
 def _single_exception_pack(
     *,
     digest: str = "abc",
-    tenant: str = "Acme Demo Pty Ltd",
+    tenant: str = "Varrock Ventures Pty Ltd",
     account_name: str = "Operating Bank",
     difference: str = "15000.00",
     threshold: str = "10000.00",
@@ -221,7 +221,7 @@ def test_markdown_table_escapes_pipes_backslashes_and_newlines(tmp_path: Path) -
             ExceptionItem(
                 control="period_variance",
                 status="REVIEW",
-                tenant="Acme | Demo",
+                tenant="Varrock | Ventures",
                 account_id="100",
                 account_code="1000",
                 # A backslash immediately before a pipe: escaping the pipe alone
@@ -253,7 +253,7 @@ def test_markdown_table_escapes_pipes_backslashes_and_newlines(tmp_path: Path) -
     assert _table_cells(data_row) == [
         "REVIEW",
         "period_variance",
-        "Acme | Demo",
+        "Varrock | Ventures",
         "1000 / Bank \\| Operating",
         "1000.00",
         "Line one. Line two | with pipe.",
@@ -270,16 +270,16 @@ def test_a_backslash_before_a_pipe_in_a_source_csv_cannot_shift_a_summary_column
     current.write_text(
         "\n".join([
             header,
-            f'2026-07-31,Acme Demo Pty Ltd,Assets,1770,"{name}",1770,0.00,0.00,900000.00,0.00',
-            "2026-07-31,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,900000.00",
+            f'2026-07-31,Varrock Ventures Pty Ltd,Assets,1770,"{name}",1770,0.00,0.00,900000.00,0.00',
+            "2026-07-31,Varrock Ventures Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,900000.00",
         ]) + "\n",
         encoding="utf-8",
     )
     prior.write_text(
         "\n".join([
             header,
-            f'2026-06-30,Acme Demo Pty Ltd,Assets,1770,"{name}",1770,0.00,0.00,100000.00,0.00',
-            "2026-06-30,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,100000.00",
+            f'2026-06-30,Varrock Ventures Pty Ltd,Assets,1770,"{name}",1770,0.00,0.00,100000.00,0.00',
+            "2026-06-30,Varrock Ventures Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,100000.00",
         ]) + "\n",
         encoding="utf-8",
     )
@@ -526,7 +526,7 @@ def test_a_prior_zero_percentage_renders_as_an_explicit_sentinel_not_a_blank(tmp
             ExceptionItem(
                 control="period_variance",
                 status="REVIEW",
-                tenant="Acme Demo Pty Ltd",
+                tenant="Varrock Ventures Pty Ltd",
                 account_id="777",
                 account_code="1770",
                 account_name="New Clearing",
@@ -579,16 +579,16 @@ def test_a_nil_prior_variance_from_the_engine_reaches_the_pack_with_the_sentinel
     prior.write_text(
         "\n".join([
             header,
-            "2026-06-30,Acme Demo Pty Ltd,Assets,777,New Clearing,1770,0.00,0.00,0.00,0.00",
-            "2026-06-30,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,0.00",
+            "2026-06-30,Varrock Ventures Pty Ltd,Assets,777,New Clearing,1770,0.00,0.00,0.00,0.00",
+            "2026-06-30,Varrock Ventures Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,0.00",
         ]) + "\n",
         encoding="utf-8",
     )
     current.write_text(
         "\n".join([
             header,
-            "2026-07-31,Acme Demo Pty Ltd,Assets,777,New Clearing,1770,900000.00,0.00,900000.00,0.00",
-            "2026-07-31,Acme Demo Pty Ltd,Equity,900,Retained Earnings,3000,0.00,900000.00,0.00,900000.00",
+            "2026-07-31,Varrock Ventures Pty Ltd,Assets,777,New Clearing,1770,900000.00,0.00,900000.00,0.00",
+            "2026-07-31,Varrock Ventures Pty Ltd,Equity,900,Retained Earnings,3000,0.00,900000.00,0.00,900000.00",
         ]) + "\n",
         encoding="utf-8",
     )
@@ -635,7 +635,7 @@ def test_amounts_that_are_not_decimals_still_render(tmp_path: Path) -> None:
             ExceptionItem(
                 control="period_variance",
                 status="REVIEW",
-                tenant="Acme Demo Pty Ltd",
+                tenant="Varrock Ventures Pty Ltd",
                 account_id="100",
                 account_code="1000",
                 account_name="Operating Bank",
@@ -801,7 +801,7 @@ def test_workbench_refuses_a_source_that_would_be_replaced_by_the_pack(
     shutil.copy(EXAMPLES / "prior_trial_balance.csv", work / "prior.csv")
     subledger = work / "exceptions.csv"
     subledger.write_text(
-        "Tenant,AccountID,SubledgerBalance\nAcme Demo Pty Ltd,110,85000.00\n",
+        "Tenant,AccountID,SubledgerBalance\nVarrock Ventures Pty Ltd,110,85000.00\n",
         encoding="utf-8",
     )
     before = subledger.read_bytes()
@@ -899,7 +899,7 @@ def test_a_source_file_sharing_a_pack_name_is_refused_not_destroyed(tmp_path: Pa
     shutil.copy(EXAMPLES / "prior_trial_balance.csv", work / "prior.csv")
     subledger = work / "exceptions.csv"
     subledger.write_text(
-        "Tenant,AccountID,SubledgerBalance\nAcme Demo Pty Ltd,110,85000.00\n",
+        "Tenant,AccountID,SubledgerBalance\nVarrock Ventures Pty Ltd,110,85000.00\n",
         encoding="utf-8",
     )
     before = subledger.read_bytes()
@@ -952,9 +952,9 @@ def test_a_blank_line_does_not_shift_the_reported_row_number(tmp_path: Path) -> 
     csv_path.write_text(
         "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,"
         "Debit,Credit,YTDDebit,YTDCredit\n"
-        "2026-07-31,Acme,Assets,100,Operating Bank,1000,0.00,0.00,1000.00,0.00\n"
+        "2026-07-31,Varrock,Assets,100,Operating Bank,1000,0.00,0.00,1000.00,0.00\n"
         "\n"
-        "2026-07-31,Acme,Assets,110,,1100,0.00,0.00,500.00,0.00\n",
+        "2026-07-31,Varrock,Assets,110,,1100,0.00,0.00,500.00,0.00\n",
         encoding="utf-8",
         newline="",
     )
