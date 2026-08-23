@@ -4,7 +4,9 @@
 ## Package Overview
 - **Repository**: https://github.com/ryanduguid/monthly-close-control-plane
 - **Distribution name**: `monthly-close-control-plane`
-- **CLI Commands**: `close-control`, `openaccountants-au`
+- **CLI Commands**: `close-control`. The `openaccountants-au` entry point is
+  quarantined: it prints a redirect on stderr and exits 2. Use `close-control`
+  for the close pack and `ato-benchmark-compare` for range tests.
 - **Domain**: Local, deterministic review-pack generation for current and prior validated trial-balance exports.
 - **Control Basis**: Double-entry balance checks, material year-to-date variance review, account-change review, mapping checks, and optional subledger reconciliation.
 
@@ -12,7 +14,7 @@
 - `closecontrol.engine`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
 - `closecontrol.loader`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
 - `closecontrol.report`: Writes JSON, Markdown, and CSV review-pack files, including source evidence and any supplied human acknowledgement.
-- `closecontrol.pipeline_cli`: Provides the separate `openaccountants-au` integrity and benchmark review command.
+- `closecontrol.pipeline_cli`: Holds the quarantined `openaccountants-au` entry point. It runs no review; it prints where to go instead and exits 2.
 
 ## Architectural Boundaries
 1. **Review-First Policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.
