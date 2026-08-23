@@ -33,6 +33,10 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 The repository contains fabricated data only. Do not commit client trial balances, workpapers, exports, or credentials.
 
+`examples/` is the assault course: every move the tool has, run against
+fabricated data, with nothing at stake. Learn the flags here before pointing
+it at a real ledger.
+
 ```bash
 python -m pip install -e ".[dev]"
 
