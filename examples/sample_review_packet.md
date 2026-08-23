@@ -1,6 +1,6 @@
 # Monthly Close & ATO Benchmark Review Packet
 
-**Entity:** Acme Demo Pty Ltd  
+**Entity:** Varrock Ventures Pty Ltd  
 **Report Date:** 2026-07-31  
 **Integrity Status:** ✅ BALANCED & VERIFIED  
 **Pipeline Source:** `pipeline_monthly_review.py` (Xero TB $\rightarrow$ Control Plane $\rightarrow$ ATO Benchmarks)

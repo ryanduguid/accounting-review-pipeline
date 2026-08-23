@@ -29,5 +29,5 @@ def test_pipeline_report_generation():
     benchmarks = calculate_ato_benchmarks(rows)
     report = generate_markdown_report(integrity, benchmarks, rows)
     assert "# Monthly Close & ATO Benchmark Review Packet" in report
-    assert "Acme Demo Pty Ltd" in report
+    assert "Varrock Ventures Pty Ltd" in report
     assert "BALANCED & VERIFIED" in report

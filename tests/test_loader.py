@@ -79,7 +79,7 @@ def test_load_canonical_trial_balance_uses_stable_tenant_account_key() -> None:
     rows = load_canonical_tb(ROOT / "examples" / "current_trial_balance.csv")
 
     assert len(rows) == 7
-    assert rows[0].key == ("Acme Demo Pty Ltd", "100")
+    assert rows[0].key == ("Varrock Ventures Pty Ltd", "100")
     assert rows[0].ytd_net == parse_money("120000.00", field="test", row_number=1, path=Path("test"))
 
 
@@ -175,7 +175,7 @@ def test_optional_csv_loaders_reject_surplus_cells(
 def test_empty_report_date_is_reported_as_empty_not_invalid_iso(tmp_path: Path) -> None:
     source = (ROOT / "examples" / "current_trial_balance.csv").read_text(encoding="utf-8")
     blank_date = tmp_path / "blank_date.csv"
-    blank_date.write_text(source.replace("2026-07-31,Acme Demo Pty Ltd,Assets,100", ",Acme Demo Pty Ltd,Assets,100"), encoding="utf-8")
+    blank_date.write_text(source.replace("2026-07-31,Varrock Ventures Pty Ltd,Assets,100", ",Varrock Ventures Pty Ltd,Assets,100"), encoding="utf-8")
 
     with pytest.raises(ControlInputError, match="empty ReportDate"):
         load_canonical_tb(blank_date)
@@ -184,8 +184,8 @@ def test_empty_report_date_is_reported_as_empty_not_invalid_iso(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("old", "new", "message"),
     [
-        ("2026-07-31,Acme Demo Pty Ltd,Assets,110", "2026-07-30,Acme Demo Pty Ltd,Assets,110", "one ReportDate"),
-        ("2026-07-31,Acme Demo Pty Ltd,Assets,110", "2026-07-31,Other Tenant,Assets,110", "one tenant"),
+        ("2026-07-31,Varrock Ventures Pty Ltd,Assets,110", "2026-07-30,Varrock Ventures Pty Ltd,Assets,110", "one ReportDate"),
+        ("2026-07-31,Varrock Ventures Pty Ltd,Assets,110", "2026-07-31,Other Tenant,Assets,110", "one tenant"),
     ],
 )
 def test_loader_rejects_mixed_period_or_tenant_scope(

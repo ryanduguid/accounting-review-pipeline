@@ -4,7 +4,7 @@
 #    into outputs/gateway-tb-loop (relative to this repository).
 # 2. elizabeth-anne-alexander evaluate against that package's bundled samples/
 #    context, if the CLI is on PATH or importable. Context is never this repo's
-#    examples/ (the Acme June/July pair crosses the 1 July FY reset).
+#    examples/ (the Varrock June/July pair crosses the 1 July FY reset).
 #
 # Set ELIZABETH_ANNE_ALEXANDER_ROOT when the gateway checkout is not a sibling.
 
@@ -47,7 +47,7 @@ Cannot find the gateway same-FY sample TBs:
   $CurrentCsv
   $PriorCsv
 Clone xero-ai-review-gateway as a sibling of this repository, or set ELIZABETH_ANNE_ALEXANDER_ROOT.
-Do not substitute examples/current_trial_balance.csv and examples/prior_trial_balance.csv: that Acme June/July pair crosses the 1 July financial-year reset and cannot feed the gateway.
+Do not substitute examples/current_trial_balance.csv and examples/prior_trial_balance.csv: that Varrock June/July pair crosses the 1 July financial-year reset and cannot feed the gateway.
 "@
 }
 

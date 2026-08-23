@@ -55,7 +55,7 @@ Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, an
 To run the check on a schedule in CI, copy [examples/github-actions-close-check.yml](examples/github-actions-close-check.yml) into `.github/workflows/`.
 It runs against a repo-stored synthetic trial balance and fails the job when the pack is `BLOCKED`.
 
-To run this pack against the sibling gateway's same-financial-year sample CSVs (not the Acme June/July demo pair, which crosses the 1 July reset), see [examples/close-loop.md](examples/close-loop.md). That loop is local files only; it does not connect to Xero.
+To run this pack against the sibling gateway's same-financial-year sample CSVs (not the Varrock June/July demo pair, which crosses the 1 July reset), see [examples/close-loop.md](examples/close-loop.md). That loop is local files only; it does not connect to Xero.
 
 ## Local close workbench
 
@@ -117,17 +117,17 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 
 | Status | Control | Tenant | Account | Difference | Reason |
 | --- | --- | --- | --- | ---: | --- |
-| REVIEW | account_mapping | Acme Demo Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
+| REVIEW | account_mapping | Varrock Ventures Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
 | REVIEW | financial_year_reset | n/a | n/a | n/a | Current ReportDate 2026-07-31 and prior ReportDate 2026-06-30 fall in different Australian financial years (1 July to 30 June). YTD figures reset on 1 July, so this YTD-vs-YTD comparison crosses a year reset and the period_variance verdicts for profit-and-loss-style rows are not meaningful. |
-| REVIEW | period_variance | Acme Demo Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
-| REVIEW | subledger_reconciliation | Acme Demo Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
+| REVIEW | period_variance | Varrock Ventures Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
+| REVIEW | subledger_reconciliation | Varrock Ventures Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
 ```
 
 `exceptions.csv` carries the same exceptions with full numeric detail. The Operating Bank variance row (wrapped here for readability):
 
 ```csv
 control,status,tenant,account_id,account_code,account_name,review_group,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
-period_variance,REVIEW,Acme Demo Pty Ltd,100,1000,Operating Bank,Cash and cash equivalents,120000.00,105000.00,15000.00,10000.00,14.29%,
+period_variance,REVIEW,Varrock Ventures Pty Ltd,100,1000,Operating Bank,Cash and cash equivalents,120000.00,105000.00,15000.00,10000.00,14.29%,
   YTD net balance moved beyond both configured materiality thresholds.,
   "Investigate the driver, retain supporting evidence, and document the reviewer conclusion."
 ```
@@ -150,7 +150,7 @@ The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.0
       "percentage_change": "14.29%",
       "threshold": "10000.00",
       "status": "REVIEW",
-      "tenant": "Acme Demo Pty Ltd"
+      "tenant": "Varrock Ventures Pty Ltd"
     }
   ],
   "overall_status": "REVIEW",
