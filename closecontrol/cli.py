@@ -8,6 +8,7 @@ from pathlib import Path
 from .engine import review_close
 from .errors import ControlInputError
 from .report import PACK_FILE_NAMES as _PACK_FILE_NAMES, write_review_pack
+from .viewer import render_review_sheet
 
 
 def _non_negative_decimal(value: str) -> Decimal:
@@ -40,6 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_close_arguments(review)
     workbench = commands.add_parser("workbench", help="run the local close-review workbench")
     _add_close_arguments(workbench)
+    view = commands.add_parser("view", help="display an existing review pack after verifying its three files agree")
+    view.add_argument("--pack-dir", required=True, type=Path, help="directory holding close-review-pack.json, close-summary.md and exceptions.csv")
     return parser
 
 
@@ -55,8 +58,22 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command not in {"review", "workbench"}:  # pragma: no cover - argparse validates command choices.
+    if args.command not in {"review", "workbench", "view"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
+    if args.command == "view":
+        # The viewer reads only. It never writes, renames or deletes, so the
+        # source/destination collision guard below does not apply to it.
+        try:
+            sheet, _ = render_review_sheet(args.pack_dir)
+        except ControlInputError as exc:
+            print(f"close-control view: verification failed: {exc}", file=sys.stderr)
+            return 1
+        print(sheet)
+        print(
+            "close-control view: display is a review aid; it does not approve "
+            "a close or change any computed status."
+        )
+        return 0
     # write_review_pack replaces its three destinations and deletes what it
     # parked aside. If a source file IS one of those destinations, that source
     # is destroyed and the pack still records a source_sha256 for it, so the
