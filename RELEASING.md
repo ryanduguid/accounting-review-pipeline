@@ -31,4 +31,6 @@ gh release verify v0.1.1 -R ryanduguid/RussellMathews
 gh release verify-asset v0.1.1 monthly_close_control_plane-0.1.1-py3-none-any.whl -R ryanduguid/RussellMathews
 ```
 
-If any gate fails, inspect it before touching the tag or draft. Never move a published tag.
+If any gate fails, inspect it before touching the tag or draft. Never move a
+published tag. It behaves like a boulder in a corridor: once it is rolling the
+only direction is forward, so cut a new version rather than try to get behind it.
