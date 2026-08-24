@@ -1,5 +1,19 @@
 # monthly-close-control-plane
 
+```
++----------------------------------------------------------------------+
+|                     monthly-close-control-plane                      |
++----------------------------------------------------------------------+
+|           Deterministic close controls for trial balances            |
++----------------------------------+-----------------------------------+
+| DR  what it gives you            | CR  what it needs                 |
++----------------------------------+-----------------------------------+
+| close summary with exceptions    | current and prior TB CSV          |
+| exceptions CSV for review        | an account mapping CSV            |
+| PASS REVIEW BLOCKED states       | -                                 |
++----------------------------------+-----------------------------------+
+```
+
 [![tests](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/monthly-close-control-plane/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/monthly-close-control-plane.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/monthly-close-control-plane/) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 
 The repository name is the public project identity; the `monthly-close-control-plane` distribution and `close-control` command remain compatibility identifiers.
