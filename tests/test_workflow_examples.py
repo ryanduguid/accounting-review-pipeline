@@ -26,6 +26,16 @@ WORKFLOW = EXAMPLES / "github-actions-close-check.yml"
 PACKAGE_NAME = "monthly-close-control-plane"
 RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
 
+# The committed example must point at a release that actually exists, so this
+# tracks the last *published* tag rather than pyproject.toml's version (which
+# is bumped ahead of the tag during release prep). Bump this, RELEASE_ASSET_SHA256
+# and examples/github-actions-close-check.yml together in one follow-up commit,
+# once the new tag's wheel is built and its real sha256 is confirmed
+# (`sha256sum` against the downloaded release asset, not a locally-built guess:
+# the wheel embeds SOURCE_DATE_EPOCH from the tag commit, so a local build
+# before the tag exists cannot reproduce the real bytes).
+EXAMPLE_PINNED_VERSION = "0.1.1"
+
 EXPECTED_EXTERNAL_PINS = {
     "actions/checkout": (
         "3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -406,7 +416,7 @@ def test_repository_versions_and_yaml_dev_dependency_agree() -> None:
     project_version, lock_version, release_version, yaml_version = _repository_versions()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert project_version == lock_version == release_version == "0.1.1"
+    assert project_version == lock_version == release_version == "0.1.2"
     assert "PyYAML>=6.0.3,<7" in project["project"]["optional-dependencies"]["dev"]
     assert yaml_version == yaml.__version__ == "6.0.3"
 
@@ -424,9 +434,9 @@ def test_strict_loader_keeps_on_as_text_and_rejects_duplicate_keys() -> None:
 
 
 def test_committed_copyable_workflow_uses_only_reviewed_immutable_dependencies() -> None:
-    project_version, _, _, _ = _repository_versions()
-
-    _assert_workflow(WORKFLOW.read_text(encoding="utf-8"), project_version=project_version)
+    _assert_workflow(
+        WORKFLOW.read_text(encoding="utf-8"), project_version=EXAMPLE_PINNED_VERSION
+    )
 
 
 @pytest.mark.parametrize("action", EXPECTED_EXTERNAL_PINS)
