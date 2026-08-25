@@ -302,6 +302,7 @@ Continuous integration verifies the committed `uv.lock`, runs the test suite on 
 
 The next layers exist as separate repositories. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
 
+- [review-ready-gate](https://github.com/ryanduguid/review-ready-gate) - the upstream pack-readiness gate. It answers whether a BAS, month-end, or year-end folder is allowed onto the review desk. This tool still answers a later question: what material exceptions exist on these trial balances. Run the gate first.
 - [xero-ai-review-gateway](https://github.com/ryanduguid/xero-ai-review-gateway) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
 - [Tax Radar AU](https://github.com/ryanduguid/tax-radar-au) - a provenance-first monitor that turns source-version metadata into a technical-review queue.
 
