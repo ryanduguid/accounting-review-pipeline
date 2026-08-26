@@ -225,7 +225,6 @@ def test_dropped_csv_row_fails_closed(pack_dir: Path) -> None:
 
 
 def test_flipped_csv_cell_fails_closed(pack_dir: Path) -> None:
-    document = _read_json(pack_dir)
     csv_path = pack_dir / "exceptions.csv"
     text = csv_path.read_text(encoding="utf-8-sig")
     csv_path.write_text(text.replace("15.00", "16.00"), encoding="utf-8-sig")
