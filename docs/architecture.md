@@ -2,7 +2,7 @@
 
 ## The first release boundary
 
-`monthly-close-control-plane` is a local, deterministic **review-pack generator**. It deliberately accepts an already validated canonical trial-balance export rather than connecting to a ledger.
+Monthly Close Controls is a local, deterministic **review-pack generator**. It deliberately accepts an already validated canonical trial-balance export rather than connecting to a ledger.
 
 ```text
 Read-only validated source export

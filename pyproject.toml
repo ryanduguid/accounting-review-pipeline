@@ -19,9 +19,9 @@ classifiers = [
   "Topic :: Office/Business :: Financial :: Accounting",
 ]
 [project.urls]
-Homepage = "https://github.com/ryanduguid/monthly-close-control-plane"
-Repository = "https://github.com/ryanduguid/monthly-close-control-plane.git"
-Issues = "https://github.com/ryanduguid/monthly-close-control-plane/issues"
+Homepage = "https://github.com/ryanduguid/monthly-close-controls"
+Repository = "https://github.com/ryanduguid/monthly-close-controls.git"
+Issues = "https://github.com/ryanduguid/monthly-close-controls/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -52,4 +52,3 @@ python_version = "3.10"
 packages = ["closecontrol"]
 ignore_missing_imports = true
 pretty = true
-

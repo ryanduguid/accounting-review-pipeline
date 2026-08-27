@@ -1,8 +1,8 @@
-# monthly-close-control-plane
+# Monthly Close Controls
 > High-density context for LLM agents, financial controllers, and accounting automation pipelines.
 
 ## Package Overview
-- **Repository**: https://github.com/ryanduguid/monthly-close-control-plane
+- **Repository**: https://github.com/ryanduguid/monthly-close-controls
 - **Distribution name**: `monthly-close-control-plane`
 - **CLI Commands**: `close-control`. The `openaccountants-au` entry point is
   quarantined: it prints a redirect on stderr and exits 2. Use `close-control`

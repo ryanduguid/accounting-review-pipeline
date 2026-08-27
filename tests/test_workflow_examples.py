@@ -23,7 +23,9 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 WORKFLOW = EXAMPLES / "github-actions-close-check.yml"
 
+REPOSITORY_NAME = "monthly-close-controls"
 PACKAGE_NAME = "monthly-close-control-plane"
+REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
 RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
 
 # The committed example must point at a release that actually exists, so this
@@ -122,7 +124,7 @@ StrictWorkflowLoader.add_constructor(
 def _requirement(project_version: str) -> str:
     return (
         f"{PACKAGE_NAME} @ "
-        "https://github.com/ryanduguid/monthly-close-control-plane/releases/download/"
+        f"{REPOSITORY_URL}/releases/download/"
         f"v{project_version}/monthly_close_control_plane-{project_version}-py3-none-any.whl"
         f"#sha256={RELEASE_ASSET_SHA256}"
     )
@@ -421,6 +423,13 @@ def test_repository_versions_and_yaml_dev_dependency_agree() -> None:
     assert yaml_version == yaml.__version__ == "6.0.3"
 
 
+def test_repository_identity_is_distinct_from_package_identity() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert project["project"]["name"] == PACKAGE_NAME
+    assert project["project"]["urls"]["Repository"] == f"{REPOSITORY_URL}.git"
+
+
 def test_strict_loader_keeps_on_as_text_and_rejects_duplicate_keys() -> None:
     loaded = _load_workflow(_secure_workflow())
     duplicate = _secure_workflow().replace(
@@ -697,7 +706,10 @@ def test_step_permissions_and_duplicate_step_keys_are_rejected() -> None:
     [
         ("/download/v0.1.1/", "/download/v0.1.0/"),
         ("monthly_close_control_plane-0.1.1-py3", "monthly_close_control_plane-0.1.0-py3"),
-        ("github.com/ryanduguid/monthly-close-control-plane", "github.com/example/monthly-close-control-plane"),
+        (
+            REPOSITORY_URL.removeprefix("https://"),
+            f"github.com/example/{REPOSITORY_NAME}",
+        ),
         (RELEASE_ASSET_SHA256, "0" + RELEASE_ASSET_SHA256[1:]),
     ],
 )

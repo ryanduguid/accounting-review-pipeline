@@ -1,6 +1,6 @@
 # Disclaimer
 
-monthly-close-control-plane compares two validated trial-balance exports and
+Monthly Close Controls compares two validated trial-balance exports and
 writes an exception pack for human close review. It is not tax, legal,
 accounting, financial, investment, BAS-agent, registered-tax-agent, or
 assurance advice, and it is not an audit or a review engagement.
