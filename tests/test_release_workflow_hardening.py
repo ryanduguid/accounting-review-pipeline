@@ -7,7 +7,9 @@ import pytest
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
-TAG_PATTERN = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
+TAG_PATTERN = re.compile(
+    r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+)
 
 
 def test_release_backfill_treats_dispatch_tag_as_validated_data() -> None:
@@ -16,7 +18,10 @@ def test_release_backfill_treats_dispatch_tag_as_validated_data() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "TAG: ${{ inputs.tag }}" in workflow
-    assert r'if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then' in workflow
+    assert (
+        r'if [[ ! "$TAG" =~ '
+        r'^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then'
+    ) in workflow
     assert 'gh release download "$TAG"' in workflow
     assert 'gh release download "${{ inputs.tag }}"' not in workflow
     assert '--repo "$GITHUB_REPOSITORY"' in workflow
@@ -34,6 +39,11 @@ def test_release_tag_validator_rejects_shell_shaped_and_malformed_values() -> No
 
     for tag in ("v0.1.4", "v12.0.103"):
         assert TAG_PATTERN.fullmatch(tag) is not None
+
+
+@pytest.mark.parametrize("tag", ("v01.2.3", "v1.02.3", "v1.2.003"))
+def test_release_tag_validator_rejects_leading_zero_numeric_identifiers(tag: str) -> None:
+    assert TAG_PATTERN.fullmatch(tag) is None
 
 
 def test_release_uses_the_hardened_shared_policy_contract() -> None:
