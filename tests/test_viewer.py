@@ -248,8 +248,10 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
     # A falsified digest line plus a duplicate carrying the true digest agrees
     # with the JSON pack as soon as only the last line is kept, wherever the
     # duplicate sits: beside the original, or under a forged second
-    # "## Source evidence" heading at the end of the file. The parser must
-    # refuse the contradiction in both shapes.
+    # "## Source evidence" heading at the end of the file. And a parser scoped
+    # to the first section misses the inverse: an untouched true section with
+    # the contradicting digest planted under a trailing forged heading. All
+    # three shapes must refuse.
     summary = pack_dir / "close-summary.md"
     text = summary.read_text(encoding="utf-8")
     falsified = text.replace(
@@ -273,6 +275,15 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         + f"- `current_trial_balance`: `{'a' * 64}`\n"
     )
     summary.write_text(forged_section, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="two different digests"):
+        render_review_sheet(pack_dir)
+
+    contradicting_tail = (
+        text
+        + "\n## Source evidence\n\n"
+        + f"- `current_trial_balance`: `{'c' * 64}`\n"
+    )
+    summary.write_text(contradicting_tail, encoding="utf-8")
     with pytest.raises(ControlInputError, match="two different digests"):
         render_review_sheet(pack_dir)
 

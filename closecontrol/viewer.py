@@ -46,7 +46,8 @@ _JSON_MEMBERS = frozenset(
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
 
 # The members report._as_json writes inside an acknowledgement, all of them
-# strings the review sheet displays verbatim.
+# strings. The sheet prints initials, reviewed_on and comment verbatim and
+# states its own effect line, so effect is shape-checked here, not displayed.
 _ACKNOWLEDGEMENT_KEYS = ("reviewer_initials", "reviewed_on", "comment", "effect")
 
 _STATUSES = ("PASS", "REVIEW", "BLOCKED")
