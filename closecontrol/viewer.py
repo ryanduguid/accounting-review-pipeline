@@ -45,6 +45,11 @@ _JSON_MEMBERS = frozenset(
 
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
 
+# The members report._as_json writes inside an acknowledgement, all of them
+# strings. The sheet prints initials, reviewed_on and comment verbatim and
+# states its own effect line, so effect is shape-checked here, not displayed.
+_ACKNOWLEDGEMENT_KEYS = ("reviewer_initials", "reviewed_on", "comment", "effect")
+
 _STATUSES = ("PASS", "REVIEW", "BLOCKED")
 
 _CSV_FIELDS = (
@@ -64,7 +69,9 @@ _CSV_FIELDS = (
     "reviewer_action",
 )
 
-# Fields report._csv_safe guards with a leading apostrophe on the CSV side.
+# Fields report._csv_safe guards with a leading apostrophe on the CSV side. It
+# tests the value after lstrip, so the mirror below must strip too or a guarded
+# value carrying leading whitespace looks like a tampered cell.
 _CSV_GUARDED_FIELDS = frozenset(
     {"tenant", "account_id", "account_code", "account_name", "review_group"}
 )
@@ -106,6 +113,8 @@ def _load_artefact_bytes(pack_dir: Path) -> dict[str, bytes]:
             raise ControlInputError(f"{name}: not found in {pack_dir}") from exc
         except IsADirectoryError as exc:
             raise ControlInputError(f"{name}: expected a file, found a directory") from exc
+        except OSError as exc:
+            raise ControlInputError(f"{name}: could not be read from {pack_dir} ({exc})") from exc
     return payloads
 
 
@@ -199,9 +208,42 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: exceptions[{index}].status is not a pack status"
             )
 
+    # An acknowledgement records a human action, so a malformed one must be
+    # named here rather than reach the sheet as a traceback or as text the
+    # renderer never checked.
+    acknowledgement = document["acknowledgement"]
+    if acknowledgement is not None:
+        if not isinstance(acknowledgement, dict):
+            raise ControlInputError(
+                f"{_JSON_NAME}: acknowledgement must be null or an object"
+            )
+        for key in _ACKNOWLEDGEMENT_KEYS:
+            if not isinstance(acknowledgement.get(key), str):
+                raise ControlInputError(
+                    f"{_JSON_NAME}: acknowledgement.{key} must be a string"
+                )
+
 
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:
-    found = dict(_SOURCE_EVIDENCE_LINE.findall(summary_text))
+    """Collect the summary's digest lines, rejecting a contradicted label.
+
+    As with a duplicated JSON member, keeping the last of two disagreeing
+    digest lines for one source hides the disagreement: a falsified line
+    paired with a duplicate carrying the true digest would then agree with
+    the JSON pack and display. The whole document is scanned, so a forged
+    second "## Source evidence" heading opens no unchecked region. A
+    reviewer acknowledgement may legitimately quote a digest line, and an
+    identical repeat states no second claim, so only a differing repeat is
+    a disagreement.
+    """
+    found: dict[str, str] = {}
+    for label, digest in _SOURCE_EVIDENCE_LINE.findall(summary_text):
+        if found.get(label, digest) != digest:
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: source-evidence label {label!r} appears "
+                "with two different digests"
+            )
+        found[label] = digest
     if not found:
         raise ControlInputError(f"{_SUMMARY_NAME}: no source-evidence digest lines found")
     return found
@@ -258,7 +300,7 @@ def _verify_cross_file_agreement(
             actual = row.get(field)
             if actual is None:
                 raise ControlInputError(f"{_CSV_NAME}: row {index + 1} has no {field} column value")
-            if field in _CSV_GUARDED_FIELDS and expected.startswith(("=", "+", "-", "@")):
+            if field in _CSV_GUARDED_FIELDS and expected.lstrip().startswith(("=", "+", "-", "@")):
                 expected = "'" + expected
             if actual != expected:
                 raise ControlInputError(
