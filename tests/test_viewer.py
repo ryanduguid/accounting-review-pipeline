@@ -228,8 +228,9 @@ def test_altered_digest_in_summary_fails_closed(pack_dir: Path) -> None:
 
 
 def test_acknowledgement_comment_quoting_a_digest_line_still_verifies(tmp_path: Path) -> None:
-    # A reviewer comment may legitimately quote a source label and digest; only
-    # the Source evidence section is parsed, so the quote is not a duplicate.
+    # A reviewer comment may legitimately quote a source label and digest; an
+    # identical repeat states no second claim, so the quote is not a
+    # disagreement and must not fail the pack.
     output = tmp_path / "quoting-pack"
     pack = _pack(with_acknowledgement=True)
     digest = "a" * 64
@@ -244,9 +245,11 @@ def test_acknowledgement_comment_quoting_a_digest_line_still_verifies(tmp_path: 
 
 
 def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path) -> None:
-    # A falsified digest line plus a duplicate inside the Source evidence
-    # section carrying the true digest agrees with the JSON pack as soon as
-    # only the last line is kept; the section parser must refuse the repeat.
+    # A falsified digest line plus a duplicate carrying the true digest agrees
+    # with the JSON pack as soon as only the last line is kept, wherever the
+    # duplicate sits: beside the original, or under a forged second
+    # "## Source evidence" heading at the end of the file. The parser must
+    # refuse the contradiction in both shapes.
     summary = pack_dir / "close-summary.md"
     text = summary.read_text(encoding="utf-8")
     falsified = text.replace(
@@ -261,7 +264,16 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         1,
     )
     summary.write_text(tampered, encoding="utf-8")
-    with pytest.raises(ControlInputError, match="appears more than once"):
+    with pytest.raises(ControlInputError, match="two different digests"):
+        render_review_sheet(pack_dir)
+
+    forged_section = (
+        falsified
+        + "\n## Source evidence\n\n"
+        + f"- `current_trial_balance`: `{'a' * 64}`\n"
+    )
+    summary.write_text(forged_section, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="two different digests"):
         render_review_sheet(pack_dir)
 
 

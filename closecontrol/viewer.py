@@ -224,24 +224,23 @@ def _verify_json_schema(document: dict[str, object]) -> None:
 
 
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:
-    """Collect the Source evidence section's digests, rejecting a repeated label.
+    """Collect the summary's digest lines, rejecting a contradicted label.
 
-    As with a duplicated JSON member, keeping the last of two digest lines for
-    one source hides the disagreement: a falsified line paired with a duplicate
-    carrying the true digest would then agree with the JSON pack and display.
-    Only the writer's "## Source evidence" section is read: a reviewer
-    acknowledgement comment further down may legitimately quote a digest line,
-    and free text outside the section is not evidence.
+    As with a duplicated JSON member, keeping the last of two disagreeing
+    digest lines for one source hides the disagreement: a falsified line
+    paired with a duplicate carrying the true digest would then agree with
+    the JSON pack and display. The whole document is scanned, so a forged
+    second "## Source evidence" heading opens no unchecked region. A
+    reviewer acknowledgement may legitimately quote a digest line, and an
+    identical repeat states no second claim, so only a differing repeat is
+    a disagreement.
     """
-    _, header, remainder = summary_text.partition("\n## Source evidence\n")
-    if not header:
-        raise ControlInputError(f"{_SUMMARY_NAME}: no source-evidence digest lines found")
-    section = remainder.split("\n## ", 1)[0]
     found: dict[str, str] = {}
-    for label, digest in _SOURCE_EVIDENCE_LINE.findall(section):
-        if label in found:
+    for label, digest in _SOURCE_EVIDENCE_LINE.findall(summary_text):
+        if found.get(label, digest) != digest:
             raise ControlInputError(
-                f"{_SUMMARY_NAME}: source-evidence label {label!r} appears more than once"
+                f"{_SUMMARY_NAME}: source-evidence label {label!r} appears "
+                "with two different digests"
             )
         found[label] = digest
     if not found:
