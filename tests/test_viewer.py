@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import json
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -19,7 +20,7 @@ import pytest
 from closecontrol.cli import main
 from closecontrol.engine import CloseReviewPack, review_close
 from closecontrol.errors import ControlInputError
-from closecontrol.models import ExceptionItem
+from closecontrol.models import ExceptionItem, ReviewerAcknowledgement
 from closecontrol.report import write_review_pack
 from closecontrol.viewer import PACK_FILE_NAMES, render_review_sheet, verify_pack
 
@@ -42,6 +43,15 @@ def _pack(status: str = "REVIEW", *, with_acknowledgement: bool = False) -> Clos
             reviewer_action="Reconcile the Operating Bank subledger before review sign-off.",
         ),
     )
+    acknowledgement = (
+        ReviewerAcknowledgement(
+            reviewer_initials="RD",
+            reviewed_on=date(2026, 8, 3),
+            comment="Subledger difference discussed with the controller.",
+        )
+        if with_acknowledgement
+        else None
+    )
     return CloseReviewPack(
         status="REVIEW",
         current_report_dates=("2026-07-31",),
@@ -51,7 +61,7 @@ def _pack(status: str = "REVIEW", *, with_acknowledgement: bool = False) -> Clos
         percentage_threshold=Decimal("0.10"),
         reconciliation_tolerance=Decimal("0.01"),
         exceptions=exceptions,
-        acknowledgement=None,
+        acknowledgement=acknowledgement,
     )
 
 
@@ -86,6 +96,16 @@ def test_valid_pack_renders_sheet(pack_dir: Path) -> None:
     assert "No reviewer acknowledgement was supplied" in sheet
 
 
+def test_acknowledged_pack_renders_the_acknowledgement(tmp_path: Path) -> None:
+    output = tmp_path / "acknowledged-pack"
+    write_review_pack(_pack(with_acknowledgement=True), output)
+    sheet, _ = render_review_sheet(output)
+    assert "- Reviewer initials: RD" in sheet
+    assert "- Reviewed on: 2026-08-03" in sheet
+    assert "- Comment: Subledger difference discussed with the controller." in sheet
+    assert "does not change the control status or approve a close" in sheet
+
+
 def test_verify_returns_artefact_digests_matching_files(pack_dir: Path) -> None:
     import hashlib
 
@@ -115,6 +135,13 @@ def test_missing_file_fails_closed(pack_dir: Path) -> None:
 def test_view_on_empty_directory_fails_closed(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["view", "--pack-dir", str(tmp_path)]) == 1
     assert "verification failed" in capsys.readouterr().err
+
+
+def test_pack_dir_pointing_at_a_file_fails_closed(pack_dir: Path) -> None:
+    # A file where the pack directory should be is a reviewer's mistake, not a
+    # NotADirectoryError traceback.
+    with pytest.raises(ControlInputError, match="could not be read"):
+        render_review_sheet(pack_dir / "close-summary.md")
 
 
 # --- tampered JSON ---------------------------------------------------------
@@ -153,6 +180,16 @@ def test_duplicate_json_member_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
+def test_acknowledgement_that_is_not_an_object_fails_closed(tmp_path: Path) -> None:
+    output = tmp_path / "acknowledged-pack"
+    write_review_pack(_pack(with_acknowledgement=True), output)
+    document = _read_json(output)
+    document["acknowledgement"] = "RD reviewed and approved this close."
+    _rewrite_json(output, document)
+    with pytest.raises(ControlInputError, match="acknowledgement must be null or an object"):
+        render_review_sheet(output)
+
+
 def test_invalid_threshold_in_json_fails_closed(pack_dir: Path) -> None:
     document = _read_json(pack_dir)
     document["thresholds"]["absolute_variance"] = "not-a-number"
@@ -187,6 +224,24 @@ def test_altered_digest_in_summary_fails_closed(pack_dir: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ControlInputError, match="source evidence disagrees"):
+        render_review_sheet(pack_dir)
+
+
+def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path) -> None:
+    # A falsified digest line plus a second line elsewhere carrying the true
+    # digest agrees with the JSON pack as soon as only the last line is kept.
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    falsified = text.replace(
+        f"`current_trial_balance`: `{'a' * 64}`",
+        f"`current_trial_balance`: `{'c' * 64}`",
+        1,
+    )
+    assert falsified != text
+    summary.write_text(
+        falsified + f"\n- `current_trial_balance`: `{'a' * 64}`\n", encoding="utf-8"
+    )
+    with pytest.raises(ControlInputError, match="appears more than once"):
         render_review_sheet(pack_dir)
 
 
@@ -235,10 +290,12 @@ def test_flipped_csv_cell_fails_closed(pack_dir: Path) -> None:
 def test_guarded_csv_field_survives_verification(pack_dir: Path) -> None:
     # A tenant whose name starts with '=' is guarded as "'..." on the CSV side
     # by the writer; the verifier must expect that exact guard, not flag it.
+    # The writer guards after lstrip, so leading whitespace is guarded too.
     pack = _pack()
     item = pack.exceptions[0]
     guarded = ExceptionItem(**{**item.__dict__, "tenant": "=cmd|' /C calc'!A0"})
-    repacked = CloseReviewPack(**{**pack.__dict__, "exceptions": (guarded,)})
+    spaced = ExceptionItem(**{**item.__dict__, "tenant": " \t=1+1"})
+    repacked = CloseReviewPack(**{**pack.__dict__, "exceptions": (guarded, spaced)})
     output = pack_dir.parent / "guarded-pack"
     write_review_pack(repacked, output)
     sheet, _ = render_review_sheet(output)
