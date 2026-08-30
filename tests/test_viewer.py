@@ -227,9 +227,26 @@ def test_altered_digest_in_summary_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
+def test_acknowledgement_comment_quoting_a_digest_line_still_verifies(tmp_path: Path) -> None:
+    # A reviewer comment may legitimately quote a source label and digest; only
+    # the Source evidence section is parsed, so the quote is not a duplicate.
+    output = tmp_path / "quoting-pack"
+    pack = _pack(with_acknowledgement=True)
+    digest = "a" * 64
+    quoting = ReviewerAcknowledgement(
+        reviewer_initials="RD",
+        reviewed_on=date(2026, 8, 3),
+        comment=f"Confirmed `current_trial_balance`: `{digest}` against the export.",
+    )
+    write_review_pack(CloseReviewPack(**{**pack.__dict__, "acknowledgement": quoting}), output)
+    sheet, _ = render_review_sheet(output)
+    assert "Confirmed" in sheet
+
+
 def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path) -> None:
-    # A falsified digest line plus a second line elsewhere carrying the true
-    # digest agrees with the JSON pack as soon as only the last line is kept.
+    # A falsified digest line plus a duplicate inside the Source evidence
+    # section carrying the true digest agrees with the JSON pack as soon as
+    # only the last line is kept; the section parser must refuse the repeat.
     summary = pack_dir / "close-summary.md"
     text = summary.read_text(encoding="utf-8")
     falsified = text.replace(
@@ -238,9 +255,12 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         1,
     )
     assert falsified != text
-    summary.write_text(
-        falsified + f"\n- `current_trial_balance`: `{'a' * 64}`\n", encoding="utf-8"
+    tampered = falsified.replace(
+        f"`current_trial_balance`: `{'c' * 64}`",
+        f"`current_trial_balance`: `{'c' * 64}`\n- `current_trial_balance`: `{'a' * 64}`",
+        1,
     )
+    summary.write_text(tampered, encoding="utf-8")
     with pytest.raises(ControlInputError, match="appears more than once"):
         render_review_sheet(pack_dir)
 
