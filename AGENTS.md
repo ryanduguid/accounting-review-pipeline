@@ -33,8 +33,6 @@ The fenced list records the unique single-line commands in
 `.github/workflows/ci.yml`. The multiline package-smoke gate is explained and
 matched semantically below without duplicating its shell body:
 
-The workflow installs uv 0.12.0 with the pinned `astral-sh/setup-uv` action.
-
 ```bash
 uv run --locked --extra dev pytest -q
 uv run --locked --extra dev --python 3.12 python -m build
