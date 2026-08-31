@@ -29,7 +29,9 @@ accounting and human-review boundaries:
 
 ## CI gates
 
-These are the current single-line commands in `.github/workflows/ci.yml`:
+The fenced list records the unique single-line commands in
+`.github/workflows/ci.yml`. The multiline package-smoke gate is explained and
+matched semantically below without duplicating its shell body:
 
 ```bash
 python -m pip install "uv==0.12.0"

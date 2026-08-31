@@ -59,13 +59,66 @@ def _ci_text() -> str:
     return (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
 
+def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
+    lines = workflow.splitlines()
+    gates: list[tuple[bool, str]] = []
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^\s*(?:-\s+)?run:\s*(.*?)\s*$", lines[index])
+        if match is None:
+            index += 1
+            continue
+
+        value = match.group(1)
+        block = re.fullmatch(r"(?P<style>[|>])[+-]?", value)
+        if block is None:
+            gates.append((False, value))
+            index += 1
+            continue
+
+        key_indent = lines[index].index("run:")
+        cursor = index + 1
+        while cursor < len(lines) and not lines[cursor].strip():
+            cursor += 1
+        if cursor == len(lines):
+            gates.append((True, ""))
+            break
+        content_indent = len(lines[cursor]) - len(lines[cursor].lstrip())
+        if content_indent <= key_indent:
+            gates.append((True, ""))
+            index = cursor
+            continue
+
+        body: list[str] = []
+        while cursor < len(lines):
+            line = lines[cursor]
+            indent = len(line) - len(line.lstrip())
+            if line.strip() and indent < content_indent:
+                break
+            if line.strip():
+                body.append(line[content_indent:].rstrip())
+            cursor += 1
+        separator = "\n" if block.group("style") == "|" else " "
+        gates.append((True, separator.join(body)))
+        index = cursor
+    return gates
+
+
 def _scalar_ci_commands() -> list[str]:
-    commands = re.findall(
-        r"^\s+(?:-\s+)?run:\s*(?!\|\s*$)(\S.*)$",
-        _ci_text(),
-        flags=re.MULTILINE,
-    )
+    commands = [
+        command
+        for multiline, command in _workflow_run_gates(_ci_text())
+        if not multiline
+    ]
     return list(dict.fromkeys(commands))
+
+
+def _multiline_ci_gates() -> list[str]:
+    return [
+        command
+        for multiline, command in _workflow_run_gates(_ci_text())
+        if multiline
+    ]
 
 
 def _multiline_ci_commands(step_name: str) -> list[str]:
@@ -192,16 +245,40 @@ def test_agents_links_existing_docs_and_tracks_scalar_ci_commands() -> None:
     )
     assert _fenced_commands(ci) == _scalar_ci_commands()
     assert _normalise(_without_fenced_commands(ci)) == _normalise(
-        "These are the current single-line commands in `.github/workflows/ci.yml`:"
+        """\
+        The fenced list records the unique single-line commands in
+        `.github/workflows/ci.yml`. The multiline package-smoke gate is explained and
+        matched semantically below without duplicating its shell body:
+        """
     )
     for path in ("README.md", "CONTRIBUTING.md", "RELEASING.md"):
         assert (ROOT / path).is_file()
+
+
+def test_workflow_parser_detects_new_non_python_and_multiline_run_gates() -> None:
+    workflow = """\
+steps:
+  - run: pwsh -File scripts/check-policy.ps1
+  - run: |
+      npm ci
+      npm test
+  - run: >-
+      cargo fmt --check &&
+      cargo test
+"""
+
+    assert _workflow_run_gates(workflow) == [
+        (False, "pwsh -File scripts/check-policy.ps1"),
+        (True, "npm ci\nnpm test"),
+        (True, "cargo fmt --check && cargo test"),
+    ]
 
 
 def test_agents_keeps_installed_wheel_smoke_outside_checkout() -> None:
     guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     smoke = _section(guidance, "Package smoke outside the checkout")
 
+    assert len(_multiline_ci_gates()) == 1
     assert _guidance_smoke_contract(_fenced_commands(smoke)) == _ci_smoke_contract()
     assert _normalise(_without_fenced_commands(smoke)) == _normalise(
         """\
