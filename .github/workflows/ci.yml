@@ -25,7 +25,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install the locked toolchain
-        run: python -m pip install "uv==0.12.0"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.0"
+          enable-cache: true
       - run: uv run --locked --extra dev pytest -q
         env:
           UV_PYTHON: ${{ matrix.python }}
@@ -42,7 +45,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install the locked toolchain
-        run: python -m pip install "uv==0.12.0"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.0"
+          enable-cache: true
       - run: uv run --locked --extra dev --python 3.12 python -m build
       - name: Install and smoke-test the built wheel outside the checkout
         run: |
@@ -67,6 +73,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: install the locked toolchain
-        run: python -m pip install "uv==0.12.0"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.0"
+          enable-cache: true
       - run: uv run --locked --extra dev ruff check closecontrol tests
       - run: uv run --locked --extra dev mypy closecontrol
