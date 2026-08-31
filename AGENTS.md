@@ -34,7 +34,6 @@ The fenced list records the unique single-line commands in
 matched semantically below without duplicating its shell body:
 
 ```bash
-python -m pip install "uv==0.12.0"
 uv run --locked --extra dev pytest -q
 uv run --locked --extra dev --python 3.12 python -m build
 uv run --locked --extra dev ruff check closecontrol tests
