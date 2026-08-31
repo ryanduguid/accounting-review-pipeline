@@ -43,21 +43,41 @@ uv run --locked --extra dev mypy closecontrol
 
 ## Package smoke outside the checkout
 
-The CI smoke uses `/tmp`; on Windows use a fresh system temporary directory.
-The fabricated demo deliberately returns `REVIEW` exit `2`, which is the accepted
-smoke result. This proves the installed wheel, not a checkout import, and does not
-publish anything:
+The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artifact
+and smoke directories. Fail immediately if a native build or install command fails,
+install only the one wheel produced by that build, and always restore the caller's
+location and remove both temporary directories. The fabricated demo deliberately
+returns `REVIEW` exit `2`, which is the accepted smoke result. This proves the
+installed wheel, not a checkout import, and does not publish anything:
 
 ```powershell
-uv run --locked --extra dev --python 3.12 python -m build
+$ErrorActionPreference = "Stop"
 $repoRoot = (Get-Location).Path
-$wheelDir = (Resolve-Path dist).Path
+$artifactDir = Join-Path ([System.IO.Path]::GetTempPath()) ("monthly-close-wheel-build-" + [guid]::NewGuid().ToString("N"))
 $smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("monthly-close-wheel-smoke-" + [guid]::NewGuid().ToString("N"))
-python -m venv "$smokeDir\venv"
-& "$smokeDir\venv\Scripts\python.exe" -m pip install --no-index --find-links $wheelDir monthly-close-control-plane
-Push-Location $smokeDir
-& "$smokeDir\venv\Scripts\close-control.exe" review --current "$repoRoot\examples\current_trial_balance.csv" --prior "$repoRoot\examples\prior_trial_balance.csv" --output pack
-if ($LASTEXITCODE -ne 2) { throw "expected REVIEW exit 2, got $LASTEXITCODE" }
-if (-not (Test-Path "pack\close-review-pack.json")) { throw "smoke pack missing" }
-Pop-Location
+try {
+    New-Item -ItemType Directory -Path $artifactDir | Out-Null
+    uv run --locked --extra dev --python 3.12 python -m build --outdir "$artifactDir"
+    if ($LASTEXITCODE -ne 0) { throw "wheel build failed with exit $LASTEXITCODE" }
+    $wheels = @(Get-ChildItem -LiteralPath $artifactDir -Filter "*.whl" -File)
+    if ($wheels.Count -ne 1) { throw "expected exactly one built wheel" }
+    $wheel = $wheels[0].FullName
+    python -m venv "$smokeDir\venv"
+    if ($LASTEXITCODE -ne 0) { throw "venv creation failed with exit $LASTEXITCODE" }
+    & "$smokeDir\venv\Scripts\python.exe" -m pip install --no-index "$wheel"
+    if ($LASTEXITCODE -ne 0) { throw "wheel install failed with exit $LASTEXITCODE" }
+    Push-Location $smokeDir
+    try {
+        & "$smokeDir\venv\Scripts\close-control.exe" review --current "$repoRoot\examples\current_trial_balance.csv" --prior "$repoRoot\examples\prior_trial_balance.csv" --output pack
+        if ($LASTEXITCODE -ne 2) { throw "expected REVIEW exit 2, got $LASTEXITCODE" }
+        if (-not (Test-Path "pack\close-review-pack.json")) { throw "smoke pack missing" }
+    }
+    finally {
+        Pop-Location
+    }
+}
+finally {
+    Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $artifactDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 ```

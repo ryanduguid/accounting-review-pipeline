@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 import re
 
+import yaml
+from yaml.nodes import MappingNode, ScalarNode, SequenceNode
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,7 +51,7 @@ def _section(document: str, heading: str) -> str:
 
 def _fenced_commands(section: str) -> list[str]:
     blocks = re.findall(r"```(?:bash|powershell)\n(.*?)```", section, flags=re.DOTALL)
-    return [line for block in blocks for line in block.splitlines() if line]
+    return [line.strip() for block in blocks for line in block.splitlines() if line.strip()]
 
 
 def _without_fenced_commands(section: str) -> str:
@@ -60,47 +63,23 @@ def _ci_text() -> str:
 
 
 def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
-    lines = workflow.splitlines()
     gates: list[tuple[bool, str]] = []
-    index = 0
-    while index < len(lines):
-        match = re.match(r"^\s*(?:-\s+)?run:\s*(.*?)\s*$", lines[index])
-        if match is None:
-            index += 1
-            continue
 
-        value = match.group(1)
-        block = re.fullmatch(r"(?P<style>[|>])[+-]?", value)
-        if block is None:
-            gates.append((False, value))
-            index += 1
-            continue
+    def visit(node: yaml.Node) -> None:
+        if isinstance(node, MappingNode):
+            for key, value in node.value:
+                if isinstance(key, ScalarNode) and key.value == "run":
+                    assert isinstance(value, ScalarNode), "workflow run value must be scalar"
+                    gates.append((value.style in ("|", ">"), value.value.rstrip("\n")))
+                else:
+                    visit(value)
+        elif isinstance(node, SequenceNode):
+            for value in node.value:
+                visit(value)
 
-        key_indent = lines[index].index("run:")
-        cursor = index + 1
-        while cursor < len(lines) and not lines[cursor].strip():
-            cursor += 1
-        if cursor == len(lines):
-            gates.append((True, ""))
-            break
-        content_indent = len(lines[cursor]) - len(lines[cursor].lstrip())
-        if content_indent <= key_indent:
-            gates.append((True, ""))
-            index = cursor
-            continue
-
-        body: list[str] = []
-        while cursor < len(lines):
-            line = lines[cursor]
-            indent = len(line) - len(line.lstrip())
-            if line.strip() and indent < content_indent:
-                break
-            if line.strip():
-                body.append(line[content_indent:].rstrip())
-            cursor += 1
-        separator = "\n" if block.group("style") == "|" else " "
-        gates.append((True, separator.join(body)))
-        index = cursor
+    root = yaml.compose(workflow)
+    assert root is not None, "workflow must not be empty"
+    visit(root)
     return gates
 
 
@@ -187,33 +166,29 @@ def _ci_smoke_contract() -> tuple[str, ...]:
 
 
 def _guidance_smoke_contract(commands: list[str]) -> tuple[str, ...]:
-    assert len(commands) == 11, "Windows package smoke must contain eleven commands"
-    assert commands[0] in _scalar_ci_commands() and commands[0].endswith("python -m build")
-    assert commands[1] == "$repoRoot = (Get-Location).Path"
-    assert commands[2] == "$wheelDir = (Resolve-Path dist).Path"
-    assert re.fullmatch(
-        r'\$smokeDir = Join-Path \(\[System\.IO\.Path\]::GetTempPath\(\)\) '
-        r'\("monthly-close-wheel-smoke-" \+ \[guid\]::NewGuid\(\)\.ToString\("N"\)\)',
-        commands[3],
-    )
-    assert commands[4] == 'python -m venv "$smokeDir\\venv"'
-    assert commands[5] == (
-        '& "$smokeDir\\venv\\Scripts\\python.exe" -m pip install --no-index '
-        "--find-links $wheelDir monthly-close-control-plane"
-    )
-    assert commands[6] == "Push-Location $smokeDir"
-    assert commands[7] == (
+    script = "\n".join(commands)
+    assert commands[0] == '$ErrorActionPreference = "Stop"'
+    build = next(command for command in _scalar_ci_commands() if command.endswith("python -m build"))
+    assert f'{build} --outdir "$artifactDir"' in commands
+    assert '$wheels = @(Get-ChildItem -LiteralPath $artifactDir -Filter "*.whl" -File)' in commands
+    assert '$wheel = $wheels[0].FullName' in commands
+    assert '& "$smokeDir\\venv\\Scripts\\python.exe" -m pip install --no-index "$wheel"' in commands
+    assert "Resolve-Path dist" not in script and "--find-links" not in script
+    assert (
         '& "$smokeDir\\venv\\Scripts\\close-control.exe" review '
         '--current "$repoRoot\\examples\\current_trial_balance.csv" '
         '--prior "$repoRoot\\examples\\prior_trial_balance.csv" --output pack'
-    )
-    assert commands[8] == (
+    ) in commands
+    assert (
         'if ($LASTEXITCODE -ne 2) { throw "expected REVIEW exit 2, got $LASTEXITCODE" }'
-    )
-    assert commands[9] == (
+    ) in commands
+    assert (
         'if (-not (Test-Path "pack\\close-review-pack.json")) { throw "smoke pack missing" }'
-    )
-    assert commands[10] == "Pop-Location"
+    ) in commands
+    assert script.count("try {") == 2 and script.count("finally {") == 2
+    assert "Pop-Location" in commands
+    assert 'Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue' in commands
+    assert 'Remove-Item -LiteralPath $artifactDir -Recurse -Force -ErrorAction SilentlyContinue' in commands
     return (
         "venv:system-temp",
         "install:monthly-close-control-plane",
@@ -259,10 +234,10 @@ def test_workflow_parser_detects_new_non_python_and_multiline_run_gates() -> Non
     workflow = """\
 steps:
   - run: pwsh -File scripts/check-policy.ps1
-  - run: |
+  - run: |2-
       npm ci
       npm test
-  - run: >-
+  - run: >- # folded command
       cargo fmt --check &&
       cargo test
 """
@@ -274,6 +249,25 @@ steps:
     ]
 
 
+def test_windows_smoke_uses_one_fresh_wheel_and_always_cleans_up() -> None:
+    guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    commands = _fenced_commands(_section(guidance, "Package smoke outside the checkout"))
+    script = "\n".join(commands)
+
+    assert 'python -m build --outdir "$artifactDir"' in script
+    assert '$wheels = @(Get-ChildItem -LiteralPath $artifactDir -Filter "*.whl" -File)' in script
+    assert 'if ($wheels.Count -ne 1) { throw "expected exactly one built wheel" }' in script
+    assert '$wheel = $wheels[0].FullName' in script
+    assert '-m pip install --no-index "$wheel"' in script
+    assert "Resolve-Path dist" not in script
+    assert "--find-links" not in script
+    assert script.count("try {") == 2
+    assert script.count("finally {") == 2
+    assert "Pop-Location" in script
+    assert 'Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue' in script
+    assert 'Remove-Item -LiteralPath $artifactDir -Recurse -Force -ErrorAction SilentlyContinue' in script
+
+
 def test_agents_keeps_installed_wheel_smoke_outside_checkout() -> None:
     guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     smoke = _section(guidance, "Package smoke outside the checkout")
@@ -282,10 +276,12 @@ def test_agents_keeps_installed_wheel_smoke_outside_checkout() -> None:
     assert _guidance_smoke_contract(_fenced_commands(smoke)) == _ci_smoke_contract()
     assert _normalise(_without_fenced_commands(smoke)) == _normalise(
         """\
-        The CI smoke uses `/tmp`; on Windows use a fresh system temporary directory.
-        The fabricated demo deliberately returns `REVIEW` exit `2`, which is the accepted
-        smoke result. This proves the installed wheel, not a checkout import, and does not
-        publish anything:
+        The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artifact
+        and smoke directories. Fail immediately if a native build or install command fails,
+        install only the one wheel produced by that build, and always restore the caller's
+        location and remove both temporary directories. The fabricated demo deliberately
+        returns `REVIEW` exit `2`, which is the accepted smoke result. This proves the
+        installed wheel, not a checkout import, and does not publish anything:
         """
     )
 
