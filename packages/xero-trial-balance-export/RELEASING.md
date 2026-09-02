@@ -1,6 +1,11 @@
 # Releasing
 
-The repository's [GitHub Releases](https://github.com/ryanduguid/xero-trial-balance-export/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
+The Accounting Review Pipeline
+[releases](https://github.com/ryanduguid/accounting-review-pipeline/releases)
+are canonical from `xero-trial-balance-export/v0.1.5` onward. Releases through
+v0.1.4 remain in the
+[source repository](https://github.com/ryanduguid/xero-trial-balance-export/releases).
+A separate changelog is intentionally not maintained.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not create or upload release assets by hand.
 
@@ -32,21 +37,28 @@ Before tagging:
 3. From an operator session authenticated with repository Administration read access, run:
 
     ```bash
-    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/xero-trial-balance-export/immutable-releases --jq .enabled
+    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-review-pipeline/immutable-releases --jq .enabled
     ```
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
-4. Confirm the active `Protect version tags` ruleset matches `refs/tags/v*`, has no bypass actor, allows creation, and blocks tag updates and deletion:
+4. Confirm the active `Protect version tags` ruleset includes
+   `refs/tags/xero-trial-balance-export/v*`, has no bypass actor, allows
+   creation, and blocks tag updates and deletion:
 
     ```bash
-    ruleset_id="$(gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/xero-trial-balance-export/rulesets --jq '.[] | select(.name == "Protect version tags" and .target == "tag" and .enforcement == "active") | .id')"
+    ruleset_id="$(gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-review-pipeline/rulesets --jq '.[] | select(.name == "Protect version tags" and .target == "tag" and .enforcement == "active") | .id')"
     test -n "$ruleset_id"
-    gh api -H "X-GitHub-Api-Version: 2026-03-10" "repos/ryanduguid/xero-trial-balance-export/rulesets/$ruleset_id" --jq '{enforcement, bypass_actors, conditions, rules}'
+    gh api -H "X-GitHub-Api-Version: 2026-03-10" "repos/ryanduguid/accounting-review-pipeline/rulesets/$ruleset_id" --jq '{enforcement, bypass_actors, conditions, rules}'
     ```
 
-    Stop unless the returned configuration has an empty `bypass_actors` array, includes only `refs/tags/v*`, and contains active `update` and `deletion` rules but no `creation` rule. This protection is required because immutable-release protection begins only when a draft is published.
+    Stop unless the returned configuration has an empty `bypass_actors` array,
+    includes the exact namespaced tag prefix, and contains active `update` and
+    `deletion` rules but no `creation` rule. This protection is required because
+    immutable-release protection begins only when a draft is published.
 5. Confirm `VERSION` and the first line of `RELEASE_NOTES.md` match the intended tag.
-6. Fetch current remote `main`, create an annotated tag on that exact commit, for example `git tag -a v0.1.3 -m "v0.1.3"` (or `-s` when signing is configured), then push only that tag.
+6. Fetch current remote `main`, create a namespaced annotated tag on that exact
+   commit, for example `git tag -a xero-trial-balance-export/v0.1.5 -m "xero-trial-balance-export v0.1.5"`
+   (or `-s` when signing is configured), then push only that tag.
 
 The workflow installs the hash-locked dependencies, runs the full offline suite and builds deterministic ZIP and tar.gz source archives. The archive helper fixes the timezone to UTC and Git text conversion to LF so the same tagged tree produces the same archive bytes on Linux and Windows. It adds an SPDX 2.3 SBOM, `SHA256SUMS`, GitHub provenance and an SBOM attestation before publishing the completed draft.
 
@@ -55,73 +67,36 @@ The authenticated release inventory must prove that no release or draft already 
 Verify the downloaded release with:
 
 ```bash
-tag=v0.1.3
-repo=ryanduguid/xero-trial-balance-export
+tag=xero-trial-balance-export/v0.1.5
+repo=ryanduguid/accounting-review-pipeline
+version="${tag#xero-trial-balance-export/v}"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
-gh release download "$tag" -R "$repo" --dir "release-$tag"
-cd "release-$tag"
+release_dir="release-${tag//\//-}"
+gh release download "$tag" -R "$repo" --dir "$release_dir"
+cd "$release_dir"
 sha256sum --check SHA256SUMS
 for file in *; do
   gh attestation verify "$file" -R "$repo" \
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
-    --signer-workflow ryanduguid/release-policy/.github/workflows/release-archive.yml
+    --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
+    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
   gh release verify-asset "$tag" "$file" -R "$repo"
 done
-gh attestation verify xero-trial-balance-export-0.1.3.zip -R "$repo" \
-  --predicate-type https://spdx.dev/Document/v2.3 \
-  --source-digest "$release_commit" \
-  --source-ref "refs/tags/$tag" \
-    --signer-workflow ryanduguid/release-policy/.github/workflows/release-archive.yml
+for archive in "xero-trial-balance-export-$version.tar.gz" \
+               "xero-trial-balance-export-$version.zip"; do
+  gh attestation verify "$archive" -R "$repo" \
+    --predicate-type https://spdx.dev/Document/v2.3 \
+    --source-digest "$release_commit" \
+    --source-ref "refs/tags/$tag" \
+    --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
+    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+done
 gh release view "$tag" -R "$repo" --json isImmutable,isLatest,tagName \
   | jq -e --arg tag "$tag" \
       '.isImmutable == true and .isLatest == true and .tagName == $tag'
 gh release verify "$tag" -R "$repo"
 ```
 
-The block above preserves the reusable signer identity of historical release
-`v0.1.3`. Releases cut after the archive-policy migration are signed by the
-policy's internal publication workflow. For the next release, update `tag` if
-the intended version changes and bind verification to the exact source and
-policy commit:
-
-```bash
-tag=v0.1.5
-repo=ryanduguid/xero-trial-balance-export
-release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
-test -n "$release_commit"
-for file in *; do
-  gh attestation verify "$file" -R "$repo" \
-    --source-digest "$release_commit" \
-    --source-ref "refs/tags/$tag" \
-    --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da
-done
-gh attestation verify "xero-trial-balance-export-${tag#v}.zip" -R "$repo" \
-  --predicate-type https://spdx.dev/Document/v2.3 \
-  --source-digest "$release_commit" \
-  --source-ref "refs/tags/$tag" \
-  --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-  --signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da
-```
-
 If any gate fails, inspect it before touching the draft. Never move, delete or reuse a protected release tag, whether or not publication completed.
-
-## PyPI trusted publishing
-
-The `pypi` job in `release.yml` uploads the sdist and wheel to PyPI after the GitHub release job succeeds. It authenticates with OIDC trusted publishing, so the repository stores no PyPI API token. Until an owner registers the trusted publisher on PyPI, the job fails at the upload step without affecting the GitHub release.
-
-Because [PyPI matches the GitHub repository claim exactly](https://docs.pypi.org/trusted-publishers/troubleshooting/), any pending or existing publisher registered before the rename must be changed to the current repository name.
-
-Register the publisher once at PyPI under the project's Publishing settings (or as a pending publisher before the first upload) with exactly these values:
-
-| Field | Value |
-|---|---|
-| PyPI project name | `xero-trial-balance-export` |
-| Owner | `ryanduguid` |
-| Repository name | `xero-trial-balance-export` |
-| Workflow name | `release.yml` |
-| Environment name | `pypi` |
-
-The repository's `pypi` environment permits only tags matching `v*.*.*`. Keep that restriction aligned with the release workflow and the ruleset that guards `v*` tags.
