@@ -16,7 +16,7 @@ Before tagging:
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
 4. Confirm the versions in `pyproject.toml` and `uv.lock` match the `RELEASE_NOTES.md` heading.
-5. Create an annotated tag on current remote `main`, for example `git tag -a v0.1.3 -m "v0.1.3"` (or `-s` when signing is configured), then push only that tag.
+5. Create the annotated component tag on current remote `main`, for example `git tag -a monthly-close-control-plane/v0.1.3 -m "monthly-close-control-plane/v0.1.3"` (or `-s` when signing is configured), then push only that tag.
 
 The workflow runs the locked tests, builds the wheel and source distribution once, generates an SPDX 2.3 SBOM for the wheel and `SHA256SUMS`, records GitHub provenance and an SBOM attestation, then publishes the completed draft. An existing release is never overwritten.
 
@@ -56,22 +56,23 @@ the next release, update `tag` if the intended version changes and run these
 checks after downloading the assets and checking `SHA256SUMS`:
 
 ```bash
-tag=v0.1.3
+tag=monthly-close-control-plane/v0.1.3
 repo=ryanduguid/accounting-review-pipeline
-wheel="monthly_close_control_plane-${tag#v}-py3-none-any.whl"
+version="${tag#monthly-close-control-plane/v}"
+wheel="monthly_close_control_plane-${version}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
 gh attestation verify "$wheel" -R "$repo" \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 gh attestation verify "$wheel" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 ```
 
 If any gate fails, inspect it before touching the tag or draft. Never move a

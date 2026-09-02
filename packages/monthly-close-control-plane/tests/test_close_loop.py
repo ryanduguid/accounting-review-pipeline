@@ -27,12 +27,12 @@ GATEWAY_SAMPLE_PRIOR = "sample-tb-2026-05-31.csv"
 
 
 def _gateway_sample_inputs() -> Path | None:
-    """Return the sibling (or env-configured) gateway sample inputs directory."""
+    """Return the co-located (or env-configured) gateway sample inputs directory."""
     configured = os.environ.get("ELIZABETH_ANNE_ALEXANDER_ROOT")
     candidates = []
     if configured:
         candidates.append(Path(configured))
-    candidates.append(ROOT.parent / "xero-ledger-review-gate")
+    candidates.append(ROOT.parent / "elizabeth-anne-alexander")
     for root in candidates:
         inputs = root / "elizabeth_anne_alexander" / "samples" / "inputs"
         if (inputs / GATEWAY_SAMPLE_CURRENT).is_file() and (inputs / GATEWAY_SAMPLE_PRIOR).is_file():
@@ -49,12 +49,19 @@ def test_canonical_columns_match_the_ten_column_contract() -> None:
     assert ",".join(CANONICAL_COLUMNS) == schema_header
 
 
+def test_windows_loop_defaults_to_the_maintained_monorepo_package() -> None:
+    script = (ROOT / "examples" / "close-loop.ps1").read_text(encoding="utf-8")
+
+    assert 'Join-Path (Split-Path -Parent $RepoRoot) "elizabeth-anne-alexander"' in script
+    assert '"xero-ledger-review-gate"' not in script
+
+
 def test_gateway_same_fy_samples_review_without_year_reset() -> None:
     # Close-control's own Varrock June/July fixtures straddle 1 July and cannot
     # feed the gateway. This pin uses the gateway's May/June Demo Entity pair.
     inputs = _gateway_sample_inputs()
     if inputs is None:
-        pytest.skip("sibling xero-ledger-review-gate checkout is missing")
+        pytest.skip("co-located Elizabeth Anne Alexander package is missing")
 
     current_path = inputs / GATEWAY_SAMPLE_CURRENT
     prior_path = inputs / GATEWAY_SAMPLE_PRIOR
