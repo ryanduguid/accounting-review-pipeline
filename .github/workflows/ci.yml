@@ -3,31 +3,7 @@ name: tests
 on:
   push:
     branches: [main]
-    paths:
-      - "packages/monthly-close-control-plane/**"
-      - "contracts/xero-trial-balance-v1/**"
-      - ".github/**"
-      - ".editorconfig"
-      - ".gitattributes"
-      - ".gitignore"
-      - "AGENTS.md"
-      - "CONTRIBUTING.md"
-      - "IMPORTS.md"
-      - "README.md"
-      - "SECURITY.md"
   pull_request:
-    paths:
-      - "packages/monthly-close-control-plane/**"
-      - "contracts/xero-trial-balance-v1/**"
-      - ".github/**"
-      - ".editorconfig"
-      - ".gitattributes"
-      - ".gitignore"
-      - "AGENTS.md"
-      - "CONTRIBUTING.md"
-      - "IMPORTS.md"
-      - "README.md"
-      - "SECURITY.md"
 
 permissions:
   contents: read

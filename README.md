@@ -33,11 +33,44 @@ commands. Only the root `.github/workflows/` are active; nested `.github/` direc
 inert records of the imported sources. `IMPORTS.md` records source identities, tree digests
 and import records. Historical releases and tags remain owned by the source repositories.
 
+## Review-pack contract
+
+Review packs are deterministic evidence for a human reviewer; they do not approve a close,
+post a journal, make a payment, lodge a return or lock a period. A readiness pack records
+`overall_status`, `engagement_type`, `period_end`, `findings`, source digests, thresholds and
+the review boundary. A monthly-close pack records `overall_status`, current and prior report
+dates, exceptions, source digests, thresholds and its non-approval acknowledgement. The
+ledger-review boundary writes a model result, reviewer evidence and a digest-bound receipt;
+its receipt records a decision without making that decision for the reviewer.
+
+## Status contract
+
+| Component | Status | Meaning |
+|---|---|---|
+| Review Ready Gate | `READY` | The pack may enter manager review; a human still decides. |
+| Review Ready Gate | `NOT_READY` | Required evidence or preparation is incomplete. |
+| Review Ready Gate | `BLOCKED` | Integrity or safety evidence prevents review. |
+| Monthly Close Control Plane | `PASS` | No configured exception requires review. |
+| Monthly Close Control Plane | `REVIEW` | One or more bounded exceptions need human review. |
+| Monthly Close Control Plane | `BLOCKED` | An integrity or input condition prevents a reliable result. |
+| Elizabeth Anne Alexander | `REVIEW_READY` | Bounded evidence is ready for a human decision. |
+| Elizabeth Anne Alexander | `DECISION_RECORDED` | A supplied human decision has been written to a receipt. |
+
+## Exit-code contract
+
+For `review-ready gate`, exit `0` means `READY`, exit `2` means `NOT_READY` or `BLOCKED`,
+and exit `1` means malformed input or an operational error. For `close-control review` and
+`workbench`, exit `0` means `PASS`, exit `2` means `REVIEW` or `BLOCKED`, and exit `1`
+means malformed input, invalid configuration or an unwritable output. The read-only
+`close-control view` exits `0` only after verified display and `1` on verification failure.
+The exporter and ledger-review commands document their command-specific exits in their
+component READMEs.
+
 ## Releases
 
 Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`6ad53a7b030da22fc299cee704c37ba7550ea1d7`: `monthly-close-control-plane/v*`,
+`3ff09b654a17b9a3b55548e25e6108ee582b00c4`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*` and
 `accounting-excel-toolkit/v*`. One tag publishes exactly one component; the identity gate
 refuses a tag whose prefix does not equal the component directory leaf and its distribution

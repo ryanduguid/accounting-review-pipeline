@@ -9,6 +9,15 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
+LANDED_RELEASE_POLICY = "3ff09b654a17b9a3b55548e25e6108ee582b00c4"
+RELEASE_CALLERS = (
+    "release-accounting-excel-toolkit.yml",
+    "release-elizabeth-anne-alexander.yml",
+    "release-monthly-close-control-plane.yml",
+    "release-review-ready-gate.yml",
+    "release-xero-trial-balance-export.yml",
+)
+PATH_FILTER_KEY = re.compile(r"(?<![\w-])['\"]?(paths(?:-ignore)?)['\"]?\s*:")
 
 EXPECTED_POLICY = """\
 # Agent instructions
@@ -61,6 +70,22 @@ def _without_fenced_commands(section: str) -> str:
 
 def _ci_text() -> str:
     return (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+
+def _trigger_path_filters(workflow: str) -> list[str]:
+    lines = workflow.splitlines()
+    trigger_lines: list[str] = []
+    for index, line in enumerate(lines):
+        match = re.match(r"^on\s*:(.*)$", line)
+        if match is None:
+            continue
+        trigger_lines.append(match.group(1))
+        for following in lines[index + 1 :]:
+            if following and not following[0].isspace() and not following.startswith("#"):
+                break
+            trigger_lines.append(following)
+        break
+    return PATH_FILTER_KEY.findall("\n".join(trigger_lines))
 
 
 def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
@@ -205,6 +230,31 @@ def test_agents_preserves_exact_control_and_human_review_boundaries() -> None:
 
     assert separator
     assert _normalise(policy) == _normalise(EXPECTED_POLICY)
+
+
+def test_anchor_required_checks_are_not_suppressed_by_path_filters() -> None:
+    assert _trigger_path_filters(_ci_text()) == []
+
+    positive_controls = (
+        "on:\n  push:\n    paths: [packages/**]\njobs: {}\n",
+        "on:\n  pull_request:\n    paths-ignore:\n      - docs/**\njobs: {}\n",
+        "on: {push: {paths: [packages/**]}}\njobs: {}\n",
+        "on: {pull_request: {paths-ignore: [docs/**]}}\njobs: {}\n",
+    )
+    for control in positive_controls:
+        assert _trigger_path_filters(control)
+
+
+def test_release_callers_resolve_to_landed_release_policy() -> None:
+    for caller in RELEASE_CALLERS:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / caller).read_text(
+            encoding="utf-8"
+        )
+        pins = re.findall(
+            r"uses:\s+ryanduguid/release-policy/\.github/workflows/[^@\s]+@([0-9a-f]{40})",
+            workflow,
+        )
+        assert pins == [LANDED_RELEASE_POLICY], caller
 
 
 def test_agents_links_existing_docs_and_tracks_scalar_ci_commands() -> None:
