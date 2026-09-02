@@ -20,4 +20,4 @@
 1. **Gate, not review.** A `READY` pack may enter manager review. The tool does not decide that the work is correct.
 2. **Acknowledgement never changes status.** A review note records that a human looked; it cannot flip `NOT_READY` or `BLOCKED` to `READY`.
 3. **No operational authority.** The package does not post journals, lodge returns, or connect to Xero.
-4. **Sibling tools.** Trial-balance variance review remains [Monthly Close Controls](https://github.com/ryanduguid/monthly-close-controls). This gate sits upstream of that pack.
+4. **Sibling tools.** Trial-balance variance review remains [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline). This gate sits upstream of that pack.

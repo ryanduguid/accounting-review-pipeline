@@ -51,7 +51,7 @@ Manager review (judgement, risk, client impact)
 Monthly Close Controls / payday-super-checker / other engines
 ```
 
-[Monthly Close Controls](https://github.com/ryanduguid/monthly-close-controls) answers "what material exceptions exist on these trial balances?". This tool answers a prior question: **"is the pack even allowed onto the review desk?"** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
+[Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) answers "what material exceptions exist on these trial balances?". This tool answers a prior question: **"is the pack even allowed onto the review desk?"** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
 
 It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM, or claim that a file is correct.
 
@@ -211,7 +211,7 @@ Before displaying anything it fails closed on: a missing artefact; JSON that is 
 
 ## Related
 
-- [Monthly Close Controls](https://github.com/ryanduguid/monthly-close-controls) - exception pack once a trial balance is allowed onto the review desk
+- [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) - exception pack once a trial balance is allowed onto the review desk
 - [Xero Ledger Review Gate](https://github.com/ryanduguid/xero-ledger-review-gate) - zero-network variance boundary for AI-assisted TB review
 - [australian-accounting-skills](https://github.com/ryanduguid/australian-accounting-skills) - `workpaper-tie-out` and `bas-preparation` workflows this gate enforces mechanically
 - [DrDebits](https://github.com/ryanduguid/DrDebits) - APES 110 / TPB guardrails for any LLM sitting *after* a READY pack

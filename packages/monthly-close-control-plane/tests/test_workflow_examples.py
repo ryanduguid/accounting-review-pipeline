@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 WORKFLOW = EXAMPLES / "github-actions-close-check.yml"
 
-REPOSITORY_NAME = "monthly-close-controls"
+REPOSITORY_NAME = "accounting-review-pipeline"
 PACKAGE_NAME = "monthly-close-control-plane"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
 RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
