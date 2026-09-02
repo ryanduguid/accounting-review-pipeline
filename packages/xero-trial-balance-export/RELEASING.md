@@ -2,7 +2,7 @@
 
 The Accounting Review Pipeline
 [releases](https://github.com/ryanduguid/accounting-review-pipeline/releases)
-are canonical from `xero-trial-balance-export/v0.1.5` onward. Releases through
+are canonical from `xero-trial-balance-export/v0.1.6` onward. Releases through
 v0.1.4 remain in the
 [source repository](https://github.com/ryanduguid/xero-trial-balance-export/releases).
 A separate changelog is intentionally not maintained.
@@ -14,6 +14,20 @@ Releases are built by GitHub Actions from an annotated tag on the exact `main` c
 The annotated `v0.1.2` tag is protected and permanently records commit `bd4cd417b06fb9dba3d6b36fbedbe544b1e0fec7`. [Release workflow run 31832080223](https://github.com/ryanduguid/xero-trial-balance-export/actions/runs/31832080223) completed the tests, deterministic archives, checksums and both attestation steps, then failed safely at the immediate remote recheck because that GitHub CLI step did not receive `GH_TOKEN`. The publication step was skipped, and the authenticated release inventory confirmed that no v0.1.2 release or draft exists.
 
 Do not move, delete or reuse `v0.1.2`. The no-bypass tag ruleset prevents those operations; `v0.1.3` is the recovery version.
+
+## Protected xero-trial-balance-export/v0.1.5 failed tag
+
+The annotated `xero-trial-balance-export/v0.1.5` tag is protected and records
+tag object `c979f669468c838e5f247ed60cdda728170d46a1`, which peels to commit
+`9b1cc3b8d1403c6779436b96f3f54e3202b9b407`. [Release workflow run
+33648952579](https://github.com/ryanduguid/accounting-review-pipeline/actions/runs/33648952579)
+stopped in the read-only consumer-test job because the clean runner had no
+`requirements-test.txt` and therefore did not install `requests`. It created no
+draft, release or release asset.
+
+Do not move, delete or reuse that tag. Version 0.1.6 adds the complete pinned
+test manifest required by the shared archive policy and is the recovery
+version.
 
 ## Preserved squash-boundary releases
 
@@ -55,9 +69,17 @@ Before tagging:
     includes the exact namespaced tag prefix, and contains active `update` and
     `deletion` rules but no `creation` rule. This protection is required because
     immutable-release protection begins only when a draft is published.
-5. Confirm `VERSION` and the first line of `RELEASE_NOTES.md` match the intended tag.
-6. Fetch current remote `main`, create a namespaced annotated tag on that exact
-   commit, for example `git tag -a xero-trial-balance-export/v0.1.5 -m "xero-trial-balance-export v0.1.5"`
+5. In a clean environment, install `requirements-test.txt` with the release
+   policy's exact dependency constraints and run the full suite:
+
+    ```bash
+    python -m pip install --disable-pip-version-check --no-deps --only-binary :all: --requirement requirements-test.txt
+    python -B -m unittest discover -s tests -v
+    ```
+
+6. Confirm `VERSION` and the first line of `RELEASE_NOTES.md` match the intended tag.
+7. Fetch current remote `main`, create a namespaced annotated tag on that exact
+   commit, for example `git tag -a xero-trial-balance-export/v0.1.6 -m "xero-trial-balance-export v0.1.6"`
    (or `-s` when signing is configured), then push only that tag.
 
 The workflow installs the hash-locked dependencies, runs the full offline suite and builds deterministic ZIP and tar.gz source archives. The archive helper fixes the timezone to UTC and Git text conversion to LF so the same tagged tree produces the same archive bytes on Linux and Windows. It adds an SPDX 2.3 SBOM, `SHA256SUMS`, GitHub provenance and an SBOM attestation before publishing the completed draft.
@@ -67,7 +89,7 @@ The authenticated release inventory must prove that no release or draft already 
 Verify the downloaded release with:
 
 ```bash
-tag=xero-trial-balance-export/v0.1.5
+tag=xero-trial-balance-export/v0.1.6
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#xero-trial-balance-export/v}"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
