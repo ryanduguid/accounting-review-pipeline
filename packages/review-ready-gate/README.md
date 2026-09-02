@@ -14,13 +14,16 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://github.com/ryanduguid/workpaper-review-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/workpaper-review-gate/actions/workflows/ci.yml)
+[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/review-ready-gate.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/review-ready-gate.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
 
 [Browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) · [Reproduce locally](evaluation/manager_review_gate/README.md) · [Quick demo](#quick-demo) · [Release notes](RELEASE_NOTES.md)
 
-The repository is Workpaper Review Gate (`workpaper-review-gate`); the `review-ready-gate` distribution, `review-ready` command and `reviewready` import remain compatibility identifiers.
+The maintained source is under
+[`packages/review-ready-gate`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate)
+in the Accounting Review Pipeline. The `review-ready-gate` distribution,
+`review-ready` command and `reviewready` import remain compatibility identifiers.
 
 A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team, or an AI agent. It tells you whether that folder is allowed to enter manager review.
 

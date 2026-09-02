@@ -9,11 +9,12 @@ else:
 
 from tests.support import EXAMPLES, ROOT
 
+MONOREPO_ROOT = ROOT.parent.parent
 WORKFLOW = EXAMPLES / "github-actions-readiness-check.yml"
-REPOSITORY_NAME = "workpaper-review-gate"
-RELEASE_REPOSITORY_NAME = "accounting-review-pipeline"
+REPOSITORY_NAME = "accounting-review-pipeline"
 PACKAGE_NAME = "review-ready-gate"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
+PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/review-ready-gate"
 HOMEPAGE_URL = "https://duguid.com.au/tools/workpaper-review-gate/"
 
 EXPECTED_PINS = (
@@ -46,14 +47,15 @@ def test_copyable_workflow_is_scheduled_and_fail_closed_on_blocked() -> None:
 def test_release_guidance_is_repo_specific_and_durable() -> None:
     text = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
     normalised = " ".join(text.split())
-    assert f"repos/ryanduguid/{RELEASE_REPOSITORY_NAME}/immutable-releases" in text
+    assert f"repos/ryanduguid/{REPOSITORY_NAME}/immutable-releases" in text
     assert "Workflow filename | `release-review-ready-gate.yml`" in text
     assert "Environment name | `pypi-review-ready-gate`" in text
     assert 'version="${tag#review-ready-gate/v}"' in text
     assert 'wheel="review_ready_gate-${version}-py3-none-any.whl"' in text
     assert "intend to publish." in text
-    assert "currently uses version `0.1.2`" in normalised
-    assert "first replacement release will use version `0.1.3`" in normalised
+    assert "review-ready-gate/v0.1.3" in normalised
+    assert "currently uses version" not in normalised
+    assert "first replacement release" not in normalised
     assert "published `v0.1.1` recovery" in normalised
     assert "intended to be" not in text
 
@@ -70,11 +72,16 @@ def test_release_guidance_is_repo_specific_and_durable() -> None:
 
 def test_current_release_metadata_uses_immutable_documentation() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert metadata["project"]["version"] == "0.1.2"
+    root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert metadata["project"]["version"] == "0.1.3"
     assert metadata["project"]["urls"]["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/v0.1.2/"
-        "evaluation/manager_review_gate"
+        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.3/"
+        "packages/review-ready-gate/evaluation/manager_review_gate"
     )
+    assert (
+        "| Workpaper Review Gate | `packages/review-ready-gate/` | distribution "
+        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.3 |"
+    ) in root_readme
 
 
 def test_release_notes_heading_matches_release_policy_tag() -> None:
@@ -94,11 +101,12 @@ def test_readme_development_uses_the_locked_uv_entrypoint() -> None:
 def test_citation_declares_the_current_release_identity() -> None:
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
     assert 'title: "Workpaper Review Gate"' in citation
-    assert "version: 0.1.2" in citation
+    assert "version: 0.1.3" in citation
     assert 'family-names: "Duguid"' in citation
     assert 'given-names: "Ryan"' in citation
     assert "license: MIT" in citation
-    assert f'repository-code: "{REPOSITORY_URL}"' in citation
+    assert f'repository-code: "{PACKAGE_URL}"' in citation
+    assert "date-released: 2026-09-03" in citation
 
 
 def test_project_identity_preserves_package_and_command_compatibility() -> None:
@@ -108,6 +116,19 @@ def test_project_identity_preserves_package_and_command_compatibility() -> None:
     assert metadata["project"]["scripts"]["review-ready"] == "reviewready.cli:main"
     assert metadata["project"]["urls"]["Homepage"] == HOMEPAGE_URL
     assert metadata["project"]["urls"]["Repository"] == f"{REPOSITORY_URL}.git"
+    assert metadata["project"]["urls"]["Issues"] == f"{REPOSITORY_URL}/issues"
+
+
+def test_public_source_links_use_the_canonical_monorepo() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    llms = (ROOT / "llms.txt").read_text(encoding="utf-8")
+    schema = (ROOT / "schemas" / "self_review.json").read_text(encoding="utf-8")
+
+    assert f"{REPOSITORY_URL}/actions/workflows/review-ready-gate.yml" in readme
+    assert PACKAGE_URL in readme
+    assert f"**Repository**: {PACKAGE_URL}" in llms
+    assert f'"$id": "{REPOSITORY_URL}/blob/main/' in schema
+    assert "ryanduguid/workpaper-review-gate/actions" not in readme
 
 
 def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
