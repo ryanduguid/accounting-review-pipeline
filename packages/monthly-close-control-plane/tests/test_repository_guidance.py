@@ -9,6 +9,14 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
+LANDED_RELEASE_POLICY = "3ff09b654a17b9a3b55548e25e6108ee582b00c4"
+RELEASE_CALLERS = (
+    "release-accounting-excel-toolkit.yml",
+    "release-elizabeth-anne-alexander.yml",
+    "release-monthly-close-control-plane.yml",
+    "release-review-ready-gate.yml",
+    "release-xero-trial-balance-export.yml",
+)
 
 EXPECTED_POLICY = """\
 # Agent instructions
@@ -61,6 +69,32 @@ def _without_fenced_commands(section: str) -> str:
 
 def _ci_text() -> str:
     return (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+
+def _trigger_path_filters(workflow: str) -> list[str]:
+    root = yaml.compose(workflow)
+    assert isinstance(root, MappingNode), "workflow root must be a mapping"
+    triggers = [
+        value
+        for key, value in root.value
+        if isinstance(key, ScalarNode) and key.value == "on"
+    ]
+    assert len(triggers) == 1, "workflow must have exactly one top-level on trigger"
+
+    filters: list[str] = []
+
+    def visit(node: yaml.Node) -> None:
+        if isinstance(node, MappingNode):
+            for key, value in node.value:
+                if isinstance(key, ScalarNode) and key.value in {"paths", "paths-ignore"}:
+                    filters.append(key.value)
+                visit(value)
+        elif isinstance(node, SequenceNode):
+            for value in node.value:
+                visit(value)
+
+    visit(triggers[0])
+    return filters
 
 
 def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
@@ -205,6 +239,64 @@ def test_agents_preserves_exact_control_and_human_review_boundaries() -> None:
 
     assert separator
     assert _normalise(policy) == _normalise(EXPECTED_POLICY)
+
+
+def test_anchor_required_checks_are_not_suppressed_by_path_filters() -> None:
+    assert _trigger_path_filters(_ci_text()) == []
+
+    positive_controls = (
+        "on:\n  push:\n    paths: [packages/**]\njobs: {}\n",
+        "on:\n  pull_request:\n    paths-ignore:\n      - docs/**\njobs: {}\n",
+        "on: {push: {paths: [packages/**]}}\njobs: {}\n",
+        "on: {pull_request: {paths-ignore: [docs/**]}}\njobs: {}\n",
+        "'on':\n  push:\n    paths: [packages/**]\njobs: {}\n",
+        '"on": {pull_request: {paths-ignore: [docs/**]}}\njobs: {}\n',
+    )
+    for control in positive_controls:
+        assert _trigger_path_filters(control)
+
+
+def test_root_readme_defines_distinct_output_contracts() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    review_pack = _section(readme, "Review-pack contract")
+    status = _section(readme, "Status contract")
+    normalised_status = _normalise(status)
+
+    assert "JSON file is the machine-readable source of truth" in review_pack
+    assert "`readiness-pack.json`, `readiness-summary.md` and `findings.csv`" in review_pack
+    assert "`close-review-pack.json`, `close-summary.md` and `exceptions.csv`" in review_pack
+    assert "`review-ready gate`" in review_pack
+    assert "`close-control review`" in review_pack
+    for field in (
+        "`overall_status`",
+        "`engagement_type`",
+        "`period_end`",
+        "`findings`",
+        "`source_sha256`",
+        "`thresholds`",
+        "`review_boundary`",
+        "`current_report_dates` / `prior_report_dates`",
+        "`exceptions`",
+        "`acknowledgement`",
+    ):
+        assert field in review_pack
+
+    assert "pack state means the Monthly Close `PackState`" in normalised_status
+    assert "exactly `PASS`, `REVIEW` or `BLOCKED`" in normalised_status
+    assert "separate `ReadinessStatus`" in normalised_status
+    assert "`PARTIAL_DECISION_RECORDED`" in normalised_status
+
+
+def test_release_callers_resolve_to_landed_release_policy() -> None:
+    for caller in RELEASE_CALLERS:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / caller).read_text(
+            encoding="utf-8"
+        )
+        pins = re.findall(
+            r"uses:\s+ryanduguid/release-policy/\.github/workflows/[^@\s]+@([0-9a-f]{40})",
+            workflow,
+        )
+        assert pins == [LANDED_RELEASE_POLICY], caller
 
 
 def test_agents_links_existing_docs_and_tracks_scalar_ci_commands() -> None:

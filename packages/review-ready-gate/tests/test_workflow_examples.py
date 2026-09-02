@@ -11,6 +11,7 @@ from tests.support import EXAMPLES, ROOT
 
 WORKFLOW = EXAMPLES / "github-actions-readiness-check.yml"
 REPOSITORY_NAME = "workpaper-review-gate"
+RELEASE_REPOSITORY_NAME = "monthly-close-controls"
 PACKAGE_NAME = "review-ready-gate"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
 HOMEPAGE_URL = "https://duguid.com.au/tools/workpaper-review-gate/"
@@ -45,12 +46,14 @@ def test_copyable_workflow_is_scheduled_and_fail_closed_on_blocked() -> None:
 def test_release_guidance_is_repo_specific_and_durable() -> None:
     text = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
     normalised = " ".join(text.split())
-    assert f"repos/ryanduguid/{REPOSITORY_NAME}/immutable-releases" in text
-    assert "Workflow filename | `release.yml`" in text
-    assert "Environment name | `pypi`" in text
-    assert 'wheel="review_ready_gate-${tag#v}-py3-none-any.whl"' in text
+    assert f"repos/ryanduguid/{RELEASE_REPOSITORY_NAME}/immutable-releases" in text
+    assert "Workflow filename | `release-review-ready-gate.yml`" in text
+    assert "Environment name | `pypi-review-ready-gate`" in text
+    assert 'version="${tag#review-ready-gate/v}"' in text
+    assert 'wheel="review_ready_gate-${version}-py3-none-any.whl"' in text
     assert "intend to publish." in text
-    assert "This release uses version `0.1.2`." in normalised
+    assert "currently uses version `0.1.2`" in normalised
+    assert "first replacement release will use version `0.1.3`" in normalised
     assert "published `v0.1.1` recovery" in normalised
     assert "intended to be" not in text
 
@@ -58,7 +61,8 @@ def test_release_guidance_is_repo_specific_and_durable() -> None:
         (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split()
     )
     assert (
-        "For a first PyPI publication, complete the one-time `pypi` environment "
+        "For the first monorepo publication, complete the one-time "
+        "`pypi-review-ready-gate` environment "
         "and trusted-publisher setup in that file before tagging."
     ) in contributing
     assert "no published PyPI project yet" not in contributing
@@ -133,7 +137,7 @@ def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
             "ryanduguid/release-policy/.github/workflows/release-python.yml"
         ) == 1
         assert command.count(
-            "--signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da"
+            "--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4"
         ) == 1
 
     predicate_counts = [
