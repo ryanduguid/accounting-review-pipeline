@@ -1,0 +1,35 @@
+table CalcGroup_Consolidation
+	lineageTag: a1b2c3d4-cgcn-0011-8899-aabbccddeeff
+
+	calculationGroup
+		precedence: 20
+
+		calculationItem 'Gross Group Total' = SELECTEDMEASURE()
+			ordinal: 0
+
+		calculationItem 'Intercompany Eliminations' =
+				CALCULATE(
+					SELECTEDMEASURE(),
+					Fact_GeneralLedger[IsIntercompany] = TRUE()
+				)
+			ordinal: 1
+
+		calculationItem 'Consolidated Group Net' =
+				CALCULATE(
+					SELECTEDMEASURE(),
+					Fact_GeneralLedger[IsIntercompany] = FALSE()
+				)
+			ordinal: 2
+
+	column 'Consolidation View'
+		dataType: string
+		lineageTag: cgcn-col-0001
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		lineageTag: cgcn-col-0002
+		summarizeBy: none
+		sourceColumn: Ordinal

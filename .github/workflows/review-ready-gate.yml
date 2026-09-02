@@ -1,0 +1,73 @@
+name: Workpaper Review Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/review-ready-gate/**"
+      - "contracts/xero-trial-balance-v1/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
+  pull_request:
+    paths:
+      - "packages/review-ready-gate/**"
+      - "contracts/xero-trial-balance-v1/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/review-ready-gate
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - run: uv lock --check
+      - run: uv run --locked --extra dev pytest -q
+      - run: uv run --locked --extra dev ruff check reviewready tests
+      - run: uv run --locked --extra dev mypy reviewready
+      - run: uv run --locked --extra dev --python 3.12 python -m build
+      - name: Install and smoke-test the built wheel outside the checkout
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --no-index --find-links dist review-ready-gate
+          cd /tmp
+          /tmp/venv/bin/review-ready gate \
+            --profile bas \
+            --pack "$GITHUB_WORKSPACE/packages/review-ready-gate/examples/bas-ready" \
+            --output pack
+          test -f pack/readiness-pack.json
+          /tmp/venv/bin/review-ready gate \
+            --profile bas \
+            --pack "$GITHUB_WORKSPACE/packages/review-ready-gate/examples/bas-not-ready" \
+            --output pack-nr && nr=0 || nr=$?
+          test "$nr" = "2"
+          /tmp/venv/bin/review-ready gate \
+            --profile bas \
+            --pack "$GITHUB_WORKSPACE/packages/review-ready-gate/examples/bas-blocked" \
+            --output pack-bl && bl=0 || bl=$?
+          test "$bl" = "2"
+          python -c "import json; assert json.load(open('pack-bl/readiness-pack.json'))['overall_status']=='BLOCKED'"

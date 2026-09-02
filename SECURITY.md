@@ -1,22 +1,15 @@
 # Security policy
 
-## Supported versions
+Report a suspected vulnerability through this repository's private vulnerability-reporting
+feature. Do not open a public issue containing exploit details, credentials or client data.
+Include the component directory, the gate or refusal you believe is bypassed and a fabricated
+reproduction.
 
-Security fixes are applied to the latest version on the default branch.
+Only `packages/xero-trial-balance-export/` may contain OAuth, Xero API, HTTP-client, token or
+Xero-credential handling, and only its own release path may ever reference publishing
+secrets. Every review package, the Excel adapter and the Power BI application consume
+fabricated local files and must remain offline. Root review workflows run with
+`contents: read` and receive no Xero credentials.
 
-## Reporting a vulnerability
-
-Please use this repository's private vulnerability-reporting feature. Do not
-open a public issue for a suspected security vulnerability. Include a clear
-description, reproduction steps, impact, and any suggested mitigation.
-
-We will acknowledge a valid report within seven days and will coordinate a fix
-and disclosure timeline with the reporter.
-
-## Data boundary
-
-This repository ships fabricated fixtures only. It deliberately has no Xero credential, API client, MCP server, LLM client, journal-posting path, payment path, BAS/lodgment path, email path, or period-locking path.
-
-Do not commit client trial balances, subledgers, workpapers, credentials, `.env` files, or generated review packs. The `examples/` folder (fabricated fixtures) and the `schemas/` folder (header-only schema references) are the only places CSVs belong in this source tree. Use a separate access-controlled working location for real data.
-
-The optional review note records a human acknowledgement only. It does not approve a close or replace professional judgement.
+Do not commit client trial balances, ledgers, workpapers, generated review artefacts,
+credentials, `.env` files, tokens, private keys or live-system screenshots.

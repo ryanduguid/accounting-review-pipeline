@@ -1,0 +1,220 @@
+table Fact_GeneralLedger
+	lineageTag: a1b2c3d4-gl-0006-8899-aabbccddeeff
+
+	/// Total debit entries posted to the general ledger.
+	measure 'Total Debits' = SUM(Fact_GeneralLedger[Debit])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0001
+
+	/// Total credit entries posted to the general ledger.
+	measure 'Total Credits' = SUM(Fact_GeneralLedger[Credit])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0002
+
+	/// Net transactional debit minus credit movement.
+	measure 'GL Net Movement' = SUM(Fact_GeneralLedger[Amount])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0003
+
+	/// Operating revenue recognized in the period.
+	measure Revenue =
+			CALCULATE(
+				SUM(Fact_GeneralLedger[Credit]) - SUM(Fact_GeneralLedger[Debit]),
+				Dim_Account[Class] = "Revenue"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0004
+
+	/// Direct cost of goods and services sold.
+	measure COGS =
+			CALCULATE(
+				SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
+				Dim_Account[SubClass] = "Cost of Sales"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0005
+
+	/// Gross trading profit (Revenue less COGS).
+	measure 'Gross Profit' = [Revenue] - [COGS]
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0006
+
+	/// Gross profit as a percentage of total revenue.
+	measure 'Gross Profit Margin %' = DIVIDE([Gross Profit], [Revenue], 0)
+		formatString: 0.0%
+		lineageTag: gl-meas-0007
+
+	/// Total operating expenses including payroll, occupancy, and administration.
+	measure 'Operating Expenses' =
+			CALCULATE(
+				SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
+				Dim_Account[SubClass] = "Operating Expenses"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0008
+
+	/// Earnings before interest, tax, depreciation, and amortisation. Depreciation (890) and
+	/// finance interest (895) sit inside Operating Expenses, so both are added back here.
+	measure EBITDA =
+			[Net Profit Before Tax]
+			+ CALCULATE(
+				SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
+				Dim_Account[AccountCode] IN {"890", "895"}
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0009
+
+	/// Net operating income before statutory corporate income tax.
+	measure 'Net Profit Before Tax' = [Revenue] - [COGS] - [Operating Expenses]
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0010
+
+	/// Net profit before tax as a percentage of revenue.
+	measure 'Net Margin %' = DIVIDE([Net Profit Before Tax], [Revenue], 0)
+		formatString: 0.0%
+		lineageTag: gl-meas-0011
+
+	/// Total cumulative balance sheet assets, accumulated to the last date in context.
+	measure 'Total Assets' =
+			CALCULATE(
+				SUM(Fact_GeneralLedger[Amount]),
+				Dim_Account[Class] = "Asset",
+				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0012
+
+	/// Total cumulative balance sheet liabilities, accumulated to the last date in context.
+	measure 'Total Liabilities' =
+			CALCULATE(
+				-1 * SUM(Fact_GeneralLedger[Amount]),
+				Dim_Account[Class] = "Liability",
+				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0013
+
+	/// Net balance sheet asset position (Assets less Liabilities).
+	measure 'Net Assets' = [Total Assets] - [Total Liabilities]
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0014
+
+	/// Contributed capital and prior-year retained earnings, accumulated to the last date in context.
+	measure 'Total Equity' =
+			CALCULATE(
+				-1 * SUM(Fact_GeneralLedger[Amount]),
+				Dim_Account[Class] = "Equity",
+				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0015
+
+	/// Diagnostic check asserting Assets = Liabilities + Equity + earnings to date (should equal $0.00).
+	/// Earnings are never closed to account 510, so equity alone omits them.
+	measure 'Balance Sheet Check' =
+			[Total Assets]
+			- (
+				[Total Liabilities]
+				+ [Total Equity]
+				+ CALCULATE(
+					[Net Profit Before Tax],
+					DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
+				)
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0016
+
+	/// Current Assets less Current Liabilities, both accumulated to the last date in context.
+	measure 'Working Capital' =
+			CALCULATE(
+				SUM(Fact_GeneralLedger[Amount]),
+				Dim_Account[SubClass] = "Current Assets",
+				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
+			)
+			- CALCULATE(
+				-1 * SUM(Fact_GeneralLedger[Amount]),
+				Dim_Account[SubClass] = "Current Liabilities",
+				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: gl-meas-0017
+
+	column JournalID
+		dataType: string
+		lineageTag: gl-col-0001
+		summarizeBy: none
+		sourceColumn: JournalID
+
+	column LineNumber
+		dataType: int64
+		formatString: 0
+		lineageTag: gl-col-0002
+		summarizeBy: none
+		sourceColumn: LineNumber
+
+	column PostingDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: gl-col-0003
+		summarizeBy: none
+		sourceColumn: PostingDate
+
+	column EntityID
+		dataType: string
+		lineageTag: gl-col-0004
+		summarizeBy: none
+		sourceColumn: EntityID
+
+	column AccountCode
+		dataType: string
+		lineageTag: gl-col-0005
+		summarizeBy: none
+		sourceColumn: AccountCode
+
+	column Debit
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: gl-col-0006
+		summarizeBy: sum
+		sourceColumn: Debit
+
+	column Credit
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: gl-col-0007
+		summarizeBy: sum
+		sourceColumn: Credit
+
+	column Amount
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: gl-col-0008
+		summarizeBy: sum
+		sourceColumn: Amount
+
+	column Description
+		dataType: string
+		lineageTag: gl-col-0009
+		summarizeBy: none
+		sourceColumn: Description
+
+	column IntercompanyEntityID
+		dataType: string
+		lineageTag: gl-col-0010
+		summarizeBy: none
+		sourceColumn: IntercompanyEntityID
+
+	column IsIntercompany
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: gl-col-0011
+		summarizeBy: none
+		sourceColumn: IsIntercompany
+
+	partition Fact_GeneralLedger = m
+		mode: import
+		source =
+			let
+				Source = Fact_GeneralLedger
+			in
+				Source

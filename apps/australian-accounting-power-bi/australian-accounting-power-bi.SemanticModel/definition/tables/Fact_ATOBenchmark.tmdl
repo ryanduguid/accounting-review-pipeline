@@ -1,0 +1,196 @@
+table Fact_ATOBenchmark
+	lineageTag: a1b2c3d4-ato-0009-8899-aabbccddeeff
+
+	/// Gross profit margin averaged across the published turnover bands for the ANZSIC industries
+	/// of the entities in context. Dim_Entity filters one way into Dim_ANZSIC, so the industry
+	/// selection is carried across to this table with TREATAS.
+	measure 'ATO Benchmark Gross Profit %' =
+			CALCULATE(
+				AVERAGE(Fact_ATOBenchmark[GrossProfitPct_Avg]),
+				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
+			)
+			/ 100
+		formatString: 0.0%
+		lineageTag: ato-meas-0001
+
+	/// Difference between client gross margin and the ATO industry benchmark average.
+	measure 'Gross Profit Variance to Benchmark %' = [Gross Profit Margin %] - [ATO Benchmark Gross Profit %]
+		formatString: +0.0%;-0.0%;0.0%
+		lineageTag: ato-meas-0002
+
+	/// Actual operating expenses divided by total trading revenue.
+	measure 'Actual Total Expense Ratio %' = DIVIDE([Operating Expenses], [Revenue], 0)
+		formatString: 0.0%
+		lineageTag: ato-meas-0003
+
+	/// Operating expense ratio averaged across the published turnover bands for the ANZSIC
+	/// industries of the entities in context.
+	measure 'ATO Benchmark Expense Ratio %' =
+			CALCULATE(
+				AVERAGE(Fact_ATOBenchmark[TotalExpensesPct_Avg]),
+				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
+			)
+			/ 100
+		formatString: 0.0%
+		lineageTag: ato-meas-0004
+
+	/// Rent and property occupancy expense as a proportion of total revenue.
+	measure 'Actual Rent to Revenue %' =
+			DIVIDE(
+				CALCULATE(
+					SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
+					Dim_Account[AccountCode] = "820"
+				),
+				[Revenue],
+				0
+			)
+		formatString: 0.0%
+		lineageTag: ato-meas-0005
+
+	/// Rent ratio averaged across the published turnover bands for the ANZSIC industries of the
+	/// entities in context.
+	measure 'ATO Benchmark Rent %' =
+			CALCULATE(
+				AVERAGE(Fact_ATOBenchmark[RentPct_Avg]),
+				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
+			)
+			/ 100
+		formatString: 0.0%
+		lineageTag: ato-meas-0006
+
+	/// Motor vehicle running costs as a proportion of total revenue.
+	measure 'Actual Motor Vehicle %' =
+			DIVIDE(
+				CALCULATE(
+					SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
+					Dim_Account[AccountCode] = "810"
+				),
+				[Revenue],
+				0
+			)
+		formatString: 0.0%
+		lineageTag: ato-meas-0007
+
+	/// Motor vehicle expense ratio averaged across the published turnover bands for the ANZSIC
+	/// industries of the entities in context.
+	measure 'ATO Benchmark Motor Vehicle %' =
+			CALCULATE(
+				AVERAGE(Fact_ATOBenchmark[MotorVehiclePct_Avg]),
+				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
+			)
+			/ 100
+		formatString: 0.0%
+		lineageTag: ato-meas-0008
+
+	/// Salaries and superannuation expense divided by total revenue.
+	measure 'Actual Labour Ratio %' =
+			DIVIDE(
+				CALCULATE(
+					SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
+					Dim_Account[AccountCode] IN {"800", "805"}
+				),
+				[Revenue],
+				0
+			)
+		formatString: 0.0%
+		lineageTag: ato-meas-0009
+
+	/// Labour cost ratio averaged across the published turnover bands for the ANZSIC industries
+	/// of the entities in context.
+	measure 'ATO Benchmark Labour %' =
+			CALCULATE(
+				AVERAGE(Fact_ATOBenchmark[LabourPct_Avg]),
+				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
+			)
+			/ 100
+		formatString: 0.0%
+		lineageTag: ato-meas-0010
+
+	/// Automated risk rating derived from the variance between actual ratios and the ATO benchmark bands.
+	measure 'ATO Compliance Risk Profile' =
+			VAR GP_Diff = ABS([Gross Profit Margin %] - [ATO Benchmark Gross Profit %])
+			VAR Exp_Diff = ABS([Actual Total Expense Ratio %] - [ATO Benchmark Expense Ratio %])
+			RETURN
+				IF(
+					ISBLANK([Revenue]) || [Revenue] == 0,
+					"No Data",
+					IF(
+						GP_Diff > 0.08 || Exp_Diff > 0.08,
+						"High Audit Risk (Red Zone)",
+						IF(
+							GP_Diff > 0.04 || Exp_Diff > 0.04,
+							"Moderate Variance (Amber Zone)",
+							"Within Benchmark Range (Green Zone)"
+						)
+					)
+				)
+		lineageTag: ato-meas-0011
+
+	column ANZSIC_Code
+		dataType: string
+		lineageTag: ato-col-0001
+		summarizeBy: none
+		sourceColumn: ANZSIC_Code
+
+	column TurnoverRange
+		dataType: string
+		lineageTag: ato-col-0002
+		summarizeBy: none
+		sourceColumn: TurnoverRange
+
+	column GrossProfitPct_Low
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0003
+		summarizeBy: average
+		sourceColumn: GrossProfitPct_Low
+
+	column GrossProfitPct_Avg
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0004
+		summarizeBy: average
+		sourceColumn: GrossProfitPct_Avg
+
+	column GrossProfitPct_High
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0005
+		summarizeBy: average
+		sourceColumn: GrossProfitPct_High
+
+	column TotalExpensesPct_Avg
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0006
+		summarizeBy: average
+		sourceColumn: TotalExpensesPct_Avg
+
+	column RentPct_Avg
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0007
+		summarizeBy: average
+		sourceColumn: RentPct_Avg
+
+	column MotorVehiclePct_Avg
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0008
+		summarizeBy: average
+		sourceColumn: MotorVehiclePct_Avg
+
+	column LabourPct_Avg
+		dataType: double
+		formatString: 0.0
+		lineageTag: ato-col-0009
+		summarizeBy: average
+		sourceColumn: LabourPct_Avg
+
+	partition Fact_ATOBenchmark = m
+		mode: import
+		source =
+			let
+				Source = Fact_ATOBenchmark
+			in
+				Source
