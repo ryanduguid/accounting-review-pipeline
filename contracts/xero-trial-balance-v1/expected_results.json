@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "corpus_id": "xero-tb-csv.v1",
-  "owner_repository": "https://github.com/ryanduguid/xero-trial-balance-export",
-  "product_release": "v0.1.4",
+  "owner_repository": "https://github.com/ryanduguid/accounting-review-pipeline",
+  "product_release": "v0.1.5",
   "fixture_version": "1",
   "source_reviewed": "2026-08-26",
   "canonical_columns": [
