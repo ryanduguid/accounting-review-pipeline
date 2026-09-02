@@ -1,6 +1,6 @@
 # Contributing
 
-This repository demonstrates a fixed-policy boundary for AI-assisted trial-balance review. Treat the refusals below as the part worth protecting; they are what the design exists to show.
+This component demonstrates a fixed-policy boundary for AI-assisted trial-balance review. Treat the refusals below as the part worth protecting; they are what the design exists to show.
 
 ## What contributions must not add
 

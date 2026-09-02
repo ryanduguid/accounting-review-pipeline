@@ -6,6 +6,6 @@ Do not place real Xero exports, client data, tokens, `.env` files, or workpapers
 
 ## Reporting a vulnerability
 
-Report a suspected vulnerability privately through [GitHub's advisory form](https://github.com/ryanduguid/xero-ledger-review-gate/security/advisories/new), or by email to ryan@duguid.com.au. Do not open a public issue for one.
+Report a suspected vulnerability privately through [GitHub's advisory form](https://github.com/ryanduguid/accounting-review-pipeline/security/advisories/new), or by email to ryan@duguid.com.au. Do not open a public issue for one.
 
 Include the gate or refusal you believe is bypassed and the artefacts that reproduce it. Fabricated data only, as everywhere else in this repository.

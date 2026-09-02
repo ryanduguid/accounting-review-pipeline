@@ -9,6 +9,11 @@ from elizabeth_anne_alexander import __version__
 from elizabeth_anne_alexander.cli import main as cli_main
 
 REPO = Path(__file__).resolve().parents[1]
+MONOREPO = REPO.parents[1]
+REPOSITORY_URL = "https://github.com/ryanduguid/accounting-review-pipeline"
+PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/elizabeth-anne-alexander"
+RELEASE_WORKFLOW = MONOREPO / ".github" / "workflows" / "release-elizabeth-anne-alexander.yml"
+CI_WORKFLOW = MONOREPO / ".github" / "workflows" / "elizabeth-anne-alexander.yml"
 
 
 def test_active_package_identity_is_consistent() -> None:
@@ -16,8 +21,8 @@ def test_active_package_identity_is_consistent() -> None:
         REPO / "pyproject.toml",
         REPO / "MANIFEST.in",
         REPO / ".gitignore",
-        REPO / ".github" / "workflows" / "ci.yml",
-        REPO / ".github" / "workflows" / "release.yml",
+        CI_WORKFLOW,
+        RELEASE_WORKFLOW,
         REPO / "README.md",
         REPO / "CITATION.cff",
         REPO / "DATA-FLOW.md",
@@ -30,7 +35,8 @@ def test_active_package_identity_is_consistent() -> None:
     releasing = (REPO / "RELEASING.md").read_text(encoding="utf-8")
     runtime_text = text.replace(releasing, "")
 
-    assert "xero-ledger-review-gate" in text
+    assert "accounting-review-pipeline" in runtime_text
+    assert "ryanduguid/xero-ledger-review-gate" not in runtime_text
     assert "xero-ai-" + "review-gateway" not in runtime_text
     assert "elizabeth-anne-alexander" in text
     assert "elizabeth_anne_alexander" in text
@@ -41,11 +47,11 @@ def test_active_package_identity_is_consistent() -> None:
 
 
 def test_release_workflow_keeps_the_pinned_reusable_policy_caller() -> None:
-    workflow = (REPO / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/"
-        "release-python.yml@8b4de1ed339f1358b5f3e850b63412d8717d01da"
+        "release-python.yml@3ff09b654a17b9a3b55548e25e6108ee582b00c4"
     ) in workflow
     assert "version-parser: python-literal" in workflow
     assert "version-file: elizabeth_anne_alexander/version.py" in workflow
@@ -68,7 +74,7 @@ def test_the_ci_test_step_does_not_repeat_the_quiet_flag_from_addopts() -> None:
     leaves a reviewer with a progress bar, no test count and no timing: the
     log stops saying how many tests actually ran.
     """
-    workflow = REPO / ".github" / "workflows" / "ci.yml"
+    workflow = CI_WORKFLOW
     pyproject = REPO / "pyproject.toml"
     if not (workflow.is_file() and pyproject.is_file()):
         pytest.skip("not running from a source checkout")
@@ -99,8 +105,48 @@ def test_citation_tracks_the_published_compatibility_release() -> None:
     ]
 
     assert package.metadata["Name"] == "elizabeth-anne-alexander"
-    assert package.version == __version__ == citation["version"] == "0.2.1"
-    assert citation["date-released"] == "2026-08-24"
+    assert package.version == __version__ == citation["version"] == "0.2.2"
+    assert citation["date-released"] == "2026-09-03"
+    assert citation["url"] == citation["repository-code"] == PACKAGE_URL
     assert len(console_scripts) == 1
     assert console_scripts[0].value == "elizabeth_anne_alexander.cli:main"
     assert console_scripts[0].load() is cli_main
+
+
+def test_current_metadata_and_public_links_use_the_monorepo() -> None:
+    package = distribution("elizabeth-anne-alexander")
+    urls = dict(value.split(", ", 1) for value in package.metadata.get_all("Project-URL", []))
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    llms = (REPO / "llms.txt").read_text(encoding="utf-8")
+    security = (REPO / "SECURITY.md").read_text(encoding="utf-8")
+    root_readme = (MONOREPO / "README.md").read_text(encoding="utf-8")
+
+    assert urls["Homepage"] == PACKAGE_URL
+    assert urls["Documentation"] == (
+        f"{REPOSITORY_URL}/tree/elizabeth-anne-alexander/v0.2.2/"
+        "packages/elizabeth-anne-alexander"
+    )
+    assert urls["Repository"] == f"{REPOSITORY_URL}.git"
+    assert urls["Issues"] == f"{REPOSITORY_URL}/issues"
+    assert PACKAGE_URL in readme
+    assert f"{REPOSITORY_URL}/actions/workflows/elizabeth-anne-alexander.yml" in readme
+    assert f"**Repository**: {PACKAGE_URL}" in llms
+    assert "The package contains no OAuth" in llms
+    assert f"{REPOSITORY_URL}/security/advisories/new" in security
+    assert (
+        "| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution "
+        "`elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command "
+        "`elizabeth-anne-alexander` | 0.2.2 |"
+    ) in root_readme
+
+
+def test_current_release_guidance_binds_the_exact_namespaced_identity() -> None:
+    guidance = (REPO / "RELEASING.md").read_text(encoding="utf-8")
+
+    assert "tag=elizabeth-anne-alexander/v0.2.2" in guidance
+    assert 'version="${tag#elizabeth-anne-alexander/v}"' in guidance
+    assert "repo=ryanduguid/accounting-review-pipeline" in guidance
+    assert guidance.count("--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4") == 2
+    assert "Workflow filename | `release-elizabeth-anne-alexander.yml`" in guidance
+    assert "Environment name | `pypi-elizabeth-anne-alexander`" in guidance
+    assert "tag=v0.2.2" not in guidance
