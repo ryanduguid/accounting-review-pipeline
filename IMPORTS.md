@@ -33,7 +33,7 @@ No distribution name, import package, command or version changed.
 
 | Component | Source and selected commit | Git tree | Tracked-tree SHA-256 | Latest release | Destination |
 |---|---|---|---|---|---|
-| Monthly Close Controls (anchor) | `https://github.com/ryanduguid/monthly-close-controls.git` at `06a9bfec0d52baceb3a15f1d5ec5afde8850df42` | `96b3fea5234a891d2f3d53f4dfca646436463235` | `883a499040ad2b413e75a348e211bb58f4ca4107f0d2a415f0143b37e0f33e8b` | `v0.1.2` | `packages/monthly-close-control-plane/` |
+| Monthly Close Controls (anchor) | `https://github.com/ryanduguid/accounting-review-pipeline.git` at `06a9bfec0d52baceb3a15f1d5ec5afde8850df42` | `96b3fea5234a891d2f3d53f4dfca646436463235` | `883a499040ad2b413e75a348e211bb58f4ca4107f0d2a415f0143b37e0f33e8b` | `v0.1.2` | `packages/monthly-close-control-plane/` |
 | Xero Trial Balance Export | `https://github.com/ryanduguid/xero-trial-balance-export.git` at `2a0966e89e5f8daa587be8466f988d9adc16003a` | `0b35ee4de1a71a5cb04fa00e27a41c130f1a7563` | `72d773eafccf558d832ab7b7df2604d3a6f7a8d1fd06d6da3acceb1f7c2e623b` | `v0.1.4` | `packages/xero-trial-balance-export/` |
 | Workpaper Review Gate | `https://github.com/ryanduguid/workpaper-review-gate.git` at `e2a01292b9782dc086595865bb80516c81fcb70e` | `f5fe55d4a2fcd5b49952d3de2583a863aa4dad45` | `851eccd592fa0edcb60becc8087f37f236cfe030867e662933336cda634e72cc` | `v0.1.1` | `packages/review-ready-gate/` |
 | Xero Ledger Review Gate | `https://github.com/ryanduguid/xero-ledger-review-gate.git` at `a3df72bfefc94c2a4b5e6fa01fe54aec21200d1f` | `82ae98af57db154c19556f7bfe0eeeaad77bdf60` | `679976f85bb5731782d68e527f5fa3cd9680744bb46a373393f1f8cbec5efb83` | `v0.2.1` | `packages/elizabeth-anne-alexander/` |
@@ -72,7 +72,7 @@ OAuth or publishing credentials. Production packages do not import sibling packa
 
 ## Anchor remote preflight (read-only)
 
-The anchor remains public, active and named `monthly-close-controls`; its default branch is
+The anchor remains public and active as `accounting-review-pipeline`; its default branch is
 `main`. Branch protection on `main` requires the status checks `package`, `test (3.10)`,
 `test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python` with strict up-to-date
 enforcement, so the root `ci.yml` keeps the workflow name `tests` with job ids `test`,

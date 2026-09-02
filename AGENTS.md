@@ -1,8 +1,8 @@
 # Accounting Review Pipeline agent instructions
 
 This repository is the local assembly of the Accounting Review Pipeline: six independently
-versioned components joined only by local files and commands. It has not been renamed on
-GitHub; it is still `ryanduguid/monthly-close-controls` until a separately authorised cutover.
+versioned components joined only by local files and commands. Its canonical GitHub repository
+is `ryanduguid/accounting-review-pipeline`.
 Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for component work.
 These repository-wide rules apply everywhere:
 
