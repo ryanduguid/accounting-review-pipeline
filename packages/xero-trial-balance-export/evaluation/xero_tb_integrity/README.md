@@ -50,7 +50,7 @@ The contract records Xero's [Accounting API Reports](https://developer.xero.com/
 
 ## Product and fixture version
 
-`xero-trial-balance-export/v0.1.5` is the first monorepo release containing
+`xero-trial-balance-export/v0.1.6` is the first monorepo release containing
 this evaluation and the root contract it exercises. The fabricated fixture
 version is `1`.
 
