@@ -44,7 +44,7 @@ changing it.
 
 ### Readiness-gate output
 
-`review-ready gate`, called with `--profile <profile> --input <directory> --output <directory>`, produces
+`review-ready gate`, called with `--profile <profile> --pack <directory> --output <directory>`, produces
 `readiness-pack.json`, `readiness-summary.md` and `findings.csv`.
 
 | JSON field | Meaning |
