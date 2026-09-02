@@ -1,6 +1,8 @@
 # Releasing
 
-The repository's [GitHub Releases](https://github.com/ryanduguid/accounting-excel-toolkit/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
+Use [Accounting Review Pipeline releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) for new component releases. Retain the [standalone release history](https://github.com/ryanduguid/accounting-excel-toolkit/releases), including immutable rollback release `v0.1.5`.
+
+The active caller is the root [release-accounting-excel-toolkit.yml](../../.github/workflows/release-accounting-excel-toolkit.yml). It selects only `adapters/accounting-excel-toolkit/` through a namespaced `accounting-excel-toolkit/v*` tag. The nested `.github/` files are inert source history. This documentation migration does not bump the version or request an archive release.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not create or upload release assets by hand.
 
@@ -11,14 +13,14 @@ Before tagging:
 3. From an operator session authenticated with repository Administration read access, run:
 
     ```bash
-    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-excel-toolkit/immutable-releases --jq .enabled
+    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-review-pipeline/immutable-releases --jq .enabled
     ```
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
-4. Confirm `VERSION` is the intended version and the first line of `RELEASE_NOTES.md` is the matching tag.
-5. Create an annotated tag on the current remote `main` commit, for example `git tag -a v0.1.6 -m "v0.1.6"` (use `-s` instead of `-a` when a signing key is configured), then push only that tag.
+4. Confirm the component's `VERSION` and `RELEASE_NOTES.md` describe the separately approved version. Keep the notes heading as `# vMAJOR.MINOR.PATCH`; the root caller supplies the tag namespace.
+5. After separate release approval, create an annotated tag on the current remote `main` commit, for example `git tag -a accounting-excel-toolkit/v0.1.6 -m "accounting-excel-toolkit/v0.1.6"` (use `-s` instead of `-a` when a signing key is configured), then push only that tag.
 
-Published releases are `v0.1.0`, `v0.1.2` and `v0.1.5`. The protected `v0.1.1`, `v0.1.3` and `v0.1.4` tags are unreleased failed-preflight history: each stopped before any build or publication step, so none has a release or assets. [Pilot run 31822769922](https://github.com/ryanduguid/accounting-excel-toolkit/actions/runs/31822769922) is the `v0.1.1` Administration-read failure. Do not move or delete any of those tags. `VERSION` and `RELEASE_NOTES.md` currently describe `v0.1.5`; the next intended tag is `v0.1.6`.
+The standalone repository published `v0.1.0`, `v0.1.2` and `v0.1.5`. Its protected `v0.1.1`, `v0.1.3` and `v0.1.4` tags retain failed-preflight history with no releases or assets. [Pilot run 31822769922](https://github.com/ryanduguid/accounting-excel-toolkit/actions/runs/31822769922) records the `v0.1.1` Administration-read failure. Do not move or delete those tags. `VERSION` and `RELEASE_NOTES.md` still describe `v0.1.5`; a future `accounting-excel-toolkit/v0.1.6` needs its own version-and-notes change and release approval.
 
 The workflow reruns the regression suite, builds deterministic ZIP and tar.gz source archives, generates an SPDX 2.3 SBOM and `SHA256SUMS`, records GitHub provenance and SBOM attestations, then publishes a draft release only after every asset is uploaded. The archive helper fixes the timezone to UTC and Git text conversion to LF so the same tagged tree produces the same archive bytes on Linux and Windows. Existing releases are refused rather than overwritten.
 
@@ -42,8 +44,8 @@ release, update `tag` if the intended version changes and verify that exact
 source and signer identity:
 
 ```bash
-tag=v0.1.6
-repo=ryanduguid/accounting-excel-toolkit
+tag=accounting-excel-toolkit/v0.1.6
+repo=ryanduguid/accounting-review-pipeline
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
 release_dir="$(mktemp -d)"
@@ -55,22 +57,22 @@ for file in *; do
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest fca32335275ee264799644ccd659b025358dd23c
+    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 done
-gh attestation verify "accounting-excel-toolkit-${tag#v}.zip" -R "$repo" \
+gh attestation verify "accounting-excel-toolkit-${tag##*/v}.zip" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-  --signer-digest fca32335275ee264799644ccd659b025358dd23c
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 ```
 
 Releases cut before the policy pin last moved verify against the
-`--signer-digest` that `release.yml` carried at the time, not the one
+`--signer-digest` that the active caller carried at the tagged commit, not the one
 above.
 
 If any gate fails, leave the tag and any draft release untouched until the failure is understood. Never move an already published tag.
 
 ## Rollback
 
-Rollback of the caller is a reviewed pull request that repins `release-archive.yml` to the previous full 40-character commit SHA of this repository (or reverts to a reviewed local implementation). No workflow creates, moves or deletes tags, so rollback never touches published releases; existing tags and their assets stay exactly as they are. The structural test in `tests/test_release_archives.py` pins the expected SHA and must be updated in the same change.
+Rollback of the caller requires a reviewed pull request that repins the root caller to a reviewed 40-character commit in `ryanduguid/release-policy`. Preserve existing tags, releases and assets. The structural check in `tests/test_release_archives.py` validates the active caller's immutable pin and component boundary.

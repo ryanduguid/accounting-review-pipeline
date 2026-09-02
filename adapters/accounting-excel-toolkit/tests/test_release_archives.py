@@ -4,13 +4,14 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+MONOREPO = ROOT.parents[1]
 
 POLICY_REF = "ryanduguid/release-policy/.github/workflows/release-archive.yml@"
 
 
 class ReleaseArchiveTests(unittest.TestCase):
     def test_release_workflow_uses_the_shared_archive_policy(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        workflow = (MONOREPO / ".github" / "workflows" / "release-accounting-excel-toolkit.yml").read_text(
             encoding="utf-8",
         )
         self.assertIn(POLICY_REF, workflow)
@@ -21,6 +22,9 @@ class ReleaseArchiveTests(unittest.TestCase):
         self.assertEqual(len(pin), 40, pin)
         self.assertTrue(set(pin) <= set("0123456789abcdef"), pin)
         self.assertIn("artifact-stem: accounting-excel-toolkit", workflow)
+        self.assertIn("source-directory: adapters/accounting-excel-toolkit", workflow)
+        self.assertIn("tag-prefix: accounting-excel-toolkit", workflow)
+        self.assertIn('"accounting-excel-toolkit/v*"', workflow)
         self.assertNotIn("\n          git archive ", workflow)
 
 
