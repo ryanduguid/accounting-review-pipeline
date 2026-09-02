@@ -1,0 +1,31 @@
+model Model
+	culture: en-AU
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-AU
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+annotation PBIDesktopVersion = 2.138.1452.0 (24.11)
+
+ref table CalcGroup_Consolidation
+ref table CalcGroup_TimeIntelligence
+ref table Dim_Account
+ref table Dim_ANZSIC
+ref table Dim_Date
+ref table Dim_Employee
+ref table Dim_Entity
+ref table Fact_ATOBenchmark
+ref table Fact_Budget
+ref table Fact_GeneralLedger
+ref table Fact_PayrollSuper
+
+ref expression Dim_Account
+ref expression Dim_Date_AU
+ref expression Dim_Entity
+ref expression Fact_ATOBenchmark
+ref expression Fact_Budget
+ref expression Fact_GeneralLedger
+ref expression Fact_PayrollSuper
+ref expression Fx_ValidateABN

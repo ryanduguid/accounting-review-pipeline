@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "062c0d9cd2ba960997fe",
+  "displayName": "1. Executive Financial Performance",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

@@ -1,0 +1,4 @@
+database 'australian-accounting-power-bi'
+	compatibilityLevel: 1600
+	compatibilityMode: powerBI
+	language: 1033

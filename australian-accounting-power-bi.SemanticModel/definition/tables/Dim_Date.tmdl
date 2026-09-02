@@ -1,0 +1,121 @@
+table Dim_Date
+	lineageTag: a1b2c3d4-date-0001-8899-aabbccddeeff
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: yyyy-mm-dd
+		lineageTag: date-col-0001
+		summarizeBy: none
+		sourceColumn: Date
+
+	column CalendarYear
+		dataType: int64
+		formatString: 0
+		lineageTag: date-col-0002
+		summarizeBy: none
+		sourceColumn: CalendarYear
+
+	column MonthNumber
+		dataType: int64
+		formatString: 0
+		lineageTag: date-col-0003
+		summarizeBy: none
+		sourceColumn: MonthNumber
+
+	column MonthName
+		dataType: string
+		lineageTag: date-col-0004
+		summarizeBy: none
+		sourceColumn: MonthName
+		sortByColumn: MonthNumber
+
+	column DayOfMonth
+		dataType: int64
+		formatString: 0
+		lineageTag: date-col-0005
+		summarizeBy: none
+		sourceColumn: DayOfMonth
+
+	column DayOfWeek
+		dataType: int64
+		formatString: 0
+		lineageTag: date-col-0006
+		summarizeBy: none
+		sourceColumn: DayOfWeek
+
+	column DayName
+		dataType: string
+		lineageTag: date-col-0007
+		summarizeBy: none
+		sourceColumn: DayName
+		sortByColumn: DayOfWeek
+
+	column IsWeekend
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: date-col-0008
+		summarizeBy: none
+		sourceColumn: IsWeekend
+
+	column FinancialYearNumber
+		dataType: int64
+		formatString: 0
+		lineageTag: date-col-0009
+		summarizeBy: none
+		sourceColumn: FinancialYearNumber
+
+	column FinancialYear
+		dataType: string
+		lineageTag: date-col-0010
+		summarizeBy: none
+		sourceColumn: FinancialYear
+		sortByColumn: FinancialYearNumber
+
+	column FinancialMonthNumber
+		dataType: int64
+		formatString: 0
+		lineageTag: date-col-0011
+		summarizeBy: none
+		sourceColumn: FinancialMonthNumber
+
+	column FinancialQuarter
+		dataType: string
+		lineageTag: date-col-0012
+		summarizeBy: none
+		sourceColumn: FinancialQuarter
+
+	column FinancialYearQuarter
+		dataType: string
+		lineageTag: date-col-0013
+		summarizeBy: none
+		sourceColumn: FinancialYearQuarter
+
+	column FinancialYearMonth
+		dataType: string
+		lineageTag: date-col-0014
+		summarizeBy: none
+		sourceColumn: FinancialYearMonth
+
+	column FYStartDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: date-col-0015
+		summarizeBy: none
+		sourceColumn: FYStartDate
+
+	column FYEndDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: date-col-0016
+		summarizeBy: none
+		sourceColumn: FYEndDate
+
+	partition Dim_Date = m
+		mode: import
+		source =
+			let
+				Source = Dim_Date_AU(#date(2024, 7, 1), #date(2027, 6, 30))
+			in
+				Source
