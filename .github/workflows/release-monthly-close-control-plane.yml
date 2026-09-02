@@ -1,18 +1,19 @@
-name: Release
+name: Release monthly-close-control-plane
 
+# One namespaced tag releases exactly one component. The reusable workflow
+# refuses the release unless the directory leaf, the tag prefix and the
+# normalised distribution name agree (monthly-close-control-plane).
 on:
   push:
     tags:
-      - "v*"
+      - "monthly-close-control-plane/v*"
   workflow_dispatch:
     inputs:
       tag:
         description: >-
-          Existing tag whose GitHub Release already has built assets, to
-          backfill a PyPI publish that failed after the release published
-          (e.g. release-policy's workflow_call outputs bug, fixed in
-          ryanduguid/release-policy#11, before which the release job
-          succeeded but the pypi job always got an empty artifact name).
+          Existing monthly-close-control-plane/vMAJOR.MINOR.PATCH tag whose
+          GitHub Release already has built assets, to backfill a PyPI publish
+          that failed after the release published.
         required: true
         type: string
 
@@ -31,9 +32,12 @@ jobs:
       attestations: write # Record provenance and SBOM attestations for release assets.
       contents: write # Create the draft release, upload assets and publish it.
       id-token: write # Obtain the OIDC identity required to sign attestations.
-    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@8b4de1ed339f1358b5f3e850b63412d8717d01da
+    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@6ad53a7b030da22fc299cee704c37ba7550ea1d7
     with:
+      source-directory: packages/monthly-close-control-plane
+      tag-prefix: monthly-close-control-plane
       upload-dist-artifact: true
+
   pypi:
     if: github.event_name == 'push'
     timeout-minutes: 15
@@ -82,8 +86,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "tag must match vMAJOR.MINOR.PATCH" >&2
+          if [[ ! "$TAG" =~ ^monthly-close-control-plane/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "tag must match monthly-close-control-plane/vMAJOR.MINOR.PATCH" >&2
             exit 1
           fi
           gh release download "$TAG" \

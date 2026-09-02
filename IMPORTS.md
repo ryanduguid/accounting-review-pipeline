@@ -100,3 +100,55 @@ table above.
 - Xero Ledger Review Gate: source `a3df72bfefc94c2a4b5e6fa01fe54aec21200d1f`; squash commit `de7d3bab8156ec7678ad6f6d9ef6f383104a5058`; subtree merge commit `8841889c8a91508a4d81ec6835ff35fc2d903c9e`; destination `packages/elizabeth-anne-alexander/` (distribution name, owner decision D1); imported tree `82ae98af57db154c19556f7bfe0eeeaad77bdf60` equals the source tree.
 - Accounting Excel Toolkit: source `5c2a779d316d2e0338f2189f3c98f0add4e7cbea`; squash commit `13bfb74d336cc1b5f19a67538ee158f2f677fba1`; subtree merge commit `4e3ec67edc53823621f45a854278246295c3911a`; destination `adapters/accounting-excel-toolkit/`; imported tree `25af282d275b3e03c93bb23eab05144453d8d89b` equals the source tree.
 - Australian Accounting Power BI: source `9aab858e5e099b44ae828ac4793ca47d25cf5675`; squash commit `719d3ae1bf17457f60c36518c0e3519aa131544f`; subtree merge commit `e73d34dc5c82606b667d2db6d3e4a80caa3a3511`; destination `apps/australian-accounting-power-bi/`; imported tree `37db7e334d30fd7a8c1573967f9d11b5fe7c82cc` equals the source tree.
+
+## Root automation and release callers
+
+Only the root `.github/workflows/` directory is active. The movement-only change replaced
+the anchor's root-default `release.yml` (tag pattern `v*`, pin
+`8b4de1ed339f1358b5f3e850b63412d8717d01da`) with five namespaced callers pinned to the
+independently approved Release Policy commit `6ad53a7b030da22fc299cee704c37ba7550ea1d7`.
+One tag publishes one component; the reusable workflow's identity gate refuses a release
+whose directory leaf, `tag-prefix` and normalised distribution name or `artifact-stem`
+disagree.
+
+| Component | Caller | Trigger | Reusable workflow | `source-directory` | `tag-prefix` | Publisher environment |
+|---|---|---|---|---|---|---|
+| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags, plus `workflow_dispatch` backfill of an existing namespaced tag | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
+| Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
+| Xero Ledger Review Gate | `release-elizabeth-anne-alexander.yml` | `elizabeth-anne-alexander/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: elizabeth_anne_alexander/version.py` | `packages/elizabeth-anne-alexander` | `elizabeth-anne-alexander` | `pypi-elizabeth-anne-alexander` (https://pypi.org/p/elizabeth-anne-alexander) |
+| Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-archive.yml` with `artifact-stem: xero-trial-balance-export` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | none (GitHub release assets only) |
+| Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
+
+The three Python callers upload the attested distribution (`upload-dist-artifact: true`) and
+publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
+exactly one wheel and one source distribution, and uses
+`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`. The anchor keeps its
+`pypi-backfill` job, now accepting only `monthly-close-control-plane/vMAJOR.MINOR.PATCH`.
+Before any monorepo release the owner must register each PyPI trusted publisher against the
+new caller file name and environment (the repository currently has only the `pypi`
+environment) and the approved Release Policy commit must be pushed. No caller references a
+secret. Nested component `release.yml` files remain inert.
+
+Per-component verification workflows: `ci.yml` (anchor; workflow `tests`, jobs `test`,
+`package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
+`elizabeth-anne-alexander.yml`, `accounting-excel-toolkit.yml`,
+`australian-accounting-power-bi.yml` and the unchanged `codeql.yml` (`Analyze Python`). Each
+uses explicit `paths` filters for its component directory, the future
+`contracts/xero-trial-balance-v1/` directory, `.github/**` and the root policy files, grants
+`contents: read` only and references no secret. The readiness and ledger workflows carry
+their source-defined clean-wheel demonstrations. Dependabot scopes Python updates to each
+component directory (`uv` for the three uv packages, `pip` for the exporter) and groups
+root GitHub Actions updates.
+
+## Whitespace declarations for exact upstream bytes
+
+`git diff --check` over the movement diff reported exact upstream bytes in four imported
+files. The bytes are unchanged; the root `.gitattributes` narrows the whitespace check for
+exactly these paths:
+
+| File | Upstream whitespace | Attribute |
+|---|---|---|
+| `apps/australian-accounting-power-bi/README.md` | trailing whitespace on lines 29, 32, 36 and 38 | `whitespace=-blank-at-eol` |
+| `apps/australian-accounting-power-bi/docs/data-model.md` | trailing whitespace on lines 11, 14, 18 and 20 | `whitespace=-blank-at-eol` |
+| `packages/elizabeth-anne-alexander/DATA-FLOW.md` | trailing whitespace on line 21 | `whitespace=-blank-at-eol` |
+| `adapters/accounting-excel-toolkit/tests/test_static_guards.py` | blank line at end of file (line 1676) | `whitespace=-blank-at-eof` |

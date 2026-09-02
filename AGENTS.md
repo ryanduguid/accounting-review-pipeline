@@ -7,10 +7,10 @@ Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for c
 These repository-wide rules apply everywhere:
 
 - Only `packages/xero-trial-balance-export/` may use OAuth, call Xero, use an HTTP client,
-  hold tokens or read Xero credentials (`XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`,
-  `XERO_REDIRECT_URI`, `XERO_TOKEN_FILE`). Review packages, the Excel adapter and the
-  Power BI application stay offline, read local files, parse money with exact `Decimal`
-  arithmetic and ship fabricated data only.
+  hold tokens or read Xero credentials (the environment names documented in the exporter's
+  `.env.example`). Review packages, the Excel adapter and the Power BI application stay
+  offline, read local files, parse money with exact `Decimal` arithmetic and ship
+  fabricated data only.
 - Roles stay separate. The readiness gate emits `READY`, `NOT_READY` or `BLOCKED` and
   decides whether a pack reaches review. Monthly close emits `PASS`, `REVIEW` or `BLOCKED`
   (exit 0 only for `PASS`, exit 2 for `REVIEW` or `BLOCKED`, exit 1 for malformed input) and
@@ -26,6 +26,9 @@ These repository-wide rules apply everywhere:
 - Only workflows under the root `.github/workflows/` are active. Nested `.github/`
   directories inside components are inert historical records imported with their sources;
   do not run them and do not treat their pins as current.
+- Release only through the root callers `.github/workflows/release-<component>.yml` on a
+  namespaced annotated tag `<component>/vMAJOR.MINOR.PATCH`, never through a nested
+  `release.yml`. One tag publishes exactly one component.
 - Never commit client data, workpapers, credentials, tokens, generated review packs or native
   application evidence containing client data.
 

@@ -32,3 +32,14 @@ unified version. Run checks from the owning component directory with its documen
 commands. Only the root `.github/workflows/` are active; nested `.github/` directories are
 inert records of the imported sources. `IMPORTS.md` records source identities, tree digests
 and import records. Historical releases and tags remain owned by the source repositories.
+
+## Releases
+
+Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
+through a root caller pinned to the independently reviewed Release Policy commit
+`6ad53a7b030da22fc299cee704c37ba7550ea1d7`: `monthly-close-control-plane/v*`,
+`review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*` and
+`accounting-excel-toolkit/v*`. One tag publishes exactly one component; the identity gate
+refuses a tag whose prefix does not equal the component directory leaf and its distribution
+name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
+is the only difference. `IMPORTS.md` lists the callers and publisher environments.
