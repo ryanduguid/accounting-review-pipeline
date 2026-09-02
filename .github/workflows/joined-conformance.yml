@@ -1,0 +1,62 @@
+name: Joined Xero Trial Balance Conformance
+
+# Runs the exporter-owned integrity runner and the three offline review
+# implementations against every root contract fixture. Only the exporter's
+# hash-locked runtime is installed; the review packages are imported from
+# their directories with no network dependency and no credentials.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/xero-trial-balance-v1/**"
+      - "tests/test_xero_trial_balance_contract.py"
+      - "packages/xero-trial-balance-export/**"
+      - "packages/review-ready-gate/**"
+      - "packages/monthly-close-control-plane/**"
+      - "packages/elizabeth-anne-alexander/**"
+      - "adapters/accounting-excel-toolkit/**"
+      - "apps/australian-accounting-power-bi/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
+  pull_request:
+    paths:
+      - "contracts/xero-trial-balance-v1/**"
+      - "tests/test_xero_trial_balance_contract.py"
+      - "packages/xero-trial-balance-export/**"
+      - "packages/review-ready-gate/**"
+      - "packages/monthly-close-control-plane/**"
+      - "packages/elizabeth-anne-alexander/**"
+      - "adapters/accounting-excel-toolkit/**"
+      - "apps/australian-accounting-power-bi/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install only the exporter-owned locked runtime dependencies
+        run: python -m pip install --require-hashes -r packages/xero-trial-balance-export/requirements.lock
+      - name: Verify the contract digests
+        working-directory: contracts/xero-trial-balance-v1
+        run: sha256sum --check --strict SHA256SUMS
+      - name: Run joined offline conformance
+        run: python -B -m unittest tests.test_xero_trial_balance_contract -v

@@ -2,6 +2,12 @@
 *.csv
 !packages/monthly-close-control-plane/examples/*.csv
 !packages/monthly-close-control-plane/schemas/*.csv
+# The data-only Xero trial-balance contract is fabricated and re-included explicitly.
+!contracts/xero-trial-balance-v1/schema.csv
+!contracts/xero-trial-balance-v1/fixtures/passing.csv
+!contracts/xero-trial-balance-v1/fixtures/failing_movement.csv
+!contracts/xero-trial-balance-v1/fixtures/failing_ytd.csv
+!contracts/xero-trial-balance-v1/expected_results.json
 outputs/
 review-notes/
 

@@ -44,7 +44,7 @@ changing it.
 
 ### Readiness-gate output
 
-`review-ready gate`, called with `--profile <profile> --input <directory> --output <directory>`, produces
+`review-ready gate`, called with `--profile <profile> --pack <directory> --output <directory>`, produces
 `readiness-pack.json`, `readiness-summary.md` and `findings.csv`.
 
 | JSON field | Meaning |
@@ -116,3 +116,12 @@ through a root caller pinned to the independently reviewed Release Policy commit
 refuses a tag whose prefix does not equal the component directory leaf and its distribution
 name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
+
+## Contract
+
+`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
+`xero-tb-csv.v1` corpus: the exact ten-column schema, three fabricated fixtures, the expected
+accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
+runtime package. `tests/test_xero_trial_balance_contract.py` and the
+`joined-conformance.yml` workflow run the exporter runner and all three offline review
+implementations against it.

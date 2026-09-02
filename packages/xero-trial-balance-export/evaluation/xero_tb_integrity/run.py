@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+MONOREPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
 from export_tb import check_balanced
@@ -25,7 +26,7 @@ HEADER = [
 ]
 
 FIXTURE_ROOT = os.path.realpath(
-    os.path.abspath(Path(__file__).resolve().parent / "fixtures")
+    os.path.abspath(MONOREPO_ROOT / "contracts" / "xero-trial-balance-v1" / "fixtures")
 )
 DECLARED_FIXTURES = tuple(
     os.path.join(FIXTURE_ROOT, name)

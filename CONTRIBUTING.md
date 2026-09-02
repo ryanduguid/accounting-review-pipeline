@@ -2,7 +2,7 @@
 
 ## Pull Request Rules
 
-Keep a change scoped to one component, or to the data-only contract once it exists. Run the
+Keep a change scoped to one component, or to the data-only contract `contracts/xero-trial-balance-v1/`. Run the
 owning component's documented checks from its directory and include affected downstream
 conformance evidence when a file contract changes. `AGENTS.md` lists the commands.
 
