@@ -44,6 +44,7 @@ release, update `tag` if the intended version changes and verify that exact
 source and signer identity:
 
 ```bash
+set -euo pipefail
 tag=accounting-excel-toolkit/v0.1.6
 repo=ryanduguid/accounting-review-pipeline
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
@@ -59,12 +60,14 @@ for file in *; do
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
     --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 done
-gh attestation verify "accounting-excel-toolkit-${tag##*/v}.zip" -R "$repo" \
-  --predicate-type https://spdx.dev/Document/v2.3 \
-  --source-digest "$release_commit" \
-  --source-ref "refs/tags/$tag" \
-  --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-toolkit-${tag##*/v}.tar.gz"; do
+  gh attestation verify "$archive" -R "$repo" \
+    --predicate-type https://spdx.dev/Document/v2.3 \
+    --source-digest "$release_commit" \
+    --source-ref "refs/tags/$tag" \
+    --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
+    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+done
 ```
 
 Releases cut before the policy pin last moved verify against the

@@ -1,6 +1,8 @@
 """The release workflow is the shared archive policy, not a local copy."""
 
 from pathlib import Path
+import re
+import shlex
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +28,25 @@ class ReleaseArchiveTests(unittest.TestCase):
         self.assertIn("tag-prefix: accounting-excel-toolkit", workflow)
         self.assertIn('"accounting-excel-toolkit/v*"', workflow)
         self.assertNotIn("\n          git archive ", workflow)
+
+    def test_release_guide_verifies_spdx_for_both_archives(self) -> None:
+        guide = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
+        loop = re.search(r"for archive in ([^\n]+); do\n(.*?)\ndone", guide, re.DOTALL)
+        self.assertIsNotNone(loop, "The guide must verify each archive's SPDX attestation")
+        assert loop is not None
+        self.assertEqual(shlex.split(loop.group(1)), [
+            "accounting-excel-toolkit-${tag##*/v}.zip",
+            "accounting-excel-toolkit-${tag##*/v}.tar.gz",
+        ])
+        for required in (
+            'gh attestation verify "$archive" -R "$repo"',
+            "--predicate-type https://spdx.dev/Document/v2.3",
+            '--source-digest "$release_commit"',
+            '--source-ref "refs/tags/$tag"',
+            "--signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml",
+            "--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4",
+        ):
+            self.assertIn(required, loop.group(2))
 
 
 if __name__ == "__main__":
