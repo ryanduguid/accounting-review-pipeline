@@ -14,8 +14,10 @@ from evaluation.xero_tb_integrity import run as evaluation_runner
 
 ROOT = Path(__file__).resolve().parent.parent
 PACK = ROOT / "evaluation" / "xero_tb_integrity"
+MONOREPO_ROOT = ROOT.parents[1]
+CONTRACT = MONOREPO_ROOT / "contracts" / "xero-trial-balance-v1"
 RUNNER = PACK / "run.py"
-EXPECTED = PACK / "expected_results.json"
+EXPECTED = CONTRACT / "expected_results.json"
 
 
 class EvaluationPackTest(unittest.TestCase):
@@ -24,7 +26,7 @@ class EvaluationPackTest(unittest.TestCase):
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(runner), str(path)],
-            cwd=ROOT,
+            cwd=MONOREPO_ROOT,
             text=True,
             capture_output=True,
             check=False,
@@ -34,13 +36,24 @@ class EvaluationPackTest(unittest.TestCase):
         return self.run_script(RUNNER, path)
 
     def run_fixture(self, name: str) -> subprocess.CompletedProcess[str]:
-        return self.run_path(PACK / "fixtures" / name)
+        return self.run_path(CONTRACT / "fixtures" / name)
 
     def assert_path_refused(self, path: str | Path) -> None:
         result = self.run_path(path)
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn("error:", result.stderr)
         self.assertIn("declared fabricated", result.stderr)
+
+    def test_reproduction_guide_uses_one_real_working_directory(self):
+        guide = (PACK / "README.md").read_text(encoding="utf-8")
+        self.assertIn("From `packages/xero-trial-balance-export/`", guide)
+        self.assertNotIn("From the repository root", guide)
+        self.assertIn("-r requirements.lock", guide)
+        self.assertIn("python evaluation/xero_tb_integrity/run.py", guide)
+        for name in ("passing.csv", "failing_movement.csv", "failing_ytd.csv"):
+            relative = Path("../../contracts/xero-trial-balance-v1/fixtures") / name
+            self.assertTrue((ROOT / relative).resolve().is_file())
+            self.assertIn(relative.as_posix(), guide)
 
     def test_documented_relative_fixture_paths_are_accepted(self):
         cases = (
@@ -50,13 +63,13 @@ class EvaluationPackTest(unittest.TestCase):
         )
         for name, exit_code, marker in cases:
             with self.subTest(name=name):
-                relative = Path("evaluation") / "xero_tb_integrity" / "fixtures" / name
+                relative = CONTRACT.relative_to(MONOREPO_ROOT) / "fixtures" / name
                 result = self.run_path(relative)
                 self.assertEqual(result.returncode, exit_code, result.stdout + result.stderr)
                 self.assertIn(marker, result.stdout)
 
     def test_absolute_undeclared_valid_csv_is_refused(self):
-        fixture = PACK / "fixtures" / "passing.csv"
+        fixture = CONTRACT / "fixtures" / "passing.csv"
         with tempfile.NamedTemporaryFile(
             dir=fixture.parent,
             prefix="undeclared-",
@@ -72,19 +85,20 @@ class EvaluationPackTest(unittest.TestCase):
 
     def test_traversal_to_undeclared_valid_csv_is_refused(self):
         traversal = (
-            "evaluation/xero_tb_integrity/fixtures/../../../samples/sample-output.csv"
+            "contracts/xero-trial-balance-v1/fixtures/../../../packages/"
+            "xero-trial-balance-export/samples/sample-output.csv"
         )
         self.assert_path_refused(traversal)
 
     def test_nested_valid_csv_is_refused(self):
-        fixture = PACK / "fixtures" / "passing.csv"
+        fixture = CONTRACT / "fixtures" / "passing.csv"
         with tempfile.TemporaryDirectory(dir=fixture.parent) as directory:
             nested = Path(directory) / "passing.csv"
             nested.write_bytes(fixture.read_bytes())
             self.assert_path_refused(nested)
 
     def test_symlink_escaping_to_undeclared_valid_csv_is_refused(self):
-        fixture = PACK / "fixtures" / "passing.csv"
+        fixture = CONTRACT / "fixtures" / "passing.csv"
         with tempfile.TemporaryDirectory() as outside_directory:
             outside = Path(outside_directory) / "passing.csv"
             outside.write_bytes(fixture.read_bytes())
@@ -97,7 +111,7 @@ class EvaluationPackTest(unittest.TestCase):
                 self.assert_path_refused(alias)
 
     def test_symlinked_runner_does_not_reanchor_its_declared_fixtures(self):
-        fixture = PACK / "fixtures" / "passing.csv"
+        fixture = CONTRACT / "fixtures" / "passing.csv"
         with tempfile.TemporaryDirectory() as directory:
             alias_root = Path(directory)
             runner_alias = alias_root / "run.py"
@@ -125,7 +139,7 @@ class EvaluationPackTest(unittest.TestCase):
         )
         for name, exit_code, marker in cases:
             with self.subTest(name=name):
-                declared = (PACK / "fixtures" / name).resolve()
+                declared = (CONTRACT / "fixtures" / name).resolve()
                 extended = "\\\\?\\" + str(declared)
                 result = self.run_path(extended)
                 self.assertEqual(result.returncode, exit_code, result.stdout + result.stderr)
@@ -151,7 +165,7 @@ class EvaluationPackTest(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "Windows path syntax required")
     def test_windows_device_namespace_paths_are_refused(self):
-        declared = str((PACK / "fixtures" / "passing.csv").resolve())
+        declared = str((CONTRACT / "fixtures" / "passing.csv").resolve())
         for hostile in (
             "\\\\.\\" + declared,
             "//./" + declared.replace("\\", "/"),
@@ -224,7 +238,7 @@ class EvaluationPackTest(unittest.TestCase):
         for scenario_id, (name, digest, conformance) in expected.items():
             with self.subTest(scenario=scenario_id):
                 scenario = scenarios[scenario_id]
-                fixture = PACK / "fixtures" / name
+                fixture = CONTRACT / "fixtures" / name
                 self.assertEqual(scenario["fixture"], name)
                 self.assertEqual(scenario["sha256"], digest)
                 self.assertEqual(scenario["conformance"], conformance)
@@ -249,7 +263,7 @@ class EvaluationPackTest(unittest.TestCase):
 
     def test_pack_names_its_limits_sources_and_versions(self):
         contract = json.loads(EXPECTED.read_text(encoding="utf-8"))
-        readme = (PACK / "README.md").read_text(encoding="utf-8")
+        readme = (CONTRACT / "README.md").read_text(encoding="utf-8")
         self.assertEqual(contract["product_release"], "v0.1.4")
         self.assertEqual(contract["fixture_version"], "1")
         self.assertEqual(contract["source_reviewed"], "2026-08-26")
@@ -259,16 +273,16 @@ class EvaluationPackTest(unittest.TestCase):
 
     def test_only_declared_evaluation_csvs_are_allowlisted(self):
         allowed = {
-            "evaluation/xero_tb_integrity/fixtures/passing.csv",
-            "evaluation/xero_tb_integrity/fixtures/failing_movement.csv",
-            "evaluation/xero_tb_integrity/fixtures/failing_ytd.csv",
+            "contracts/xero-trial-balance-v1/fixtures/passing.csv",
+            "contracts/xero-trial-balance-v1/fixtures/failing_movement.csv",
+            "contracts/xero-trial-balance-v1/fixtures/failing_ytd.csv",
         }
-        rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        rules = (MONOREPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         for relative in sorted(allowed):
             self.assertIn(f"!{relative}", rules)
             result = subprocess.run(
                 ["git", "check-ignore", "--no-index", "--quiet", "--", relative],
-                cwd=ROOT,
+                cwd=MONOREPO_ROOT,
                 check=False,
             )
             self.assertEqual(result.returncode, 1, relative)
@@ -279,9 +293,9 @@ class EvaluationPackTest(unittest.TestCase):
                 "--no-index",
                 "--quiet",
                 "--",
-                "evaluation/xero_tb_integrity/fixtures/client.csv",
+                "contracts/xero-trial-balance-v1/fixtures/client.csv",
             ],
-            cwd=ROOT,
+            cwd=MONOREPO_ROOT,
             check=False,
         )
         self.assertEqual(refused.returncode, 0)
