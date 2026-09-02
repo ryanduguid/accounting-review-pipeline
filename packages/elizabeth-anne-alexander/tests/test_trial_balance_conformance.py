@@ -10,6 +10,7 @@ import pytest
 from elizabeth_anne_alexander.errors import GatewayError
 from elizabeth_anne_alexander.gateway import CANONICAL_COLUMNS, _load_tb
 
+REPO = Path(__file__).resolve().parents[1]
 CORPUS = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"
 CONTRACT = CORPUS / "expected_results.json"
 
@@ -48,3 +49,16 @@ def test_gateway_satisfies_the_pinned_exporter_contract() -> None:
         else:
             with pytest.raises(GatewayError, match=re.escape(expectation["error_contains"])):
                 _load_tb(fixture)
+
+
+def test_component_policy_points_only_to_the_canonical_contract() -> None:
+    stale_path = "tests/conformance/xero_trial_balance_v1"
+    ignore = (REPO / ".gitignore").read_text(encoding="utf-8")
+    contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+    assert f"!{stale_path}/fixtures/" not in ignore
+    assert stale_path not in contributing
+    assert stale_path not in readme
+    for document in (contributing, readme):
+        assert "contracts/xero-trial-balance-v1/" in document

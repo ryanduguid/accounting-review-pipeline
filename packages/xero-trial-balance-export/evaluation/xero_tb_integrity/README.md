@@ -14,7 +14,7 @@ The three CSVs in the repository root's `contracts/xero-trial-balance-v1/fixture
 
 ## Reproduce the result
 
-From the repository root, install the locked dependencies and run the offline pack:
+From `packages/xero-trial-balance-export/`, install the locked dependencies and run the offline pack:
 
 ```bash
 python -m pip install --require-hashes -r requirements.lock

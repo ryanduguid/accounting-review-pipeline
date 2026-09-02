@@ -44,6 +44,17 @@ class EvaluationPackTest(unittest.TestCase):
         self.assertIn("error:", result.stderr)
         self.assertIn("declared fabricated", result.stderr)
 
+    def test_reproduction_guide_uses_one_real_working_directory(self):
+        guide = (PACK / "README.md").read_text(encoding="utf-8")
+        self.assertIn("From `packages/xero-trial-balance-export/`", guide)
+        self.assertNotIn("From the repository root", guide)
+        self.assertIn("-r requirements.lock", guide)
+        self.assertIn("python evaluation/xero_tb_integrity/run.py", guide)
+        for name in ("passing.csv", "failing_movement.csv", "failing_ytd.csv"):
+            relative = Path("../../contracts/xero-trial-balance-v1/fixtures") / name
+            self.assertTrue((ROOT / relative).resolve().is_file())
+            self.assertIn(relative.as_posix(), guide)
+
     def test_documented_relative_fixture_paths_are_accepted(self):
         cases = (
             ("passing.csv", 0, "PASS: passing.csv"),
