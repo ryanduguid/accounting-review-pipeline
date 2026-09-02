@@ -20,12 +20,14 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 C
 
 
 ROOT = Path(__file__).resolve().parents[1]
+MONOREPO_ROOT = ROOT.parents[1]
 EXAMPLES = ROOT / "examples"
 WORKFLOW = EXAMPLES / "github-actions-close-check.yml"
 
 REPOSITORY_NAME = "accounting-review-pipeline"
 PACKAGE_NAME = "monthly-close-control-plane"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
+PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/monthly-close-control-plane"
 RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
 
 # The committed example must point at a release that actually exists, so this
@@ -418,16 +420,66 @@ def test_repository_versions_and_yaml_dev_dependency_agree() -> None:
     project_version, lock_version, release_version, yaml_version = _repository_versions()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert project_version == lock_version == release_version == "0.1.2"
+    assert project_version == lock_version == release_version == "0.1.3"
     assert "PyYAML>=6.0.3,<7" in project["project"]["optional-dependencies"]["dev"]
     assert yaml_version == yaml.__version__ == "6.0.3"
 
 
 def test_repository_identity_is_distinct_from_package_identity() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    llms = (ROOT / "llms.txt").read_text(encoding="utf-8")
 
     assert project["project"]["name"] == PACKAGE_NAME
+    assert project["project"]["urls"]["Homepage"] == PACKAGE_URL
+    assert project["project"]["urls"]["Documentation"] == (
+        f"{REPOSITORY_URL}/tree/monthly-close-control-plane/v0.1.3/"
+        "packages/monthly-close-control-plane"
+    )
     assert project["project"]["urls"]["Repository"] == f"{REPOSITORY_URL}.git"
+    assert project["project"]["urls"]["Issues"] == f"{REPOSITORY_URL}/issues"
+    assert PACKAGE_URL in readme
+    assert f"**Repository**: {PACKAGE_URL}" in llms
+    assert (
+        "| Monthly Close Controls | `packages/monthly-close-control-plane/` | "
+        "distribution `monthly-close-control-plane`, import `closecontrol`, commands "
+        "`close-control` and `openaccountants-au` | 0.1.3 |"
+    ) in root_readme
+
+
+def test_current_docs_use_canonical_pipeline_component_links() -> None:
+    documents = [
+        ROOT / "README.md",
+        ROOT / "docs" / "follow-on-safety-layers.md",
+        ROOT / "examples" / "close-loop.md",
+    ]
+    text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
+
+    for path in (
+        "packages/xero-trial-balance-export",
+        "packages/review-ready-gate",
+        "packages/elizabeth-anne-alexander",
+    ):
+        assert f"{REPOSITORY_URL}/tree/main/{path}" in text
+    for retired_repository in (
+        "ryanduguid/xero-trial-balance-export",
+        "ryanduguid/workpaper-review-gate",
+        "ryanduguid/xero-ledger-review-gate",
+    ):
+        assert retired_repository not in text
+
+
+def test_release_guidance_uses_the_namespaced_current_tag() -> None:
+    guidance = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
+
+    assert "monthly-close-control-plane/v0.1.3" in guidance
+    assert "tag=monthly-close-control-plane/v0.1.3" in guidance
+    assert 'version="${tag#monthly-close-control-plane/v}"' in guidance
+    assert "tag=v0.1.3" not in guidance
+    assert guidance.count(
+        "--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4"
+    ) == 2
 
 
 def test_strict_loader_keeps_on_as_text_and_rejects_duplicate_keys() -> None:

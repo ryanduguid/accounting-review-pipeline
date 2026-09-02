@@ -139,8 +139,12 @@ def test_view_on_empty_directory_fails_closed(tmp_path: Path, capsys: pytest.Cap
 
 def test_pack_dir_pointing_at_a_file_fails_closed(pack_dir: Path) -> None:
     # A file where the pack directory should be is a reviewer's mistake, not a
-    # NotADirectoryError traceback.
-    with pytest.raises(ControlInputError, match="could not be read"):
+    # traceback. Windows raises FileNotFoundError for this path while POSIX
+    # raises NotADirectoryError; both must remain a controlled input failure.
+    with pytest.raises(
+        ControlInputError,
+        match=r"^close-review-pack\.json: (could not be read from|not found in) ",
+    ):
         render_review_sheet(pack_dir / "close-summary.md")
 
 

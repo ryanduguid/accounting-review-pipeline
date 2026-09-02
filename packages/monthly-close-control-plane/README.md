@@ -16,7 +16,10 @@
 
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/monthly-close-control-plane.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/monthly-close-control-plane/) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 
-The repository name is the public project identity; the `monthly-close-control-plane` distribution and `close-control` command remain compatibility identifiers.
+The maintained source is under
+[`packages/monthly-close-control-plane`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane)
+in the Accounting Review Pipeline. The `monthly-close-control-plane`
+distribution and `close-control` command remain compatibility identifiers.
 
 A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
 
@@ -41,7 +44,7 @@ Explicit exception queue
 Human review and workpaper acknowledgement
 ```
 
-The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
+The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
 
 ## Quick demo
 
@@ -73,7 +76,7 @@ Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, an
 To run the check on a schedule in CI, copy [examples/github-actions-close-check.yml](examples/github-actions-close-check.yml) into `.github/workflows/`.
 It runs against a repo-stored synthetic trial balance and fails the job when the pack is `BLOCKED`.
 
-To run this pack against the sibling gateway's same-financial-year sample CSVs (not the Varrock June/July demo pair, which crosses the 1 July reset), see [examples/close-loop.md](examples/close-loop.md). That loop is local files only; it does not connect to Xero.
+To run this pack against the co-located gateway's same-financial-year sample CSVs (not the Varrock June/July demo pair, which crosses the 1 July reset), see [examples/close-loop.md](examples/close-loop.md). That loop is local files only; it does not connect to Xero.
 
 ## Local close workbench
 
@@ -300,17 +303,17 @@ Continuous integration verifies the committed `uv.lock`, runs the test suite on 
 
 ## Related
 
-The next layers exist as separate repositories. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
+The next layers remain separate components. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
 
-- [Workpaper Review Gate](https://github.com/ryanduguid/workpaper-review-gate) - the upstream pack-readiness gate. It answers whether a BAS, month-end, or year-end folder is allowed onto the review desk. This tool still answers a later question: what material exceptions exist on these trial balances. Run the gate first.
-- [Xero Ledger Review Gate](https://github.com/ryanduguid/xero-ledger-review-gate) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
+- [Workpaper Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate) - the upstream pack-readiness gate. It answers whether a BAS, month-end, or year-end folder is allowed onto the review desk. This tool still answers a later question: what material exceptions exist on these trial balances. Run the gate first.
+- [Xero Ledger Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
 - [Tax Radar AU](https://github.com/ryanduguid/tax-radar-au) - a provenance-first monitor that turns source-version metadata into a technical-review queue.
 
-[examples/close-loop.md](examples/close-loop.md) runs close-control and the sibling gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.
+[examples/close-loop.md](examples/close-loop.md) runs close-control and the co-located gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.
 
 ## Roadmap
 
-The next layers are deliberately separated from the control engine; they already live in the sibling repositories above. The close-loop example runs the gateway on local files only.
+The next layers are deliberately separated from the control engine. The pipeline components above are co-located without sharing runtime authority, and Tax Radar AU remains separate. The close-loop example runs the gateway on local files only.
 
 See [docs/follow-on-safety-layers.md](docs/follow-on-safety-layers.md) for the intended boundary contracts.
 
