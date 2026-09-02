@@ -24,8 +24,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ryanduguid/xero-trial-balance-export"
-Issues = "https://github.com/ryanduguid/xero-trial-balance-export/issues"
+Homepage = "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export"
+Issues = "https://github.com/ryanduguid/accounting-review-pipeline/issues"
 
 [project.scripts]
 export-tb = "export_tb:run"

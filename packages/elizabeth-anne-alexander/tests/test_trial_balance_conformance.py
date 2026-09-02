@@ -21,7 +21,7 @@ def _json(path: Path) -> dict:
 
 def test_root_corpus_preserves_the_exporter_owned_bytes() -> None:
     expected_files = {
-        "expected_results.json": "1568687d5ccc809d0267d024b34869061cf10d436a28501e57888314238add91",
+        "expected_results.json": "bbebf751b4f55ac248266c8c7d37eda7ddf3b0d4b4722d22177f0b0bcac0ea50",
         "fixtures/passing.csv": "2cbe9997a8e7210936ff3c59b5d3fdb0041c1b375b0f9c88cf9ee30d0f356a09",
         "fixtures/failing_movement.csv": "702175df967b2854e7897cd27fdc4aca441e21b52438381108fabe88ff3153e4",
         "fixtures/failing_ytd.csv": "ec757f12d13866360fbab189228ebb425893c6f8b299809c6f8567bf5817c64b",
@@ -37,7 +37,10 @@ def test_gateway_satisfies_the_pinned_exporter_contract() -> None:
     contract = _json(CONTRACT)
     assert contract["schema_version"] == 2
     assert contract["corpus_id"] == "xero-tb-csv.v1"
-    assert contract["owner_repository"] == "https://github.com/ryanduguid/xero-trial-balance-export"
+    assert (
+        contract["owner_repository"]
+        == "https://github.com/ryanduguid/accounting-review-pipeline"
+    )
     assert tuple(contract["canonical_columns"]) == CANONICAL_COLUMNS
 
     for scenario in contract["scenarios"]:

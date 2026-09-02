@@ -1,3 +1,13 @@
+# v0.1.5
+
+- Move the maintained source into `packages/xero-trial-balance-export` in the
+  Accounting Review Pipeline.
+- Publish source archives through the monorepo's namespaced, attested release
+  workflow.
+- Include the canonical `xero-tb-csv.v1` contract and its fabricated integrity
+  evaluation in the release.
+- Preserve the v0.1.4 OAuth, token-cache, export and command behaviour.
+
 # v0.1.4
 
 Changes since published `v0.1.3`:
