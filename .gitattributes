@@ -1,0 +1,11 @@
+# Text files normalise to LF in the repo and to the platform ending on checkout.
+* text=auto
+
+# The VBE expects CRLF in imported VBA source, so the VBA text blobs are
+# stored CRLF and shipped byte-for-byte: a Raw download and a repo ZIP both
+# import the same way the working tree does. .bas is a standard module,
+# .cls a class module, .frm a form. tools/check_vba_encoding.py checks all
+# three, so all three are pinned here.
+*.bas -text whitespace=cr-at-eol
+*.cls -text whitespace=cr-at-eol
+*.frm -text whitespace=cr-at-eol

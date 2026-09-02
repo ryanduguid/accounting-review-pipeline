@@ -1,0 +1,19 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      attestations: write # Record provenance and SBOM attestations for release assets.
+      contents: write # Create the draft release, upload assets and publish it.
+      id-token: write # Obtain the OIDC identity required to sign attestations.
+    uses: ryanduguid/release-policy/.github/workflows/release-archive.yml@fca32335275ee264799644ccd659b025358dd23c
+    with:
+      artifact-stem: accounting-excel-toolkit
