@@ -13,7 +13,7 @@ EXPECTED = PACK / "expected_results.json"
 def test_manager_review_evaluation_reproduces_the_declared_results() -> None:
     contract = json.loads(EXPECTED.read_text(encoding="utf-8"))
     assert contract["schema_version"] == 1
-    assert contract["product_release"] == "0.1.2"
+    assert contract["product_release"] == "0.1.3"
     assert contract["fixture_version"] == "1"
     for scenario in contract["scenarios"]:
         first_result = review_pack(
