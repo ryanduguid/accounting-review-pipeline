@@ -17,7 +17,6 @@ RELEASE_CALLERS = (
     "release-review-ready-gate.yml",
     "release-xero-trial-balance-export.yml",
 )
-PATH_FILTER_KEY = re.compile(r"(?<![\w-])['\"]?(paths(?:-ignore)?)['\"]?\s*:")
 
 EXPECTED_POLICY = """\
 # Agent instructions
@@ -73,19 +72,29 @@ def _ci_text() -> str:
 
 
 def _trigger_path_filters(workflow: str) -> list[str]:
-    lines = workflow.splitlines()
-    trigger_lines: list[str] = []
-    for index, line in enumerate(lines):
-        match = re.match(r"^on\s*:(.*)$", line)
-        if match is None:
-            continue
-        trigger_lines.append(match.group(1))
-        for following in lines[index + 1 :]:
-            if following and not following[0].isspace() and not following.startswith("#"):
-                break
-            trigger_lines.append(following)
-        break
-    return PATH_FILTER_KEY.findall("\n".join(trigger_lines))
+    root = yaml.compose(workflow)
+    assert isinstance(root, MappingNode), "workflow root must be a mapping"
+    triggers = [
+        value
+        for key, value in root.value
+        if isinstance(key, ScalarNode) and key.value == "on"
+    ]
+    assert len(triggers) == 1, "workflow must have exactly one top-level on trigger"
+
+    filters: list[str] = []
+
+    def visit(node: yaml.Node) -> None:
+        if isinstance(node, MappingNode):
+            for key, value in node.value:
+                if isinstance(key, ScalarNode) and key.value in {"paths", "paths-ignore"}:
+                    filters.append(key.value)
+                visit(value)
+        elif isinstance(node, SequenceNode):
+            for value in node.value:
+                visit(value)
+
+    visit(triggers[0])
+    return filters
 
 
 def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
@@ -240,9 +249,42 @@ def test_anchor_required_checks_are_not_suppressed_by_path_filters() -> None:
         "on:\n  pull_request:\n    paths-ignore:\n      - docs/**\njobs: {}\n",
         "on: {push: {paths: [packages/**]}}\njobs: {}\n",
         "on: {pull_request: {paths-ignore: [docs/**]}}\njobs: {}\n",
+        "'on':\n  push:\n    paths: [packages/**]\njobs: {}\n",
+        '"on": {pull_request: {paths-ignore: [docs/**]}}\njobs: {}\n',
     )
     for control in positive_controls:
         assert _trigger_path_filters(control)
+
+
+def test_root_readme_defines_distinct_output_contracts() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    review_pack = _section(readme, "Review-pack contract")
+    status = _section(readme, "Status contract")
+    normalised_status = _normalise(status)
+
+    assert "JSON file is the machine-readable source of truth" in review_pack
+    assert "`readiness-pack.json`, `readiness-summary.md` and `findings.csv`" in review_pack
+    assert "`close-review-pack.json`, `close-summary.md` and `exceptions.csv`" in review_pack
+    assert "`review-ready gate`" in review_pack
+    assert "`close-control review`" in review_pack
+    for field in (
+        "`overall_status`",
+        "`engagement_type`",
+        "`period_end`",
+        "`findings`",
+        "`source_sha256`",
+        "`thresholds`",
+        "`review_boundary`",
+        "`current_report_dates` / `prior_report_dates`",
+        "`exceptions`",
+        "`acknowledgement`",
+    ):
+        assert field in review_pack
+
+    assert "pack state means the Monthly Close `PackState`" in normalised_status
+    assert "exactly `PASS`, `REVIEW` or `BLOCKED`" in normalised_status
+    assert "separate `ReadinessStatus`" in normalised_status
+    assert "`PARTIAL_DECISION_RECORDED`" in normalised_status
 
 
 def test_release_callers_resolve_to_landed_release_policy() -> None:

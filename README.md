@@ -36,25 +36,65 @@ and import records. Historical releases and tags remain owned by the source repo
 ## Review-pack contract
 
 Review packs are deterministic evidence for a human reviewer; they do not approve a close,
-post a journal, make a payment, lodge a return or lock a period. A readiness pack records
-`overall_status`, `engagement_type`, `period_end`, `findings`, source digests, thresholds and
-the review boundary. A monthly-close pack records `overall_status`, current and prior report
-dates, exceptions, source digests, thresholds and its non-approval acknowledgement. The
-ledger-review boundary writes a model result, reviewer evidence and a digest-bound receipt;
-its receipt records a decision without making that decision for the reviewer.
+post a journal, make a payment, lodge a return or lock a period. Each pack is a three-file
+directory: the JSON file is the machine-readable source of truth, Markdown is its human-readable
+summary, and CSV exposes the findings or exceptions as rows. The producing command writes all
+three files; the component's `view` command consumes and cross-checks an existing pack without
+changing it.
+
+### Readiness-gate output
+
+`review-ready gate`, called with `--profile <profile> --input <directory> --output <directory>`, produces
+`readiness-pack.json`, `readiness-summary.md` and `findings.csv`.
+
+| JSON field | Meaning |
+|---|---|
+| `overall_status` | The separate readiness result: whether configured evidence permits the pack to enter human review. |
+| `engagement_type` | The selected `bas`, `month_end` or `year_end` evidence profile. |
+| `period_end` | The reporting date declared by the preparer's self-review. |
+| `findings` | Missing, incomplete or integrity conditions found by the configured gates. |
+| `source_sha256` | Filenames and SHA-256 digests identifying the exact input byte snapshots assessed. |
+| `thresholds` | The tie-out tolerance applied during the run. |
+| `review_boundary` | The fixed statement that readiness is not approval, advice or lodgement authority. |
+| `acknowledgement` | Optional evidence of a later human review; it cannot change readiness or approve a file. |
+
+### Monthly-close pack
+
+`close-control review`, called with `--current <csv> --prior <csv> --output <directory>`, produces
+`close-review-pack.json`, `close-summary.md` and `exceptions.csv`.
+
+| JSON field | Meaning |
+|---|---|
+| `overall_status` | The aggregate Monthly Close `PackState` produced by the configured controls. |
+| `current_report_dates` / `prior_report_dates` | Report dates read from the current and prior validated trial-balance exports. |
+| `exceptions` | Material variances, integrity failures and other conditions requiring attention. |
+| `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
+| `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
+| `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |
+
+### Ledger-review evidence
+
+The ledger-review boundary is not a review pack and does not use `PackState`. It writes a model
+result, reviewer evidence and a digest-bound receipt. The receipt records a supplied human
+decision without making that decision for the reviewer.
 
 ## Status contract
 
-| Component | Status | Meaning |
-|---|---|---|
-| Review Ready Gate | `READY` | The pack may enter manager review; a human still decides. |
-| Review Ready Gate | `NOT_READY` | Required evidence or preparation is incomplete. |
-| Review Ready Gate | `BLOCKED` | Integrity or safety evidence prevents review. |
-| Monthly Close Control Plane | `PASS` | No configured exception requires review. |
-| Monthly Close Control Plane | `REVIEW` | One or more bounded exceptions need human review. |
-| Monthly Close Control Plane | `BLOCKED` | An integrity or input condition prevents a reliable result. |
-| Elizabeth Anne Alexander | `REVIEW_READY` | Bounded evidence is ready for a human decision. |
-| Elizabeth Anne Alexander | `DECISION_RECORDED` | A supplied human decision has been written to a receipt. |
+In this repository, pack state means the Monthly Close `PackState`; its value is exactly `PASS`,
+`REVIEW` or `BLOCKED`. Review Ready Gate emits a separate `ReadinessStatus`, and the ledger
+gateway uses result and receipt statuses rather than pack states.
+
+| Output | Status domain | Value | Meaning |
+|---|---|---|---|
+| Review Ready Gate | `ReadinessStatus` | `READY` | Configured evidence permits the pack to enter manager review; a human still decides. |
+| Review Ready Gate | `ReadinessStatus` | `NOT_READY` | Required evidence or preparation is incomplete. |
+| Review Ready Gate | `ReadinessStatus` | `BLOCKED` | Integrity or safety evidence prevents review. |
+| Monthly Close Control Plane | `PackState` | `PASS` | No configured exception requires review. |
+| Monthly Close Control Plane | `PackState` | `REVIEW` | One or more bounded exceptions need human review. |
+| Monthly Close Control Plane | `PackState` | `BLOCKED` | An integrity or input condition prevents a reliable result. |
+| Elizabeth Anne Alexander model result | gateway result status | `REVIEW_READY` | Bounded evidence is ready for a human decision. |
+| Elizabeth Anne Alexander receipt | decision-receipt status | `DECISION_RECORDED` | Every supplied finding decision has been recorded. |
+| Elizabeth Anne Alexander receipt | decision-receipt status | `PARTIAL_DECISION_RECORDED` | At least one finding still has no supplied human decision. |
 
 ## Exit-code contract
 
