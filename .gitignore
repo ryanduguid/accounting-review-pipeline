@@ -1,7 +1,7 @@
 # Never commit a client's ledger export, workpaper, credentials, or generated review pack.
 *.csv
-!examples/*.csv
-!schemas/*.csv
+!packages/monthly-close-control-plane/examples/*.csv
+!packages/monthly-close-control-plane/schemas/*.csv
 outputs/
 review-notes/
 
@@ -13,8 +13,8 @@ close-summary.md
 # exceptions.csv is a generated pack file, not a fixture. The two negations
 # above re-include every CSV in these directories, so --output pointed at
 # either of them left the exception detail committable.
-examples/exceptions.csv
-schemas/exceptions.csv
+packages/monthly-close-control-plane/examples/exceptions.csv
+packages/monthly-close-control-plane/schemas/exceptions.csv
 # Staged pack files. One is left behind only if a run is killed mid-write or a
 # rollback cannot put a previous file back; it may hold either run's content.
 *.partial

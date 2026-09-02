@@ -21,6 +21,7 @@ from closecontrol.report import write_review_pack
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = ROOT.parents[1]
 EXAMPLES = ROOT / "examples"
 PACK_FILES = ["close-review-pack.json", "close-summary.md", "exceptions.csv"]
 
@@ -879,10 +880,11 @@ def test_cli_returns_one_for_usage_errors(capsys, tmp_path: Path) -> None:
     [f"{directory}/{name}" for directory in ("examples", "schemas") for name in PACK_FILES],
 )
 def test_gitignore_blocks_a_generated_pack_wherever_output_points(candidate: str) -> None:
-    if shutil.which("git") is None or not (ROOT / ".git").exists():
+    if shutil.which("git") is None or not (REPOSITORY_ROOT / ".git").exists():
         pytest.skip("not a git checkout")
 
-    result = subprocess.run(["git", "check-ignore", "-q", candidate], cwd=ROOT)
+    nested_candidate = f"packages/monthly-close-control-plane/{candidate}"
+    result = subprocess.run(["git", "check-ignore", "-q", nested_candidate], cwd=REPOSITORY_ROOT)
 
     # examples/ and schemas/ re-include their CSVs so the fabricated fixtures
     # stay committable, which left exceptions.csv committable with them.
@@ -890,11 +892,12 @@ def test_gitignore_blocks_a_generated_pack_wherever_output_points(candidate: str
 
 
 def test_gitignore_still_admits_the_fabricated_fixtures() -> None:
-    if shutil.which("git") is None or not (ROOT / ".git").exists():
+    if shutil.which("git") is None or not (REPOSITORY_ROOT / ".git").exists():
         pytest.skip("not a git checkout")
 
     for fixture in ("examples/current_trial_balance.csv", "schemas/canonical_trial_balance.csv"):
-        assert subprocess.run(["git", "check-ignore", "-q", fixture], cwd=ROOT).returncode == 1, fixture
+        nested_fixture = f"packages/monthly-close-control-plane/{fixture}"
+        assert subprocess.run(["git", "check-ignore", "-q", nested_fixture], cwd=REPOSITORY_ROOT).returncode == 1, fixture
 
 
 def test_cli_help_still_exits_zero(capsys) -> None:

@@ -8,6 +8,7 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = ROOT.parents[1]
 
 EXPECTED_POLICY = """\
 # Agent instructions
@@ -59,7 +60,7 @@ def _without_fenced_commands(section: str) -> str:
 
 
 def _ci_text() -> str:
-    return (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    return (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
 
 def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
@@ -151,8 +152,8 @@ def _ci_smoke_contract() -> tuple[str, ...]:
     assert commands[2] == "cd /tmp"
     assert commands[3] == (
         f"{venv_path}/bin/close-control review "
-        '--current "$GITHUB_WORKSPACE/examples/current_trial_balance.csv" '
-        '--prior "$GITHUB_WORKSPACE/examples/prior_trial_balance.csv" '
+        '--current "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/current_trial_balance.csv" '
+        '--prior "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/prior_trial_balance.csv" '
         "--output pack || [ $? -eq 2 ]"
     )
     assert commands[4] == "test -f pack/close-review-pack.json"
