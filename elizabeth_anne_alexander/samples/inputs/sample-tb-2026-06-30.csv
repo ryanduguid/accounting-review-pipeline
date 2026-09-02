@@ -1,0 +1,6 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-06-30,Demo Entity Pty Ltd,Assets,acct-100,Demo Bank,1000,10000.00,0.00,50000.00,0.00
+2026-06-30,Demo Entity Pty Ltd,Assets,acct-200,Demo Receivables,1100,3500.00,0.00,21500.00,0.00
+2026-06-30,Demo Entity Pty Ltd,Revenue,acct-300,Demo Sales,4000,0.00,10000.00,0.00,71000.00
+2026-06-30,Demo Entity Pty Ltd,Expenses,acct-400,Demo Operating Expenses,6000,2500.00,0.00,20500.00,0.00
+2026-06-30,Demo Entity Pty Ltd,Equity,acct-900,Demo Retained Earnings,3000,0.00,6000.00,0.00,21000.00

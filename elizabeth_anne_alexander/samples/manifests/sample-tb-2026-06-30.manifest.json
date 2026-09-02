@@ -1,0 +1,20 @@
+{
+  "schema_version": "xero-source-manifest.v1",
+  "mode": "synthetic",
+  "source_system": "xero-trial-balance-export",
+  "entity_ref": "sample-entity-001",
+  "report": {
+    "name": "Trial Balance",
+    "as_at": "2026-06-30",
+    "basis": "accrual",
+    "currency": "AUD",
+    "tracking_filters": [],
+    "include_drafts": false
+  },
+  "export": {
+    "schema": "xero-tb-csv.v1",
+    "csv": "samples/inputs/sample-tb-2026-06-30.csv",
+    "sha256": "c046352800279da7a4b54a2e5e356d98da610049091a44a62c41e17820be6bda",
+    "generated_at": "2026-07-01T09:00:00Z"
+  }
+}
