@@ -1,0 +1,179 @@
+table Fact_PayrollSuper
+	lineageTag: a1b2c3d4-stp-0008-8899-aabbccddeeff
+
+	/// Total gross earnings paid across Single Touch Payroll events.
+	measure 'Gross Wages Paid' = SUM(Fact_PayrollSuper[GrossEarnings])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0001
+
+	/// Qualifying earnings under post-1 July 2026 Payday Super regime (STP Code Q).
+	measure 'Qualifying Earnings (Code Q)' = SUM(Fact_PayrollSuper[QualifyingEarnings_CodeQ])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0002
+
+	/// Statutory 12.0% superannuation liability accrued (STP Code L).
+	measure 'Super Liability Accrued (Code L)' = SUM(Fact_PayrollSuper[SuperLiability_CodeL])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0003
+
+	/// Contributions verified received by employee funds within 7 national business days.
+	measure 'Super Remitted On-Time' =
+			CALCULATE(
+				SUM(Fact_PayrollSuper[SuperLiability_CodeL]),
+				Fact_PayrollSuper[ComplianceStatus] = "ON_TIME"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0004
+
+	/// Contributions received after the 7-business-day statutory fund receipt deadline.
+	measure 'Super in Breach (Late)' =
+			CALCULATE(
+				SUM(Fact_PayrollSuper[SuperLiability_CodeL]),
+				Fact_PayrollSuper[ComplianceStatus] = "LATE_BREACH"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0005
+
+	/// Proportion of superannuation liability received by funds within the statutory deadline.
+	/// Blank rather than 100% for a period with no payroll events, matching [ATO Compliance Risk Profile].
+	measure 'Payday Super Compliance Rate %' = DIVIDE([Super Remitted On-Time], [Super Liability Accrued (Code L)], BLANK())
+		formatString: 0.0%
+		lineageTag: stp-meas-0006
+
+	/// Estimated Super Guarantee Charge (individual final shortfall, notional earnings, and administrative uplift).
+	measure 'Total SGC Exposure' = SUM(Fact_PayrollSuper[SGC_Shortfall])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0007
+
+	/// Individual notional earnings accrued on late contributions, compounding daily at the general interest charge (GIC) rate.
+	measure 'Total GIC Nominal Interest' = SUM(Fact_PayrollSuper[GIC_NominalInterest])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: stp-meas-0008
+
+	/// Total count of individual employee pay run events.
+	measure 'Payroll Events Count' = COUNTROWS(Fact_PayrollSuper)
+		formatString: #,##0
+		lineageTag: stp-meas-0009
+
+	/// Count of pay run events that breached the 7-business-day fund receipt deadline.
+	measure 'Late Events Count' =
+			CALCULATE(
+				COUNTROWS(Fact_PayrollSuper),
+				Fact_PayrollSuper[ComplianceStatus] = "LATE_BREACH"
+			)
+		formatString: #,##0
+		lineageTag: stp-meas-0010
+
+	column EventID
+		dataType: string
+		isKey
+		lineageTag: stp-col-0001
+		summarizeBy: none
+		sourceColumn: EventID
+
+	column EmployeeID
+		dataType: string
+		lineageTag: stp-col-0002
+		summarizeBy: none
+		sourceColumn: EmployeeID
+
+	column EntityID
+		dataType: string
+		lineageTag: stp-col-0003
+		summarizeBy: none
+		sourceColumn: EntityID
+
+	column EmployeeName
+		dataType: string
+		lineageTag: stp-col-0004
+		summarizeBy: none
+		sourceColumn: EmployeeName
+
+	column PayDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: stp-col-0005
+		summarizeBy: none
+		sourceColumn: PayDate
+
+	column GrossEarnings
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: stp-col-0006
+		summarizeBy: sum
+		sourceColumn: GrossEarnings
+
+	column QualifyingEarnings_CodeQ
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: stp-col-0007
+		summarizeBy: sum
+		sourceColumn: QualifyingEarnings_CodeQ
+
+	column SuperLiability_CodeL
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: stp-col-0008
+		summarizeBy: sum
+		sourceColumn: SuperLiability_CodeL
+
+	column SuperFundUSI
+		dataType: string
+		lineageTag: stp-col-0009
+		summarizeBy: none
+		sourceColumn: SuperFundUSI
+
+	column SuperFundName
+		dataType: string
+		lineageTag: stp-col-0010
+		summarizeBy: none
+		sourceColumn: SuperFundName
+
+	column RemittanceDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: stp-col-0011
+		summarizeBy: none
+		sourceColumn: RemittanceDate
+
+	column FundReceiptDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: stp-col-0012
+		summarizeBy: none
+		sourceColumn: FundReceiptDate
+
+	column StatutoryDueDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: stp-col-0013
+		summarizeBy: none
+		sourceColumn: StatutoryDueDate
+
+	column ComplianceStatus
+		dataType: string
+		lineageTag: stp-col-0014
+		summarizeBy: none
+		sourceColumn: ComplianceStatus
+
+	column SGC_Shortfall
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: stp-col-0015
+		summarizeBy: sum
+		sourceColumn: SGC_Shortfall
+
+	column GIC_NominalInterest
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: stp-col-0016
+		summarizeBy: sum
+		sourceColumn: GIC_NominalInterest
+
+	partition Fact_PayrollSuper = m
+		mode: import
+		source =
+			let
+				Source = Fact_PayrollSuper
+			in
+				Source

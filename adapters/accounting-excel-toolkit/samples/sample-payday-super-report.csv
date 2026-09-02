@@ -1,0 +1,4 @@
+row,employee_id,qe_day,pathway,due_date,verdict,days_late,lateness_measured_to,sg_amount,final_shortfall,notional_earnings,uplift_best_case,uplift_worst_case,sgc_estimate_low,sgc_estimate_high,caveats,notes,unassessable_between
+1,000123,2026-06-30,quarterly,2026-07-28,LATE,5,fund receipt,780.00,780.00,45.12,8.22,19.47,833.34,844.59,fund receipt supplied,"Fabricated, ""late"" contribution",
+2,'=FORMULA,2026-07-31,monthly,,UNKNOWN,,calendar coverage,125.50,,,,,,,calendar coverage cannot settle the due date,Fabricated indeterminate contribution,LATE or ON_TIME
+,NOTE,,,,,,,,,,,,,,,payday-super-checker 0.0.0 fabricated fixture; source fabricated-payroll.csv; as at 2026-08-21. Educational test provenance only.,

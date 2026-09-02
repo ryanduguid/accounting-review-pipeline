@@ -1,0 +1,69 @@
+table Fact_Budget
+	lineageTag: a1b2c3d4-bud-0007-8899-aabbccddeeff
+
+	/// Total budgeted amount for the selected period.
+	measure 'Budget Amount' = SUM(Fact_Budget[BudgetAmount])
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: bud-meas-0001
+
+	/// Total budgeted revenue.
+	measure 'Budget Revenue' =
+			CALCULATE(
+				SUM(Fact_Budget[BudgetAmount]),
+				Dim_Account[Class] = "Revenue"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: bud-meas-0002
+
+	/// Total budgeted expenses.
+	measure 'Budget Expenses' =
+			CALCULATE(
+				SUM(Fact_Budget[BudgetAmount]),
+				Dim_Account[Class] = "Expense"
+			)
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: bud-meas-0003
+
+	/// Variance between actual revenue and budgeted revenue.
+	measure 'Budget Variance $' = [Revenue] - [Budget Revenue]
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: bud-meas-0004
+
+	/// Percentage variance against revenue budget.
+	measure 'Budget Variance %' = DIVIDE([Budget Variance $], [Budget Revenue], 0)
+		formatString: 0.0%
+		lineageTag: bud-meas-0005
+
+	column PeriodDate
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: bud-col-0001
+		summarizeBy: none
+		sourceColumn: PeriodDate
+
+	column EntityID
+		dataType: string
+		lineageTag: bud-col-0002
+		summarizeBy: none
+		sourceColumn: EntityID
+
+	column AccountCode
+		dataType: string
+		lineageTag: bud-col-0003
+		summarizeBy: none
+		sourceColumn: AccountCode
+
+	column BudgetAmount
+		dataType: double
+		formatString: $#,##0.00
+		lineageTag: bud-col-0004
+		summarizeBy: sum
+		sourceColumn: BudgetAmount
+
+	partition Fact_Budget = m
+		mode: import
+		source =
+			let
+				Source = Fact_Budget
+			in
+				Source

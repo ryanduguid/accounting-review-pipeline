@@ -1,0 +1,5 @@
+EntityID,LegalName,TradingName,ABN,ACN,TaxStructure,EntityRole,ANZSIC_Code,Currency,ConsolidationWeight
+ENT001,Varrock Ventures Pty Ltd,Varrock Advisory & Tech,51824753556,123456789,Company,Parent Operating,6962,AUD,1.0
+ENT002,Draynor Produce Pty Ltd,Draynor Fresh Foods,82147609350,234567890,Company,Trading Subsidiary,4122,AUD,1.0
+ENT003,Falador Freight Pty Ltd,Falador National Logistics,33087542991,345678901,Company,Logistics Subsidiary,4610,AUD,1.0
+ENT004,Ardougne Holdings Trust,Ardougne Commercial Property,12325678901,,Unit Trust,Property Asset Trust,6712,AUD,1.0

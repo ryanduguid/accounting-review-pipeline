@@ -1,0 +1,23 @@
+{
+  "schema_version": "xero-review-policy.v1",
+  "policy_id": "demo-policy-v1",
+  "operations": {
+    "trial_balance_variance": {
+      "allowed_sections": ["Revenue", "Expenses"],
+      "minimum_absolute_delta": "1000.00",
+      "minimum_percent_delta": "15.00",
+      "max_results": 25
+    }
+  },
+  "model_projection": [
+    "finding_id",
+    "evidence_ref",
+    "account_ref",
+    "section",
+    "current_ytd_net",
+    "prior_ytd_net",
+    "delta",
+    "percent_change",
+    "review_reason"
+  ]
+}

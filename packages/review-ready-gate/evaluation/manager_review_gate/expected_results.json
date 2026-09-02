@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "product_release": "0.1.2",
+  "fixture_version": "1",
+  "source_reviewed": "2026-08-26",
+  "sources": [
+    {
+      "publisher": "Australian Taxation Office",
+      "title": "Business activity statements",
+      "url": "https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/business-activity-statements-bas"
+    },
+    {
+      "publisher": "Australian Taxation Office",
+      "title": "Monthly GST reporting",
+      "url": "https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/lodging-your-bas-or-annual-gst-return/options-for-reporting-and-paying-gst/monthly-gst-reporting"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "incomplete_bas",
+      "profile": "bas",
+      "fixture": "examples/bas-not-ready",
+      "expected_status": "NOT_READY",
+      "expected_findings": [
+        "MISSING_ARTEFACT",
+        "SELF_REVIEW_INCOMPLETE",
+        "OPEN_ITEM_BLOCKING"
+      ]
+    },
+    {
+      "id": "corrected_bas",
+      "profile": "bas",
+      "fixture": "examples/bas-ready",
+      "expected_status": "READY",
+      "expected_findings": []
+    }
+  ],
+  "human_decision": "READY means no configured gate tripped; it is not approval, not a tax or BAS agent service, not advice and not lodgment authority. A human remains accountable for professional judgement, approval, client impact and lodgment decisions."
+}
