@@ -10,11 +10,10 @@ commit. Do not build or upload package assets by hand. Do not tag until you
 intend to publish. A `READY` result from this tool is not a reason to release,
 and a release is not an approval of any client file.
 
-The imported package currently uses version `0.1.2`; the first replacement release will use
-version `0.1.3`. The protected standalone `v0.1.0` tag failed its
-release-notes-header gate before any GitHub Release, asset or PyPI project was
-created. Never move or reuse that tag. The published `v0.1.1` recovery remains
-historical and must not be moved or reused.
+The protected standalone `v0.1.0` tag failed its release-notes-header gate
+before any GitHub Release, asset or PyPI project was created. Never move or
+reuse that tag. The published `v0.1.1` recovery remains historical and must not
+be moved or reused.
 
 ## One-time setup before the first tag
 

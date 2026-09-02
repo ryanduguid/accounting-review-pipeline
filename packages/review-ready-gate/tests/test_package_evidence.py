@@ -20,12 +20,12 @@ def test_source_distribution_contains_manager_review_evidence(tmp_path: Path) ->
     assert len(archives) == 1
 
     expected_rooted_members = {
-        "review_ready_gate-0.1.2/CITATION.cff",
-        "review_ready_gate-0.1.2/evaluation/manager_review_gate/README.md",
-        "review_ready_gate-0.1.2/evaluation/manager_review_gate/expected_results.json",
+        "review_ready_gate-0.1.3/CITATION.cff",
+        "review_ready_gate-0.1.3/evaluation/manager_review_gate/README.md",
+        "review_ready_gate-0.1.3/evaluation/manager_review_gate/expected_results.json",
     }
     expected_suffixes = {
-        member.removeprefix("review_ready_gate-0.1.2/")
+        member.removeprefix("review_ready_gate-0.1.3/")
         for member in expected_rooted_members
     }
     with tarfile.open(archives[0], "r:gz") as archive:

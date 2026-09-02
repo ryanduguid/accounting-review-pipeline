@@ -2,7 +2,7 @@
 > High-density context for LLM agents and accounting automation pipelines.
 
 ## Package Overview
-- **Repository**: https://github.com/ryanduguid/workpaper-review-gate
+- **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate
 - **Distribution name**: `review-ready-gate`
 - **CLI command**: `review-ready`
 - **Domain**: Local, deterministic readiness gating for Australian public-practice workpaper packs (BAS, month-end, year-end).
