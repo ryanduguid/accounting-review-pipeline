@@ -1,0 +1,16 @@
+# The demo contains fabricated data only. Never add a client export, token, or review output.
+build/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+*.csv
+!elizabeth_anne_alexander/samples/inputs/*.csv
+!tests/conformance/xero_trial_balance_v1/fixtures/passing.csv
+!tests/conformance/xero_trial_balance_v1/fixtures/failing_movement.csv
+!tests/conformance/xero_trial_balance_v1/fixtures/failing_ytd.csv
+.env
+.env.*
+*.token
+*.pem
