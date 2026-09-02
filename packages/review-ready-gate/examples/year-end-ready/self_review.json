@@ -1,0 +1,13 @@
+{
+  "preparer_initials": "EF",
+  "prepared_on": "2026-07-10",
+  "engagement_type": "year_end",
+  "period_end": "2026-06-30",
+  "assertions": {
+    "pack_complete": true,
+    "tie_outs_done": true,
+    "open_items_listed": true,
+    "variances_explained": true,
+    "self_reviewed": true
+  }
+}

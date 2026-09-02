@@ -1,0 +1,13 @@
+{
+  "preparer_initials": "AB",
+  "prepared_on": "2026-04-10",
+  "engagement_type": "bas",
+  "period_end": "2026-03-31",
+  "assertions": {
+    "pack_complete": true,
+    "tie_outs_done": true,
+    "open_items_listed": true,
+    "variances_explained": true,
+    "self_reviewed": true
+  }
+}
