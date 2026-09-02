@@ -44,7 +44,7 @@ It is the missing upstream step in this stack:
 Incomplete pack
       |
       v
-workpaper-review-gate   <-- this repository
+review-ready-gate      <-- maintained monorepo package
       |
       |  READY
       v

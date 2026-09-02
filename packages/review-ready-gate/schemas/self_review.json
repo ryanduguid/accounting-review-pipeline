@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/schemas/self_review.json",
+  "$id": "https://github.com/ryanduguid/workpaper-review-gate/blob/main/schemas/self_review.json",
   "title": "Self-review declaration",
   "description": "Shape of self_review.json. The CLI also requires prepared_on not earlier than period_end, engagement_type matching --profile, JSON booleans only, and no control or formatting characters. Any assertion that is not true is NOT_READY; the assertions are necessary, not sufficient.",
   "type": "object",

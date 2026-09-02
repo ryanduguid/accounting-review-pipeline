@@ -119,7 +119,7 @@ def test_project_identity_preserves_package_and_command_compatibility() -> None:
     assert metadata["project"]["urls"]["Issues"] == f"{REPOSITORY_URL}/issues"
 
 
-def test_public_source_links_use_the_canonical_monorepo() -> None:
+def test_public_source_links_use_canonical_monorepo_and_schema_id_stays_stable() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     llms = (ROOT / "llms.txt").read_text(encoding="utf-8")
     schema = (ROOT / "schemas" / "self_review.json").read_text(encoding="utf-8")
@@ -127,8 +127,12 @@ def test_public_source_links_use_the_canonical_monorepo() -> None:
     assert f"{REPOSITORY_URL}/actions/workflows/review-ready-gate.yml" in readme
     assert PACKAGE_URL in readme
     assert f"**Repository**: {PACKAGE_URL}" in llms
-    assert f'"$id": "{REPOSITORY_URL}/blob/main/' in schema
+    assert (
+        '"$id": "https://github.com/ryanduguid/workpaper-review-gate/'
+        'blob/main/schemas/self_review.json"'
+    ) in schema
     assert "ryanduguid/workpaper-review-gate/actions" not in readme
+    assert "this repository" not in readme
 
 
 def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
