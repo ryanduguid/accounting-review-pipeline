@@ -1,0 +1,259 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "a0d487f4e719fa5923a4",
+  "position": {
+    "x": 20,
+    "y": 220,
+    "z": 4000,
+    "height": 480,
+    "width": 760,
+    "tabOrder": 4000
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Dim_Entity"
+                    }
+                  },
+                  "Property": "TradingName"
+                }
+              },
+              "queryRef": "Dim_Entity.TradingName",
+              "nativeQueryRef": "TradingName"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Dim_ANZSIC"
+                    }
+                  },
+                  "Property": "IndustryTitle"
+                }
+              },
+              "queryRef": "Dim_ANZSIC.IndustryTitle",
+              "nativeQueryRef": "IndustryTitle"
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_GeneralLedger"
+                    }
+                  },
+                  "Property": "Gross Profit Margin %"
+                }
+              },
+              "queryRef": "Fact_GeneralLedger.Gross Profit Margin %",
+              "nativeQueryRef": "Gross Profit Margin %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "ATO Benchmark Gross Profit %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Gross Profit %",
+              "nativeQueryRef": "ATO Benchmark Gross Profit %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "Gross Profit Variance to Benchmark %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.Gross Profit Variance to Benchmark %",
+              "nativeQueryRef": "Gross Profit Variance to Benchmark %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "Actual Total Expense Ratio %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.Actual Total Expense Ratio %",
+              "nativeQueryRef": "Actual Total Expense Ratio %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "ATO Benchmark Expense Ratio %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %",
+              "nativeQueryRef": "ATO Benchmark Expense Ratio %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "Actual Labour Ratio %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.Actual Labour Ratio %",
+              "nativeQueryRef": "Actual Labour Ratio %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "ATO Benchmark Labour %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Labour %",
+              "nativeQueryRef": "ATO Benchmark Labour %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "Actual Rent to Revenue %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.Actual Rent to Revenue %",
+              "nativeQueryRef": "Actual Rent to Revenue %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "ATO Benchmark Rent %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Rent %",
+              "nativeQueryRef": "ATO Benchmark Rent %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "Actual Motor Vehicle %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.Actual Motor Vehicle %",
+              "nativeQueryRef": "Actual Motor Vehicle %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "ATO Benchmark Motor Vehicle %"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Motor Vehicle %",
+              "nativeQueryRef": "ATO Benchmark Motor Vehicle %"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_ATOBenchmark"
+                    }
+                  },
+                  "Property": "ATO Compliance Risk Profile"
+                }
+              },
+              "queryRef": "Fact_ATOBenchmark.ATO Compliance Risk Profile",
+              "nativeQueryRef": "ATO Compliance Risk Profile"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Key Expense & Margin Ratios vs ATO Industry Benchmarks'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}
