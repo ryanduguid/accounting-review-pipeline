@@ -10,11 +10,11 @@ This pack is for a reviewer who wants to reproduce the offline integrity gate wi
 
 ## Fabricated inputs
 
-The three CSVs in `fixtures/` are fabricated output-shape fixtures. They are not Xero API responses and are not client records. No OAuth flow runs in this evaluation.
+The three CSVs in the repository root's `contracts/xero-trial-balance-v1/fixtures/` directory are fabricated output-shape fixtures. They are not Xero API responses and are not client records. No OAuth flow runs in this evaluation.
 
 ## Reproduce the result
 
-From the repository root, install the locked dependencies and run the offline pack:
+From `packages/xero-trial-balance-export/`, install the locked dependencies and run the offline pack:
 
 ```bash
 python -m pip install --require-hashes -r requirements.lock
@@ -25,16 +25,16 @@ python -B -m unittest discover -s tests -v
 Dependency installation may download the hash-locked packages. Once dependencies are installed, the three evaluation runner commands are fully offline, make no network request and write no output file:
 
 ```bash
-python evaluation/xero_tb_integrity/run.py evaluation/xero_tb_integrity/fixtures/passing.csv
-python evaluation/xero_tb_integrity/run.py evaluation/xero_tb_integrity/fixtures/failing_movement.csv
-python evaluation/xero_tb_integrity/run.py evaluation/xero_tb_integrity/fixtures/failing_ytd.csv
+python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/passing.csv
+python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/failing_movement.csv
+python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/failing_ytd.csv
 ```
 
 They use only the fabricated local fixtures and need no credentials.
 
 ## Expected result
 
-[`expected_results.json`](expected_results.json) is the machine-readable contract. `passing.csv` exits 0 and reports that movement and YTD balance. Each failing fixture exits 1, identifies its failed pair and reports that nothing was written.
+[`expected_results.json`](../../../../contracts/xero-trial-balance-v1/expected_results.json) is the machine-readable contract. `passing.csv` exits 0 and reports that movement and YTD balance. Each failing fixture exits 1, identifies its failed pair and reports that nothing was written.
 
 ## Shared conformance corpus
 
@@ -50,7 +50,9 @@ The contract records Xero's [Accounting API Reports](https://developer.xero.com/
 
 ## Product and fixture version
 
-`v0.1.4` is the latest published product release. It predates this evaluation directory. This evaluation is protected by the permanent merge-commit link captured after this pull request; the `v0.1.4` tag does not contain this pack. The fabricated fixture version is `1`.
+`xero-trial-balance-export/v0.1.6` is the first monorepo release containing
+this evaluation and the root contract it exercises. The fabricated fixture
+version is `1`.
 
 ## Human decision
 

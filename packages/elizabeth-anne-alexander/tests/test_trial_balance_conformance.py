@@ -10,31 +10,23 @@ import pytest
 from elizabeth_anne_alexander.errors import GatewayError
 from elizabeth_anne_alexander.gateway import CANONICAL_COLUMNS, _load_tb
 
-CORPUS = Path(__file__).parent / "conformance" / "xero_trial_balance_v1"
+REPO = Path(__file__).resolve().parents[1]
+CORPUS = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"
 CONTRACT = CORPUS / "expected_results.json"
-PROVENANCE = CORPUS / "UPSTREAM.json"
 
 
 def _json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_vendored_corpus_is_pinned_to_an_immutable_exporter_commit() -> None:
-    provenance = _json(PROVENANCE)
+def test_root_corpus_preserves_the_exporter_owned_bytes() -> None:
     expected_files = {
-        "expected_results.json": "1568687d5ccc809d0267d024b34869061cf10d436a28501e57888314238add91",
+        "expected_results.json": "af6b1db093e47137330f3228dd5ce1c5d663f497fcc5e3ffd00493ecd829461d",
         "fixtures/passing.csv": "2cbe9997a8e7210936ff3c59b5d3fdb0041c1b375b0f9c88cf9ee30d0f356a09",
         "fixtures/failing_movement.csv": "702175df967b2854e7897cd27fdc4aca441e21b52438381108fabe88ff3153e4",
         "fixtures/failing_ytd.csv": "ec757f12d13866360fbab189228ebb425893c6f8b299809c6f8567bf5817c64b",
     }
 
-    assert provenance == {
-        "schema_version": 1,
-        "repository": "https://github.com/ryanduguid/xero-trial-balance-export",
-        "commit": "f87b5e4e224b930b3f6d9c9c43e365a9d4ea98d4",
-        "source_root": "evaluation/xero_tb_integrity",
-        "files": expected_files,
-    }
     for relative, expected_digest in expected_files.items():
         content = (CORPUS / relative).read_bytes()
         assert b"\r\n" not in content
@@ -45,7 +37,10 @@ def test_gateway_satisfies_the_pinned_exporter_contract() -> None:
     contract = _json(CONTRACT)
     assert contract["schema_version"] == 2
     assert contract["corpus_id"] == "xero-tb-csv.v1"
-    assert contract["owner_repository"] == "https://github.com/ryanduguid/xero-trial-balance-export"
+    assert (
+        contract["owner_repository"]
+        == "https://github.com/ryanduguid/accounting-review-pipeline"
+    )
     assert tuple(contract["canonical_columns"]) == CANONICAL_COLUMNS
 
     for scenario in contract["scenarios"]:
@@ -57,3 +52,16 @@ def test_gateway_satisfies_the_pinned_exporter_contract() -> None:
         else:
             with pytest.raises(GatewayError, match=re.escape(expectation["error_contains"])):
                 _load_tb(fixture)
+
+
+def test_component_policy_points_only_to_the_canonical_contract() -> None:
+    stale_path = "tests/conformance/xero_trial_balance_v1"
+    ignore = (REPO / ".gitignore").read_text(encoding="utf-8")
+    contributing = (REPO / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+
+    assert f"!{stale_path}/fixtures/" not in ignore
+    assert stale_path not in contributing
+    assert stale_path not in readme
+    for document in (contributing, readme):
+        assert "contracts/xero-trial-balance-v1/" in document

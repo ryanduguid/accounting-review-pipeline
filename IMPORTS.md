@@ -33,7 +33,7 @@ No distribution name, import package, command or version changed.
 
 | Component | Source and selected commit | Git tree | Tracked-tree SHA-256 | Latest release | Destination |
 |---|---|---|---|---|---|
-| Monthly Close Controls (anchor) | `https://github.com/ryanduguid/monthly-close-controls.git` at `06a9bfec0d52baceb3a15f1d5ec5afde8850df42` | `96b3fea5234a891d2f3d53f4dfca646436463235` | `883a499040ad2b413e75a348e211bb58f4ca4107f0d2a415f0143b37e0f33e8b` | `v0.1.2` | `packages/monthly-close-control-plane/` |
+| Monthly Close Controls (anchor) | `https://github.com/ryanduguid/accounting-review-pipeline.git` at `06a9bfec0d52baceb3a15f1d5ec5afde8850df42` | `96b3fea5234a891d2f3d53f4dfca646436463235` | `883a499040ad2b413e75a348e211bb58f4ca4107f0d2a415f0143b37e0f33e8b` | `v0.1.2` | `packages/monthly-close-control-plane/` |
 | Xero Trial Balance Export | `https://github.com/ryanduguid/xero-trial-balance-export.git` at `2a0966e89e5f8daa587be8466f988d9adc16003a` | `0b35ee4de1a71a5cb04fa00e27a41c130f1a7563` | `72d773eafccf558d832ab7b7df2604d3a6f7a8d1fd06d6da3acceb1f7c2e623b` | `v0.1.4` | `packages/xero-trial-balance-export/` |
 | Workpaper Review Gate | `https://github.com/ryanduguid/workpaper-review-gate.git` at `e2a01292b9782dc086595865bb80516c81fcb70e` | `f5fe55d4a2fcd5b49952d3de2583a863aa4dad45` | `851eccd592fa0edcb60becc8087f37f236cfe030867e662933336cda634e72cc` | `v0.1.1` | `packages/review-ready-gate/` |
 | Xero Ledger Review Gate | `https://github.com/ryanduguid/xero-ledger-review-gate.git` at `a3df72bfefc94c2a4b5e6fa01fe54aec21200d1f` | `82ae98af57db154c19556f7bfe0eeeaad77bdf60` | `679976f85bb5731782d68e527f5fa3cd9680744bb46a373393f1f8cbec5efb83` | `v0.2.1` | `packages/elizabeth-anne-alexander/` |
@@ -72,7 +72,7 @@ OAuth or publishing credentials. Production packages do not import sibling packa
 
 ## Anchor remote preflight (read-only)
 
-The anchor remains public, active and named `monthly-close-controls`; its default branch is
+The anchor remains public and active as `accounting-review-pipeline`; its default branch is
 `main`. Branch protection on `main` requires the status checks `package`, `test (3.10)`,
 `test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python` with strict up-to-date
 enforcement, so the root `ci.yml` keeps the workflow name `tests` with job ids `test`,
@@ -153,3 +153,26 @@ exactly these paths:
 | `apps/australian-accounting-power-bi/docs/data-model.md` | trailing whitespace on lines 11, 14, 18 and 20 | `whitespace=-blank-at-eol` |
 | `packages/elizabeth-anne-alexander/DATA-FLOW.md` | trailing whitespace on line 21 | `whitespace=-blank-at-eol` |
 | `adapters/accounting-excel-toolkit/tests/test_static_guards.py` | blank line at end of file (line 1676) | `whitespace=-blank-at-eof` |
+
+## Contract provenance
+
+`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
+`xero-tb-csv.v1` corpus. `expected_results.json` and the three fixtures were moved with
+`git mv` from `packages/xero-trial-balance-export/evaluation/xero_tb_integrity/` (exporter
+source commit `2a0966e89e5f8daa587be8466f988d9adc16003a`), so the blobs are byte-identical:
+`1568687d5ccc809d0267d024b34869061cf10d436a28501e57888314238add91` (expected results),
+`2cbe9997a8e7210936ff3c59b5d3fdb0041c1b375b0f9c88cf9ee30d0f356a09` (passing),
+`702175df967b2854e7897cd27fdc4aca441e21b52438381108fabe88ff3153e4` (movement rejection) and
+`ec757f12d13866360fbab189228ebb425893c6f8b299809c6f8567bf5817c64b` (YTD rejection). The
+ledger-review gate's vendored copy under `tests/conformance/xero_trial_balance_v1/` (pinned
+to exporter commit `f87b5e4e224b930b3f6d9c9c43e365a9d4ea98d4` and byte-identical) was removed
+with its `UPSTREAM.json`, the `MANIFEST.in` line and the packaging test that asserted it,
+after every consumer read the root authority. `schema.csv` is exactly the ten-column header
+plus one LF and `SHA256SUMS` covers all six files. The exporter runner, its evaluation
+README and `tests/test_evaluation_pack.py` read the root contract; the readiness,
+monthly-close and ledger-review suites gained root-contract tests; the Excel adapter and
+Power BI suites verify the same files with the standard library only;
+`tests/test_xero_trial_balance_contract.py` and `.github/workflows/joined-conformance.yml`
+run the joined producer-to-consumer conformance with only the exporter's hash-locked runtime
+installed. No duplicate copy of any fixture blob remains in the tree and no shared runtime
+package was added.

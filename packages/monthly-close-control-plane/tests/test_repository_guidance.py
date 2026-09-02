@@ -266,6 +266,7 @@ def test_root_readme_defines_distinct_output_contracts() -> None:
     assert "`readiness-pack.json`, `readiness-summary.md` and `findings.csv`" in review_pack
     assert "`close-review-pack.json`, `close-summary.md` and `exceptions.csv`" in review_pack
     assert "`review-ready gate`" in review_pack
+    assert "`--profile <profile> --pack <directory> --output <directory>`" in review_pack
     assert "`close-control review`" in review_pack
     for field in (
         "`overall_status`",

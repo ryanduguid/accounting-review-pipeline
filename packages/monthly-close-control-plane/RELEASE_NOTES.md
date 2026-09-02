@@ -1,3 +1,13 @@
+# v0.1.3
+
+First namespaced release from the maintained
+`packages/monthly-close-control-plane` source in the Accounting Review
+Pipeline. Project and component links now identify the canonical monorepo,
+release guidance uses the protected component tag, and the fabricated local
+close loop resolves the co-located Elizabeth Anne Alexander package. The
+control engine, status and exit-code contracts, and fabricated fixtures are
+unchanged from v0.1.2.
+
 # v0.1.2
 
 Changes since `v0.1.0`:

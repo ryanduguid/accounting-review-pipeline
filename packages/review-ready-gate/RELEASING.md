@@ -10,16 +10,15 @@ commit. Do not build or upload package assets by hand. Do not tag until you
 intend to publish. A `READY` result from this tool is not a reason to release,
 and a release is not an approval of any client file.
 
-The imported package currently uses version `0.1.2`; the first replacement release will use
-version `0.1.3`. The protected standalone `v0.1.0` tag failed its
-release-notes-header gate before any GitHub Release, asset or PyPI project was
-created. Never move or reuse that tag. The published `v0.1.1` recovery remains
-historical and must not be moved or reused.
+The protected standalone `v0.1.0` tag failed its release-notes-header gate
+before any GitHub Release, asset or PyPI project was created. Never move or
+reuse that tag. The published `v0.1.1` recovery remains historical and must not
+be moved or reused.
 
 ## One-time setup before the first tag
 
 1. Create the GitHub Actions environment `pypi-review-ready-gate` on
-   `ryanduguid/monthly-close-controls` (Settings → Environments). Set its URL to
+   `ryanduguid/accounting-review-pipeline` (Settings → Environments). Set its URL to
    `https://pypi.org/p/review-ready-gate`.
 2. Register a PyPI trusted publisher (Account → Publishing → "Add a new
    pending publisher" while the project does not exist) with exactly these
@@ -29,7 +28,7 @@ historical and must not be moved or reused.
 | --- | --- |
 | PyPI project name | `review-ready-gate` |
 | Owner | `ryanduguid` |
-| Repository name | `monthly-close-controls` |
+| Repository name | `accounting-review-pipeline` |
 | Workflow filename | `release-review-ready-gate.yml` |
 | Environment name | `pypi-review-ready-gate` |
 
@@ -47,7 +46,7 @@ required.
 
     ```bash
     gh api -H "X-GitHub-Api-Version: 2026-03-10" \
-      repos/ryanduguid/monthly-close-controls/immutable-releases --jq .enabled
+      repos/ryanduguid/accounting-review-pipeline/immutable-releases --jq .enabled
     ```
 
     Do not push the tag unless the output is exactly `true`. The Actions
@@ -69,7 +68,7 @@ Verify the downloaded release with:
 
 ```bash
 tag=review-ready-gate/v0.1.3
-repo=ryanduguid/monthly-close-controls
+repo=ryanduguid/accounting-review-pipeline
 version="${tag#review-ready-gate/v}"
 wheel="review_ready_gate-${version}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"

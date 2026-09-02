@@ -117,10 +117,21 @@ def test_a_name_the_operating_system_refuses_is_blocked_not_a_traceback(
         path_within(target, tmp_path, label="test artefact")
 
 
-def test_a_name_that_cannot_be_encoded_for_the_filesystem_is_blocked_not_a_traceback(tmp_path: Path) -> None:
-    # resolve refuses a lone surrogate before it reaches the filesystem, with
-    # UnicodeEncodeError rather than OSError. A manifest naming such a CSV
-    # therefore escaped the funnel as a traceback printing absolute local paths
-    # and exit 1, instead of "blocked:" and exit 2.
+def test_a_name_that_cannot_be_encoded_for_the_filesystem_is_blocked_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # POSIX resolve refuses a lone surrogate with UnicodeEncodeError; Windows
+    # can instead report a missing file. Inject the encoding failure so this
+    # regression always exercises the ValueError funnel, not the missing-file gate.
+    target = tmp_path / "a\ud800b"
+    real_resolve = Path.resolve
+
+    def refuse(self: Path, strict: bool = False) -> Path:
+        if self == target:
+            raise UnicodeEncodeError("utf-8", "a\ud800b", 1, 2, "surrogates not allowed")
+        return real_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", refuse)
+
     with pytest.raises(GatewayError, match="not a usable path"):
-        path_within(Path("a\ud800b"), tmp_path, label="x")
+        path_within(target, tmp_path, label="x")

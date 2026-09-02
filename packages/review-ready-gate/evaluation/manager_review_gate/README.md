@@ -42,7 +42,7 @@ Reviewed 2026-08-26.
 
 ## Product and fixture version
 
-Product release `0.1.2`; fixture version `1`.
+Product release `0.1.3`; fixture version `1`.
 
 ## Limitations and non-claims
 

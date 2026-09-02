@@ -2,10 +2,11 @@ cff-version: 1.2.0
 message: "If you use this software, cite the repository and exact release."
 title: "Workpaper Review Gate"
 type: software
-version: 0.1.2
+version: 0.1.3
 authors:
   - family-names: "Duguid"
     given-names: "Ryan"
-repository-code: "https://github.com/ryanduguid/workpaper-review-gate"
+repository-code: "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate"
 url: "https://duguid.com.au/tools/workpaper-review-gate/"
+date-released: 2026-09-03
 license: MIT

@@ -22,6 +22,8 @@ Keep client data out. The `.gitignore` blocks `input/`, `output/`, `clients/`, `
 
 ## Local verification
 
+Run these commands from `adapters/accounting-excel-toolkit/` in [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline). Keep the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) as the data-only authority; do not vendor another copy into this adapter.
+
 Python 3.10 or newer drives the test suite.
 
 ```bash

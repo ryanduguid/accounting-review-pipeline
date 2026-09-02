@@ -8,10 +8,10 @@ The loop is two local commands over fabricated trial-balance CSVs that share the
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
 ```
 
-1. `close-control review` in this repository, pointed at the sibling gateway's same-financial-year sample pair.
-2. `elizabeth-anne-alexander evaluate` in [Xero Ledger Review Gate](https://github.com/ryanduguid/xero-ledger-review-gate), still pointed at **that package's bundled** `samples/` context. Do not pass this repo's `examples/` as `--context`.
+1. `close-control review` in this package, pointed at the co-located gateway's same-financial-year sample pair.
+2. `elizabeth-anne-alexander evaluate` in [Xero Ledger Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander), still pointed at **that package's bundled** `samples/` context. Do not pass this package's `examples/` as `--context`.
 
-A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). Set `ELIZABETH_ANNE_ALEXANDER_ROOT` if the gateway checkout is not a sibling of this repository.
+A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). It uses the co-located `packages/elizabeth-anne-alexander` source by default; set `ELIZABETH_ANNE_ALEXANDER_ROOT` only for a separate checkout.
 
 ## Why the Varrock June/July files cannot feed the gateway
 
@@ -35,22 +35,22 @@ Both dates sit in FY2025 (1 July 2025 to 30 June 2026). Close-control should rep
 
 ## Command 1: close-control review
 
-From this repository root, after `python -m pip install -e ".[dev]"`:
+From this package root, after `python -m pip install -e ".[dev]"`:
 
 ```bash
 close-control review \
-  --current ../xero-ledger-review-gate/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-06-30.csv \
-  --prior ../xero-ledger-review-gate/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-05-31.csv \
+  --current ../elizabeth-anne-alexander/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-06-30.csv \
+  --prior ../elizabeth-anne-alexander/elizabeth_anne_alexander/samples/inputs/sample-tb-2026-05-31.csv \
   --output outputs/gateway-tb-loop
 ```
 
 Leave the default materiality thresholds ($1,000 absolute and 10%). The command exits `2` because the pack is `REVIEW`, not because the files are invalid. It writes `close-summary.md`, `exceptions.csv`, and `close-review-pack.json` under `outputs/gateway-tb-loop`.
 
-Do not pass this repo's Varrock mapping, subledger, or review note: those fixtures belong to a different tenant and a different date pair.
+Do not pass this package's Varrock mapping, subledger, or review note: those fixtures belong to a different tenant and a different date pair.
 
 ## Command 2: gateway evaluate (bundled context)
 
-Install the sibling package, then run its documented evaluate. Relative `samples/` and `policy/` paths resolve against the bundled package data, not against this checkout's `examples/`:
+Install the co-located package, then run its documented evaluate. Relative `samples/` and `policy/` paths resolve against the bundled package data, not against this package's `examples/`:
 
 ```bash
 elizabeth-anne-alexander evaluate \

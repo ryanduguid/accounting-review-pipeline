@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "review-ready-gate"
-version = "0.1.2"
+version = "0.1.3"
 description = "Stop incomplete workpapers reaching manager review"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,9 +20,9 @@ classifiers = [
 ]
 [project.urls]
 Homepage = "https://duguid.com.au/tools/workpaper-review-gate/"
-Documentation = "https://github.com/ryanduguid/workpaper-review-gate/tree/v0.1.2/evaluation/manager_review_gate"
-Repository = "https://github.com/ryanduguid/workpaper-review-gate.git"
-Issues = "https://github.com/ryanduguid/workpaper-review-gate/issues"
+Documentation = "https://github.com/ryanduguid/accounting-review-pipeline/tree/review-ready-gate/v0.1.3/packages/review-ready-gate/evaluation/manager_review_gate"
+Repository = "https://github.com/ryanduguid/accounting-review-pipeline.git"
+Issues = "https://github.com/ryanduguid/accounting-review-pipeline/issues"
 
 [project.optional-dependencies]
 dev = [

@@ -1,8 +1,8 @@
 # Accounting Review Pipeline agent instructions
 
 This repository is the local assembly of the Accounting Review Pipeline: six independently
-versioned components joined only by local files and commands. It has not been renamed on
-GitHub; it is still `ryanduguid/monthly-close-controls` until a separately authorised cutover.
+versioned components joined only by local files and commands. Its canonical GitHub repository
+is `ryanduguid/accounting-review-pipeline`.
 Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for component work.
 These repository-wide rules apply everywhere:
 
@@ -55,6 +55,5 @@ Run every check from the owning component directory with its documented commands
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | pinned actionlint and ShellCheck; `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
 
-A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`,
-established by the separate contract change) must run the exporter, all three review packages,
+A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all three review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test.

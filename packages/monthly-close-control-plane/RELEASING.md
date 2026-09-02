@@ -1,6 +1,6 @@
 # Releasing
 
-The repository's [GitHub Releases](https://github.com/ryanduguid/monthly-close-controls/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
+The repository's [GitHub Releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not build or upload package assets by hand.
 
@@ -11,12 +11,12 @@ Before tagging:
 3. From an operator session authenticated with repository Administration read access, run:
 
     ```bash
-    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/monthly-close-controls/immutable-releases --jq .enabled
+    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-review-pipeline/immutable-releases --jq .enabled
     ```
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
 4. Confirm the versions in `pyproject.toml` and `uv.lock` match the `RELEASE_NOTES.md` heading.
-5. Create an annotated tag on current remote `main`, for example `git tag -a v0.1.3 -m "v0.1.3"` (or `-s` when signing is configured), then push only that tag.
+5. Create the annotated component tag on current remote `main`, for example `git tag -a monthly-close-control-plane/v0.1.3 -m "monthly-close-control-plane/v0.1.3"` (or `-s` when signing is configured), then push only that tag.
 
 The workflow runs the locked tests, builds the wheel and source distribution once, generates an SPDX 2.3 SBOM for the wheel and `SHA256SUMS`, records GitHub provenance and an SBOM attestation, then publishes the completed draft. An existing release is never overwritten.
 
@@ -24,7 +24,7 @@ Verify the downloaded release with:
 
 ```bash
 tag=v0.1.2
-repo=ryanduguid/monthly-close-controls
+repo=ryanduguid/accounting-review-pipeline
 wheel="monthly_close_control_plane-${tag#v}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
@@ -56,22 +56,23 @@ the next release, update `tag` if the intended version changes and run these
 checks after downloading the assets and checking `SHA256SUMS`:
 
 ```bash
-tag=v0.1.3
-repo=ryanduguid/monthly-close-controls
-wheel="monthly_close_control_plane-${tag#v}-py3-none-any.whl"
+tag=monthly-close-control-plane/v0.1.3
+repo=ryanduguid/accounting-review-pipeline
+version="${tag#monthly-close-control-plane/v}"
+wheel="monthly_close_control_plane-${version}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
 gh attestation verify "$wheel" -R "$repo" \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 gh attestation verify "$wheel" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 8b4de1ed339f1358b5f3e850b63412d8717d01da
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 ```
 
 If any gate fails, inspect it before touching the tag or draft. Never move a

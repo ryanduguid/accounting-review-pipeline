@@ -1,16 +1,15 @@
 # Accounting Review Pipeline
 
-Local monorepo assembly anchored in Monthly Close Controls. The repository has not been
-renamed on GitHub; it remains `ryanduguid/monthly-close-controls` until a separately
-authorised cutover. It holds six independently versioned components joined only by local
-files and commands:
+Local monorepo assembly anchored in Monthly Close Controls. Its canonical GitHub repository
+is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
+It holds six independently versioned components joined only by local files and commands:
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.4 |
-| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.2 |
-| Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, commands `close-control` and `openaccountants-au` | 0.1.2 |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.1 |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.6 |
+| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.3 |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, commands `close-control` and `openaccountants-au` | 0.1.3 |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.2 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.5 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
 
@@ -44,7 +43,7 @@ changing it.
 
 ### Readiness-gate output
 
-`review-ready gate`, called with `--profile <profile> --input <directory> --output <directory>`, produces
+`review-ready gate`, called with `--profile <profile> --pack <directory> --output <directory>`, produces
 `readiness-pack.json`, `readiness-summary.md` and `findings.csv`.
 
 | JSON field | Meaning |
@@ -116,3 +115,12 @@ through a root caller pinned to the independently reviewed Release Policy commit
 refuses a tag whose prefix does not equal the component directory leaf and its distribution
 name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
+
+## Contract
+
+`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
+`xero-tb-csv.v1` corpus: the exact ten-column schema, three fabricated fixtures, the expected
+accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
+runtime package. `tests/test_xero_trial_balance_contract.py` and the
+`joined-conformance.yml` workflow run the exporter runner and all three offline review
+implementations against it.

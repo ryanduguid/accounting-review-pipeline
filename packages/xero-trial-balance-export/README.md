@@ -2,13 +2,21 @@
 
 ![xero-trial-balance-export](assets/banner.svg)
 
-[![Verify](https://github.com/ryanduguid/xero-trial-balance-export/actions/workflows/verify.yml/badge.svg)](https://github.com/ryanduguid/xero-trial-balance-export/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
+[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/xero-trial-balance-export.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/xero-trial-balance-export.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 
 Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. No SDK, no framework, just four readable Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) showing exactly how Xero OAuth2 works, including the part that breaks most scheduled scripts.
 
-The repository name is the public project identity; the `xero-trial-balance-export` distribution, `export-tb` command and `xero-trial-balance-export-token-cache` cache format remain compatibility identifiers.
+The maintained source is under `packages/xero-trial-balance-export` in the
+Accounting Review Pipeline. The `xero-trial-balance-export` distribution,
+`export-tb` command, `xero-tb-auth` command and
+`xero-trial-balance-export-token-cache` cache format remain compatibility
+identifiers.
 
-For citation metadata, see [`CITATION.cff`](CITATION.cff) and the exact [`v0.1.4` release](https://github.com/ryanduguid/xero-trial-balance-export/releases/tag/v0.1.4). The API path is read-only and cannot write to the ledger; see [Scope and disclaimer](#scope-and-disclaimer) and the fabricated [`samples/sample-output.csv`](samples/sample-output.csv) output.
+For citation metadata, see [`CITATION.cff`](CITATION.cff) and the exact
+[`xero-trial-balance-export/v0.1.6` release](https://github.com/ryanduguid/accounting-review-pipeline/releases/tag/xero-trial-balance-export%2Fv0.1.6).
+The API path is read-only and cannot write to the ledger; see
+[Scope and disclaimer](#scope-and-disclaimer) and the fabricated
+[`samples/sample-output.csv`](samples/sample-output.csv) output.
 
 ## Quick proof
 

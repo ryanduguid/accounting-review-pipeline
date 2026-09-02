@@ -22,15 +22,19 @@ authorship, source system, origin, time, or immutability.
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://github.com/ryanduguid/xero-ledger-review-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/xero-ledger-review-gate/actions/workflows/ci.yml)
+[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/elizabeth-anne-alexander.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/elizabeth-anne-alexander.yml)
 [![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/elizabeth-anne-alexander/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
-[![Zero-Network Safe](https://img.shields.io/badge/Network-Air--Gapped%20Local-5C2D91.svg?labelColor=04001F)](DATA-FLOW.md)
+[![No network client](https://img.shields.io/badge/Network-No%20Client-5C2D91.svg?labelColor=04001F)](DATA-FLOW.md)
 
 A **fixed-policy, zero-network ledger-review boundary for AI**, not an AI that operates Xero.
 
-The repository name is the public project identity; the `elizabeth-anne-alexander` distribution, import package and command remain compatibility identifiers.
+The maintained source is under
+[`packages/elizabeth-anne-alexander`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander)
+in the Accounting Review Pipeline. The `elizabeth-anne-alexander`
+distribution and command, and `elizabeth_anne_alexander` import, remain
+compatibility identifiers.
 
 Xero Ledger Review Gate consumes synthetic Xero-shaped trial-balance fixtures and produces a bounded, redacted variance-review result alongside separate local review evidence. It deliberately features **no network calls, no cloud telemetry, no LLM API clients, and zero accounting-system write operations**.
 
@@ -95,7 +99,9 @@ elizabeth-anne-alexander validate-review \
 ## Control boundary
 
 - The canonical source contract has exactly ten columns: `ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit`.
-- `tests/conformance/xero_trial_balance_v1/` vendors the exporter-owned, fabricated `xero-tb-csv.v1` corpus at an immutable commit. Tests verify every byte locally, with no runtime network dependency.
+- The root `contracts/xero-trial-balance-v1/` directory is the exporter-owned, fabricated
+  `xero-tb-csv.v1` corpus. Its `SHA256SUMS` file and every consumer's tests verify the same bytes
+  locally, with no runtime network dependency.
 - CSV schema, duplicate account IDs, reporting dates, balance pairs, source hashes, entity, basis, currency, tracking filters, and draft setting are all checked before review.
 - Monetary values use `Decimal`, never binary floating point.
 - `percent_change` in the model result is expressed in percent and quantized to four decimal places (`"18.3333"` means 18.3333%). It is `null` when there is no prior balance to compare against.

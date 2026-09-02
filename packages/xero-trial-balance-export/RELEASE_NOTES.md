@@ -1,3 +1,21 @@
+# v0.1.6
+
+- Add the complete pinned `requirements-test.txt` manifest expected by the
+  shared source-archive release policy.
+- Supersede the protected v0.1.5 tag, whose workflow stopped before creating a
+  draft or release because the clean test runner had no runtime dependencies.
+- Preserve the v0.1.5 source, OAuth, token-cache, export and command behaviour.
+
+# v0.1.5
+
+- Move the maintained source into `packages/xero-trial-balance-export` in the
+  Accounting Review Pipeline.
+- Prepare source archives through the monorepo's namespaced, attested release
+  workflow.
+- Include the canonical `xero-tb-csv.v1` contract and its fabricated integrity
+  evaluation in the release.
+- Preserve the v0.1.4 OAuth, token-cache, export and command behaviour.
+
 # v0.1.4
 
 Changes since published `v0.1.3`:
