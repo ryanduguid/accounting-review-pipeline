@@ -14,7 +14,9 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![Verify](https://github.com/ryanduguid/accounting-excel-toolkit/actions/workflows/verify.yml/badge.svg)](https://github.com/ryanduguid/accounting-excel-toolkit/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
+[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/accounting-excel-toolkit.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/accounting-excel-toolkit.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
+
+Maintain this adapter at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit). Run the commands below from `adapters/accounting-excel-toolkit/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical API CSV header, fixtures and expected results; the interactive-export parser fixtures under `samples/` cover a separate format.
 
 Power Query (M) functions and VBA modules for accountants working with Australian ledger exports: a Xero trial balance parser, Xero aged receivables and payables parsers, an AU financial-year helper, ABN validation, workpaper formatting, keyed reconciliations.
 
@@ -77,7 +79,7 @@ To import a module into Excel:
 
 Three layers check this repository, and each covers different ground:
 
-- **CI (GitHub Actions, [`verify.yml`](.github/workflows/verify.yml))** runs the Python suite in `tests/` on every push and pull request, with no Excel present. These are static source checks: they read the `.pq` and `.bas` files as text and pin the guards, constants and structures the docs promise. Covered: the M parsers' predicates, pair selection, header promotion and AEST conversion expressions; the VBA recon sheet-marker safety logic and protected-sheet guards; the accounting number format staying byte-identical across both modules; `.bas` files staying ASCII with CRLF endings; sample fixtures balancing and matching across both layouts; README sentences the test docstrings quote; release archive determinism; and the PowerShell runner's own safety properties (portability, fabricated inputs only, COM cleanup). CI never executes M or VBA.
+- **CI (GitHub Actions, [`accounting-excel-toolkit.yml`](../../.github/workflows/accounting-excel-toolkit.yml))** runs the Python suite in `tests/` on every push and pull request, with no Excel present. These are static source checks: they read the `.pq` and `.bas` files as text and pin the guards, constants and structures the docs promise. Covered: the M parsers' predicates, pair selection, header promotion and AEST conversion expressions; the VBA recon sheet-marker safety logic and protected-sheet guards; the accounting number format staying byte-identical across both modules; `.bas` files staying ASCII with CRLF endings; sample fixtures balancing and matching across both layouts; README sentences the test docstrings quote; release archive determinism; and the PowerShell runner's own safety properties (portability, fabricated inputs only, COM cleanup). CI never executes M or VBA.
 - **[`tools/native_excel_acceptance.ps1`](tools/native_excel_acceptance.ps1)** runs the Power Query functions for real. It evaluates 72 checks in Excel's actual Power Query engine: both fabricated trial-balance layouts, the fabricated Payday Super producer contract, financial-year boundaries, ABN validation, header promotion, and adverse and lazy-evaluation branches. The default run isolates the 46 core checks and 26 Payday Super checks in fresh child PowerShell and Excel processes; the Payday child uses 20 separate single-source queries across 19 fabricated files to avoid Excel's cross-source privacy/firewall composition boundary. The suite also preserves a quoted multiline field, materialises 500-, 5,000- and 10,000-contribution fabricated reports, and prints each measured refresh time. It needs Windows, Windows PowerShell 5.1+, desktop Excel with Power Query, and the `Microsoft.Mashup.OleDb.1` provider. It does not import or execute VBA. The two aged parsers load into the workbook with every other `.pq` file, but no check yet calls them.
 - **Manual Excel run** is the only check for VBA behaviour end to end: importing the modules, running `modWorkpaperFormat` and `modReconCompare` against real worksheets, and confirming Mac behaviour (the recon module's platform error message). Nothing automated executes the macros.
 
@@ -95,7 +97,7 @@ See [the close-input contract roadmap](docs/close-input-contract-roadmap.md) for
 
 [`australian-accounting-skills`](https://github.com/ryanduguid/australian-accounting-skills): Claude Code skills for AU public-practice workflows; its `xero-exports` skill pairs with these parsers.
 
-[`xero-trial-balance-export`](https://github.com/ryanduguid/xero-trial-balance-export): the API path for the same trial balance; use it when OAuth app access is on the table and skip the CSV cleanup entirely.
+[`xero-trial-balance-export`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export): the API path for the same trial balance; use it when OAuth app access is on the table and skip the CSV cleanup entirely.
 
 ## Disclaimer
 
@@ -107,7 +109,7 @@ Ryan Duguid, accountant in Newcastle NSW, provisional member of Chartered Accoun
 
 ## CI coverage
 
-`verify.yml` runs static Python guards. `tools/native_excel_acceptance.ps1`
+The root [`accounting-excel-toolkit.yml`](../../.github/workflows/accounting-excel-toolkit.yml) runs static Python guards. `tools/native_excel_acceptance.ps1`
 (72 checks) and VBA end-to-end remain local Windows work. Power Query
 behaviour is not executed on GitHub-hosted runners. Tagged releases call
 `ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA.

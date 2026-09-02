@@ -1,6 +1,8 @@
 # Australian Accounting Power BI
 
-[![Verify](https://github.com/ryanduguid/australian-accounting-power-bi/actions/workflows/verify.yml/badge.svg)](https://github.com/ryanduguid/australian-accounting-power-bi/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/australian-accounting-power-bi.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/australian-accounting-power-bi.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Maintain this application at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/apps/australian-accounting-power-bi). Run the commands below from `apps/australian-accounting-power-bi/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical CSV header, fixtures and expected results, and [Xero Trial Balance Export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) for its producer. The report's native smoke uses its own fabricated `samples/` model; the contract checks do not prove a native model refresh.
 
 **Status: incubating.** This source-controlled Power BI Project (`.pbip`) is an evolving reference implementation, not a production-ready Power BI solution. It demonstrates Australian accounting domain modelling, dimensional star schema design, Tabular Model Definition Language (TMDL), calculation groups, and automated GitHub Actions CI verification.
 
@@ -69,7 +71,7 @@ See [docs/dax-patterns.md](docs/dax-patterns.md) for full DAX formulas and prece
 australian-accounting-power-bi/
 ├── .github/
 │   └── workflows/
-│       └── verify.yml                   # CI: TMDL schema validation & fixture balance check
+│       └── verify.yml                   # Inert source history; active CI is at the monorepo root
 ├── docs/
 │   ├── data-model.md                    # Star schema diagram & dimension specifications
 │   ├── dax-patterns.md                  # Calculation groups & financial statement DAX
@@ -140,7 +142,7 @@ The test suite verifies:
 - All four report pages and 21 visuals are materialised, and every visual field binding resolves to a declared model column or measure.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
-GitHub Actions runs both the Python suite and the pinned Microsoft PBIR validator.
+The root [Power BI workflow](../../.github/workflows/australian-accounting-power-bi.yml) runs both the Python suite and the pinned Microsoft PBIR validator. The nested `.github/` directory contains imported source history, not an active workflow.
 
 ---
 

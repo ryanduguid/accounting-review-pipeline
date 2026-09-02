@@ -53,6 +53,15 @@ class XeroTrialBalanceContractTests(unittest.TestCase):
     def test_schema_file_is_exactly_the_canonical_header(self):
         self.assertEqual((CONTRACT / "schema.csv").read_bytes(), (",".join(HEADER) + "\n").encode("ascii"))
 
+    def test_documentation_uses_the_canonical_home_contract_and_active_ci(self):
+        component = Path(__file__).resolve().parents[1]
+        readme = (component / "README.md").read_text(encoding="utf-8")
+        self.assertIn("accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit", readme)
+        self.assertIn("../../contracts/xero-trial-balance-v1/", readme)
+        self.assertIn("../../.github/workflows/accounting-excel-toolkit.yml", readme)
+        self.assertIn("accounting-review-pipeline/tree/main/packages/xero-trial-balance-export", readme)
+        self.assertNotIn("accounting-excel-toolkit/actions/workflows/verify.yml", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
