@@ -52,6 +52,15 @@ class XeroTrialBalanceContractTests(unittest.TestCase):
                     for column in ("Debit", "Credit", "YTDDebit", "YTDCredit"):
                         Decimal(row[column])
 
+    def test_documentation_uses_the_canonical_home_contract_and_active_ci(self):
+        component = Path(__file__).resolve().parents[1]
+        readme = (component / "README.md").read_text(encoding="utf-8")
+        self.assertIn("accounting-review-pipeline/tree/main/apps/australian-accounting-power-bi", readme)
+        self.assertIn("../../contracts/xero-trial-balance-v1/", readme)
+        self.assertIn("../../.github/workflows/australian-accounting-power-bi.yml", readme)
+        self.assertIn("accounting-review-pipeline/tree/main/packages/xero-trial-balance-export", readme)
+        self.assertNotIn("australian-accounting-power-bi/actions/workflows/verify.yml", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
