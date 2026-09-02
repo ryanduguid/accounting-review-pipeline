@@ -1,0 +1,32 @@
+# Never commit a client's ledger export, workpaper, credentials, or generated readiness pack.
+*.csv
+!examples/**/*.csv
+!schemas/*.csv
+outputs/
+
+# A readiness pack goes wherever --output points, not only to outputs/.
+# findings.csv is caught by *.csv above; the two negations re-include every
+# CSV in these directories, so --output pointed at either of them left the
+# finding detail committable until the generated names are ignored again.
+readiness-pack.json
+readiness-summary.md
+findings.csv
+examples/**/findings.csv
+schemas/findings.csv
+# Staged pack files. One is left behind only if a run is killed mid-write or a
+# rollback cannot put a previous file back; it may hold either run's content.
+*.partial
+.env
+.env.*
+!.env.example
+*.token
+*.tokens
+*.pem
+__pycache__/
+.pytest_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
