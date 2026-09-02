@@ -21,7 +21,7 @@ def _json(path: Path) -> dict:
 
 def test_root_corpus_preserves_the_exporter_owned_bytes() -> None:
     expected_files = {
-        "expected_results.json": "bbebf751b4f55ac248266c8c7d37eda7ddf3b0d4b4722d22177f0b0bcac0ea50",
+        "expected_results.json": "af6b1db093e47137330f3228dd5ce1c5d663f497fcc5e3ffd00493ecd829461d",
         "fixtures/passing.csv": "2cbe9997a8e7210936ff3c59b5d3fdb0041c1b375b0f9c88cf9ee30d0f356a09",
         "fixtures/failing_movement.csv": "702175df967b2854e7897cd27fdc4aca441e21b52438381108fabe88ff3153e4",
         "fixtures/failing_ytd.csv": "ec757f12d13866360fbab189228ebb425893c6f8b299809c6f8567bf5817c64b",

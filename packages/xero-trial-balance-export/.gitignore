@@ -30,6 +30,7 @@ clients/
 !samples/sample-*.csv
 !samples/**/sample-*.csv
 !requirements.txt
+!requirements-test.txt
 !llms.txt
 
 # Python
