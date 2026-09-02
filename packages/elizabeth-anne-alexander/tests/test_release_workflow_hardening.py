@@ -1,52 +1,55 @@
-"""Contracts for the manually dispatched release backfill boundary."""
+"""Contracts for the active namespaced release boundary."""
 
-import re
 from pathlib import Path
 
 import pytest
 
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
-TAG_PATTERN = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release-elizabeth-anne-alexander.yml"
 
 
-def test_release_backfill_treats_dispatch_tag_as_validated_data() -> None:
-    if not WORKFLOW.is_file():
+def _workflow_text() -> str:
+    if not (REPOSITORY_ROOT / ".git").exists() and not (REPOSITORY_ROOT / "IMPORTS.md").is_file():
         pytest.skip("release workflow is not included in source distributions")
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+    return WORKFLOW.read_text(encoding="utf-8")
 
-    assert "TAG: ${{ inputs.tag }}" in workflow
-    assert r'if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then' in workflow
-    assert 'gh release download "$TAG"' in workflow
-    assert 'gh release download "${{ inputs.tag }}"' not in workflow
-    assert '--repo "$GITHUB_REPOSITORY"' in workflow
-    assert '--repo "${{ github.repository }}"' not in workflow
-    assert (
-        "group: release-${{ github.repository }}-"
-        "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-    ) in workflow
+
+def test_release_is_triggered_only_by_namespaced_tags() -> None:
+    workflow = _workflow_text()
+
+    assert 'tags:\n      - "elizabeth-anne-alexander/v*"' in workflow
+    assert "workflow_dispatch:" not in workflow
+    assert "inputs.tag" not in workflow
+    assert "group: release-${{ github.repository }}-${{ github.ref_name }}" in workflow
     assert "cancel-in-progress: false" in workflow
 
 
-def test_release_tag_validator_rejects_shell_shaped_and_malformed_values() -> None:
-    for tag in ("1.2.3", "v1.2", "v1.2.3/extra", 'v1.2.3"; touch PWNED; #'):
-        assert TAG_PATTERN.fullmatch(tag) is None
-
-    for tag in ("v0.1.4", "v12.0.103"):
-        assert TAG_PATTERN.fullmatch(tag) is not None
-
-
 def test_release_uses_the_hardened_shared_policy_contract() -> None:
-    if not WORKFLOW.is_file():
-        pytest.skip("release workflow is not included in source distributions")
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+    workflow = _workflow_text()
     release_job = workflow.split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-        "8b4de1ed339f1358b5f3e850b63412d8717d01da"
+        "3ff09b654a17b9a3b55548e25e6108ee582b00c4"
     ) in release_job
     assert "actions: read" in release_job
+    assert "source-directory: packages/elizabeth-anne-alexander" in release_job
+    assert "tag-prefix: elizabeth-anne-alexander" in release_job
+    assert "upload-dist-artifact: true" in release_job
     assert "version-command:" not in release_job
     assert "version-parser: python-literal" in release_job
     assert "version-file: elizabeth_anne_alexander/version.py" in release_job
+
+
+def test_pypi_uses_only_the_exact_attested_distribution() -> None:
+    workflow = _workflow_text()
+    pypi_job = workflow.split("  pypi:\n", 1)[1]
+
+    assert "needs: release" in pypi_job
+    assert "name: pypi-elizabeth-anne-alexander" in pypi_job
+    assert "id-token: write" in pypi_job
+    assert "name: dist-${{ needs.release.outputs.stem }}-${{ needs.release.outputs.version }}" in pypi_job
+    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in pypi_job
+    assert "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33" in pypi_job
+    assert "python -m build" not in pypi_job
