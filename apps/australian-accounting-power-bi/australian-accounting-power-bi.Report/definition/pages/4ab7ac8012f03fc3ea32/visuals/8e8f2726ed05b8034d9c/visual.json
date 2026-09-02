@@ -1,0 +1,213 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "8e8f2726ed05b8034d9c",
+  "position": {
+    "x": 20,
+    "y": 220,
+    "z": 6000,
+    "height": 480,
+    "width": 1240,
+    "tabOrder": 6000
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "PayDate"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.PayDate",
+              "nativeQueryRef": "PayDate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "EmployeeName"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.EmployeeName",
+              "nativeQueryRef": "EmployeeName"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Dim_Entity"
+                    }
+                  },
+                  "Property": "TradingName"
+                }
+              },
+              "queryRef": "Dim_Entity.TradingName",
+              "nativeQueryRef": "TradingName"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "GrossEarnings"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.GrossEarnings",
+              "nativeQueryRef": "GrossEarnings"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "QualifyingEarnings_CodeQ"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.QualifyingEarnings_CodeQ",
+              "nativeQueryRef": "QualifyingEarnings_CodeQ"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "SuperLiability_CodeL"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.SuperLiability_CodeL",
+              "nativeQueryRef": "SuperLiability_CodeL"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "StatutoryDueDate"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.StatutoryDueDate",
+              "nativeQueryRef": "StatutoryDueDate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "FundReceiptDate"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.FundReceiptDate",
+              "nativeQueryRef": "FundReceiptDate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "ComplianceStatus"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.ComplianceStatus",
+              "nativeQueryRef": "ComplianceStatus"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "SGC_Shortfall"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.SGC_Shortfall",
+              "nativeQueryRef": "SGC_Shortfall"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_PayrollSuper"
+                    }
+                  },
+                  "Property": "GIC_NominalInterest"
+                }
+              },
+              "queryRef": "Fact_PayrollSuper.GIC_NominalInterest",
+              "nativeQueryRef": "GIC_NominalInterest"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Payday Super Late Receipt & SGC Exposure Audit Ledger'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

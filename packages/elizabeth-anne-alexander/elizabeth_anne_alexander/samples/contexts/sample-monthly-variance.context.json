@@ -1,0 +1,6 @@
+{
+  "schema_version": "xero-review-context.v1",
+  "mode": "synthetic",
+  "current_manifest": "samples/manifests/sample-tb-2026-06-30.manifest.json",
+  "prior_manifest": "samples/manifests/sample-tb-2026-05-31.manifest.json"
+}

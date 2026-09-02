@@ -1,1 +1,10 @@
 * text=auto eol=lf
+
+# Exact upstream bytes imported with git subtree add --squash. These four files
+# carry trailing whitespace or a blank line at end of file in their source
+# repositories. The bytes are not altered here, so the whitespace check is
+# narrowed for exactly these paths and nothing else.
+apps/australian-accounting-power-bi/README.md whitespace=-blank-at-eol
+apps/australian-accounting-power-bi/docs/data-model.md whitespace=-blank-at-eol
+packages/elizabeth-anne-alexander/DATA-FLOW.md whitespace=-blank-at-eol
+adapters/accounting-excel-toolkit/tests/test_static_guards.py whitespace=-blank-at-eof

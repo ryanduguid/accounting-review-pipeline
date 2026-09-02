@@ -1,0 +1,24 @@
+name: Release accounting-excel-toolkit
+
+# One namespaced tag releases exactly one component. The reusable workflow
+# refuses the release unless the directory leaf, the tag prefix and the
+# artifact stem agree (accounting-excel-toolkit).
+on:
+  push:
+    tags:
+      - "accounting-excel-toolkit/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      attestations: write # Record provenance and SBOM attestations for release assets.
+      contents: write # Create the draft release, upload assets and publish it.
+      id-token: write # Obtain the OIDC identity required to sign attestations.
+    uses: ryanduguid/release-policy/.github/workflows/release-archive.yml@6ad53a7b030da22fc299cee704c37ba7550ea1d7
+    with:
+      artifact-stem: accounting-excel-toolkit
+      source-directory: adapters/accounting-excel-toolkit
+      tag-prefix: accounting-excel-toolkit

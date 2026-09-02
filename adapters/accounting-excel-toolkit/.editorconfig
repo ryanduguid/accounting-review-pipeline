@@ -1,0 +1,20 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,md,toml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# The VBE reads imported VBA source as CRLF; tools/check_vba_encoding.py
+# rejects an LF-normalised module, so these override the [*] lf default.
+[*.{bas,cls,frm}]
+end_of_line = crlf

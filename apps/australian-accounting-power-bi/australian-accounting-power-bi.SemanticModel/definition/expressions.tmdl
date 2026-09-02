@@ -1,0 +1,203 @@
+expression Dim_Account = ```
+	// Dim_Account.pq
+	// Ingests and types the standard Australian Chart of Accounts dimension.
+
+	let
+	    Source = Csv.Document(File.Contents("samples/sample-chart-of-accounts.csv"), [Delimiter=",", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	        {"AccountCode", type text},
+	        {"AccountName", type text},
+	        {"Class", type text},
+	        {"SubClass", type text},
+	        {"ReportSection", type text},
+	        {"BalanceSheetGroup", type text},
+	        {"CashFlowCategory", type text},
+	        {"NormalBalance", type text},
+	        {"SortOrder", Int64.Type}
+	    })
+	in
+	    TypedTable
+	```
+
+expression Dim_Date_AU = ```
+	// Dim_Date_AU.pq
+	// Generates an Australian Financial Year Date Dimension (1 July - 30 June)
+	// Parameters: StartDate (date), EndDate (date)
+
+	let
+	    GenerateDateDimension = (StartDate as date, EndDate as date) as table =>
+	    let
+	        DayCount = Duration.Days(EndDate - StartDate) + 1,
+	        DateList = List.Dates(StartDate, DayCount, #duration(1, 0, 0, 0)),
+	        TableFromList = Table.FromList(DateList, Splitter.SplitByNothing(), {"Date"}, null, ExtraValues.Error),
+	        ChangedType = Table.TransformColumnTypes(TableFromList, {{"Date", type date}}),
+
+	        // Calendar attributes
+	        AddYear = Table.AddColumn(ChangedType, "CalendarYear", each Date.Year([Date]), Int64.Type),
+	        AddMonthNum = Table.AddColumn(AddYear, "MonthNumber", each Date.Month([Date]), Int64.Type),
+	        AddMonthName = Table.AddColumn(AddMonthNum, "MonthName", each Date.MonthName([Date]), type text),
+	        AddDay = Table.AddColumn(AddMonthName, "DayOfMonth", each Date.Day([Date]), Int64.Type),
+	        AddDayOfWeek = Table.AddColumn(AddDay, "DayOfWeek", each Date.DayOfWeek([Date], Day.Monday) + 1, Int64.Type),
+	        AddDayName = Table.AddColumn(AddDayOfWeek, "DayName", each Date.DayOfWeekName([Date]), type text),
+	        AddIsWeekend = Table.AddColumn(AddDayName, "IsWeekend", each if [DayOfWeek] >= 6 then true else false, type logical),
+
+	        // Australian Financial Year attributes (1 July to 30 June)
+	        AddFinYearNum = Table.AddColumn(AddIsWeekend, "FinancialYearNumber", each if [MonthNumber] >= 7 then [CalendarYear] + 1 else [CalendarYear], Int64.Type),
+	        AddFinYearLabel = Table.AddColumn(AddFinYearNum, "FinancialYear", each "FY" & Text.End(Text.From([FinancialYearNumber] - 1), 2) & "-" & Text.End(Text.From([FinancialYearNumber]), 2), type text),
+	        AddFinMonthNum = Table.AddColumn(AddFinYearLabel, "FinancialMonthNumber", each if [MonthNumber] >= 7 then [MonthNumber] - 6 else [MonthNumber] + 6, Int64.Type),
+	        AddFinQuarter = Table.AddColumn(AddFinMonthNum, "FinancialQuarter", each "FQ" & Text.From(Number.IntegerDivide([FinancialMonthNumber] - 1, 3) + 1), type text),
+	        AddFinYearQuarter = Table.AddColumn(AddFinQuarter, "FinancialYearQuarter", each [FinancialYear] & " " & [FinancialQuarter], type text),
+	        AddFinYearMonth = Table.AddColumn(AddFinYearQuarter, "FinancialYearMonth", each [FinancialYear] & "-" & Text.PadStart(Text.From([FinancialMonthNumber]), 2, "0"), type text),
+	        AddFYStartDate = Table.AddColumn(AddFinYearMonth, "FYStartDate", each #date([FinancialYearNumber] - 1, 7, 1), type date),
+	        AddFYEndDate = Table.AddColumn(AddFYStartDate, "FYEndDate", each #date([FinancialYearNumber], 6, 30), type date)
+	    in
+	        AddFYEndDate
+	in
+	    GenerateDateDimension
+	```
+
+expression Dim_Entity = ```
+	// Dim_Entity.pq
+	// Ingests and types the multi-entity corporate structure master table.
+
+	let
+	    Source = Csv.Document(File.Contents("samples/sample-entities.csv"), [Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	        {"EntityID", type text},
+	        {"LegalName", type text},
+	        {"TradingName", type text},
+	        {"ABN", type text},
+	        {"ACN", type text},
+	        {"TaxStructure", type text},
+	        {"EntityRole", type text},
+	        {"ANZSIC_Code", type text},
+	        {"Currency", type text},
+	        {"ConsolidationWeight", type number}
+	    })
+	in
+	    TypedTable
+	```
+
+expression Fact_ATOBenchmark = ```
+	// Fact_ATOBenchmark.pq
+	// Ingests ATO Small Business Benchmarks across industry codes (ANZSIC) and turnover brackets.
+
+	let
+	    Source = Csv.Document(File.Contents("samples/sample-ato-benchmarks.csv"), [Delimiter=",", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	        {"ANZSIC_Code", type text},
+	        {"TurnoverRange", type text},
+	        {"GrossProfitPct_Low", type number},
+	        {"GrossProfitPct_Avg", type number},
+	        {"GrossProfitPct_High", type number},
+	        {"TotalExpensesPct_Avg", type number},
+	        {"RentPct_Avg", type number},
+	        {"MotorVehiclePct_Avg", type number},
+	        {"LabourPct_Avg", type number}
+	    })
+	in
+	    TypedTable
+	```
+
+expression Fact_Budget = ```
+	// Ingests and types monthly entity budgets.
+
+	let
+	    Source = Csv.Document(File.Contents("samples/sample-budgets.csv"), [Delimiter=",", Columns=4, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	        {"PeriodDate", type date},
+	        {"EntityID", type text},
+	        {"AccountCode", type text},
+	        {"BudgetAmount", type number}
+	    })
+	in
+	    TypedTable
+	```
+
+expression Fact_GeneralLedger = ```
+	// Fact_GeneralLedger.pq
+	// Ingests, validates, and types balanced General Ledger journal entries.
+
+	let
+	    Source = Csv.Document(File.Contents("samples/sample-general-ledger.csv"), [Delimiter=",", Columns=11, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	        {"JournalID", type text},
+	        {"LineNumber", Int64.Type},
+	        {"PostingDate", type date},
+	        {"EntityID", type text},
+	        {"AccountCode", type text},
+	        {"Debit", type number},
+	        {"Credit", type number},
+	        {"Amount", type number},
+	        {"Description", type text},
+	        {"IntercompanyEntityID", type text},
+	        {"IsIntercompany", type logical}
+	    })
+	in
+	    TypedTable
+	```
+
+expression Fact_PayrollSuper = ```
+	// Fact_PayrollSuper.pq
+	// Ingests Single Touch Payroll (STP Phase 2) events and evaluates Payday Super compliance.
+
+	let
+	    Source = Csv.Document(File.Contents("samples/sample-payroll-super.csv"), [Delimiter=",", Columns=16, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	        {"EventID", type text},
+	        {"EmployeeID", type text},
+	        {"EntityID", type text},
+	        {"EmployeeName", type text},
+	        {"PayDate", type date},
+	        {"GrossEarnings", type number},
+	        {"QualifyingEarnings_CodeQ", type number},
+	        {"SuperLiability_CodeL", type number},
+	        {"SuperFundUSI", type text},
+	        {"SuperFundName", type text},
+	        {"RemittanceDate", type date},
+	        {"FundReceiptDate", type date},
+	        {"StatutoryDueDate", type date},
+	        {"ComplianceStatus", type text},
+	        {"SGC_Shortfall", type number},
+	        {"GIC_NominalInterest", type number}
+	    })
+	in
+	    TypedTable
+	```
+
+expression Fx_ValidateABN = ```
+	// Fx_ValidateABN.pq
+	// Validates an Australian Business Number (ABN) using the statutory ATO Modulus-89 algorithm.
+	// Algorithm:
+	// 1. Subtract 1 from the first digit.
+	// 2. Multiply each of the 11 digits by its assigned weighting: [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19].
+	// 3. Sum the resulting products.
+	// 4. Divide sum by 89. If remainder is 0, the ABN checksum is valid.
+
+	let
+	    ValidateABN = (abnInput as any) as logical =>
+	    let
+	        RawText = Text.Select(Text.From(abnInput), {"0".."9"}),
+	        Weights = {10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19},
+	        IsValid = if Text.Length(RawText) <> 11 then
+	            false
+	        else
+	            let
+	                Digits = List.Transform(Text.ToList(RawText), each Number.FromText(_)),
+	                AdjustedFirst = {Digits{0} - 1} & List.Skip(Digits, 1),
+	                Products = List.Zip({AdjustedFirst, Weights}),
+	                WeightedSum = List.Sum(List.Transform(Products, each _{0} * _{1})),
+	                Remainder = Number.Mod(WeightedSum, 89)
+	            in
+	                (Remainder = 0)
+	    in
+	        IsValid
+	in
+	    ValidateABN
+	```

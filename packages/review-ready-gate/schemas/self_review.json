@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ryanduguid/workpaper-review-gate/blob/main/schemas/self_review.json",
+  "title": "Self-review declaration",
+  "description": "Shape of self_review.json. The CLI also requires prepared_on not earlier than period_end, engagement_type matching --profile, JSON booleans only, and no control or formatting characters. Any assertion that is not true is NOT_READY; the assertions are necessary, not sufficient.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "preparer_initials",
+    "prepared_on",
+    "engagement_type",
+    "period_end",
+    "assertions"
+  ],
+  "properties": {
+    "preparer_initials": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12
+    },
+    "prepared_on": {
+      "type": "string",
+      "format": "date"
+    },
+    "engagement_type": {
+      "type": "string",
+      "enum": ["bas", "month_end", "year_end"]
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pack_complete",
+        "tie_outs_done",
+        "open_items_listed",
+        "variances_explained",
+        "self_reviewed"
+      ],
+      "properties": {
+        "pack_complete": { "type": "boolean" },
+        "tie_outs_done": { "type": "boolean" },
+        "open_items_listed": { "type": "boolean" },
+        "variances_explained": { "type": "boolean" },
+        "self_reviewed": { "type": "boolean" }
+      }
+    }
+  }
+}

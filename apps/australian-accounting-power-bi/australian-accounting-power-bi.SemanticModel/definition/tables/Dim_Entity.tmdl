@@ -1,0 +1,72 @@
+table Dim_Entity
+	lineageTag: a1b2c3d4-entity-0002-8899-aabbccddeeff
+
+	column EntityID
+		dataType: string
+		isKey
+		lineageTag: ent-col-0001
+		summarizeBy: none
+		sourceColumn: EntityID
+
+	column LegalName
+		dataType: string
+		lineageTag: ent-col-0002
+		summarizeBy: none
+		sourceColumn: LegalName
+
+	column TradingName
+		dataType: string
+		lineageTag: ent-col-0003
+		summarizeBy: none
+		sourceColumn: TradingName
+
+	column ABN
+		dataType: string
+		lineageTag: ent-col-0004
+		summarizeBy: none
+		sourceColumn: ABN
+
+	column ACN
+		dataType: string
+		lineageTag: ent-col-0005
+		summarizeBy: none
+		sourceColumn: ACN
+
+	column TaxStructure
+		dataType: string
+		lineageTag: ent-col-0006
+		summarizeBy: none
+		sourceColumn: TaxStructure
+
+	column EntityRole
+		dataType: string
+		lineageTag: ent-col-0007
+		summarizeBy: none
+		sourceColumn: EntityRole
+
+	column ANZSIC_Code
+		dataType: string
+		lineageTag: ent-col-0008
+		summarizeBy: none
+		sourceColumn: ANZSIC_Code
+
+	column Currency
+		dataType: string
+		lineageTag: ent-col-0009
+		summarizeBy: none
+		sourceColumn: Currency
+
+	column ConsolidationWeight
+		dataType: double
+		formatString: 0.0
+		lineageTag: ent-col-0010
+		summarizeBy: none
+		sourceColumn: ConsolidationWeight
+
+	partition Dim_Entity = m
+		mode: import
+		source =
+			let
+				Source = Dim_Entity
+			in
+				Source

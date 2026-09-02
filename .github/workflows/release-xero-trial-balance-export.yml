@@ -1,0 +1,26 @@
+name: Release xero-trial-balance-export
+
+# One namespaced tag releases exactly one component. The reusable workflow
+# refuses the release unless the directory leaf, the tag prefix and the
+# artifact stem agree (xero-trial-balance-export). This caller references no
+# secret and grants no Xero credential; publication uses only the OIDC
+# identity of the tagged run.
+on:
+  push:
+    tags:
+      - "xero-trial-balance-export/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      attestations: write # Record provenance and SBOM attestations for release assets.
+      contents: write # Create the draft release, upload assets and publish it.
+      id-token: write # Obtain the OIDC identity required to sign attestations.
+    uses: ryanduguid/release-policy/.github/workflows/release-archive.yml@6ad53a7b030da22fc299cee704c37ba7550ea1d7
+    with:
+      artifact-stem: xero-trial-balance-export
+      source-directory: packages/xero-trial-balance-export
+      tag-prefix: xero-trial-balance-export

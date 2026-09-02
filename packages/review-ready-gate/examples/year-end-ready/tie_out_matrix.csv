@@ -1,0 +1,4 @@
+StatementLine,StatementAmount,WorkpaperRef,SourceFile,Status
+Cash,120000.00,WP-100,trial_balance.csv,TIED
+Trade debtors,85000.00,WP-110,trial_balance.csv,TIED
+Trade creditors,65000.00,WP-200,trial_balance.csv,TIED

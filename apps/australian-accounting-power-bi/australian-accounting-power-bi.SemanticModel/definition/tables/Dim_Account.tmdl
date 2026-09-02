@@ -1,0 +1,66 @@
+table Dim_Account
+	lineageTag: a1b2c3d4-account-0003-8899-aabbccddeeff
+
+	column AccountCode
+		dataType: string
+		isKey
+		lineageTag: acc-col-0001
+		summarizeBy: none
+		sourceColumn: AccountCode
+
+	column AccountName
+		dataType: string
+		lineageTag: acc-col-0002
+		summarizeBy: none
+		sourceColumn: AccountName
+
+	column Class
+		dataType: string
+		lineageTag: acc-col-0003
+		summarizeBy: none
+		sourceColumn: Class
+
+	column SubClass
+		dataType: string
+		lineageTag: acc-col-0004
+		summarizeBy: none
+		sourceColumn: SubClass
+
+	column ReportSection
+		dataType: string
+		lineageTag: acc-col-0005
+		summarizeBy: none
+		sourceColumn: ReportSection
+
+	column BalanceSheetGroup
+		dataType: string
+		lineageTag: acc-col-0006
+		summarizeBy: none
+		sourceColumn: BalanceSheetGroup
+
+	column CashFlowCategory
+		dataType: string
+		lineageTag: acc-col-0007
+		summarizeBy: none
+		sourceColumn: CashFlowCategory
+
+	column NormalBalance
+		dataType: string
+		lineageTag: acc-col-0008
+		summarizeBy: none
+		sourceColumn: NormalBalance
+
+	column SortOrder
+		dataType: int64
+		formatString: 0
+		lineageTag: acc-col-0009
+		summarizeBy: none
+		sourceColumn: SortOrder
+
+	partition Dim_Account = m
+		mode: import
+		source =
+			let
+				Source = Dim_Account
+			in
+				Source

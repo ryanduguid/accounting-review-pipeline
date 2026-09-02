@@ -3,7 +3,31 @@ name: tests
 on:
   push:
     branches: [main]
+    paths:
+      - "packages/monthly-close-control-plane/**"
+      - "contracts/xero-trial-balance-v1/**"
+      - ".github/**"
+      - ".editorconfig"
+      - ".gitattributes"
+      - ".gitignore"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
   pull_request:
+    paths:
+      - "packages/monthly-close-control-plane/**"
+      - "contracts/xero-trial-balance-v1/**"
+      - ".github/**"
+      - ".editorconfig"
+      - ".gitattributes"
+      - ".gitignore"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
 
 permissions:
   contents: read
@@ -30,6 +54,7 @@ jobs:
           version: "0.12.0"
           enable-cache: true
       - run: uv run --locked --extra dev pytest -q
+        working-directory: packages/monthly-close-control-plane
         env:
           UV_PYTHON: ${{ matrix.python }}
 
@@ -50,14 +75,16 @@ jobs:
           version: "0.12.0"
           enable-cache: true
       - run: uv run --locked --extra dev --python 3.12 python -m build
+        working-directory: packages/monthly-close-control-plane
       - name: Install and smoke-test the built wheel outside the checkout
+        working-directory: packages/monthly-close-control-plane
         run: |
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install --no-index --find-links dist monthly-close-control-plane
           cd /tmp
           /tmp/venv/bin/close-control review \
-            --current "$GITHUB_WORKSPACE/examples/current_trial_balance.csv" \
-            --prior "$GITHUB_WORKSPACE/examples/prior_trial_balance.csv" \
+            --current "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/current_trial_balance.csv" \
+            --prior "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/prior_trial_balance.csv" \
             --output pack || [ $? -eq 2 ]
           test -f pack/close-review-pack.json
 
@@ -78,4 +105,6 @@ jobs:
           version: "0.12.0"
           enable-cache: true
       - run: uv run --locked --extra dev ruff check closecontrol tests
+        working-directory: packages/monthly-close-control-plane
       - run: uv run --locked --extra dev mypy closecontrol
+        working-directory: packages/monthly-close-control-plane

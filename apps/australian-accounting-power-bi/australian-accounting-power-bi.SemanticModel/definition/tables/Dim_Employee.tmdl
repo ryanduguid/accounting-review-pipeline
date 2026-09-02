@@ -1,0 +1,42 @@
+table Dim_Employee
+	lineageTag: a1b2c3d4-employee-0005-8899-aabbccddeeff
+
+	column EmployeeID
+		dataType: string
+		isKey
+		lineageTag: emp-col-0001
+		summarizeBy: none
+		sourceColumn: EmployeeID
+
+	column EntityID
+		dataType: string
+		lineageTag: emp-col-0002
+		summarizeBy: none
+		sourceColumn: EntityID
+
+	column EmployeeName
+		dataType: string
+		lineageTag: emp-col-0003
+		summarizeBy: none
+		sourceColumn: EmployeeName
+
+	column SuperFundUSI
+		dataType: string
+		lineageTag: emp-col-0004
+		summarizeBy: none
+		sourceColumn: SuperFundUSI
+
+	column SuperFundName
+		dataType: string
+		lineageTag: emp-col-0005
+		summarizeBy: none
+		sourceColumn: SuperFundName
+
+	partition Dim_Employee = m
+		mode: import
+		source =
+			let
+				Source = Table.SelectColumns(Fact_PayrollSuper, {"EmployeeID", "EntityID", "EmployeeName", "SuperFundUSI", "SuperFundName"}),
+				DistinctEmployees = Table.Distinct(Source, {"EmployeeID"})
+			in
+				DistinctEmployees

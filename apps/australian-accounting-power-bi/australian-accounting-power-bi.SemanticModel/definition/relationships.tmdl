@@ -1,0 +1,43 @@
+relationship 'Fact_GeneralLedger to Dim_Account'
+	fromColumn: Fact_GeneralLedger.AccountCode
+	toColumn: Dim_Account.AccountCode
+
+relationship 'Fact_GeneralLedger to Dim_Entity'
+	fromColumn: Fact_GeneralLedger.EntityID
+	toColumn: Dim_Entity.EntityID
+
+relationship 'Fact_GeneralLedger to Dim_Date'
+	fromColumn: Fact_GeneralLedger.PostingDate
+	toColumn: Dim_Date.Date
+
+relationship 'Fact_Budget to Dim_Account'
+	fromColumn: Fact_Budget.AccountCode
+	toColumn: Dim_Account.AccountCode
+
+relationship 'Fact_Budget to Dim_Entity'
+	fromColumn: Fact_Budget.EntityID
+	toColumn: Dim_Entity.EntityID
+
+relationship 'Fact_Budget to Dim_Date'
+	fromColumn: Fact_Budget.PeriodDate
+	toColumn: Dim_Date.Date
+
+relationship 'Fact_PayrollSuper to Dim_Entity'
+	fromColumn: Fact_PayrollSuper.EntityID
+	toColumn: Dim_Entity.EntityID
+
+relationship 'Fact_PayrollSuper to Dim_Date'
+	fromColumn: Fact_PayrollSuper.PayDate
+	toColumn: Dim_Date.Date
+
+relationship 'Fact_PayrollSuper to Dim_Employee'
+	fromColumn: Fact_PayrollSuper.EmployeeID
+	toColumn: Dim_Employee.EmployeeID
+
+relationship 'Dim_Entity to Dim_ANZSIC'
+	fromColumn: Dim_Entity.ANZSIC_Code
+	toColumn: Dim_ANZSIC.ANZSIC_Code
+
+relationship 'Fact_ATOBenchmark to Dim_ANZSIC'
+	fromColumn: Fact_ATOBenchmark.ANZSIC_Code
+	toColumn: Dim_ANZSIC.ANZSIC_Code

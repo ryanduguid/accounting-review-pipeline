@@ -1,0 +1,46 @@
+table Dim_ANZSIC
+	lineageTag: a1b2c3d4-anzsic-0004-8899-aabbccddeeff
+
+	column ANZSIC_Code
+		dataType: string
+		isKey
+		lineageTag: anz-col-0001
+		summarizeBy: none
+		sourceColumn: ANZSIC_Code
+
+	column Division
+		dataType: string
+		lineageTag: anz-col-0002
+		summarizeBy: none
+		sourceColumn: Division
+
+	column Subdivision
+		dataType: string
+		lineageTag: anz-col-0003
+		summarizeBy: none
+		sourceColumn: Subdivision
+
+	column IndustryTitle
+		dataType: string
+		lineageTag: anz-col-0004
+		summarizeBy: none
+		sourceColumn: IndustryTitle
+
+	partition Dim_ANZSIC = m
+		mode: import
+		source =
+			let
+				// One row per industry classification used by the group. The codes are the
+				// join keys for samples/sample-entities.csv and samples/sample-ato-benchmarks.csv,
+				// so this literal must stay in step with both fixtures.
+				Source = Table.FromRows(
+					{
+						{"4122", "G - Retail Trade", "41 - Food Retailing", "Fresh Meat, Fish and Poultry Retailing"},
+						{"4610", "I - Transport, Postal and Warehousing", "46 - Road Transport", "Road Freight Transport"},
+						{"6712", "L - Rental, Hiring and Real Estate Services", "67 - Property Operators and Real Estate Services", "Non-Residential Property Operators"},
+						{"6962", "M - Professional, Scientific and Technical Services", "69 - Professional, Scientific and Technical Services", "Management Advice & Consulting"}
+					},
+					type table [ANZSIC_Code = text, Division = text, Subdivision = text, IndustryTitle = text]
+				)
+			in
+				Source

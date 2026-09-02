@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "Australian Accounting Power BI"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "48eabbdd-7943-5ad2-8a66-474ebc280ce8"
+  }
+}

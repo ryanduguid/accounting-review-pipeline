@@ -1,0 +1,54 @@
+# Client data must never enter this repo.
+# Anything exported from a real ledger or containing a real entity stays out.
+input/
+output/
+clients/
+exports/
+
+# Data-file extensions (ledger exports, workbooks, statements, bank files,
+# API dumps)
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.xlt
+*.xltx
+*.xltm
+*.csv
+*.txt
+*.pdf
+*.aba
+*.ofx
+*.qif
+*.zip
+*.myox
+*.myo
+*.bak
+*.json
+*.xml
+
+# Fabricated fixtures are allowed, and ONLY files following the sample-*
+# naming convention, so a real client export dropped in samples/ stays blocked
+!samples/
+!samples/sample-*.csv
+!samples/**/sample-*.csv
+
+# Python bytecode from tools/ and tests/
+__pycache__/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Workflow review scratch, not repo content.
+.superpowers/
+
+# Credentials must never be committed.
+.env
+.env.*
+!.env.example
+*.token
+*.tokens
+*.pem

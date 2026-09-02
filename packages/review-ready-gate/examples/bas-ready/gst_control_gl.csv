@@ -1,0 +1,3 @@
+Date,AccountID,AccountName,Debit,Credit,Description
+2026-01-15,820,GST Payable,0.00,10000.00,GST on sales
+2026-02-20,820,GST Payable,2500.00,0.00,GST on purchases

@@ -1,0 +1,7 @@
+{
+  "schema_version": "xero-review-request.v1",
+  "request_id": "demo-revenue-variance-001",
+  "operation": "trial_balance_variance",
+  "section": "Revenue",
+  "policy_id": "demo-policy-v1"
+}

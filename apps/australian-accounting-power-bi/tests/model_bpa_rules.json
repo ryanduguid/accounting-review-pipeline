@@ -1,0 +1,34 @@
+[
+  {
+    "ID": "BPA_MEASURE_FORMAT_STRING",
+    "Name": "Measures must have format string",
+    "Category": "Formatting",
+    "Severity": 1,
+    "Scope": "Measure",
+    "Expression": "!string.IsNullOrEmpty(FormatString)"
+  },
+  {
+    "ID": "BPA_MEASURE_DESCRIPTION",
+    "Name": "Visible measures should have descriptions",
+    "Category": "Documentation",
+    "Severity": 2,
+    "Scope": "Measure",
+    "Expression": "!IsHidden && !string.IsNullOrEmpty(Description)"
+  },
+  {
+    "ID": "BPA_STAR_SCHEMA_RELATIONSHIPS",
+    "Name": "Avoid bidirectional cross filtering on fact tables",
+    "Category": "Performance",
+    "Severity": 1,
+    "Scope": "Relationship",
+    "Expression": "CrossFilteringBehavior == CrossFilteringBehavior.OneDirection"
+  },
+  {
+    "ID": "BPA_CALC_GROUP_PRECEDENCE",
+    "Name": "Calculation groups must have positive precedence",
+    "Category": "Design",
+    "Severity": 1,
+    "Scope": "CalculationGroup",
+    "Expression": "Precedence > 0"
+  }
+]

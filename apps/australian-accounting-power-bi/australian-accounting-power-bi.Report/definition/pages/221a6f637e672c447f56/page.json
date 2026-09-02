@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "221a6f637e672c447f56",
+  "displayName": "2. Multi-Entity Consolidation & Eliminations",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

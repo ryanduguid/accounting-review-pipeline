@@ -1,0 +1,30 @@
+# Power BI Desktop local temporary files and cache
+*.pbix
+*.pbit
+*.abf
+*.tmp
+~*
+*.lock
+
+# Python & testing caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# OS and Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# Safe sample allowlist (only fabricated fixtures)
+samples/*
+!samples/sample-*.csv

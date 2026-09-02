@@ -1,0 +1,31 @@
+AccountCode,AccountName,Class,SubClass,ReportSection,BalanceSheetGroup,CashFlowCategory,NormalBalance,SortOrder
+100,Cash at Bank - Operating,Asset,Current Assets,Balance Sheet,Cash & Cash Equivalents,Operating,Debit,10
+110,Trade Receivables,Asset,Current Assets,Balance Sheet,Receivables,Operating,Debit,20
+120,Inventories on Hand,Asset,Current Assets,Balance Sheet,Inventory,Operating,Debit,30
+180,Intercompany Loan Receivable,Asset,Current Assets,Balance Sheet,Intercompany Receivables,Financing,Debit,40
+200,"Property, Plant & Equipment",Asset,Non-Current Assets,Balance Sheet,Fixed Assets,Investing,Debit,50
+210,Accumulated Depreciation,Asset,Non-Current Assets,Balance Sheet,Fixed Assets,Investing,Credit,60
+250,Commercial Real Estate (Property),Asset,Non-Current Assets,Balance Sheet,Investment Property,Investing,Debit,70
+300,Trade Payables,Liability,Current Liabilities,Balance Sheet,Payables,Operating,Credit,110
+310,GST Clearing Account,Liability,Current Liabilities,Balance Sheet,Tax Liabilities,Operating,Credit,120
+320,PAYG Withholding Payable,Liability,Current Liabilities,Balance Sheet,Tax Liabilities,Operating,Credit,130
+330,Superannuation Guarantee Payable,Liability,Current Liabilities,Balance Sheet,Payroll Liabilities,Operating,Credit,140
+380,Intercompany Loan Payable,Liability,Current Liabilities,Balance Sheet,Intercompany Payables,Financing,Credit,150
+400,Bank Commercial Loan Facility,Liability,Non-Current Liabilities,Balance Sheet,Borrowings,Financing,Credit,160
+500,Share Capital / Settled Sum,Equity,Equity,Balance Sheet,Contributed Capital,Financing,Credit,210
+510,Retained Earnings - Prior Years,Equity,Equity,Balance Sheet,Retained Profits,Operating,Credit,220
+600,Commercial Trading Revenue,Revenue,Operating Revenue,Profit and Loss,Revenue,Operating,Credit,310
+610,Professional Advisory Fees,Revenue,Operating Revenue,Profit and Loss,Revenue,Operating,Credit,320
+620,Commercial Rental Income,Revenue,Operating Revenue,Profit and Loss,Revenue,Operating,Credit,330
+650,Intercompany Management Fees Revenue,Revenue,Intercompany Revenue,Profit and Loss,Intercompany Revenue,Operating,Credit,340
+700,Direct Cost of Goods Sold,Expense,Cost of Sales,Profit and Loss,Cost of Sales,Operating,Debit,410
+710,Direct Freight & Fuel Expense,Expense,Cost of Sales,Profit and Loss,Cost of Sales,Operating,Debit,420
+750,Intercompany Freight Expense,Expense,Cost of Sales,Profit and Loss,Cost of Sales,Operating,Debit,430
+800,Salaries & Wages,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,510
+805,Superannuation Guarantee Expense,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,520
+810,Motor Vehicle Running Costs,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,530
+820,Rent & Property Occupancy,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,540
+830,Insurance & Compliance,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,550
+880,Intercompany Management Fees Expense,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,560
+890,Depreciation Expense,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,570
+895,Finance & Bank Interest Expense,Expense,Operating Expenses,Profit and Loss,Operating Expenses,Operating,Debit,580

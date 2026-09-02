@@ -1,0 +1,64 @@
+table CalcGroup_TimeIntelligence
+	lineageTag: a1b2c3d4-cgti-0010-8899-aabbccddeeff
+
+	calculationGroup
+		precedence: 10
+
+		calculationItem 'Current Period' = SELECTEDMEASURE()
+			ordinal: 0
+
+		calculationItem 'Month to Date (MTD)' =
+				CALCULATE(
+					SELECTEDMEASURE(),
+					DATESMTD(Dim_Date[Date])
+				)
+			ordinal: 1
+
+		calculationItem 'Quarter to Date (QTD)' =
+				CALCULATE(
+					SELECTEDMEASURE(),
+					DATESQTD(Dim_Date[Date])
+				)
+			ordinal: 2
+
+		calculationItem 'Financial Year to Date (FYTD)' =
+				VAR MaxDate = MAX(Dim_Date[Date])
+				VAR FYStart = CALCULATE(MIN(Dim_Date[FYStartDate]), Dim_Date[Date] = MaxDate)
+				RETURN
+					CALCULATE(
+						SELECTEDMEASURE(),
+						DATESBETWEEN(Dim_Date[Date], FYStart, MaxDate)
+					)
+			ordinal: 3
+
+		calculationItem 'Prior Year (PY)' =
+				CALCULATE(
+					SELECTEDMEASURE(),
+					SAMEPERIODLASTYEAR(Dim_Date[Date])
+				)
+			ordinal: 4
+
+		calculationItem 'Year-on-Year Variance ($)' =
+				SELECTEDMEASURE() - CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
+			ordinal: 5
+
+		calculationItem 'Year-on-Year Variance (%)' =
+				VAR CurrentVal = SELECTEDMEASURE()
+				VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
+				RETURN
+					DIVIDE(CurrentVal - PriorVal, PriorVal, 0)
+			ordinal: 6
+			formatStringDefinition = "0.0%"
+
+	column 'Time Calculation'
+		dataType: string
+		lineageTag: cgti-col-0001
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		lineageTag: cgti-col-0002
+		summarizeBy: none
+		sourceColumn: Ordinal

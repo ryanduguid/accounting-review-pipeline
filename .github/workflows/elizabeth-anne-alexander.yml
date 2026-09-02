@@ -1,0 +1,73 @@
+name: Xero Ledger Review Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/elizabeth-anne-alexander/**"
+      - "contracts/xero-trial-balance-v1/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
+  pull_request:
+    paths:
+      - "packages/elizabeth-anne-alexander/**"
+      - "contracts/xero-trial-balance-v1/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "IMPORTS.md"
+      - "README.md"
+      - "SECURITY.md"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/elizabeth-anne-alexander
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - run: uv lock --check
+      # No -q here: pyproject's addopts already supplies it, and a second one
+      # is -qq, which drops the "N passed" summary from the job log.
+      - run: uv run --locked --extra dev pytest
+      - run: uv run --locked --extra dev ruff check elizabeth_anne_alexander tests
+      - run: uv run --locked --extra dev mypy elizabeth_anne_alexander
+      - run: uv run --locked --extra dev --python 3.12 python -m build
+      # policy/ and samples/ ship as package data; a wheel that drops them
+      # produces a console script that cannot run at all, so install the
+      # wheel into a clean venv and run the demo from an empty directory.
+      - name: Install the wheel and run the demo from an empty directory
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --no-index --find-links dist elizabeth-anne-alexander
+          mkdir /tmp/demo
+          cd /tmp/demo
+          /tmp/venv/bin/elizabeth-anne-alexander evaluate \
+            --context samples/contexts/sample-monthly-variance.context.json \
+            --request samples/requests/sample-revenue-variance.request.json \
+            --policy policy/demo-policy-v1.json \
+            --out build/demo
+          /tmp/venv/bin/elizabeth-anne-alexander validate-review \
+            --evidence build/demo/reviewer-evidence.json \
+            --receipt build/demo/receipt.json \
+            --decision samples/decisions/sample-review-decision.json
+          test -f build/demo/receipt.json
