@@ -96,3 +96,4 @@ Each `git subtree add --squash` record is appended immediately after its local i
 commits are created. The imported source commit and tree must continue to match the source
 table above.
 - Xero Trial Balance Export: source `2a0966e89e5f8daa587be8466f988d9adc16003a`; squash commit `cf537fe42493406fa0147e9274b1c77d88aaec9a`; subtree merge commit `fe5192336da3d0ccc52aa169bdec86e8fb141095`; destination `packages/xero-trial-balance-export/`; imported tree `0b35ee4de1a71a5cb04fa00e27a41c130f1a7563` equals the source tree.
+- Workpaper Review Gate: source `e2a01292b9782dc086595865bb80516c81fcb70e`; squash commit `6e2db45c6c6dad68987a783886e0f2e00d415d24`; subtree merge commit `3063b1df80418f4b4672acc85703720be1eecace`; destination `packages/review-ready-gate/` (distribution name, owner decision D1); imported tree `f5fe55d4a2fcd5b49952d3de2583a863aa4dad45` equals the source tree.
