@@ -264,42 +264,56 @@ class EvaluationPackTest(unittest.TestCase):
     def test_pack_names_its_limits_sources_and_versions(self):
         contract = json.loads(EXPECTED.read_text(encoding="utf-8"))
         readme = (CONTRACT / "README.md").read_text(encoding="utf-8")
-        self.assertEqual(contract["product_release"], "v0.1.5")
+        self.assertEqual(contract["product_release"], "v0.1.6")
         self.assertEqual(contract["fixture_version"], "1")
         self.assertEqual(contract["source_reviewed"], "2026-08-26")
         self.assertIn(contract["human_decision"], readme)
         self.assertIn("fabricated", readme.casefold())
         self.assertNotIn("case study", readme.casefold())
 
-    def test_v015_release_metadata_points_to_the_canonical_monorepo(self):
+    def test_v016_release_metadata_points_to_the_canonical_monorepo(self):
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
         citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         releasing = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
+        test_requirements = (ROOT / "requirements-test.txt").read_text(
+            encoding="utf-8"
+        )
         root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
         canonical = "https://github.com/ryanduguid/accounting-review-pipeline"
 
-        self.assertEqual(version, "0.1.5")
-        self.assertTrue(notes.startswith("# v0.1.5\n"))
-        self.assertIn("version: 0.1.5", citation)
+        self.assertEqual(version, "0.1.6")
+        self.assertTrue(notes.startswith("# v0.1.6\n"))
+        self.assertIn("version: 0.1.6", citation)
         self.assertIn(
             f'repository-code: "{canonical}/tree/main/'
             'packages/xero-trial-balance-export"',
             citation,
         )
         self.assertIn(f"{canonical}/actions/workflows/xero-trial-balance-export.yml", readme)
-        self.assertIn("xero-trial-balance-export/v0.1.5", readme)
+        self.assertIn("xero-trial-balance-export/v0.1.6", readme)
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "
             "| distribution `xero-trial-balance-export`, commands `export-tb` and "
-            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.5 |",
+            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.6 |",
             root_readme,
         )
-        self.assertIn("tag=xero-trial-balance-export/v0.1.5", releasing)
+        self.assertIn("tag=xero-trial-balance-export/v0.1.6", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
         self.assertIn("--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4", releasing)
         self.assertNotIn("isLatest", releasing)
+        self.assertIn("requirements-test.txt", releasing)
+        self.assertEqual(
+            test_requirements.splitlines(),
+            [
+                "certifi==2026.7.22",
+                "charset-normalizer==3.4.9",
+                "idna==3.18",
+                "requests==2.34.2",
+                "urllib3==2.7.0",
+            ],
+        )
 
     def test_only_declared_evaluation_csvs_are_allowlisted(self):
         allowed = {
