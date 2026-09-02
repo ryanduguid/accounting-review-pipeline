@@ -1,9 +1,8 @@
 # Accounting Review Pipeline
 
-Local monorepo assembly anchored in Monthly Close Controls. The repository has not been
-renamed on GitHub; it remains `ryanduguid/monthly-close-controls` until a separately
-authorised cutover. It holds six independently versioned components joined only by local
-files and commands:
+Local monorepo assembly anchored in Monthly Close Controls. Its canonical GitHub repository
+is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
+It holds six independently versioned components joined only by local files and commands:
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|

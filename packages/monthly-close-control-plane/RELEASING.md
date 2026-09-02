@@ -1,6 +1,6 @@
 # Releasing
 
-The repository's [GitHub Releases](https://github.com/ryanduguid/monthly-close-controls/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
+The repository's [GitHub Releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not build or upload package assets by hand.
 
@@ -11,7 +11,7 @@ Before tagging:
 3. From an operator session authenticated with repository Administration read access, run:
 
     ```bash
-    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/monthly-close-controls/immutable-releases --jq .enabled
+    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-review-pipeline/immutable-releases --jq .enabled
     ```
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
@@ -24,7 +24,7 @@ Verify the downloaded release with:
 
 ```bash
 tag=v0.1.2
-repo=ryanduguid/monthly-close-controls
+repo=ryanduguid/accounting-review-pipeline
 wheel="monthly_close_control_plane-${tag#v}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
@@ -57,7 +57,7 @@ checks after downloading the assets and checking `SHA256SUMS`:
 
 ```bash
 tag=v0.1.3
-repo=ryanduguid/monthly-close-controls
+repo=ryanduguid/accounting-review-pipeline
 wheel="monthly_close_control_plane-${tag#v}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"

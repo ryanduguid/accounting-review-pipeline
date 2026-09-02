@@ -11,7 +11,7 @@ from tests.support import EXAMPLES, ROOT
 
 WORKFLOW = EXAMPLES / "github-actions-readiness-check.yml"
 REPOSITORY_NAME = "workpaper-review-gate"
-RELEASE_REPOSITORY_NAME = "monthly-close-controls"
+RELEASE_REPOSITORY_NAME = "accounting-review-pipeline"
 PACKAGE_NAME = "review-ready-gate"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
 HOMEPAGE_URL = "https://duguid.com.au/tools/workpaper-review-gate/"

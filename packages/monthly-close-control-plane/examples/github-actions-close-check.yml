@@ -42,7 +42,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install close-control
-        run: python -m pip install "monthly-close-control-plane @ https://github.com/ryanduguid/monthly-close-controls/releases/download/v0.1.1/monthly_close_control_plane-0.1.1-py3-none-any.whl#sha256=e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
+        run: python -m pip install "monthly-close-control-plane @ https://github.com/ryanduguid/accounting-review-pipeline/releases/download/v0.1.1/monthly_close_control_plane-0.1.1-py3-none-any.whl#sha256=e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
         # For a checkout of this repository itself, use:
         # run: python -m pip install .
 
