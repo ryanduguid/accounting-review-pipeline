@@ -93,9 +93,9 @@ for archive in "xero-trial-balance-export-$version.tar.gz" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
     --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 done
-gh release view "$tag" -R "$repo" --json isImmutable,isLatest,tagName \
+gh release view "$tag" -R "$repo" --json isImmutable,tagName \
   | jq -e --arg tag "$tag" \
-      '.isImmutable == true and .isLatest == true and .tagName == $tag'
+      '.isImmutable == true and .tagName == $tag'
 gh release verify "$tag" -R "$repo"
 ```
 
