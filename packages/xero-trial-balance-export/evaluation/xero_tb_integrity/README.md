@@ -50,7 +50,9 @@ The contract records Xero's [Accounting API Reports](https://developer.xero.com/
 
 ## Product and fixture version
 
-`v0.1.4` is the latest published product release. It predates this evaluation directory. This evaluation is protected by the permanent merge-commit link captured after this pull request; the `v0.1.4` tag does not contain this pack. The fabricated fixture version is `1`.
+`xero-trial-balance-export/v0.1.5` is the first monorepo release containing
+this evaluation and the root contract it exercises. The fabricated fixture
+version is `1`.
 
 ## Human decision
 
