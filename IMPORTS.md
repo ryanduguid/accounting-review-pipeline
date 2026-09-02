@@ -153,3 +153,26 @@ exactly these paths:
 | `apps/australian-accounting-power-bi/docs/data-model.md` | trailing whitespace on lines 11, 14, 18 and 20 | `whitespace=-blank-at-eol` |
 | `packages/elizabeth-anne-alexander/DATA-FLOW.md` | trailing whitespace on line 21 | `whitespace=-blank-at-eol` |
 | `adapters/accounting-excel-toolkit/tests/test_static_guards.py` | blank line at end of file (line 1676) | `whitespace=-blank-at-eof` |
+
+## Contract provenance
+
+`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
+`xero-tb-csv.v1` corpus. `expected_results.json` and the three fixtures were moved with
+`git mv` from `packages/xero-trial-balance-export/evaluation/xero_tb_integrity/` (exporter
+source commit `2a0966e89e5f8daa587be8466f988d9adc16003a`), so the blobs are byte-identical:
+`1568687d5ccc809d0267d024b34869061cf10d436a28501e57888314238add91` (expected results),
+`2cbe9997a8e7210936ff3c59b5d3fdb0041c1b375b0f9c88cf9ee30d0f356a09` (passing),
+`702175df967b2854e7897cd27fdc4aca441e21b52438381108fabe88ff3153e4` (movement rejection) and
+`ec757f12d13866360fbab189228ebb425893c6f8b299809c6f8567bf5817c64b` (YTD rejection). The
+ledger-review gate's vendored copy under `tests/conformance/xero_trial_balance_v1/` (pinned
+to exporter commit `f87b5e4e224b930b3f6d9c9c43e365a9d4ea98d4` and byte-identical) was removed
+with its `UPSTREAM.json`, the `MANIFEST.in` line and the packaging test that asserted it,
+after every consumer read the root authority. `schema.csv` is exactly the ten-column header
+plus one LF and `SHA256SUMS` covers all six files. The exporter runner, its evaluation
+README and `tests/test_evaluation_pack.py` read the root contract; the readiness,
+monthly-close and ledger-review suites gained root-contract tests; the Excel adapter and
+Power BI suites verify the same files with the standard library only;
+`tests/test_xero_trial_balance_contract.py` and `.github/workflows/joined-conformance.yml`
+run the joined producer-to-consumer conformance with only the exporter's hash-locked runtime
+installed. No duplicate copy of any fixture blob remains in the tree and no shared runtime
+package was added.

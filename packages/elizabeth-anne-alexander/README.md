@@ -95,7 +95,9 @@ elizabeth-anne-alexander validate-review \
 ## Control boundary
 
 - The canonical source contract has exactly ten columns: `ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit`.
-- `tests/conformance/xero_trial_balance_v1/` vendors the exporter-owned, fabricated `xero-tb-csv.v1` corpus at an immutable commit. Tests verify every byte locally, with no runtime network dependency.
+- The root `contracts/xero-trial-balance-v1/` directory is the exporter-owned, fabricated
+  `xero-tb-csv.v1` corpus. Its `SHA256SUMS` file and every consumer's tests verify the same bytes
+  locally, with no runtime network dependency.
 - CSV schema, duplicate account IDs, reporting dates, balance pairs, source hashes, entity, basis, currency, tracking filters, and draft setting are all checked before review.
 - Monetary values use `Decimal`, never binary floating point.
 - `percent_change` in the model result is expressed in percent and quantized to four decimal places (`"18.3333"` means 18.3333%). It is `null` when there is no prior balance to compare against.
