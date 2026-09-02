@@ -12,7 +12,7 @@ authoritative in the source repositories; none is copied here.
 The migration plan's path table named `packages/monthly-close-controls`,
 `packages/workpaper-review-gate` and `packages/xero-ledger-review-gate`. The reviewed
 Release Policy identity gate (`gate_component_identity` in `scripts/gates.sh` at
-`6ad53a7b030da22fc299cee704c37ba7550ea1d7`) requires a nested release's directory leaf,
+`3ff09b654a17b9a3b55548e25e6108ee582b00c4`) requires a nested release's directory leaf,
 `tag-prefix` and normalised distribution name (or `artifact-stem`) to be identical. Those
 plan paths cannot satisfy it for the distributions `monthly-close-control-plane`,
 `review-ready-gate` and `elizabeth-anne-alexander`, so the coordinator directed
@@ -83,12 +83,11 @@ setting was changed.
 ## Release Policy prerequisite
 
 The reviewed Release Policy extension (`source-directory`, `tag-prefix`, `version-parser`,
-`version-file` and `upload-dist-artifact` inputs) is the independently approved commit
-`6ad53a7b030da22fc299cee704c37ba7550ea1d7`. At assembly time it exists only as a local
-commit in the coordinator's `release-policy` clone; remote `ryanduguid/release-policy` main
-was observed at `5707d96f6fb0f5ba368df34a3500b54299c2ec44`. Every root release caller pins
-exactly `6ad53a7b030da22fc299cee704c37ba7550ea1d7`; the callers cannot run until that commit
-is pushed, which is expected.
+`version-file` and `upload-dist-artifact` inputs) was candidate
+`6ad53a7b030da22fc299cee704c37ba7550ea1d7`. It squash-landed on Release Policy `main` as
+`3ff09b654a17b9a3b55548e25e6108ee582b00c4` with the identical reviewed tree and diff.
+Every root release caller pins that landed commit, so the reusable workflows remain reachable
+after the reviewed feature branch is deleted.
 
 ## Import records
 
@@ -106,7 +105,8 @@ table above.
 Only the root `.github/workflows/` directory is active. The movement-only change replaced
 the anchor's root-default `release.yml` (tag pattern `v*`, pin
 `8b4de1ed339f1358b5f3e850b63412d8717d01da`) with five namespaced callers pinned to the
-independently approved Release Policy commit `6ad53a7b030da22fc299cee704c37ba7550ea1d7`.
+independently approved and squash-landed Release Policy commit
+`3ff09b654a17b9a3b55548e25e6108ee582b00c4`.
 One tag publishes one component; the reusable workflow's identity gate refuses a release
 whose directory leaf, `tag-prefix` and normalised distribution name or `artifact-stem`
 disagree.
@@ -126,16 +126,17 @@ exactly one wheel and one source distribution, and uses
 `pypi-backfill` job, now accepting only `monthly-close-control-plane/vMAJOR.MINOR.PATCH`.
 Before any monorepo release the owner must register each PyPI trusted publisher against the
 new caller file name and environment (the repository currently has only the `pypi`
-environment) and the approved Release Policy commit must be pushed. No caller references a
-secret. Nested component `release.yml` files remain inert.
+environment). The Release Policy pin resolves to its protected `main`. No caller references
+a secret. Nested component `release.yml` files remain inert.
 
 Per-component verification workflows: `ci.yml` (anchor; workflow `tests`, jobs `test`,
 `package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
 `elizabeth-anne-alexander.yml`, `accounting-excel-toolkit.yml`,
 `australian-accounting-power-bi.yml` and the unchanged `codeql.yml` (`Analyze Python`). Each
-uses explicit `paths` filters for its component directory, the future
-`contracts/xero-trial-balance-v1/` directory, `.github/**` and the root policy files, grants
-`contents: read` only and references no secret. The readiness and ledger workflows carry
+keeps the anchor checks unfiltered because branch protection requires their names for every
+pull request. The component workflows use explicit `paths` filters for their component
+directory, the future `contracts/xero-trial-balance-v1/` directory, `.github/**` and the root
+policy files. Each grants `contents: read` only and references no secret. The readiness and ledger workflows carry
 their source-defined clean-wheel demonstrations. Dependabot scopes Python updates to each
 component directory (`uv` for the three uv packages, `pip` for the exporter) and groups
 root GitHub Actions updates.
