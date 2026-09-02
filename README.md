@@ -33,11 +33,84 @@ commands. Only the root `.github/workflows/` are active; nested `.github/` direc
 inert records of the imported sources. `IMPORTS.md` records source identities, tree digests
 and import records. Historical releases and tags remain owned by the source repositories.
 
+## Review-pack contract
+
+Review packs are deterministic evidence for a human reviewer; they do not approve a close,
+post a journal, make a payment, lodge a return or lock a period. Each pack is a three-file
+directory: the JSON file is the machine-readable source of truth, Markdown is its human-readable
+summary, and CSV exposes the findings or exceptions as rows. The producing command writes all
+three files; the component's `view` command consumes and cross-checks an existing pack without
+changing it.
+
+### Readiness-gate output
+
+`review-ready gate`, called with `--profile <profile> --input <directory> --output <directory>`, produces
+`readiness-pack.json`, `readiness-summary.md` and `findings.csv`.
+
+| JSON field | Meaning |
+|---|---|
+| `overall_status` | The separate readiness result: whether configured evidence permits the pack to enter human review. |
+| `engagement_type` | The selected `bas`, `month_end` or `year_end` evidence profile. |
+| `period_end` | The reporting date declared by the preparer's self-review. |
+| `findings` | Missing, incomplete or integrity conditions found by the configured gates. |
+| `source_sha256` | Filenames and SHA-256 digests identifying the exact input byte snapshots assessed. |
+| `thresholds` | The tie-out tolerance applied during the run. |
+| `review_boundary` | The fixed statement that readiness is not approval, advice or lodgement authority. |
+| `acknowledgement` | Optional evidence of a later human review; it cannot change readiness or approve a file. |
+
+### Monthly-close pack
+
+`close-control review`, called with `--current <csv> --prior <csv> --output <directory>`, produces
+`close-review-pack.json`, `close-summary.md` and `exceptions.csv`.
+
+| JSON field | Meaning |
+|---|---|
+| `overall_status` | The aggregate Monthly Close `PackState` produced by the configured controls. |
+| `current_report_dates` / `prior_report_dates` | Report dates read from the current and prior validated trial-balance exports. |
+| `exceptions` | Material variances, integrity failures and other conditions requiring attention. |
+| `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
+| `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
+| `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |
+
+### Ledger-review evidence
+
+The ledger-review boundary is not a review pack and does not use `PackState`. It writes a model
+result, reviewer evidence and a digest-bound receipt. The receipt records a supplied human
+decision without making that decision for the reviewer.
+
+## Status contract
+
+In this repository, pack state means the Monthly Close `PackState`; its value is exactly `PASS`,
+`REVIEW` or `BLOCKED`. Review Ready Gate emits a separate `ReadinessStatus`, and the ledger
+gateway uses result and receipt statuses rather than pack states.
+
+| Output | Status domain | Value | Meaning |
+|---|---|---|---|
+| Review Ready Gate | `ReadinessStatus` | `READY` | Configured evidence permits the pack to enter manager review; a human still decides. |
+| Review Ready Gate | `ReadinessStatus` | `NOT_READY` | Required evidence or preparation is incomplete. |
+| Review Ready Gate | `ReadinessStatus` | `BLOCKED` | Integrity or safety evidence prevents review. |
+| Monthly Close Control Plane | `PackState` | `PASS` | No configured exception requires review. |
+| Monthly Close Control Plane | `PackState` | `REVIEW` | One or more bounded exceptions need human review. |
+| Monthly Close Control Plane | `PackState` | `BLOCKED` | An integrity or input condition prevents a reliable result. |
+| Elizabeth Anne Alexander model result | gateway result status | `REVIEW_READY` | Bounded evidence is ready for a human decision. |
+| Elizabeth Anne Alexander receipt | decision-receipt status | `DECISION_RECORDED` | Every supplied finding decision has been recorded. |
+| Elizabeth Anne Alexander receipt | decision-receipt status | `PARTIAL_DECISION_RECORDED` | At least one finding still has no supplied human decision. |
+
+## Exit-code contract
+
+For `review-ready gate`, exit `0` means `READY`, exit `2` means `NOT_READY` or `BLOCKED`,
+and exit `1` means malformed input or an operational error. For `close-control review` and
+`workbench`, exit `0` means `PASS`, exit `2` means `REVIEW` or `BLOCKED`, and exit `1`
+means malformed input, invalid configuration or an unwritable output. The read-only
+`close-control view` exits `0` only after verified display and `1` on verification failure.
+The exporter and ledger-review commands document their command-specific exits in their
+component READMEs.
+
 ## Releases
 
 Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`6ad53a7b030da22fc299cee704c37ba7550ea1d7`: `monthly-close-control-plane/v*`,
+`3ff09b654a17b9a3b55548e25e6108ee582b00c4`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*` and
 `accounting-excel-toolkit/v*`. One tag publishes exactly one component; the identity gate
 refuses a tag whose prefix does not equal the component directory leaf and its distribution
