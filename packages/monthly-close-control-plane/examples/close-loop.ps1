@@ -1,12 +1,12 @@
 # Local-file monthly close loop. No Xero OAuth.
 #
-# 1. close-control review of the sibling Xero Ledger Review Gate same-FY sample TBs
-#    into outputs/gateway-tb-loop (relative to this repository).
+# 1. close-control review of the co-located Elizabeth Anne Alexander same-FY
+#    sample TBs into outputs/gateway-tb-loop (relative to this package).
 # 2. elizabeth-anne-alexander evaluate against that package's bundled samples/
-#    context, if the CLI is on PATH or importable. Context is never this repo's
+#    context, if the CLI is on PATH or importable. Context is never this package's
 #    examples/ (the Varrock June/July pair crosses the 1 July FY reset).
 #
-# Set ELIZABETH_ANNE_ALEXANDER_ROOT when the gateway checkout is not a sibling.
+# Set ELIZABETH_ANNE_ALEXANDER_ROOT only when using a separate checkout.
 
 [CmdletBinding()]
 param(
@@ -32,7 +32,7 @@ if (-not $GatewayRoot) {
     $GatewayRoot = $env:ELIZABETH_ANNE_ALEXANDER_ROOT
 }
 if (-not $GatewayRoot) {
-    $GatewayRoot = Join-Path (Split-Path -Parent $RepoRoot) "xero-ledger-review-gate"
+    $GatewayRoot = Join-Path (Split-Path -Parent $RepoRoot) "elizabeth-anne-alexander"
 }
 
 $SampleDir = Join-Path $GatewayRoot "elizabeth_anne_alexander"
@@ -46,7 +46,7 @@ if (-not ((Test-Path -LiteralPath $CurrentCsv) -and (Test-Path -LiteralPath $Pri
 Cannot find the gateway same-FY sample TBs:
   $CurrentCsv
   $PriorCsv
-Clone Xero Ledger Review Gate (xero-ledger-review-gate) as a sibling of this repository, or set ELIZABETH_ANNE_ALEXANDER_ROOT.
+Use the Accounting Review Pipeline checkout with packages/elizabeth-anne-alexander, or set ELIZABETH_ANNE_ALEXANDER_ROOT to a separate checkout.
 Do not substitute examples/current_trial_balance.csv and examples/prior_trial_balance.csv: that Varrock June/July pair crosses the 1 July financial-year reset and cannot feed the gateway.
 "@
 }
