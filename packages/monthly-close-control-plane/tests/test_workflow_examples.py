@@ -28,7 +28,7 @@ REPOSITORY_NAME = "accounting-review-pipeline"
 PACKAGE_NAME = "monthly-close-control-plane"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
 PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/monthly-close-control-plane"
-RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d92a449d9"
+RELEASE_ASSET_SHA256 = "8afed7249f031a862ce052c3f27c793d6c91dd0dafbff1bd95f20f90ed20d94d"
 
 # The committed example must point at a release that actually exists, so this
 # tracks the last *published* tag rather than pyproject.toml's version (which
@@ -38,7 +38,7 @@ RELEASE_ASSET_SHA256 = "e4ca2bce708a3e28c8a6316eae68095848a116a04a99f24bc1d7325d
 # (`sha256sum` against the downloaded release asset, not a locally-built guess:
 # the wheel embeds SOURCE_DATE_EPOCH from the tag commit, so a local build
 # before the tag exists cannot reproduce the real bytes).
-EXAMPLE_PINNED_VERSION = "0.1.1"
+EXAMPLE_PINNED_VERSION = "0.1.3"
 
 EXPECTED_EXTERNAL_PINS = {
     "actions/checkout": (
@@ -127,6 +127,7 @@ def _requirement(project_version: str) -> str:
     return (
         f"{PACKAGE_NAME} @ "
         f"{REPOSITORY_URL}/releases/download/"
+        f"{PACKAGE_NAME}/"
         f"v{project_version}/monthly_close_control_plane-{project_version}-py3-none-any.whl"
         f"#sha256={RELEASE_ASSET_SHA256}"
     )
@@ -756,7 +757,8 @@ def test_step_permissions_and_duplicate_step_keys_are_rejected() -> None:
 @pytest.mark.parametrize(
     ("old", "new"),
     [
-        ("/download/v0.1.1/", "/download/v0.1.0/"),
+        ("/monthly-close-control-plane/v0.1.1/", "/monthly-close-control-plane/v0.1.0/"),
+        ("/download/monthly-close-control-plane/", "/download/"),
         ("monthly_close_control_plane-0.1.1-py3", "monthly_close_control_plane-0.1.0-py3"),
         (
             REPOSITORY_URL.removeprefix("https://"),
