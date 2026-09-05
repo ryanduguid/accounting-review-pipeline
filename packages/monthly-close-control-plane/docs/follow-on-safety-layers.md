@@ -23,7 +23,7 @@ The gateway must not accept a natural-language tool request, an arbitrary Xero/M
 
 ## Tax Radar AU
 
-The intended next component is [`Tax Radar AU`](https://github.com/ryanduguid/tax-radar-au), a provenance-first synthetic demonstration that turns version metadata into a technical-review queue.
+The intended next component is [`Tax Radar AU`](https://github.com/ryanduguid/au-tax-legislation-corpus/blob/main/RADAR.md), a provenance-first synthetic demonstration that turns version metadata into a technical-review queue, now maintained inside the Australian tax legislation corpus.
 
 ```text
 Reviewed source-index metadata + reviewed Register observation

@@ -467,6 +467,7 @@ def test_current_docs_use_canonical_pipeline_component_links() -> None:
         "ryanduguid/xero-trial-balance-export",
         "ryanduguid/workpaper-review-gate",
         "ryanduguid/xero-ledger-review-gate",
+        "ryanduguid/tax-radar-au",
     ):
         assert retired_repository not in text
 
