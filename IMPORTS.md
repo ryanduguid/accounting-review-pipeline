@@ -12,7 +12,7 @@ authoritative in the source repositories; none is copied here.
 The migration plan's path table named `packages/monthly-close-controls`,
 `packages/workpaper-review-gate` and `packages/xero-ledger-review-gate`. The reviewed
 Release Policy identity gate (`gate_component_identity` in `scripts/gates.sh` at
-`3ff09b654a17b9a3b55548e25e6108ee582b00c4`) requires a nested release's directory leaf,
+`787db4590e725cfd37104c8a9dd9e75f7fd4c018`) requires a nested release's directory leaf,
 `tag-prefix` and normalised distribution name (or `artifact-stem`) to be identical. Those
 plan paths cannot satisfy it for the distributions `monthly-close-control-plane`,
 `review-ready-gate` and `elizabeth-anne-alexander`, so the coordinator directed
@@ -85,7 +85,7 @@ setting was changed.
 The reviewed Release Policy extension (`source-directory`, `tag-prefix`, `version-parser`,
 `version-file` and `upload-dist-artifact` inputs) was candidate
 `6ad53a7b030da22fc299cee704c37ba7550ea1d7`. It squash-landed on Release Policy `main` as
-`3ff09b654a17b9a3b55548e25e6108ee582b00c4` with the identical reviewed tree and diff.
+`787db4590e725cfd37104c8a9dd9e75f7fd4c018` with the identical reviewed tree and diff.
 Every root release caller pins that landed commit, so the reusable workflows remain reachable
 after the reviewed feature branch is deleted.
 
@@ -104,9 +104,9 @@ table above.
 
 Only the root `.github/workflows/` directory is active. The movement-only change replaced
 the anchor's root-default `release.yml` (tag pattern `v*`, pin
-`8b4de1ed339f1358b5f3e850b63412d8717d01da`) with five namespaced callers pinned to the
+`2fe690d8dbb90c9b680c43822b7819f6aa1408ff`) with five namespaced callers pinned to the
 independently approved and squash-landed Release Policy commit
-`3ff09b654a17b9a3b55548e25e6108ee582b00c4`.
+`787db4590e725cfd37104c8a9dd9e75f7fd4c018`.
 One tag publishes one component; the reusable workflow's identity gate refuses a release
 whose directory leaf, `tag-prefix` and normalised distribution name or `artifact-stem`
 disagree.

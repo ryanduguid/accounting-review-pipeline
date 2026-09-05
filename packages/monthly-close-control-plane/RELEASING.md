@@ -66,13 +66,13 @@ gh attestation verify "$wheel" -R "$repo" \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+  --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
 gh attestation verify "$wheel" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+  --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
 ```
 
 If any gate fails, inspect it before touching the tag or draft. Never move a

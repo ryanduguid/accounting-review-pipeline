@@ -58,7 +58,7 @@ for file in *; do
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+    --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
 done
 for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-toolkit-${tag##*/v}.tar.gz"; do
   gh attestation verify "$archive" -R "$repo" \
@@ -66,7 +66,7 @@ for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-tool
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+    --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
 done
 ```
 

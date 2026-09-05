@@ -109,7 +109,7 @@ component READMEs.
 
 Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`3ff09b654a17b9a3b55548e25e6108ee582b00c4`: `monthly-close-control-plane/v*`,
+`787db4590e725cfd37104c8a9dd9e75f7fd4c018`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*` and
 `accounting-excel-toolkit/v*`. One tag publishes exactly one component; the identity gate
 refuses a tag whose prefix does not equal the component directory leaf and its distribution
