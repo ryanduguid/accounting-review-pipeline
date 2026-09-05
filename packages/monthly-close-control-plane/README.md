@@ -307,7 +307,7 @@ The next layers remain separate components. This project stays a local review-pa
 
 - [Workpaper Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate) - the upstream pack-readiness gate. It answers whether a BAS, month-end, or year-end folder is allowed onto the review desk. This tool still answers a later question: what material exceptions exist on these trial balances. Run the gate first.
 - [Xero Ledger Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
-- [Tax Radar AU](https://github.com/ryanduguid/tax-radar-au) - a provenance-first monitor that turns source-version metadata into a technical-review queue.
+- [Tax Radar AU](https://github.com/ryanduguid/au-tax-legislation-corpus/blob/main/RADAR.md) - a provenance-first monitor that turns source-version metadata into a technical-review queue, now maintained inside the Australian tax legislation corpus.
 
 [examples/close-loop.md](examples/close-loop.md) runs close-control and the co-located gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.
 
