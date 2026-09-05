@@ -63,6 +63,42 @@ ASCII_DIGITS = frozenset(string.digits)
 
 Account = namedtuple("Account", "code name type debit credit")
 
+# The labels the Excel export carries when saved as CSV, observed on the Demo
+# Company (AU) on 5 September 2026, mapped onto the CSV-export names the way
+# Xero.TrialBalance.pq does before it chooses a pair.
+EXCEL_EXPORT_LABELS = {
+    "Account": "Account Name",
+    "Debit - Year to date": "YTD Debit",
+    "Credit - Year to date": "YTD Credit",
+}
+EXCEL_FIXTURE = ROOT / "samples" / "sample-xero-trial-balance-excel-export.csv"
+
+
+def _aged_body_rows(data_rows):
+    """The row filter Xero.AgedReceivables.pq and Xero.AgedPayables.pq share,
+    ported: returns the contact rows plus the summary Total row.
+
+    A section row is any row whose amount cells are all blank; only
+    "Total " plus that name is dropped as its subtotal, so a contact called
+    "Total Tools Trade Card" survives. The "Percentage of total" row and
+    blank rows go too.
+    """
+    sections = [
+        row[0].strip()
+        for row in data_rows
+        if row[0].strip() and all(cell.strip() == "" for cell in row[1:])
+    ]
+    subtotals = {"Total " + section for section in sections}
+    kept = []
+    for row in data_rows:
+        name = row[0].strip()
+        if name == "" or all(cell.strip() == "" for cell in row[1:]):
+            continue
+        if name.lower() == "percentage of total" or name in subtotals:
+            continue
+        kept.append(row)
+    return kept
+
 
 class TrialBalanceError(Exception):
     """What the ported parser raises where the M raises. A distinct type, so
@@ -546,6 +582,8 @@ def _parse_rows(rows, name, use_ytd=None):
     header = [cell.strip() for cell in rows[start]]
 
     split_layout = header[0] == "Account Code"
+    if split_layout:
+        header = [EXCEL_EXPORT_LABELS.get(cell, cell) for cell in header]
     has_period = "Debit" in header and "Credit" in header
     has_ytd = "YTD Debit" in header and "YTD Credit" in header
 
@@ -636,6 +674,8 @@ class TrialBalanceFixtureTests(unittest.TestCase):
             "it must load with a null `AccountCode` and its full name intact",
             # test_default_takes_the_as_at_pair_and_useYTD_false_the_movement
             "default returns as-at, `useYTD = false` for movement",
+            # test_excel_export_saved_as_csv_loads_as_the_as_at_pair
+            "The Excel export saved as CSV loads as the as-at pair",
         ):
             with self.subTest(quoted=quoted):
                 self.assertIn(quoted, readme)
@@ -727,6 +767,42 @@ class TrialBalanceFixtureTests(unittest.TestCase):
                 with self.assertRaises(TrialBalanceError) as refused:
                     _parse_rows(rows, path.name, use_ytd=True)
                 self.assertIn("no YTD pair", str(refused.exception))
+
+    def test_excel_export_saved_as_csv_loads_as_the_as_at_pair(self):
+        """The README: "The Excel export saved as CSV loads as the as-at
+        pair".  Observed on the Demo Company (AU) on 5 September 2026: the
+        separate columns are labelled "Account", "Debit - Year to date" and
+        "Credit - Year to date", a comparative column is named for the prior
+        date, and there is no period pair at all.  So the default and
+        useYTD = true both take the as-at pair, useYTD = false refuses, and
+        the accounts and balances agree with the two CSV-export fixtures."""
+        as_at = _parse_trial_balance(EXCEL_FIXTURE)
+        self.assertEqual(len(as_at), 12)
+        self.assertEqual(sum(a.debit for a in as_at), Decimal("129934.50"))
+        self.assertEqual(sum(a.credit for a in as_at), Decimal("129934.50"))
+        self.assertEqual(as_at, _parse_trial_balance(EXCEL_FIXTURE, use_ytd=True))
+
+        def balances(accounts):
+            return sorted(accounts, key=lambda a: (a.code or "", a.name))
+
+        self.assertEqual(balances(as_at), balances(_parse_trial_balance(SEPARATE_FIXTURE)))
+        with self.assertRaises(TrialBalanceError) as refused:
+            _parse_trial_balance(EXCEL_FIXTURE, use_ytd=False)
+        self.assertIn("no period pair", str(refused.exception))
+        # The M maps the same three labels, in the split layout only, before
+        # the pair is chosen; the port above is what the fixture exercises.
+        source = (ROOT / "powerquery" / "Xero.TrialBalance.pq").read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            re.compile(
+                r"Promoted =\s*if splitLayout then\s*Table\.RenameColumns\(\s*PromotedRaw,\s*\{\s*"
+                r'\{"Account", "Account Name"\},\s*'
+                r'\{"Debit - Year to date", "YTD Debit"\},\s*'
+                r'\{"Credit - Year to date", "YTD Credit"\}\s*\},\s*'
+                r"MissingField\.Ignore\s*\)\s*else\s*PromotedRaw,",
+                re.MULTILINE,
+            ),
+        )
 
     def test_code_less_parenthetical_account_parses_with_no_code(self):
         """The other half of the same README sentence: the fixtures "include
@@ -1537,6 +1613,13 @@ class XeroAgedReceivablesSafetyTests(unittest.TestCase):
         # The silent-zero form cannot come back beside the parser.
         self.assertNotIn("otherwise 0.0", source)
         self.assertNotIn("Value.FromText", source)
+        # Observed 5 September 2026: section, subtotal and Percentage of
+        # total rows are dropped by these exact rules, mirrored by
+        # _aged_body_rows above.
+        self.assertIn("not isSectionRow(_)", source)
+        self.assertIn('Text.Lower(val) <> "percentage of total"', source)
+        self.assertIn("not List.Contains(sectionSubtotals, val)", source)
+        self.assertIn('each "Total " & Text.Trim(Text.From(_))', source)
 
     def test_aged_receivables_sample_fixture_is_reconciled(self):
         fixture_path = ROOT / "samples" / "sample-xero-aged-receivables.csv"
@@ -1556,16 +1639,20 @@ class XeroAgedReceivablesSafetyTests(unittest.TestCase):
         self.assertEqual(headers[-1], "Total")
 
         data_rows = rows[header_idx + 1 :]
+        # Observed 5 September 2026: the export closes with a "Percentage of
+        # total" row. The fixture must keep carrying it, or the filter that
+        # drops it stops being exercised.
+        self.assertIn("Percentage of total", [r[0] for r in data_rows])
         total_row = None
         customer_rows = []
-        for r in data_rows:
+        for r in _aged_body_rows(data_rows):
             if r[0].lower() == "total":
                 total_row = r
             else:
                 customer_rows.append(r)
 
         self.assertIsNotNone(total_row, "Summary Total row required in sample fixture")
-        self.assertGreaterEqual(len(customer_rows), 2)
+        self.assertEqual(len(customer_rows), 4)
 
         # Check row-level bucket summation
         for r in customer_rows:
@@ -1627,6 +1714,11 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         # The silent-zero form cannot come back beside the parser.
         self.assertNotIn("otherwise 0.0", source)
         self.assertNotIn("Value.FromText", source)
+        # The payables copy carries the same three drop rules.
+        self.assertIn("not isSectionRow(_)", source)
+        self.assertIn('Text.Lower(val) <> "percentage of total"', source)
+        self.assertIn("not List.Contains(sectionSubtotals, val)", source)
+        self.assertIn('each "Total " & Text.Trim(Text.From(_))', source)
 
     def test_aged_payables_sample_fixture_is_reconciled(self):
         fixture_path = ROOT / "samples" / "sample-xero-aged-payables.csv"
@@ -1646,16 +1738,24 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         self.assertEqual(headers[-1], "Total")
 
         data_rows = rows[header_idx + 1 :]
+        # Observed 5 September 2026: the payables export groups suppliers
+        # under an "Aged Payables" section row with blank amounts, closes it
+        # with "Total Aged Payables", and ends with "Percentage of total".
+        # The fixture must keep carrying all three, or the filters that drop
+        # them stop being exercised.
+        names = [r[0] for r in data_rows]
+        for marker in ("Aged Payables", "Total Aged Payables", "Percentage of total"):
+            self.assertIn(marker, names)
         total_row = None
         supplier_rows = []
-        for r in data_rows:
+        for r in _aged_body_rows(data_rows):
             if r[0].lower() == "total":
                 total_row = r
             else:
                 supplier_rows.append(r)
 
         self.assertIsNotNone(total_row, "Summary Total row required in sample fixture")
-        self.assertGreaterEqual(len(supplier_rows), 2)
+        self.assertEqual(len(supplier_rows), 4)
 
         # Check row-level bucket summation
         for r in supplier_rows:
