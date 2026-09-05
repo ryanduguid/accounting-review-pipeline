@@ -1,0 +1,18 @@
+Trial Balance
+Yanille Trading Pty Ltd
+As at 30 June 2026
+
+Account Code,Account,Account Type,Debit - Year to date,Credit - Year to date,30 June 2025
+090,Business Bank Account,Bank,15234.50,,9800.00
+610,Accounts Receivable,Current Asset,42100.00,,38250.00
+620,Prepayments,Current Asset,3600.00,,0
+710,Office Equipment,Fixed Asset,12000.00,,12000.00
+477,Wages and Salaries,Expense,45000.00,,41000.00
+469,Rent,Expense,12000.00,,12000.00
+800,Accounts Payable,Current Liability,,18400.00,-16700.00
+820,GST,Current Liability,,4210.00,-3950.00
+900,Loan,Non-current Liability,,20000.00,-25000.00
+200,Sales,Revenue,,71000.00,-64500.00
+960,Retained Earnings,Equity,,16324.50,-2900.00
+,Rent (Sydney),Expense,,,0
+Total,,,129934.50,129934.50,0
