@@ -1,4 +1,4 @@
-# xero-trial-balance-export
+# Xero trial balance CSV export
 
 ![xero-trial-balance-export](assets/banner.svg)
 
