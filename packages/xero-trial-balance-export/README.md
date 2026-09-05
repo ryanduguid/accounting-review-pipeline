@@ -1,4 +1,4 @@
-# xero-trial-balance-export
+# Xero trial balance CSV export
 
 ![xero-trial-balance-export](assets/banner.svg)
 
@@ -158,7 +158,7 @@ The `{tenant}` segment of the default filename is the org name lowercased, with 
 
 ## Related
 
-[`accounting-excel-toolkit`](https://github.com/ryanduguid/accounting-excel-toolkit): Power Query parsers for the manual-export path, when API access isn't on the table.
+[`accounting-excel-toolkit`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit): Power Query parsers for the manual-export path, when API access isn't on the table.
 
 ## Author
 
