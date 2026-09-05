@@ -1,8 +1,8 @@
-# accounting-excel-toolkit
+# Accounting Excel Toolkit
 
 ```
 +----------------------------------------------------------------------+
-|                       accounting-excel-toolkit                       |
+|                       Accounting Excel Toolkit                       |
 +----------------------------------------------------------------------+
 |       Power Query and VBA utilities for Australian ledger work       |
 +----------------------------------+-----------------------------------+
@@ -15,6 +15,8 @@
 ```
 
 [![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/accounting-excel-toolkit.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/accounting-excel-toolkit.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
+
+Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 
 Maintain this adapter at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit). Run the commands below from `adapters/accounting-excel-toolkit/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical API CSV header, fixtures and expected results; the interactive-export parser fixtures under `samples/` cover a separate format.
 
