@@ -480,7 +480,7 @@ def test_release_guidance_uses_the_namespaced_current_tag() -> None:
     assert 'version="${tag#monthly-close-control-plane/v}"' in guidance
     assert "tag=v0.1.3" not in guidance
     assert guidance.count(
-        "--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4"
+        "--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018"
     ) == 2
 
 

@@ -51,7 +51,7 @@ def test_release_workflow_keeps_the_pinned_reusable_policy_caller() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/"
-        "release-python.yml@3ff09b654a17b9a3b55548e25e6108ee582b00c4"
+        "release-python.yml@787db4590e725cfd37104c8a9dd9e75f7fd4c018"
     ) in workflow
     assert "version-parser: python-literal" in workflow
     assert "version-file: elizabeth_anne_alexander/version.py" in workflow
@@ -146,7 +146,7 @@ def test_current_release_guidance_binds_the_exact_namespaced_identity() -> None:
     assert "tag=elizabeth-anne-alexander/v0.2.2" in guidance
     assert 'version="${tag#elizabeth-anne-alexander/v}"' in guidance
     assert "repo=ryanduguid/accounting-review-pipeline" in guidance
-    assert guidance.count("--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4") == 2
+    assert guidance.count("--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018") == 2
     assert "Workflow filename | `release-elizabeth-anne-alexander.yml`" in guidance
     assert "Environment name | `pypi-elizabeth-anne-alexander`" in guidance
     assert "tag=v0.2.2" not in guidance
