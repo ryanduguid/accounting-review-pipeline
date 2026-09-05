@@ -1,6 +1,6 @@
 # GitHub discovery metadata
 
-Description: Stop incomplete workpapers reaching manager review. Deterministic readiness gate for Australian public-practice packs. Not advice.
+Description: Workpaper Review Gate: stop incomplete workpapers reaching manager review. Deterministic readiness gate for Australian public-practice packs. Not advice.
 
 Homepage: https://duguid.com.au/tools/workpaper-review-gate/
 
