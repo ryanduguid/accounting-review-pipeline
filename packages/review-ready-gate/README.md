@@ -154,7 +154,7 @@ ItemID,Severity,Owner,DueDate,Status,Description,Resolution
 
 ### Trial balance
 
-The ten-column canonical CSV from [xero-trial-balance-export](https://github.com/ryanduguid/xero-trial-balance-export):
+The ten-column canonical CSV from [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export):
 
 ```text
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
@@ -214,8 +214,8 @@ Before displaying anything it fails closed on: a missing artefact; JSON that is 
 
 ## Related
 
-- [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) - exception pack once a trial balance is allowed onto the review desk
-- [Xero Ledger Review Gate](https://github.com/ryanduguid/xero-ledger-review-gate) - zero-network variance boundary for AI-assisted TB review
+- [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane) - exception pack once a trial balance is allowed onto the review desk
+- [Xero Ledger Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander) - zero-network variance boundary for AI-assisted TB review
 - [australian-accounting-skills](https://github.com/ryanduguid/australian-accounting-skills) - `workpaper-tie-out` and `bas-preparation` workflows this gate enforces mechanically
 - [DrDebits](https://github.com/ryanduguid/DrDebits) - APES 110 / TPB guardrails for any LLM sitting *after* a READY pack
 
