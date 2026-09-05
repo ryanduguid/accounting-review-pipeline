@@ -77,48 +77,51 @@ Before tagging:
     python -B -m unittest discover -s tests -v
     ```
 
-6. Confirm `VERSION` and the first line of `RELEASE_NOTES.md` match the intended tag.
+6. Confirm the versions in `pyproject.toml` and `uv.lock` match the first line of
+   `RELEASE_NOTES.md` (`# vX.Y.Z`).
 7. Fetch current remote `main`, create a namespaced annotated tag on that exact
-   commit, for example `git tag -a xero-trial-balance-export/v0.1.6 -m "xero-trial-balance-export v0.1.6"`
+   commit, for example `git tag -a xero-trial-balance-export/v0.1.7 -m "xero-trial-balance-export v0.1.7"`
    (or `-s` when signing is configured), then push only that tag.
 
-The workflow installs the hash-locked dependencies, runs the full offline suite and builds deterministic ZIP and tar.gz source archives. The archive helper fixes the timezone to UTC and Git text conversion to LF so the same tagged tree produces the same archive bytes on Linux and Windows. It adds an SPDX 2.3 SBOM, `SHA256SUMS`, GitHub provenance and an SBOM attestation before publishing the completed draft.
+The workflow runs the locked test suite, builds the wheel and source
+distribution once, generates an SPDX 2.3 SBOM for the wheel and `SHA256SUMS`,
+records GitHub provenance and an SBOM attestation, then publishes the completed
+draft. The caller's `pypi` job then publishes that exact wheel and source
+distribution to PyPI through the `pypi-xero-trial-balance-export` environment and
+trusted publisher. Releases through v0.1.6 were source archives; from v0.1.7 the
+release assets are the wheel and source distribution.
 
 The authenticated release inventory must prove that no release or draft already uses the tag. The workflow creates the candidate as a draft, finds that draft through the all-releases API, and addresses it only by release ID. Before publication it verifies the exact notes, asset names and digests, then rechecks that the remote annotated tag and `main` still peel to the tested workflow commit. After publication it checks immutability, latest-release classification, digests and every release attestation. A failure after draft creation leaves that draft for deliberate inspection; an earlier failure may leave no draft, as v0.1.2 demonstrated. Query the authenticated release inventory, preserve the failed tag and do not replace or rerun blindly. The immediate pre-publication check narrows, but cannot make atomic, the residual race with a concurrent merge to `main`; do not merge other work during a release run, and rely on the no-bypass tag ruleset to prevent tag movement.
 
 Verify the downloaded release with:
 
 ```bash
-tag=xero-trial-balance-export/v0.1.6
+tag=xero-trial-balance-export/v0.1.7
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#xero-trial-balance-export/v}"
+wheel="xero_trial_balance_export-${version}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
 release_dir="release-${tag//\//-}"
 gh release download "$tag" -R "$repo" --dir "$release_dir"
 cd "$release_dir"
 sha256sum --check SHA256SUMS
-for file in *; do
-  gh attestation verify "$file" -R "$repo" \
-    --source-digest "$release_commit" \
-    --source-ref "refs/tags/$tag" \
-    --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
-  gh release verify-asset "$tag" "$file" -R "$repo"
-done
-for archive in "xero-trial-balance-export-$version.tar.gz" \
-               "xero-trial-balance-export-$version.zip"; do
-  gh attestation verify "$archive" -R "$repo" \
-    --predicate-type https://spdx.dev/Document/v2.3 \
-    --source-digest "$release_commit" \
-    --source-ref "refs/tags/$tag" \
-    --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
-done
+gh attestation verify "$wheel" -R "$repo" \
+  --source-digest "$release_commit" \
+  --source-ref "refs/tags/$tag" \
+  --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
+gh attestation verify "$wheel" -R "$repo" \
+  --predicate-type https://spdx.dev/Document/v2.3 \
+  --source-digest "$release_commit" \
+  --source-ref "refs/tags/$tag" \
+  --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
+  --signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4
 gh release view "$tag" -R "$repo" --json isImmutable,tagName \
   | jq -e --arg tag "$tag" \
       '.isImmutable == true and .tagName == $tag'
 gh release verify "$tag" -R "$repo"
+gh release verify-asset "$tag" "$wheel" -R "$repo"
 ```
 
 If any gate fails, inspect it before touching the draft. Never move, delete or reuse a protected release tag, whether or not publication completed.

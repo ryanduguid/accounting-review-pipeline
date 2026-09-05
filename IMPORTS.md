@@ -23,7 +23,7 @@ distribution-named directories:
 | `packages/monthly-close-controls/` | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane` |
 | `packages/workpaper-review-gate/` | `packages/review-ready-gate/` | distribution `review-ready-gate` |
 | `packages/xero-ledger-review-gate/` | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander` |
-| `packages/xero-trial-balance-export/` | unchanged | archive stem `xero-trial-balance-export` |
+| `packages/xero-trial-balance-export/` | unchanged | distribution `xero-trial-balance-export` |
 | `adapters/accounting-excel-toolkit/` | unchanged | archive stem `accounting-excel-toolkit` |
 | `apps/australian-accounting-power-bi/` | unchanged | no release |
 
@@ -60,7 +60,7 @@ The fetched heads above are the selected import snapshots.
 | Component | Public identity | Lock and verification | Licence and publisher boundary |
 |---|---|---|---|
 | Monthly Close Controls | distribution `monthly-close-control-plane` 0.1.2; import `closecontrol`; commands `close-control`, `openaccountants-au`; version in `pyproject.toml` | `uv.lock`; pytest, build, Ruff, mypy, clean-wheel smoke | MIT; PyPI environment `pypi`; local, offline review package |
-| Xero Trial Balance Export | distribution `xero-trial-balance-export` 0.1.4; modules `export_tb`, `xero_client`, `auth`, `token_store`; commands `export-tb`, `xero-tb-auth`; version in `VERSION` | hash-locked `requirements.lock`; unittest, Ruff, mypy | MIT; GitHub source-archive release with `artifact-stem: xero-trial-balance-export`; the only component allowed OAuth, Xero API, HTTP, tokens or Xero credentials |
+| Xero Trial Balance Export | distribution `xero-trial-balance-export` 0.1.4; modules `export_tb`, `xero_client`, `auth`, `token_store`; commands `export-tb`, `xero-tb-auth`; version in `pyproject.toml` | hash-locked `requirements.lock` for CI; `uv.lock` with a `dev` extra for the release policy's pytest and build; Ruff, mypy | MIT; attested wheel and source distribution published to PyPI through `pypi-xero-trial-balance-export`; the only component allowed OAuth, Xero API, HTTP, tokens or Xero credentials |
 | Workpaper Review Gate | distribution `review-ready-gate` 0.1.2; import `reviewready`; command `review-ready`; version in `pyproject.toml` | `uv.lock`; pytest, build, wheel smoke, `uv lock --check`, Ruff, mypy | MIT; PyPI; local, offline and fabricated-only |
 | Xero Ledger Review Gate | distribution `elizabeth-anne-alexander` 0.2.1; import `elizabeth_anne_alexander`; command `elizabeth-anne-alexander`; version in `elizabeth_anne_alexander/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, build, wheel demo, Ruff, mypy | MIT; PyPI; zero-network synthetic demonstration |
 | Accounting Excel Toolkit | source adapter 0.1.5; version in `VERSION`; Power Query and VBA source, no Python distribution | pinned actionlint and ShellCheck; unittest; optional native Excel acceptance | MIT; GitHub source-archive release with `artifact-stem: accounting-excel-toolkit`; local-file adapters only |
@@ -116,10 +116,10 @@ disagree.
 | Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags, plus `workflow_dispatch` backfill of an existing namespaced tag | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
 | Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
 | Xero Ledger Review Gate | `release-elizabeth-anne-alexander.yml` | `elizabeth-anne-alexander/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: elizabeth_anne_alexander/version.py` | `packages/elizabeth-anne-alexander` | `elizabeth-anne-alexander` | `pypi-elizabeth-anne-alexander` (https://pypi.org/p/elizabeth-anne-alexander) |
-| Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-archive.yml` with `artifact-stem: xero-trial-balance-export` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | none (GitHub release assets only) |
+| Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
 
-The three Python callers upload the attested distribution (`upload-dist-artifact: true`) and
+The four Python callers upload the attested distribution (`upload-dist-artifact: true`) and
 publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
 exactly one wheel and one source distribution, and uses
 `pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`. The anchor keeps its
