@@ -13,13 +13,18 @@ accounting, legal or exposure decision.
 
 ## Evidence gate: observed Xero aged receivables/payables
 
-`Xero.AgedReceivables` and `Xero.AgedPayables` shipped in `v0.1.5` and are
-listed under Contracted parsers above, ahead of this gate: neither parser
-header names an observed export mode and date, and no static or native
-acceptance case calls either function yet, so the gate's criteria below
-remain open. The requirement is kept as the record of what has to be
-collected, and it applies to the shipped parsers and to any change in the
-observed export shape.
+`Xero.AgedReceivables` and `Xero.AgedPayables` shipped in `v0.1.5` ahead of
+this gate. On 5 September 2026 the Excel exports of both summaries were
+observed on Xero's Demo Company (AU), and both parser headers now name that
+mode and date. The fixtures carry the observed shape: title rows ending in
+`Ageing by due date`, bucket labels `< 1 Month`, `1 Month`, `2 Months`,
+`3 Months`, `Older` and `Total` with a leading `Current` column, the trailing
+`Percentage of total` row, and on the payables side an `Aged Payables`
+section row closed by a `Total Aged Payables` subtotal; the static checks
+parse them through the same drop rules the M applies. Still open: the CSV
+export mode has not been observed separately, and no native Excel acceptance
+case calls either function. The requirement below stays as the record of
+what a further observation has to collect.
 
 Before adding a Xero aged receivables or aged payables parser, collect a fresh,
 non-client interactive export outside this repository and record only the

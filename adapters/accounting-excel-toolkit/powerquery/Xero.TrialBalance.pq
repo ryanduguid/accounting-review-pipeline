@@ -5,7 +5,10 @@
 //   "Account"      - combined account cell: code and name in one field.
 //   "Account Code" - separate "Account Code" and "Account Name" fields.
 // Both come out the same shape: AccountCode, AccountName, then the export's
-// remaining columns.
+// remaining columns. The separate-column shape also accepts the labels the
+// Excel export carries when saved as CSV ("Account", "Debit - Year to date",
+// "Credit - Year to date"; observed on the Demo Company (AU) on 5 September
+// 2026), mapped onto the names above before the pair is chosen.
 //
 // The separate-column shape was observed in Xero's interactive Trial Balance
 // CSV export on 20 August 2026. The checked-in CSVs are fabricated fixtures,
@@ -92,7 +95,27 @@ let
                 else
                     List.Min(HeaderMatches),
             Sliced = Table.RemoveFirstN(Raw, HeaderIdx),
-            Promoted = Table.PromoteHeaders(Sliced, [PromoteAllScalars = true]),
+            PromotedRaw = Table.PromoteHeaders(Sliced, [PromoteAllScalars = true]),
+            // Observed Xero Excel export of the Trial Balance (Demo Company
+            // (AU), 5 September 2026), saved as CSV, labels the separate
+            // columns "Account Code", "Account", "Account Type",
+            // "Debit - Year to date", "Credit - Year to date", then one
+            // comparative column named for the prior date ("30 June 2025").
+            // Map those labels onto the CSV-export names so both shapes load
+            // the same way; the comparative column rides through untouched.
+            Promoted =
+                if splitLayout then
+                    Table.RenameColumns(
+                        PromotedRaw,
+                        {
+                            {"Account", "Account Name"},
+                            {"Debit - Year to date", "YTD Debit"},
+                            {"Credit - Year to date", "YTD Credit"}
+                        },
+                        MissingField.Ignore
+                    )
+                else
+                    PromotedRaw,
             // Choose ONE debit/credit pair. Debit/Credit = period movement,
             // YTD Debit/YTD Credit = as-at balances. Null (the default)
             // prefers the as-at pair; explicit true/false demands its pair.

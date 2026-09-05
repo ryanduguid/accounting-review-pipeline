@@ -6,6 +6,14 @@
 // Metadata rows above the header (report title, entity name, as-at date, ageing basis)
 // are safely measured and skipped without collapsing the table width.
 //
+// Observed export: Xero Excel export of the Aged Receivables Summary for the
+// Demo Company (AU), 5 September 2026, saved as CSV. Title rows are the report
+// name, the organisation, "As at <date>" and "Ageing by due date", then a blank
+// row, then the header. Bucket labels are "< 1 Month", "1 Month", "2 Months",
+// "3 Months", "Older" and "Total", with a leading "Current" column when the
+// as-at date leaves anything not yet due. Zero buckets export as 0, not blank.
+// The CSV export mode has not been observed separately.
+//
 // Key contract rules:
 //   1. Contact identifier is forced to text so leading zeros and punctuation survive.
 //   2. Ageing buckets and Total columns are parsed as numbers (Currency/type
@@ -67,14 +75,43 @@ let
             Promoted = Table.PromoteHeaders(Sliced, [PromoteAllScalars = true]),
             cols = Table.ColumnNames(Promoted),
             contactCol = if List.Contains(cols, "Contact") then "Contact" else if List.Contains(cols, "Customer") then "Customer" else cols{0},
-            // Drop total rows and blank rows
-            Filtered = Table.SelectRows(
-                Promoted,
-                each let val = Text.Trim(Text.From(Record.Field(_, contactCol) ?? "")) in
-                    val <> "" and Text.Lower(val) <> "total"
-            ),
             // Identify amount columns (all columns except the contact column)
             amountCols = List.Difference(cols, {contactCol}),
+            // Observed Xero Excel export (Demo Company (AU), 5 September
+            // 2026): below the contact rows sit the "Total" row, a blank
+            // row and a "Percentage of total" row. The export can also
+            // group contacts under a section row whose amount cells are all
+            // blank, closed by a "Total <section>" subtotal (the payables
+            // export does this with "Aged Payables"). A section is any row
+            // with every amount cell blank; only "Total " & that name is
+            // dropped as a subtotal, so a contact called "Total Tools Trade
+            // Card" still loads.
+            contactOf = (row as record) as text =>
+                Text.Trim(Text.From(Record.Field(row, contactCol) ?? "")),
+            isSectionRow = (row as record) as logical =>
+                List.AllTrue(
+                    List.Transform(
+                        amountCols,
+                        each Text.Trim(Text.From(Record.Field(row, _) ?? "")) = ""
+                    )
+                ),
+            sectionSubtotals = List.Transform(
+                List.Select(
+                    Table.Column(Table.SelectRows(Promoted, each isSectionRow(_)), contactCol),
+                    each Text.Trim(Text.From(_ ?? "")) <> ""
+                ),
+                each "Total " & Text.Trim(Text.From(_))
+            ),
+            // Drop blank, section, subtotal, Total and Percentage of total rows
+            Filtered = Table.SelectRows(
+                Promoted,
+                each let val = contactOf(_) in
+                    val <> ""
+                    and not isSectionRow(_)
+                    and Text.Lower(val) <> "total"
+                    and Text.Lower(val) <> "percentage of total"
+                    and not List.Contains(sectionSubtotals, val)
+            ),
             // Culture pinned to en-AU, the same rule Xero.TrialBalance's
             // parseAmount follows: an unpinned parse follows the machine
             // locale, where de-DE reads "15234.50" as 1523450. Blank cells
