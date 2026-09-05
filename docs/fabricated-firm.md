@@ -5,20 +5,22 @@ approves this document. It covers audit items 16 (inventory) and 17 (design).
 
 Governance note: root `CONTRIBUTING.md` scopes a change to one component or
 to the data-only contract `contracts/xero-trial-balance-v1/`. This document
-is repository-wide, like `IMPORTS.md`, and touches no component. The dataset
-it proposes would be a second data-only contract directory, which the rule
-does not cover yet: `CONTRIBUTING.md`, `AGENTS.md` and
+fits neither, and the policy grants no exception for root documentation, so
+merging it is the owner's explicit call (decision 7). The dataset it
+proposes would be a second data-only contract directory, which the rule does
+not cover yet either: `CONTRIBUTING.md`, `AGENTS.md` and
 `joined-conformance.yml` all name the v1 directory literally and would be
 amended in the change that creates the firm (section 3).
 
 ## 1. Inventory of fabricated entities today
 
-Every name in the tables is invented. Two real names appear elsewhere:
-`Cadia Holdings Pty Ltd v Downer EDI Mining Pty Ltd` in the progress-claim
-skill is a case citation, not a fixture, and `FireFalcon/examples/arb/` is a
-worked example built from ARB Corporation Limited's published Appendix 4E,
-a real listed company's public figures. The ARB example is outside the firm
-and stays or goes on the owner's call; it is not a fabricated entity.
+Every name in the tables is invented. Two places name real parties and are
+deliberately not repeated here: the `progress-claim-preparation` skill cites
+a NSW Supreme Court security-of-payment judgment by its parties, which is a
+citation, not a fixture; and `FireFalcon/examples/arb/` is a worked example
+built from a listed company's published Appendix 4E figures. That example is
+outside the firm and stays or goes on the owner's call; it is not a
+fabricated entity.
 
 | Entity | Files | Facts asserted | Consumers |
 | --- | --- | --- | --- |
@@ -212,5 +214,8 @@ runs:
 6. The generator's home: the root `tools/fabricated_firm.py` proposed in
    section 3, or inside the Power BI component, which would make one
    component the author of a contract three review packages consume.
+7. Whether this document may merge as a root document at all, or whether
+   `CONTRIBUTING.md` is first amended to admit root documentation, since the
+   scope rule as written admits neither this file nor a second contract.
 
 Generation waits on these answers.
