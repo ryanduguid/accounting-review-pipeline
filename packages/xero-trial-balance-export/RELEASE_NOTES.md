@@ -1,3 +1,13 @@
+# v0.1.7
+
+- Publish the wheel and source distribution to PyPI from the monorepo through
+  the shared attested Python release policy, so `pip install
+  xero-trial-balance-export` installs the maintained source and the PyPI page
+  points here rather than at the archived source repository.
+- Declare the version statically in `pyproject.toml` with a locked `dev` extra
+  for the policy's test and build steps; `VERSION` is retired.
+- Preserve the v0.1.6 source, OAuth, token-cache, export and command behaviour.
+
 # v0.1.6
 
 - Add the complete pinned `requirements-test.txt` manifest expected by the

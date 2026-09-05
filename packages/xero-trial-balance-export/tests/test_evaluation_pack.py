@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -271,8 +272,9 @@ class EvaluationPackTest(unittest.TestCase):
         self.assertIn("fabricated", readme.casefold())
         self.assertNotIn("case study", readme.casefold())
 
-    def test_v016_release_metadata_points_to_the_canonical_monorepo(self):
-        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    def test_v017_release_metadata_points_to_the_canonical_monorepo(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        version = re.search(r'(?m)^version = "([^"]+)"$', pyproject).group(1)
         citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
@@ -283,23 +285,23 @@ class EvaluationPackTest(unittest.TestCase):
         root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
         canonical = "https://github.com/ryanduguid/accounting-review-pipeline"
 
-        self.assertEqual(version, "0.1.6")
-        self.assertTrue(notes.startswith("# v0.1.6\n"))
-        self.assertIn("version: 0.1.6", citation)
+        self.assertEqual(version, "0.1.7")
+        self.assertTrue(notes.startswith("# v0.1.7\n"))
+        self.assertIn("version: 0.1.7", citation)
         self.assertIn(
             f'repository-code: "{canonical}/tree/main/'
             'packages/xero-trial-balance-export"',
             citation,
         )
         self.assertIn(f"{canonical}/actions/workflows/xero-trial-balance-export.yml", readme)
-        self.assertIn("xero-trial-balance-export/v0.1.6", readme)
+        self.assertIn("xero-trial-balance-export/v0.1.7", readme)
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "
             "| distribution `xero-trial-balance-export`, commands `export-tb` and "
-            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.6 |",
+            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.7 |",
             root_readme,
         )
-        self.assertIn("tag=xero-trial-balance-export/v0.1.6", releasing)
+        self.assertIn("tag=xero-trial-balance-export/v0.1.7", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
         self.assertIn("--signer-digest 3ff09b654a17b9a3b55548e25e6108ee582b00c4", releasing)
         self.assertNotIn("isLatest", releasing)

@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xero-trial-balance-export"
+version = "0.1.7"
 description = "Export a Xero trial balance to a tidy CSV for Power BI, pandas or Excel."
 readme = "README.md"
 license = "MIT"
@@ -12,7 +13,6 @@ requires-python = ">=3.10"
 dependencies = [
     "requests>=2.34.2",
 ]
-dynamic = ["version"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -27,12 +27,12 @@ classifiers = [
 Homepage = "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export"
 Issues = "https://github.com/ryanduguid/accounting-review-pipeline/issues"
 
+[project.optional-dependencies]
+dev = ["build>=1.2", "pytest>=8"]
+
 [project.scripts]
 export-tb = "export_tb:run"
 xero-tb-auth = "auth:main"
 
 [tool.setuptools]
 py-modules = ["auth", "xero_client", "export_tb", "token_store"]
-
-[tool.setuptools.dynamic]
-version = { file = "VERSION" }
