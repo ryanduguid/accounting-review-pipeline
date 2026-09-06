@@ -1,4 +1,27 @@
-# Accounting Review Pipeline
+# Accounting Review Pipeline: a balanced trial balance still needs review
+
+Synthetic examples. Review aid, not professional advice; a human decides whether the close is acceptable.
+
+**Input:** the supplied current and prior trial balances, account mapping and subledger. The creditors reconciliation differs by $250.
+
+From a clone, with [uv](https://docs.astral.sh/uv/) installed:
+
+```bash
+cd packages/monthly-close-control-plane
+uv run --locked --extra dev close-control review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output outputs/demo
+```
+
+**Output:** `REVIEW`, eight exceptions, exit 2. Open `outputs/demo/close-summary.md`.
+
+| Finding | Evidence | Human decision |
+| --- | --- | --- |
+| Creditors reconciliation | $250 difference | Trace and explain the difference before sign-off. |
+| Financial-year reset | 30 June compared with 31 July | Reconsider P&L YTD comparisons across the reset. |
+
+[Read the five-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Inspect all eight exceptions](packages/monthly-close-control-plane/README.md#worked-example)
+
+<details>
+<summary>Setup, component identities, file contracts and reference</summary>
 
 Local monorepo assembly anchored in Monthly Close Controls. Its canonical GitHub repository
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
@@ -124,3 +147,5 @@ accept and reject results and `SHA256SUMS`. It is test and data input only and a
 runtime package. `tests/test_xero_trial_balance_contract.py` and the
 `joined-conformance.yml` workflow run the exporter runner and all three offline review
 implementations against it.
+
+</details>
