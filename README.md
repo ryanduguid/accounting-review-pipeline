@@ -8,10 +8,10 @@ From a clone, with [uv](https://docs.astral.sh/uv/) installed:
 
 ```bash
 cd packages/monthly-close-control-plane
-uv run --locked --extra dev close-control review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output outputs/demo
+uv run --locked --extra dev close-control review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output ../../../close-control-demo
 ```
 
-**Output:** `REVIEW`, eight exceptions, exit 2. Open `outputs/demo/close-summary.md`.
+**Output:** `REVIEW`, eight exceptions, exit 2. Open `../../../close-control-demo/close-summary.md`.
 
 | Finding | Evidence | Human decision |
 | --- | --- | --- |
