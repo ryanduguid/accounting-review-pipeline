@@ -1,5 +1,11 @@
 # Xero Ledger Review Gate
 
+| Install distribution | Python import | Command |
+| --- | --- | --- |
+| `elizabeth-anne-alexander` | `elizabeth_anne_alexander` | `elizabeth-anne-alexander` |
+
+Compatibility: install `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, and run `elizabeth-anne-alexander`. These remain the supported names; no migration is required.
+
 ## Scope and assurance boundary
 
 This is a **synthetic-only** design demonstration. It accepts synthetic
