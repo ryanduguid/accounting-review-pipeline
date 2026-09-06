@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | `elizabeth-anne-alexander` | `elizabeth_anne_alexander` | `elizabeth-anne-alexander` |
 
-These published identities remain supported. The functional title describes the accounting task; no package rename or import migration is required.
+Compatibility: install `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, and run `elizabeth-anne-alexander`. These remain the supported names; no migration is required.
 
 ## Scope and assurance boundary
 
