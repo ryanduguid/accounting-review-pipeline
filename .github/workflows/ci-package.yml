@@ -234,10 +234,12 @@ jobs:
       - name: install the wheel into a clean environment, import it and run the smoke
         # Exactly one wheel, installed by path with --no-index, or pip is free
         # to resolve the name from PyPI and test a release nobody built in this
-        # job. The wheel's own runtime dependencies come from the lock, the same
-        # closed set the audit job checks: `uv export` from a member directory
-        # exports that member. The smoke runs from an empty directory so it can
-        # only see what the wheel installed.
+        # job. The wheel's own runtime dependencies come from the component's
+        # own uv.lock, the set that governs its release: inside the workspace
+        # `uv export --locked` would read the root lock, so the export runs from
+        # a copy of the component outside it, as the lockfile check does. The
+        # smoke runs from an empty directory so it can only see what the wheel
+        # installed.
         env:
           IMPORT_NAME: ${{ inputs.import_name }}
           SMOKE: ${{ inputs.smoke }}
@@ -251,9 +253,12 @@ jobs:
             echo "expected exactly one wheel in dist/, found: ${wheels[*]}"
             exit 1
           fi
+          mkdir "${smoke_dir}/component"
+          cp -R . "${smoke_dir}/component/"
+          rm -rf "${smoke_dir}/component/.venv"
+          (cd "${smoke_dir}/component" && uv export --locked --no-dev --no-emit-project --no-hashes \
+            --format requirements-txt --output-file "${smoke_dir}/runtime.txt")
           python -m venv "${smoke_dir}/venv"
-          uv export --locked --no-dev --no-emit-project --no-hashes --format requirements-txt \
-            --output-file "${smoke_dir}/runtime.txt"
           "${smoke_dir}/venv/bin/pip" install -r "${smoke_dir}/runtime.txt"
           "${smoke_dir}/venv/bin/pip" install --no-index "${wheels[0]}"
           cd "${smoke_dir}"
