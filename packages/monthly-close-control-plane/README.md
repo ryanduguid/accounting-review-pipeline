@@ -315,7 +315,5 @@ The next layers remain separate components. This project stays a local review-pa
 
 The next layers are deliberately separated from the control engine. The pipeline components above are co-located without sharing runtime authority, and Tax Radar AU remains separate. The close-loop example runs the gateway on local files only.
 
-See [docs/follow-on-safety-layers.md](docs/follow-on-safety-layers.md) for the intended boundary contracts.
-
 
 MIT licensed. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
