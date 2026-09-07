@@ -55,7 +55,7 @@ required.
 4. Confirm the versions in `pyproject.toml` and `uv.lock` match the
    `RELEASE_NOTES.md` heading.
 5. Create an annotated namespaced tag on current remote `main`, for example
-   `git tag -a review-ready-gate/v0.1.3 -m "review-ready-gate v0.1.3"` (or `-s`
+   `git tag -a review-ready-gate/v0.1.4 -m "review-ready-gate v0.1.4"` (or `-s`
    when signing is configured), then
    push only that tag.
 
@@ -67,7 +67,7 @@ existing release is never overwritten.
 Verify the downloaded release with:
 
 ```bash
-tag=review-ready-gate/v0.1.3
+tag=review-ready-gate/v0.1.4
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#review-ready-gate/v}"
 wheel="review_ready_gate-${version}-py3-none-any.whl"
