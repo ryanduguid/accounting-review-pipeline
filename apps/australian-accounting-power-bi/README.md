@@ -69,9 +69,6 @@ See [docs/dax-patterns.md](docs/dax-patterns.md) for full DAX formulas and prece
 
 ```text
 australian-accounting-power-bi/
-├── .github/
-│   └── workflows/
-│       └── verify.yml                   # Inert source history; active CI is at the monorepo root
 ├── docs/
 │   ├── data-model.md                    # Star schema diagram & dimension specifications
 │   ├── dax-patterns.md                  # Calculation groups & financial statement DAX
@@ -142,7 +139,7 @@ The test suite verifies:
 - All four report pages and 21 visuals are materialised, and every visual field binding resolves to a declared model column or measure.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
-The root [Power BI workflow](../../.github/workflows/australian-accounting-power-bi.yml) runs both the Python suite and the pinned Microsoft PBIR validator. The nested `.github/` directory contains imported source history, not an active workflow.
+The root [Power BI workflow](../../.github/workflows/australian-accounting-power-bi.yml) runs both the Python suite and the pinned Microsoft PBIR validator.
 
 ---
 

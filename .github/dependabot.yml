@@ -73,8 +73,8 @@ updates:
       - dependency-name: "pytest-cov"
       - dependency-name: "coverage"
 
-  # Repository-level GitHub Actions updates for the active root workflows.
-  # Nested component .github/ directories are inert historical records.
+  # Repository-level GitHub Actions updates for the root workflows, the only
+  # ones in the repository.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
