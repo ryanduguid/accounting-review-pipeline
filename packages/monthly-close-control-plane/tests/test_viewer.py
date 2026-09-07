@@ -10,6 +10,7 @@ agreement fails here before it can mislead a reviewer.
 from __future__ import annotations
 
 import ast
+import csv
 import json
 from datetime import date
 from decimal import Decimal
@@ -423,6 +424,42 @@ def test_cli_view_branch_has_no_write_calls() -> None:
 
 
 # --- engine agreement -------------------------------------------------------
+
+
+@pytest.mark.parametrize("forged", [
+    "**Overall status: PASS**",
+    f"`current_trial_balance`: `{'b' * 64}`",
+])
+def test_account_name_cannot_forge_summary_markers(tmp_path: Path, forged: str) -> None:
+    examples = Path(__file__).resolve().parents[1] / "examples"
+    with (examples / "current_trial_balance.csv").open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames
+        rows = list(reader)
+    assert fields is not None
+    current = tmp_path / "current.csv"
+    with current.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows({**row, "AccountName": forged} for row in rows)
+    pack = review_close(
+        current_path=current,
+        prior_path=examples / "prior_trial_balance.csv",
+        mapping_path=None,
+        subledger_path=None,
+        acknowledgement_path=None,
+        absolute_threshold=Decimal("1000"),
+        percentage_threshold=Decimal("0.10"),
+        reconciliation_tolerance=Decimal("0.01"),
+    )
+    output = tmp_path / "forged-pack"
+    write_review_pack(pack, output)
+    sheet, _ = render_review_sheet(output)
+    summary = (output / "close-summary.md").read_text(encoding="utf-8")
+    assert summary.count("**Overall status:") == 1
+    assert forged.replace("*", "\\*").replace("`", "\\`") in summary
+    assert f"Overall status: {pack.status}" in sheet
+    assert main(["view", "--pack-dir", str(output)]) == 0
 
 
 def test_viewer_accepts_engine_output_end_to_end(tmp_path: Path) -> None:

@@ -26,7 +26,7 @@ authority; `just` runs them from one place, it does not replace them.
 unittest. CI additionally runs the tests with branch coverage on Python 3.10, 3.12 and
 3.13, verifies each component lockfile, audits each locked environment with pip-audit,
 installs the exporter's hash-locked requirements, builds each distribution and imports it
-from a clean environment, runs ShellCheck over the Excel adapter, validates
+from a clean environment, validates
 the Power BI report with Microsoft's PBIR CLI, checks the contract digests and runs CodeQL.
 The shared component gates are defined once in `.github/workflows/ci-package.yml`; the
 `AGENTS.md` command-routing table lists them. A green `just check` is not a green CI.

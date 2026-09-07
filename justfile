@@ -85,7 +85,7 @@ typecheck: setup
 # Not a CI equivalent. The component workflows also verify the component
 # lockfile, install the exporter's hash-locked requirements, build each
 # distribution, install and smoke-test the built wheel outside the checkout,
-# run actionlint and ShellCheck over the Excel adapter, validate the Power BI
+# run actionlint, validate the Power BI
 # report with Microsoft's PBIR CLI, check the contract digests and run CodeQL.
 # None of those run here. A green `just check` is not a green CI.
 
