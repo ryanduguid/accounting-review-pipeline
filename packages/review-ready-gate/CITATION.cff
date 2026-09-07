@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, cite the repository and exact release."
 title: "Workpaper Review Gate"
 type: software
-version: 0.1.4
+version: 0.1.5
 authors:
   - family-names: "Duguid"
     given-names: "Ryan"

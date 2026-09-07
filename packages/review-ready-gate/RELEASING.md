@@ -55,7 +55,7 @@ required.
 4. Confirm the versions in `pyproject.toml` and `uv.lock` match the
    `RELEASE_NOTES.md` heading.
 5. Create an annotated namespaced tag on current remote `main`, for example
-   `git tag -a review-ready-gate/v0.1.4 -m "review-ready-gate v0.1.4"` (or `-s`
+   `git tag -a review-ready-gate/v0.1.5 -m "review-ready-gate v0.1.5"` (or `-s`
    when signing is configured), then
    push only that tag.
 
@@ -67,7 +67,7 @@ existing release is never overwritten.
 Verify the downloaded release with:
 
 ```bash
-tag=review-ready-gate/v0.1.4
+tag=review-ready-gate/v0.1.5
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#review-ready-gate/v}"
 wheel="review_ready_gate-${version}-py3-none-any.whl"
@@ -80,13 +80,13 @@ gh attestation verify "$wheel" -R "$repo" \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
+  --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
 gh attestation verify "$wheel" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
+  --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
 gh release view "$tag" -R "$repo" --json isImmutable
 gh release verify "$tag" -R "$repo"
 gh release verify-asset "$tag" "$wheel" -R "$repo"

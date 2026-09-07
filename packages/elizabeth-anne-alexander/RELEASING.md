@@ -97,13 +97,13 @@ gh attestation verify "$wheel" -R "$repo" \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
+  --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
 gh attestation verify "$wheel" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
+  --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
 gh release view "$tag" -R "$repo" --json isImmutable
 gh release verify "$tag" -R "$repo"
 gh release verify-asset "$tag" "$wheel" -R "$repo"

@@ -303,7 +303,7 @@ class EvaluationPackTest(unittest.TestCase):
         )
         self.assertIn("tag=xero-trial-balance-export/v0.1.7", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
-        self.assertIn("--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018", releasing)
+        self.assertIn("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91", releasing)
         self.assertNotIn("isLatest", releasing)
         self.assertIn("requirements-test.txt", releasing)
         self.assertEqual(

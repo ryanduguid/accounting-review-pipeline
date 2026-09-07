@@ -73,14 +73,14 @@ def test_release_guidance_is_repo_specific_and_durable() -> None:
 def test_current_release_metadata_uses_immutable_documentation() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert metadata["project"]["version"] == "0.1.4"
+    assert metadata["project"]["version"] == "0.1.5"
     assert metadata["project"]["urls"]["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.4/"
+        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.5/"
         "packages/review-ready-gate/evaluation/manager_review_gate"
     )
     assert (
         "| Workpaper Review Gate | `packages/review-ready-gate/` | distribution "
-        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.4 |"
+        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.5 |"
     ) in root_readme
 
 
@@ -101,7 +101,7 @@ def test_readme_development_uses_the_locked_uv_entrypoint() -> None:
 def test_citation_declares_the_current_release_identity() -> None:
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
     assert 'title: "Workpaper Review Gate"' in citation
-    assert "version: 0.1.4" in citation
+    assert "version: 0.1.5" in citation
     assert 'family-names: "Duguid"' in citation
     assert 'given-names: "Ryan"' in citation
     assert "license: MIT" in citation
@@ -162,7 +162,7 @@ def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
             "ryanduguid/release-policy/.github/workflows/release-python.yml"
         ) == 1
         assert command.count(
-            "--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018"
+            "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
         ) == 1
 
     predicate_counts = [
