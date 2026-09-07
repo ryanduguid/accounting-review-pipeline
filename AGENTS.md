@@ -19,10 +19,18 @@ These repository-wide rules apply everywhere:
   payment, lodges a return or locks a period.
 - Preserve every distribution name, import package, command, exit code, file schema,
   version, licence and component lockfile. Production code must not import a sibling
-  component, and no review package may import the exporter.
-- Do not add a root package manager, shared runtime package, unified version, generated
-  dependency graph or monorepo framework. Movement and behaviour changes are separate pull
-  requests.
+  component, and no review package may import the exporter. One shared `.venv` makes every
+  Python component importable from every other; that is a convenience for tests, not a
+  licence to depend on a sibling.
+- The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
+  The root is a virtual uv workspace: it declares no package, no version and no runtime
+  dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
+  unified version, generated dependency graph or monorepo framework. Movement and behaviour
+  changes are separate pull requests.
+- `uv run --locked` inside a component directory validates the root `uv.lock`, not the
+  component's. After changing any component's dependencies, run `uv lock` at the root and
+  commit the result alongside the component's own `uv.lock`, which stays the authority for
+  building and releasing that component alone.
 - Only workflows under the root `.github/workflows/` are active. Nested `.github/`
   directories inside components are inert historical records imported with their sources;
   do not run them and do not treat their pins as current.
@@ -42,6 +50,18 @@ reviewed Release Policy identity gate requires a nested release's directory leaf
 `packages/review-ready-gate` and `packages/elizabeth-anne-alexander`. The exporter, the Excel
 adapter and the Power BI application keep the plan's paths. `IMPORTS.md` records the decision.
 
+## Setup
+
+From a fresh clone, `uv sync` at the root installs the four Python components as editable
+workspace members and the shared test toolchain into one `.venv`, and `just test` runs
+every component's suite plus the joined conformance test. That is the whole setup. `just`
+comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
+`test` and `check` (the last three together). Each recipe loops over the per-component
+commands in the table below, which remain the authority. `just check` is not a CI
+equivalent: it does not verify component lockfiles, install the exporter's hash-locked
+requirements, build or smoke-test a wheel, run actionlint, ShellCheck, the Power BI CLI
+or CodeQL, or check the contract digests.
+
 ## Command routing
 
 Run every check from the owning component directory with its documented commands:
@@ -56,4 +76,6 @@ Run every check from the owning component directory with its documented commands
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all three review packages,
-the Excel adapter, Power BI structural validation and the joined conformance test.
+the Excel adapter, Power BI structural validation and the joined conformance test. A change
+to the root `pyproject.toml`, `uv.lock` or `justfile` triggers every component workflow,
+because the root lock is what `uv run --locked` validates inside every component directory.
