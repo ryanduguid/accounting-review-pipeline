@@ -12,6 +12,9 @@ on:
       - "IMPORTS.md"
       - "README.md"
       - "SECURITY.md"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
   pull_request:
     paths:
       - "apps/australian-accounting-power-bi/**"
@@ -22,6 +25,9 @@ on:
       - "IMPORTS.md"
       - "README.md"
       - "SECURITY.md"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
 
 permissions:
   contents: read
