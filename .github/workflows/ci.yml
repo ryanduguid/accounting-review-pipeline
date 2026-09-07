@@ -3,7 +3,9 @@ name: tests
 # The `test`, `package` and `lint` jobs are Monthly Close Controls' own checks
 # and the anchor required checks on main (`package`, `test (3.10)` to
 # `test (3.13)`), so they keep their ids and this workflow carries no path
-# filter. The `component` matrix calls the reusable ci-package.yml once per
+# filter. They run the same gates as ci-package.yml: `test` measures branch
+# coverage and `dependency-audit` runs pip-audit against the locked
+# environment. The `component` matrix calls the reusable ci-package.yml once per
 # other Python distribution; each call filters itself to its component
 # directory, the shared contract and the root files, so a change to one
 # component runs that component alone. The Excel adapter and the Power BI
@@ -87,10 +89,36 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
-      - run: uv run --locked --extra dev pytest -q
+      # No -q here: the component's pytest addopts already sets it, and a second
+      # one is -qq, which drops the "N passed" count from the log. --cov takes
+      # its source from the component's [tool.coverage.run] configuration, the
+      # same gate ci-package.yml runs for the other components.
+      - name: run tests with branch coverage
+        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: packages/monthly-close-control-plane
         env:
           UV_PYTHON: ${{ matrix.python }}
+
+  dependency-audit:
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - name: audit the locked project environment
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+        working-directory: packages/monthly-close-control-plane
 
   package:
     permissions:
