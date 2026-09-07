@@ -66,8 +66,9 @@ The fetched heads above are the selected import snapshots.
 | Accounting Excel Toolkit | source adapter 0.1.5; version in `VERSION`; Power Query and VBA source, no Python distribution | pinned actionlint and ShellCheck; unittest; optional native Excel acceptance | MIT; GitHub source-archive release with `artifact-stem: accounting-excel-toolkit`; local-file adapters only |
 | Australian Accounting Power BI | PBIP/PBIR reference application; no release and no version | unittest plus Microsoft Power BI report-authoring CLI 0.1.4 | MIT; no publisher; fabricated local model and report |
 
-Imported workflows remain nested under their component paths and are not active root
-workflows. They were read before any component command ran. Review jobs receive no Xero,
+Imported workflows stayed nested under their component paths, never as active root
+workflows, until their removal on 7 September 2026; the subtree merge commits above still
+hold them. They were read before any component command ran. Review jobs receive no Xero,
 OAuth or publishing credentials. Production packages do not import sibling packages.
 
 ## Anchor remote preflight (read-only)
@@ -127,7 +128,7 @@ exactly one wheel and one source distribution, and uses
 Before any monorepo release the owner must register each PyPI trusted publisher against the
 new caller file name and environment (the repository currently has only the `pypi`
 environment). The Release Policy pin resolves to its protected `main`. No caller references
-a secret. Nested component `release.yml` files remain inert.
+a secret. No component directory carries a `release.yml` of its own.
 
 Per-component verification workflows at import: `ci.yml` (anchor; workflow `tests`, jobs
 `test`, `package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,

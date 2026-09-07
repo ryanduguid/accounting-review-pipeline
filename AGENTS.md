@@ -31,9 +31,8 @@ These repository-wide rules apply everywhere:
   component's. After changing any component's dependencies, run `uv lock` at the root and
   commit the result alongside the component's own `uv.lock`, which stays the authority for
   building and releasing that component alone.
-- Only workflows under the root `.github/workflows/` are active. Nested `.github/`
-  directories inside components are inert historical records imported with their sources;
-  do not run them and do not treat their pins as current.
+- Only workflows under the root `.github/workflows/` are active. Components carry no
+  `.github/` directory; the subtree merge commits recorded in IMPORTS.md hold the imported ones.
 - Release only through the root callers `.github/workflows/release-<component>.yml` on a
   namespaced annotated tag `<component>/vMAJOR.MINOR.PATCH`, never through a nested
   `release.yml`. One tag publishes exactly one component.
