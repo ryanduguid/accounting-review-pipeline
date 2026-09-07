@@ -1,5 +1,15 @@
 name: tests
 
+# The `test`, `package` and `lint` jobs are Monthly Close Controls' own checks
+# and the anchor required checks on main (`package`, `test (3.10)` to
+# `test (3.13)`), so they keep their ids and this workflow carries no path
+# filter. The `component` matrix calls the reusable ci-package.yml once per
+# other Python distribution; each call filters itself to its component
+# directory, the shared contract and the root files, so a change to one
+# component runs that component alone. The Excel adapter and the Power BI
+# application have no pyproject.toml and are not workspace members; their
+# standard-library suites run in their own root workflows.
+
 on:
   push:
     branches: [main]
@@ -13,6 +23,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  component:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package_dir: packages/review-ready-gate
+            import_name: reviewready
+          - package_dir: packages/elizabeth-anne-alexander
+            import_name: elizabeth_anne_alexander
+          - package_dir: packages/xero-trial-balance-export
+            import_name: xero_client
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-package.yml
+    with:
+      package_dir: ${{ matrix.package_dir }}
+      import_name: ${{ matrix.import_name }}
+
   test:
     permissions:
       contents: read

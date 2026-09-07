@@ -1,5 +1,10 @@
 name: Australian Accounting Power BI
 
+# The Power BI application has no pyproject.toml and no Python dependencies, so
+# it is not a uv workspace member and cannot run through ci-package.yml. It
+# gets the same lint tools at the same pins (configured in its ruff.toml and
+# mypy.ini) and its standard-library suite runs on the same Python matrix.
+
 on:
   push:
     branches: [main]
@@ -37,7 +42,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  lint:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:
@@ -54,16 +59,50 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install pinned lint tools
+        run: python -m pip install --disable-pip-version-check "ruff==0.16.6" "mypy==2.3.1"
+
+      - name: Ruff
+        run: python -m ruff check .
+
+      - name: Mypy
+        run: python -m mypy
+
+  verify:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: apps/australian-accounting-power-bi
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Run model integrity and fixture balance checks
+        run: python -B -m unittest discover -s tests -v
+
+      # The PBIR structural validation does not depend on the Python version,
+      # so it runs once, on the leg that matches the lint job.
       - name: Set up Node.js
+        if: matrix.python == '3.12'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           package-manager-cache: false
 
-      - name: Run model integrity and fixture balance checks
-        run: python -B -m unittest discover -s tests -v
-
       - name: Validate the report with Microsoft's PBIR authoring CLI
+        if: matrix.python == '3.12'
         run: >-
           npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4
           validate australian-accounting-power-bi.Report

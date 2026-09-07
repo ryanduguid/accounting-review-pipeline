@@ -28,7 +28,14 @@ Homepage = "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/p
 Issues = "https://github.com/ryanduguid/accounting-review-pipeline/issues"
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8"]
+dev = [
+    "ruff==0.16.6",
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "coverage==7.16.0",
+    "build>=1.2",
+]
 
 [project.scripts]
 export-tb = "export_tb:run"
@@ -36,3 +43,14 @@ xero-tb-auth = "auth:main"
 
 [tool.setuptools]
 py-modules = ["auth", "xero_client", "export_tb", "token_store"]
+
+# The exporter is four flat modules, not a package, so the type-check and
+# coverage scopes are the module list. Ruff reads ruff.toml beside this file.
+[tool.mypy]
+python_version = "3.10"
+files = ["xero_client.py", "export_tb.py", "auth.py", "token_store.py"]
+ignore_missing_imports = true
+pretty = true
+
+[tool.coverage.run]
+source = ["xero_client", "export_tb", "auth", "token_store"]
