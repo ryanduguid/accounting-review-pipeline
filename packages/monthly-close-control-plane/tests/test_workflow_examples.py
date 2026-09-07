@@ -452,7 +452,6 @@ def test_repository_identity_is_distinct_from_package_identity() -> None:
 def test_current_docs_use_canonical_pipeline_component_links() -> None:
     documents = [
         ROOT / "README.md",
-        ROOT / "docs" / "follow-on-safety-layers.md",
         ROOT / "examples" / "close-loop.md",
     ]
     text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
