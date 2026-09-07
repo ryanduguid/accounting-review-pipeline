@@ -118,7 +118,7 @@ disagree.
 
 | Component | Caller | Trigger | Reusable workflow | `source-directory` | `tag-prefix` | Publisher environment |
 |---|---|---|---|---|---|---|
-| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags, plus `workflow_dispatch` backfill of an existing namespaced tag | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
+| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
 | Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
 | Xero Ledger Review Gate | `release-elizabeth-anne-alexander.yml` | `elizabeth-anne-alexander/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: elizabeth_anne_alexander/version.py` | `packages/elizabeth-anne-alexander` | `elizabeth-anne-alexander` | `pypi-elizabeth-anne-alexander` (https://pypi.org/p/elizabeth-anne-alexander) |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
@@ -127,8 +127,7 @@ disagree.
 The four Python callers upload the attested distribution (`upload-dist-artifact: true`) and
 publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
 exactly one wheel and one source distribution, and uses
-`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`. The anchor keeps its
-`pypi-backfill` job, now accepting only `monthly-close-control-plane/vMAJOR.MINOR.PATCH`.
+`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`.
 Before any monorepo release the owner must register each PyPI trusted publisher against the
 new caller file name and environment (the repository currently has only the `pypi`
 environment). The Release Policy pin resolves to its protected `main`. No caller references

@@ -7,26 +7,16 @@ on:
   push:
     tags:
       - "monthly-close-control-plane/v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: >-
-          Existing monthly-close-control-plane/vMAJOR.MINOR.PATCH tag whose
-          GitHub Release already has built assets, to backfill a PyPI publish
-          that failed after the release published.
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: github.event_name == 'push'
     permissions:
       actions: read # Inspect and download only the exact bound release candidate.
       attestations: write # Record provenance and SBOM attestations for release assets.
@@ -39,7 +29,6 @@ jobs:
       upload-dist-artifact: true
 
   pypi:
-    if: github.event_name == 'push'
     timeout-minutes: 15
     name: publish to PyPI
     needs: release
@@ -55,47 +44,6 @@ jobs:
         with:
           name: dist-${{ needs.release.outputs.stem }}-${{ needs.release.outputs.version }}
           path: dist
-
-      - name: Require exactly one wheel and one source distribution
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(find dist -name '*.whl' | wc -l)" = "1"
-          test "$(find dist -name '*.tar.gz' | wc -l)" = "1"
-          ls -l dist
-
-      - name: Publish to PyPI via trusted publishing
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-
-  pypi-backfill:
-    if: github.event_name == 'workflow_dispatch'
-    timeout-minutes: 15
-    name: publish an existing release to PyPI
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/monthly-close-control-plane
-    permissions:
-      contents: read
-      id-token: write # Obtain the OIDC identity that PyPI trusted publishing verifies.
-    steps:
-      - name: Download the existing release's attested assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "$TAG" =~ ^monthly-close-control-plane/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "tag must match monthly-close-control-plane/vMAJOR.MINOR.PATCH" >&2
-            exit 1
-          fi
-          gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir dist \
-            --pattern '*.whl' --pattern '*.tar.gz' --pattern 'SHA256SUMS'
-          (cd dist && sha256sum --check --ignore-missing SHA256SUMS)
-          rm dist/SHA256SUMS
 
       - name: Require exactly one wheel and one source distribution
         shell: bash

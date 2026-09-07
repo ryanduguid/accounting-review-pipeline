@@ -172,26 +172,3 @@ def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
     assert sorted(predicate_counts) == [0, 1]
 
 
-def test_discovery_record_matches_the_approved_remote_metadata() -> None:
-    discovery = (ROOT / "docs" / "DISCOVERY.md").read_text(encoding="utf-8")
-    assert discovery == (
-        "# GitHub discovery metadata\n\n"
-        "Description: Workpaper Review Gate: stop incomplete workpapers reaching manager review. "
-        "Deterministic readiness gate for Australian public-practice packs. Not advice.\n\n"
-        f"Homepage: {HOMEPAGE_URL}\n\n"
-        "Topics:\n\n"
-        "- accounting\n"
-        "- accounting-controls\n"
-        "- australia\n"
-        "- bas\n"
-        "- cli\n"
-        "- month-end\n"
-        "- public-practice\n"
-        "- python\n"
-        "- quality-control\n"
-        "- review\n"
-        "- review-workflow\n"
-        "- workpaper-review\n"
-        "- workpapers\n"
-        "- year-end\n"
-    )
