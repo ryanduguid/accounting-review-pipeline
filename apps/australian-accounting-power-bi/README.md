@@ -69,9 +69,6 @@ See [docs/dax-patterns.md](docs/dax-patterns.md) for full DAX formulas and prece
 
 ```text
 australian-accounting-power-bi/
-├── .github/
-│   └── workflows/
-│       └── verify.yml                   # Inert source history; active CI is at the monorepo root
 ├── docs/
 │   ├── data-model.md                    # Star schema diagram & dimension specifications
 │   ├── dax-patterns.md                  # Calculation groups & financial statement DAX
