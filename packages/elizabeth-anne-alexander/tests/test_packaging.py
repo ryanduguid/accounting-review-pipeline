@@ -13,7 +13,8 @@ MONOREPO = REPO.parents[1]
 REPOSITORY_URL = "https://github.com/ryanduguid/accounting-review-pipeline"
 PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/elizabeth-anne-alexander"
 RELEASE_WORKFLOW = MONOREPO / ".github" / "workflows" / "release-elizabeth-anne-alexander.yml"
-CI_WORKFLOW = MONOREPO / ".github" / "workflows" / "elizabeth-anne-alexander.yml"
+# ci.yml calls this reusable workflow for the package; it is where pytest runs.
+CI_WORKFLOW = MONOREPO / ".github" / "workflows" / "ci-package.yml"
 
 
 def test_active_package_identity_is_consistent() -> None:
@@ -129,7 +130,7 @@ def test_current_metadata_and_public_links_use_the_monorepo() -> None:
     assert urls["Repository"] == f"{REPOSITORY_URL}.git"
     assert urls["Issues"] == f"{REPOSITORY_URL}/issues"
     assert PACKAGE_URL in readme
-    assert f"{REPOSITORY_URL}/actions/workflows/elizabeth-anne-alexander.yml" in readme
+    assert f"{REPOSITORY_URL}/actions/workflows/ci.yml" in readme
     assert f"**Repository**: {PACKAGE_URL}" in llms
     assert "The package contains no OAuth" in llms
     assert f"{REPOSITORY_URL}/security/advisories/new" in security

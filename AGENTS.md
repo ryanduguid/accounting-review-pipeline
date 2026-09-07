@@ -68,12 +68,34 @@ Run every check from the owning component directory with its documented commands
 
 | Component | Directory | Checks |
 |---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | `python -m pip install --require-hashes -r requirements.lock`; `python -m unittest discover -s tests -v`; Ruff and mypy over `xero_client.py export_tb.py auth.py token_store.py` |
-| Workpaper Review Gate | `packages/review-ready-gate/` | `uv lock --check`; `uv run --locked --extra dev pytest -q`; Ruff over `reviewready tests`; mypy over `reviewready`; `python -m build`; clean-wheel `review-ready gate` runs |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | the shared component gates below (mypy and coverage scoped to `xero_client.py export_tb.py auth.py token_store.py` by its `pyproject.toml`), plus `python -m pip install --require-hashes -r requirements.lock` and `python -m unittest discover -s tests -v` from that hash-locked environment |
+| Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates and Windows clean-wheel smoke |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `elizabeth_anne_alexander tests`; mypy over `elizabeth_anne_alexander`; `python -m build`; clean-wheel `evaluate` and `validate-review` demo |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | pinned actionlint and ShellCheck; `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
+
+The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
+`ci.yml` calls for the exporter, Workpaper Review Gate and Xero Ledger Review Gate with the
+component directory. Run them from the component directory:
+
+```bash
+uv lock --check
+uv run --locked --extra dev ruff check .
+uv run --locked --extra dev mypy
+uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+uv run --locked --extra dev --python 3.12 python -m build
+```
+
+The tests run on Python 3.10, 3.12 and 3.13, and the build gate installs the wheel into a
+clean virtual environment and imports the component's package from it. Each call filters
+itself to its component directory, the shared contract and the root files, so a change to
+one component runs that component alone. Monthly Close Controls keeps its own `test`,
+`package` and `lint` jobs in `ci.yml` because they are the anchor required checks on
+`main`. The Excel adapter and the Power BI application have no `pyproject.toml`, so their
+root workflows run ruff and mypy from `ruff.toml` and `mypy.ini` and their unittest suites
+on the same Python matrix.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all three review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change

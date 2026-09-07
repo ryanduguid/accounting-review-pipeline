@@ -293,7 +293,7 @@ class EvaluationPackTest(unittest.TestCase):
             'packages/xero-trial-balance-export"',
             citation,
         )
-        self.assertIn(f"{canonical}/actions/workflows/xero-trial-balance-export.yml", readme)
+        self.assertIn(f"{canonical}/actions/workflows/ci.yml", readme)
         self.assertIn("xero-trial-balance-export/v0.1.7", readme)
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "

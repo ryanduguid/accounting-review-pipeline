@@ -109,7 +109,7 @@ class TestFixtureRegeneration(unittest.TestCase):
         spec.loader.exec_module(generator)  # type: ignore[union-attr]
 
         with tempfile.TemporaryDirectory() as scratch:
-            generator.SAMPLES_DIR = Path(scratch)
+            setattr(generator, "SAMPLES_DIR", Path(scratch))
             with contextlib.redirect_stdout(io.StringIO()):
                 generator.generate_fixtures()
 

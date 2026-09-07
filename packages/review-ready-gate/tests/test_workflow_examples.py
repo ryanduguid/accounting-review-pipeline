@@ -124,7 +124,7 @@ def test_public_source_links_use_canonical_monorepo_and_schema_id_stays_stable()
     llms = (ROOT / "llms.txt").read_text(encoding="utf-8")
     schema = (ROOT / "schemas" / "self_review.json").read_text(encoding="utf-8")
 
-    assert f"{REPOSITORY_URL}/actions/workflows/review-ready-gate.yml" in readme
+    assert f"{REPOSITORY_URL}/actions/workflows/ci.yml" in readme
     assert PACKAGE_URL in readme
     assert f"**Repository**: {PACKAGE_URL}" in llms
     assert (

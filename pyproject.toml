@@ -17,16 +17,19 @@ members = ["packages/*"]
 
 # The shared toolchain for running every component's checks from one
 # environment: the union of what the component `dev` extras and test suites
-# import, with loose floors. Components keep their own `dev` extras, which
-# remain the authority for their own CI. No exact pins: the four members
-# declare none, and an exact pin here would only make the root lock disagree
-# with a component the day it moves.
+# import. Components keep their own `dev` extras, which remain the authority
+# for their own CI. The five check tools carry the same exact pin in every
+# member's `dev` extra and here, so one workspace resolution holds them all and
+# `just lint`, `just typecheck` and `just test` run the versions CI runs. Move
+# a pin in all five places together.
 [dependency-groups]
 dev = [
+  "ruff==0.16.6",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "coverage==7.16.0",
   "build>=1.2",
-  "mypy>=1.14",
-  "pytest>=8",
   "PyYAML>=6.0.3,<7",
-  "ruff>=0.11",
   'tomli>=2.0; python_version < "3.11"',
 ]
