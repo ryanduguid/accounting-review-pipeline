@@ -53,8 +53,7 @@ documentation and release cadence. There is no root runtime package, shared libr
 unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a development
 entrypoint only: `uv sync` then `just test` sets up and verifies a fresh clone from the top
 (see `CONTRIBUTING.md`). Run a component's own checks from its directory with its documented
-commands. Only the root `.github/workflows/` are active; nested `.github/` directories are
-inert records of the imported sources. `IMPORTS.md` records source identities, tree digests
+commands. Only the root `.github/workflows/` are active. `IMPORTS.md` records source identities, tree digests
 and import records. Historical releases and tags remain owned by the source repositories.
 
 ## Review-pack contract
