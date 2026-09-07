@@ -28,7 +28,13 @@ version = { attr = "elizabeth_anne_alexander.version.__version__" }
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.11", "mypy>=1.14","build>=1.2", "pytest>=8"]
+    "ruff==0.16.6",
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "coverage==7.16.0",
+    "build>=1.2",
+]
 
 [project.scripts]
 elizabeth-anne-alexander = "elizabeth_anne_alexander.cli:main"
@@ -66,3 +72,6 @@ python_version = "3.10"
 packages = ["elizabeth_anne_alexander"]
 ignore_missing_imports = true
 pretty = true
+
+[tool.coverage.run]
+source = ["elizabeth_anne_alexander"]

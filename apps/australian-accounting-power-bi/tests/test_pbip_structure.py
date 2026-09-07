@@ -7,6 +7,7 @@ import re
 import unittest
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +18,7 @@ REPORT = ROOT / f"{NAME}.Report"
 REPORT_DEFINITION = REPORT / "definition"
 
 
-def read_json(path: Path) -> dict[str, object]:
+def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -26,7 +27,7 @@ def tmdl_field_inventory() -> dict[str, dict[str, set[str]]]:
     inventory: dict[str, dict[str, set[str]]] = {}
 
     for path in sorted((DEFINITION / "tables").glob("*.tmdl")):
-        fields = {"Column": set(), "Measure": set()}
+        fields: dict[str, set[str]] = {"Column": set(), "Measure": set()}
         for line in path.read_text(encoding="utf-8").splitlines():
             for kind in fields:
                 prefix = f"\t{kind.lower()} "

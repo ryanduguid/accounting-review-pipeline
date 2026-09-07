@@ -129,17 +129,25 @@ new caller file name and environment (the repository currently has only the `pyp
 environment). The Release Policy pin resolves to its protected `main`. No caller references
 a secret. Nested component `release.yml` files remain inert.
 
-Per-component verification workflows: `ci.yml` (anchor; workflow `tests`, jobs `test`,
-`package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
+Per-component verification workflows at import: `ci.yml` (anchor; workflow `tests`, jobs
+`test`, `package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
 `elizabeth-anne-alexander.yml`, `accounting-excel-toolkit.yml`,
 `australian-accounting-power-bi.yml` and the unchanged `codeql.yml` (`Analyze Python`). Each
-keeps the anchor checks unfiltered because branch protection requires their names for every
-pull request. The component workflows use explicit `paths` filters for their component
+kept the anchor checks unfiltered because branch protection requires their names for every
+pull request. The component workflows used explicit `paths` filters for their component
 directory, the future `contracts/xero-trial-balance-v1/` directory, `.github/**` and the root
-policy files. Each grants `contents: read` only and references no secret. The readiness and ledger workflows carry
-their source-defined clean-wheel demonstrations. Dependabot scopes Python updates to each
-component directory (`uv` for the three uv packages, `pip` for the exporter) and groups
-root GitHub Actions updates.
+policy files. Each granted `contents: read` only and referenced no secret. The readiness and
+ledger workflows carried their source-defined clean-wheel demonstrations. Dependabot scopes
+Python updates to each component directory (`uv` for the three uv packages, `pip` for the
+exporter) and groups root GitHub Actions updates.
+
+Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml` and
+`elizabeth-anne-alexander.yml` were replaced by the reusable `ci-package.yml`, which
+`ci.yml` calls once per component from its `component` matrix. The anchor jobs, their
+required-check names and `codeql.yml` are unchanged; the checks the matrix reports are
+`component (<directory>, <import>) / <gate>`. The reusable workflow filters itself on the
+same paths the deleted workflows listed, and the readiness and ledger clean-wheel
+demonstrations run as its per-component `smoke` input. `AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
 

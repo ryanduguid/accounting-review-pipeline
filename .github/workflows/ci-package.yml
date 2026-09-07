@@ -1,0 +1,276 @@
+name: ci-package
+
+# Reusable component CI. ci.yml calls this once per Python distribution with
+# the component directory and the import package it owns, so every component
+# runs the same gates from the same definition: the component's own lockfile
+# check, ruff, mypy, pytest with branch coverage on the Python matrix, pip-audit
+# over the locked environment, and a distribution build with an installed-wheel
+# import smoke plus whatever console-script smoke the caller passes for that
+# component. A component that ships a hash-locked requirements file also has
+# that runtime installed with --require-hashes and its unittest suite run from
+# it, because that install is the security property the exporter documents.
+#
+# ruff, mypy and coverage read their scope from the component's own
+# configuration (ruff.toml or [tool.ruff], [tool.mypy], [tool.coverage.run]),
+# so a flat-module component and a packaged one run the same commands.
+#
+# The workflow filters itself. The `changes` job compares the pushed or
+# proposed commits against their base and only runs the gates when the
+# component directory, the shared trial-balance contract or a shared root file
+# changed, so a change to one component runs that component alone while the
+# caller stays free of path filters (a required check that is suppressed by a
+# path filter never reports). Root policy files, the root workspace files and
+# .github changes run every component, because the root uv.lock is what
+# `uv run --locked` validates from inside every component directory.
+
+on:
+  workflow_call:
+    inputs:
+      package_dir:
+        description: Component directory, for example packages/review-ready-gate.
+        required: true
+        type: string
+      import_name:
+        description: An import the built wheel must provide, for example reviewready.
+        required: true
+        type: string
+      smoke:
+        description: >-
+          Optional shell run from an empty directory after the wheel is installed
+          into a clean virtual environment, with that environment's bin on PATH
+          and COMPONENT set to the checked-out component directory. Use it to
+          exercise the installed console script and its package data.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.12.0"
+
+jobs:
+  changes:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: decide whether this component's gates run
+        id: filter
+        shell: bash
+        env:
+          PACKAGE_DIR: ${{ inputs.package_dir }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          # Everything outside the component directory that still changes what
+          # the component resolves, consumes or how it is checked: the shared
+          # trial-balance contract, the root policy files, the root workspace
+          # files and the workflows themselves.
+          shared='^(\.github/|contracts/xero-trial-balance-v1/|AGENTS\.md$|CONTRIBUTING\.md$|IMPORTS\.md$|README\.md$|SECURITY\.md$|pyproject\.toml$|uv\.lock$|justfile$)'
+          case "${EVENT_NAME}" in
+            pull_request)
+              # HEAD is the synthetic merge of the proposal into its base, so its
+              # first parent is the base tip and the diff is exactly the proposal.
+              changed=$(git diff --name-only HEAD^1 HEAD)
+              ;;
+            push)
+              if [ -n "${PUSH_BEFORE}" ] && ! printf '%s' "${PUSH_BEFORE}" | grep -Eq '^0+$' \
+                && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+                changed=$(git diff --name-only "${PUSH_BEFORE}" HEAD)
+              else
+                echo "::notice::No reachable base for this push; running every gate."
+                changed="${PACKAGE_DIR}/"
+              fi
+              ;;
+            *)
+              echo "::notice::${EVENT_NAME} has no diff to filter on; running every gate."
+              changed="${PACKAGE_DIR}/"
+              ;;
+          esac
+          if printf '%s\n' "${changed}" | grep -Eq "^${PACKAGE_DIR}/|${shared}"; then
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+            echo "${PACKAGE_DIR}: changed, gates run"
+          else
+            echo "run=false" >> "${GITHUB_OUTPUT}"
+            echo "${PACKAGE_DIR}: unchanged, gates skipped"
+          fi
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ inputs.package_dir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      # No -q here: the packaged components already set it in their pytest
+      # addopts, and a second one is -qq, which drops the "N passed" count from
+      # the log. Without the count a test file that stops being collected
+      # leaves every leg green. --cov takes its source from the component's
+      # [tool.coverage.run] configuration.
+      - name: run tests with branch coverage
+        run: >-
+          uv run --locked --extra dev pytest
+          --cov --cov-branch --cov-report=term-missing --cov-report=xml
+        env:
+          UV_PYTHON: ${{ matrix.python }}
+
+  lint:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.package_dir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: the component's own lockfile resolves on its own
+        # uv discovers the workspace root from inside a member, so a plain
+        # `uv lock --check` here would validate the root lock. The component's
+        # own uv.lock is the authority for building and releasing it alone, so
+        # it is checked from a copy outside the workspace.
+        run: |
+          set -euo pipefail
+          standalone="$(mktemp -d)"
+          trap 'rm -rf "${standalone}"' EXIT
+          cp -R . "${standalone}/"
+          rm -rf "${standalone}/.venv"
+          (cd "${standalone}" && uv lock --check)
+      - name: ruff
+        run: uv run --locked --extra dev ruff check .
+      - name: mypy
+        run: uv run --locked --extra dev mypy
+
+  dependency-audit:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.package_dir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: audit the locked project environment
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.package_dir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: install the locked toolchain
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: build the distribution
+        run: uv run --locked --extra dev --python 3.12 python -m build
+      - name: install the wheel into a clean environment, import it and run the smoke
+        # Exactly one wheel, installed by path with --no-index, or pip is free
+        # to resolve the name from PyPI and test a release nobody built in this
+        # job. The wheel's own runtime dependencies come from the lock, the same
+        # closed set the audit job checks: `uv export` from a member directory
+        # exports that member. The smoke runs from an empty directory so it can
+        # only see what the wheel installed.
+        env:
+          IMPORT_NAME: ${{ inputs.import_name }}
+          SMOKE: ${{ inputs.smoke }}
+        run: |
+          set -euo pipefail
+          component="$(pwd)"
+          smoke_dir="$(mktemp -d)"
+          trap 'cd "${component}"; rm -rf "${smoke_dir}"' EXIT
+          wheels=(dist/*.whl)
+          if [ "${#wheels[@]}" -ne 1 ] || [ ! -f "${wheels[0]}" ]; then
+            echo "expected exactly one wheel in dist/, found: ${wheels[*]}"
+            exit 1
+          fi
+          python -m venv "${smoke_dir}/venv"
+          uv export --locked --no-dev --no-emit-project --no-hashes --format requirements-txt \
+            --output-file "${smoke_dir}/runtime.txt"
+          "${smoke_dir}/venv/bin/pip" install -r "${smoke_dir}/runtime.txt"
+          "${smoke_dir}/venv/bin/pip" install --no-index "${wheels[0]}"
+          cd "${smoke_dir}"
+          "${smoke_dir}/venv/bin/python" -c "import importlib, os; importlib.import_module(os.environ['IMPORT_NAME']); print(os.environ['IMPORT_NAME'], 'imports from the wheel')"
+          if [ -n "${SMOKE}" ]; then
+            PATH="${smoke_dir}/venv/bin:${PATH}" COMPONENT="${component}" bash -euo pipefail -c "${SMOKE}"
+          fi
+      - name: install the hash-locked runtime and run the suite from it
+        # Only a component that ships requirements.lock has this gate. The
+        # exporter is the one component allowed an HTTP client, and the
+        # hash-locked install is how its runtime is pinned outside uv. This is
+        # a step-level condition, where hashFiles is available.
+        if: hashFiles(format('{0}/requirements.lock', inputs.package_dir)) != ''
+        run: |
+          set -euo pipefail
+          locked="$(mktemp -d)"
+          trap 'rm -rf "${locked}"' EXIT
+          python -m venv "${locked}/venv"
+          "${locked}/venv/bin/python" -m pip install --require-hashes -r requirements.lock
+          "${locked}/venv/bin/python" -m unittest discover -s tests -v
