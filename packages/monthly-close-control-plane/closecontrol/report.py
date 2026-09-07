@@ -150,7 +150,7 @@ def _md_cell(value: str) -> str:
     pipe. Order matters: escaping pipes first and backslashes second would
     re-escape the backslashes this function just added.
     """
-    return " ".join(value.split()).replace("\\", "\\\\").replace("|", "\\|")
+    return " ".join(value.split()).replace("\\", "\\\\").replace("|", "\\|").replace("*", "\\*").replace("`", "\\`")
 
 
 def _md_note_lines(comment: str) -> list[str]:

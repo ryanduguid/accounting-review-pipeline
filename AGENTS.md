@@ -58,7 +58,7 @@ comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typech
 `test` and `check` (the last three together). Each recipe loops over the per-component
 commands in the table below, which remain the authority. `just check` is not a CI
 equivalent: it does not verify component lockfiles, install the exporter's hash-locked
-requirements, build or smoke-test a wheel, run actionlint, ShellCheck, the Power BI CLI
+requirements, build or smoke-test a wheel, run actionlint, the Power BI CLI
 or CodeQL, or check the contract digests.
 
 ## Command routing
@@ -71,7 +71,7 @@ Run every check from the owning component directory with its documented commands
 | Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates and Windows clean-wheel smoke |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | pinned ShellCheck; `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
