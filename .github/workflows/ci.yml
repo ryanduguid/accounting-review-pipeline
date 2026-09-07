@@ -27,11 +27,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # smoke runs from an empty directory with the installed wheel's console
+        # scripts on PATH and COMPONENT pointing at the checked-out component,
+        # so each block below proves the wheel carries its package data and the
+        # documented exit codes hold. The exporter has no offline command line
+        # to exercise; its hash-locked install and unittest run cover it.
         include:
           - package_dir: packages/review-ready-gate
             import_name: reviewready
+            smoke: |
+              review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-ready" --output pack
+              test -f pack/readiness-pack.json
+              review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-not-ready" --output pack-nr && nr=0 || nr=$?
+              test "$nr" = "2"
+              review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-blocked" --output pack-bl && bl=0 || bl=$?
+              test "$bl" = "2"
+              python -c "import json; assert json.load(open('pack-bl/readiness-pack.json'))['overall_status']=='BLOCKED'"
           - package_dir: packages/elizabeth-anne-alexander
             import_name: elizabeth_anne_alexander
+            smoke: |
+              elizabeth-anne-alexander evaluate \
+                --context samples/contexts/sample-monthly-variance.context.json \
+                --request samples/requests/sample-revenue-variance.request.json \
+                --policy policy/demo-policy-v1.json \
+                --out build/demo
+              elizabeth-anne-alexander validate-review \
+                --evidence build/demo/reviewer-evidence.json \
+                --receipt build/demo/receipt.json \
+                --decision samples/decisions/sample-review-decision.json
+              test -f build/demo/receipt.json
           - package_dir: packages/xero-trial-balance-export
             import_name: xero_client
     permissions:
@@ -40,6 +64,7 @@ jobs:
     with:
       package_dir: ${{ matrix.package_dir }}
       import_name: ${{ matrix.import_name }}
+      smoke: ${{ matrix.smoke || '' }}
 
   test:
     permissions:
