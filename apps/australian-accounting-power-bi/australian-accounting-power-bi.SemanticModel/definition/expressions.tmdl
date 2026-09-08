@@ -107,7 +107,7 @@ expression Source_Fact_ATOBenchmark = ```
 	            Clean = Text.Lower(Text.Replace(value, "$", "")),
 	            Suffix = Text.End(Clean, 1),
 	            Multiplier = if Suffix = "k" then 1000 else if Suffix = "m" then 1000000 else error "Unsupported turnover suffix",
-	            Amount = Number.FromText(Text.Start(Clean, Text.Length(Clean) - 1), "en-AU") * Multiplier
+	            Amount = Value.Multiply(Currency.From(Text.Start(Clean, Text.Length(Clean) - 1), "en-AU"), Multiplier, Precision.Decimal)
 	        in
 	            Amount,
 	    LowerBound = Table.AddColumn(TypedTable, "TurnoverLowerBound", each ParseAmount(Text.BeforeDelimiter([TurnoverRange], "-")), Int64.Type),
