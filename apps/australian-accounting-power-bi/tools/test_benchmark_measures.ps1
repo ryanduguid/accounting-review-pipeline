@@ -35,7 +35,8 @@ $cases = @(
     @{ Name = 'multiple entities'; Turnover = '750000'; Margin = '0.84'; Entities = '"ENT002", "ENT003"'; Status = 'Select one entity and financial year'; Benchmark = $null },
     @{ Name = 'multiple financial years'; Turnover = '750000'; Margin = '0.84'; Years = '2025, 2026'; Status = 'Select one entity and financial year'; Benchmark = $null },
     @{ Name = 'subperiod does not change annual band'; Turnover = 'IF(ISFILTERED(Dim_Date[MonthNumber]), 750000, 1500000)'; Margin = '0.75'; ExtraFilter = ', TREATAS({7}, Dim_Date[MonthNumber])'; Status = 'Within gross profit range'; Benchmark = 0.765 },
-    @{ Name = 'account filter does not change annual band'; Turnover = 'IF(ISFILTERED(Dim_Account[AccountCode]), 750000, 1500000)'; Margin = '0.75'; ExtraFilter = ', TREATAS({"800"}, Dim_Account[AccountCode])'; Status = 'Within gross profit range'; Benchmark = 0.765 }
+    @{ Name = 'account filter does not change annual band'; Turnover = 'IF(ISFILTERED(Dim_Account[AccountCode]), 750000, 1500000)'; Margin = '0.75'; ExtraFilter = ', TREATAS({"800"}, Dim_Account[AccountCode])'; Status = 'Within gross profit range'; Benchmark = 0.765 },
+    @{ Name = 'benchmark value filter does not remove selected band'; Turnover = '1500000'; Margin = '0.75'; ExtraFilter = ', TREATAS({78.0}, Fact_ATOBenchmark[GrossProfitPct_Avg])'; Status = 'Within gross profit range'; Benchmark = 0.765 }
 )
 
 $failed = 0

@@ -25,11 +25,13 @@ The script uses Power BI Desktop's installed ADOMD client. It reads the producti
 DAX expressions and evaluates them in the native engine with controlled inputs;
 it does not change the model. The port must belong to the sample project instance.
 
-The 12 cases cover both gross profit endpoints, values outside each endpoint,
+The 13 cases cover both gross profit endpoints, values outside each endpoint,
 the 1,000,000 turnover boundary and the next band, unmatched turnover, no
 turnover, multiple entities, multiple financial years, a month filter and an
-account filter. The original measures failed the boundary and selection cases;
-the corrected measures passed all 12 on 8 September 2026. Full sample model
+account filter, and a conflicting benchmark value filter. The original measures
+failed the boundary and selection cases. The benchmark value filter also failed
+before the reference lookups cleared benchmark-table filters. The corrected
+measures passed all 13 on 8 September 2026. Full sample model
 refresh also succeeded in Power BI Desktop.
 
 All four pages rendered after the model change. The final benchmark page displayed

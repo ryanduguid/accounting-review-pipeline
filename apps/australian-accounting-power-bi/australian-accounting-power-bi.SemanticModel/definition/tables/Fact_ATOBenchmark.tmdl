@@ -9,6 +9,7 @@ table Fact_ATOBenchmark
 			        NOT ISBLANK(Band),
 			        CALCULATE(
 			            SELECTEDVALUE(Fact_ATOBenchmark[GrossProfitPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
 			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 			            Fact_ATOBenchmark[TurnoverRange] = Band
 			        ) / 100
@@ -42,6 +43,7 @@ table Fact_ATOBenchmark
 			        NOT ISBLANK(Band),
 			        CALCULATE(
 			            SELECTEDVALUE(Fact_ATOBenchmark[TotalExpensesPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
 			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 			            Fact_ATOBenchmark[TurnoverRange] = Band
 			        ) / 100
@@ -70,6 +72,7 @@ table Fact_ATOBenchmark
 			        NOT ISBLANK(Band),
 			        CALCULATE(
 			            SELECTEDVALUE(Fact_ATOBenchmark[RentPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
 			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 			            Fact_ATOBenchmark[TurnoverRange] = Band
 			        ) / 100
@@ -98,6 +101,7 @@ table Fact_ATOBenchmark
 			        NOT ISBLANK(Band),
 			        CALCULATE(
 			            SELECTEDVALUE(Fact_ATOBenchmark[MotorVehiclePct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
 			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 			            Fact_ATOBenchmark[TurnoverRange] = Band
 			        ) / 100
@@ -126,6 +130,7 @@ table Fact_ATOBenchmark
 			        NOT ISBLANK(Band),
 			        CALCULATE(
 			            SELECTEDVALUE(Fact_ATOBenchmark[LabourPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
 			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 			            Fact_ATOBenchmark[TurnoverRange] = Band
 			        ) / 100
@@ -190,6 +195,7 @@ table Fact_ATOBenchmark
 					NOT ISBLANK(Band),
 					CALCULATE(
 						SELECTEDVALUE(Fact_ATOBenchmark[GrossProfitPct_Low]),
+						REMOVEFILTERS(Fact_ATOBenchmark),
 						TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 						Fact_ATOBenchmark[TurnoverRange] = Band
 					) / 100
@@ -205,6 +211,7 @@ table Fact_ATOBenchmark
 					NOT ISBLANK(Band),
 					CALCULATE(
 						SELECTEDVALUE(Fact_ATOBenchmark[GrossProfitPct_High]),
+						REMOVEFILTERS(Fact_ATOBenchmark),
 						TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
 						Fact_ATOBenchmark[TurnoverRange] = Band
 					) / 100
