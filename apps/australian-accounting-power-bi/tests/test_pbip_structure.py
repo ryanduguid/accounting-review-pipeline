@@ -124,16 +124,22 @@ class SemanticModelStructureTests(unittest.TestCase):
 
         self.assertEqual(len(table_names), 11)
         self.assertEqual(
+            sorted(set(table_names) & set(expression_names)),
+            [],
+            "Power Query table queries and named expressions must have distinct names",
+        )
+        self.assertEqual(
             expression_names,
             [
-                "Dim_Account",
                 "Dim_Date_AU",
-                "Dim_Entity",
-                "Fact_ATOBenchmark",
-                "Fact_Budget",
-                "Fact_GeneralLedger",
-                "Fact_PayrollSuper",
                 "Fx_ValidateABN",
+                "SampleFolder",
+                "Source_Dim_Account",
+                "Source_Dim_Entity",
+                "Source_Fact_ATOBenchmark",
+                "Source_Fact_Budget",
+                "Source_Fact_GeneralLedger",
+                "Source_Fact_PayrollSuper",
             ],
         )
         for name in table_names:
@@ -185,7 +191,18 @@ class SemanticModelStructureTests(unittest.TestCase):
     def test_power_query_has_one_canonical_tmdl_source(self) -> None:
         self.assertFalse((ROOT / "powerquery").exists())
         expressions = (DEFINITION / "expressions.tmdl").read_text(encoding="utf-8")
-        self.assertIn('File.Contents("samples/sample-budgets.csv")', expressions)
+        sources = [expressions]
+        sources.extend(
+            path.read_text(encoding="utf-8")
+            for path in (DEFINITION / "tables").glob("*.tmdl")
+        )
+        file_paths = re.findall(r"File\.Contents\(([^)]+)\)", "\n".join(sources))
+        self.assertEqual(len(file_paths), 6)
+        for file_path in file_paths:
+            self.assertTrue(
+                file_path.startswith("SampleFolder & "),
+                f"CSV imports need the configured absolute sample folder: {file_path}",
+            )
 
 
 class ReportStructureTests(unittest.TestCase):

@@ -61,6 +61,6 @@ table Dim_Account
 		mode: import
 		source =
 			let
-				Source = Dim_Account
+				Source = Source_Dim_Account
 			in
 				Source

@@ -87,7 +87,7 @@ australian-accounting-power-bi/
 │       ├── database.tmdl                # Database compatibility and language
 │       ├── model.tmdl                   # Canonical table and expression references
 │       ├── relationships.tmdl           # Unidirectional star schema relationships
-│       ├── expressions.tmdl             # Eight named Power Query (M) expressions
+│       ├── expressions.tmdl             # SampleFolder parameter and eight M queries/functions
 │       └── tables/                      # Dimensions, facts, and calculation groups
 ├── samples/                             # Deterministic fabricated CSV fixtures
 │   ├── sample-entities.csv              # Varrock Ventures, Draynor Produce, Falador Freight
@@ -145,11 +145,13 @@ The root [Power BI workflow](../../.github/workflows/australian-accounting-power
 
 ## Opening the Project
 
-1. Open `australian-accounting-power-bi.pbip` in **Power BI Desktop** (Developer Mode enabled).
-2. Or inspect and edit the semantic model directly in **Tabular Editor 3 / 2** by opening the `australian-accounting-power-bi.SemanticModel` directory.
-3. Or view and edit TMDL files in **Visual Studio Code** using the Microsoft TMDL extension.
+1. Open `australian-accounting-power-bi.pbip` in **Power BI Desktop**.
+2. Under **Home > Transform data > Edit parameters**, set `SampleFolder` to the absolute path of this checkout's `samples` folder, then apply the change. The committed parameter is blank because the folder location differs on each PC.
+3. Select **Home > Refresh > Schema and data**, then inspect all four report pages.
 
-Automated checks validate the source structure and bindings, but they do not refresh the model or render the report in Power BI Desktop. Complete that native smoke test before treating a release as production-ready.
+You can also inspect the semantic model directory in **Tabular Editor 3 / 2**, or edit TMDL files in **Visual Studio Code** with the Microsoft TMDL extension.
+
+The [8 September 2026 native verification](docs/native-verification.md) records a fabricated-data refresh and inspection of all four pages in Desktop 2.157.1354.0. Automated checks cover structure and bindings; repeat the native check after model or report changes. This smoke test does not establish production readiness or validate every accounting calculation.
 
 ---
 

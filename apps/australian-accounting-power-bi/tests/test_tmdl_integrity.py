@@ -278,6 +278,8 @@ class TestTmdlIntegrity(unittest.TestCase):
         """Calculation groups must declare explicit precedence and ordinals on calculation items."""
         cg_files = [f for f in TMDL_TABLES_DIR.glob("*.tmdl") if "CalcGroup" in f.name]
         self.assertGreaterEqual(len(cg_files), 2, "Expected at least 2 calculation groups")
+        model = (TMDL_DIR / "model.tmdl").read_text(encoding="utf-8")
+        self.assertRegex(model, r"(?m)^\tdiscourageImplicitMeasures\s*$")
 
         for cg_file in cg_files:
             content = cg_file.read_text(encoding="utf-8")

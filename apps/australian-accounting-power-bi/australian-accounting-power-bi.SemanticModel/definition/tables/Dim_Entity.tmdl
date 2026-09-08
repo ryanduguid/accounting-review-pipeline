@@ -67,6 +67,6 @@ table Dim_Entity
 		mode: import
 		source =
 			let
-				Source = Dim_Entity
+				Source = Source_Dim_Entity
 			in
 				Source
