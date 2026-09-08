@@ -4,7 +4,7 @@
 
 [![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 
-Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. No SDK, no framework, just four readable Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) showing exactly how Xero OAuth2 works, including the part that breaks most scheduled scripts.
+Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. The four Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) handle consent, token refresh, the API request and CSV output.
 
 The maintained source is under `packages/xero-trial-balance-export` in the
 Accounting Review Pipeline. The `xero-trial-balance-export` distribution,
@@ -30,7 +30,7 @@ python tools/render_quick_proof.py --check
 
 ## Why
 
-The manual path (Reports → Trial Balance → Export → fix the header rows → fix the account codes) burns 10 minutes per entity per month and produces a slightly different file each time. The API path produces the same tidy shape every run:
+The exporter writes a fixed CSV schema, so downstream queries can use the same column names every run:
 
 ```
 ReportDate, Tenant, Section, AccountID, AccountName, AccountCode, Debit, Credit, YTDDebit, YTDCredit
