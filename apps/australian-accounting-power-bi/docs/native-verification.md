@@ -53,11 +53,14 @@ Run from this component directory, using the local port of that sample instance:
 powershell -NoProfile -File tools/test_financial_filters.ps1 -Server localhost:<port>
 ```
 
-All 12 filter cases passed, with 132 assertions: FY2025 and FY2026 group totals,
+All 16 filter cases passed, with 192 assertions: FY2025 and FY2026 group totals,
 each of four entities, a two-entity selection, June and July across the financial
 year boundary, a July group selection, September FYTD through the calculation
-group, and a two-year selection. Each case checks the filtered row count and ten
-financial measures, including cumulative balance-sheet amounts.
+group, and a two-year selection. Four additional cases select financial years
+through `FinancialYearNumber` and `FinancialYear`, and June/July through
+`FinancialYearMonth`. Their CSV expectations still use independent date ranges.
+Each case checks the filtered row count and eleven financial measures, including
+Working Capital and cumulative balance-sheet amounts.
 
 | Selection | Revenue | EBITDA | Net assets |
 | --- | ---: | ---: | ---: |
@@ -70,6 +73,13 @@ As a negative control, a disposable copy of the check replaced Revenue with zero
 in query scope. It failed the first case: native zero versus independent
 8,777,700.00. The stored model and the checked-in script were not altered by
 that control. The existing 13 benchmark cases also passed.
+
+The expanded check ran after reopening the same refreshed sample project. A
+Working Capital override of zero passed the original 132 assertions, then failed
+the expanded check against independent 3,500,472.00. A separate negative control
+selected financial year 2025 for the 2026 case and failed on 566 rows versus
+expected 540. Both controls used disposable script copies; the stored model and
+checked-in script retain the real measures and intended selections.
 
 The native checks exercise filter contexts directly. They do not certify filter
 card interaction, every visual, every calculation group combination, statutory

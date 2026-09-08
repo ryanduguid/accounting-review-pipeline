@@ -38,7 +38,11 @@ $cases = @(
     @{ Name = 'ENT001 July'; Start = '2025-07-01'; End = '2025-07-31'; Entities = @('ENT001') },
     @{ Name = 'group July'; Start = '2025-07-01'; End = '2025-07-31' },
     @{ Name = 'group FYTD September'; Start = '2025-07-01'; End = '2025-09-30'; FYTD = $true },
-    @{ Name = 'group two financial years'; Start = '2024-07-01'; End = '2026-06-30' }
+    @{ Name = 'group two financial years'; Start = '2024-07-01'; End = '2026-06-30' },
+    @{ Name = 'group financial year number'; Start = '2025-07-01'; End = '2026-06-30'; PeriodFilter = 'TREATAS({2026}, Dim_Date[FinancialYearNumber])' },
+    @{ Name = 'group financial year label'; Start = '2024-07-01'; End = '2025-06-30'; PeriodFilter = 'TREATAS({"FY24-25"}, Dim_Date[FinancialYear])' },
+    @{ Name = 'ENT001 financial June'; Start = '2025-06-01'; End = '2025-06-30'; Entities = @('ENT001'); PeriodFilter = 'TREATAS({"FY24-25-12"}, Dim_Date[FinancialYearMonth])' },
+    @{ Name = 'ENT001 financial July'; Start = '2025-07-01'; End = '2025-07-31'; Entities = @('ENT001'); PeriodFilter = 'TREATAS({"FY25-26-01"}, Dim_Date[FinancialYearMonth])' }
 )
 
 [Reflection.Assembly]::LoadFrom((Join-Path $PowerBIBin 'Microsoft.PowerBI.AdomdClient.dll')) | Out-Null
@@ -56,12 +60,16 @@ try {
         [decimal]$addbacks = 0
         [decimal]$assets = 0
         [decimal]$liabilities = 0
+        [decimal]$currentAssets = 0
+        [decimal]$currentLiabilities = 0
         [decimal]$equity = 0
         [decimal]$earnings = 0
         $periodRows = 0
         foreach ($row in $ledger) {
             if ($case.Entities -and $row.Entity -notin $case.Entities) { continue }
             if ($row.Date -gt $end) { continue }
+            if ($row.SubClass -eq 'Current Assets') { $currentAssets += $row.Net }
+            if ($row.SubClass -eq 'Current Liabilities') { $currentLiabilities -= $row.Net }
             switch ($row.Class) {
                 'Asset' { $assets += $row.Net }
                 'Liability' { $liabilities -= $row.Net }
@@ -87,10 +95,15 @@ try {
             'Total Assets' = $assets
             'Total Liabilities' = $liabilities
             'Net Assets' = $assets - $liabilities
+            'Working Capital' = $currentAssets - $currentLiabilities
             'Balance Sheet Check' = $assets - $liabilities - $equity - $earnings
         }
         $filterStart = if ($case.FYTD) { $end } else { $start }
-        $filters = @("DATESBETWEEN(Dim_Date[Date], DATE($($filterStart.Year),$($filterStart.Month),$($filterStart.Day)), DATE($($end.Year),$($end.Month),$($end.Day)))")
+        $filters = @(if ($case.PeriodFilter) {
+            $case.PeriodFilter
+        } else {
+            "DATESBETWEEN(Dim_Date[Date], DATE($($filterStart.Year),$($filterStart.Month),$($filterStart.Day)), DATE($($end.Year),$($end.Month),$($end.Day)))"
+        })
         if ($case.Entities) {
             $entities = ($case.Entities | ForEach-Object { '"' + $_ + '"' }) -join ','
             $filters += "TREATAS({$entities}, Dim_Entity[EntityID])"
