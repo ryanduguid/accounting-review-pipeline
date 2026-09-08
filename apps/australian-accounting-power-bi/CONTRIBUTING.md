@@ -22,3 +22,10 @@ Work from `apps/australian-accounting-power-bi/` in [Accounting Review Pipeline]
    npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report
    ```
 3. Submit a pull request adhering to Conventional Commits format (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
+
+For changes to financial measures, relationships or date filters, also run
+`powershell -NoProfile -File tools/test_financial_filters.ps1 -Server localhost:<port>`
+against a refreshed, disposable sample project. The
+[native verification record](docs/native-verification.md) explains the 16 cases
+and independent CSV expectations. This native gate requires Power BI Desktop;
+structural CI alone does not run it.
