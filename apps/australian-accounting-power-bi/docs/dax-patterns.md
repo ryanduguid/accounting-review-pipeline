@@ -102,26 +102,12 @@ CALCULATE(
 
 ---
 
-## 3. ATO Small Business Compliance Risk Diagnostic
+## 3. Gross profit comparison
 
-Evaluates gross profit and operating expense variances against ATO benchmark bands to assign an automated risk rating:
+`Benchmark Annual Turnover` selects full financial-year revenue for one entity. `Benchmark Turnover Band` matches that revenue to exactly one industry band. All five reference measures use that same band and return blank when selection is ambiguous or unsupported.
 
-```dax
-measure 'ATO Compliance Risk Profile' =
-    VAR GP_Diff = ABS([Gross Profit Margin %] - [ATO Benchmark Gross Profit %])
-    VAR Exp_Diff = ABS([Actual Total Expense Ratio %] - [ATO Benchmark Expense Ratio %])
-    RETURN
-        IF(
-            ISBLANK([Revenue]) || [Revenue] == 0,
-            "No Data",
-            IF(
-                GP_Diff > 0.08 || Exp_Diff > 0.08,
-                "High Audit Risk (Red Zone)",
-                IF(
-                    GP_Diff > 0.04 || Exp_Diff > 0.04,
-                    "Moderate Variance (Amber Zone)",
-                    "Within Benchmark Range (Green Zone)"
-                )
-            )
-        )
-```
+`Gross Profit Variance to Benchmark %` compares the displayed margin with the band's inclusive bounds. It returns zero inside the range, the signed distance to the nearest bound outside it, and blank when no comparison can be made. The source expressions are in [Fact_ATOBenchmark.tmdl](../australian-accounting-power-bi.SemanticModel/definition/tables/Fact_ATOBenchmark.tmdl).
+
+The `ATO Compliance Risk Profile` identifier is retained for existing bindings. Its visible output is a gross profit comparison, with no red/amber/green thresholds or audit-risk prediction. Expense reference averages are not treated as range boundaries.
+
+The [native regression checks](benchmark-verification.md) exercise the source expressions in the Power BI engine, including the previously misclassified upper endpoint and turnover-band boundaries.

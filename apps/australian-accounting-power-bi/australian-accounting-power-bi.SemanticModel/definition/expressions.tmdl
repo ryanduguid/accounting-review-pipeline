@@ -100,9 +100,20 @@ expression Source_Fact_ATOBenchmark = ```
 	        {"RentPct_Avg", type number},
 	        {"MotorVehiclePct_Avg", type number},
 	        {"LabourPct_Avg", type number}
-	    })
+	    }),
+	    // Derive numeric bounds without changing the nine-column CSV contract.
+	    ParseAmount = (value as text) as number =>
+	        let
+	            Clean = Text.Lower(Text.Replace(value, "$", "")),
+	            Suffix = Text.End(Clean, 1),
+	            Multiplier = if Suffix = "k" then 1000 else if Suffix = "m" then 1000000 else error "Unsupported turnover suffix",
+	            Amount = Value.Multiply(Currency.From(Text.Start(Clean, Text.Length(Clean) - 1), "en-AU"), Multiplier, Precision.Decimal)
+	        in
+	            Amount,
+	    LowerBound = Table.AddColumn(TypedTable, "TurnoverLowerBound", each ParseAmount(Text.BeforeDelimiter([TurnoverRange], "-")), Int64.Type),
+	    UpperBound = Table.AddColumn(LowerBound, "TurnoverUpperBound", each ParseAmount(Text.AfterDelimiter([TurnoverRange], "-")), Int64.Type)
 	in
-	    TypedTable
+	    UpperBound
 	```
 
 expression Source_Fact_Budget = ```

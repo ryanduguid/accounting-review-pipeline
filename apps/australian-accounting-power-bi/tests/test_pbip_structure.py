@@ -184,7 +184,7 @@ class SemanticModelStructureTests(unittest.TestCase):
                     if index == 0 or not lines[index - 1].startswith("\t/// "):
                         missing.append(f"{path.name}:{index + 1}")
 
-        self.assertEqual(measure_count, 43)
+        self.assertEqual(measure_count, 47)
         self.assertEqual(unsupported, [])
         self.assertEqual(missing, [])
 

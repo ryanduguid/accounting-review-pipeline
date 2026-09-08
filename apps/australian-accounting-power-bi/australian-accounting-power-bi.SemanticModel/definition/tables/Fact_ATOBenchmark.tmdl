@@ -1,20 +1,32 @@
 table Fact_ATOBenchmark
 	lineageTag: a1b2c3d4-ato-0009-8899-aabbccddeeff
 
-	/// Gross profit margin averaged across the published turnover bands for the ANZSIC industries
-	/// of the entities in context. Dim_Entity filters one way into Dim_ANZSIC, so the industry
-	/// selection is carried across to this table with TREATAS.
+	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
 	measure 'ATO Benchmark Gross Profit %' =
-			CALCULATE(
-				AVERAGE(Fact_ATOBenchmark[GrossProfitPct_Avg]),
-				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
-			)
-			/ 100
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+			    IF(
+			        NOT ISBLANK(Band),
+			        CALCULATE(
+			            SELECTEDVALUE(Fact_ATOBenchmark[GrossProfitPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
+			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+			            Fact_ATOBenchmark[TurnoverRange] = Band
+			        ) / 100
+			    )
 		formatString: 0.0%
 		lineageTag: ato-meas-0001
 
-	/// Difference between client gross margin and the ATO industry benchmark average.
-	measure 'Gross Profit Variance to Benchmark %' = [Gross Profit Margin %] - [ATO Benchmark Gross Profit %]
+	/// Signed percentage-point distance outside the selected gross profit range; zero within its inclusive bounds.
+	measure 'Gross Profit Variance to Benchmark %' =
+			VAR Low = [Benchmark Gross Profit Lower %]
+			VAR High = [Benchmark Gross Profit Upper %]
+			VAR Actual = [Gross Profit Margin %]
+			RETURN
+			    IF(
+			        NOT ISBLANK(Low) && NOT ISBLANK(High) && NOT ISBLANK(Actual) && [Revenue] > 0,
+			        SWITCH(TRUE(), Actual < Low, Actual - Low, Actual > High, Actual - High, 0)
+			    )
 		formatString: +0.0%;-0.0%;0.0%
 		lineageTag: ato-meas-0002
 
@@ -23,14 +35,19 @@ table Fact_ATOBenchmark
 		formatString: 0.0%
 		lineageTag: ato-meas-0003
 
-	/// Operating expense ratio averaged across the published turnover bands for the ANZSIC
-	/// industries of the entities in context.
+	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
 	measure 'ATO Benchmark Expense Ratio %' =
-			CALCULATE(
-				AVERAGE(Fact_ATOBenchmark[TotalExpensesPct_Avg]),
-				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
-			)
-			/ 100
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+			    IF(
+			        NOT ISBLANK(Band),
+			        CALCULATE(
+			            SELECTEDVALUE(Fact_ATOBenchmark[TotalExpensesPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
+			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+			            Fact_ATOBenchmark[TurnoverRange] = Band
+			        ) / 100
+			    )
 		formatString: 0.0%
 		lineageTag: ato-meas-0004
 
@@ -47,14 +64,19 @@ table Fact_ATOBenchmark
 		formatString: 0.0%
 		lineageTag: ato-meas-0005
 
-	/// Rent ratio averaged across the published turnover bands for the ANZSIC industries of the
-	/// entities in context.
+	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
 	measure 'ATO Benchmark Rent %' =
-			CALCULATE(
-				AVERAGE(Fact_ATOBenchmark[RentPct_Avg]),
-				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
-			)
-			/ 100
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+			    IF(
+			        NOT ISBLANK(Band),
+			        CALCULATE(
+			            SELECTEDVALUE(Fact_ATOBenchmark[RentPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
+			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+			            Fact_ATOBenchmark[TurnoverRange] = Band
+			        ) / 100
+			    )
 		formatString: 0.0%
 		lineageTag: ato-meas-0006
 
@@ -71,14 +93,19 @@ table Fact_ATOBenchmark
 		formatString: 0.0%
 		lineageTag: ato-meas-0007
 
-	/// Motor vehicle expense ratio averaged across the published turnover bands for the ANZSIC
-	/// industries of the entities in context.
+	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
 	measure 'ATO Benchmark Motor Vehicle %' =
-			CALCULATE(
-				AVERAGE(Fact_ATOBenchmark[MotorVehiclePct_Avg]),
-				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
-			)
-			/ 100
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+			    IF(
+			        NOT ISBLANK(Band),
+			        CALCULATE(
+			            SELECTEDVALUE(Fact_ATOBenchmark[MotorVehiclePct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
+			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+			            Fact_ATOBenchmark[TurnoverRange] = Band
+			        ) / 100
+			    )
 		formatString: 0.0%
 		lineageTag: ato-meas-0008
 
@@ -95,36 +122,102 @@ table Fact_ATOBenchmark
 		formatString: 0.0%
 		lineageTag: ato-meas-0009
 
-	/// Labour cost ratio averaged across the published turnover bands for the ANZSIC industries
-	/// of the entities in context.
+	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
 	measure 'ATO Benchmark Labour %' =
-			CALCULATE(
-				AVERAGE(Fact_ATOBenchmark[LabourPct_Avg]),
-				TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])
-			)
-			/ 100
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+			    IF(
+			        NOT ISBLANK(Band),
+			        CALCULATE(
+			            SELECTEDVALUE(Fact_ATOBenchmark[LabourPct_Avg]),
+			            REMOVEFILTERS(Fact_ATOBenchmark),
+			            TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+			            Fact_ATOBenchmark[TurnoverRange] = Band
+			        ) / 100
+			    )
 		formatString: 0.0%
 		lineageTag: ato-meas-0010
 
-	/// Automated risk rating derived from the variance between actual ratios and the ATO benchmark bands.
+	/// Gross profit comparison only. The legacy measure name is retained for report bindings; this is not an audit-risk assessment.
 	measure 'ATO Compliance Risk Profile' =
-			VAR GP_Diff = ABS([Gross Profit Margin %] - [ATO Benchmark Gross Profit %])
-			VAR Exp_Diff = ABS([Actual Total Expense Ratio %] - [ATO Benchmark Expense Ratio %])
+			VAR Difference = [Gross Profit Variance to Benchmark %]
+			RETURN
+			    SWITCH(
+			        TRUE(),
+			        NOT HASONEVALUE(Dim_Entity[EntityID]) || NOT HASONEVALUE(Dim_Date[FinancialYearNumber]), "Select one entity and financial year",
+			        ISBLANK([Benchmark Annual Turnover]) || [Benchmark Annual Turnover] <= 0, "No turnover",
+			        ISBLANK([Benchmark Turnover Band]), "No matching benchmark",
+			        ISBLANK(Difference), "No margin data",
+			        Difference < 0, "Below gross profit range",
+			        Difference > 0, "Above gross profit range",
+			        "Within gross profit range"
+			    )
+		lineageTag: ato-meas-0011
+
+	/// Full financial-year revenue for one entity; account and subperiod filters cannot change the band.
+	measure 'Benchmark Annual Turnover' =
+			VAR FiscalYear = SELECTEDVALUE(Dim_Date[FinancialYearNumber])
 			RETURN
 				IF(
-					ISBLANK([Revenue]) || [Revenue] == 0,
-					"No Data",
-					IF(
-						GP_Diff > 0.08 || Exp_Diff > 0.08,
-						"High Audit Risk (Red Zone)",
-						IF(
-							GP_Diff > 0.04 || Exp_Diff > 0.04,
-							"Moderate Variance (Amber Zone)",
-							"Within Benchmark Range (Green Zone)"
-						)
+					HASONEVALUE(Dim_Entity[EntityID]) && NOT ISBLANK(FiscalYear),
+					CALCULATE(
+						[Revenue],
+						REMOVEFILTERS(Dim_Date),
+						REMOVEFILTERS(Dim_Account),
+						Dim_Date[FinancialYearNumber] = FiscalYear
 					)
 				)
-		lineageTag: ato-meas-0011
+		formatString: $#,##0.00;($#,##0.00);$0.00
+		lineageTag: ato-meas-0012
+
+	/// Exactly one sample industry band, with turnover greater than its lower bound and at most its upper bound.
+	measure 'Benchmark Turnover Band' =
+			VAR Turnover = [Benchmark Annual Turnover]
+			VAR Industry = SELECTEDVALUE(Dim_Entity[ANZSIC_Code])
+			VAR Bands = FILTER(
+				ALL(Fact_ATOBenchmark),
+				Fact_ATOBenchmark[ANZSIC_Code] = Industry
+					&& Turnover > Fact_ATOBenchmark[TurnoverLowerBound]
+					&& Turnover <= Fact_ATOBenchmark[TurnoverUpperBound]
+			)
+			RETURN
+				IF(
+					Turnover > 0 && NOT ISBLANK(Industry) && COUNTROWS(Bands) = 1,
+					MAXX(Bands, Fact_ATOBenchmark[TurnoverRange])
+				)
+		lineageTag: ato-meas-0013
+
+	/// Lower inclusive gross profit bound for the selected sample band.
+	measure 'Benchmark Gross Profit Lower %' =
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+				IF(
+					NOT ISBLANK(Band),
+					CALCULATE(
+						SELECTEDVALUE(Fact_ATOBenchmark[GrossProfitPct_Low]),
+						REMOVEFILTERS(Fact_ATOBenchmark),
+						TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+						Fact_ATOBenchmark[TurnoverRange] = Band
+					) / 100
+				)
+		formatString: 0.0%
+		lineageTag: ato-meas-0014
+
+	/// Upper inclusive gross profit bound for the selected sample band.
+	measure 'Benchmark Gross Profit Upper %' =
+			VAR Band = [Benchmark Turnover Band]
+			RETURN
+				IF(
+					NOT ISBLANK(Band),
+					CALCULATE(
+						SELECTEDVALUE(Fact_ATOBenchmark[GrossProfitPct_High]),
+						REMOVEFILTERS(Fact_ATOBenchmark),
+						TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code]),
+						Fact_ATOBenchmark[TurnoverRange] = Band
+					) / 100
+				)
+		formatString: 0.0%
+		lineageTag: ato-meas-0015
 
 	column ANZSIC_Code
 		dataType: string
@@ -186,6 +279,22 @@ table Fact_ATOBenchmark
 		lineageTag: ato-col-0009
 		summarizeBy: average
 		sourceColumn: LabourPct_Avg
+
+	column TurnoverLowerBound
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: ato-col-0010
+		summarizeBy: none
+		sourceColumn: TurnoverLowerBound
+
+	column TurnoverUpperBound
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: ato-col-0011
+		summarizeBy: none
+		sourceColumn: TurnoverUpperBound
 
 	partition Fact_ATOBenchmark = m
 		mode: import
