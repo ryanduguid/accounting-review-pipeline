@@ -4,5 +4,31 @@
   "displayName": "3. ATO Benchmark & Practice Diagnostic",
   "displayOption": "FitToPage",
   "height": 720,
-  "width": 1280
+  "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "benchmarkFinancialYear",
+        "field": {
+          "Column": {
+            "Expression": { "SourceRef": { "Entity": "Dim_Date" } },
+            "Property": "FinancialYear"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "User"
+      },
+      {
+        "name": "benchmarkEntity",
+        "field": {
+          "Column": {
+            "Expression": { "SourceRef": { "Entity": "Dim_Entity" } },
+            "Property": "TradingName"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "User"
+      }
+    ]
+  }
 }
