@@ -42,14 +42,14 @@ class TestPowerQueryM(unittest.TestCase):
         self.assertEqual(
             sorted(named_expressions()),
             [
-                "Dim_Account",
                 "Dim_Date_AU",
-                "Dim_Entity",
-                "Fact_ATOBenchmark",
-                "Fact_Budget",
-                "Fact_GeneralLedger",
-                "Fact_PayrollSuper",
                 "Fx_ValidateABN",
+                "Source_Dim_Account",
+                "Source_Dim_Entity",
+                "Source_Fact_ATOBenchmark",
+                "Source_Fact_Budget",
+                "Source_Fact_GeneralLedger",
+                "Source_Fact_PayrollSuper",
             ],
         )
 
@@ -103,12 +103,12 @@ class TestPowerQueryM(unittest.TestCase):
 
     def test_csv_source_column_counts_match_fixture_rows(self) -> None:
         cases = {
-            "Dim_Account": "sample-chart-of-accounts.csv",
-            "Dim_Entity": "sample-entities.csv",
-            "Fact_ATOBenchmark": "sample-ato-benchmarks.csv",
-            "Fact_Budget": "sample-budgets.csv",
-            "Fact_GeneralLedger": "sample-general-ledger.csv",
-            "Fact_PayrollSuper": "sample-payroll-super.csv",
+            "Source_Dim_Account": "sample-chart-of-accounts.csv",
+            "Source_Dim_Entity": "sample-entities.csv",
+            "Source_Fact_ATOBenchmark": "sample-ato-benchmarks.csv",
+            "Source_Fact_Budget": "sample-budgets.csv",
+            "Source_Fact_GeneralLedger": "sample-general-ledger.csv",
+            "Source_Fact_PayrollSuper": "sample-payroll-super.csv",
         }
         expressions = named_expressions()
 
@@ -132,7 +132,7 @@ class TestPowerQueryM(unittest.TestCase):
                 )
 
     def test_dim_account_preserves_quoted_account_name(self) -> None:
-        content = named_expressions()["Dim_Account"]
+        content = named_expressions()["Source_Dim_Account"]
         self.assertIn("QuoteStyle=QuoteStyle.Csv", content)
 
         with (SAMPLES_DIR / "sample-chart-of-accounts.csv").open(

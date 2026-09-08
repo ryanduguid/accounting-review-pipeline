@@ -64,6 +64,6 @@ table Fact_Budget
 		mode: import
 		source =
 			let
-				Source = Fact_Budget
+				Source = Source_Fact_Budget
 			in
 				Source
