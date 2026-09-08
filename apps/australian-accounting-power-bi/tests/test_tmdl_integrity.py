@@ -267,11 +267,11 @@ class TestTmdlIntegrity(unittest.TestCase):
                     f"Measure [{measure_name}] in {tmdl_file.name} is missing a supported description",
                 )
 
-        self.assertEqual(measure_count, 43, "Expected exactly 43 explicit DAX measures across model")
+        self.assertEqual(measure_count, 47, "Expected exactly 47 explicit DAX measures across model")
         self.assertEqual(
             unformatted_measures,
-            ["Fact_ATOBenchmark.tmdl:[ATO Compliance Risk Profile]"],
-            "Only the text-valued risk-profile measure may omit a numeric format string",
+            ["Fact_ATOBenchmark.tmdl:[ATO Compliance Risk Profile]", "Fact_ATOBenchmark.tmdl:[Benchmark Turnover Band]"],
+            "Only the comparison status and selected band may omit a numeric format string",
         )
 
     def test_calculation_groups_have_precedence_and_ordinals(self) -> None:

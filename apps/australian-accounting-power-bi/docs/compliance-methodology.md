@@ -46,7 +46,7 @@ The offset applies only where the fund receipt date is **strictly after** the du
 ## 2. ATO Small Business Benchmarks
 
 ### ANZSIC Benchmarking
-The ATO publishes financial performance benchmarks across turnover bands for small businesses based on income tax returns and activity statements. The model averages every published band for an industry; it does not select the band matching an entity's turnover.
+The ATO publishes financial performance benchmarks across turnover bands for small businesses based on income tax returns and activity statements. The model selects one sample band for the entity's industry and full selected financial-year revenue. Turnover must be greater than the lower bound and at most the upper bound. Multiple entities, multiple financial years, missing bands or overlapping bands leave the comparison unavailable. A subperiod or account filter does not change the annual turnover used to select the band.
 
 ### Key Ratios Monitored
 1. **Gross Profit Margin %**: `(Sales - Cost of Goods Sold) / Sales`
@@ -55,12 +55,13 @@ The ATO publishes financial performance benchmarks across turnover bands for sma
 4. **Rent Ratio %**: `Rent Expense / Sales`
 5. **Motor Vehicle Expense Ratio %**: `Motor Vehicle Running Costs / Sales`
 
-### Compliance Risk Profiling
-The ATO publishes the benchmark ranges and uses them to select businesses for closer review. It does not publish a traffic-light score, so the three zones below are this project's own banding of variance against the published range, not an ATO rating.
+### Gross profit comparison
 
-- **Green Zone (Within Benchmark)**: Normal compliance monitoring.
-- **Amber Zone (Moderate Variance 4% to 8%)**: Potential record-keeping review.
-- **Red Zone (High Variance > 8%)**: Elevated risk of ATO review. Sitting outside a benchmark range affects where the ATO directs compliance resources; of itself it creates no liability.
+The card reports whether the displayed gross profit margin falls below, within or above the selected sample band's inclusive bounds. The signed variance is zero inside the range and the percentage-point distance to the nearest bound outside it. It does not estimate the likelihood of an ATO audit.
+
+The sample file supplies lower and upper bounds for gross profit only. Expense, rent, motor vehicle and labour reference values remain descriptive comparisons; their averages do not establish an acceptable range. No missing bounds are inferred. The report does not establish that these sample reference values are current ATO authority.
+
+Use one complete financial year for an annual comparison. A monthly view retains the year's turnover band but displays that month's ratios. The legacy DAX name `ATO Compliance Risk Profile` remains for existing report bindings; its output and visible labels describe only the gross profit comparison.
 
 ---
 

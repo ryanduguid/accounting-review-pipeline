@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "Fact_ATOBenchmark.ATO Compliance Risk Profile",
-              "nativeQueryRef": "ATO Compliance Risk Profile"
+              "nativeQueryRef": "ATO Compliance Risk Profile",
+              "displayName": "Gross profit comparison"
             }
           ]
         }
@@ -47,7 +48,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Compliance Risk Profile'"
+                  "Value": "'Gross profit comparison (sample data)'"
                 }
               }
             }
