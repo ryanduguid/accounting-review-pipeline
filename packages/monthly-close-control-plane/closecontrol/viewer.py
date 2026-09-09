@@ -370,65 +370,84 @@ def _verify_rows_match(
                 )
 
 
-_QUERY_COUNT_LINE = re.compile(r"- Client queries drafted: (\d+)\.")
+# Anchored to a whole line. The writer emits this as its own line, while every
+# source-derived value it renders is prefixed by something: a table cell by
+# '| ', a one-line reviewer comment by '- Comment: ', a quoted comment line by
+# '  > '. Searching the document instead would count a client's own figure as a
+# second count line and refuse a pack whose four artefacts agree.
+_QUERY_COUNT_LINE = re.compile(r"^- Client queries drafted: (\d+)\.$", re.MULTILINE)
 
 _CLIENT_QUERY_HEADING = "## Client queries"
 
+# The heading levels report._as_markdown emits, and so where one of its
+# sections ends. Anything else inside the section is content the writer never
+# wrote, and the line-by-line comparison below refuses it rather than treating
+# it as a boundary.
+_MD_SECTION_HEADING = re.compile(r"^#{1,2}\s")
+
 _CLIENT_QUERY_TABLE_HEADER = (
     "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |"
+)
+
+_CLIENT_QUERY_TABLE_DELIMITER = "| --- | --- | --- | --- | ---: | --- | --- |"
+
+# report._CLIENT_QUERY_PREAMBLE, and the line it writes when no exception
+# raised a question, mirrored here as _md_cell_mirror mirrors report._md_cell.
+# The section is rebuilt from these and compared, rather than searched for
+# landmarks, because searching leaves everything it does not look for
+# unchecked: a replaced delimiter row stops the register rendering as a table
+# at all, and an inserted line puts a sentence in front of a preparer that no
+# run produced. Neither disturbs a landmark.
+_CLIENT_QUERY_PREAMBLE = (
+    "These are draft questions for the preparer, derived from the exceptions above. "
+    "Nothing has been sent to anyone. Read and edit them before they reach a client, "
+    "and record the answers in the firm's own tracker: this pack is evidence of one "
+    "run, and editing it breaks the check that its files still agree.",
+    "",
+    "Answering every query does not close the period, and a query nobody raised is "
+    "not evidence that nothing needs asking.",
+    "",
+)
+
+_CLIENT_QUERY_EMPTY_REGISTER = (
+    "No exception raised a question for the client. Every exception in this "
+    "pack, if any, is one the firm settles from its own records."
 )
 
 # The renderer's placeholder for a tenant, account or difference it has none of.
 _ABSENT = "n/a"
 
 
-def _client_query_section(summary_text: str) -> str:
-    """Return the one client-query section, or raise.
+def _client_query_section_lines(summary_text: str) -> list[str]:
+    """Return the lines under the one client-query heading, or raise.
 
-    Exactly one heading, for the same reason _summary_source_evidence scans the
-    whole document: a forged second section would otherwise be a region nothing
+    The heading has to be a heading. report._md_cell escapes a cell's pipes,
+    backslashes, asterisks and backticks but not its hashes, and a one-line
+    reviewer comment is rendered inline, so under a substring search an account
+    named '## Client queries' or a comment quoting the phrase would count as a
+    second section and refuse a pack whose four artefacts were written together
+    and agree.
+
+    Exactly one, for the same reason _summary_source_evidence scans the whole
+    document: a forged second section would otherwise be a region nothing
     checks, sitting under a heading a reviewer reads as the register.
     """
-    parts = summary_text.split(_CLIENT_QUERY_HEADING)
-    if len(parts) != 2:
+    lines = summary_text.splitlines()
+    headings = [
+        index
+        for index, line in enumerate(lines)
+        if line.strip() == _CLIENT_QUERY_HEADING
+    ]
+    if len(headings) != 1:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: expected exactly one {_CLIENT_QUERY_HEADING!r} "
-            f"heading, found {len(parts) - 1}"
+            f"heading, found {len(headings)}"
         )
-    tail = parts[1]
-    end = re.search(r"^#{1,2}\s+", tail, flags=re.MULTILINE)
-    return tail[: end.start()] if end else tail
-
-
-def _split_md_row(line: str) -> list[str]:
-    """Split one rendered table row into its cells, honouring the writer's escapes.
-
-    report._md_cell escapes a backslash before a pipe, so a cell holding a pipe
-    arrives as ``\\|`` and must not end the cell. The escape sequences are kept
-    rather than resolved, because the expected text is built by the same
-    escaping and the two are compared as written.
-    """
-    cells: list[str] = []
-    current: list[str] = []
-    escaped = False
-    for character in line:
-        if escaped:
-            current.append(character)
-            escaped = False
-        elif character == "\\":
-            current.append(character)
-            escaped = True
-        elif character == "|":
-            cells.append("".join(current).strip())
-            current = []
-        else:
-            current.append(character)
-    cells.append("".join(current).strip())
-    if cells and cells[0] == "":
-        cells = cells[1:]
-    if cells and cells[-1] == "":
-        cells = cells[:-1]
-    return cells
+    start = headings[0] + 1
+    for index in range(start, len(lines)):
+        if _MD_SECTION_HEADING.match(lines[index]):
+            return lines[start:index]
+    return lines[start:]
 
 
 def _md_cell_mirror(value: str) -> str:
@@ -448,7 +467,7 @@ def _md_cell_mirror(value: str) -> str:
     )
 
 
-def _expected_summary_row(query: dict) -> list[str]:
+def _expected_summary_row(query: dict) -> str:
     """Rebuild the table row report._as_markdown renders for one query.
 
     Every cell is reconstructed, not a chosen few, so the check is a row-level
@@ -471,7 +490,7 @@ def _expected_summary_row(query: dict) -> list[str]:
     account = " / ".join(
         piece for piece in (fields["account_code"], fields["account_name"]) if piece
     ) or fields["account_id"] or _ABSENT
-    return [
+    cells = (
         fields["query_id"],
         fields["control"],
         _md_cell_mirror(fields["tenant"] or _ABSENT),
@@ -479,7 +498,8 @@ def _expected_summary_row(query: dict) -> list[str]:
         fields["difference"] or _ABSENT,
         _md_cell_mirror(fields["question"]),
         _md_cell_mirror(fields["evidence_requested"]),
-    ]
+    )
+    return "| " + " | ".join(cells) + " |"
 
 
 def _verify_summary_states_the_register(
@@ -490,13 +510,17 @@ def _verify_summary_states_the_register(
     The summary is the artefact a preparer reads and copies a question out of,
     so a row edited there alone is the divergence that matters most: the pack
     would verify while the file somebody actually works from asks something the
-    run never asked. The table is parsed and each row rebuilt from the JSON,
-    rather than the document being searched for identifiers, so a value in an
-    exception reason or a reviewer comment neither counts as a query nor hides
-    one that was altered.
+    run never asked.
+
+    Every line of the section is rebuilt from the JSON and compared, rather than
+    the section being searched for landmarks. A search leaves whatever it does
+    not look for unchecked, and two of those matter: the delimiter row, without
+    which the register stops rendering as a table at all, and any line inserted
+    between the ones the writer wrote, which puts a sentence in front of a
+    preparer that no run produced. Neither disturbs a landmark.
     """
-    section = _client_query_section(summary_text)
-    if _CLIENT_QUERY_SENTENCE not in " ".join(section.split()):
+    section = _client_query_section_lines(summary_text)
+    if _CLIENT_QUERY_SENTENCE not in " ".join(" ".join(section).split()):
         raise ControlInputError(
             f"{_SUMMARY_NAME}: the client-query boundary statement is missing or altered"
         )
@@ -513,19 +537,37 @@ def _verify_summary_states_the_register(
             f"{len(client_queries)}, {_SUMMARY_NAME} states {counts[0]}"
         )
 
-    lines = [line.strip() for line in section.splitlines() if line.strip().startswith("|")]
+    lead = ["", *_CLIENT_QUERY_PREAMBLE]
+    if section[: len(lead)] != lead:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the client-query section's preamble is missing or "
+            "altered"
+        )
+    body = section[len(lead) :]
+    if not body or body[-1] != "":
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the client-query section does not end where the "
+            "writer ends it"
+        )
+    body = body[:-1]
+
     if not client_queries:
-        if lines:
+        if body != [_CLIENT_QUERY_EMPTY_REGISTER]:
             raise ControlInputError(
                 f"{_SUMMARY_NAME}: holds a client-query table while {_JSON_NAME} "
                 "holds no queries"
             )
         return
-    if not lines or lines[0] != _CLIENT_QUERY_TABLE_HEADER:
+    if not body or body[0] != _CLIENT_QUERY_TABLE_HEADER:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: the client-query table header is missing or altered"
         )
-    rows = [_split_md_row(line) for line in lines[2:]]
+    if len(body) < 2 or body[1] != _CLIENT_QUERY_TABLE_DELIMITER:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the client-query table delimiter is missing or "
+            "altered; the register would not render as a table"
+        )
+    rows = body[2:]
     if len(rows) != len(client_queries):
         raise ControlInputError(
             f"client-query counts disagree: {_JSON_NAME} holds "
@@ -548,12 +590,18 @@ def _verify_summary_holds_no_register(summary_text: str) -> None:
     as an older pack would display a sheet saying the register never existed
     beside a file that lists it, so the absence has to hold across all three
     artefacts or the pack is refused.
+
+    Each marker is matched as a whole line, for the reason
+    _client_query_section_lines is: a genuinely old pack whose account or
+    reviewer comment quotes one of these phrases is still an old pack, and
+    refusing it would take archived evidence out of a firm's hands.
     """
+    lines = {line.strip() for line in summary_text.splitlines()}
     for marker, description in (
         (_CLIENT_QUERY_HEADING, "a client-query section"),
         (_CLIENT_QUERY_TABLE_HEADER, "a client-query table"),
     ):
-        if marker in summary_text:
+        if marker in lines:
             raise ControlInputError(
                 f"{_SUMMARY_NAME}: holds {description} while the pack carries no "
                 f"client-query register; the register is half removed, not absent"

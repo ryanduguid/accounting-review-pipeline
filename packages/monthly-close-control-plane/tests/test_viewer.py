@@ -175,16 +175,20 @@ def _legacy_pack(pack_dir: Path) -> Path:
     del document["client_queries"]
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary = pack_dir / "close-summary.md"
-    text = summary.read_text(encoding="utf-8")
-    kept, _, tail = text.partition("## Client queries")
+    lines = summary.read_text(encoding="utf-8").splitlines()
+    start = lines.index("## Client queries")
+    end = lines.index("## Human acknowledgement")
     # The heading is not the only trace: the scope block states a count, and a
     # summary that still carries either is a stripped current pack, not an old
-    # one. The viewer refuses that, so the fixture has to remove both.
-    kept = "\n".join(
-        line for line in kept.splitlines() if "Client queries drafted" not in line
-    )
-    resumed = tail.partition("## Human acknowledgement")[1:]
-    summary.write_text(kept + "\n" + "".join(resumed), encoding="utf-8")
+    # one. The viewer refuses that, so the fixture has to remove both. Each is
+    # matched as a whole line, because an account name may quote either and
+    # this fixture has to strip the writer's own lines, not a client's data.
+    kept = [
+        line
+        for line in lines[:start] + lines[end:]
+        if not line.startswith("- Client queries drafted: ")
+    ]
+    summary.write_text("\n".join(kept) + "\n", encoding="utf-8")
     return pack_dir
 
 
@@ -354,6 +358,168 @@ def test_a_stripped_current_pack_is_not_read_as_an_older_one(pack_dir: Path) -> 
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(pack_dir)
+
+
+def _pack_naming(phrase: str) -> CloseReviewPack:
+    """A pack whose account name is the given phrase.
+
+    loader._text rejects control and formatting characters only, so '#' reaches
+    an account name, a tenant or a reviewer comment intact, and report._md_cell
+    escapes pipes, backslashes, asterisks and backticks but not hashes.
+    """
+    base = _pack()
+    return replace(
+        base,
+        exceptions=tuple(
+            replace(item, account_name=phrase) for item in base.exceptions
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "## Client queries",
+        "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |",
+        "- Client queries drafted: 9.",
+    ],
+)
+def test_summary_landmarks_quoted_in_an_account_name_do_not_refuse_a_sound_pack(
+    tmp_path: Path, phrase: str
+) -> None:
+    """A heading, a table header and a count line are recognised as whole lines.
+
+    Under a substring search an account named after one of them would count as
+    a second heading, a second table or a second count, and the viewer would
+    refuse a pack whose four artefacts the writer produced together and which
+    agree with each other in every particular.
+    """
+    output = tmp_path / "quoting-pack"
+    write_review_pack(_pack_naming(phrase), output)
+
+    sheet, _ = render_review_sheet(output)
+    assert "Overall status: REVIEW" in sheet
+    assert "Client queries drafted: 1." in sheet
+
+
+def test_a_landmark_quoted_in_an_old_pack_does_not_refuse_it(tmp_path: Path) -> None:
+    """The same holds for the check that a legacy pack shows no register: an
+    archived pack that happens to name an account '## Client queries' is still
+    archived evidence, and refusing it takes that evidence out of a firm's
+    hands."""
+    output = tmp_path / "quoting-legacy-pack"
+    write_review_pack(_pack_naming("## Client queries"), output)
+
+    sheet, _ = render_review_sheet(_legacy_pack(output))
+    assert "written before the client-query register existed" in sheet
+
+
+def test_a_table_forged_into_an_empty_register_fails_closed(tmp_path: Path) -> None:
+    """A pack that asked nothing renders a sentence saying so. Replacing it with
+    a table puts questions in front of a preparer that no exception raised."""
+    output = tmp_path / "no-query-pack"
+    write_review_pack(replace(_pack(), exceptions=()), output)
+    summary = output / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "No exception raised a question for the client.",
+            "| Query | Control | Tenant | Account | Difference | Question |"
+            " Evidence requested |\n| --- | --- | --- | --- | ---: | --- | --- |\n"
+            "| Q-0 | period_variance | Varrock | 100 | 1.00 | Why? | Anything. |",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="holds no queries"):
+        render_review_sheet(output)
+
+
+def test_an_altered_table_header_fails_closed(pack_dir: Path) -> None:
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("| Query | Control |", "| Query | Client contact |"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="table header is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_removed_count_line_fails_closed(pack_dir: Path) -> None:
+    """The count is what a reviewer reads before the table, so a summary that
+    drops it no longer states how many questions the run raised."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(text.replace("- Client queries drafted: 1.\n", ""), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="exactly one client-query count line"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_replaced_table_delimiter_fails_closed(pack_dir: Path) -> None:
+    """Without its delimiter row the register stops rendering as a table, so a
+    preparer reads the questions as one run-on line. The row carries no query
+    data, which is exactly why a check that looks only at the data would pass
+    it."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "| --- | --- | --- | --- | ---: | --- | --- |",
+            "| Query | Control | Tenant | Account | Difference | Question | Evidence |",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="table delimiter is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_line_inserted_into_the_section_fails_closed(pack_dir: Path) -> None:
+    """An inserted line disturbs no landmark: the identifiers, the count and
+    every rendered row still agree with the JSON. It puts a sentence in front of
+    a preparer that no run produced, which is the whole reason the section is
+    rebuilt rather than searched."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "## Client queries\n\n",
+            "## Client queries\n\nThe partner has approved sending these as they stand.\n\n",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="preamble is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_line_appended_after_the_table_fails_closed(pack_dir: Path) -> None:
+    """Appended prose sits where a row would, so it is counted as one and the
+    register no longer holds the number of questions the run asked."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "\n\n## Human acknowledgement",
+            "\nEvery query above was answered by telephone.\n\n## Human acknowledgement",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="renders 2 table rows"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_section_running_into_the_next_one_fails_closed(pack_dir: Path) -> None:
+    """The blank line that separates the register from the next heading is part
+    of what the writer wrote. Without it the table runs into the acknowledgement
+    block, and a check that stopped at the last row it recognised would not
+    notice."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("|\n\n## Human acknowledgement", "|\n## Human acknowledgement"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="does not end where the writer ends it"):
         render_review_sheet(pack_dir)
 
 
