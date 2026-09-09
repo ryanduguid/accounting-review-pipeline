@@ -6,7 +6,8 @@
 #
 # Exit codes, from reviewready/cli.py:
 #   0  the pack is READY
-#   1  malformed input, invalid command configuration, or unwritable --output
+#   1  malformed input, invalid command configuration, an --output inside a
+#      version-control checkout, or an unwritable --output
 #   2  the pack is not allowed onto the review desk (NOT_READY or BLOCKED)
 #
 # NOT_READY and BLOCKED share exit code 2, so the exit code alone cannot single
@@ -21,6 +22,12 @@
 #
 # Store only fabricated or synthetic data in the repository. Never commit a
 # client workpaper pack.
+#
+# The pack is written to $RUNNER_TEMP, outside the checkout, and reaches you
+# as a build artifact. review-ready refuses an --output directory under
+# version control: a readiness pack names a client's file and its open
+# findings, and a workflow that later commits or pushes the workspace would
+# carry it into a history every clone copies.
 
 name: scheduled-readiness-check
 
@@ -61,7 +68,7 @@ jobs:
           review-ready gate \
             --profile bas \
             --pack examples/bas-not-ready \
-            --output outputs/readiness-check && code=0 || code=$?
+            --output "$RUNNER_TEMP/readiness-check" && code=0 || code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
       - name: Fail on BLOCKED, report NOT_READY
@@ -71,7 +78,7 @@ jobs:
             echo "review-ready reported a malformed input or configuration." >&2
             exit 1
           fi
-          status=$(python -c "import json; print(json.load(open('outputs/readiness-check/readiness-pack.json'))['overall_status'])")
+          status=$(python -c "import json, os; print(json.load(open(os.environ['RUNNER_TEMP'] + '/readiness-check/readiness-pack.json'))['overall_status'])")
           echo "Overall status: $status (exit code $code)"
           if [ "$status" = "BLOCKED" ]; then
             echo "The pack failed an integrity gate. Return it to the preparer." >&2
@@ -85,4 +92,4 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: readiness-pack
-          path: outputs/readiness-check/
+          path: ${{ runner.temp }}/readiness-check/
