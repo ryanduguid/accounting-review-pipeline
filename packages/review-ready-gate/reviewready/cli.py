@@ -8,7 +8,11 @@ from pathlib import Path
 from .engine import review_pack
 from .errors import GateInputError
 from .profiles import PROFILE_NAMES
-from .report import PACK_FILE_NAMES, write_review_pack
+from .report import (
+    PACK_FILE_NAMES,
+    require_output_outside_repository,
+    write_review_pack,
+)
 from .viewer import render_review_sheet
 
 
@@ -78,6 +82,15 @@ def main(argv: list[str] | None = None) -> int:
             "or change any computed status."
         )
         return 0
+    # Both output guards run before any client file is opened. write_review_pack
+    # repeats this one so a library caller cannot get past it, but a reviewer who
+    # mistyped --output should hear about it before the run reads a workpaper
+    # pack, not after.
+    try:
+        require_output_outside_repository(args.output)
+    except GateInputError as exc:
+        print(f"review-ready: output error: {exc}", file=sys.stderr)
+        return 1
     destinations = {(args.output / name).resolve() for name in PACK_FILE_NAMES}
     for flag, source in (("--pack", args.pack), ("--review-note", args.review_note)):
         if source is None:
