@@ -1,13 +1,20 @@
+import subprocess
+import sys
+
 import pytest
 
 from evatt import redact as redact_module
+from evatt import verify as verify_module
 from evatt.entities import Entity
 from evatt.errors import Halt
+from evatt.restore import restore
 
 CLIENT = Entity("Sample Holdings Pty Ltd", "CLIENT_01", "client", "2026-09-09")
 PERSON = Entity("Jane Roe", "PERSON_01", "person", "2026-09-09")
 SHORT = Entity("Sample", "CLIENT_02", "client", "2026-09-09")
 MAP = (CLIENT, PERSON)
+ENTITY_ONLY = "Jane Roe of Sample Holdings Pty Ltd lodged on time"
+STRUCTURED = "Jane Roe, TFN 123 456 782, ABN 51 824 753 556, BSB 062-000"
 
 
 def redact(text, entities=MAP):
@@ -197,3 +204,98 @@ def test_a_placeholder_already_in_the_input_halts() -> None:
         redact_module.redact("CLIENT_01 was the code used.", MAP)
     reported = [(u.kind, u.value, u.line) for u in caught.value.unknowns]
     assert reported == [("placeholder", "CLIENT_01", 1)]
+
+
+def test_round_trip_on_named_entities_is_exact() -> None:
+    text, _counts = redact_module.redact(ENTITY_ONLY, MAP)
+    assert restore(text, MAP) == ENTITY_ONLY
+
+
+def test_structured_identifiers_never_come_back() -> None:
+    text, _counts = redact(STRUCTURED)
+    restored = restore(text, MAP)
+    for original in ("123 456 782", "51 824 753 556", "062-000"):
+        assert original not in restored
+
+
+def test_restore_does_not_confuse_a_placeholder_with_its_prefix() -> None:
+    many = tuple(
+        Entity(f"Client Number {n}", f"CLIENT_{n:02d}", "client", "2026-09-09")
+        for n in (1, 10, 100)
+    )
+    text = "CLIENT_01 CLIENT_10 CLIENT_100"
+    assert restore(text, many) == "Client Number 1 Client Number 10 Client Number 100"
+
+
+def test_the_prefix_guard_is_checked_on_values_that_cannot_heal_themselves() -> None:
+    """"Client Number 10" plus the leftover "0" spells the right answer by luck.
+
+    Dropping the ``(?!\\d)`` therefore leaves the test above passing. These
+    values have no such arithmetic, so the shorter placeholder eating the
+    longer one is visible.
+    """
+    many = (
+        Entity("Alpha", "CLIENT_10", "client", "2026-09-09"),
+        Entity("Beta", "CLIENT_100", "client", "2026-09-09"),
+    )
+    assert restore("CLIENT_10 and CLIENT_100", many) == "Alpha and Beta"
+
+
+def test_verify_finds_nothing_in_redacted_output() -> None:
+    text, _counts = redact_module.redact(ENTITY_ONLY, MAP)
+    assert verify_module.findings(text, MAP) == ()
+
+
+def test_verify_finds_a_surviving_identifier() -> None:
+    found = verify_module.findings("TFN 123 456 782", MAP)
+    assert [f.kind for f in found] == ["tfn"]
+
+
+def test_verify_finds_a_surviving_mapped_entity() -> None:
+    found = verify_module.findings("Jane Roe was here", MAP)
+    assert [f.kind for f in found] == ["person"]
+
+
+def test_verify_finds_an_unmapped_name() -> None:
+    found = verify_module.findings("John Smith was here", MAP)
+    assert [f.kind for f in found] == ["name"]
+
+
+def test_verify_finds_a_placeholder_the_map_cannot_reverse() -> None:
+    """An entity placeholder with no map entry is a literal, or the wrong map."""
+    found = verify_module.findings("CLIENT_09 filed the return", MAP)
+    assert [(f.kind, f.value) for f in found] == [("placeholder", "CLIENT_09")]
+
+
+def test_verify_finds_a_placeholder_carried_in_beside_its_own_value() -> None:
+    """A half-redacted file: the input wrote CLIENT_01 itself, redaction did not."""
+    found = verify_module.findings("CLIENT_01 is Sample Holdings Pty Ltd", MAP)
+    assert [(f.kind, f.value) for f in found] == [
+        ("client", "Sample Holdings Pty Ltd"),
+        ("placeholder", "CLIENT_01"),
+    ]
+
+
+def test_verify_keeps_a_structured_placeholder_out_of_the_findings() -> None:
+    """TFN_01 is what a clean redacted file looks like; the map never assigns it."""
+    assert verify_module.findings("TFN_01 was on file", MAP) == ()
+
+
+def test_redaction_is_deterministic_across_processes() -> None:
+    """Placeholder ordinals must not depend on hash order or dict iteration."""
+    script = (
+        "from evatt.redact import redact\n"
+        "from evatt.entities import Entity\n"
+        "m = (Entity('Sample Holdings Pty Ltd','CLIENT_01','client','2026-09-09'),\n"
+        "     Entity('Jane Roe','PERSON_01','person','2026-09-09'))\n"
+        "t, c = redact('Jane Roe TFN 123 456 782 ABN 51 824 753 556 "
+        "at Sample Holdings Pty Ltd', m)\n"
+        "print(t)\n"
+    )
+    runs = {
+        subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, check=True
+        ).stdout
+        for _ in range(3)
+    }
+    assert len(runs) == 1
