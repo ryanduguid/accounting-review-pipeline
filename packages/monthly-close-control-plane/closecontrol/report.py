@@ -330,9 +330,12 @@ def _reject_unreachable(directory: Path) -> None:
     A destination that is not there yet is the ordinary case: the writer
     creates it.
     """
-    try:
-        directory.stat()
-    except FileNotFoundError:
+    for candidate in (directory, *directory.parents):
+        try:
+            candidate.stat()
+        except FileNotFoundError:
+            # A missing child can hide an unreachable parent on Windows.
+            continue
         return
 
 
