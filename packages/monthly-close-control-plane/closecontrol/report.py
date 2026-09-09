@@ -325,8 +325,23 @@ def _enclosing_repository(directory: Path) -> Path | None:
     return None
 
 
-def require_output_outside_repository(output_dir: Path) -> None:
-    """Refuse an output directory that sits inside a version-control checkout.
+def require_output_outside_repository(output_dir: Path) -> Path:
+    """Refuse an output directory inside a version-control checkout, and return it.
+
+    The return value is the resolved directory, and it is what the caller must
+    then write to. Checking one path and writing to another leaves the two free
+    to disagree: ``resolve`` follows every symlink in the path once, while each
+    later ``mkdir`` and ``write_text`` follows them again, so a component
+    re-pointed in between would send the pack somewhere this function never
+    approved. Returning the approved path is what binds the decision to the
+    destination.
+
+    That narrows the window rather than closing it. A component replaced
+    between the directory being created and a file being written still
+    redirects that write, and only opening each path component without
+    following symlinks would prevent it, which is not available on every
+    platform this component supports. The guard is aimed at the careless
+    output path, not at a local actor racing the process for it.
 
     A review pack names a client's accounts, balances and unexplained
     movements. Inside a checkout it is one ``git add -A`` away from a history
@@ -342,7 +357,7 @@ def require_output_outside_repository(output_dir: Path) -> None:
     resolved = output_dir.resolve()
     repository = _enclosing_repository(resolved)
     if repository is None:
-        return
+        return resolved
     raise ControlInputError(
         f"{output_dir} is inside the version-control checkout at {repository}. "
         "A review pack names a client's accounts and balances, so it belongs in "
@@ -373,13 +388,17 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
     An output directory inside a version-control checkout is refused before any
     directory is created, so a rejected run leaves nothing behind. The check
     lives here rather than only in the CLI so that a library caller cannot
-    reach the writer without passing it.
+    reach the writer without passing it, and the returned paths are rooted at
+    the resolved directory it approved rather than at the argument, so the
+    location that was checked is the location written to.
 
     exceptions.csv carries a UTF-8 byte-order mark to match the canonical input
     files, so a spreadsheet that falls back to the Windows ANSI code page does
     not turn a tenant or account name into mojibake.
     """
-    require_output_outside_repository(output_dir)
+    # Every destination below is built from the directory the guard approved,
+    # not from the argument, so the path that was checked is the path written.
+    output_dir = require_output_outside_repository(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "close-review-pack.json"
     summary_path = output_dir / "close-summary.md"

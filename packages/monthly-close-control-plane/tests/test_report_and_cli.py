@@ -1104,3 +1104,39 @@ def test_view_still_opens_a_pack_that_is_inside_a_checkout(
 
     assert main(["view", "--pack-dir", str(moved)]) == 0
     assert "Close Review Sheet" in capsys.readouterr().out
+
+
+def test_a_symlink_swapped_after_the_check_cannot_redirect_the_pack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard's decision has to bind to the destination it approved.
+
+    `resolve` follows a path's symlinks once; every later `mkdir` and
+    `write_text` follows them again. Checking one path and writing through
+    another leaves a component free to be re-pointed in between, which would
+    put a client's accounts and balances somewhere the guard refused. The
+    writer takes the resolved directory back from the guard and builds every
+    destination from it, so the swap below changes nothing.
+    """
+    safe = tmp_path / "close-data"
+    safe.mkdir()
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    link = tmp_path / "link"
+    link.symlink_to(safe, target_is_directory=True)
+
+    real_mkdir = Path.mkdir
+
+    def swap_then_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        # Fires between the guard and the first write: the link the caller
+        # named now points at a checkout.
+        link.unlink()
+        link.symlink_to(checkout, target_is_directory=True)
+        return real_mkdir(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "mkdir", swap_then_mkdir)
+    outputs = write_review_pack(_single_exception_pack(), link / "july")
+
+    assert (safe / "july" / "close-review-pack.json").exists()
+    assert not list(checkout.glob("july"))
+    for path in outputs.values():
+        assert safe in path.parents

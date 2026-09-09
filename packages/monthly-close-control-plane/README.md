@@ -143,10 +143,15 @@ Running the quick-demo command above against the fabricated fixtures in `example
 
 ```text
 close-control: REVIEW; 8 exception(s)
-  json: outputs/demo/close-review-pack.json
-  summary: outputs/demo/close-summary.md
-  exceptions: outputs/demo/exceptions.csv
+  json: /home/you/close-control-demo/close-review-pack.json
+  summary: /home/you/close-control-demo/close-summary.md
+  exceptions: /home/you/close-control-demo/exceptions.csv
 ```
+
+The paths are absolute and have their symlinks resolved, whatever `--output`
+was written as. The writer builds every destination from the directory the
+checkout guard approved rather than from the argument, so what is printed is
+where the pack actually went.
 
 `close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to four of the eight rows):
 
