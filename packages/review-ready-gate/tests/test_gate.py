@@ -255,7 +255,7 @@ def test_a_refused_output_leaves_nothing_behind(tmp_path: Path) -> None:
 def test_a_worktree_pointer_counts_as_a_checkout(tmp_path: Path, git_is_a_file: bool) -> None:
     checkout = _fake_checkout(tmp_path / "firm-repo", git_is_a_file=git_is_a_file)
 
-    with pytest.raises(GateInputError, match=str(checkout)):
+    with pytest.raises(GateInputError, match=re.escape(str(checkout))):
         write_review_pack(_ready_pack(), checkout / "packs")
 
 
