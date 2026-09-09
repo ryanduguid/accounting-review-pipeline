@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .engine import CloseReviewPack
 from .errors import ControlInputError
-from .models import ExceptionItem
+from .models import ClientQuery, ExceptionItem
 
 
 def _money(value) -> str:
@@ -68,6 +68,21 @@ def _exception_dict(item: ExceptionItem) -> dict[str, str]:
     }
 
 
+def _query_dict(query: ClientQuery) -> dict[str, str]:
+    return {
+        "query_id": query.query_id,
+        "control": query.control,
+        "tenant": query.tenant,
+        "account_id": query.account_id,
+        "account_code": query.account_code,
+        "account_name": query.account_name,
+        "review_group": query.review_group,
+        "difference": _money(query.difference),
+        "question": query.question,
+        "evidence_requested": query.evidence_requested,
+    }
+
+
 def _csv_safe(value: str) -> str:
     """Keep source-controlled text inert when an exceptions CSV is opened in a spreadsheet.
 
@@ -95,6 +110,7 @@ def _as_json(pack: CloseReviewPack) -> dict:
         }
     return {
         "acknowledgement": acknowledgement,
+        "client_queries": [_query_dict(query) for query in pack.client_queries],
         "current_report_dates": list(pack.current_report_dates),
         "exceptions": [_exception_dict(item) for item in pack.exceptions],
         "overall_status": pack.status,
@@ -176,6 +192,21 @@ def _md_note_lines(comment: str) -> list[str]:
     return lines
 
 
+# Stated wherever the queries are rendered. A query list that reads as finished
+# correspondence is the one way this file could do harm: it names the client's
+# accounts and invites somebody to send it as it stands.
+_CLIENT_QUERY_PREAMBLE = [
+    "These are draft questions for the preparer, derived from the exceptions above. "
+    "Nothing has been sent to anyone. Read and edit them before they reach a client, "
+    "and record the answers in the firm's own tracker: this pack is evidence of one "
+    "run, and editing it breaks the check that its files still agree.",
+    "",
+    "Answering every query does not close the period, and a query nobody raised is "
+    "not evidence that nothing needs asking.",
+    "",
+]
+
+
 def _as_markdown(pack: CloseReviewPack) -> str:
     blocked = sum(item.status == "BLOCKED" for item in pack.exceptions)
     review = sum(item.status == "REVIEW" for item in pack.exceptions)
@@ -193,6 +224,7 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         f"- Material variance thresholds: ${_money(pack.absolute_threshold)} and {_percentage(pack.percentage_threshold)}",
         f"- Reconciliation tolerance: ${_money(pack.reconciliation_tolerance)}",
         f"- Exceptions: {len(pack.exceptions)} total; {blocked} blocked; {review} requiring review.",
+        f"- Client queries drafted: {len(pack.client_queries)}.",
         "",
         "## Source evidence",
         "",
@@ -213,6 +245,25 @@ def _as_markdown(pack: CloseReviewPack) -> str:
             reason = _md_cell(item.reason)
             tenant = _md_cell(item.tenant or _ABSENT)
             lines.append(f"| {item.status} | {item.control} | {tenant} | {account} | {_money(item.difference) or _ABSENT} | {reason} |")
+    lines += ["", "## Client queries", ""]
+    lines += _CLIENT_QUERY_PREAMBLE
+    if not pack.client_queries:
+        lines.append(
+            "No exception raised a question for the client. Every exception in this "
+            "pack, if any, is one the firm settles from its own records."
+        )
+    else:
+        lines += [
+            "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |",
+            "| --- | --- | --- | --- | ---: | --- | --- |",
+        ]
+        for query in pack.client_queries:
+            account = " / ".join(piece for piece in (query.account_code, query.account_name) if piece) or query.account_id or _ABSENT
+            lines.append(
+                f"| {query.query_id} | {query.control} | {_md_cell(query.tenant or _ABSENT)}"
+                f" | {_md_cell(account)} | {_money(query.difference) or _ABSENT}"
+                f" | {_md_cell(query.question)} | {_md_cell(query.evidence_requested)} |"
+            )
     lines += ["", "## Human acknowledgement", ""]
     if pack.acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
@@ -235,6 +286,34 @@ def _as_csv(pack: CloseReviewPack) -> str:
     for item in pack.exceptions:
         row = _exception_dict(item)
         for field in ("tenant", "account_id", "account_code", "account_name", "review_group"):
+            row[field] = _csv_safe(row[field])
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
+_QUERY_CSV_GUARDED_FIELDS = (
+    "tenant",
+    "account_id",
+    "account_code",
+    "account_name",
+    "review_group",
+    "question",
+    "evidence_requested",
+)
+"""Query columns carrying source-controlled or template text, guarded like the
+exception columns. The question and evidence are project text rather than
+client text, but they are guarded too: a template that ever begins with a dash
+would otherwise become a formula the day somebody rewords one."""
+
+
+def _as_query_csv(pack: CloseReviewPack) -> str:
+    fields = list(_query_dict(ClientQuery("", "", "", "", "", "", "", None, "", "")).keys())
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fields)
+    writer.writeheader()
+    for query in pack.client_queries:
+        row = _query_dict(query)
+        for field in _QUERY_CSV_GUARDED_FIELDS:
             row[field] = _csv_safe(row[field])
         writer.writerow(row)
     return buffer.getvalue()
@@ -304,8 +383,13 @@ def _swap_into_place(staged_path: Path, destination: Path) -> Path | None:
     return parked
 
 
-PACK_FILE_NAMES = ("close-review-pack.json", "close-summary.md", "exceptions.csv")
-"""The three names write_review_pack claims in its output directory."""
+PACK_FILE_NAMES = (
+    "close-review-pack.json",
+    "close-summary.md",
+    "exceptions.csv",
+    "client-queries.csv",
+)
+"""The four names write_review_pack claims in its output directory."""
 
 
 CHECKOUT_MARKERS = (".git", ".hg", ".svn", ".bzr")
@@ -503,15 +587,15 @@ def require_output_outside_repository(output_dir: Path) -> Path:
 
 
 def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path]:
-    """Write the three pack files so a failed run cannot leave two runs mixed together.
+    """Write the four pack files so a failed run cannot leave two runs mixed together.
 
     Each file is rendered in full, staged beside its destination under a unique
     name, and only then moved into place. If a move fails - a locked
     exceptions.csv is the usual cause - the files this run had already moved are
     rolled back to the content they replaced, so the directory holds the whole
-    previous pack rather than one file from this run beside two from the last
-    one; all three carry the same SHA-256 provenance framing and a reviewer
-    cannot tell them apart. Apart from the three destinations themselves, no
+    previous pack rather than one file from this run beside three from the last
+    one; all four carry the same SHA-256 provenance framing and a reviewer
+    cannot tell them apart. Apart from the four destinations themselves, no
     file is ever deleted; a caller that points a source path at one of
     PACK_FILE_NAMES inside output_dir destroys that source, which is why the
     CLI refuses that combination before the run starts.
@@ -528,7 +612,7 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
     the resolved directory it approved rather than at the argument, so the
     location that was checked is the location written to.
 
-    exceptions.csv carries a UTF-8 byte-order mark to match the canonical input
+    Both CSV files carry a UTF-8 byte-order mark to match the canonical input
     files, so a spreadsheet that falls back to the Windows ANSI code page does
     not turn a tenant or account name into mojibake.
     """
@@ -539,10 +623,12 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
     json_path = output_dir / "close-review-pack.json"
     summary_path = output_dir / "close-summary.md"
     exceptions_path = output_dir / "exceptions.csv"
+    queries_path = output_dir / "client-queries.csv"
     rendered = (
         (json_path, json.dumps(_as_json(pack), indent=2, sort_keys=True) + "\n", "utf-8", None),
         (summary_path, _as_markdown(pack), "utf-8", None),
         (exceptions_path, _as_csv(pack), "utf-8-sig", ""),
+        (queries_path, _as_query_csv(pack), "utf-8-sig", ""),
     )
 
     staged: list[tuple[Path, Path]] = []
@@ -579,4 +665,9 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
     for _, parked in replaced:
         if parked is not None:
             _remove_quietly(parked)
-    return {"json": json_path, "summary": summary_path, "exceptions": exceptions_path}
+    return {
+        "json": json_path,
+        "summary": summary_path,
+        "exceptions": exceptions_path,
+        "client_queries": queries_path,
+    }

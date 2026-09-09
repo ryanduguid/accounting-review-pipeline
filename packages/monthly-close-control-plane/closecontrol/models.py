@@ -56,6 +56,28 @@ class ExceptionItem:
 
 
 @dataclass(frozen=True)
+class ClientQuery:
+    """One question for the client, derived from an exception.
+
+    The register carries no answer or status column. A pack is evidence of one
+    run and `close-control view` proves its files still agree, so an answer
+    written back into the file would invalidate the pack that raised the
+    question. Answers belong in the firm's own tracker.
+    """
+
+    query_id: str
+    control: str
+    tenant: str
+    account_id: str
+    account_code: str
+    account_name: str
+    review_group: str
+    difference: Decimal | None
+    question: str
+    evidence_requested: str
+
+
+@dataclass(frozen=True)
 class ReviewerAcknowledgement:
     reviewer_initials: str
     reviewed_on: date

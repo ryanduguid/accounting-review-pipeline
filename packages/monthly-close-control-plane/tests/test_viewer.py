@@ -12,6 +12,8 @@ from __future__ import annotations
 import ast
 import csv
 import json
+import re
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -24,6 +26,9 @@ from closecontrol.errors import ControlInputError
 from closecontrol.models import ExceptionItem, ReviewerAcknowledgement
 from closecontrol.report import write_review_pack
 from closecontrol.viewer import PACK_FILE_NAMES, render_review_sheet, verify_pack
+
+
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 
 def _pack(status: str = "REVIEW", *, with_acknowledgement: bool = False) -> CloseReviewPack:
@@ -93,8 +98,24 @@ def test_valid_pack_renders_sheet(pack_dir: Path) -> None:
     assert "does not approve a close" in sheet
     for name in PACK_FILE_NAMES:
         assert f"{name}: sha256 " in sheet
-    assert len(digests) == 3
+    assert len(digests) == 4
     assert "No reviewer acknowledgement was supplied" in sheet
+
+
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_summary_line_endings_preserve_verification_and_digest(
+    pack_dir: Path, newline: bytes
+) -> None:
+    import hashlib
+
+    summary = pack_dir / "close-summary.md"
+    content = summary.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
+    summary.write_bytes(content)
+
+    sheet, digests = render_review_sheet(pack_dir)
+
+    assert "Overall status: REVIEW" in sheet
+    assert digests["close-summary.md"] == hashlib.sha256(content).hexdigest()
 
 
 def test_acknowledged_pack_renders_the_acknowledgement(tmp_path: Path) -> None:
@@ -107,10 +128,644 @@ def test_acknowledged_pack_renders_the_acknowledgement(tmp_path: Path) -> None:
     assert "does not change the control status or approve a close" in sheet
 
 
+def test_sheet_shows_the_client_queries_and_says_nothing_was_sent(pack_dir: Path) -> None:
+    """The fixture's one exception is a subledger difference, which is a
+    question for the client. The sheet has to carry the boundary with it: a
+    list of a client's accounts and unexplained movements reads as ready-to-send
+    correspondence unless it says otherwise."""
+    sheet, _ = render_review_sheet(pack_dir)
+    assert "Client queries" in sheet
+    assert "Client queries drafted: 1." in sheet
+    assert "Nothing has been sent." in sheet
+    assert "ask: What makes up the difference between the general ledger balance" in sheet
+    assert "evidence: The reconciling items" in sheet
+
+
+def test_a_pack_whose_query_boundary_was_removed_fails_closed(pack_dir: Path) -> None:
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("Nothing has been sent to anyone.", ""), encoding="utf-8"
+    )
+    with pytest.raises(ControlInputError, match="client-query boundary statement"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_dropped_query_row_fails_closed(pack_dir: Path) -> None:
+    path = pack_dir / "client-queries.csv"
+    lines = path.read_text(encoding="utf-8-sig").splitlines(keepends=True)
+    del lines[1]
+    path.write_text("".join(lines), encoding="utf-8-sig")
+    with pytest.raises(ControlInputError, match="client query counts disagree"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_reworded_question_fails_closed(pack_dir: Path) -> None:
+    """A question edited in the CSV alone is the failure that matters here: it
+    is the cell somebody would change before sending, and the pack would then
+    no longer be evidence of what the run actually asked."""
+    path = pack_dir / "client-queries.csv"
+    text = path.read_text(encoding="utf-8-sig")
+    path.write_text(
+        text.replace("What makes up the difference", "Please explain the difference"),
+        encoding="utf-8-sig",
+    )
+    with pytest.raises(ControlInputError, match="question disagrees on client query 1"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_duplicated_query_id_fails_closed(pack_dir: Path) -> None:
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["client_queries"].append(dict(document["client_queries"][0]))
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with pytest.raises(ControlInputError, match="more than once"):
+        render_review_sheet(pack_dir)
+
+
+def test_an_added_query_field_fails_closed(pack_dir: Path) -> None:
+    """The CSV projects exactly the ten fields the writer emits, so a member
+    outside them is one no other file witnesses: it passes every cross-file
+    comparison and leaves an edited pack verifying. `approved_by` is the shape
+    that matters here, since the pack exists to show nothing approved
+    anything."""
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["client_queries"][0]["approved_by"] = "the preparer"
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="does not hold the fields the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_removed_query_field_fails_closed(pack_dir: Path) -> None:
+    """The same check in the other direction: a dropped field is not silently
+    read as an empty one."""
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["client_queries"][0]["evidence_requested"]
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="does not hold the fields the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_non_string_query_field_fails_closed(pack_dir: Path) -> None:
+    """Every projected field is text in the CSV, so a number or a null in the
+    JSON is a malformed register, not a value to render."""
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["client_queries"][0]["difference"] = 15000
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="difference must be a string"):
+        render_review_sheet(pack_dir)
+
+
+def _legacy_pack(pack_dir: Path) -> Path:
+    """Turn a pack into one written before the client-query register existed."""
+    (pack_dir / "client-queries.csv").unlink()
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["client_queries"]
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary = pack_dir / "close-summary.md"
+    lines = summary.read_text(encoding="utf-8").splitlines()
+    start = lines.index("## Client queries")
+    end = lines.index("## Human acknowledgement")
+    # The heading is not the only trace: the scope block states a count, and a
+    # summary that still carries either is a stripped current pack, not an old
+    # one. The viewer refuses that, so the fixture has to remove both. Each is
+    # matched as a whole line, because an account name may quote either and
+    # this fixture has to strip the writer's own lines, not a client's data.
+    kept = [
+        line
+        for line in lines[:start] + lines[end:]
+        if not line.startswith("- Client queries drafted: ")
+    ]
+    summary.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    return pack_dir
+
+
+def test_a_pack_written_before_the_register_still_opens(pack_dir: Path) -> None:
+    """An archived three-file pack is evidence a firm may still have to show.
+    Requiring a file that did not exist when it was written would make the
+    older evidence unreadable by the command that exists to display it."""
+    sheet, digests = render_review_sheet(_legacy_pack(pack_dir))
+    assert "Overall status: REVIEW" in sheet
+    assert "written before the client-query register existed" in sheet
+    assert "Client queries drafted" not in sheet
+    # An archived pack carries no register, so nothing in it establishes that
+    # no exception raised a question. Its exceptions may well include ones this
+    # version would turn into questions, and the fixture's subledger difference
+    # is exactly that, so the empty-register sentence would be a false claim.
+    assert "No exception raised a question for the client." not in sheet
+    assert set(digests) == {"close-review-pack.json", "close-summary.md", "exceptions.csv"}
+
+
+def test_half_a_register_fails_closed(pack_dir: Path) -> None:
+    """A pack holding the file without the member, or the member without the
+    file, was assembled from two runs or edited. It is evidence of neither
+    format, so it is refused rather than read as the older one."""
+    file_only = _legacy_pack(pack_dir)
+    (file_only / "client-queries.csv").write_text(
+        "query_id,control,tenant,account_id,account_code,account_name,"
+        "review_group,difference,question,evidence_requested\n",
+        encoding="utf-8-sig",
+    )
+    with pytest.raises(ControlInputError, match="half present"):
+        render_review_sheet(file_only)
+
+
+def test_member_without_file_fails_closed(pack_dir: Path) -> None:
+    (pack_dir / "client-queries.csv").unlink()
+    with pytest.raises(ControlInputError, match="half present"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_surplus_cell_cannot_ride_along_unverified(pack_dir: Path) -> None:
+    """csv.DictReader would file a surplus cell under a key nothing compares,
+    so an appended formula would verify clean and be live the moment the CSV
+    was opened. The writer's guard covers named fields only."""
+    for name in ("client-queries.csv", "exceptions.csv"):
+        path = pack_dir / name
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+        lines[1] += ",=cmd|'/c calc'!A0"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+        with pytest.raises(ControlInputError, match="cells, but the header declares"):
+            render_review_sheet(pack_dir)
+        # Put it back so the next file is tested against an otherwise sound pack.
+        path.write_text(
+            "\n".join(line.replace(",=cmd|'/c calc'!A0", "") for line in lines) + "\n",
+            encoding="utf-8-sig",
+        )
+
+
+def test_a_question_edited_only_in_the_summary_fails_closed(pack_dir: Path) -> None:
+    """The summary is what a preparer reads and copies a question out of, so a
+    question changed there alone is the divergence that matters most: the pack
+    would verify while the file somebody works from asks something else."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "What makes up the difference between the general ledger balance",
+            "Please explain the difference between the general ledger balance",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="client-query row 1 disagrees"):
+        render_review_sheet(pack_dir)
+
+
+def _two_query_pack(tmp_path: Path) -> Path:
+    """A pack with two queries whose questions differ.
+
+    Two period_variance rows would carry the same question, and exchanging
+    identical cells proves nothing, so the two exceptions are of different
+    controls.
+    """
+    base = _pack()
+    variance = ExceptionItem(
+        control="period_variance",
+        status="REVIEW",
+        tenant="Varrock Ventures Pty Ltd",
+        account_id="200",
+        account_code="200",
+        account_name="Trade Debtors",
+        current_value=Decimal("42000.00"),
+        prior_value=Decimal("12000.00"),
+        difference=Decimal("30000.00"),
+        threshold=Decimal("1000"),
+        percentage_change=None,
+        reason="YTD net balance moved beyond both configured materiality thresholds.",
+        reviewer_action="Investigate the driver and retain supporting evidence.",
+    )
+    output = tmp_path / "two-query-pack"
+    write_review_pack(
+        replace(base, exceptions=base.exceptions + (variance,)), output
+    )
+    return output
+
+
+def test_swapped_questions_in_the_summary_fail_closed(tmp_path: Path) -> None:
+    """Two rows with their questions exchanged hold the same identifiers, the
+    same count and the same set of question strings. Only a row-level
+    comparison catches it, and a preparer reading the swapped table asks the
+    right question about the wrong account."""
+    pack = _two_query_pack(tmp_path)
+    summary = pack / "close-summary.md"
+    lines = summary.read_text(encoding="utf-8").splitlines()
+    rows = [index for index, line in enumerate(lines) if line.startswith("| Q-")]
+    assert len(rows) == 2, "fixture must raise exactly two queries"
+    first, second = rows[0], rows[1]
+    cells_first = lines[first].split(" | ")
+    cells_second = lines[second].split(" | ")
+    assert cells_first[5] != cells_second[5], "the two questions must differ"
+    cells_first[5], cells_second[5] = cells_second[5], cells_first[5]
+    lines[first] = " | ".join(cells_first)
+    lines[second] = " | ".join(cells_second)
+    summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="client-query row 1 disagrees"):
+        render_review_sheet(pack)
+
+
+def test_an_identifier_with_a_suffix_fails_closed(pack_dir: Path) -> None:
+    """A prefix match would accept Q-abc123ZZ as Q-abc123: the extracted value
+    equals the expected one and the altered document verifies."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(re.sub(r"(\| Q-[0-9a-f]+) \|", r"\1ZZ |", text, count=1), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="client-query row 1 disagrees"):
+        render_review_sheet(pack_dir)
+
+
+def test_query_shaped_text_elsewhere_does_not_break_a_sound_pack(tmp_path: Path) -> None:
+    """An exception reason or a reviewer comment may legitimately mention a
+    ticket like Q-deadbeef. Counting it as a query would refuse a pack that is
+    entirely consistent, so only the table's own rows are read."""
+    output = tmp_path / "commented-pack"
+    base = _pack(with_acknowledgement=True)
+    assert base.acknowledgement is not None
+    write_review_pack(
+        replace(
+            base,
+            acknowledgement=replace(
+                base.acknowledgement,
+                comment="Discussed with the controller, see ticket Q-deadbeef.",
+            ),
+        ),
+        output,
+    )
+
+    # Written by the real writer, so every artefact carries the comment and the
+    # pack is internally consistent. Only the table's own rows are read, so the
+    # ticket in the comment neither counts as a query nor hides one.
+    sheet, _ = render_review_sheet(output)
+    assert "Q-deadbeef" in sheet
+    assert "Client queries drafted: 1." in sheet
+
+
+def test_a_stripped_current_pack_is_not_read_as_an_older_one(pack_dir: Path) -> None:
+    """Removing the query CSV and the JSON member from a current pack leaves a
+    summary that still lists the register. Reading that as legacy would show a
+    sheet saying the register never existed beside a file that displays it."""
+    (pack_dir / "client-queries.csv").unlink()
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["client_queries"]
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(pack_dir)
+
+
+def _pack_naming(phrase: str) -> CloseReviewPack:
+    """A pack whose account name is the given phrase.
+
+    loader._text rejects control and formatting characters only, so '#' reaches
+    an account name, a tenant or a reviewer comment intact, and report._md_cell
+    escapes pipes, backslashes, asterisks and backticks but not hashes.
+    """
+    base = _pack()
+    return replace(
+        base,
+        exceptions=tuple(
+            replace(item, account_name=phrase) for item in base.exceptions
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "## Client queries",
+        "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |",
+        "- Client queries drafted: 9.",
+    ],
+)
+def test_summary_landmarks_quoted_in_an_account_name_do_not_refuse_a_sound_pack(
+    tmp_path: Path, phrase: str
+) -> None:
+    """A heading, a table header and a count line are recognised as whole lines.
+
+    Under a substring search an account named after one of them would count as
+    a second heading, a second table or a second count, and the viewer would
+    refuse a pack whose four artefacts the writer produced together and which
+    agree with each other in every particular.
+    """
+    output = tmp_path / "quoting-pack"
+    write_review_pack(_pack_naming(phrase), output)
+
+    sheet, _ = render_review_sheet(output)
+    assert "Overall status: REVIEW" in sheet
+    assert "Client queries drafted: 1." in sheet
+
+
+def test_a_landmark_quoted_in_an_old_pack_does_not_refuse_it(tmp_path: Path) -> None:
+    """The same holds for the check that a legacy pack shows no register: an
+    archived pack that happens to name an account '## Client queries' is still
+    archived evidence, and refusing it takes that evidence out of a firm's
+    hands."""
+    output = tmp_path / "quoting-legacy-pack"
+    write_review_pack(_pack_naming("## Client queries"), output)
+
+    sheet, _ = render_review_sheet(_legacy_pack(output))
+    assert "written before the client-query register existed" in sheet
+
+
+def test_a_table_forged_into_an_empty_register_fails_closed(tmp_path: Path) -> None:
+    """A pack that asked nothing renders a sentence saying so. Replacing it with
+    a table puts questions in front of a preparer that no exception raised."""
+    output = tmp_path / "no-query-pack"
+    write_review_pack(replace(_pack(), exceptions=()), output)
+    summary = output / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "No exception raised a question for the client.",
+            "| Query | Control | Tenant | Account | Difference | Question |"
+            " Evidence requested |\n| --- | --- | --- | --- | ---: | --- | --- |\n"
+            "| Q-0 | period_variance | Varrock | 100 | 1.00 | Why? | Anything. |",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="holds no queries"):
+        render_review_sheet(output)
+
+
+def test_an_altered_table_header_fails_closed(pack_dir: Path) -> None:
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("| Query | Control |", "| Query | Client contact |"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="table header is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_removed_count_line_fails_closed(pack_dir: Path) -> None:
+    """The count is what a reviewer reads before the table, so a summary that
+    drops it no longer states how many questions the run raised."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(text.replace("- Client queries drafted: 1.\n", ""), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="exactly one client-query count line"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_replaced_table_delimiter_fails_closed(pack_dir: Path) -> None:
+    """Without its delimiter row the register stops rendering as a table, so a
+    preparer reads the questions as one run-on line. The row carries no query
+    data, which is exactly why a check that looks only at the data would pass
+    it."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "| --- | --- | --- | --- | ---: | --- | --- |",
+            "| Query | Control | Tenant | Account | Difference | Question | Evidence |",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="table delimiter is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_line_inserted_into_the_section_fails_closed(pack_dir: Path) -> None:
+    """An inserted line disturbs no landmark: the identifiers, the count and
+    every rendered row still agree with the JSON. It puts a sentence in front of
+    a preparer that no run produced, which is the whole reason the section is
+    rebuilt rather than searched."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "## Client queries\n\n",
+            "## Client queries\n\nThe partner has approved sending these as they stand.\n\n",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="preamble is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_line_appended_after_the_table_fails_closed(pack_dir: Path) -> None:
+    """Appended prose sits where a row would, so it is counted as one and the
+    register no longer holds the number of questions the run asked."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "\n\n## Human acknowledgement",
+            "\nEvery query above was answered by telephone.\n\n## Human acknowledgement",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="renders 2 table rows"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_section_running_into_the_next_one_fails_closed(pack_dir: Path) -> None:
+    """The blank line that separates the register from the next heading is part
+    of what the writer wrote. Without it the table runs into the acknowledgement
+    block, and a check that stopped at the last row it recognised would not
+    notice."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("|\n\n## Human acknowledgement", "|\n## Human acknowledgement"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="does not end where the writer ends it"):
+        render_review_sheet(pack_dir)
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        # Every one of these renders as a heading reading "Client queries",
+        # confirmed against a CommonMark renderer: a closing run of hashes is
+        # optional, its length is free, and up to three leading spaces are
+        # allowed. A level-1 heading reads as the register to somebody
+        # scrolling past it just as a level-2 one does.
+        "## Client queries ##",
+        "## Client queries ######",
+        "   ## Client queries ##",
+        "# Client queries",
+    ],
+)
+def test_a_second_section_in_any_heading_spelling_fails_closed(
+    pack_dir: Path, heading: str
+) -> None:
+    """A forged register is spelled by whoever forges it.
+
+    Matching the writer's exact line and nothing else leaves every equivalent
+    spelling as a region no check reads, sitting under a heading that renders
+    identically to the real one. A preparer scrolling to "Client queries" and
+    copying a question out of the second table would be reading something the
+    run never produced.
+    """
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + f"\n{heading}\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_an_indented_heading_fails_closed(pack_dir: Path) -> None:
+    """Four leading spaces make the line an indented code block, not a heading,
+    so the register stops rendering as a section at all. Stripping the line
+    before comparing it accepted that, which is the opposite of what the rest
+    of this check does: everything else here is compared as the writer wrote
+    it."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("\n## Client queries\n", "\n    ## Client queries\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_heading_with_a_closing_run_fails_closed(pack_dir: Path) -> None:
+    """Still one heading, and still renders as one, but it is not the line the
+    writer emits, so the summary has been edited since the run."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("\n## Client queries\n", "\n## Client queries ##\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_an_old_pack_showing_a_register_in_any_spelling_fails_closed(
+    pack_dir: Path,
+) -> None:
+    """The legacy path answers the same question, so it needs the same
+    breadth: what must be absent from an older pack is any region a reader
+    would take for the register."""
+    legacy = _legacy_pack(pack_dir)
+    summary = legacy / "close-summary.md"
+    summary.write_text(
+        summary.read_text(encoding="utf-8") + "\n## Client queries ##\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(legacy)
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        # A Setext underline makes a level-2 heading with no hashes at all, and
+        # a character reference spells the same rendered text a regular
+        # expression over the source line cannot see. Both were confirmed
+        # against a CommonMark renderer.
+        "Client queries\n--------------",
+        "## Client &#113;ueries",
+        "## *Client* queries",
+        # Not the register's heading at all, and still refused: the writer did
+        # not write it, which is the whole question being asked.
+        "## Client queries#",
+        "## Sundry notes",
+    ],
+)
+def test_any_heading_the_writer_did_not_write_fails_closed(
+    pack_dir: Path, heading: str
+) -> None:
+    """The question is not which spelling of "Client queries" this is.
+
+    Enumerating spellings is a list that is never finished, and each round of
+    it leaves whatever was not enumerated as a region no check reads. Asking
+    instead whether the document's headings are the writer's needs no knowledge
+    of what a heading says, so a Setext rule, a character reference and inline
+    emphasis are all caught by the same rule that catches a plain one.
+    """
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + f"\n{heading}\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        # An unclosed fence turns everything after it into a code block, so the
+        # headings and both tables stop rendering while their source lines
+        # still read exactly as they should. Confirmed against a CommonMark
+        # renderer, as is the HTML case below.
+        "```\n",
+        "~~~\n",
+    ],
+)
+def test_a_fence_that_stops_the_summary_rendering_fails_closed(
+    pack_dir: Path, edit: str
+) -> None:
+    """Reading the headings out of the source presumes the source is what
+    renders. One character at the top of the file breaks that presumption for
+    the whole document, and every check that reads a region of this summary
+    depends on it."""
+    summary = pack_dir / "close-summary.md"
+    summary.write_text(edit + summary.read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="opens a code fence or an HTML block"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_raw_html_heading_fails_closed(pack_dir: Path) -> None:
+    """The same presumption broken the other way: '<h2>Client queries</h2>'
+    renders as a heading that no scan of Markdown syntax will see, so a forged
+    register could sit under it. Refusing the construct is what closes the
+    class; enumerating the tags would be the same losing argument again."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + "\n<h2>Client queries</h2>\n\n| Q-0 | forged |\n", encoding="utf-8"
+    )
+    with pytest.raises(ControlInputError, match="opens a code fence or an HTML block"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_forged_second_query_section_fails_closed(pack_dir: Path) -> None:
+    """A second section would be a region nothing checks, under a heading a
+    reviewer reads as the register."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + "\n## Client queries\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_query_dropped_only_from_the_summary_fails_closed(pack_dir: Path) -> None:
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("- Client queries drafted: 1.", "- Client queries drafted: 0."),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="client-query counts disagree"):
+        render_review_sheet(pack_dir)
+
+
 def test_verify_returns_artefact_digests_matching_files(pack_dir: Path) -> None:
     import hashlib
 
-    _, _, _, artefact_digests = verify_pack(pack_dir)
+    *_, artefact_digests = verify_pack(pack_dir)
     assert set(artefact_digests) == set(PACK_FILE_NAMES)
     for name, digest in artefact_digests.items():
         assert len(digest) == 64
@@ -280,7 +935,10 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         + f"- `current_trial_balance`: `{'a' * 64}`\n"
     )
     summary.write_text(forged_section, encoding="utf-8")
-    with pytest.raises(ControlInputError, match="two different digests"):
+    # A whole forged section is now refused for being a heading the writer
+    # never wrote, before its digest lines are read. The in-section tampering
+    # above still fails on the digests themselves.
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
     contradicting_tail = (
@@ -289,7 +947,9 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         + f"- `current_trial_balance`: `{'c' * 64}`\n"
     )
     summary.write_text(contradicting_tail, encoding="utf-8")
-    with pytest.raises(ControlInputError, match="two different digests"):
+    # As above: a second Source evidence section is a heading the writer never
+    # wrote, so it is refused before its digest lines are read.
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
 
