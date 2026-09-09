@@ -183,6 +183,19 @@ def test_save_then_load_round_trips(tmp_path) -> None:
 
 
 @git_required
+@pytest.mark.parametrize("tracked", [False, True])
+def test_save_refuses_a_committable_destination(tmp_path, tracked) -> None:
+    path = repo_map(tmp_path, SAMPLE, gitignore="*.tmp\n")
+    if tracked:
+        git(path.parent, "add", "entities.json")
+    before = path.read_bytes()
+    with pytest.raises(EvattError, match="must never be committed"):
+        entities.save(path, entities.load(path)[:1])
+    assert path.read_bytes() == before
+    assert not path.with_name(path.name + ".tmp").exists()
+
+
+@git_required
 def test_save_leaves_the_previous_map_intact_when_the_write_fails(tmp_path, monkeypatch) -> None:
     """An interrupted save must not truncate the only copy of the key."""
     path = repo_map(tmp_path, SAMPLE)

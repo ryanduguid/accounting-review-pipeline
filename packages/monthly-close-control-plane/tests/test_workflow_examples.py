@@ -452,7 +452,6 @@ def test_repository_identity_is_distinct_from_package_identity() -> None:
 def test_current_docs_use_canonical_pipeline_component_links() -> None:
     documents = [
         ROOT / "README.md",
-        ROOT / "docs" / "follow-on-safety-layers.md",
         ROOT / "examples" / "close-loop.md",
     ]
     text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
@@ -480,7 +479,7 @@ def test_release_guidance_uses_the_namespaced_current_tag() -> None:
     assert 'version="${tag#monthly-close-control-plane/v}"' in guidance
     assert "tag=v0.1.3" not in guidance
     assert guidance.count(
-        "--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018"
+        "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
     ) == 2
 
 

@@ -7,9 +7,8 @@ across a document, and so ``restore`` can put real names back into its answer.
 Ordinals are stored rather than derived at read time. Deriving them from
 iteration order would make output depend on dictionary ordering, and the
 determinism property in the test suite exists to catch exactly that. They are
-also monotonic: an ordinal freed by a deletion is never handed out again,
-because a placeholder already written into a redacted document must not come
-to mean somebody else.
+monotonic while the map is append-only. Keep retired entries: deleting the
+highest ordinal lets the next assignment reuse it.
 """
 from __future__ import annotations
 
@@ -177,6 +176,7 @@ def save(path: Path, entities: Sequence[Entity]) -> None:
     that reaches the disk ahead of the data it points at produces exactly the
     truncated map the temporary exists to prevent.
     """
+    require_gitignored(path)
     temporary = path.with_name(path.name + ".tmp")
     require_gitignored(temporary)
     document = {
@@ -202,8 +202,8 @@ def assign(entities: Sequence[Entity], value: str, kind: str, added: str) -> Ent
 
     Returning the existing entity keeps one real value on one placeholder; a
     second placeholder for the same value would fail ``load``'s duplicate check.
-    Ordinals are max+1 within the kind, never the lowest free number, so a
-    deletion cannot hand a retired placeholder to somebody new.
+    Ordinals are max+1 within the kind. Keep retired entries in the map so a
+    later assignment cannot reuse a deleted entry's placeholder.
 
     The match is on ``_fold``, not on an exact string. An operator working a
     triage file types what the document showed them, and the document may have

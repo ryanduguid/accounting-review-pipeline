@@ -22,9 +22,8 @@ Putting two redacted documents in front of one model is putting two meanings of
 on disk. It is not transmitted, and no network client exists in this package.
 
 **This does not take the data outside the Privacy Act.** Pseudonymised data
-remains personal information in the hands of anyone holding the key. The claim
-this package supports is narrower: the recipient cannot re-identify, because
-the recipient never receives the map.
+remains personal information in the hands of anyone holding the key. The
+recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
 a client through surviving detail alone, such as an industry, a location, a
@@ -80,8 +79,9 @@ mistyped option is never mistaken for a document that needs triage.
 
 The residual sweep stops the run when it finds a candidate neither earlier pass
 recognised. Nothing is written, and a triage file lists each candidate with its
-line and context. Classify each one into the map or confirm it is noise, then
-run again.
+line and context. Add each candidate to the map, then run again. To clear a
+false positive, map that phrase as an `entity`; it will also be replaced and
+restored. There is no separate noise allowlist or command-line bypass.
 
 This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
@@ -123,6 +123,11 @@ an extra placeholder costs a triage decision while a miss leaks.
   It cannot catch a detection bug: what the detector could not see going in it
   cannot see coming out. A clean `verify` says the output agrees with the
   detector, not that the output is clean.
+- **Unmapped names can escape the residual sweep.** It looks for two or
+  three capitalised Latin-1 tokens and filters statutory vocabulary. Lower-case
+  names, single names, other scripts and names containing statutory words can
+  pass unnoticed. Dates and addresses also have limited format coverage.
+  Seed known values in the map and inspect the whole output before sending.
 - **evatt does not detect an ATO client reference.** No single fixed published
   format exists for one, so a pattern would be guesswork producing either noise
   or false confidence, and a detector nobody can calibrate is worse than a
@@ -145,9 +150,9 @@ an extra placeholder costs a triage decision while a miss leaks.
   triage paths it derives from `--out`. The map is the only copy of the key,
   and one mistyped path used to overwrite it with redacted markdown.
 - **CRLF input is normalised to LF for detection.** The CLI writes the file
-  back with the ending its source carried, so a file with one ending
-  throughout round trips byte for byte. A file that mixes endings is
-  normalised to its dominant one.
+  back with the ending its source carried. Restoration uses the map's spelling
+  and whitespace, so case variants and wrapped names do not round trip byte
+  for byte. A file that mixes endings is normalised to its dominant one.
 
 Contextual re-identification is not addressed by any of this. Read the
 document before you send it.
@@ -156,8 +161,9 @@ document before you send it.
 
 One JSON file, `schema_version` and `entries`, each entry holding a real value,
 its placeholder, a kind (`client`, `person`, `staff` or `entity`) and the date
-it was added. Placeholders are stable and are never reissued, so a placeholder
-already written into a redacted document cannot come to mean somebody else.
+it was added. Keep the map append-only: never delete an entry or change what
+its placeholder means. Assignment uses the highest remaining ordinal plus one;
+deleting the highest entry would allow its placeholder to be reissued.
 `evatt/samples/entities.sample.json` is a fabricated map of the right shape.
 
 ## Documents

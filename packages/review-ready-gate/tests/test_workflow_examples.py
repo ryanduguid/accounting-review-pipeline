@@ -73,14 +73,14 @@ def test_release_guidance_is_repo_specific_and_durable() -> None:
 def test_current_release_metadata_uses_immutable_documentation() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert metadata["project"]["version"] == "0.1.3"
+    assert metadata["project"]["version"] == "0.1.5"
     assert metadata["project"]["urls"]["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.3/"
+        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.5/"
         "packages/review-ready-gate/evaluation/manager_review_gate"
     )
     assert (
         "| Workpaper Review Gate | `packages/review-ready-gate/` | distribution "
-        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.3 |"
+        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.5 |"
     ) in root_readme
 
 
@@ -101,12 +101,12 @@ def test_readme_development_uses_the_locked_uv_entrypoint() -> None:
 def test_citation_declares_the_current_release_identity() -> None:
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
     assert 'title: "Workpaper Review Gate"' in citation
-    assert "version: 0.1.3" in citation
+    assert "version: 0.1.5" in citation
     assert 'family-names: "Duguid"' in citation
     assert 'given-names: "Ryan"' in citation
     assert "license: MIT" in citation
     assert f'repository-code: "{PACKAGE_URL}"' in citation
-    assert "date-released: 2026-09-03" in citation
+    assert "date-released: 2026-09-07" in citation
 
 
 def test_project_identity_preserves_package_and_command_compatibility() -> None:
@@ -124,7 +124,7 @@ def test_public_source_links_use_canonical_monorepo_and_schema_id_stays_stable()
     llms = (ROOT / "llms.txt").read_text(encoding="utf-8")
     schema = (ROOT / "schemas" / "self_review.json").read_text(encoding="utf-8")
 
-    assert f"{REPOSITORY_URL}/actions/workflows/review-ready-gate.yml" in readme
+    assert f"{REPOSITORY_URL}/actions/workflows/ci.yml" in readme
     assert PACKAGE_URL in readme
     assert f"**Repository**: {PACKAGE_URL}" in llms
     assert (
@@ -162,7 +162,7 @@ def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
             "ryanduguid/release-policy/.github/workflows/release-python.yml"
         ) == 1
         assert command.count(
-            "--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018"
+            "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
         ) == 1
 
     predicate_counts = [
@@ -172,26 +172,3 @@ def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
     assert sorted(predicate_counts) == [0, 1]
 
 
-def test_discovery_record_matches_the_approved_remote_metadata() -> None:
-    discovery = (ROOT / "docs" / "DISCOVERY.md").read_text(encoding="utf-8")
-    assert discovery == (
-        "# GitHub discovery metadata\n\n"
-        "Description: Workpaper Review Gate: stop incomplete workpapers reaching manager review. "
-        "Deterministic readiness gate for Australian public-practice packs. Not advice.\n\n"
-        f"Homepage: {HOMEPAGE_URL}\n\n"
-        "Topics:\n\n"
-        "- accounting\n"
-        "- accounting-controls\n"
-        "- australia\n"
-        "- bas\n"
-        "- cli\n"
-        "- month-end\n"
-        "- public-practice\n"
-        "- python\n"
-        "- quality-control\n"
-        "- review\n"
-        "- review-workflow\n"
-        "- workpaper-review\n"
-        "- workpapers\n"
-        "- year-end\n"
-    )

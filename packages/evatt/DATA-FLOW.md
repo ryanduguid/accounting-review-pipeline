@@ -19,7 +19,7 @@ recipient receives; it does not change the character of the data.
 
 ```mermaid
 flowchart LR
-    Raw["raw .md"] --> Structured["pass 1: structured identifiers, check digit confirmed"]
+    Raw["raw .md"] --> Structured["pass 1: structured identifiers, labelled or check digit confirmed"]
     Structured --> Entities["pass 2: known entities from the local map"]
     Entities --> Residual{"pass 3: residual sweep"}
     Residual -->|unknown found| Halt["triage .md, nothing written, exit 2"]

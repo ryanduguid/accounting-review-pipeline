@@ -19,13 +19,20 @@ These repository-wide rules apply everywhere:
   payment, lodges a return or locks a period.
 - Preserve every distribution name, import package, command, exit code, file schema,
   version, licence and component lockfile. Production code must not import a sibling
-  component, and no review package may import the exporter.
-- Do not add a root package manager, shared runtime package, unified version, generated
-  dependency graph or monorepo framework. Movement and behaviour changes are separate pull
-  requests.
-- Only workflows under the root `.github/workflows/` are active. Nested `.github/`
-  directories inside components are inert historical records imported with their sources;
-  do not run them and do not treat their pins as current.
+  component, and no review package may import the exporter. One shared `.venv` makes every
+  Python component importable from every other; that is a convenience for tests, not a
+  licence to depend on a sibling.
+- The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
+  The root is a virtual uv workspace: it declares no package, no version and no runtime
+  dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
+  unified version, generated dependency graph or monorepo framework. Movement and behaviour
+  changes are separate pull requests.
+- `uv run --locked` inside a component directory validates the root `uv.lock`, not the
+  component's. After changing any component's dependencies, run `uv lock` at the root and
+  commit the result alongside the component's own `uv.lock`, which stays the authority for
+  building and releasing that component alone.
+- Only workflows under the root `.github/workflows/` are active. Components carry no
+  `.github/` directory; the subtree merge commits recorded in IMPORTS.md hold the imported ones.
 - Release only through the root callers `.github/workflows/release-<component>.yml` on a
   namespaced annotated tag `<component>/vMAJOR.MINOR.PATCH`, never through a nested
   `release.yml`. One tag publishes exactly one component.
@@ -42,19 +49,55 @@ reviewed Release Policy identity gate requires a nested release's directory leaf
 `packages/review-ready-gate` and `packages/elizabeth-anne-alexander`. The exporter, the Excel
 adapter and the Power BI application keep the plan's paths. `IMPORTS.md` records the decision.
 
+## Setup
+
+From a fresh clone, `uv sync` at the root installs the five Python components as editable
+workspace members and the shared test toolchain into one `.venv`, and `just test` runs
+every component's suite plus the joined conformance test. That is the whole setup. `just`
+comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
+`test` and `check` (the last three together). Each recipe loops over the per-component
+commands in the table below, which remain the authority. `just check` is not a CI
+equivalent: it does not verify component lockfiles, install the exporter's hash-locked
+requirements, build or smoke-test a wheel, run actionlint, the Power BI CLI
+or CodeQL, or check the contract digests.
+
 ## Command routing
 
 Run every check from the owning component directory with its documented commands:
 
 | Component | Directory | Checks |
 |---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | `python -m pip install --require-hashes -r requirements.lock`; `python -m unittest discover -s tests -v`; Ruff and mypy over `xero_client.py export_tb.py auth.py token_store.py` |
-| Workpaper Review Gate | `packages/review-ready-gate/` | `uv lock --check`; `uv run --locked --extra dev pytest -q`; Ruff over `reviewready tests`; mypy over `reviewready`; `python -m build`; clean-wheel `review-ready gate` runs |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | the shared component gates below (mypy and coverage scoped to `xero_client.py export_tb.py auth.py token_store.py` by its `pyproject.toml`), plus `python -m pip install --require-hashes -r requirements.lock` and `python -m unittest discover -s tests -v` from that hash-locked environment |
+| Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates and Windows clean-wheel smoke |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `elizabeth_anne_alexander tests`; mypy over `elizabeth_anne_alexander`; `python -m build`; clean-wheel `evaluate` and `validate-review` demo |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | pinned actionlint and ShellCheck; `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
 | evatt | `packages/evatt/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `evatt tests`; mypy over `evatt`; `python -m build`; clean-wheel redact, verify, restore and halt demo |
 
+The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
+`ci.yml` calls for the exporter, Workpaper Review Gate and Xero Ledger Review Gate with the
+component directory. Run them from the component directory:
+
+```bash
+uv lock --check
+uv run --locked --extra dev ruff check .
+uv run --locked --extra dev mypy
+uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+uv run --locked --extra dev --python 3.12 python -m build
+```
+
+The tests run on Python 3.10, 3.12 and 3.13, and the build gate installs the wheel into a
+clean virtual environment and imports the component's package from it. Each call filters
+itself to its component directory, the shared contract and the root files, so a change to
+one component runs that component alone. Monthly Close Controls keeps its own `test`,
+`package` and `lint` jobs in `ci.yml` because they are the anchor required checks on
+`main`. The Excel adapter and the Power BI application have no `pyproject.toml`, so their
+root workflows run ruff and mypy from `ruff.toml` and `mypy.ini` and their unittest suites
+on the same Python matrix.
+
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all three review packages,
-the Excel adapter, Power BI structural validation and the joined conformance test.
+the Excel adapter, Power BI structural validation and the joined conformance test. A change
+to the root `pyproject.toml`, `uv.lock` or `justfile` triggers every component workflow,
+because the root lock is what `uv run --locked` validates inside every component directory.

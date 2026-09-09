@@ -166,7 +166,9 @@ def _collision(args: argparse.Namespace) -> str | None:
     for name, path in written:
         resolved = path.resolve()
         for candidate, description in protected:
-            if resolved == candidate:
+            if resolved == candidate or (
+                resolved.exists() and candidate.exists() and resolved.samefile(candidate)
+            ):
                 return f"{name} is {description}, {resolved}; refusing to overwrite it"
     return None
 
@@ -204,8 +206,8 @@ def _write_triage(path: Path, halt: Halt) -> None:
         "",
         f"{halt}.",
         "",
-        "Classify every candidate below into the entity map, or confirm it is",
-        "noise, then run redact again.",
+        "Add every candidate to the entity map, then run redact again.",
+        "Map a false positive as an entity; it will also be replaced and restored.",
         "",
     ]
     for unknown in sorted(halt.unknowns, key=lambda u: (u.line, u.kind, u.value)):
@@ -227,11 +229,10 @@ def main(argv: list[str] | None = None) -> int:
             raise
         return 1
 
-    collision = _collision(args)
-    if collision is not None:
-        return _fail(collision)
-
     try:
+        collision = _collision(args)
+        if collision is not None:
+            return _fail(collision)
         entities_module.require_gitignored(args.entity_map)
         entity_map = entities_module.load(args.entity_map)
         text, ending = _read(args.source)
@@ -263,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
             # and an answer of "yes, you could commit this" is a refusal rather
             # than a file.
             try:
+                triage.parent.mkdir(parents=True, exist_ok=True)
                 entities_module.require_gitignored(triage, "the triage file")
                 _write_triage(triage, halt)
             except (EvattError, OSError) as error:

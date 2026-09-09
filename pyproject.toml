@@ -1,0 +1,35 @@
+# Workspace root. This file is a development entrypoint only: it is not a
+# distributable package, carries no name or version, and ships nothing to PyPI.
+# Each component under packages/ keeps its own pyproject.toml, uv.lock, version,
+# release notes and licence, and is still built and released on its own from its
+# own directory through its root release caller.
+#
+# The root exists so a fresh clone can install every Python component and the
+# shared test toolchain in one command and run the whole suite from the top. See
+# the justfile for the setup, lint, typecheck and test entrypoints.
+#
+# Only the five Python distributions are members. The Excel adapter and the
+# Power BI application have no pyproject.toml and no Python dependencies; the
+# justfile runs their standard-library unittest suites from the same .venv.
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+# The shared toolchain for running every component's checks from one
+# environment: the union of what the component `dev` extras and test suites
+# import. Components keep their own `dev` extras, which remain the authority
+# for their own CI. The five check tools carry the same exact pin in every
+# member's `dev` extra and here, so one workspace resolution holds them all and
+# `just lint`, `just typecheck` and `just test` run the versions CI runs. Move
+# a pin in all five places together.
+[dependency-groups]
+dev = [
+  "ruff==0.16.6",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "coverage==7.16.0",
+  "build>=1.2",
+  "PyYAML>=6.0.3,<7",
+  'tomli>=2.0; python_version < "3.11"',
+]

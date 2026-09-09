@@ -22,6 +22,9 @@ on:
       - "IMPORTS.md"
       - "README.md"
       - "SECURITY.md"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
   pull_request:
     paths:
       - "contracts/xero-trial-balance-v1/**"
@@ -38,6 +41,9 @@ on:
       - "IMPORTS.md"
       - "README.md"
       - "SECURITY.md"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
 
 permissions:
   contents: read

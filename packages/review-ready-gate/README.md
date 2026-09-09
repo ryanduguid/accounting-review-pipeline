@@ -14,7 +14,7 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/review-ready-gate.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/review-ready-gate.yml)
+[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
 
@@ -65,7 +65,7 @@ It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, 
 
 Preparation got cheaper. Review did not. Software, offshore capacity, and AI all increase the number of files that hit the review desk. The scarce resource in a firm is the manager who can actually sign.
 
-Most of what that manager then does is not judgement. It is reconstructing a pack that was never review-ready: missing tie-outs, open questions in email, a trial balance that does not balance, the same finding as last period. This gate keeps that work off the review desk.
+Missing tie-outs, open questions in email, an unbalanced trial balance and unresolved findings from last period send a pack back for more preparation. This gate checks for those gaps before the pack reaches the manager.
 
 ## Quick demo
 

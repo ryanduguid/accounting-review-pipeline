@@ -30,7 +30,7 @@ It holds seven independently versioned components joined only by local files and
 | Component | Directory | Identity | Version |
 |---|---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.7 |
-| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.3 |
+| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.5 |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, commands `close-control` and `openaccountants-au` | 0.1.3 |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.2 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.5 |
@@ -53,9 +53,10 @@ can release one component per namespaced tag. That is why Monthly Close Controls
 
 Each component keeps its own package identity, version, lockfile, licence, commands,
 documentation and release cadence. There is no root runtime package, shared library or
-unified version. Run checks from the owning component directory with its documented
-commands. Only the root `.github/workflows/` are active; nested `.github/` directories are
-inert records of the imported sources. `IMPORTS.md` records source identities, tree digests
+unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a development
+entrypoint only: `uv sync` then `just test` sets up and verifies a fresh clone from the top
+(see `CONTRIBUTING.md`). Run a component's own checks from its directory with its documented
+commands. Only the root `.github/workflows/` are active. `IMPORTS.md` records source identities, tree digests
 and import records. Historical releases and tags remain owned by the source repositories.
 
 ## Review-pack contract
@@ -135,7 +136,7 @@ component READMEs.
 
 Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`787db4590e725cfd37104c8a9dd9e75f7fd4c018`: `monthly-close-control-plane/v*`,
+`fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*`,
 `accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its

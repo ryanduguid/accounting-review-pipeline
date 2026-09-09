@@ -14,7 +14,9 @@ that from this command rather than infer it from a plausible-looking sheet.
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import re
 from decimal import Decimal, InvalidOperation
@@ -310,9 +312,6 @@ def _verify_cross_file_agreement(
 
 
 def _read_csv_rows(payload: bytes) -> list[dict[str, str]]:
-    import csv
-    import io
-
     try:
         text = payload.decode("utf-8-sig")
     except UnicodeDecodeError as exc:

@@ -1,5 +1,6 @@
 model Model
 	culture: en-AU
+	discourageImplicitMeasures
 	defaultPowerBIDataSourceVersion: powerBI_V3
 	sourceQueryCulture: en-AU
 	dataAccessOptions
@@ -21,11 +22,12 @@ ref table Fact_Budget
 ref table Fact_GeneralLedger
 ref table Fact_PayrollSuper
 
-ref expression Dim_Account
+ref expression SampleFolder
+ref expression Source_Dim_Account
 ref expression Dim_Date_AU
-ref expression Dim_Entity
-ref expression Fact_ATOBenchmark
-ref expression Fact_Budget
-ref expression Fact_GeneralLedger
-ref expression Fact_PayrollSuper
+ref expression Source_Dim_Entity
+ref expression Source_Fact_ATOBenchmark
+ref expression Source_Fact_Budget
+ref expression Source_Fact_GeneralLedger
+ref expression Source_Fact_PayrollSuper
 ref expression Fx_ValidateABN

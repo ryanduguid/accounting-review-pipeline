@@ -84,6 +84,29 @@ def test_redact_halts_writes_triage_and_no_output(tmp_path) -> None:
     assert "line 3" in triage
 
 
+def test_first_halt_creates_the_output_directory(tmp_path) -> None:
+    root = workspace(tmp_path)
+    shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
+    out = root / "build" / "nested" / "out.md"
+    assert main(["redact", "--in", str(root / "in.md"),
+                 "--map", str(root / "entities.json"), "--out", str(out)]) == 2
+    assert not out.exists()
+    assert "John Smith" in cli._triage_path(out).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("command", ["redact", "restore"])
+@pytest.mark.parametrize("protected", ["in.md", "entities.json"])
+def test_output_hardlink_cannot_overwrite_a_protected_file(tmp_path, command, protected) -> None:
+    root = workspace(tmp_path)
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    out = root / "out.md"
+    out.hardlink_to(root / protected)
+    before = (root / protected).read_bytes()
+    assert main([command, "--in", str(root / "in.md"),
+                 "--map", str(root / "entities.json"), "--out", str(out)]) == 1
+    assert (root / protected).read_bytes() == before
+
+
 def test_the_halt_sentence_is_written_once(tmp_path, capsys) -> None:
     """The triage file and the console must not carry two copies of one sentence.
 

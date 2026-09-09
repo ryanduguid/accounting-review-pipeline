@@ -1,5 +1,10 @@
 name: Accounting Excel Toolkit
 
+# The Excel adapter has no pyproject.toml and no Python dependencies, so it is
+# not a uv workspace member and cannot run through ci-package.yml. It gets the
+# same lint tools at the same pins (configured in its ruff.toml and mypy.ini)
+# and its standard-library suite runs on the same Python matrix.
+
 on:
   push:
     branches: [main]
@@ -12,6 +17,9 @@ on:
       - "IMPORTS.md"
       - "README.md"
       - "SECURITY.md"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
   pull_request:
     paths:
       - "adapters/accounting-excel-toolkit/**"
@@ -22,6 +30,9 @@ on:
       - "IMPORTS.md"
       - "README.md"
       - "SECURITY.md"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
 
 permissions:
   contents: read
@@ -31,19 +42,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  lint:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: adapters/accounting-excel-toolkit
-    env:
-      ACTIONLINT_VERSION: "1.7.12"
-      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-      SHELLCHECK_VERSION: "0.11.0"
-      # digest computed from the v0.11.0 release tarball at pin time
-      # (koalaman does not publish a checksums file)
-      SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,29 +59,35 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Download and verify shellcheck
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -sSLO "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
-          echo "${SHELLCHECK_SHA256}  shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | sha256sum --check
-          tar -xJf "shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+      - name: Install pinned lint tools
+        run: python -m pip install --disable-pip-version-check "ruff==0.16.6" "mypy==2.3.1"
 
-      - name: Download and verify actionlint
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -sSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          echo "${ACTIONLINT_SHA256}  actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | sha256sum --check
-          tar -xzf "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" actionlint
+      - name: Ruff
+        run: python -m ruff check .
 
-      - name: Actionlint the component workflows
-        run: ./actionlint .github/workflows/*.yml
+      - name: Mypy
+        run: python -m mypy
 
-      - name: Shellcheck the component scripts
-        if: hashFiles('adapters/accounting-excel-toolkit/scripts/*.sh') != ''
-        run: |
-          "./shellcheck-v${SHELLCHECK_VERSION}/shellcheck" -x scripts/*.sh
+  verify:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: adapters/accounting-excel-toolkit
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
 
       - name: Run source-safety regression checks
         run: python -B -m unittest discover -s tests -v

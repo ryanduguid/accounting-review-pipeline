@@ -2,7 +2,7 @@
 
 Use [Accounting Review Pipeline releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) for new component releases. Retain the [standalone release history](https://github.com/ryanduguid/accounting-excel-toolkit/releases), including immutable rollback release `v0.1.5`.
 
-The active caller is the root [release-accounting-excel-toolkit.yml](../../.github/workflows/release-accounting-excel-toolkit.yml). It selects only `adapters/accounting-excel-toolkit/` through a namespaced `accounting-excel-toolkit/v*` tag. The nested `.github/` files are inert source history. This documentation migration does not bump the version or request an archive release.
+The active caller is the root [release-accounting-excel-toolkit.yml](../../.github/workflows/release-accounting-excel-toolkit.yml). It selects only `adapters/accounting-excel-toolkit/` through a namespaced `accounting-excel-toolkit/v*` tag.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not create or upload release assets by hand.
 
@@ -58,7 +58,7 @@ for file in *; do
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
+    --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
 done
 for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-toolkit-${tag##*/v}.tar.gz"; do
   gh attestation verify "$archive" -R "$repo" \
@@ -66,7 +66,7 @@ for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-tool
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018
+    --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
 done
 ```
 

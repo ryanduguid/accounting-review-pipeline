@@ -13,7 +13,8 @@ MONOREPO = REPO.parents[1]
 REPOSITORY_URL = "https://github.com/ryanduguid/accounting-review-pipeline"
 PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/elizabeth-anne-alexander"
 RELEASE_WORKFLOW = MONOREPO / ".github" / "workflows" / "release-elizabeth-anne-alexander.yml"
-CI_WORKFLOW = MONOREPO / ".github" / "workflows" / "elizabeth-anne-alexander.yml"
+# ci.yml calls this reusable workflow for the package; it is where pytest runs.
+CI_WORKFLOW = MONOREPO / ".github" / "workflows" / "ci-package.yml"
 
 
 def test_active_package_identity_is_consistent() -> None:
@@ -51,7 +52,7 @@ def test_release_workflow_keeps_the_pinned_reusable_policy_caller() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/"
-        "release-python.yml@787db4590e725cfd37104c8a9dd9e75f7fd4c018"
+        "release-python.yml@fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
     ) in workflow
     assert "version-parser: python-literal" in workflow
     assert "version-file: elizabeth_anne_alexander/version.py" in workflow
@@ -129,7 +130,7 @@ def test_current_metadata_and_public_links_use_the_monorepo() -> None:
     assert urls["Repository"] == f"{REPOSITORY_URL}.git"
     assert urls["Issues"] == f"{REPOSITORY_URL}/issues"
     assert PACKAGE_URL in readme
-    assert f"{REPOSITORY_URL}/actions/workflows/elizabeth-anne-alexander.yml" in readme
+    assert f"{REPOSITORY_URL}/actions/workflows/ci.yml" in readme
     assert f"**Repository**: {PACKAGE_URL}" in llms
     assert "The package contains no OAuth" in llms
     assert f"{REPOSITORY_URL}/security/advisories/new" in security
@@ -146,7 +147,7 @@ def test_current_release_guidance_binds_the_exact_namespaced_identity() -> None:
     assert "tag=elizabeth-anne-alexander/v0.2.2" in guidance
     assert 'version="${tag#elizabeth-anne-alexander/v}"' in guidance
     assert "repo=ryanduguid/accounting-review-pipeline" in guidance
-    assert guidance.count("--signer-digest 787db4590e725cfd37104c8a9dd9e75f7fd4c018") == 2
+    assert guidance.count("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91") == 2
     assert "Workflow filename | `release-elizabeth-anne-alexander.yml`" in guidance
     assert "Environment name | `pypi-elizabeth-anne-alexander`" in guidance
     assert "tag=v0.2.2" not in guidance

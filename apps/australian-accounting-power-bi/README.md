@@ -10,13 +10,11 @@ Maintain this application at [Accounting Review Pipeline](https://github.com/rya
 
 ## What This Project Solves
 
-Most Power BI repositories on GitHub commit monolithic binary `.pbix` blobs with zero diffability, no automated test suites, and generic mock sales data.
-
-This project treats Power BI as source-controlled software engineering:
+This project keeps Power BI models and reports in text files so changes can be reviewed in git:
 1. **Plain-Text Version Control**: Built entirely on the Power BI Project format (`.pbip`), using Tabular Model Definition Language (`.tmdl`) and Enhanced Report Format (`.pbir`). Measures, visuals, relationships, and M expressions produce reviewable git diffs.
 2. **Multi-Entity Consolidation & Financial Statements**: P&L matrix reporting and balance sheet measures across a multi-entity corporate group (operating company, trading subsidiary, logistics entity, property trust) with automated intercompany transaction eliminations.
-3. **ATO Small Business Benchmarks Diagnostic**: Ingests ANZSIC industry classifications and scores business cost structures against the Australian Taxation Office's published small business benchmark ranges for the relevant industry, averaged across that industry's published turnover bands.
-4. **Live Payday Super Compliance Monitoring**: Tracks Single Touch Payroll Phase 2 events (Code Q - Qualifying Earnings, Code L - Super Liability at 12.0%) against the statutory 7-business-day fund receipt rule commencing 1 July 2026, including automated SG charge and notional earnings exposure calculators.
+3. **ATO Small Business Benchmarks Diagnostic**: Selects one sample benchmark band using an entity's industry and full financial-year turnover. Gross profit is compared with that band's inclusive lower and upper bounds. The result describes a sample variance and does not estimate audit risk.
+4. **Payday Super Review with Sample Data**: Checks fabricated Single Touch Payroll Phase 2 events (Code Q - Qualifying Earnings, Code L - Super Liability at 12.0%) against the statutory 7-business-day fund receipt rule commencing 1 July 2026, including automated SG charge and notional earnings exposure calculators.
 
 ---
 
@@ -49,7 +47,7 @@ See [docs/data-model.md](docs/data-model.md) for table grain, schema description
 
 1. **Executive Financial Performance**: Consolidated P&L matrix with revenue, gross margin, EBITDA, and net asset cards, and a cumulative working capital trend.
 2. **Multi-Entity Consolidation & Eliminations**: Entity-level matrix views with automated intra-group elimination columns and intercompany loan audit trails.
-3. **ATO Benchmark & Practice Diagnostic**: ANZSIC industry quantile comparisons, gross margin and cost ratio variance analyses, and an automated benchmark variance rating.
+3. **ATO Benchmark & Practice Diagnostic**: Industry and turnover-band comparisons, gross margin and cost ratios, and a gross profit comparison against the sample range.
 4. **Payday Super & STP Compliance Monitor**: 7-business-day timeline tracker, clearing-house transit risk analyser, and estimated Super Guarantee Charge (SGC) exposure calculators.
 
 ---
@@ -69,9 +67,6 @@ See [docs/dax-patterns.md](docs/dax-patterns.md) for full DAX formulas and prece
 
 ```text
 australian-accounting-power-bi/
-├── .github/
-│   └── workflows/
-│       └── verify.yml                   # Inert source history; active CI is at the monorepo root
 ├── docs/
 │   ├── data-model.md                    # Star schema diagram & dimension specifications
 │   ├── dax-patterns.md                  # Calculation groups & financial statement DAX
@@ -90,7 +85,7 @@ australian-accounting-power-bi/
 │       ├── database.tmdl                # Database compatibility and language
 │       ├── model.tmdl                   # Canonical table and expression references
 │       ├── relationships.tmdl           # Unidirectional star schema relationships
-│       ├── expressions.tmdl             # Eight named Power Query (M) expressions
+│       ├── expressions.tmdl             # SampleFolder parameter and eight M queries/functions
 │       └── tables/                      # Dimensions, facts, and calculation groups
 ├── samples/                             # Deterministic fabricated CSV fixtures
 │   ├── sample-entities.csv              # Varrock Ventures, Draynor Produce, Falador Freight
@@ -98,7 +93,7 @@ australian-accounting-power-bi/
 │   ├── sample-general-ledger.csv        # Balanced double-entry GL journals (FY25-FY27)
 │   ├── sample-budgets.csv               # Monthly departmental budgets
 │   ├── sample-payroll-super.csv         # Payday Super events with on-time & late receipts
-│   └── sample-ato-benchmarks.csv        # Real ATO benchmark percentiles by ANZSIC category
+│   └── sample-ato-benchmarks.csv        # Sample industry and turnover-band reference values
 ├── tests/
 │   ├── test_fixtures_balance.py         # Asserts debits == credits per journal and period
 │   ├── test_tmdl_integrity.py           # Asserts TMDL syntax, explicit measure formats, descriptions
@@ -142,17 +137,22 @@ The test suite verifies:
 - All four report pages and 21 visuals are materialised, and every visual field binding resolves to a declared model column or measure.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
-The root [Power BI workflow](../../.github/workflows/australian-accounting-power-bi.yml) runs both the Python suite and the pinned Microsoft PBIR validator. The nested `.github/` directory contains imported source history, not an active workflow.
+The root [Power BI workflow](../../.github/workflows/australian-accounting-power-bi.yml) runs both the Python suite and the pinned Microsoft PBIR validator.
 
 ---
 
 ## Opening the Project
 
-1. Open `australian-accounting-power-bi.pbip` in **Power BI Desktop** (Developer Mode enabled).
-2. Or inspect and edit the semantic model directly in **Tabular Editor 3 / 2** by opening the `australian-accounting-power-bi.SemanticModel` directory.
-3. Or view and edit TMDL files in **Visual Studio Code** using the Microsoft TMDL extension.
+1. Open `australian-accounting-power-bi.pbip` in **Power BI Desktop**.
+2. Under **Home > Transform data > Edit parameters**, set `SampleFolder` to the absolute path of this checkout's `samples` folder, then apply the change. The committed parameter is blank because the folder location differs on each PC.
+3. Select **Home > Refresh > Schema and data**, then inspect all four report pages.
+4. On the benchmark page, use the Filters pane to select one `Dim_Date[FinancialYear]`. Select one entity for the comparison card; each entity row in the matrix supplies its own entity selection. Multiple entities or years have no combined benchmark.
 
-Automated checks validate the source structure and bindings, but they do not refresh the model or render the report in Power BI Desktop. Complete that native smoke test before treating a release as production-ready.
+The turnover band uses revenue for the complete selected financial year, even when a month or account is filtered. Ratios describe the currently displayed period, so use the complete year for an annual comparison. The sample bands use a strict lower turnover bound and an inclusive upper bound: $1,000,000 belongs to the $500k-$1m band; $1,000,001 belongs to $1m-$5m. Gross profit bounds include both endpoints. Missing or overlapping bands leave the comparison unavailable. See [benchmark verification](docs/benchmark-verification.md).
+
+You can also inspect the semantic model directory in **Tabular Editor 3 / 2**, or edit TMDL files in **Visual Studio Code** with the Microsoft TMDL extension.
+
+The [8 September 2026 native verification](docs/native-verification.md) records a fabricated-data refresh and inspection of all four pages in Desktop 2.157.1354.0. Automated checks cover structure and bindings; repeat the native check after model or report changes. This smoke test does not establish production readiness or validate every accounting calculation.
 
 ---
 

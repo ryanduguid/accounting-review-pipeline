@@ -38,8 +38,43 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
 
-  # Repository-level GitHub Actions updates for the active root workflows.
-  # Nested component .github/ directories are inert historical records.
+  # The root uv workspace lock. `uv run --locked` inside every component
+  # directory validates this lock, not the component's, so it must move too.
+  # The workspace declares no package of its own: its only direct requirements
+  # are the shared `dev` group in the root pyproject.toml.
+  #
+  # Dependabot's uv support reads the member pyproject.toml files as well as
+  # the root one, so this entry sees the same direct requirements the four
+  # component entries see. Every one of them is a loose floor that Dependabot
+  # leaves alone (a component bump changes only that component's uv.lock), and
+  # the five exact pins are ignored below, so a root run moves only the root
+  # uv.lock. The component entries keep moving the component locks; the two
+  # are different files, not duplicates. One group keeps the root refresh to a
+  # single pull request a week.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      root-workspace-lock:
+        patterns:
+          - "*"
+    ignore:
+      # The five check tools carry the same exact pin in every member's `dev`
+      # extra and in the root `dev` group, and one workspace resolution must
+      # hold them all. A bump at the root alone cannot resolve against the
+      # members' pins, so those five move together in a reviewed change.
+      - dependency-name: "ruff"
+      - dependency-name: "mypy"
+      - dependency-name: "pytest"
+      - dependency-name: "pytest-cov"
+      - dependency-name: "coverage"
+
+  # Repository-level GitHub Actions updates for the root workflows, the only
+  # ones in the repository.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

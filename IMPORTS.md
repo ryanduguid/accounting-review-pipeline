@@ -12,7 +12,7 @@ authoritative in the source repositories; none is copied here.
 The migration plan's path table named `packages/monthly-close-controls`,
 `packages/workpaper-review-gate` and `packages/xero-ledger-review-gate`. The reviewed
 Release Policy identity gate (`gate_component_identity` in `scripts/gates.sh` at
-`787db4590e725cfd37104c8a9dd9e75f7fd4c018`) requires a nested release's directory leaf,
+`fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`) requires a nested release's directory leaf,
 `tag-prefix` and normalised distribution name (or `artifact-stem`) to be identical. Those
 plan paths cannot satisfy it for the distributions `monthly-close-control-plane`,
 `review-ready-gate` and `elizabeth-anne-alexander`, so the coordinator directed
@@ -63,7 +63,7 @@ The fetched heads above are the selected import snapshots.
 | Xero Trial Balance Export | distribution `xero-trial-balance-export` 0.1.4; modules `export_tb`, `xero_client`, `auth`, `token_store`; commands `export-tb`, `xero-tb-auth`; version in `pyproject.toml` | hash-locked `requirements.lock` for CI; `uv.lock` with a `dev` extra for the release policy's pytest and build; Ruff, mypy | MIT; attested wheel and source distribution published to PyPI through `pypi-xero-trial-balance-export`; the only component allowed OAuth, Xero API, HTTP, tokens or Xero credentials |
 | Workpaper Review Gate | distribution `review-ready-gate` 0.1.2; import `reviewready`; command `review-ready`; version in `pyproject.toml` | `uv.lock`; pytest, build, wheel smoke, `uv lock --check`, Ruff, mypy | MIT; PyPI; local, offline and fabricated-only |
 | Xero Ledger Review Gate | distribution `elizabeth-anne-alexander` 0.2.1; import `elizabeth_anne_alexander`; command `elizabeth-anne-alexander`; version in `elizabeth_anne_alexander/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, build, wheel demo, Ruff, mypy | MIT; PyPI; zero-network synthetic demonstration |
-| Accounting Excel Toolkit | source adapter 0.1.5; version in `VERSION`; Power Query and VBA source, no Python distribution | pinned actionlint and ShellCheck; unittest; optional native Excel acceptance | MIT; GitHub source-archive release with `artifact-stem: accounting-excel-toolkit`; local-file adapters only |
+| Accounting Excel Toolkit | source adapter 0.1.5; version in `VERSION`; Power Query and VBA source, no Python distribution | pinned ShellCheck; unittest; optional native Excel acceptance | MIT; GitHub source-archive release with `artifact-stem: accounting-excel-toolkit`; local-file adapters only |
 | Australian Accounting Power BI | PBIP/PBIR reference application; no release and no version | unittest plus Microsoft Power BI report-authoring CLI 0.1.4 | MIT; no publisher; fabricated local model and report |
 | evatt | distribution `evatt` 0.1.0; import `evatt`; command `evatt`; version in `evatt/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, Ruff, mypy, build, clean-wheel redact, verify, restore and halt demo | MIT; **no publisher**: `release-evatt.yml` carries no `pypi` job while the disclosure policy this package enforces is unsigned; local, offline, zero-network; standard library only |
 
@@ -72,8 +72,9 @@ fetched from a source repository, so there is no source commit, git tree or
 tracked-tree SHA-256 to record for it, and no `git subtree add --squash` record
 in the import list below.
 
-Imported workflows remain nested under their component paths and are not active root
-workflows. They were read before any component command ran. Review jobs receive no Xero,
+Imported workflows stayed nested under their component paths, never as active root
+workflows, until their removal on 7 September 2026; the subtree merge commits above still
+hold them. They were read before any component command ran. Review jobs receive no Xero,
 OAuth or publishing credentials. Production packages do not import sibling packages.
 
 ## Anchor remote preflight (read-only)
@@ -90,10 +91,14 @@ setting was changed.
 
 The reviewed Release Policy extension (`source-directory`, `tag-prefix`, `version-parser`,
 `version-file` and `upload-dist-artifact` inputs) was candidate
-`6ad53a7b030da22fc299cee704c37ba7550ea1d7`. It squash-landed on Release Policy `main` as
-`787db4590e725cfd37104c8a9dd9e75f7fd4c018` with the identical reviewed tree and diff.
-Every root release caller pins that landed commit, so the reusable workflows remain reachable
-after the reviewed feature branch is deleted.
+`6ad53a7b030da22fc299cee704c37ba7550ea1d7`. It squash-landed on Release Policy `main` with
+the identical reviewed tree and diff. Two later history rewrites of that repository replaced
+the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7fd4c018` on
+5 September 2026 and then `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`, and left the earlier
+commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
+unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
+produced no release. Every root release caller pins the current twin, `fcf25e5`, so the
+reusable workflows remain reachable.
 
 ## Import records
 
@@ -111,15 +116,15 @@ table above.
 Only the root `.github/workflows/` directory is active. The movement-only change replaced
 the anchor's root-default `release.yml` (tag pattern `v*`, pin
 `2fe690d8dbb90c9b680c43822b7819f6aa1408ff`) with five namespaced callers pinned to the
-independently approved and squash-landed Release Policy commit
-`787db4590e725cfd37104c8a9dd9e75f7fd4c018`.
+independently approved and squash-landed Release Policy commit, now
+`fcf25e532e9eb60056ae6e5c819cf3125c4f4b91` after the rewrites recorded above.
 One tag publishes one component; the reusable workflow's identity gate refuses a release
 whose directory leaf, `tag-prefix` and normalised distribution name or `artifact-stem`
 disagree.
 
 | Component | Caller | Trigger | Reusable workflow | `source-directory` | `tag-prefix` | Publisher environment |
 |---|---|---|---|---|---|---|
-| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags, plus `workflow_dispatch` backfill of an existing namespaced tag | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
+| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
 | Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
 | Xero Ledger Review Gate | `release-elizabeth-anne-alexander.yml` | `elizabeth-anne-alexander/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: elizabeth_anne_alexander/version.py` | `packages/elizabeth-anne-alexander` | `elizabeth-anne-alexander` | `pypi-elizabeth-anne-alexander` (https://pypi.org/p/elizabeth-anne-alexander) |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
@@ -129,12 +134,11 @@ disagree.
 The four Python callers upload the attested distribution (`upload-dist-artifact: true`) and
 publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
 exactly one wheel and one source distribution, and uses
-`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`. The anchor keeps its
-`pypi-backfill` job, now accepting only `monthly-close-control-plane/vMAJOR.MINOR.PATCH`.
+`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`.
 Before any monorepo release the owner must register each PyPI trusted publisher against the
 new caller file name and environment (the repository currently has only the `pypi`
 environment). The Release Policy pin resolves to its protected `main`. No caller references
-a secret. Nested component `release.yml` files remain inert.
+a secret. No component directory carries a `release.yml` of its own.
 
 `release-evatt.yml` is the sixth caller and the exception to the paragraph
 above. It uploads the attested distribution but has no `pypi` job at all, so a
@@ -145,19 +149,28 @@ than one that would fire on a stray tag. `packages/evatt/RELEASING.md` records
 the `pypi-evatt` environment and trusted-publisher values to register when that
 changes.
 
-Per-component verification workflows: `ci.yml` (anchor; workflow `tests`, jobs `test`,
-`package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
+Per-component verification workflows at import: `ci.yml` (anchor; workflow `tests`, jobs
+`test`, `package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
 `elizabeth-anne-alexander.yml`, `accounting-excel-toolkit.yml`,
-`australian-accounting-power-bi.yml`, `evatt.yml` and the unchanged `codeql.yml`
-(`Analyze Python`). Each
-keeps the anchor checks unfiltered because branch protection requires their names for every
-pull request. The component workflows use explicit `paths` filters for their component
+`australian-accounting-power-bi.yml` and the unchanged `codeql.yml` (`Analyze Python`). Each
+kept the anchor checks unfiltered because branch protection requires their names for every
+pull request. The component workflows used explicit `paths` filters for their component
 directory, the future `contracts/xero-trial-balance-v1/` directory, `.github/**` and the root
-policy files. Each grants `contents: read` only and references no secret. The readiness and ledger workflows carry
-their source-defined clean-wheel demonstrations, and `evatt.yml` carries its own over a
-matrix of Python 3.10, the declared floor, and 3.12. Dependabot scopes Python updates to each
-component directory (`uv` for the three uv packages, `pip` for the exporter) and groups
-root GitHub Actions updates.
+policy files. Each granted `contents: read` only and referenced no secret. The readiness and
+ledger workflows carried their source-defined clean-wheel demonstrations. Dependabot scopes
+Python updates to each component directory (`uv` for the three uv packages, `pip` for the
+exporter) and groups root GitHub Actions updates.
+
+Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml` and
+`elizabeth-anne-alexander.yml` were replaced by the reusable `ci-package.yml`, which
+`ci.yml` calls once per component from its `component` matrix. The anchor jobs, their
+required-check names and `codeql.yml` are unchanged; the checks the matrix reports are
+`component (<directory>, <import>) / <gate>`. The reusable workflow filters itself on the
+same paths the deleted workflows listed, and the readiness and ledger clean-wheel
+demonstrations run as its per-component `smoke` input. `AGENTS.md` lists the current gates.
+
+evatt uses its own `evatt.yml` workflow for Python 3.10 and 3.12, including
+the clean-wheel redact, verify, restore and halt demonstration.
 
 ## Whitespace declarations for exact upstream bytes
 

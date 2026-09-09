@@ -6,7 +6,7 @@
     "y": 70,
     "z": 2000,
     "height": 130,
-    "width": 290,
+    "width": 910,
     "tabOrder": 2000
   },
   "visual": {
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "Fact_ATOBenchmark.ATO Compliance Risk Profile",
-              "nativeQueryRef": "ATO Compliance Risk Profile"
+              "nativeQueryRef": "ATO Compliance Risk Profile",
+              "displayName": "Gross profit comparison"
             }
           ]
         }
@@ -47,7 +48,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Compliance Risk Profile'"
+                  "Value": "'Gross profit comparison (sample data)'"
                 }
               }
             }

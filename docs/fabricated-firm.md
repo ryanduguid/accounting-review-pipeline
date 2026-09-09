@@ -1,4 +1,4 @@
-# The Fabricated Firm: design
+# The Fabricated Firm design
 
 Design only, 5 September 2026. No dataset is generated until the owner
 approves this document. It covers audit items 16 (inventory) and 17 (design).
