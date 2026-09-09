@@ -554,7 +554,7 @@ def test_a_second_section_in_any_heading_spelling_fails_closed(
         text + f"\n{heading}\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
         encoding="utf-8",
     )
-    with pytest.raises(ControlInputError, match="exactly one .* heading"):
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
 
@@ -570,7 +570,7 @@ def test_an_indented_heading_fails_closed(pack_dir: Path) -> None:
         text.replace("\n## Client queries\n", "\n    ## Client queries\n"),
         encoding="utf-8",
     )
-    with pytest.raises(ControlInputError, match="exactly one .* heading, found 0"):
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
 
@@ -583,7 +583,7 @@ def test_a_heading_with_a_closing_run_fails_closed(pack_dir: Path) -> None:
         text.replace("\n## Client queries\n", "\n## Client queries ##\n"),
         encoding="utf-8",
     )
-    with pytest.raises(ControlInputError, match="not the line the writer emits"):
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
 
@@ -599,22 +599,45 @@ def test_an_old_pack_showing_a_register_in_any_spelling_fails_closed(
         summary.read_text(encoding="utf-8") + "\n## Client queries ##\n",
         encoding="utf-8",
     )
-    with pytest.raises(ControlInputError, match="half removed, not absent"):
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(legacy)
 
 
-def test_a_heading_shaped_line_that_is_not_this_heading_is_left_alone(
-    pack_dir: Path,
+@pytest.mark.parametrize(
+    "heading",
+    [
+        # A Setext underline makes a level-2 heading with no hashes at all, and
+        # a character reference spells the same rendered text a regular
+        # expression over the source line cannot see. Both were confirmed
+        # against a CommonMark renderer.
+        "Client queries\n--------------",
+        "## Client &#113;ueries",
+        "## *Client* queries",
+        # Not the register's heading at all, and still refused: the writer did
+        # not write it, which is the whole question being asked.
+        "## Client queries#",
+        "## Sundry notes",
+    ],
+)
+def test_any_heading_the_writer_did_not_write_fails_closed(
+    pack_dir: Path, heading: str
 ) -> None:
-    """'## Client queries#' renders as the heading 'Client queries#', a
-    different heading, because a closing run needs a space before it. Counting
-    it would refuse a pack over a heading that is not this one."""
+    """The question is not which spelling of "Client queries" this is.
+
+    Enumerating spellings is a list that is never finished, and each round of
+    it leaves whatever was not enumerated as a region no check reads. Asking
+    instead whether the document's headings are the writer's needs no knowledge
+    of what a heading says, so a Setext rule, a character reference and inline
+    emphasis are all caught by the same rule that catches a plain one.
+    """
     summary = pack_dir / "close-summary.md"
     text = summary.read_text(encoding="utf-8")
-    summary.write_text(text + "\n## Client queries#\n\nUnrelated.\n", encoding="utf-8")
-
-    sheet, _ = render_review_sheet(pack_dir)
-    assert "Overall status: REVIEW" in sheet
+    summary.write_text(
+        text + f"\n{heading}\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
+        render_review_sheet(pack_dir)
 
 
 def test_a_forged_second_query_section_fails_closed(pack_dir: Path) -> None:
@@ -626,7 +649,7 @@ def test_a_forged_second_query_section_fails_closed(pack_dir: Path) -> None:
         text + "\n## Client queries\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
         encoding="utf-8",
     )
-    with pytest.raises(ControlInputError, match="exactly one .* heading"):
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
 
@@ -814,7 +837,10 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         + f"- `current_trial_balance`: `{'a' * 64}`\n"
     )
     summary.write_text(forged_section, encoding="utf-8")
-    with pytest.raises(ControlInputError, match="two different digests"):
+    # A whole forged section is now refused for being a heading the writer
+    # never wrote, before its digest lines are read. The in-section tampering
+    # above still fails on the digests themselves.
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
     contradicting_tail = (
@@ -823,7 +849,9 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
         + f"- `current_trial_balance`: `{'c' * 64}`\n"
     )
     summary.write_text(contradicting_tail, encoding="utf-8")
-    with pytest.raises(ControlInputError, match="two different digests"):
+    # As above: a second Source evidence section is a heading the writer never
+    # wrote, so it is refused before its digest lines are read.
+    with pytest.raises(ControlInputError, match="headings are not the ones the writer emits"):
         render_review_sheet(pack_dir)
 
 

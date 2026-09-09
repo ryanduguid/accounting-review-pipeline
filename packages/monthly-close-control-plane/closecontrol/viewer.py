@@ -385,22 +385,85 @@ _CLIENT_QUERY_HEADING = "## Client queries"
 # it as a boundary.
 _MD_SECTION_HEADING = re.compile(r"^#{1,2}\s")
 
-# Every ATX spelling a Markdown renderer shows as a heading reading "Client
-# queries", at any level. CommonMark allows up to three leading spaces, an
-# optional closing run of hashes after a space, and trailing whitespace, so
-# '## Client queries ##' and '   # Client queries' render exactly as the
-# writer's own line does. Locating the section demands the writer's exact
-# bytes; counting the headings has to see every form, because a forged second
-# register is spelled by whoever forges it, and a reviewer reading "Client
-# queries" above a table does not know or care which spelling produced it.
+# The headings report._as_markdown emits, in the order it emits them. A pack
+# written before the client-query register existed carries the same list
+# without that one.
 #
-# Four leading spaces are deliberately outside the pattern: that is an indented
-# code block, not a heading, so such a line is not a second register. It is
-# caught instead by the exact-line check, which is where a summary whose
-# heading has stopped rendering as a heading belongs.
-_CLIENT_QUERY_HEADING_FORM = re.compile(
-    r"^ {0,3}#{1,6}[ \t]+Client[ \t]+queries(?:[ \t]+#+)?[ \t]*$"
+# Asking whether the document's heading structure is the writer's, rather than
+# whether some line spells "Client queries" the way this file expects, is what
+# ends an argument that cannot otherwise be won. CommonMark renders a heading
+# from ATX hashes at six levels with an optional closing run, from a Setext
+# underline with no hashes at all, and from inline content that may carry
+# emphasis, code spans or character references: '## Client queries ##',
+# 'Client queries' over a rule, and '## Client &#113;ueries' all display as the
+# writer's own heading does. Enumerating those spellings is a list that is
+# never finished, and each round of it leaves whatever was not enumerated as a
+# region no check reads. Recognising a heading, on the other hand, needs no
+# knowledge of what it says.
+_SUMMARY_HEADINGS = (
+    "# Monthly Close Review Pack",
+    "## Scope",
+    "## Source evidence",
+    "## Exceptions",
+    _CLIENT_QUERY_HEADING,
+    "## Human acknowledgement",
 )
+
+# A heading opener: ATX hashes, or a line underlined by a Setext rule. Neither
+# pattern reads the heading's text, and neither can fire on source-derived
+# content, because every value the writer renders is prefixed by something: a
+# table cell by '| ', a one-line comment by '- Comment: ', a quoted comment
+# line by '  > ', a digest by '- `'. The writer emits no horizontal rule, so a
+# '---' line under a paragraph is not something it produces either.
+_ATX_HEADING = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
+_SETEXT_UNDERLINE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
+
+
+def _heading_lines(summary_text: str) -> list[str]:
+    """Return every line a Markdown renderer displays as a heading, in order."""
+    lines = summary_text.splitlines()
+    headings = []
+    for index, line in enumerate(lines):
+        if _ATX_HEADING.match(line):
+            headings.append(line)
+        elif (
+            line.strip()
+            and index + 1 < len(lines)
+            and _SETEXT_UNDERLINE.match(lines[index + 1])
+        ):
+            headings.append(line)
+    return headings
+
+
+def _verify_summary_headings(summary_text: str, *, register: bool) -> None:
+    """Prove the summary's headings are the writer's, exactly and in order.
+
+    A forged section needs a heading, or a reviewer scrolling past it reads a
+    bare table with nothing claiming to be the register. Requiring the whole
+    heading structure to match refuses that heading whatever syntax spells it,
+    and refuses a second Exceptions or Source evidence section too, which
+    nothing else here looks for.
+    """
+    expected = [
+        heading
+        for heading in _SUMMARY_HEADINGS
+        if register or heading != _CLIENT_QUERY_HEADING
+    ]
+    found = _heading_lines(summary_text)
+    if found == expected:
+        return
+    if not register and found == list(_SUMMARY_HEADINGS):
+        # The one shape worth naming for itself: a current pack whose register
+        # files were removed while its summary kept the section.
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: holds a client-query section while the pack "
+            "carries no client-query register; the register is half removed, "
+            "not absent"
+        )
+    raise ControlInputError(
+        f"{_SUMMARY_NAME}: the headings are not the ones the writer emits: "
+        f"holds {found!r}, expected {expected!r}"
+    )
 
 _CLIENT_QUERY_TABLE_HEADER = (
     "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |"
@@ -445,30 +508,18 @@ def _client_query_section_lines(summary_text: str) -> list[str]:
     second section and refuse a pack whose four artefacts were written together
     and agree.
 
-    Two questions, deliberately asked with two different tests. How many
-    regions could a reader take for the register? Every ATX spelling counts,
-    because a forged second section would otherwise be a region nothing checks
-    sitting under a heading that renders exactly as this one does. Is this
-    region the one the writer wrote? Only the writer's exact line will do,
-    because a heading indented into a code block, or carrying a closing run the
-    writer never emits, is a summary somebody has edited.
+    _verify_summary_headings has already proved the document's headings are the
+    writer's, exactly and in order, so there is one such line and it is the one
+    the writer emitted. This finds it and returns what sits under it.
     """
     lines = summary_text.splitlines()
     headings = [
-        index
-        for index, line in enumerate(lines)
-        if _CLIENT_QUERY_HEADING_FORM.match(line)
+        index for index, line in enumerate(lines) if line == _CLIENT_QUERY_HEADING
     ]
     if len(headings) != 1:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: expected exactly one {_CLIENT_QUERY_HEADING!r} "
             f"heading, found {len(headings)}"
-        )
-    if lines[headings[0]] != _CLIENT_QUERY_HEADING:
-        raise ControlInputError(
-            f"{_SUMMARY_NAME}: the client-query heading is not the line the "
-            f"writer emits: holds {lines[headings[0]]!r}, expected "
-            f"{_CLIENT_QUERY_HEADING!r}"
         )
     start = headings[0] + 1
     for index in range(start, len(lines)):
@@ -618,22 +669,15 @@ def _verify_summary_holds_no_register(summary_text: str) -> None:
     beside a file that lists it, so the absence has to hold across all three
     artefacts or the pack is refused.
 
-    Each marker is matched on a whole line, for the reason
-    _client_query_section_lines is: a genuinely old pack whose account or
-    reviewer comment quotes one of these phrases is still an old pack, and
-    refusing it would take archived evidence out of a firm's hands. The
-    heading is matched in every spelling that renders as one, for the same
-    reason it is counted that way there: what must be absent from an older
-    pack is any region a reader would take for the register, not one spelling
-    of it.
+    The heading is covered by _verify_summary_headings, which the caller runs
+    with register=False for such a pack: an older summary's headings are the
+    writer's five, and a client-query heading in any syntax is a sixth. What is
+    left here is the table and the count line, matched on a whole line, because
+    a genuinely old pack whose account or reviewer comment quotes one of those
+    phrases is still an old pack and refusing it would take archived evidence
+    out of a firm's hands.
     """
     lines = summary_text.splitlines()
-    if any(_CLIENT_QUERY_HEADING_FORM.match(line) for line in lines):
-        raise ControlInputError(
-            f"{_SUMMARY_NAME}: holds a client-query section while the pack "
-            "carries no client-query register; the register is half removed, "
-            "not absent"
-        )
     if _CLIENT_QUERY_TABLE_HEADER in {line.strip() for line in lines}:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: holds a client-query table while the pack "
@@ -653,6 +697,11 @@ def _verify_cross_file_agreement(
     csv_rows: list[dict[str, str]],
     query_rows: list[dict[str, str]] | None,
 ) -> None:
+    # Before anything is read out of the summary, prove its sections are the
+    # writer's. Every later check reads one region of this document; this is
+    # what says there is no other region pretending to be one.
+    _verify_summary_headings(summary_text, register=query_rows is not None)
+
     status = document["overall_status"]
     assert isinstance(status, str)
 
