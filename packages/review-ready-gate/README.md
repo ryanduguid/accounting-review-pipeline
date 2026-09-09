@@ -83,7 +83,7 @@ python -m pip install -e ".[dev]"
 review-ready gate \
   --profile bas \
   --pack examples/bas-ready \
-  --output outputs/bas-ready
+  --output ../../../review-ready-demo/bas-ready
 ```
 
 The ready demo exits `0` and writes three files:
@@ -96,16 +96,26 @@ The ready demo exits `0` and writes three files:
 review-ready gate \
   --profile bas \
   --pack examples/bas-not-ready \
-  --output outputs/bas-not-ready
+  --output ../../../review-ready-demo/bas-not-ready
 ```
 
 The not-ready demo exits `2`. The GST control export is missing, the preparer has not certified the pack, a blocking open item is still OPEN, and the same missing artefact was OPEN on the prior pack, so it is flagged as a repeat.
 
 ```bash
-review-ready view --pack-dir outputs/bas-ready
+review-ready view --pack-dir ../../../review-ready-demo/bas-ready
 ```
 
-Use exit code `0` only for `READY`, `2` for `NOT_READY` or `BLOCKED`, and `1` for a malformed file, an invalid command, or an `--output` path that cannot be written.
+`--output` points outside this checkout, and it has to: the command refuses an
+output directory inside a version-control checkout, exiting `1` without
+creating anything. A readiness pack names a client's file, its workpaper
+references and every finding standing between it and manager review, and
+inside a checkout it is one `git add -A` away from a history that every clone
+copies. A `.gitignore` entry is a convention the next commit can waive, and it
+does nothing about the copy sitting in the working tree meanwhile. The refusal
+applies to writing only: `review-ready view` still opens a pack wherever it
+already is.
+
+Use exit code `0` only for `READY`, `2` for `NOT_READY` or `BLOCKED`, and `1` for a malformed file, an invalid command, an `--output` path inside a version-control checkout, or an `--output` path that cannot be written.
 
 To run the gate on a schedule in CI, copy [examples/github-actions-readiness-check.yml](examples/github-actions-readiness-check.yml) into `.github/workflows/`.
 It runs against a repo-stored synthetic pack, fails the job when the pack is `BLOCKED`, and reports `NOT_READY` for a human. A `READY` result is still not an approval.
@@ -209,7 +219,8 @@ Before displaying anything it fails closed on: a missing artefact; JSON that is 
 ## Data boundary
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name wherever `--output` points them, including inside those two fixture directories.
+- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds a `.git` directory or worktree pointer, before it creates anything. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Do not use this as tax, financial, audit, or legal advice.
 
 ## Related

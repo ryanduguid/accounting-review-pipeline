@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from .engine import ReadinessPack
+from .errors import GateInputError
 from .models import Finding
 
 REVIEW_BOUNDARY = (
@@ -216,7 +217,72 @@ def _swap_into_place(staged_path: Path, destination: Path) -> Path | None:
     return parked
 
 
+def _enclosing_repository(directory: Path) -> Path | None:
+    """Return the root of the version-control checkout holding directory, or None.
+
+    ``.git`` is a directory in an ordinary clone and a file in a worktree or a
+    submodule, so existence is the test rather than is_dir. The directory
+    itself counts: an --output pointed at a repository root is inside that
+    repository. Path.exists answers False for a path it cannot stat, which is
+    the safe direction here, because a directory this process cannot inspect is
+    not one it can show to be a checkout, and the write that follows fails on
+    its own terms if the path is unusable.
+    """
+    for candidate in (directory, *directory.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def require_output_outside_repository(output_dir: Path) -> Path:
+    """Refuse an output directory inside a version-control checkout, and return it.
+
+    A readiness pack names a client's file, its workpaper references and every
+    finding standing between it and manager review. Inside a checkout it is one
+    ``git add -A`` away from a history that is copied to every clone and, on a
+    public remote, to everyone; a .gitignore entry is a convention the next
+    commit can waive, and it does nothing about the copy sitting in the working
+    tree in the meantime.
+
+    The return value is the resolved directory, and it is what the caller must
+    then write to. Checking one path and writing to another leaves the two free
+    to disagree: ``resolve`` follows every symlink in the path once, while each
+    later ``mkdir`` and ``write_text`` follows them again, so a component
+    re-pointed in between would send the pack somewhere this function never
+    approved. That narrows the window rather than closing it; a component
+    replaced between the directory being created and a file being written still
+    redirects that write, and only opening each path component without
+    following symlinks would prevent it, which is not available on every
+    platform this component supports.
+
+    The check is a refusal rather than a warning, and there is no override,
+    because every other gate in this package fails closed and because the
+    caller who most needs it is the one who did not think about it. A pack
+    already written into a checkout still opens: ``view`` only reads.
+    """
+    resolved = output_dir.resolve()
+    repository = _enclosing_repository(resolved)
+    if repository is None:
+        return resolved
+    raise GateInputError(
+        f"{output_dir} is inside the version-control checkout at {repository}. "
+        "A readiness pack names a client's file and its open findings, so it "
+        "belongs in an access-controlled directory outside version control. "
+        "Point --output somewhere outside that checkout."
+    )
+
+
 def write_review_pack(pack: ReadinessPack, output_dir: Path) -> dict[str, Path]:
+    """Write the three pack files, refusing an output inside a checkout first.
+
+    The refusal happens before any directory is created, so a rejected run
+    leaves nothing behind, and every destination below is built from the
+    directory the guard approved rather than from the argument, so the location
+    that was checked is the location written to. The check lives here rather
+    than only in the CLI so that a library caller cannot reach the writer
+    without passing it.
+    """
+    output_dir = require_output_outside_repository(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "readiness-pack.json"
     summary_path = output_dir / "readiness-summary.md"

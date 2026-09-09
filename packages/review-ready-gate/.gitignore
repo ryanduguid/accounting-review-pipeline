@@ -4,7 +4,9 @@
 !schemas/*.csv
 outputs/
 
-# A readiness pack goes wherever --output points, not only to outputs/.
+# review-ready now refuses an --output directory inside a checkout, so it can
+# no longer write a readiness pack here at all. These stay as the second line:
+# they still catch a pack copied in by hand and one from an older release.
 # findings.csv is caught by *.csv above; the two negations re-include every
 # CSV in these directories, so --output pointed at either of them left the
 # finding detail committable until the generated names are ignored again.
