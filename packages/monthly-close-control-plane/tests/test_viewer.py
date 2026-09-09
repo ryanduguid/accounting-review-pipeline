@@ -162,6 +162,96 @@ def test_a_duplicated_query_id_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
+def _legacy_pack(pack_dir: Path) -> Path:
+    """Turn a pack into one written before the client-query register existed."""
+    (pack_dir / "client-queries.csv").unlink()
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["client_queries"]
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(text.split("## Client queries")[0], encoding="utf-8")
+    return pack_dir
+
+
+def test_a_pack_written_before_the_register_still_opens(pack_dir: Path) -> None:
+    """An archived three-file pack is evidence a firm may still have to show.
+    Requiring a file that did not exist when it was written would make the
+    older evidence unreadable by the command that exists to display it."""
+    sheet, digests = render_review_sheet(_legacy_pack(pack_dir))
+    assert "Overall status: REVIEW" in sheet
+    assert "written before the client-query register existed" in sheet
+    assert "Client queries drafted" not in sheet
+    assert set(digests) == {"close-review-pack.json", "close-summary.md", "exceptions.csv"}
+
+
+def test_half_a_register_fails_closed(pack_dir: Path) -> None:
+    """A pack holding the file without the member, or the member without the
+    file, was assembled from two runs or edited. It is evidence of neither
+    format, so it is refused rather than read as the older one."""
+    file_only = _legacy_pack(pack_dir)
+    (file_only / "client-queries.csv").write_text(
+        "query_id,control,tenant,account_id,account_code,account_name,"
+        "review_group,difference,question,evidence_requested\n",
+        encoding="utf-8-sig",
+    )
+    with pytest.raises(ControlInputError, match="half present"):
+        render_review_sheet(file_only)
+
+
+def test_member_without_file_fails_closed(pack_dir: Path) -> None:
+    (pack_dir / "client-queries.csv").unlink()
+    with pytest.raises(ControlInputError, match="half present"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_surplus_cell_cannot_ride_along_unverified(pack_dir: Path) -> None:
+    """csv.DictReader would file a surplus cell under a key nothing compares,
+    so an appended formula would verify clean and be live the moment the CSV
+    was opened. The writer's guard covers named fields only."""
+    for name in ("client-queries.csv", "exceptions.csv"):
+        path = pack_dir / name
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+        lines[1] += ",=cmd|'/c calc'!A0"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+        with pytest.raises(ControlInputError, match="cells, but the header declares"):
+            render_review_sheet(pack_dir)
+        # Put it back so the next file is tested against an otherwise sound pack.
+        path.write_text(
+            "\n".join(line.replace(",=cmd|'/c calc'!A0", "") for line in lines) + "\n",
+            encoding="utf-8-sig",
+        )
+
+
+def test_a_question_edited_only_in_the_summary_fails_closed(pack_dir: Path) -> None:
+    """The summary is what a preparer reads and copies a question out of, so a
+    question changed there alone is the divergence that matters most: the pack
+    would verify while the file somebody works from asks something else."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace(
+            "What makes up the difference between the general ledger balance",
+            "Please explain the difference between the general ledger balance",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="question for Q-.* is missing or altered"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_query_dropped_only_from_the_summary_fails_closed(pack_dir: Path) -> None:
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("- Client queries drafted: 1.", "- Client queries drafted: 0."),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="client-query counts disagree"):
+        render_review_sheet(pack_dir)
+
+
 def test_verify_returns_artefact_digests_matching_files(pack_dir: Path) -> None:
     import hashlib
 

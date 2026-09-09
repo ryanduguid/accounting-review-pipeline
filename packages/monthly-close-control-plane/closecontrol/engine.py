@@ -416,6 +416,12 @@ def review_close(
         source_hashes["review_note"] = acknowledgement_source.sha256
 
     ordered = tuple(sorted(exceptions, key=lambda item: (item.status != "BLOCKED", item.control, item.tenant, item.account_id, item.reason)))
+    # Force the register once here. client_queries is a property, so an
+    # identifier collision would otherwise first be raised inside the pack
+    # writer, whose caller handles only OSError and ValueError and would let it
+    # out as a traceback. Deriving it on this path reports it as an input
+    # problem, which is where the caller is already looking.
+    derive_client_queries(ordered)
     return CloseReviewPack(
         status=_overall_status(list(ordered)),
         current_report_dates=tuple(sorted({row.report_date.isoformat() for row in current_rows})),

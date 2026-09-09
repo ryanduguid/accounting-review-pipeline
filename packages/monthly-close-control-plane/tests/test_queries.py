@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from closecontrol.engine import review_close
+from closecontrol.errors import ControlInputError
 from closecontrol.models import ExceptionItem
 from closecontrol.queries import (
     CLIENT_ANSWERABLE_CONTROLS,
@@ -128,10 +129,27 @@ def test_query_ids_are_stable_across_runs_and_unique_within_one() -> None:
 
 def test_two_queries_for_one_account_and_control_fail_loudly() -> None:
     """One number against two questions is worse than no register: the client
-    answers one of them and the firm cannot tell which."""
+    answers one of them and the firm cannot tell which.
+
+    ControlInputError, not RuntimeError: review_close forces the derivation, so
+    the condition reaches the CLI on the path that already reports an input
+    problem instead of escaping the pack writer as a traceback.
+    """
     duplicate = _exception("period_variance")
-    with pytest.raises(RuntimeError, match="share Q-"):
+    with pytest.raises(ControlInputError, match="share Q-"):
         derive_client_queries((duplicate, duplicate))
+
+
+def test_the_two_period_comparison_questions_get_different_identifiers() -> None:
+    """An account that disappears one period and returns later asks the firm
+    two different things. One identifier against both would let a tracker
+    attach a closure answer to a new-account question."""
+    gone = _exception("period_comparison", current_value=None, difference=None)
+    arrived = _exception("period_comparison", prior_value=None, difference=None)
+
+    (closed,) = derive_client_queries((gone,))
+    (opened,) = derive_client_queries((arrived,))
+    assert closed.query_id != opened.query_id
 
 
 def test_the_fabricated_demo_asks_only_what_the_client_can_answer() -> None:

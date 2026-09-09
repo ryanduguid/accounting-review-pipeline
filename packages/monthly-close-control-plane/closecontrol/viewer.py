@@ -1,6 +1,6 @@
 """Read-only display of an existing close-review pack.
 
-Phase B of the workbench: load the four generated artefacts, prove they agree
+Phase B of the workbench: load the generated artefacts, prove they agree
 with each other before showing anything, and render a review sheet. The viewer
 never writes, renames or deletes a file, never opens a network connection, and
 never changes what the engine computed. A tampered, partial or mismatched
@@ -24,25 +24,25 @@ from pathlib import Path
 
 from .errors import ControlInputError
 
-PACK_FILE_NAMES = (
-    "close-review-pack.json",
-    "close-summary.md",
-    "exceptions.csv",
-    "client-queries.csv",
-)
-
 _JSON_NAME = "close-review-pack.json"
 _SUMMARY_NAME = "close-summary.md"
 _CSV_NAME = "exceptions.csv"
 _QUERY_CSV_NAME = "client-queries.csv"
 
-# The exact top-level members report._as_json emits, no more and no less. An
-# added or removed member means the file was edited by something other than
-# the writer that produced the other three artefacts.
+# The three files every pack has carried since the viewer existed. A pack
+# written before the client-query register was added is archived evidence a
+# firm may still have to display, so it must keep opening: the register is an
+# extension to the pack, not a new requirement placed on old ones.
+_REQUIRED_PACK_FILE_NAMES = (_JSON_NAME, _SUMMARY_NAME, _CSV_NAME)
+
+PACK_FILE_NAMES = _REQUIRED_PACK_FILE_NAMES + (_QUERY_CSV_NAME,)
+
+# The top-level members report._as_json has always emitted, no more and no
+# less. An added or removed member means the file was edited by something other
+# than the writer that produced the other artefacts.
 _JSON_MEMBERS = frozenset(
     {
         "acknowledgement",
-        "client_queries",
         "current_report_dates",
         "exceptions",
         "overall_status",
@@ -51,6 +51,11 @@ _JSON_MEMBERS = frozenset(
         "thresholds",
     }
 )
+
+# Present in a pack carrying the client-query register, absent in one written
+# before it existed. Half a register is not a pack in either format, so
+# verify_pack requires this member and client-queries.csv to arrive together.
+_OPTIONAL_JSON_MEMBERS = frozenset({"client_queries"})
 
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
 
@@ -135,18 +140,32 @@ def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return seen
 
 
-def _load_artefact_bytes(pack_dir: Path) -> dict[str, bytes]:
-    payloads: dict[str, bytes] = {}
-    for name in PACK_FILE_NAMES:
-        path = pack_dir / name
-        try:
-            payloads[name] = path.read_bytes()
-        except FileNotFoundError as exc:
+def _read_artefact(pack_dir: Path, name: str) -> bytes:
+    path = pack_dir / name
+    try:
+        return path.read_bytes()
+    except IsADirectoryError as exc:
+        raise ControlInputError(f"{name}: expected a file, found a directory") from exc
+    except OSError as exc:
+        if isinstance(exc, FileNotFoundError):
             raise ControlInputError(f"{name}: not found in {pack_dir}") from exc
-        except IsADirectoryError as exc:
-            raise ControlInputError(f"{name}: expected a file, found a directory") from exc
-        except OSError as exc:
-            raise ControlInputError(f"{name}: could not be read from {pack_dir} ({exc})") from exc
+        raise ControlInputError(f"{name}: could not be read from {pack_dir} ({exc})") from exc
+
+
+def _load_artefact_bytes(pack_dir: Path) -> dict[str, bytes]:
+    payloads = {name: _read_artefact(pack_dir, name) for name in _REQUIRED_PACK_FILE_NAMES}
+    try:
+        payloads[_QUERY_CSV_NAME] = (pack_dir / _QUERY_CSV_NAME).read_bytes()
+    except FileNotFoundError:
+        # A pack written before the register existed. Absence is checked
+        # against the JSON member in verify_pack, so a half-converted pack is
+        # still refused; only a wholly older one is displayed.
+        pass
+    except OSError:
+        # Anything else about the path is a fault worth naming, not a reason to
+        # read the pack as an older one.
+        _read_artefact(pack_dir, _QUERY_CSV_NAME)
+        raise  # pragma: no cover - _read_artefact always raises here.
     return payloads
 
 
@@ -160,7 +179,7 @@ def _parse_json(payload: bytes) -> dict[str, object]:
     if not isinstance(document, dict):
         raise ControlInputError(f"{_JSON_NAME}: top level must be a JSON object")
     members = set(document)
-    unknown = sorted(members - _JSON_MEMBERS)
+    unknown = sorted(members - _JSON_MEMBERS - _OPTIONAL_JSON_MEMBERS)
     if unknown:
         raise ControlInputError(
             f"{_JSON_NAME}: unknown top-level member(s): {', '.join(unknown)}"
@@ -242,26 +261,29 @@ def _verify_json_schema(document: dict[str, object]) -> None:
 
     # A query names an account and a movement, so a malformed or duplicated
     # register has to be named here rather than reach a preparer as a question
-    # they might put to a client.
-    client_queries = document["client_queries"]
-    if not isinstance(client_queries, list):
-        raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
-    seen_ids: set[str] = set()
-    for index, query in enumerate(client_queries):
-        if not isinstance(query, dict):
-            raise ControlInputError(
-                f"{_JSON_NAME}: client_queries[{index}] must be an object"
-            )
-        query_id = query.get("query_id")
-        if not isinstance(query_id, str) or not query_id:
-            raise ControlInputError(
-                f"{_JSON_NAME}: client_queries[{index}].query_id must be a non-empty string"
-            )
-        if query_id in seen_ids:
-            raise ControlInputError(
-                f"{_JSON_NAME}: client_queries holds {query_id} more than once"
-            )
-        seen_ids.add(query_id)
+    # they might put to a client. A pack from before the register existed
+    # carries no member to check.
+    if "client_queries" in document:
+        client_queries = document["client_queries"]
+        if not isinstance(client_queries, list):
+            raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
+        seen_ids: set[str] = set()
+        for index, query in enumerate(client_queries):
+            if not isinstance(query, dict):
+                raise ControlInputError(
+                    f"{_JSON_NAME}: client_queries[{index}] must be an object"
+                )
+            query_id = query.get("query_id")
+            if not isinstance(query_id, str) or not query_id:
+                raise ControlInputError(
+                    f"{_JSON_NAME}: client_queries[{index}].query_id must be a "
+                    "non-empty string"
+                )
+            if query_id in seen_ids:
+                raise ControlInputError(
+                    f"{_JSON_NAME}: client_queries holds {query_id} more than once"
+                )
+            seen_ids.add(query_id)
 
     # An acknowledgement records a human action, so a malformed one must be
     # named here rather than reach the sheet as a traceback or as text the
@@ -348,11 +370,84 @@ def _verify_rows_match(
                 )
 
 
+_QUERY_COUNT_LINE = re.compile(r"- Client queries drafted: (\d+)\.")
+
+_QUERY_ID_IN_SUMMARY = re.compile(r"Q-[0-9a-f]+")
+
+
+def _md_cell_mirror(value: str) -> str:
+    """Mirror report._md_cell, as _CSV_GUARDED_FIELDS mirrors _csv_safe.
+
+    Reimplemented rather than imported so the viewer stays an independent
+    witness: a renderer that changes how it escapes a cell has to be reflected
+    here deliberately, and until it is, this check fails rather than agreeing
+    with whatever the writer now produces.
+    """
+    return (
+        " ".join(value.split())
+        .replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("*", "\\*")
+        .replace("`", "\\`")
+    )
+
+
+def _verify_summary_states_the_register(
+    summary_text: str, client_queries: list
+) -> None:
+    """Prove close-summary.md holds the register the JSON pack holds.
+
+    The summary is the artefact a preparer reads and copies a question out of,
+    so a question edited there alone is the divergence that matters most: the
+    pack would verify while the file somebody actually works from asks
+    something the run never asked. The count, every identifier and every
+    question text are checked; the remaining columns are already pinned
+    through the CSV.
+    """
+    if _CLIENT_QUERY_SENTENCE not in " ".join(summary_text.split()):
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the client-query boundary statement is missing or altered"
+        )
+
+    counts = _QUERY_COUNT_LINE.findall(summary_text)
+    if len(counts) != 1:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: expected exactly one client-query count line, "
+            f"found {len(counts)}"
+        )
+    if int(counts[0]) != len(client_queries):
+        raise ControlInputError(
+            f"client-query counts disagree: {_JSON_NAME} holds "
+            f"{len(client_queries)}, {_SUMMARY_NAME} states {counts[0]}"
+        )
+
+    flattened = " ".join(summary_text.split())
+    listed = _QUERY_ID_IN_SUMMARY.findall(summary_text)
+    expected_ids = [str(query["query_id"]) for query in client_queries]
+    if sorted(listed) != sorted(expected_ids):
+        raise ControlInputError(
+            f"client-query identifiers disagree: {_SUMMARY_NAME} lists "
+            f"{sorted(listed)}, {_JSON_NAME} holds {sorted(expected_ids)}"
+        )
+    for query in client_queries:
+        question = query.get("question")
+        if not isinstance(question, str):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{query.get('query_id')!r}].question "
+                "must be a string"
+            )
+        if _md_cell_mirror(question) not in flattened:
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: the question for {query.get('query_id')} is "
+                f"missing or altered"
+            )
+
+
 def _verify_cross_file_agreement(
     document: dict[str, object],
     summary_text: str,
     csv_rows: list[dict[str, str]],
-    query_rows: list[dict[str, str]],
+    query_rows: list[dict[str, str]] | None,
 ) -> None:
     status = document["overall_status"]
     assert isinstance(status, str)
@@ -383,11 +478,6 @@ def _verify_cross_file_agreement(
             f"list different source digests"
         )
 
-    if _CLIENT_QUERY_SENTENCE not in " ".join(summary_text.split()):
-        raise ControlInputError(
-            f"{_SUMMARY_NAME}: the client-query boundary statement is missing or altered"
-        )
-
     exceptions = document["exceptions"]
     assert isinstance(exceptions, list)
     _verify_rows_match(
@@ -400,6 +490,9 @@ def _verify_cross_file_agreement(
         guarded=_CSV_GUARDED_FIELDS,
     )
 
+    if query_rows is None:
+        return
+
     client_queries = document["client_queries"]
     assert isinstance(client_queries, list)
     _verify_rows_match(
@@ -411,49 +504,90 @@ def _verify_cross_file_agreement(
         fields=_QUERY_CSV_FIELDS,
         guarded=_QUERY_CSV_GUARDED_FIELDS,
     )
+    _verify_summary_states_the_register(summary_text, client_queries)
 
 
 def _read_csv_rows(
     payload: bytes, name: str, fields: tuple[str, ...]
 ) -> list[dict[str, str]]:
+    """Read a pack CSV, requiring every row to hold exactly the declared cells.
+
+    csv.DictReader would collect a surplus cell under a key of None and pad a
+    short row with a default, and the field-by-field comparison downstream
+    reads only the declared columns, so neither would ever be looked at. The
+    surplus cell is the one that matters: the writer's formula guard covers
+    named fields only, so an appended ``=...`` cell would pass verification and
+    be live the moment a reviewer opened the file in a spreadsheet. Counting
+    cells here closes that for both pack CSVs. A blank line is refused for the
+    same reason, DictReader having skipped it in silence: the writer emits
+    none, so one means the file was edited after it was written.
+    """
     try:
         text = payload.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise ControlInputError(f"{name}: not valid UTF-8") from exc
-    reader = csv.DictReader(io.StringIO(text, newline=""))
-    if reader.fieldnames != list(fields):
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header = next(reader, None)
+    if header != list(fields):
         raise ControlInputError(
             f"{name}: header row does not match the written contract"
         )
-    return [
-        {key: ("" if value is None else value) for key, value in row.items()}
-        for row in reader
-    ]
+    rows: list[dict[str, str]] = []
+    for number, cells in enumerate(reader, start=1):
+        if len(cells) != len(fields):
+            raise ControlInputError(
+                f"{name}: row {number} holds {len(cells)} cells, but the header "
+                f"declares {len(fields)}"
+            )
+        rows.append(dict(zip(fields, cells)))
+    return rows
 
 
 def verify_pack(pack_dir: Path) -> tuple[
     dict[str, object],
     str,
     list[dict[str, str]],
-    list[dict[str, str]],
+    list[dict[str, str]] | None,
     dict[str, str],
 ]:
     """Verify one artefact set end to end and return its parsed contents.
 
     The returned mapping also carries the SHA-256 of each artefact's exact
     bytes under ``artefact_sha256``, so a displayed sheet can state what it
-    actually read.
+    actually read. The query rows are None for a pack written before the
+    client-query register existed; such a pack still verifies and displays,
+    because it is archived evidence that predates the register rather than a
+    pack missing part of itself.
     """
     payloads = _load_artefact_bytes(pack_dir)
     document = _parse_json(payloads[_JSON_NAME])
     _verify_json_schema(document)
+
+    # Both halves of the register or neither. A pack holding one without the
+    # other was assembled from two runs, or edited, and is not evidence of
+    # either format.
+    has_file = _QUERY_CSV_NAME in payloads
+    has_member = "client_queries" in document
+    if has_file != has_member:
+        present, absent = (
+            (_QUERY_CSV_NAME, f"{_JSON_NAME} member client_queries")
+            if has_file
+            else (f"{_JSON_NAME} member client_queries", _QUERY_CSV_NAME)
+        )
+        raise ControlInputError(
+            f"client-query register is half present: {present} exists but "
+            f"{absent} does not"
+        )
+
     try:
         summary_text = payloads[_SUMMARY_NAME].decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ControlInputError(f"{_SUMMARY_NAME}: not valid UTF-8") from exc
     csv_rows = _read_csv_rows(payloads[_CSV_NAME], _CSV_NAME, _CSV_FIELDS)
-    query_rows = _read_csv_rows(
-        payloads[_QUERY_CSV_NAME], _QUERY_CSV_NAME, _QUERY_CSV_FIELDS
+    query_rows = (
+        _read_csv_rows(payloads[_QUERY_CSV_NAME], _QUERY_CSV_NAME, _QUERY_CSV_FIELDS)
+        if has_file
+        else None
     )
     _verify_cross_file_agreement(document, summary_text, csv_rows, query_rows)
     artefact_digests = {
@@ -500,9 +634,10 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     lines.append(
         f"- Exceptions: {len(exceptions)} total; {blocked} blocked; {review} requiring review."
     )
-    queries_in_scope = document["client_queries"]
-    assert isinstance(queries_in_scope, list)
-    lines.append(f"- Client queries drafted: {len(queries_in_scope)}.")
+    queries_in_scope = document.get("client_queries")
+    if queries_in_scope is not None:
+        assert isinstance(queries_in_scope, list)
+        lines.append(f"- Client queries drafted: {len(queries_in_scope)}.")
     lines += ["", "Source evidence", ""]
     source_hashes = document["source_sha256"]
     assert isinstance(source_hashes, dict)
@@ -532,7 +667,13 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         "they reach a client and record answers in the firm's own tracker."
     )
     lines.append("")
-    client_queries = document["client_queries"]
+    client_queries = document.get("client_queries")
+    if client_queries is None:
+        lines.append(
+            "This pack was written before the client-query register existed, so it "
+            "carries none. Its exceptions are unchanged."
+        )
+        client_queries = []
     assert isinstance(client_queries, list)
     if not client_queries:
         lines.append(
@@ -568,6 +709,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         )
     lines += ["", "Artefacts verified", ""]
     for name in PACK_FILE_NAMES:
-        lines.append(f"- {name}: sha256 {artefact_digests[name]}")
+        if name in artefact_digests:
+            lines.append(f"- {name}: sha256 {artefact_digests[name]}")
     lines.append("")
     return "\n".join(lines), artefact_digests

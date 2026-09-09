@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 
+from .errors import ControlInputError
 from .models import ClientQuery, ExceptionItem
 
 
@@ -46,11 +47,13 @@ FIRM_RESOLVED_CONTROLS = {
 # the money formatting stays in the report layer with every other figure.
 CLIENT_ANSWERABLE_CONTROLS = {
     "period_variance": (
+        "",
         "What drove the year-to-date movement in this account against the prior period?",
         "The transactions or documents behind the movement, and confirmation that "
         "no part of it belongs to another period.",
     ),
     "account_metadata": (
+        "",
         "Who changed this account's code, name or section since the prior period, and why?",
         "The date of the chart-of-accounts change, who approved it, and any effect "
         "on how the prior period was reported.",
@@ -64,15 +67,18 @@ CLIENT_ANSWERABLE_CONTROLS = {
 # tests: an absent current balance means the account or the ledger side is
 # missing, a present one means both sides exist and disagree.
 _ACCOUNT_ABSENT = (
+    "absent",
     "Was this account closed, reclassified or renamed during the period, or is it "
     "missing from the export?",
     "Confirmation of the change and the account the balance moved to, or a corrected export.",
 )
 _ACCOUNT_NEW = (
+    "new",
     "What is this new account used for, and when did it start being used?",
     "The reason the account was opened and the first transaction posted to it.",
 )
 _SUBLEDGER_DIFFERENCE = (
+    "difference",
     "What makes up the difference between the general ledger balance and the "
     "subledger balance for this account?",
     "The reconciling items with their dates and amounts, and support for any that "
@@ -95,8 +101,14 @@ _YEAR_RESET_CAVEAT = (
 )
 
 
-def _classify(item: ExceptionItem) -> tuple[str, str] | None:
-    """Return the question and evidence for an exception, or None for no query."""
+def _classify(item: ExceptionItem) -> tuple[str, str, str] | None:
+    """Return the variant tag, question and evidence, or None for no query.
+
+    The variant distinguishes two questions raised under one control name. It
+    is part of the query's identity, because an account that disappears one
+    period and returns later asks the firm two different things, and a tracker
+    holding both under one number cannot tell them apart.
+    """
     if item.control in FIRM_RESOLVED_CONTROLS:
         return None
     if item.control == "period_comparison":
@@ -110,16 +122,25 @@ def _classify(item: ExceptionItem) -> tuple[str, str] | None:
     return CLIENT_ANSWERABLE_CONTROLS.get(item.control)
 
 
-def _query_id(item: ExceptionItem) -> str:
+# Twelve hex characters, not eight. The identifier has to survive being carried
+# into a firm's tracker, so the space it is drawn from should not be one a
+# register could plausibly fill: 48 bits leaves a collision beyond any number
+# of accounts a close produces, and the guard in derive_client_queries is then
+# a genuine invariant check rather than a failure mode to design around.
+_ID_LENGTH = 12
+
+
+def _query_id(item: ExceptionItem, variant: str) -> str:
     """A short identifier that stays the same while the question stands open.
 
-    Derived from the control and the account rather than from the query's
-    position, so a firm that carried Q-3f2a1b0c into last month's query list
-    sees the same identifier this month if the question recurs, and an
-    unrelated exception appearing earlier in the pack does not renumber it.
+    Derived from the control, the account and the question's variant rather
+    than from the query's position, so a firm that carried Q-3f2a1b0c9d8e into
+    last month's list sees the same identifier this month if the same question
+    recurs, and an unrelated exception appearing earlier in the pack does not
+    renumber it.
     """
-    material = "|".join((item.control, item.tenant, item.account_id))
-    return "Q-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:8]
+    material = "|".join((item.control, variant, item.tenant, item.account_id))
+    return "Q-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:_ID_LENGTH]
 
 
 def derive_client_queries(
@@ -127,11 +148,14 @@ def derive_client_queries(
 ) -> tuple[ClientQuery, ...]:
     """Build the register, preserving the order the exceptions were raised in.
 
-    Raises RuntimeError if two queries would share an identifier. Among the
-    client-answerable controls the engine raises at most one exception per
-    account, so an identifier collision means a control now raises two, and a
+    Raises ControlInputError if two queries would share an identifier. Among
+    the client-answerable controls the engine raises at most one exception per
+    account and variant, so a collision means a control now raises two, and a
     register with one number against two questions is worse than no register:
-    a client answers one of them and the firm cannot tell which.
+    a client answers one of them and the firm cannot tell which. review_close
+    forces this derivation once, so the condition is reported on the same
+    failure path as a malformed input rather than escaping the pack writer,
+    whose caller handles only OSError and ValueError.
     """
     crosses_year_reset = any(
         item.control == "financial_year_reset" for item in exceptions
@@ -142,13 +166,13 @@ def derive_client_queries(
         classified = _classify(item)
         if classified is None:
             continue
-        question, evidence = classified
+        variant, question, evidence = classified
         if crosses_year_reset and item.control == "period_variance":
             evidence += _YEAR_RESET_CAVEAT
-        query_id = _query_id(item)
+        query_id = _query_id(item, variant)
         previous = seen.get(query_id)
         if previous is not None:
-            raise RuntimeError(
+            raise ControlInputError(
                 f"two client queries share {query_id}: control {item.control!r} "
                 f"raised more than one exception for account {item.account_id!r}"
             )

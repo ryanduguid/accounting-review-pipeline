@@ -126,9 +126,24 @@ digests or review-boundary statement disagree with the JSON (including a second,
 conflicting status line, or a missing client-query boundary statement); and an
 `exceptions.csv` or `client-queries.csv` whose header, row count or any cell
 disagrees with the JSON member it projects, honouring the writer's
-formula-injection guard exactly. A duplicated `query_id` fails closed too: one
-identifier against two questions leaves a firm unable to tell which one a
-client answered. On success the sheet ends with the SHA-256 of
+formula-injection guard exactly. A data row holding more or fewer cells than
+the header declares fails closed as well: a surplus cell would otherwise sit
+outside every named column, unguarded against formula prefixes and compared
+with nothing.
+
+The summary's client-query section is checked against the JSON register too,
+not only for its boundary sentence: the count line, every `query_id` and every
+question must agree. That file is what a preparer reads and copies a question
+out of, so a question edited only there is the divergence worth catching. A
+duplicated `query_id` fails closed for the same reason: one identifier against
+two questions leaves a firm unable to tell which one a client answered.
+
+A pack written before the client-query register existed still opens. Its three
+files verify and display as before, and the sheet says the pack predates the
+register rather than leaving a reviewer to wonder. A pack holding half a
+register, the file without the JSON member or the member without the file, was
+assembled from two runs or edited, and is refused rather than read as an older
+one. On success the sheet ends with the SHA-256 of
 each artefact's exact bytes, so the displayed evidence can itself be archived.
 Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
