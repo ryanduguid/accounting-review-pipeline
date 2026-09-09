@@ -35,6 +35,11 @@ packages/monthly-close-control-plane/schemas/client-queries.csv
 *.pem
 __pycache__/
 .pytest_cache/
+# Every component's test gate writes these; CI adds --cov-report=xml.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 .venv/
 build/
 dist/
