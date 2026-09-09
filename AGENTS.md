@@ -1,6 +1,6 @@
 # Accounting Review Pipeline agent instructions
 
-This repository is the local assembly of the Accounting Review Pipeline: six independently
+This repository is the local assembly of the Accounting Review Pipeline: seven independently
 versioned components joined only by local files and commands. Its canonical GitHub repository
 is `ryanduguid/accounting-review-pipeline`.
 Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for component work.
@@ -36,8 +36,8 @@ These repository-wide rules apply everywhere:
 - Release only through the root callers `.github/workflows/release-<component>.yml` on a
   namespaced annotated tag `<component>/vMAJOR.MINOR.PATCH`, never through a nested
   `release.yml`. One tag publishes exactly one component.
-- Never commit client data, workpapers, credentials, tokens, generated review packs or native
-  application evidence containing client data.
+- Never commit client data, workpapers, credentials, tokens, generated review packs,
+  entity maps or native application evidence containing client data.
 
 ## Path decision
 
@@ -51,7 +51,7 @@ adapter and the Power BI application keep the plan's paths. `IMPORTS.md` records
 
 ## Setup
 
-From a fresh clone, `uv sync` at the root installs the four Python components as editable
+From a fresh clone, `uv sync` at the root installs the five Python components as editable
 workspace members and the shared test toolchain into one `.venv`, and `just test` runs
 every component's suite plus the joined conformance test. That is the whole setup. `just`
 comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
@@ -73,6 +73,7 @@ Run every check from the owning component directory with its documented commands
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
+| evatt | `packages/evatt/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `evatt tests`; mypy over `evatt`; `python -m build`; clean-wheel redact, verify, restore and halt demo |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
 `ci.yml` calls for the exporter, Workpaper Review Gate and Xero Ledger Review Gate with the

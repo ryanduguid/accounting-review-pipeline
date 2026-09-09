@@ -8,7 +8,7 @@
 # Requires just and uv:
 #     uv tool install rust-just
 #
-# The four Python distributions are uv workspace members. The Excel adapter and
+# The five Python distributions are uv workspace members. The Excel adapter and
 # the Power BI application have no pyproject.toml; their standard-library
 # unittest suites run from the same .venv. Adding a component means adding it to
 # the matching list below and to the root pyproject.toml workspace members.
@@ -18,6 +18,7 @@ pytest_components := trim(replace('''
 packages/review-ready-gate:reviewready
 packages/monthly-close-control-plane:closecontrol
 packages/elizabeth-anne-alexander:elizabeth_anne_alexander
+packages/evatt:evatt
 ''', "\n", " "))
 
 # unittest components: directory only

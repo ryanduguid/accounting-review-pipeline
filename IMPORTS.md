@@ -65,6 +65,12 @@ The fetched heads above are the selected import snapshots.
 | Xero Ledger Review Gate | distribution `elizabeth-anne-alexander` 0.2.1; import `elizabeth_anne_alexander`; command `elizabeth-anne-alexander`; version in `elizabeth_anne_alexander/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, build, wheel demo, Ruff, mypy | MIT; PyPI; zero-network synthetic demonstration |
 | Accounting Excel Toolkit | source adapter 0.1.5; version in `VERSION`; Power Query and VBA source, no Python distribution | pinned ShellCheck; unittest; optional native Excel acceptance | MIT; GitHub source-archive release with `artifact-stem: accounting-excel-toolkit`; local-file adapters only |
 | Australian Accounting Power BI | PBIP/PBIR reference application; no release and no version | unittest plus Microsoft Power BI report-authoring CLI 0.1.4 | MIT; no publisher; fabricated local model and report |
+| evatt | distribution `evatt` 0.1.0; import `evatt`; command `evatt`; version in `evatt/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, Ruff, mypy, build, clean-wheel redact, verify, restore and halt demo | MIT; **no publisher**: `release-evatt.yml` carries no `pypi` job while the disclosure policy this package enforces is unsigned; local, offline, zero-network; standard library only |
+
+evatt has no import row above. It was written in this repository rather than
+fetched from a source repository, so there is no source commit, git tree or
+tracked-tree SHA-256 to record for it, and no `git subtree add --squash` record
+in the import list below.
 
 Imported workflows stayed nested under their component paths, never as active root
 workflows, until their removal on 7 September 2026; the subtree merge commits above still
@@ -123,6 +129,7 @@ disagree.
 | Xero Ledger Review Gate | `release-elizabeth-anne-alexander.yml` | `elizabeth-anne-alexander/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: elizabeth_anne_alexander/version.py` | `packages/elizabeth-anne-alexander` | `elizabeth-anne-alexander` | `pypi-elizabeth-anne-alexander` (https://pypi.org/p/elizabeth-anne-alexander) |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
+| evatt | `release-evatt.yml` | `evatt/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: evatt/version.py` | `packages/evatt` | `evatt` | none (GitHub release assets only; the caller has no `pypi` job) |
 
 The four Python callers upload the attested distribution (`upload-dist-artifact: true`) and
 publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
@@ -132,6 +139,15 @@ Before any monorepo release the owner must register each PyPI trusted publisher 
 new caller file name and environment (the repository currently has only the `pypi`
 environment). The Release Policy pin resolves to its protected `main`. No caller references
 a secret. No component directory carries a `release.yml` of its own.
+
+`release-evatt.yml` is the sixth caller and the exception to the paragraph
+above. It uploads the attested distribution but has no `pypi` job at all, so a
+tag produces GitHub release assets and publishes to no index. That is
+deliberate: a public release of evatt is out of scope until the disclosure
+policy the package enforces is signed off, and an absent job is a better guard
+than one that would fire on a stray tag. `packages/evatt/RELEASING.md` records
+the `pypi-evatt` environment and trusted-publisher values to register when that
+changes.
 
 Per-component verification workflows at import: `ci.yml` (anchor; workflow `tests`, jobs
 `test`, `package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
@@ -152,6 +168,9 @@ required-check names and `codeql.yml` are unchanged; the checks the matrix repor
 `component (<directory>, <import>) / <gate>`. The reusable workflow filters itself on the
 same paths the deleted workflows listed, and the readiness and ledger clean-wheel
 demonstrations run as its per-component `smoke` input. `AGENTS.md` lists the current gates.
+
+evatt uses its own `evatt.yml` workflow for Python 3.10 and 3.12, including
+the clean-wheel redact, verify, restore and halt demonstration.
 
 ## Whitespace declarations for exact upstream bytes
 

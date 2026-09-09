@@ -8,7 +8,7 @@
 # shared test toolchain in one command and run the whole suite from the top. See
 # the justfile for the setup, lint, typecheck and test entrypoints.
 #
-# Only the four Python distributions are members. The Excel adapter and the
+# Only the five Python distributions are members. The Excel adapter and the
 # Power BI application have no pyproject.toml and no Python dependencies; the
 # justfile runs their standard-library unittest suites from the same .venv.
 

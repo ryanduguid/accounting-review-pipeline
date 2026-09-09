@@ -1,0 +1,7 @@
+include LICENSE
+include README.md
+include DISCLAIMER.md
+include DATA-FLOW.md
+include SECURITY.md
+include CONTRIBUTING.md
+recursive-include evatt/samples *.md *.json
