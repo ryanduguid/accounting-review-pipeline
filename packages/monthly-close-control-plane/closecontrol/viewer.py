@@ -372,7 +372,63 @@ def _verify_rows_match(
 
 _QUERY_COUNT_LINE = re.compile(r"- Client queries drafted: (\d+)\.")
 
-_QUERY_ID_IN_SUMMARY = re.compile(r"Q-[0-9a-f]+")
+_CLIENT_QUERY_HEADING = "## Client queries"
+
+_CLIENT_QUERY_TABLE_HEADER = (
+    "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |"
+)
+
+# The renderer's placeholder for a tenant, account or difference it has none of.
+_ABSENT = "n/a"
+
+
+def _client_query_section(summary_text: str) -> str:
+    """Return the one client-query section, or raise.
+
+    Exactly one heading, for the same reason _summary_source_evidence scans the
+    whole document: a forged second section would otherwise be a region nothing
+    checks, sitting under a heading a reviewer reads as the register.
+    """
+    parts = summary_text.split(_CLIENT_QUERY_HEADING)
+    if len(parts) != 2:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: expected exactly one {_CLIENT_QUERY_HEADING!r} "
+            f"heading, found {len(parts) - 1}"
+        )
+    tail = parts[1]
+    end = re.search(r"^#{1,2}\s+", tail, flags=re.MULTILINE)
+    return tail[: end.start()] if end else tail
+
+
+def _split_md_row(line: str) -> list[str]:
+    """Split one rendered table row into its cells, honouring the writer's escapes.
+
+    report._md_cell escapes a backslash before a pipe, so a cell holding a pipe
+    arrives as ``\\|`` and must not end the cell. The escape sequences are kept
+    rather than resolved, because the expected text is built by the same
+    escaping and the two are compared as written.
+    """
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for character in line:
+        if escaped:
+            current.append(character)
+            escaped = False
+        elif character == "\\":
+            current.append(character)
+            escaped = True
+        elif character == "|":
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(character)
+    cells.append("".join(current).strip())
+    if cells and cells[0] == "":
+        cells = cells[1:]
+    if cells and cells[-1] == "":
+        cells = cells[:-1]
+    return cells
 
 
 def _md_cell_mirror(value: str) -> str:
@@ -392,19 +448,55 @@ def _md_cell_mirror(value: str) -> str:
     )
 
 
+def _expected_summary_row(query: dict) -> list[str]:
+    """Rebuild the table row report._as_markdown renders for one query.
+
+    Every cell is reconstructed, not a chosen few, so the check is a row-level
+    comparison rather than a search for text that appears somewhere. Two rows
+    whose questions were swapped hold the same identifiers, the same count and
+    the same set of questions; only rebuilding the row catches it, and a
+    preparer reading a swapped table asks the right question about the wrong
+    account.
+    """
+    fields = {}
+    for name in ("query_id", "control", "tenant", "account_id", "account_code",
+                 "account_name", "difference", "question", "evidence_requested"):
+        value = query.get(name)
+        if not isinstance(value, str):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{query.get('query_id')!r}].{name} "
+                "must be a string"
+            )
+        fields[name] = value
+    account = " / ".join(
+        piece for piece in (fields["account_code"], fields["account_name"]) if piece
+    ) or fields["account_id"] or _ABSENT
+    return [
+        fields["query_id"],
+        fields["control"],
+        _md_cell_mirror(fields["tenant"] or _ABSENT),
+        _md_cell_mirror(account),
+        fields["difference"] or _ABSENT,
+        _md_cell_mirror(fields["question"]),
+        _md_cell_mirror(fields["evidence_requested"]),
+    ]
+
+
 def _verify_summary_states_the_register(
     summary_text: str, client_queries: list
 ) -> None:
     """Prove close-summary.md holds the register the JSON pack holds.
 
     The summary is the artefact a preparer reads and copies a question out of,
-    so a question edited there alone is the divergence that matters most: the
-    pack would verify while the file somebody actually works from asks
-    something the run never asked. The count, every identifier and every
-    question text are checked; the remaining columns are already pinned
-    through the CSV.
+    so a row edited there alone is the divergence that matters most: the pack
+    would verify while the file somebody actually works from asks something the
+    run never asked. The table is parsed and each row rebuilt from the JSON,
+    rather than the document being searched for identifiers, so a value in an
+    exception reason or a reviewer comment neither counts as a query nor hides
+    one that was altered.
     """
-    if _CLIENT_QUERY_SENTENCE not in " ".join(summary_text.split()):
+    section = _client_query_section(summary_text)
+    if _CLIENT_QUERY_SENTENCE not in " ".join(section.split()):
         raise ControlInputError(
             f"{_SUMMARY_NAME}: the client-query boundary statement is missing or altered"
         )
@@ -421,26 +513,56 @@ def _verify_summary_states_the_register(
             f"{len(client_queries)}, {_SUMMARY_NAME} states {counts[0]}"
         )
 
-    flattened = " ".join(summary_text.split())
-    listed = _QUERY_ID_IN_SUMMARY.findall(summary_text)
-    expected_ids = [str(query["query_id"]) for query in client_queries]
-    if sorted(listed) != sorted(expected_ids):
+    lines = [line.strip() for line in section.splitlines() if line.strip().startswith("|")]
+    if not client_queries:
+        if lines:
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: holds a client-query table while {_JSON_NAME} "
+                "holds no queries"
+            )
+        return
+    if not lines or lines[0] != _CLIENT_QUERY_TABLE_HEADER:
         raise ControlInputError(
-            f"client-query identifiers disagree: {_SUMMARY_NAME} lists "
-            f"{sorted(listed)}, {_JSON_NAME} holds {sorted(expected_ids)}"
+            f"{_SUMMARY_NAME}: the client-query table header is missing or altered"
         )
-    for query in client_queries:
-        question = query.get("question")
-        if not isinstance(question, str):
+    rows = [_split_md_row(line) for line in lines[2:]]
+    if len(rows) != len(client_queries):
+        raise ControlInputError(
+            f"client-query counts disagree: {_JSON_NAME} holds "
+            f"{len(client_queries)}, {_SUMMARY_NAME} renders {len(rows)} table rows"
+        )
+    for index, (query, row) in enumerate(zip(client_queries, rows)):
+        expected = _expected_summary_row(query)
+        if row != expected:
             raise ControlInputError(
-                f"{_JSON_NAME}: client_queries[{query.get('query_id')!r}].question "
-                "must be a string"
+                f"{_SUMMARY_NAME}: client-query row {index + 1} disagrees with "
+                f"{_JSON_NAME}: renders {row!r}, expected {expected!r}"
             )
-        if _md_cell_mirror(question) not in flattened:
+
+
+def _verify_summary_holds_no_register(summary_text: str) -> None:
+    """A pack without the register must not have a summary that shows one.
+
+    Deleting client-queries.csv and the JSON member from a current pack leaves
+    a summary still carrying the heading, the count and the table. Reading that
+    as an older pack would display a sheet saying the register never existed
+    beside a file that lists it, so the absence has to hold across all three
+    artefacts or the pack is refused.
+    """
+    for marker, description in (
+        (_CLIENT_QUERY_HEADING, "a client-query section"),
+        (_CLIENT_QUERY_TABLE_HEADER, "a client-query table"),
+    ):
+        if marker in summary_text:
             raise ControlInputError(
-                f"{_SUMMARY_NAME}: the question for {query.get('query_id')} is "
-                f"missing or altered"
+                f"{_SUMMARY_NAME}: holds {description} while the pack carries no "
+                f"client-query register; the register is half removed, not absent"
             )
+    if _QUERY_COUNT_LINE.search(summary_text):
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: states a client-query count while the pack carries "
+            "no client-query register; the register is half removed, not absent"
+        )
 
 
 def _verify_cross_file_agreement(
@@ -491,6 +613,7 @@ def _verify_cross_file_agreement(
     )
 
     if query_rows is None:
+        _verify_summary_holds_no_register(summary_text)
         return
 
     client_queries = document["client_queries"]

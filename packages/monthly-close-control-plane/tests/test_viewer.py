@@ -12,6 +12,8 @@ from __future__ import annotations
 import ast
 import csv
 import json
+import re
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -24,6 +26,9 @@ from closecontrol.errors import ControlInputError
 from closecontrol.models import ExceptionItem, ReviewerAcknowledgement
 from closecontrol.report import write_review_pack
 from closecontrol.viewer import PACK_FILE_NAMES, render_review_sheet, verify_pack
+
+
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 
 def _pack(status: str = "REVIEW", *, with_acknowledgement: bool = False) -> CloseReviewPack:
@@ -171,7 +176,15 @@ def _legacy_pack(pack_dir: Path) -> Path:
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary = pack_dir / "close-summary.md"
     text = summary.read_text(encoding="utf-8")
-    summary.write_text(text.split("## Client queries")[0], encoding="utf-8")
+    kept, _, tail = text.partition("## Client queries")
+    # The heading is not the only trace: the scope block states a count, and a
+    # summary that still carries either is a stripped current pack, not an old
+    # one. The viewer refuses that, so the fixture has to remove both.
+    kept = "\n".join(
+        line for line in kept.splitlines() if "Client queries drafted" not in line
+    )
+    resumed = tail.partition("## Human acknowledgement")[1:]
+    summary.write_text(kept + "\n" + "".join(resumed), encoding="utf-8")
     return pack_dir
 
 
@@ -237,7 +250,123 @@ def test_a_question_edited_only_in_the_summary_fails_closed(pack_dir: Path) -> N
         ),
         encoding="utf-8",
     )
-    with pytest.raises(ControlInputError, match="question for Q-.* is missing or altered"):
+    with pytest.raises(ControlInputError, match="client-query row 1 disagrees"):
+        render_review_sheet(pack_dir)
+
+
+def _two_query_pack(tmp_path: Path) -> Path:
+    """A pack with two queries whose questions differ.
+
+    Two period_variance rows would carry the same question, and exchanging
+    identical cells proves nothing, so the two exceptions are of different
+    controls.
+    """
+    base = _pack()
+    variance = ExceptionItem(
+        control="period_variance",
+        status="REVIEW",
+        tenant="Varrock Ventures Pty Ltd",
+        account_id="200",
+        account_code="200",
+        account_name="Trade Debtors",
+        current_value=Decimal("42000.00"),
+        prior_value=Decimal("12000.00"),
+        difference=Decimal("30000.00"),
+        threshold=Decimal("1000"),
+        percentage_change=None,
+        reason="YTD net balance moved beyond both configured materiality thresholds.",
+        reviewer_action="Investigate the driver and retain supporting evidence.",
+    )
+    output = tmp_path / "two-query-pack"
+    write_review_pack(
+        replace(base, exceptions=base.exceptions + (variance,)), output
+    )
+    return output
+
+
+def test_swapped_questions_in_the_summary_fail_closed(tmp_path: Path) -> None:
+    """Two rows with their questions exchanged hold the same identifiers, the
+    same count and the same set of question strings. Only a row-level
+    comparison catches it, and a preparer reading the swapped table asks the
+    right question about the wrong account."""
+    pack = _two_query_pack(tmp_path)
+    summary = pack / "close-summary.md"
+    lines = summary.read_text(encoding="utf-8").splitlines()
+    rows = [index for index, line in enumerate(lines) if line.startswith("| Q-")]
+    assert len(rows) == 2, "fixture must raise exactly two queries"
+    first, second = rows[0], rows[1]
+    cells_first = lines[first].split(" | ")
+    cells_second = lines[second].split(" | ")
+    assert cells_first[5] != cells_second[5], "the two questions must differ"
+    cells_first[5], cells_second[5] = cells_second[5], cells_first[5]
+    lines[first] = " | ".join(cells_first)
+    lines[second] = " | ".join(cells_second)
+    summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="client-query row 1 disagrees"):
+        render_review_sheet(pack)
+
+
+def test_an_identifier_with_a_suffix_fails_closed(pack_dir: Path) -> None:
+    """A prefix match would accept Q-abc123ZZ as Q-abc123: the extracted value
+    equals the expected one and the altered document verifies."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(re.sub(r"(\| Q-[0-9a-f]+) \|", r"\1ZZ |", text, count=1), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="client-query row 1 disagrees"):
+        render_review_sheet(pack_dir)
+
+
+def test_query_shaped_text_elsewhere_does_not_break_a_sound_pack(tmp_path: Path) -> None:
+    """An exception reason or a reviewer comment may legitimately mention a
+    ticket like Q-deadbeef. Counting it as a query would refuse a pack that is
+    entirely consistent, so only the table's own rows are read."""
+    output = tmp_path / "commented-pack"
+    base = _pack(with_acknowledgement=True)
+    assert base.acknowledgement is not None
+    write_review_pack(
+        replace(
+            base,
+            acknowledgement=replace(
+                base.acknowledgement,
+                comment="Discussed with the controller, see ticket Q-deadbeef.",
+            ),
+        ),
+        output,
+    )
+
+    # Written by the real writer, so every artefact carries the comment and the
+    # pack is internally consistent. Only the table's own rows are read, so the
+    # ticket in the comment neither counts as a query nor hides one.
+    sheet, _ = render_review_sheet(output)
+    assert "Q-deadbeef" in sheet
+    assert "Client queries drafted: 1." in sheet
+
+
+def test_a_stripped_current_pack_is_not_read_as_an_older_one(pack_dir: Path) -> None:
+    """Removing the query CSV and the JSON member from a current pack leaves a
+    summary that still lists the register. Reading that as legacy would show a
+    sheet saying the register never existed beside a file that displays it."""
+    (pack_dir / "client-queries.csv").unlink()
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["client_queries"]
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_forged_second_query_section_fails_closed(pack_dir: Path) -> None:
+    """A second section would be a region nothing checks, under a heading a
+    reviewer reads as the register."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + "\n## Client queries\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="exactly one .* heading"):
         render_review_sheet(pack_dir)
 
 
