@@ -44,7 +44,7 @@ close-control review \
   --output ../../../close-control-demo/gateway-tb-loop
 ```
 
-Leave the default materiality thresholds ($1,000 absolute and 10%). The command exits `2` because the pack is `REVIEW`, not because the files are invalid. It writes `close-summary.md`, `exceptions.csv`, and `close-review-pack.json` under `../../../close-control-demo/gateway-tb-loop`.
+Leave the default materiality thresholds ($1,000 absolute and 10%). The command exits `2` because the pack is `REVIEW`. It writes `close-summary.md`, `exceptions.csv`, `client-queries.csv`, and `close-review-pack.json` under `../../../close-control-demo/gateway-tb-loop`.
 
 That path sits beside the repository rather than inside it. `close-control` refuses an `--output` directory inside a version-control checkout and exits `1`, so an in-repo path such as `outputs/gateway-tb-loop` writes nothing.
 
