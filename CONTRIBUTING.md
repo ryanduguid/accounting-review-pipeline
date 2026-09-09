@@ -13,7 +13,7 @@ uv sync        # install every Python component and the shared toolchain
 just test      # every component's suite, plus the joined conformance test
 ```
 
-`uv sync` creates one `.venv` at the root and installs the four Python distributions into it
+`uv sync` creates one `.venv` at the root and installs the five Python distributions into it
 as editable workspace members. The Excel adapter and the Power BI application have no
 `pyproject.toml`; their standard-library unittest suites run from the same `.venv`.
 
