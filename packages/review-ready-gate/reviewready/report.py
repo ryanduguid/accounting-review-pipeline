@@ -227,6 +227,24 @@ the firm least likely to be told this tool assumed the other.
 """
 
 
+def _reject_unreachable(directory: Path) -> None:
+    """Raise OSError if a resolved destination cannot be reached at all.
+
+    ``Path.resolve`` reports a symbolic-link loop as RuntimeError before Python
+    3.13 and simply hands back the unresolved path from 3.13, so on the newer
+    interpreters the loop shows up only when something stats the path. Stating
+    it here keeps every supported version refusing in the same place, instead
+    of one of them walking a path it never resolved and failing later in mkdir.
+
+    A destination that is not there yet is the ordinary case: the writer
+    creates it.
+    """
+    try:
+        directory.stat()
+    except FileNotFoundError:
+        return
+
+
 def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
     """Return the checkout root holding directory and the marker naming it, or None.
 
@@ -272,9 +290,11 @@ def require_output_outside_repository(output_dir: Path) -> Path:
 
     A path this function cannot examine is refused too, rather than allowed
     through or left to raise. ``resolve`` raises RuntimeError for a
-    symbolic-link loop on every Python before 3.13, and ``exists`` propagates a
-    permission error or an over-long name, so without this the command would
-    answer a bad --output with a traceback instead of the documented exit 1.
+    symbolic-link loop on every Python before 3.13 and returns the unresolved
+    path from 3.13, and ``exists`` propagates a permission error or an
+    over-long name, so without this the command would answer a bad --output
+    with a traceback on one interpreter and a later mkdir failure on another,
+    where the README promises a message and exit 1.
 
     The check is a refusal rather than a warning, and there is no override,
     because every other gate in this package fails closed and because the
@@ -283,6 +303,7 @@ def require_output_outside_repository(output_dir: Path) -> Path:
     """
     try:
         resolved = output_dir.resolve()
+        _reject_unreachable(resolved)
         checkout = _enclosing_repository(resolved)
     except (OSError, RuntimeError, ValueError) as exc:
         raise GateInputError(

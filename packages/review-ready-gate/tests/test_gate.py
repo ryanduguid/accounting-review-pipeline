@@ -338,16 +338,19 @@ def test_every_checkout_marker_is_refused(tmp_path: Path, marker: str) -> None:
 
 
 def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
-    """`Path.resolve` raises RuntimeError, not OSError, for a symlink loop on
-    every Python before 3.13. Uncaught it left the CLI's handlers untouched and
-    printed a traceback; from 3.13 resolve returns the unresolved path and the
-    later write fails instead. Either way the caller gets the guard's error."""
+    """One refusal on every supported interpreter, from the guard.
+
+    `Path.resolve` raises RuntimeError, not OSError, for a symlink loop before
+    Python 3.13, which left the CLI's handlers untouched and printed a
+    traceback. From 3.13 resolve hands back the unresolved path instead, and
+    the loop surfaced two layers later in mkdir. The guard stats the resolved
+    destination so both end here, with the same error."""
     looped = tmp_path / "loop"
     other = tmp_path / "other"
     looped.symlink_to(other)
     other.symlink_to(looped)
 
-    with pytest.raises(GateInputError, match="cannot be examined|inside the version-control"):
+    with pytest.raises(GateInputError, match="cannot be examined"):
         write_review_pack(_ready_pack(), looped / "march")
 
 
