@@ -12,8 +12,9 @@ Four traps in the copied material must not be undone:
 * Name tokens accept U+2019, the curly apostrophe Register text actually uses.
 * ``is_statutory`` checks all-caps candidates case-insensitively, because an
   all-caps token never matches the capitalised word list.
-* The TFN label separator is ``\\s*(?:[.:-]\\s*)?``. Written as the equivalent
-  ``\\s*[.:-]?\\s*`` it backtracks quadratically on long space runs.
+* The TFN label separator is ``\\s*(?:[.:\\u2013-]\\s*)?``. Written as the
+  equivalent ``\\s*[.:\\u2013-]?\\s*`` it backtracks quadratically on long
+  space runs.
 * Every phone alternative pins its digit count between ``(?<!\\d)`` and
   ``(?!\\d)`` so statutory references, years and grouped amounts stay out.
 
@@ -63,28 +64,37 @@ TFN_LABELLED = re.compile(
     r"\b(?:tax file number|TFN)\b\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)",
     re.I,
 )
+# The trailing dot of the spaced-out form is optional: "A.B.N 51 824 753 556"
+# is written as often as "A.B.N.", and the label is the evidence either way.
 ABN_LABELLED = re.compile(
-    r"(?:\bABN\b|\bA\.B\.N\.)\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){10})(?![\s-]?\d)",
+    r"(?:\bABN\b|\bA\.B\.N\.?)\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){10})(?![\s-]?\d)",
     re.I,
 )
 ACN_LABELLED = re.compile(
-    r"(?:\bACN\b|\bA\.C\.N\.)\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){8})(?![\s-]?\d)",
+    r"(?:\bACN\b|\bA\.C\.N\.?)\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){8})(?![\s-]?\d)",
     re.I,
 )
+# "card" earns its place beside "number" and "no": a workpaper transcribing a
+# Medicare card writes "Medicare card", and without it those digits fall
+# through to MEDICARE and are lost the moment the check digit fails.
 MEDICARE_LABELLED = re.compile(
-    r"\bMedicare\b(?:\s+(?:number|no)\b\.?)?\s*(?:[.:\u2013-]\s*)?"
+    r"\bMedicare\b(?:\s+(?:number|no|card)\b\.?)?\s*(?:[.:\u2013-]\s*)?"
     r"(\d(?:[\s-]?\d){9})(?![\s-]?\d)",
     re.I,
 )
-# The bare runs carry the two-character money guard as well as the one-character
-# one, so a run cannot start part-way through a grouped amount such as
-# "$1 234 567 890" the way it can start at the head of one.
+# The money guards on the bare runs are deliberately asymmetric. TFN_BARE keeps
+# the origin's two-character guard, which also stops a run starting part-way
+# through a grouped amount such as "$1 234 567 890": the origin scanned
+# published legislation, where a false positive blocked a release. ABN, ACN and
+# MEDICARE take the one-character guard only and so favour over-detection. The
+# two-character guard was tried on them and deleted real detections in the two
+# shapes a workpaper is full of, the table row ("row 7 123456780") and the
+# dated sentence ("in 2019 2123456701 was issued"). A false positive here costs
+# one placeholder in a private file; a miss leaks.
 TFN_BARE = re.compile(r"(?<![\d$])(?<![\d$][\s-])(\d{3}([\s-]?)\d{3}\2\d{3})(?![\s-]?\d)")
-ABN = re.compile(
-    r"(?<![\d$])(?<![\d$][\s-])(\d{2}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)"
-)
-ACN = re.compile(r"(?<![\d$])(?<![\d$][\s-])(\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
-MEDICARE = re.compile(r"(?<![\d$])(?<![\d$][\s-])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
+ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
+ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
+MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
 # No check digit exists for a BSB, so the hyphen is required. Accepting bare
 # six-digit runs would swallow ordinary numbers with nothing to reject them on.
 BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")

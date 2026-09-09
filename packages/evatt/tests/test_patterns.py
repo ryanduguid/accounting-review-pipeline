@@ -205,14 +205,74 @@ def test_address_and_date_of_birth_cover_the_added_shapes() -> None:
     assert not patterns.DOB.search("period ending 2024-03-14")
 
 
-def test_the_money_guard_keeps_a_grouped_amount_out() -> None:
-    """The two-character guard stops a run starting mid-amount.
+def test_a_grouped_amount_tail_is_accepted_over_detection() -> None:
+    """Deliberate over-detection, not an oversight: this ACN is a false positive.
 
-    000 000 019 passes both the TFN and the ACN check, so without the guard on
-    ABN, ACN and MEDICARE the tail of a grouped amount reports as an identifier.
+    000 000 019 satisfies the ASIC check digit, so the tail of "$1 000 000 019"
+    reports as an ACN. Only the two-character money guard would suppress it,
+    and that guard also deletes every detection pinned in the table-row test
+    below. Under-detection is the direction that matters, so the guard stays
+    off ABN, ACN and MEDICARE and this false positive is the accepted price:
+    one placeholder in a private file against a leak. TFN_BARE keeps the
+    origin's two-character guard and is unaffected.
     """
-    assert patterns.structured_spans("invoice $1 234 567 890 paid") == []
-    assert patterns.structured_spans("paid $1 000 000 019 today") == []
+    spans = patterns.structured_spans("paid $1 000 000 019 today")
+    assert [(kind, text) for _s, _e, kind, text in spans] == [("acn", "000 000 019")]
+    # The one-character guard still does its own job. 123456780 is a valid ACN,
+    # so this vector reports one the moment ``(?<![\d$])`` is dropped, unlike
+    # the "invoice $1 234 567 890 paid" it replaces: that one failed every
+    # check digit and so passed with or without any guard at all.
+    assert patterns.valid_acn("123456780")
+    assert patterns.structured_spans("total $123456780 owing") == []
+
+
+def test_table_row_and_dated_prose_identifiers_are_detected() -> None:
+    """The two shapes a workpaper is full of, pinned against the guard returning.
+
+    A two-character money guard on ABN, ACN and MEDICARE reports nothing for
+    any of these: the preceding "7 ", "2 " or "9 " is indistinguishable from
+    the interior of a grouped amount.
+    """
+    for text, kind, value in (
+        ("in 2019 2123456701 was issued", "medicare", "2123456701"),
+        ("row 7 123456780", "acn", "123456780"),
+        ("Entity 2 51824753556", "abn", "51824753556"),
+        ("Entity 2 51 824 753 556", "abn", "51 824 753 556"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
+
+
+def test_the_spaced_out_label_does_not_need_its_trailing_dot() -> None:
+    """A workpaper writes "A.B.N 51 824 753 556" as readily as "A.B.N.".
+
+    Every vector fails its check digit, so nothing but the label admits it.
+    """
+    for text, kind, value in (
+        ("A.B.N 51824753557", "abn", "51824753557"),
+        ("A.B.N 51 824 753 557", "abn", "51 824 753 557"),
+        ("A.C.N 123456781", "acn", "123456781"),
+        ("A.C.N 123 456 781", "acn", "123 456 781"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
+        assert patterns.structured_spans(value) == [], value
+
+
+def test_medicare_accepts_a_card_qualifier() -> None:
+    """Without "card", "Medicare card 2123456711" falls through to MEDICARE.
+
+    There the check digit rejects it and a real Medicare number is lost, which
+    is exactly what the labelled patterns exist to prevent.
+    """
+    for text, value in (
+        ("Medicare card 2123456701", "2123456701"),
+        ("Medicare card 2123456711", "2123456711"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [("medicare", value)], text
+    assert not patterns.valid_medicare("2123456711")
+    assert patterns.structured_spans("2123456711") == []
 
 
 def test_structured_spans_are_sorted_non_overlapping_and_slice_back() -> None:
