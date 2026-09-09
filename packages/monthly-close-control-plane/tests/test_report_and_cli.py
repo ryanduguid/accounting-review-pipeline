@@ -984,3 +984,123 @@ def test_a_blank_line_does_not_shift_the_reported_row_number(tmp_path: Path) -> 
     # The offending record is physically on line 4: header, row, blank, row.
     assert "row 4" in str(caught.value)
     assert "row 3" not in str(caught.value)
+
+
+# --- a pack never lands inside a checkout ----------------------------------
+
+
+def _fake_checkout(root: Path, *, git_is_a_file: bool = False) -> Path:
+    """Create a directory that looks like a version-control checkout.
+
+    A worktree and a submodule carry a `.git` file holding a gitdir pointer
+    rather than a directory, and both are still checkouts, so the guard has to
+    read existence rather than directory-ness.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    if git_is_a_file:
+        (root / ".git").write_text("gitdir: /elsewhere/.git/worktrees/wt\n", encoding="utf-8")
+    else:
+        (root / ".git").mkdir()
+    return root
+
+
+def test_writer_refuses_an_output_inside_a_checkout(tmp_path: Path) -> None:
+    """A pack names a client's accounts, balances and unexplained movements.
+    Inside a checkout it is one `git add -A` away from a history every clone
+    copies, and a .gitignore entry is a convention the next commit can waive."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+
+def test_a_refused_output_leaves_nothing_behind(tmp_path: Path) -> None:
+    """The guard runs before mkdir, so a refused run does not create the tree it
+    was told to write into and then abandon it."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+
+    with pytest.raises(ControlInputError):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+    assert not (checkout / "reports").exists()
+
+
+@pytest.mark.parametrize("git_is_a_file", [False, True])
+def test_a_worktree_pointer_counts_as_a_checkout(tmp_path: Path, git_is_a_file: bool) -> None:
+    checkout = _fake_checkout(tmp_path / "firm-repo", git_is_a_file=git_is_a_file)
+
+    with pytest.raises(ControlInputError, match=str(checkout)):
+        write_review_pack(_single_exception_pack(), checkout / "packs")
+
+
+def test_the_checkout_root_itself_is_refused(tmp_path: Path) -> None:
+    """`--output .` from a repository root is the same mistake as any nested
+    path, so the directory itself counts, not only its parents."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), checkout)
+
+
+def test_a_relative_path_climbing_into_a_checkout_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The path is resolved first, so `..` segments and a working directory
+    cannot walk a pack back into a repository the literal argument never named."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), Path("..") / "firm-repo" / "packs")
+
+
+def test_an_output_outside_any_checkout_still_writes(tmp_path: Path) -> None:
+    """The guard must not refuse the ordinary case: an access-controlled
+    directory that is not under version control at all."""
+    _fake_checkout(tmp_path / "firm-repo")
+    outputs = write_review_pack(_single_exception_pack(), tmp_path / "close-data" / "july")
+
+    assert sorted(path.name for path in outputs.values()) == sorted(PACK_FILES)
+
+
+def test_the_cli_refuses_before_it_reads_a_trial_balance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A reviewer who mistyped --output should hear about it before the run
+    opens a client's ledger, and the exit code is the documented 1 for an
+    invalid command configuration."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    unreadable = tmp_path / "does-not-exist.csv"
+
+    code = main([
+        "review",
+        "--current", str(unreadable),
+        "--prior", str(unreadable),
+        "--output", str(checkout / "packs"),
+    ])
+
+    assert code == 1
+    error = capsys.readouterr().err
+    assert "output error" in error
+    assert "inside the version-control checkout" in error
+    # The input error never fires: the run stopped before reading anything.
+    assert "input error" not in error
+
+
+def test_view_still_opens_a_pack_that_is_inside_a_checkout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The refusal is on writing. A firm that already has packs under version
+    control must still be able to read them, or the guard would take evidence
+    out of its hands."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    pack_dir = tmp_path / "outside" / "july"
+    # The viewer checks the recorded digests, so this pack needs real ones.
+    write_review_pack(_single_exception_pack(digest="a" * 64), pack_dir)
+    moved = checkout / "archive"
+    shutil.copytree(pack_dir, moved)
+
+    assert main(["view", "--pack-dir", str(moved)]) == 0
+    assert "Close Review Sheet" in capsys.readouterr().out

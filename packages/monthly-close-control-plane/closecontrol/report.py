@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from .engine import CloseReviewPack
+from .errors import ControlInputError
 from .models import ExceptionItem
 
 
@@ -307,6 +308,49 @@ PACK_FILE_NAMES = ("close-review-pack.json", "close-summary.md", "exceptions.csv
 """The three names write_review_pack claims in its output directory."""
 
 
+def _enclosing_repository(directory: Path) -> Path | None:
+    """Return the root of the version-control checkout holding directory, or None.
+
+    ``.git`` is a directory in an ordinary clone and a file in a worktree or a
+    submodule, so existence is the test rather than is_dir. The directory
+    itself counts: an --output pointed at a repository root is inside that
+    repository. Path.exists answers False for a path it cannot stat, which is
+    the safe direction here, because a directory this process cannot inspect is
+    not one it can show to be a checkout, and the write that follows fails on
+    its own terms if the path is unusable.
+    """
+    for candidate in (directory, *directory.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def require_output_outside_repository(output_dir: Path) -> None:
+    """Refuse an output directory that sits inside a version-control checkout.
+
+    A review pack names a client's accounts, balances and unexplained
+    movements. Inside a checkout it is one ``git add -A`` away from a history
+    that is copied to every clone and, on a public remote, to everyone; a
+    .gitignore entry is a convention the next commit can waive, and it does
+    nothing about the copy sitting in the working tree in the meantime.
+
+    The check is a refusal rather than a warning, and there is no override,
+    because every other gate in this package fails closed and because the
+    caller who most needs it is the one who did not think about it. A pack
+    already written into a checkout still opens: ``view`` only reads.
+    """
+    resolved = output_dir.resolve()
+    repository = _enclosing_repository(resolved)
+    if repository is None:
+        return
+    raise ControlInputError(
+        f"{output_dir} is inside the version-control checkout at {repository}. "
+        "A review pack names a client's accounts and balances, so it belongs in "
+        "an access-controlled directory outside version control. Point --output "
+        "somewhere outside that checkout."
+    )
+
+
 def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path]:
     """Write the three pack files so a failed run cannot leave two runs mixed together.
 
@@ -326,10 +370,16 @@ def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path
     this run's staged content or the previous run's. Concurrent runs sharing one
     output directory are not serialised; run one at a time per directory.
 
+    An output directory inside a version-control checkout is refused before any
+    directory is created, so a rejected run leaves nothing behind. The check
+    lives here rather than only in the CLI so that a library caller cannot
+    reach the writer without passing it.
+
     exceptions.csv carries a UTF-8 byte-order mark to match the canonical input
     files, so a spreadsheet that falls back to the Windows ANSI code page does
     not turn a tenant or account name into mojibake.
     """
+    require_output_outside_repository(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "close-review-pack.json"
     summary_path = output_dir / "close-summary.md"

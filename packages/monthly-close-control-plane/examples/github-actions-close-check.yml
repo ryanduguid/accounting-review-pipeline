@@ -6,7 +6,8 @@
 #
 # Exit codes, from closecontrol/cli.py:
 #   0  every control passed (PASS)
-#   1  malformed input, invalid command configuration, or unwritable --output
+#   1  malformed input, invalid command configuration, an --output inside a
+#      version-control checkout, or an unwritable --output
 #   2  the pack needs human attention (REVIEW or BLOCKED)
 #
 # REVIEW and BLOCKED share exit code 2, so the exit code alone cannot single
@@ -16,6 +17,12 @@
 #
 # Store only fabricated or synthetic data in the repository. Never commit a
 # client trial balance.
+#
+# The pack is written to $RUNNER_TEMP, outside the checkout, and reaches you
+# as a build artifact. close-control refuses an --output directory under
+# version control: a pack names accounts, balances and unexplained movements,
+# and a workflow that later commits or pushes the workspace would carry it
+# into a history every clone copies.
 
 name: scheduled-close-check
 
@@ -57,7 +64,7 @@ jobs:
             --prior examples/prior_trial_balance.csv \
             --absolute-threshold 10000 \
             --percentage-threshold 0.10 \
-            --output outputs/close-check && code=0 || code=$?
+            --output "$RUNNER_TEMP/close-check" && code=0 || code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
       - name: Fail on BLOCKED, report REVIEW
@@ -67,7 +74,7 @@ jobs:
             echo "close-control reported a malformed input or configuration." >&2
             exit 1
           fi
-          status=$(python -c "import json; print(json.load(open('outputs/close-check/close-review-pack.json'))['overall_status'])")
+          status=$(python -c "import json, os; print(json.load(open(os.environ['RUNNER_TEMP'] + '/close-check/close-review-pack.json'))['overall_status'])")
           echo "Overall status: $status (exit code $code)"
           if [ "$status" = "BLOCKED" ]; then
             echo "The trial balance failed an integrity gate. Fix the source export." >&2
@@ -81,4 +88,4 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: close-review-pack
-          path: outputs/close-check/
+          path: ${{ runner.temp }}/close-check/
