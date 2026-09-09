@@ -196,6 +196,20 @@ def test_save_refuses_a_committable_destination(tmp_path, tracked) -> None:
 
 
 @git_required
+def test_save_through_a_symlink_updates_the_ignored_target(tmp_path) -> None:
+    path = repo_map(tmp_path, SAMPLE)
+    alias = path.with_name("map-link.json")
+    try:
+        alias.symlink_to(path)
+    except OSError:
+        pytest.skip("creating symbolic links is unavailable")
+    updated = entities.load(path)[:1]
+    entities.save(alias, updated)
+    assert alias.is_symlink()
+    assert entities.load(path) == updated
+
+
+@git_required
 def test_save_leaves_the_previous_map_intact_when_the_write_fails(tmp_path, monkeypatch) -> None:
     """An interrupted save must not truncate the only copy of the key."""
     path = repo_map(tmp_path, SAMPLE)

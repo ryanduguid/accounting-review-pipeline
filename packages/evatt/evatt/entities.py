@@ -176,6 +176,8 @@ def save(path: Path, entities: Sequence[Entity]) -> None:
     that reaches the disk ahead of the data it points at produces exactly the
     truncated map the temporary exists to prevent.
     """
+    # Write to the same resolved target that the ignore guard checks.
+    path = path.resolve()
     require_gitignored(path)
     temporary = path.with_name(path.name + ".tmp")
     require_gitignored(temporary)
