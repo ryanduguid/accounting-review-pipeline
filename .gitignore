@@ -11,7 +11,10 @@
 outputs/
 review-notes/
 
-# A review pack goes wherever --output points, not only to outputs/.
+# close-control now refuses an --output directory inside a checkout, so it can
+# no longer write a monthly-close pack here at all. These stay as the second
+# line: they still catch a pack copied in by hand, a pack from an older release,
+# and the packs the other components write.
 # exceptions.csv is caught by *.csv above; these two were not caught by
 # anything, so a pack written into the checkout was committable.
 close-review-pack.json
@@ -32,6 +35,8 @@ packages/monthly-close-control-plane/schemas/exceptions.csv
 *.pem
 __pycache__/
 .pytest_cache/
+.coverage
+coverage.xml
 .venv/
 build/
 dist/
