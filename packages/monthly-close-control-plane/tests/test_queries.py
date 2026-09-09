@@ -127,6 +127,20 @@ def test_query_ids_are_stable_across_runs_and_unique_within_one() -> None:
     assert len({query.query_id for query in first}) == 2
 
 
+def test_a_pipe_in_a_tenant_or_account_cannot_collide_two_queries() -> None:
+    """The loader admits a pipe in both fields, so joining the identifier's
+    parts on one alone gave tenant "A|B" with account "C" the same material as
+    tenant "A" with account "B|C". Two unrelated accounts drew one identifier,
+    and the duplicate guard then aborted the whole pack naming a cause that
+    never happened. Length-prefixing each part settles it whatever the text."""
+    left = _exception("subledger_reconciliation", tenant="A|B", account_id="C")
+    right = _exception("subledger_reconciliation", tenant="A", account_id="B|C")
+
+    queries = derive_client_queries((left, right))
+
+    assert len({query.query_id for query in queries}) == 2
+
+
 def test_two_queries_for_one_account_and_control_fail_loudly() -> None:
     """One number against two questions is worse than no register: the client
     answers one of them and the firm cannot tell which.

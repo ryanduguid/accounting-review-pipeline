@@ -167,6 +167,45 @@ def test_a_duplicated_query_id_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
+def test_an_added_query_field_fails_closed(pack_dir: Path) -> None:
+    """The CSV projects exactly the ten fields the writer emits, so a member
+    outside them is one no other file witnesses: it passes every cross-file
+    comparison and leaves an edited pack verifying. `approved_by` is the shape
+    that matters here, since the pack exists to show nothing approved
+    anything."""
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["client_queries"][0]["approved_by"] = "the preparer"
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="does not hold the fields the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_removed_query_field_fails_closed(pack_dir: Path) -> None:
+    """The same check in the other direction: a dropped field is not silently
+    read as an empty one."""
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["client_queries"][0]["evidence_requested"]
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="does not hold the fields the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_non_string_query_field_fails_closed(pack_dir: Path) -> None:
+    """Every projected field is text in the CSV, so a number or a null in the
+    JSON is a malformed register, not a value to render."""
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["client_queries"][0]["difference"] = 15000
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match="difference must be a string"):
+        render_review_sheet(pack_dir)
+
+
 def _legacy_pack(pack_dir: Path) -> Path:
     """Turn a pack into one written before the client-query register existed."""
     (pack_dir / "client-queries.csv").unlink()

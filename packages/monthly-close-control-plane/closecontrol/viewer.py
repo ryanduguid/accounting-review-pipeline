@@ -273,8 +273,24 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 raise ControlInputError(
                     f"{_JSON_NAME}: client_queries[{index}] must be an object"
                 )
-            query_id = query.get("query_id")
-            if not isinstance(query_id, str) or not query_id:
+            # The CSV projects exactly these fields, so a member outside them is
+            # one no other file witnesses: it survives every cross-file
+            # comparison and leaves an edited pack verifying. The top-level
+            # members are held to their exact set for the same reason. The
+            # register is new, so no earlier pack carries a different shape.
+            if set(query) != set(_QUERY_CSV_FIELDS):
+                raise ControlInputError(
+                    f"{_JSON_NAME}: client_queries[{index}] does not hold the "
+                    f"fields the writer emits: holds {sorted(query)!r}, "
+                    f"expected {sorted(_QUERY_CSV_FIELDS)!r}"
+                )
+            for field in _QUERY_CSV_FIELDS:
+                if not isinstance(query[field], str):
+                    raise ControlInputError(
+                        f"{_JSON_NAME}: client_queries[{index}].{field} must be a string"
+                    )
+            query_id = query["query_id"]
+            if not query_id:
                 raise ControlInputError(
                     f"{_JSON_NAME}: client_queries[{index}].query_id must be a "
                     "non-empty string"

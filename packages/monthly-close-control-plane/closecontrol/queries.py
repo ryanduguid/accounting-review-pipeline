@@ -138,8 +138,16 @@ def _query_id(item: ExceptionItem, variant: str) -> str:
     last month's list sees the same identifier this month if the same question
     recurs, and an unrelated exception appearing earlier in the pack does not
     renumber it.
+
+    Each part is length-prefixed because a bare separator does not distinguish
+    the parts it joins: the loader admits a pipe in a tenant and in an account
+    id, so joining on one alone gives tenant "A|B" with account "C" the same
+    material as tenant "A" with account "B|C". Two unrelated accounts would
+    then draw the same identifier, and the duplicate guard below would abort
+    the whole pack while naming a cause that never happened.
     """
-    material = "|".join((item.control, variant, item.tenant, item.account_id))
+    parts = (item.control, variant, item.tenant, item.account_id)
+    material = "|".join(f"{len(part)}:{part}" for part in parts)
     return "Q-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:_ID_LENGTH]
 
 
