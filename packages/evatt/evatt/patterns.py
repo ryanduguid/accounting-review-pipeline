@@ -134,11 +134,17 @@ MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
 # six-digit runs would swallow ordinary numbers with nothing to reject them on.
 BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")
 
+# The street-name tokens take the same accented letters as ``_TOKEN``. While
+# they were ASCII-only, "12 Gr\u00fcner Street" missed ADDRESS and reached the
+# name sweep instead, which reported the street as the person "Gr\u00fcner
+# Street": the halt still fired, so nothing leaked, but the operator was asked
+# the wrong question about the wrong kind of thing. The house-number suffix
+# stays ASCII, because "12A" is a unit letter and never an accented one.
 ADDRESS = re.compile(
-    r"\b\d{1,4}[A-Za-z]?\s+[A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?\s+"
+    r"\b\d{1,4}[A-Za-z]?\s+[%s][%s%s'\u2019-]+(?:\s+[%s][%s%s'\u2019-]+)?\s+"
     r"(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Court|Ct|Place|Pl|Lane|Ln|"
     r"Parade|Pde|Crescent|Cres|Highway|Hwy|Terrace|Tce|Close|Way|Circuit|"
-    r"Boulevard|Esplanade|Grove)\b"
+    r"Boulevard|Esplanade|Grove)\b" % (_UPPER, _UPPER, _LOWER, _UPPER, _UPPER, _LOWER)
 )
 # Australian workpapers write a date of birth numerically far more often than
 # they spell the month. ``yyyy-mm-dd`` is deliberately absent: it collides with
@@ -267,26 +273,47 @@ def person_name_spans(text: str) -> list[tuple[int, int, str]]:
     prose, and both used to pass through silently. A window that is itself
     statutory stays dropped, so "Income Tax Assessment" still reports nothing.
 
-    The two-token case is deliberately unchanged. Dropping a statutory word from
-    a two-token candidate leaves one token, which is not a name shape, so there
-    is nothing to report and reporting the pair would only add triage noise.
+    The two-token case reports nothing of its own, for the same reason: dropping
+    the statutory word leaves one token, which is not a name shape.
+
+    A candidate that keeps nothing must not consume its own tokens, which is why
+    the scan is a ``search`` loop rather than ``finditer``. A rejected candidate
+    resumes at its SECOND token, so every token but the first is offered again
+    inside the next candidate. ``finditer`` resumes past the whole match instead,
+    and a heading ending in "<Cap> <Statutory>" then swallowed the family name on
+    the line below it: NAME's ``\\s+`` spans the newline, so "Payroll Tax\\nJohn"
+    is one three-token candidate whose windows are both statutory, and "Smith"
+    was never offered to anything. Retrying from "Tax" instead yields
+    "Tax\\nJohn Smith", whose second window is the person. The single-line form,
+    "Income Tax John Smith called", leaked the same way and is fixed by the same
+    resume.
+
+    The loop terminates because ``pos`` strictly increases: NAME matches at least
+    two tokens, so the second token starts after the candidate does, and every
+    other path advances to ``match.end()``.
 
     Spans are returned rather than a bare set because the residual sweep has to
     map each candidate back to the line it starts on.
     """
     found: list[tuple[int, int, str]] = []
-    for match in NAME.finditer(text):
+    pos = 0
+    match = NAME.search(text, pos)
+    while match is not None:
         candidate = match.group(0)
         if not is_statutory(candidate):
             found.append((match.start(), match.end(), candidate))
-            continue
-        tokens = [token.span() for token in _NAME_TOKEN.finditer(candidate)]
-        if len(tokens) != 3:
-            continue
-        for (start, _), (_, end) in zip(tokens, tokens[1:]):
-            window = candidate[start:end]
-            if not is_statutory(window):
-                found.append((match.start() + start, match.start() + end, window))
+            pos = match.end()
+        else:
+            tokens = [token.span() for token in _NAME_TOKEN.finditer(candidate)]
+            kept = False
+            if len(tokens) == 3:
+                for (start, _), (_, end) in zip(tokens, tokens[1:]):
+                    window = candidate[start:end]
+                    if not is_statutory(window):
+                        found.append((match.start() + start, match.start() + end, window))
+                        kept = True
+            pos = match.end() if kept else match.start() + tokens[1][0]
+        match = NAME.search(text, pos)
     return found
 
 

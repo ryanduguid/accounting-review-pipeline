@@ -93,6 +93,26 @@ def test_an_address_is_reported() -> None:
     assert [u.kind for u in unknowns] == ["address"]
 
 
+def test_an_accented_street_name_is_reported_as_an_address_not_a_person() -> None:
+    """ADDRESS was ASCII-only while NAME was not, so the kind came out wrong.
+
+    "12 Gr\u00fcner Street" missed ADDRESS, so it was never masked before the
+    name sweep and came back as the person "Gr\u00fcner Street". The halt fired
+    either way, so nothing leaked, but triage was asked the wrong question about
+    the wrong kind of thing.
+    """
+    for text, value in (
+        ("Site at 12 Gr\u00fcner Street was sold", "12 Gr\u00fcner Street"),
+        ("Site at 4 \u00d6lund Road was sold", "4 \u00d6lund Road"),
+        (
+            "Site at 9 Jos\u00e9 Ram\u00edrez Avenue was sold",
+            "9 Jos\u00e9 Ram\u00edrez Avenue",
+        ),
+    ):
+        unknowns = redact_module.residual(text)
+        assert [(u.kind, u.value) for u in unknowns] == [("address", value)], text
+
+
 def test_a_date_of_birth_is_reported() -> None:
     unknowns = redact_module.residual("Born 14 March 1982")
     assert [u.kind for u in unknowns] == ["date"]

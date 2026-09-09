@@ -390,6 +390,17 @@ def _failing_scan_seconds(pattern: re.Pattern[str], label: str, spaces: int) -> 
     return best
 
 
+def _best_span_seconds(unit: str, repetitions: int) -> float:
+    """Best of three name sweeps over *unit* repeated, for the growth check."""
+    text = unit * repetitions
+    best = float("inf")
+    for _ in range(3):
+        started = time.perf_counter()
+        patterns.person_name_spans(text)
+        best = min(best, time.perf_counter() - started)
+    return best
+
+
 def test_the_labelled_separator_does_not_backtrack_quadratically() -> None:
     """Fails if ``\\s*[.:-]?\\s*`` ever replaces ``\\s*(?:[.:-]\\s*)?``.
 
@@ -435,6 +446,61 @@ def test_a_statutory_word_no_longer_swallows_the_person_beside_it() -> None:
         assert patterns.person_names(text) == {name}, text
 
 
+def test_a_statutory_heading_above_a_person_no_longer_orphans_the_family_name() -> None:
+    """The ordinary shape of these documents: a heading, then a person below it.
+
+    NAME's ``\\s+`` spans the newline, so "Payroll Tax\\nJohn" is one three-token
+    candidate whose windows are both statutory. While the scan resumed at
+    ``match.end()`` the candidate took "John" with it, "Smith" was left as a
+    single token that no pattern reports, and the whole document came back
+    unchanged with an empty manifest and no halt. Resuming at the rejected
+    candidate's second token offers "Tax\\nJohn Smith" instead, whose second
+    window is the person.
+    """
+    for text, name in (
+        ("## Income Tax\nJohn Smith prepared the return", "John Smith"),
+        ("Payroll Tax\nJohn Smith called", "John Smith"),
+        ("Deferred Tax\nMary Jones reviewed", "Mary Jones"),
+        ("Federal Court\nAnna Petrov appeared", "Anna Petrov"),
+        ("Notes to Income Tax\nJohn Smith signed", "John Smith"),
+        ("Land Tax\nDaniel Okafor paid", "Daniel Okafor"),
+        ("Trust Income\nJane Doe signed", "Jane Doe"),
+    ):
+        assert name in patterns.person_names(text), text
+
+
+def test_the_single_line_form_of_that_shape_is_recovered_too() -> None:
+    """The same three-token rejection with a space where the newline was.
+
+    This one leaked before the three-token window retry existed and after it,
+    because both versions resumed past everything the rejected candidate had
+    consumed. Only the resume position fixes it.
+    """
+    for text, name in (
+        ("Income Tax John Smith called on one line", "John Smith"),
+        ("Payroll Tax Mary Jones reconciled it", "Mary Jones"),
+        ("the Federal Court Anna Petrov appeared", "Anna Petrov"),
+    ):
+        assert name in patterns.person_names(text), text
+
+
+def test_the_rejected_candidate_retry_stays_linear() -> None:
+    """Guards the search loop against a hang or quadratic re-scan.
+
+    Every rejected candidate re-searches from its own second token, so text made
+    entirely of rejected candidates is the worst case for the loop. ``pos``
+    strictly increases on every iteration, which bounds it at one iteration per
+    token; if that ever stops holding this test hangs rather than fails, which
+    is the louder of the two failures.
+    """
+    for unit in ("Tax Court ", "Tax Zzz ", "Income Tax\nJohn Smith\n"):
+        small = _best_span_seconds(unit, 2_000)
+        assert small < 0.5, (unit, small)
+        large = _best_span_seconds(unit, 8_000)
+        # Sixteen would be quadratic. The 10 ms term absorbs scheduler noise.
+        assert large < 8 * small + 0.010, (unit, small, large)
+
+
 def test_a_two_token_candidate_holding_a_statutory_word_still_drops() -> None:
     """Deliberate: dropping the statutory half leaves one token, which is not a name."""
     assert patterns.person_names("Tax Smith reconciled the account") == set()
@@ -456,3 +522,26 @@ def test_person_name_spans_point_at_the_text_they_report() -> None:
     text = "the Commissioner Anna Petrov letter"
     spans = patterns.person_name_spans(text)
     assert [text[start:end] for start, end, _value in spans] == [value for *_, value in spans]
+
+
+def test_person_name_spans_are_ordered_and_report_each_person_once() -> None:
+    """The retry resumes inside a rejected candidate, so a span could repeat.
+
+    A candidate that keeps a window must resume past the whole candidate. If it
+    resumed at its second token instead, "Commissioner Anna Petrov" would report
+    "Anna Petrov" from the window and again from the next candidate. Only the
+    span list shows it: ``person_names`` is a set and the residual sweep keeps
+    one report per name per line, so both would hide the duplicate.
+    """
+    for text in (
+        "the Commissioner Anna Petrov letter",
+        "reviewed by Priya Sharma Superannuation",
+        "## Income Tax\nJohn Smith prepared the return",
+        "the Board Daniel Okafor and Mary Jones met",
+    ):
+        spans = patterns.person_name_spans(text)
+        assert len(spans) == len(set(spans)), (text, spans)
+        previous_end = 0
+        for start, end, _value in spans:
+            assert start >= previous_end, (text, spans)
+            previous_end = end
