@@ -24,7 +24,7 @@ from types import MappingProxyType
 from typing import Mapping, Sequence
 
 from .errors import EvattError
-from .patterns import PLACEHOLDER
+from .patterns import PLACEHOLDER_CI
 
 SCHEMA_VERSION = 1
 KINDS = ("client", "person", "staff", "entity")
@@ -76,7 +76,10 @@ def _check_fields(
     a pattern, so a map holding the value "TFN_01" rewrites the placeholder pass
     one has just written, destroys the only record that a tax file number was
     there, and leaves a manifest that still counts the tfn. Refusing it here
-    keeps it out of the map rather than repairing the damage later.
+    keeps it out of the map rather than repairing the damage later. The shape
+    test is ``PLACEHOLDER_CI`` rather than ``PLACEHOLDER``, because the pattern
+    pass two compiles is case-insensitive: while this guard was case-sensitive
+    it accepted "tfn_01" and "Tfn_01", and those did the same damage.
 
     *folded* maps each already-accepted value's fold to the value it came from.
     A new value that folds onto one of them is refused, which is what keeps two
@@ -91,7 +94,7 @@ def _check_fields(
     """
     if not isinstance(value, str) or not value.strip():
         raise EvattError("entity value must be a non-empty string")
-    if PLACEHOLDER.search(value):
+    if PLACEHOLDER_CI.search(value):
         raise EvattError(f"entity value {value!r} is shaped like an assigned placeholder")
     if kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")

@@ -193,6 +193,23 @@ PLACEHOLDER = re.compile(
     r"(?<!%s)(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
     % PLACEHOLDER_BOUNDARY
 )
+# The same shape, folded for case, and used by exactly the two guards that ask
+# whether an entity map VALUE is placeholder-shaped: ``entities._check_fields``
+# and ``redact._replace_entities``. Those two have to agree with
+# ``value_pattern``, which is ``re.IGNORECASE``, or a value the map accepts as
+# ordinary text still compiles into a pattern that eats the placeholder pass one
+# has just written. Entity(value="tfn_01", placeholder="CLIENT_07") turned
+# "TFN: 123 456 782" into "TFN: CLIENT_07": the only record that a tax file
+# number stood there was destroyed, the manifest counted a client that never
+# appeared, ``verify`` called the output clean, and ``restore`` wrote "tfn_01"
+# back into the position.
+#
+# PLACEHOLDER itself stays case-sensitive. ``redact._input_placeholders``,
+# ``verify._carried_placeholders`` and ``restore`` read it to decide what this
+# package's OWN output looks like, and that output is minted upper case by
+# ``_PREFIX`` and ``_KIND_PREFIX``. Widening it there would change which inputs
+# halt and which tokens restore, which is a different decision from this one.
+PLACEHOLDER_CI = re.compile(PLACEHOLDER.pattern, re.I)
 
 
 def value_pattern(value: str) -> re.Pattern[str]:

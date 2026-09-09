@@ -24,6 +24,7 @@ from .patterns import (
     ADDRESS,
     DOB,
     PLACEHOLDER,
+    PLACEHOLDER_CI,
     person_name_spans,
     structured_spans,
     value_pattern,
@@ -137,7 +138,12 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # has just written: Entity("TFN_01", "CLIENT_07", ...) destroys the only
         # record that a tax file number was there and leaves a manifest
         # counting a client that never appeared.
-        if not entity.value.strip() or PLACEHOLDER.search(entity.value):
+        #
+        # The shape test is PLACEHOLDER_CI, matching the case-insensitive
+        # pattern ``value_pattern`` compiles below. Case-sensitive, it let
+        # "tfn_01" straight through and did exactly that damage, and ``load``
+        # accepted the same value, so the map gate was no backstop either.
+        if not entity.value.strip() or PLACEHOLDER_CI.search(entity.value):
             continue
         for match in value_pattern(entity.value).finditer(text):
             found.append((match.start(), match.end(), priority, entity))

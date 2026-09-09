@@ -323,12 +323,23 @@ def test_require_gitignored_fails_closed_on_an_unexpected_exit_code(tmp_path, mo
         entities.require_gitignored(tmp_path / "entities.json")
 
 
-@pytest.mark.parametrize("value", ["TFN_01", "CLIENT_07", "Acme ENTITY_12 Pty Ltd"])
+@pytest.mark.parametrize(
+    "value",
+    ["TFN_01", "CLIENT_07", "Acme ENTITY_12 Pty Ltd",
+     "tfn_01", "Tfn_01", "client_01", "medicare_01", "Acme entity_12 Pty Ltd"],
+)
 def test_a_placeholder_shaped_value_never_enters_the_map(value, tmp_path) -> None:
     """Pass two compiles the raw value into a pattern, so such a value destroys a real one.
 
     A map holding "TFN_01" rewrites the placeholder pass one has just written
     over a real tax file number, and leaves a manifest still counting the tfn.
+
+    The lower-case and mixed-case spellings are here because ``value_pattern``
+    is ``re.IGNORECASE``: "tfn_01" compiles into a pattern that matches TFN_01
+    just as surely as "TFN_01" does. While this guard read the case-sensitive
+    PLACEHOLDER it accepted every one of them, and ``load`` accepted them too,
+    so the damage was reachable from a map file on disk and not only from a
+    hand-built Sequence.
     """
     with pytest.raises(EvattError):
         entities.assign([], value, "client", "2026-09-10")

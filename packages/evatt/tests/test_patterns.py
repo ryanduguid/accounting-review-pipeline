@@ -622,3 +622,14 @@ def test_the_placeholder_prefixes_stay_in_union_with_both_tables() -> None:
     assert {kind for kind, _pattern, _validator in patterns._STRUCTURED} == set(
         redact_module._KIND_PREFIX
     )
+    # PLACEHOLDER_CI is the same shape folded for case, so a prefix added to one
+    # cannot be missed by the other. The two guards that ask whether an entity
+    # VALUE is placeholder-shaped read the CI form, because ``value_pattern`` is
+    # itself IGNORECASE; everything that describes this package's own output
+    # reads the case-sensitive original.
+    assert patterns.PLACEHOLDER_CI.pattern == patterns.PLACEHOLDER.pattern
+    assert not patterns.PLACEHOLDER.flags & re.I
+    assert patterns.PLACEHOLDER_CI.flags & re.I
+    for prefix in minted:
+        assert patterns.PLACEHOLDER_CI.fullmatch(f"{prefix.lower()}_01"), prefix
+        assert not patterns.PLACEHOLDER.fullmatch(f"{prefix.lower()}_01"), prefix

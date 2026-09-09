@@ -201,6 +201,33 @@ def test_a_hand_built_placeholder_value_cannot_destroy_a_real_placeholder() -> N
     assert counts == {"tfn": 1}
 
 
+@pytest.mark.parametrize("value", ["tfn_01", "Tfn_01", "TFN_01"])
+def test_a_lower_case_placeholder_value_cannot_destroy_a_real_placeholder(value) -> None:
+    """``value_pattern`` is IGNORECASE, so the skip in pass two has to be too.
+
+    While the skip read the case-sensitive PLACEHOLDER, an entity valued
+    "tfn_01" passed it, then matched the TFN_01 pass one had just written. The
+    output said "TFN: CLIENT_07 was quoted", the manifest counted a client that
+    never appeared, ``verify`` called the file clean, and ``restore`` put
+    "tfn_01" back where a tax file number had stood. ``load`` accepted the same
+    value, so no earlier gate stopped it either.
+    """
+    forged = (Entity(value, "CLIENT_07", "client", "2026-09-09"),)
+    text, counts = redact("TFN: 123 456 782 on file", forged)
+    assert text == "TFN: TFN_01 on file"
+    assert "123 456 782" not in text
+    assert "CLIENT_07" not in text
+    assert counts == {"tfn": 1}
+
+
+def test_a_lower_case_placeholder_value_cannot_rewrite_a_mapped_placeholder() -> None:
+    """The same skip, on the prefix pass one never mints, so only pass two can be at fault."""
+    forged = (Entity("client_01", "PERSON_09", "person", "2026-09-09"),)
+    text, counts = redact("CLIENT_01 was the code used.", forged)
+    assert text == "CLIENT_01 was the code used."
+    assert counts == {}
+
+
 def test_a_placeholder_already_in_the_input_halts() -> None:
     """Otherwise restore writes a real client name where it never appeared."""
     with pytest.raises(Halt) as caught:
