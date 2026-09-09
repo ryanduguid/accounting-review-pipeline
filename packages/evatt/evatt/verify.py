@@ -51,7 +51,10 @@ def _carried_placeholders(text: str, entities: Sequence[Entity]) -> list[Finding
     nothing else: at that point it is character for character a correctly
     redacted document, and ``restore`` will write a real client name into it.
     That case is why ``redact`` halts on an input placeholder in strict mode
-    rather than leaving it for this command to find later.
+    rather than leaving it for this command to find later. The mitigation is
+    conditional on that halt being reachable: it holds only while every caller
+    on the operator path redacts strictly, so the CLI must never expose a
+    non-strict redact.
     """
     assigned = {entity.placeholder: entity for entity in entities}
     found: list[Finding] = []

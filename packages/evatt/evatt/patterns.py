@@ -156,11 +156,25 @@ DOB = re.compile(
     r"|(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])/(?:19|20)\d{2}"
     r"|(?:0?[1-9]|[12]\d|3[01])-(?:0?[1-9]|1[0-2])-(?:19|20)\d{2})\b"
 )
+# The characters that make a placeholder part of a longer token rather than a
+# placeholder. Every component that decides what counts as a placeholder reads
+# the boundary from here, because the components that disagree are the ones that
+# leak: ``restore`` once built its own match, dropped the left lookbehind, and
+# rewrote "XCLIENT_01" into a real client name that neither ``redact`` nor
+# ``verify`` could see, precisely because those two use PLACEHOLDER and it did
+# not. Spelt out rather than ``\w``, which is Unicode-wide under ``str``.
+PLACEHOLDER_BOUNDARY = "[A-Za-z0-9_]"
 # The left boundary matters because Task 5 reaches for this with ``search``, not
 # ``fullmatch``: without it "XCLIENT_01" reads as an assigned placeholder.
+#
+# There is deliberately no right boundary. This pattern is what the two guards
+# sweep an input with, and "CLIENT_01s" in an input is a placeholder-shaped
+# token an operator has to be told about, so the halt in
+# ``redact._input_placeholders`` must still fire on it. ``restore`` pins both
+# sides, which is the safe direction: it declines a token these report.
 PLACEHOLDER = re.compile(
-    r"(?<![A-Za-z0-9_])"
-    r"(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
+    r"(?<!%s)(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
+    % PLACEHOLDER_BOUNDARY
 )
 
 # The origin list ends with the twelve month names. They are dropped here: over

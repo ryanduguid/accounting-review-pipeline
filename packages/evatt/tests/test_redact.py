@@ -241,6 +241,106 @@ def test_the_prefix_guard_is_checked_on_values_that_cannot_heal_themselves() -> 
     assert restore("CLIENT_10 and CLIENT_100", many) == "Alpha and Beta"
 
 
+def test_restore_leaves_a_placeholder_with_no_left_boundary_alone() -> None:
+    """A ledger column, a code fence or a heading of this shape passes both guards.
+
+    ``redact`` and ``verify`` read placeholders through PLACEHOLDER, which
+    carries a left boundary, so neither reports "PRIOR_CLIENT_01". While
+    ``restore`` reimplemented the match without one, it wrote the real client
+    name into a position it had never occupied, in front of the partner.
+    """
+    for text in ("PRIOR_CLIENT_01 column", "XCLIENT_01 filed", "9CLIENT_01 row"):
+        assert restore(text, MAP) == text, text
+
+
+def test_restore_leaves_a_placeholder_followed_by_a_word_character_alone() -> None:
+    """Symmetric rather than trailing-digit: unrestored is visible, wrong is not."""
+    for text in ("CLIENT_01s lodged", "CLIENT_01_old lodged", "CLIENT_01A lodged"):
+        assert restore(text, MAP) == text, text
+
+
+def test_redact_verify_and_restore_agree_on_where_a_placeholder_can_start() -> None:
+    """One shared boundary, so a guard cannot miss what ``restore`` will rewrite.
+
+    The "XCLIENT_01" hole was exactly this disagreement: both guards use
+    PLACEHOLDER and saw nothing, while ``restore`` built its own match without
+    the left boundary and rewrote it anyway. ``verify`` is asked about an
+    unassigned placeholder, because an assigned one standing alone is the
+    residual case it cannot report.
+    """
+    for template, is_placeholder in (
+        ("{} filed the return", True),
+        ("the {}, filed", True),
+        ("({}) filed", True),
+        ("PRIOR_{} column", False),
+        ("X{} filed", False),
+        ("9{} row", False),
+    ):
+        assigned = template.format("CLIENT_01")
+        halted = False
+        try:
+            redact_module.redact(assigned, MAP)
+        except Halt as caught:
+            halted = any(u.kind == "placeholder" for u in caught.unknowns)
+        reported = [f.kind for f in verify_module.findings(template.format("CLIENT_09"), MAP)]
+        assert halted is is_placeholder, template
+        assert (reported == ["placeholder"]) is is_placeholder, template
+        assert (restore(assigned, MAP) != assigned) is is_placeholder, template
+
+
+def test_restore_is_never_more_permissive_than_the_two_guards() -> None:
+    """PLACEHOLDER has no right boundary on purpose, and that asymmetry is safe.
+
+    Both guards report "CLIENT_01s", because a placeholder-shaped token in an
+    input is something an operator has to be told about. ``restore`` declines
+    it, so the token stays visibly unrestored instead of silently becoming
+    "Sample Holdings Pty Ltds".
+    """
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("CLIENT_01s lodged", MAP)
+    assert [u.value for u in caught.value.unknowns] == ["CLIENT_01"]
+    found = verify_module.findings("CLIENT_09s lodged", MAP)
+    assert [(f.kind, f.value) for f in found] == [("placeholder", "CLIENT_09")]
+    assert restore("CLIENT_01s lodged", MAP) == "CLIENT_01s lodged"
+
+
+def test_restore_refuses_a_hand_built_entry_that_would_undo_pass_one() -> None:
+    """``load`` rejects this map, but ``restore`` takes any Sequence[Entity].
+
+    Structured identifiers are replaced one-way and nothing records their
+    values, so an entity pointing a real TFN back at TFN_01 is the one thing
+    that could undo the guarantee. The claimed kind is not consulted, because a
+    hand-built entity can claim anything; the placeholder is what is checked.
+    """
+    text, _counts = redact_module.redact("TFN: 123 456 782 on file", MAP)
+    assert text == "TFN: TFN_01 on file"
+    forged = (Entity("123 456 782", "TFN_01", "client", "2026-09-09"),)
+    assert restore(text, forged) == text
+    assert "123 456 782" not in restore(text, forged)
+    for prefix in ("TFN", "ABN", "ACN", "BSB", "MEDICARE", "EMAIL", "PHONE"):
+        one = (Entity("a real value", f"{prefix}_01", "client", "2026-09-09"),)
+        assert restore(f"{prefix}_01 on file", one) == f"{prefix}_01 on file", prefix
+
+
+def test_restore_ignores_a_placeholder_that_is_empty_or_misshapen() -> None:
+    """An empty placeholder matches at every token edge and scatters the value."""
+    for placeholder, text in (
+        ("", "Total: $1,000."),
+        ("   ", "a   b"),
+        ("CLIENT_1", "CLIENT_1 filed"),
+        ("client_01", "client_01 filed"),
+        ("TOTAL_01", "TOTAL_01 filed"),
+    ):
+        forged = (Entity("Sample Holdings Pty Ltd", placeholder, "client", "2026-09-09"),)
+        assert restore(text, forged) == text, repr(placeholder)
+
+
+def test_restore_refuses_a_value_that_carries_another_placeholder() -> None:
+    """The loop is sequential, so such a value is rewritten again downstream."""
+    cascade = (Entity("PERSON_01 trading", "CLIENT_01", "client", "2026-09-09"), PERSON)
+    assert restore("CLIENT_01 lodged", cascade) == "CLIENT_01 lodged"
+
+
 def test_verify_finds_nothing_in_redacted_output() -> None:
     text, _counts = redact_module.redact(ENTITY_ONLY, MAP)
     assert verify_module.findings(text, MAP) == ()
