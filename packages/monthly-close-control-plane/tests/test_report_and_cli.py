@@ -19,7 +19,7 @@ from closecontrol.errors import ControlInputError
 from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
 from closecontrol.pipeline_cli import main as quarantined_main
-from closecontrol.report import CHECKOUT_MARKERS, write_review_pack
+from closecontrol.report import CHECKOUT_MARKERS, _same_directory, write_review_pack
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1194,6 +1194,51 @@ def test_a_work_tree_named_only_by_the_environment_is_refused(
     assert not any((work_tree / marker).exists() for marker in CHECKOUT_MARKERS)
     with pytest.raises(ControlInputError, match="GIT_WORK_TREE"):
         write_review_pack(_single_exception_pack(), work_tree / "packs" / "july")
+
+
+def test_two_spellings_of_one_directory_are_recognised_as_one(
+    tmp_path: Path,
+) -> None:
+    """The comparison the work-tree check rests on answers by identity.
+
+    A case alias needs a case-insensitive filesystem, which the Linux runners
+    are not, so the test below skips there and this one carries the mechanism.
+    A symbolic link is the same shape of question, two paths and one inode, and
+    every supported host can make one: `Path` equality says they differ, and
+    the guard's comparison says they do not.
+    """
+    _require_symlinks(tmp_path)
+    real = tmp_path / "client-files"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+
+    assert alias != real
+    assert _same_directory(alias, real)
+    assert not _same_directory(tmp_path / "elsewhere", real)
+
+
+def test_a_differently_cased_work_tree_is_still_the_same_work_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Comparing spelling would let a case alias walk past the guard.
+
+    macOS and Windows accept both spellings of a directory and hand back
+    whichever the caller used, so a work tree named `client-files` and an
+    output written under `CLIENT-FILES` are one directory that plain `Path`
+    equality calls two. Linux runners are case-sensitive, where the two really
+    are separate directories and there is nothing to test, so this skips there
+    rather than asserting something the host cannot show.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    alias = tmp_path / "CLIENT-FILES"
+    if not alias.exists():  # pragma: no cover - POSIX CI
+        pytest.skip("this filesystem is case-sensitive, so there is no alias")
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+
+    with pytest.raises(ControlInputError, match="GIT_WORK_TREE"):
+        write_review_pack(_single_exception_pack(), alias / "packs" / "july")
 
 
 def test_a_work_tree_elsewhere_does_not_refuse_an_unrelated_output(

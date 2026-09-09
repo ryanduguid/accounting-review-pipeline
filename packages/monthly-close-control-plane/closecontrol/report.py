@@ -380,6 +380,28 @@ def _configured_work_tree() -> Path | None:
     return Path(value).resolve()
 
 
+def _same_directory(candidate: Path, work_tree: Path) -> bool:
+    """Do these two paths name one directory, whatever they are spelled?
+
+    ``Path`` equality compares text. ``Path.resolve`` normalises separators,
+    ``..`` and symbolic links, but it does not normalise case, and it hands
+    back the spelling it was given: macOS and Windows will both accept
+    ``/Users/x/Repo`` and ``/Users/x/repo`` for the same directory. A work tree
+    named one way and an output written the other way would compare unequal and
+    the pack would land among tracked files.
+
+    ``os.path.samefile`` answers from the device and inode instead, which is
+    what this guard means by the same directory. It needs both paths to exist,
+    so the caller keeps plain equality alongside it for the parts of an output
+    path the writer has not created yet. Those cannot be the work tree anyway,
+    because a work tree Git is using exists.
+    """
+    try:
+        return os.path.samefile(candidate, work_tree)
+    except OSError:
+        return False
+
+
 def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
     """Return the checkout root holding directory and why it counts, or None.
 
@@ -400,10 +422,13 @@ def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
             if _marker_present(candidate, marker):
                 return candidate, f"which holds {marker}"
     work_tree = _configured_work_tree()
-    if work_tree is not None and (
-        directory == work_tree or work_tree in directory.parents
-    ):
-        return work_tree, "which the GIT_WORK_TREE environment variable names"
+    if work_tree is not None:
+        for candidate in (directory, *directory.parents):
+            if candidate == work_tree or _same_directory(candidate, work_tree):
+                return (
+                    work_tree,
+                    "which the GIT_WORK_TREE environment variable names",
+                )
     return None
 
 
