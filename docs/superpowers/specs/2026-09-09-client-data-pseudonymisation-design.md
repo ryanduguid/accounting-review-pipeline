@@ -2,7 +2,7 @@
 
 Date: 2026-09-09
 Status: design approved, not yet implemented
-Repository: `accounting-review-pipeline`, new package
+Repository: `accounting-review-pipeline`, new package `evatt`
 
 ## 1. Problem
 
@@ -238,12 +238,6 @@ Step 4 is a hard gate. The tool is not run over real client data before
 sign-off under any framing, including testing or evaluation.
 
 ## 10. Open decisions
-
-**Package codename.** The monorepo names packages after Australian historical
-figures. Working name `client-data-pseudonymisation` with the import package
-`pseudonymise` until a codename is chosen. Renaming is cheap before the first
-release and expensive after it, so the choice should be made before step 1
-completes.
 
 **Employment agreement IP position.** `accounting-review-pipeline` is public,
 and this package handles a class of employer work product. The EA's intellectual
