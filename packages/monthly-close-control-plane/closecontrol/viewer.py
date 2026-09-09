@@ -385,6 +385,23 @@ _CLIENT_QUERY_HEADING = "## Client queries"
 # it as a boundary.
 _MD_SECTION_HEADING = re.compile(r"^#{1,2}\s")
 
+# Every ATX spelling a Markdown renderer shows as a heading reading "Client
+# queries", at any level. CommonMark allows up to three leading spaces, an
+# optional closing run of hashes after a space, and trailing whitespace, so
+# '## Client queries ##' and '   # Client queries' render exactly as the
+# writer's own line does. Locating the section demands the writer's exact
+# bytes; counting the headings has to see every form, because a forged second
+# register is spelled by whoever forges it, and a reviewer reading "Client
+# queries" above a table does not know or care which spelling produced it.
+#
+# Four leading spaces are deliberately outside the pattern: that is an indented
+# code block, not a heading, so such a line is not a second register. It is
+# caught instead by the exact-line check, which is where a summary whose
+# heading has stopped rendering as a heading belongs.
+_CLIENT_QUERY_HEADING_FORM = re.compile(
+    r"^ {0,3}#{1,6}[ \t]+Client[ \t]+queries(?:[ \t]+#+)?[ \t]*$"
+)
+
 _CLIENT_QUERY_TABLE_HEADER = (
     "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |"
 )
@@ -428,20 +445,30 @@ def _client_query_section_lines(summary_text: str) -> list[str]:
     second section and refuse a pack whose four artefacts were written together
     and agree.
 
-    Exactly one, for the same reason _summary_source_evidence scans the whole
-    document: a forged second section would otherwise be a region nothing
-    checks, sitting under a heading a reviewer reads as the register.
+    Two questions, deliberately asked with two different tests. How many
+    regions could a reader take for the register? Every ATX spelling counts,
+    because a forged second section would otherwise be a region nothing checks
+    sitting under a heading that renders exactly as this one does. Is this
+    region the one the writer wrote? Only the writer's exact line will do,
+    because a heading indented into a code block, or carrying a closing run the
+    writer never emits, is a summary somebody has edited.
     """
     lines = summary_text.splitlines()
     headings = [
         index
         for index, line in enumerate(lines)
-        if line.strip() == _CLIENT_QUERY_HEADING
+        if _CLIENT_QUERY_HEADING_FORM.match(line)
     ]
     if len(headings) != 1:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: expected exactly one {_CLIENT_QUERY_HEADING!r} "
             f"heading, found {len(headings)}"
+        )
+    if lines[headings[0]] != _CLIENT_QUERY_HEADING:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the client-query heading is not the line the "
+            f"writer emits: holds {lines[headings[0]]!r}, expected "
+            f"{_CLIENT_QUERY_HEADING!r}"
         )
     start = headings[0] + 1
     for index in range(start, len(lines)):
@@ -591,21 +618,28 @@ def _verify_summary_holds_no_register(summary_text: str) -> None:
     beside a file that lists it, so the absence has to hold across all three
     artefacts or the pack is refused.
 
-    Each marker is matched as a whole line, for the reason
+    Each marker is matched on a whole line, for the reason
     _client_query_section_lines is: a genuinely old pack whose account or
     reviewer comment quotes one of these phrases is still an old pack, and
-    refusing it would take archived evidence out of a firm's hands.
+    refusing it would take archived evidence out of a firm's hands. The
+    heading is matched in every spelling that renders as one, for the same
+    reason it is counted that way there: what must be absent from an older
+    pack is any region a reader would take for the register, not one spelling
+    of it.
     """
-    lines = {line.strip() for line in summary_text.splitlines()}
-    for marker, description in (
-        (_CLIENT_QUERY_HEADING, "a client-query section"),
-        (_CLIENT_QUERY_TABLE_HEADER, "a client-query table"),
-    ):
-        if marker in lines:
-            raise ControlInputError(
-                f"{_SUMMARY_NAME}: holds {description} while the pack carries no "
-                f"client-query register; the register is half removed, not absent"
-            )
+    lines = summary_text.splitlines()
+    if any(_CLIENT_QUERY_HEADING_FORM.match(line) for line in lines):
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: holds a client-query section while the pack "
+            "carries no client-query register; the register is half removed, "
+            "not absent"
+        )
+    if _CLIENT_QUERY_TABLE_HEADER in {line.strip() for line in lines}:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: holds a client-query table while the pack "
+            "carries no client-query register; the register is half removed, "
+            "not absent"
+        )
     if _QUERY_COUNT_LINE.search(summary_text):
         raise ControlInputError(
             f"{_SUMMARY_NAME}: states a client-query count while the pack carries "

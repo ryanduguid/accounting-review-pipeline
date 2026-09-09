@@ -523,6 +523,100 @@ def test_a_section_running_into_the_next_one_fails_closed(pack_dir: Path) -> Non
         render_review_sheet(pack_dir)
 
 
+@pytest.mark.parametrize(
+    "heading",
+    [
+        # Every one of these renders as a heading reading "Client queries",
+        # confirmed against a CommonMark renderer: a closing run of hashes is
+        # optional, its length is free, and up to three leading spaces are
+        # allowed. A level-1 heading reads as the register to somebody
+        # scrolling past it just as a level-2 one does.
+        "## Client queries ##",
+        "## Client queries ######",
+        "   ## Client queries ##",
+        "# Client queries",
+    ],
+)
+def test_a_second_section_in_any_heading_spelling_fails_closed(
+    pack_dir: Path, heading: str
+) -> None:
+    """A forged register is spelled by whoever forges it.
+
+    Matching the writer's exact line and nothing else leaves every equivalent
+    spelling as a region no check reads, sitting under a heading that renders
+    identically to the real one. A preparer scrolling to "Client queries" and
+    copying a question out of the second table would be reading something the
+    run never produced.
+    """
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + f"\n{heading}\n\n| Query | Control |\n| --- | --- |\n| Q-0 | forged |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="exactly one .* heading"):
+        render_review_sheet(pack_dir)
+
+
+def test_an_indented_heading_fails_closed(pack_dir: Path) -> None:
+    """Four leading spaces make the line an indented code block, not a heading,
+    so the register stops rendering as a section at all. Stripping the line
+    before comparing it accepted that, which is the opposite of what the rest
+    of this check does: everything else here is compared as the writer wrote
+    it."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("\n## Client queries\n", "\n    ## Client queries\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="exactly one .* heading, found 0"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_heading_with_a_closing_run_fails_closed(pack_dir: Path) -> None:
+    """Still one heading, and still renders as one, but it is not the line the
+    writer emits, so the summary has been edited since the run."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("\n## Client queries\n", "\n## Client queries ##\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="not the line the writer emits"):
+        render_review_sheet(pack_dir)
+
+
+def test_an_old_pack_showing_a_register_in_any_spelling_fails_closed(
+    pack_dir: Path,
+) -> None:
+    """The legacy path answers the same question, so it needs the same
+    breadth: what must be absent from an older pack is any region a reader
+    would take for the register."""
+    legacy = _legacy_pack(pack_dir)
+    summary = legacy / "close-summary.md"
+    summary.write_text(
+        summary.read_text(encoding="utf-8") + "\n## Client queries ##\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(legacy)
+
+
+def test_a_heading_shaped_line_that_is_not_this_heading_is_left_alone(
+    pack_dir: Path,
+) -> None:
+    """'## Client queries#' renders as the heading 'Client queries#', a
+    different heading, because a closing run needs a space before it. Counting
+    it would refuse a pack over a heading that is not this one."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(text + "\n## Client queries#\n\nUnrelated.\n", encoding="utf-8")
+
+    sheet, _ = render_review_sheet(pack_dir)
+    assert "Overall status: REVIEW" in sheet
+
+
 def test_a_forged_second_query_section_fails_closed(pack_dir: Path) -> None:
     """A second section would be a region nothing checks, under a heading a
     reviewer reads as the register."""
