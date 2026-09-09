@@ -25,7 +25,7 @@ The application cannot cross the final boundary. It has no code to create a jour
 ## Local workbench façade
 
 `close-control workbench` is a second local entry point to the same loader,
-control engine, source/output collision guard, and three-file review-pack
+control engine, source/output collision guard, and four-file review-pack
 writer as `close-control review`. It accepts the same already-created
 canonical CSV inputs and returns the same status and exit codes; it adds only a
 concise reviewer handoff to the console.
@@ -37,7 +37,7 @@ Human-operated read-only export, outside repository
 close-control workbench --- existing review_close() / write_review_pack()
              |
              v
-close-summary.md + exceptions.csv + close-review-pack.json
+close-summary.md + exceptions.csv + client-queries.csv + close-review-pack.json
              |
              v
 Human reviewer opens or imports the exception detail
@@ -46,7 +46,7 @@ Human reviewer opens or imports the exception detail
 The façade does not launch Excel, create a workbook, import VBA, run Power
 Query, access Xero or OAuth tokens, call a model or AI gateway, copy inputs, or
 write to an accounting system. It is not a new data contract or a workflow
-approval state: the three existing local artefacts remain the only outputs.
+approval state: the four local artefacts remain the only outputs.
 
 ## Source contract
 
@@ -77,4 +77,4 @@ The acknowledgement is separate from calculation and never flips `REVIEW` or `BL
 
 ## Data handling
 
-The repository contains fabricated data. Its `.gitignore` blocks ordinary CSV files outside `examples/` and `schemas/`, the three generated review-pack files by name (`exceptions.csv` explicitly inside those two directories as well, since their fixture negations would otherwise re-include it), token-like files, and environment files. Client exports and review packs belong in an access-controlled local location outside the repository.
+The repository contains fabricated data. Its `.gitignore` blocks ordinary CSV files outside `examples/` and `schemas/`, the four generated review-pack files by name (`exceptions.csv` and `client-queries.csv` explicitly inside those two directories as well, since their fixture negations would otherwise re-include them), token-like files, and environment files. Client exports and review packs belong in an access-controlled local location outside the repository.
