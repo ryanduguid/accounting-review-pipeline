@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from evatt import entities as entities_module
+from evatt import patterns
 from evatt import redact as redact_module
 from evatt import verify as verify_module
 from evatt.entities import Entity
@@ -459,3 +460,41 @@ def test_verify_is_clean_on_every_redactable_sample() -> None:
                  "negatives.md", "unicode-names.md"):
         text, _counts = redact_module.redact(sample(name), SAMPLE_MAP)
         assert verify_module.findings(text, SAMPLE_MAP) == (), name
+
+
+def test_no_sample_ships_a_real_identifier() -> None:
+    """samples/ ships as package data, so no fixture may carry real data.
+
+    51 824 753 556 is the Australian Taxation Office's own ABN, active since
+    1999, and 0412 345 678 sits in an allocated mobile range. Both were in
+    identifiers.md. Since Task 2 a labelled identifier is admitted on its label
+    alone, so a checksum-invalid ABN still yields an "abn" count without
+    shipping anybody's number, and ACMA reserves 0491 570 006 to 0491 570 016
+    for fiction. The check-digit vectors stay in tests/test_patterns.py, which
+    is where they belong.
+    """
+    text = sample("identifiers.md")
+    assert "51 824 753 556" not in text
+    assert "0412 345 678" not in text
+    assert "ABN 12 345 678 901" in text
+    assert not patterns.valid_abn("12345678901")
+    assert "Phone 0491 570 006" in text
+
+
+def test_a_carried_placeholder_whose_own_digits_are_redacted_still_halts() -> None:
+    """The one carried token that does not survive pass one, still reported.
+
+    "MEDICARE_2123456701" is placeholder-shaped and its own digits satisfy the
+    Medicare check, so pass one replaces them and the token is gone from the
+    output. Deciding which tokens count from the input is what keeps the halt;
+    the context is still quoted from the redacted text, so the digits that were
+    replaced do not come back through the triage file.
+    """
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("Row one.\nCard MEDICARE_2123456701 filed.\n", MAP)
+    unknown = caught.value.unknowns[0]
+    assert len(caught.value.unknowns) == 1
+    assert (unknown.kind, unknown.value, unknown.line) == (
+        "placeholder", "MEDICARE_2123456701", 2
+    )
+    assert "2123456701" not in unknown.context

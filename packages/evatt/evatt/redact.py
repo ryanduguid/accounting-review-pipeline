@@ -190,7 +190,7 @@ def residual(text: str) -> tuple[Unknown, ...]:
     return tuple(found)
 
 
-def _input_placeholders(text: str) -> tuple[Unknown, ...]:
+def _input_placeholders(text: str, redacted: str) -> tuple[Unknown, ...]:
     """Report placeholder-shaped text that was in the input before any pass ran.
 
     Such text is either a document that has already been through this boundary
@@ -199,13 +199,46 @@ def _input_placeholders(text: str) -> tuple[Unknown, ...]:
     and ``restore`` would then write a real client name into a position where it
     never appeared. The residual sweep cannot catch this, because it runs on the
     output, where placeholders are exactly what is expected.
+
+    Which tokens count is decided from *text*, because that is the question
+    being asked. Where they are quoted from is *redacted*, because the context
+    ends up in a triage file in the directory the operator sends from, and
+    quoting the input put a real tax file number, an email address and a mapped
+    client name in plaintext there, on the same line the sweep reported in
+    redacted form two lines above. Every context this module produces is now
+    post-redaction, the residual sweep's included.
+
+    A carried token normally survives both passes untouched, so it can be found
+    again in *redacted* and quoted exactly where it stands. It survives because
+    pass two skips any entity whose value is placeholder-shaped and pass one
+    matches digits, not words. The exception is a token whose own digits form a
+    valid identifier, "MEDICARE_2123456701" being the reachable one: pass one
+    replaces the digits and the token is gone from the output. Losing the halt
+    there would be worse than quoting an approximate line, so such a token is
+    still reported, against the redacted line standing at its input line number.
     """
-    lines, starts = _lines_and_starts(text)
-    found: list[Unknown] = []
-    for match in PLACEHOLDER.finditer(text):
+    carried = {match.group(0) for match in PLACEHOLDER.finditer(text)}
+    if not carried:
+        return ()
+    lines, starts = _lines_and_starts(redacted)
+    found: dict[tuple[int, str], Unknown] = {}
+    for match in PLACEHOLDER.finditer(redacted):
+        token = match.group(0)
+        if token not in carried:
+            continue
         number, context = _locate(lines, starts, match.start())
-        found.append(Unknown("placeholder", match.group(0), number, context))
-    return tuple(found)
+        found.setdefault((number, token), Unknown("placeholder", token, number, context))
+    survived = {token for _number, token in found}
+    if len(survived) < len(carried):
+        input_lines, input_starts = _lines_and_starts(text)
+        for match in PLACEHOLDER.finditer(text):
+            token = match.group(0)
+            if token in survived:
+                continue
+            number, _raw = _locate(input_lines, input_starts, match.start())
+            context = lines[number - 1].strip() if 0 < number <= len(lines) else ""
+            found.setdefault((number, token), Unknown("placeholder", token, number, context))
+    return tuple(found[key] for key in sorted(found))
 
 
 def redact(
@@ -216,13 +249,12 @@ def redact(
     The manifest carries counts only. Putting values in it would defeat the
     purpose of the file it accompanies.
     """
-    carried = _input_placeholders(text)
-    text, structured_counts = _replace_structured(text)
-    text, entity_counts = _replace_entities(text, entities)
-    unknowns = carried + residual(text)
+    redacted, structured_counts = _replace_structured(text)
+    redacted, entity_counts = _replace_entities(redacted, entities)
+    unknowns = _input_placeholders(text, redacted) + residual(redacted)
     if unknowns and strict:
         raise Halt(unknowns)
     manifest: Counter = Counter()
     manifest.update(structured_counts)
     manifest.update(entity_counts)
-    return text, dict(manifest)
+    return redacted, dict(manifest)

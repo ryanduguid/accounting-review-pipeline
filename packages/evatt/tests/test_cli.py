@@ -37,9 +37,17 @@ def new_repo(root: Path, gitignore: str) -> Path:
     return root
 
 
-def workspace(tmp_path: Path) -> Path:
-    root = new_repo(tmp_path / "repo", "entities.json\n")
-    shutil.copy(SAMPLES / "entities.sample.json", root / "entities.json")
+def workspace(
+    tmp_path: Path, gitignore: str = "entities.json\n", name: str = "entities.json"
+) -> Path:
+    """A repository holding a gitignored copy of the sample map.
+
+    The collision tests need the map under a name of their own choosing, so the
+    ignore rule and the file name are both adjustable. Everything else uses the
+    defaults and reads the same as it always did.
+    """
+    root = new_repo(tmp_path / "repo", gitignore)
+    shutil.copy(SAMPLES / "entities.sample.json", root / name)
     return root
 
 
@@ -116,7 +124,13 @@ def test_the_cli_never_exposes_a_non_strict_redact() -> None:
             )
 
 
-def test_redact_refuses_an_ungitignored_map(tmp_path) -> None:
+def test_redact_refuses_an_ungitignored_map(tmp_path, capsys) -> None:
+    """The branch is asserted, not just the exit code.
+
+    This test and the work-tree one below both exit 1 on the same guard, so
+    without matching the message the two could swap which branch they exercise
+    and both would still pass.
+    """
     root = new_repo(tmp_path / "repo", "")
     shutil.copy(SAMPLES / "entities.sample.json", root / "entities.json")
     shutil.copy(SAMPLES / "clean.md", root / "in.md")
@@ -124,9 +138,10 @@ def test_redact_refuses_an_ungitignored_map(tmp_path) -> None:
                  "--out", str(root / "out.md")])
     assert code == 1
     assert not (root / "out.md").exists()
+    assert "git does not ignore it" in capsys.readouterr().err
 
 
-def test_every_command_refuses_a_map_outside_a_work_tree(tmp_path) -> None:
+def test_every_command_refuses_a_map_outside_a_work_tree(tmp_path, capsys) -> None:
     """The guard runs before the map is read, whichever command was asked for."""
     root = tmp_path / "loose"
     root.mkdir()
@@ -140,7 +155,18 @@ def test_every_command_refuses_a_map_outside_a_work_tree(tmp_path) -> None:
         ["verify", "--in", source, "--map", entity_map],
     ):
         assert main(argv) == 1, argv[0]
+        assert "it is not inside a git work tree" in capsys.readouterr().err, argv[0]
     assert not (root / "out.md").exists()
+
+
+def test_an_error_goes_to_stderr_and_not_to_stdout(tmp_path, capsys) -> None:
+    """argparse writes its own failures there, so these have to match."""
+    root = workspace(tmp_path)
+    assert main(["redact", "--in", str(root / "absent.md"),
+                 "--map", str(root / "entities.json"), "--out", str(root / "out.md")]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("error: ")
 
 
 def test_restore_reverses_the_map(tmp_path) -> None:
@@ -194,3 +220,208 @@ def test_a_missing_input_file_is_exit_one(tmp_path) -> None:
     code = main(["redact", "--in", str(root / "absent.md"),
                  "--map", str(root / "entities.json"), "--out", str(root / "out.md")])
     assert code == 1
+
+
+# A wrapped identifier is the case the round-trip test above cannot reach:
+# entities-only.md holds no identifier at all, so CRLF parity was never what
+# that test proved, only that the bytes came back.
+WRAPPED = "Engagement file.\n\nTFN: 123 456\n782 was quoted.\n"
+
+
+def test_crlf_and_lf_copies_of_one_document_redact_identically(tmp_path) -> None:
+    """A CRLF break inside an identifier used to defeat every digit pattern.
+
+    Each pattern separates groups with ``[\\s-]?``, exactly one character, and a
+    CRLF pair is two. The LF copy produced "TFN: TFN_01 here." and a manifest
+    counting one tfn; the CRLF copy wrote the live tax file number straight
+    through with an empty manifest, and verify then called it clean. Detection
+    must not depend on how the operator's editor saved the file.
+    """
+    root = workspace(tmp_path)
+    entity_map = str(root / "entities.json")
+    outputs = {}
+    for label, payload in (("lf", WRAPPED), ("crlf", WRAPPED.replace("\n", "\r\n"))):
+        source = root / f"{label}.md"
+        source.write_bytes(payload.encode("utf-8"))
+        out = root / f"{label}.out.md"
+        assert main(["redact", "--in", str(source), "--map", entity_map,
+                     "--out", str(out)]) == 0, label
+        text = out.read_bytes().decode("utf-8").replace("\r\n", "\n")
+        counts = json.loads(
+            (root / f"{label}.out.md.manifest.json").read_text(encoding="utf-8")
+        )["counts"]
+        outputs[label] = (text, counts)
+        assert "123 456" not in text, label
+        assert "TFN_01" in text, label
+    assert outputs["lf"] == outputs["crlf"]
+    assert outputs["lf"][1]["tfn"] == 1
+    # The ending the source carried is the ending the output gets back.
+    assert b"\r\n" in (root / "crlf.out.md").read_bytes()
+    assert b"\r" not in (root / "lf.out.md").read_bytes()
+
+
+def test_verify_sees_a_wrapped_identifier_in_a_crlf_file(tmp_path) -> None:
+    """The operator's last check cleared a live TFN, which is the worse half."""
+    root = workspace(tmp_path)
+    (root / "in.md").write_bytes(WRAPPED.replace("\n", "\r\n").encode("utf-8"))
+    code = main(["verify", "--in", str(root / "in.md"), "--map", str(root / "entities.json")])
+    assert code == 2
+
+
+def test_redact_refuses_to_overwrite_the_map_or_the_input(tmp_path, capsys) -> None:
+    """One typo destroyed the only copy of the key, and it exited 0 doing it.
+
+    Structured identifiers are replaced one way, so every document already
+    redacted against that map becomes unrestorable. The two paths ``--out``
+    derives are covered too: neither is spelt on the command line, so neither
+    is a collision the operator can see coming.
+    """
+    root = workspace(tmp_path, gitignore="*.json\n", name="key.json")
+    entity_map, source = root / "key.json", root / "in.md"
+    shutil.copy(SAMPLES / "entities-only.md", source)
+    before = entity_map.read_bytes()
+
+    for out, expected in (
+        (entity_map, "--out is the entity map"),
+        (source, "--out is the input"),
+    ):
+        assert main(["redact", "--in", str(source), "--map", str(entity_map),
+                     "--out", str(out)]) == 1, out
+        assert expected in capsys.readouterr().err, out
+
+    # The manifest --out derives lands on the map.
+    on_manifest = workspace(tmp_path / "b", gitignore="*.json\n", name="out.md.manifest.json")
+    shutil.copy(SAMPLES / "entities-only.md", on_manifest / "in.md")
+    assert main(["redact", "--in", str(on_manifest / "in.md"),
+                 "--map", str(on_manifest / "out.md.manifest.json"),
+                 "--out", str(on_manifest / "out.md")]) == 1
+    assert "the manifest path --out derives is the entity map" in capsys.readouterr().err
+
+    # The triage path --out derives lands on the input.
+    on_triage = workspace(tmp_path / "c")
+    shutil.copy(SAMPLES / "entities-only.md", on_triage / "out.md.triage.md")
+    assert main(["redact", "--in", str(on_triage / "out.md.triage.md"),
+                 "--map", str(on_triage / "entities.json"),
+                 "--out", str(on_triage / "out.md")]) == 1
+    assert "the triage path --out derives is the input" in capsys.readouterr().err
+
+    assert entity_map.read_bytes() == before
+    original = (SAMPLES / "entities-only.md").read_text(encoding="utf-8")
+    assert source.read_text(encoding="utf-8") == original
+
+
+def test_restore_refuses_to_overwrite_the_map_or_the_input(tmp_path, capsys) -> None:
+    root = workspace(tmp_path, gitignore="*.json\n", name="key.json")
+    entity_map, source = root / "key.json", root / "in.md"
+    shutil.copy(SAMPLES / "entities-only.md", source)
+    before = entity_map.read_bytes()
+    for out, expected in (
+        (entity_map, "--out is the entity map"),
+        (source, "--out is the input"),
+    ):
+        assert main(["restore", "--in", str(source), "--map", str(entity_map),
+                     "--out", str(out)]) == 1, out
+        assert expected in capsys.readouterr().err, out
+    assert entity_map.read_bytes() == before
+
+
+LEAKY = (
+    "# Prior pack\n\n"
+    "CLIENT_01 was quoted from a prior pack; Sample Holdings Pty Ltd TFN 123 456 782\n"
+    "and a.person@example.com, at 12 Sample Street.\n"
+)
+
+
+def test_no_triage_context_carries_a_value_redaction_replaced(tmp_path) -> None:
+    """The triage file held both forms of the same line, and one was the raw one.
+
+    ``residual`` quoted the redacted text while the carried-placeholder sweep
+    quoted the input, so a full tax file number, an email address and a mapped
+    client name landed in plaintext in the directory the operator sends from.
+    """
+    root = workspace(tmp_path)
+    (root / "in.md").write_text(LEAKY, encoding="utf-8")
+    code = main(["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+                 "--out", str(root / "out.md")])
+    assert code == 2
+    triage = (root / "out.md.triage.md").read_text(encoding="utf-8")
+    contexts = [line for line in triage.splitlines() if line.startswith("  > ")]
+    assert contexts
+    for replaced in ("Sample Holdings Pty Ltd", "123 456 782", "a.person@example.com"):
+        assert not any(replaced in context for context in contexts), replaced
+        assert replaced not in triage, replaced
+    # The placeholder is still reported, quoted against its redacted line.
+    assert "**CLIENT_01** (placeholder" in triage
+    assert any("CLIENT_01 was quoted" in context for context in contexts)
+
+
+def test_the_triage_file_is_gitignored() -> None:
+    """The package rule has to cover the name the CLI actually derives."""
+    gitignore = Path(cli.__file__).resolve().parents[1] / ".gitignore"
+    lines = [line.strip() for line in gitignore.read_text(encoding="utf-8").splitlines()]
+    assert "*.triage.md" in lines
+
+
+def test_an_output_that_cannot_be_written_is_exit_one(tmp_path, capsys) -> None:
+    """The try covered the reads only, so this raised a traceback."""
+    root = workspace(tmp_path)
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    (root / "blocked").write_text("not a directory", encoding="utf-8")
+    code = main(["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+                 "--out", str(root / "blocked" / "out.md")])
+    assert code == 1
+    assert capsys.readouterr().err.startswith("error: ")
+
+
+def test_a_manifest_that_cannot_be_written_takes_the_output_with_it(tmp_path, capsys) -> None:
+    """The manifest fails after out.md is already on disk.
+
+    A sanitised document with no manifest is one nobody can say what was
+    replaced in, so it does not survive the failure either.
+    """
+    root = workspace(tmp_path)
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    (root / "out.md.manifest.json").mkdir()
+    code = main(["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+                 "--out", str(root / "out.md")])
+    assert code == 1
+    assert not (root / "out.md").exists()
+    assert capsys.readouterr().err.startswith("error: ")
+
+
+def test_a_halt_removes_an_earlier_runs_output(tmp_path) -> None:
+    """Nothing written has to be true of the directory, not just of this run.
+
+    Run one succeeds. The input then gains an unmapped name and run two halts,
+    leaving run one's out.md beside the new triage file, which is the file an
+    operator sends.
+    """
+    root = workspace(tmp_path)
+    out, manifest = root / "out.md", root / "out.md.manifest.json"
+    argv = ["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+            "--out", str(out)]
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    assert main(argv) == 0
+    assert out.exists() and manifest.exists()
+
+    shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
+    assert main(argv) == 2
+    assert not out.exists()
+    assert not manifest.exists()
+    assert (root / "out.md.triage.md").exists()
+
+
+def test_a_usage_error_is_exit_one_not_two(tmp_path, capsys) -> None:
+    """The house convention reads 2 as halted or findings.
+
+    argparse exits 2 for a typo, so a wrapper could not tell a mistyped
+    command from a document that needs triage.
+    """
+    for argv in ([], ["nosuchcommand"], ["redact", "--in", "a", "--map", "b"]):
+        assert main(argv) == 1, argv
+        assert capsys.readouterr().err, argv
+    # --help and --version are argparse doing what it was asked, and still exit 0.
+    for argv in (["--help"], ["--version"]):
+        with pytest.raises(SystemExit) as caught:
+            main(argv)
+        assert caught.value.code == 0, argv
