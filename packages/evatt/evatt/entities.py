@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .errors import EvattError
+from .patterns import PLACEHOLDER
 
 SCHEMA_VERSION = 1
 KINDS = ("client", "person", "staff", "entity")
@@ -47,9 +48,18 @@ def _check_fields(value: object, kind: object, added: object) -> None:
 
     An ``assign`` that mints an entity ``load`` would later reject turns the map
     into a file that cannot be read back, and the map is the only copy of the key.
+
+    A value shaped like an assigned placeholder is refused outright. Nothing
+    downstream guards the shape of a value: pass two compiles the raw value into
+    a pattern, so a map holding the value "TFN_01" rewrites the placeholder pass
+    one has just written, destroys the only record that a tax file number was
+    there, and leaves a manifest that still counts the tfn. Refusing it here
+    keeps it out of the map rather than repairing the damage later.
     """
     if not isinstance(value, str) or not value.strip():
         raise EvattError("entity value must be a non-empty string")
+    if PLACEHOLDER.search(value):
+        raise EvattError(f"entity value {value!r} is shaped like an assigned placeholder")
     if kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")
     try:

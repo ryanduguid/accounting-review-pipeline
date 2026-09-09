@@ -321,3 +321,24 @@ def test_require_gitignored_fails_closed_on_an_unexpected_exit_code(tmp_path, mo
     monkeypatch.setattr(entities, "_git", lambda subcommand, target: 3)
     with pytest.raises(EvattError):
         entities.require_gitignored(tmp_path / "entities.json")
+
+
+@pytest.mark.parametrize("value", ["TFN_01", "CLIENT_07", "Acme ENTITY_12 Pty Ltd"])
+def test_a_placeholder_shaped_value_never_enters_the_map(value, tmp_path) -> None:
+    """Pass two compiles the raw value into a pattern, so such a value destroys a real one.
+
+    A map holding "TFN_01" rewrites the placeholder pass one has just written
+    over a real tax file number, and leaves a manifest still counting the tfn.
+    """
+    with pytest.raises(EvattError):
+        entities.assign([], value, "client", "2026-09-10")
+    document = {"schema_version": 1, "entries": [
+        {"value": value, "placeholder": "CLIENT_01", "kind": "client", "added": "2026-09-09"}]}
+    with pytest.raises(EvattError):
+        entities.load(write_map(tmp_path, document))
+
+
+def test_a_value_that_merely_looks_placeholder_ish_is_still_accepted() -> None:
+    """The guard must not cost a real client whose name happens to end in digits."""
+    assert entities.assign([], "Precinct 88", "client", "2026-09-10").value == "Precinct 88"
+    assert entities.assign([], "MY_CLIENT_01", "client", "2026-09-10").value == "MY_CLIENT_01"

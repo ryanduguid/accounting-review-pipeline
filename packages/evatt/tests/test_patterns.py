@@ -414,3 +414,45 @@ def test_the_labelled_separator_does_not_backtrack_quadratically() -> None:
         # Sixteen would be quadratic. The 10 ms term absorbs scheduler noise at
         # these magnitudes so a loaded machine does not flake it.
         assert large < 8 * small + 0.010, (label, small, large)
+
+
+def test_a_statutory_word_no_longer_swallows_the_person_beside_it() -> None:
+    """NAME takes a third token whenever one is there, and used to lose the pair.
+
+    Every vector below returned nothing at all before the three-token window
+    retry. "<Given> <Family> Superannuation" is how an SMSF is named and "the
+    Board <Given> <Family>" is ordinary workpaper prose, so both shapes are the
+    normal case rather than a curiosity.
+    """
+    for text, name in (
+        ("reviewed by Priya Sharma Superannuation", "Priya Sharma"),
+        ("John Smith Superannuation was reviewed", "John Smith"),
+        ("Jane Doe Tax return lodged", "Jane Doe"),
+        ("Mary Jones Court appearance", "Mary Jones"),
+        ("signed by the Board Daniel Okafor", "Daniel Okafor"),
+        ("the Commissioner Anna Petrov letter", "Anna Petrov"),
+    ):
+        assert patterns.person_names(text) == {name}, text
+
+
+def test_a_two_token_candidate_holding_a_statutory_word_still_drops() -> None:
+    """Deliberate: dropping the statutory half leaves one token, which is not a name."""
+    assert patterns.person_names("Tax Smith reconciled the account") == set()
+    assert patterns.person_names("the Superannuation Act applies") == set()
+
+
+def test_accented_names_are_candidates() -> None:
+    """Latin-1 accented letters are ordinary in Australian client data."""
+    for text, name in (
+        ("Zo\u00eb Nguyen filed the return", "Zo\u00eb Nguyen"),
+        ("Jos\u00e9 Ram\u00edrez signed", "Jos\u00e9 Ram\u00edrez"),
+        ("\u00c9mile Zola attended", "\u00c9mile Zola"),
+        ("S\u00f8ren Kierkegaard called", "S\u00f8ren Kierkegaard"),
+    ):
+        assert name in patterns.person_names(text), text
+
+
+def test_person_name_spans_point_at_the_text_they_report() -> None:
+    text = "the Commissioner Anna Petrov letter"
+    spans = patterns.person_name_spans(text)
+    assert [text[start:end] for start, end, _value in spans] == [value for *_, value in spans]

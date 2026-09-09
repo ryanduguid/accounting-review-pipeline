@@ -26,7 +26,7 @@ since nothing but the check digit separates one from an ordinary number. The
 origin module splits it the same way, applying its plausibility test inside
 ``if pattern is TFN_BARE`` and admitting the labelled pattern unconditionally.
 
-Three deliberate divergences from the origin:
+Four deliberate divergences from the origin:
 
 * The twelve month names are not in ``_STATUTORY_WORDS`` here. Over Register
   text they filter citation noise; over a workpaper they suppress ``June
@@ -40,14 +40,29 @@ Three deliberate divergences from the origin:
   The origin scanned published legislation, where a false positive blocked a
   release; here it costs one placeholder in a private file. See the money-guard
   comment above the bare patterns.
+* The name token accepts the Latin-1 accented letters, and ``Appeals`` joins the
+  statutory vocabulary. Both follow from the same asymmetry as the months: over
+  a workpaper an undetected person leaks and an over-detected phrase costs one
+  triage decision.
 """
 from __future__ import annotations
 
 import re
 from typing import Callable
 
-_TOKEN = r"[A-Z][A-Za-z'\u2019-]{1,20}"
+# The token class carries the Latin-1 accented letters as well as A-Z. Without
+# them "Zo\u00eb Nguyen", "Jos\u00e9 Ram\u00edrez" and "S\u00f8ren Kierkegaard"
+# are never candidates and never reach triage, and Australian client data is
+# full of such names. The ranges skip \u00d7 and \u00f7, the multiplication and
+# division signs sitting inside the Latin-1 letter block. Cyrillic and CJK stay
+# out: a script with no case distinction needs a different rule than
+# "capitalised word", and that is a larger decision than this one.
+_UPPER = r"A-Z\u00c0-\u00d6\u00d8-\u00de"
+_LOWER = r"a-z\u00df-\u00f6\u00f8-\u00ff"
+_TOKEN = r"[%s][%s%s'\u2019-]{1,20}" % (_UPPER, _UPPER, _LOWER)
 NAME = re.compile(r"\b%s,?\s+%s(?:\s+%s)?\b" % (_TOKEN, _TOKEN, _TOKEN))
+# One token on its own, used to find the token boundaries inside a NAME match.
+_NAME_TOKEN = re.compile(_TOKEN)
 
 EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")
 PHONE = re.compile(
@@ -146,11 +161,18 @@ PLACEHOLDER = re.compile(
 # a workpaper they suppress "June Smith", "April Jones", "August Meyer" and
 # "Ray May", and a person the sweep never reports is a person nobody redacts.
 # DOB keeps its own month names; it is a separate pattern and unaffected.
+#
+# "Appeals" is added to the origin list. It is the one word the three-token
+# window retry in ``person_name_spans`` needs to keep "Administrative Appeals
+# Tribunal" filtered whole: the retry drops "Tribunal" and would otherwise
+# offer "Administrative Appeals" as a person. Nothing is lost by it, because no
+# Australian is named Appeals, and the alternative was leaving every real
+# "<Given> <Family> Superannuation" undetected.
 _STATUTORY_WORDS = (
     r"\b(Act|Regulation|Schedule|Division|Subdivision|Part|Chapter|Section|"
     r"Commissioner|Minister|Treasurer|Commonwealth|Australian|Australia|Board|"
-    r"Tax|Taxation|Income|Superannuation|Court|Tribunal|Determination|Notice|"
-    r"Instrument|Amendment)\b"
+    r"Tax|Taxation|Income|Superannuation|Court|Tribunal|Appeals|Determination|"
+    r"Notice|Instrument|Amendment)\b"
 )
 STATUTORY = re.compile(_STATUTORY_WORDS)
 _STATUTORY_CI = re.compile(_STATUTORY_WORDS, re.I)
@@ -234,9 +256,43 @@ def is_statutory(candidate: str) -> bool:
     return False
 
 
+def person_name_spans(text: str) -> list[tuple[int, int, str]]:
+    """Every surviving NAME candidate as ``(start, end, value)``, in document order.
+
+    A three-token candidate rejected as statutory is retried over its two
+    two-token windows. NAME is greedy and takes a third token whenever one is
+    there, so a single statutory word beside a person absorbs the person and
+    ``finditer`` never offers the shorter match: "Priya Sharma Superannuation"
+    is how an SMSF is named, "the Board Daniel Okafor" is ordinary workpaper
+    prose, and both used to pass through silently. A window that is itself
+    statutory stays dropped, so "Income Tax Assessment" still reports nothing.
+
+    The two-token case is deliberately unchanged. Dropping a statutory word from
+    a two-token candidate leaves one token, which is not a name shape, so there
+    is nothing to report and reporting the pair would only add triage noise.
+
+    Spans are returned rather than a bare set because the residual sweep has to
+    map each candidate back to the line it starts on.
+    """
+    found: list[tuple[int, int, str]] = []
+    for match in NAME.finditer(text):
+        candidate = match.group(0)
+        if not is_statutory(candidate):
+            found.append((match.start(), match.end(), candidate))
+            continue
+        tokens = [token.span() for token in _NAME_TOKEN.finditer(candidate)]
+        if len(tokens) != 3:
+            continue
+        for (start, _), (_, end) in zip(tokens, tokens[1:]):
+            window = candidate[start:end]
+            if not is_statutory(window):
+                found.append((match.start() + start, match.start() + end, window))
+    return found
+
+
 def person_names(text: str) -> set[str]:
     """The set of NAME matches in *text* that survive the statutory filter."""
-    return {m.group(0) for m in NAME.finditer(text) if not is_statutory(m.group(0))}
+    return {value for _start, _end, value in person_name_spans(text)}
 
 
 def structured_spans(text: str) -> list[tuple[int, int, str, str]]:
