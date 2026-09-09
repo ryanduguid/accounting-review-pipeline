@@ -26,6 +26,8 @@ schemas/findings.csv
 *.pem
 __pycache__/
 .pytest_cache/
+.coverage
+coverage.xml
 .venv/
 build/
 dist/
