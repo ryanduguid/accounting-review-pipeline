@@ -217,20 +217,35 @@ def _swap_into_place(staged_path: Path, destination: Path) -> Path | None:
     return parked
 
 
-def _enclosing_repository(directory: Path) -> Path | None:
-    """Return the root of the version-control checkout holding directory, or None.
+CHECKOUT_MARKERS = (".git", ".hg", ".svn", ".bzr")
+"""The metadata entries whose presence marks a directory as a checkout root.
 
-    ``.git`` is a directory in an ordinary clone and a file in a worktree or a
-    submodule, so existence is the test rather than is_dir. The directory
-    itself counts: an --output pointed at a repository root is inside that
-    repository. Path.exists answers False for a path it cannot stat, which is
-    the safe direction here, because a directory this process cannot inspect is
-    not one it can show to be a checkout, and the write that follows fails on
-    its own terms if the path is unusable.
+Git is what this repository is kept in, but the reason to refuse is that the
+pack lands under version control, and Mercurial, Subversion and Bazaar copy a
+committed pack to every clone exactly as Git does. A firm on one of them is
+the firm least likely to be told this tool assumed the other.
+"""
+
+
+def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
+    """Return the checkout root holding directory and the marker naming it, or None.
+
+    A marker is a directory in an ordinary checkout, and ``.git`` is a file in
+    a worktree or a submodule, so existence is the test rather than is_dir. The
+    directory itself counts: an --output pointed at a checkout root is inside
+    that checkout.
+
+    Raises OSError when a candidate cannot be inspected. ``Path.exists``
+    answers False only for the errors it is documented to ignore, a missing
+    path and a symlink loop among them, and propagates the rest, so an
+    unreadable parent or an over-long name arrives here as an error rather than
+    as a settled absence. The caller refuses on it: a directory this process
+    cannot inspect is not one it can show to be outside a checkout.
     """
     for candidate in (directory, *directory.parents):
-        if (candidate / ".git").exists():
-            return candidate
+        for marker in CHECKOUT_MARKERS:
+            if (candidate / marker).exists():
+                return candidate, marker
     return None
 
 
@@ -255,20 +270,35 @@ def require_output_outside_repository(output_dir: Path) -> Path:
     following symlinks would prevent it, which is not available on every
     platform this component supports.
 
+    A path this function cannot examine is refused too, rather than allowed
+    through or left to raise. ``resolve`` raises RuntimeError for a
+    symbolic-link loop on every Python before 3.13, and ``exists`` propagates a
+    permission error or an over-long name, so without this the command would
+    answer a bad --output with a traceback instead of the documented exit 1.
+
     The check is a refusal rather than a warning, and there is no override,
     because every other gate in this package fails closed and because the
     caller who most needs it is the one who did not think about it. A pack
     already written into a checkout still opens: ``view`` only reads.
     """
-    resolved = output_dir.resolve()
-    repository = _enclosing_repository(resolved)
-    if repository is None:
+    try:
+        resolved = output_dir.resolve()
+        checkout = _enclosing_repository(resolved)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise GateInputError(
+            f"{output_dir} cannot be examined for an enclosing version-control "
+            f"checkout: {exc}. An output this run cannot inspect is refused "
+            "rather than written to, because a readiness pack names a client's "
+            "file and its open findings. Point --output somewhere readable."
+        ) from exc
+    if checkout is None:
         return resolved
+    repository, marker = checkout
     raise GateInputError(
-        f"{output_dir} is inside the version-control checkout at {repository}. "
-        "A readiness pack names a client's file and its open findings, so it "
-        "belongs in an access-controlled directory outside version control. "
-        "Point --output somewhere outside that checkout."
+        f"{output_dir} is inside the version-control checkout at {repository}, "
+        f"which holds {marker}. A readiness pack names a client's file and its "
+        "open findings, so it belongs in an access-controlled directory outside "
+        "version control. Point --output somewhere outside that checkout."
     )
 
 

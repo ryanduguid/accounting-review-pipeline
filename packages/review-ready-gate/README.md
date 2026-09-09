@@ -111,9 +111,13 @@ creating anything. A readiness pack names a client's file, its workpaper
 references and every finding standing between it and manager review, and
 inside a checkout it is one `git add -A` away from a history that every clone
 copies. A `.gitignore` entry is a convention the next commit can waive, and it
-does nothing about the copy sitting in the working tree meanwhile. The refusal
-applies to writing only: `review-ready view` still opens a pack wherever it
-already is.
+does nothing about the copy sitting in the working tree meanwhile. A checkout
+is any directory at or above the output holding `.git`, `.hg`, `.svn` or
+`.bzr`, because the harm is the pack going under version control and every one
+of those copies a committed pack to each clone. An output the command cannot
+examine, such as one behind a symbolic-link loop or an unreadable parent, is
+refused on the same grounds rather than assumed safe. The refusal applies to
+writing only: `review-ready view` still opens a pack wherever it already is.
 
 Use exit code `0` only for `READY`, `2` for `NOT_READY` or `BLOCKED`, and `1` for a malformed file, an invalid command, an `--output` path inside a version-control checkout, or an `--output` path that cannot be written.
 
@@ -219,7 +223,7 @@ Before displaying anything it fails closed on: a missing artefact; JSON that is 
 ## Data boundary
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds a `.git` directory or worktree pointer, before it creates anything. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
+- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
 - Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Do not use this as tax, financial, audit, or legal advice.
 
