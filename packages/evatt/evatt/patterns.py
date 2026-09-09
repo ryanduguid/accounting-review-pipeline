@@ -16,6 +16,25 @@ Four traps in the copied material must not be undone:
   ``\\s*[.:-]?\\s*`` it backtracks quadratically on long space runs.
 * Every phone alternative pins its digit count between ``(?<!\\d)`` and
   ``(?!\\d)`` so statutory references, years and grouped amounts stay out.
+
+A label is evidence on its own. Something wrote "TFN" next to those digits, so
+every labelled pattern here takes ``_always`` and no check digit: a labelled
+identifier is reported even when its check digit fails, because a typo in a
+real TFN is still a real TFN. Only a bare digit run has to earn its place,
+since nothing but the check digit separates one from an ordinary number. The
+origin module splits it the same way, applying its plausibility test inside
+``if pattern is TFN_BARE`` and admitting the labelled pattern unconditionally.
+
+Two deliberate divergences from the origin:
+
+* The twelve month names are not in ``_STATUTORY_WORDS`` here. Over Register
+  text they filter citation noise; over a workpaper they suppress ``June
+  Smith`` and ``April Jones``, and a person who is never detected is never
+  redacted. Terms such as "June Quarter" now reach triage instead, which is
+  the safe direction: over-detection costs a triage decision, under-detection
+  leaks.
+* The labelled ABN, ACN and Medicare patterns are new. The origin scanned
+  legislation, where only a labelled TFN turned up.
 """
 from __future__ import annotations
 
@@ -37,14 +56,35 @@ PHONE = re.compile(
     r"|13[\s-]?\d{2}[\s-]?\d{2}"
     r")(?!\d)"
 )
+# Every labelled pattern uses the same separator, ``\s*(?:[.:\u2013-]\s*)?``, and the
+# same trailing ``(?![\s-]?\d)`` digit-count pin. The TFN label alone accepts
+# eight digits as well as nine, because TFNs issued before 1988 were eight.
 TFN_LABELLED = re.compile(
     r"\b(?:tax file number|TFN)\b\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)",
     re.I,
 )
+ABN_LABELLED = re.compile(
+    r"(?:\bABN\b|\bA\.B\.N\.)\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){10})(?![\s-]?\d)",
+    re.I,
+)
+ACN_LABELLED = re.compile(
+    r"(?:\bACN\b|\bA\.C\.N\.)\s*(?:[.:\u2013-]\s*)?(\d(?:[\s-]?\d){8})(?![\s-]?\d)",
+    re.I,
+)
+MEDICARE_LABELLED = re.compile(
+    r"\bMedicare\b(?:\s+(?:number|no)\b\.?)?\s*(?:[.:\u2013-]\s*)?"
+    r"(\d(?:[\s-]?\d){9})(?![\s-]?\d)",
+    re.I,
+)
+# The bare runs carry the two-character money guard as well as the one-character
+# one, so a run cannot start part-way through a grouped amount such as
+# "$1 234 567 890" the way it can start at the head of one.
 TFN_BARE = re.compile(r"(?<![\d$])(?<![\d$][\s-])(\d{3}([\s-]?)\d{3}\2\d{3})(?![\s-]?\d)")
-ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
-ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
-MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
+ABN = re.compile(
+    r"(?<![\d$])(?<![\d$][\s-])(\d{2}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)"
+)
+ACN = re.compile(r"(?<![\d$])(?<![\d$][\s-])(\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
+MEDICARE = re.compile(r"(?<![\d$])(?<![\d$][\s-])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
 # No check digit exists for a BSB, so the hyphen is required. Accepting bare
 # six-digit runs would swallow ordinary numbers with nothing to reject them on.
 BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")
@@ -52,23 +92,35 @@ BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")
 ADDRESS = re.compile(
     r"\b\d{1,4}[A-Za-z]?\s+[A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?\s+"
     r"(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Court|Ct|Place|Pl|Lane|Ln|"
-    r"Parade|Pde|Crescent|Cres|Highway|Hwy|Terrace|Tce)\b"
+    r"Parade|Pde|Crescent|Cres|Highway|Hwy|Terrace|Tce|Close|Way|Circuit|"
+    r"Boulevard|Esplanade|Grove)\b"
 )
+# Australian workpapers write a date of birth numerically far more often than
+# they spell the month. ``yyyy-mm-dd`` is deliberately absent: it collides with
+# ordinary accounting period labels.
 DOB = re.compile(
-    r"\b(?:0?[1-9]|[12]\d|3[01])\s+"
+    r"\b(?:(?:0?[1-9]|[12]\d|3[01])\s+"
     r"(?:January|February|March|April|May|June|July|August|September|October|"
-    r"November|December)\s+(?:19|20)\d{2}\b"
+    r"November|December)\s+(?:19|20)\d{2}"
+    r"|(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])/(?:19|20)\d{2}"
+    r"|(?:0?[1-9]|[12]\d|3[01])-(?:0?[1-9]|1[0-2])-(?:19|20)\d{2})\b"
 )
+# The left boundary matters because Task 5 reaches for this with ``search``, not
+# ``fullmatch``: without it "XCLIENT_01" reads as an assigned placeholder.
 PLACEHOLDER = re.compile(
+    r"(?<![A-Za-z0-9_])"
     r"(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
 )
 
+# The origin list ends with the twelve month names. They are dropped here: over
+# a workpaper they suppress "June Smith", "April Jones", "August Meyer" and
+# "Ray May", and a person the sweep never reports is a person nobody redacts.
+# DOB keeps its own month names; it is a separate pattern and unaffected.
 _STATUTORY_WORDS = (
     r"\b(Act|Regulation|Schedule|Division|Subdivision|Part|Chapter|Section|"
     r"Commissioner|Minister|Treasurer|Commonwealth|Australian|Australia|Board|"
     r"Tax|Taxation|Income|Superannuation|Court|Tribunal|Determination|Notice|"
-    r"Instrument|Amendment|January|February|March|April|May|June|July|August|"
-    r"September|October|November|December)\b"
+    r"Instrument|Amendment)\b"
 )
 STATUTORY = re.compile(_STATUTORY_WORDS)
 _STATUTORY_CI = re.compile(_STATUTORY_WORDS, re.I)
@@ -118,13 +170,23 @@ def _length_six(digits: str) -> bool:
     return len(digits) == 6
 
 
-# Order is the tie-break when two kinds match the identical span. A nine-digit
-# run can satisfy both the TFN and the ACN check, so the more sensitive kind is
-# listed first and wins.
+# Order is the tie-break when two kinds match the identical span, and a labelled
+# pattern captures the same digits as its bare equivalent, so every labelled
+# entry is listed ahead of every bare one: the label names the kind, and a bare
+# run of the same length must not take the span off it. Within each group a
+# nine-digit run can satisfy both the TFN and the ACN check, so the more
+# sensitive kind is listed first and wins.
+#
+# Labelled entries take ``_always``: the label is the evidence, so a labelled
+# identifier is reported whether or not its check digit holds. Only the bare
+# runs are validated.
 _STRUCTURED: tuple[tuple[str, re.Pattern[str], Callable[[str], bool]], ...] = (
+    ("abn", ABN_LABELLED, _always),
+    ("medicare", MEDICARE_LABELLED, _always),
+    ("tfn", TFN_LABELLED, _always),
+    ("acn", ACN_LABELLED, _always),
     ("abn", ABN, valid_abn),
     ("medicare", MEDICARE, valid_medicare),
-    ("tfn", TFN_LABELLED, valid_tfn),
     ("tfn", TFN_BARE, valid_tfn),
     ("acn", ACN, valid_acn),
     ("bsb", BSB, _length_six),

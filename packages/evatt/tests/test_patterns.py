@@ -2,6 +2,9 @@
 
 They live in test code only. Nothing under evatt/samples/ carries them.
 """
+import re
+import time
+
 from evatt import patterns
 
 VALID_TFN = "123456782"
@@ -115,3 +118,166 @@ def test_placeholder_pattern_matches_assigned_placeholders() -> None:
     assert patterns.PLACEHOLDER.fullmatch("CLIENT_01")
     assert patterns.PLACEHOLDER.fullmatch("TFN_12")
     assert not patterns.PLACEHOLDER.fullmatch("CLIENT")
+
+
+def test_a_labelled_tfn_is_reported_although_its_check_digit_fails() -> None:
+    """The label is the evidence; only a bare run has to earn its place.
+
+    A transcription error in a real TFN is still a real TFN, so a labelled one
+    is reported either way. The same digits with no label are an ordinary
+    number until the check digit says otherwise.
+    """
+    spans = patterns.structured_spans("TFN: 123456783")
+    assert [(kind, text) for _s, _e, kind, text in spans] == [("tfn", "123456783")]
+    assert patterns.structured_spans("123456783") == []
+
+
+def test_labelled_abn_acn_and_medicare_are_reported_without_a_check_digit() -> None:
+    for text, kind, value in (
+        ("ABN: 51824753557", "abn", "51824753557"),
+        ("ABN 51 824 753 557", "abn", "51 824 753 557"),
+        ("A.B.N. 51 824 753 557", "abn", "51 824 753 557"),
+        ("ACN: 123456781", "acn", "123456781"),
+        ("A.C.N. 123 456 781", "acn", "123 456 781"),
+        ("Medicare number 2123456711", "medicare", "2123456711"),
+        ("Medicare no. 2123456711", "medicare", "2123456711"),
+        ("Medicare 2123456711", "medicare", "2123456711"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
+        # Every vector above fails its check digit, so the same digits with the
+        # label taken away must report nothing.
+        assert patterns.structured_spans(value) == [], value
+
+
+def test_a_label_wins_the_tie_against_a_bare_run_over_the_same_digits() -> None:
+    """000000019 satisfies both the TFN and the ACN check.
+
+    Labelled and bare capture the identical span, so only the order in
+    ``_STRUCTURED`` decides it. The label names the kind and must win.
+    """
+    assert patterns.valid_tfn("000000019")
+    assert patterns.valid_acn("000000019")
+    for text, kind in (("ACN: 000000019", "acn"), ("TFN: 000000019", "tfn")):
+        assert [k for _s, _e, k, _t in patterns.structured_spans(text)] == [kind], text
+
+
+def test_month_names_no_longer_suppress_a_person() -> None:
+    """The twelve months are out of the statutory list; they hid real people."""
+    for text, name in (
+        ("June Smith attended", "June Smith"),
+        ("April Jones signed", "April Jones"),
+        ("August Meyer called", "August Meyer"),
+        ("Ray May paid the invoice", "Ray May"),
+    ):
+        assert name in patterns.person_names(text), text
+    assert not patterns.is_statutory("June Smith")
+
+
+def test_the_remaining_statutory_vocabulary_still_filters() -> None:
+    for text in (
+        "Federal Court of Australia",
+        "Part IVA applies",
+        "Income Tax Assessment Act",
+        "Administrative Appeals Tribunal",
+        "THE COMMISSIONER OF TAXATION",
+    ):
+        # Assert NAME fires first, or the filter assertion below proves nothing.
+        assert patterns.NAME.search(text), text
+        assert patterns.person_names(text) == set(), text
+
+
+def test_placeholder_requires_a_left_boundary() -> None:
+    """Task 5 reaches for PLACEHOLDER with ``search``, not ``fullmatch``."""
+    assert not patterns.PLACEHOLDER.search("XCLIENT_01")
+    assert not patterns.PLACEHOLDER.search("MY_CLIENT_01")
+    assert patterns.PLACEHOLDER.search("see CLIENT_01 in the workpaper")
+
+
+def test_address_and_date_of_birth_cover_the_added_shapes() -> None:
+    assert patterns.ADDRESS.search("42 Wattle Grove was sold")
+    assert patterns.DOB.search("date of birth 14/03/1982")
+    assert patterns.DOB.search("date of birth 14-03-1982")
+    # Task 5's fixtures.
+    assert patterns.ADDRESS.search("12 Hunter Street was sold")
+    assert patterns.DOB.search("Born 14 March 1982")
+    # yyyy-mm-dd stays out: it collides with accounting period labels.
+    assert not patterns.DOB.search("period ending 2024-03-14")
+
+
+def test_the_money_guard_keeps_a_grouped_amount_out() -> None:
+    """The two-character guard stops a run starting mid-amount.
+
+    000 000 019 passes both the TFN and the ACN check, so without the guard on
+    ABN, ACN and MEDICARE the tail of a grouped amount reports as an identifier.
+    """
+    assert patterns.structured_spans("invoice $1 234 567 890 paid") == []
+    assert patterns.structured_spans("paid $1 000 000 019 today") == []
+
+
+def test_structured_spans_are_sorted_non_overlapping_and_slice_back() -> None:
+    """The three guarantees Task 4's replacement pass depends on."""
+    document = (
+        "Invoice for Jane Roe, ABN 51 824 753 556, TFN: 123456782, "
+        "ACN: 123456780, BSB 062-000, Medicare 2123456701, "
+        "a.person@example.com, 0412 345 678."
+    )
+    spans = patterns.structured_spans(document)
+    assert sorted(kind for _s, _e, kind, _t in spans) == [
+        "abn",
+        "acn",
+        "bsb",
+        "email",
+        "medicare",
+        "phone",
+        "tfn",
+    ]
+    assert [start for start, _e, _k, _t in spans] == sorted(
+        start for start, _e, _k, _t in spans
+    )
+    previous_end = 0
+    for start, end, _kind, text in spans:
+        assert start >= previous_end, spans
+        assert document[start:end] == text, spans
+        previous_end = end
+
+
+def _failing_scan_seconds(pattern: re.Pattern[str], label: str, spaces: int) -> float:
+    """Best of three searches that must fail after a long run of spaces.
+
+    The trap only shows itself on a failing search. When digits do follow the
+    spaces the first greedy path succeeds and nothing backtracks.
+    """
+    text = label + " " * spaces
+    best = float("inf")
+    for _ in range(3):
+        started = time.perf_counter()
+        pattern.search(text)
+        best = min(best, time.perf_counter() - started)
+    return best
+
+
+def test_the_labelled_separator_does_not_backtrack_quadratically() -> None:
+    """Fails if ``\\s*[.:-]?\\s*`` ever replaces ``\\s*(?:[.:-]\\s*)?``.
+
+    Growth rather than wall clock: quadratic cost quadruples per doubling, so
+    four times the input predicts about sixteen times the cost against about
+    four for the linear form. Measured here, the quadratic form costs 0.017 s
+    at 2,000 spaces, 0.068 s at 4,000 and 0.276 s at 8,000, which puts it near
+    1.7 s at the small size below and half a minute at the large one. The
+    shipped form takes under 4 ms at the large size.
+    """
+    for label, pattern in (
+        ("TFN", patterns.TFN_LABELLED),
+        ("ABN", patterns.ABN_LABELLED),
+        ("ACN", patterns.ACN_LABELLED),
+        ("Medicare", patterns.MEDICARE_LABELLED),
+    ):
+        small = _failing_scan_seconds(pattern, label, 20_000)
+        # Cheap guard, so a reintroduced trap fails in seconds instead of
+        # making the suite sit through the large size.
+        assert small < 0.1, (label, small)
+        large = _failing_scan_seconds(pattern, label, 80_000)
+        # Sixteen would be quadratic. The 10 ms term absorbs scheduler noise at
+        # these magnitudes so a loaded machine does not flake it.
+        assert large < 8 * small + 0.010, (label, small, large)
