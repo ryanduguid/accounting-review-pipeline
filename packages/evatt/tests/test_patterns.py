@@ -208,22 +208,47 @@ def test_address_and_date_of_birth_cover_the_added_shapes() -> None:
 def test_a_grouped_amount_tail_is_accepted_over_detection() -> None:
     """Deliberate over-detection, not an oversight: this ACN is a false positive.
 
-    000 000 019 satisfies the ASIC check digit, so the tail of "$1 000 000 019"
+    123 456 780 satisfies the ASIC check digit, so the tail of "$1 123 456 780"
     reports as an ACN. Only the two-character money guard would suppress it,
     and that guard also deletes every detection pinned in the table-row test
-    below. Under-detection is the direction that matters, so the guard stays
-    off ABN, ACN and MEDICARE and this false positive is the accepted price:
-    one placeholder in a private file against a leak. TFN_BARE keeps the
-    origin's two-character guard and is unaffected.
+    below. Under-detection is the direction that matters, so no bare pattern
+    carries that guard and this false positive is the accepted price: one
+    placeholder in a private file against a leak.
     """
-    spans = patterns.structured_spans("paid $1 000 000 019 today")
-    assert [(kind, text) for _s, _e, kind, text in spans] == [("acn", "000 000 019")]
+    # The premises, asserted here so the vector cannot rot: the tail has to
+    # satisfy the ACN check and fail the TFN one, or the more sensitive kind
+    # takes the span and this pins nothing about ACN.
+    assert patterns.valid_acn("123456780")
+    assert not patterns.valid_tfn("123456780")
+    spans = patterns.structured_spans("paid $1 123 456 780 today")
+    assert [(kind, text) for _s, _e, kind, text in spans] == [("acn", "123 456 780")]
     # The one-character guard still does its own job. 123456780 is a valid ACN,
     # so this vector reports one the moment ``(?<![\d$])`` is dropped, unlike
     # the "invoice $1 234 567 890 paid" it replaces: that one failed every
     # check digit and so passed with or without any guard at all.
     assert patterns.valid_acn("123456780")
     assert patterns.structured_spans("total $123456780 owing") == []
+
+
+def test_a_grouped_amount_tail_valid_as_a_tfn_is_accepted_over_detection() -> None:
+    """The same accepted price, now paid by TFN_BARE as well.
+
+    The tail of "$1 123 456 782" satisfies the ATO mod-11 sum, so it is
+    redacted as a TFN. Roughly one nine-digit tail in eleven will. Dropping the
+    origin's second lookbehind is what admits it, and the trade is deliberate:
+    over-redaction costs one placeholder in a private file, under-detection
+    leaks a tax file number.
+    """
+    # The premises, asserted here so the vector cannot rot: the tail has to
+    # satisfy the TFN check and fail the ACN one, or this would pass on the
+    # wrong kind and prove nothing about TFN_BARE.
+    assert patterns.valid_tfn(VALID_TFN)
+    assert not patterns.valid_acn(VALID_TFN)
+    spans = patterns.structured_spans("paid $1 123 456 782 today")
+    assert [(kind, text) for _s, _e, kind, text in spans] == [("tfn", "123 456 782")]
+    # The one-character guard still does its own job: no run may start on a
+    # digit or a "$", so the same valid TFN behind a "$" reports nothing.
+    assert patterns.structured_spans("total $123456782 owing") == []
 
 
 def test_table_row_and_dated_prose_identifiers_are_detected() -> None:
@@ -241,6 +266,20 @@ def test_table_row_and_dated_prose_identifiers_are_detected() -> None:
     ):
         spans = patterns.structured_spans(text)
         assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
+
+
+def test_a_bare_tfn_is_detected_in_the_table_row_and_dated_prose_shapes() -> None:
+    """The same two shapes, pinned for the most sensitive identifier of the four.
+
+    Both reported nothing while TFN_BARE kept the origin's second lookbehind:
+    the preceding "7 " and "9 " are indistinguishable from the interior of a
+    grouped amount. 123456782 satisfies the mod-11 sum, so the check digit is
+    not what decides these vectors; only the money guard is.
+    """
+    assert patterns.valid_tfn(VALID_TFN)
+    for text in ("row 7 123456782", "in 2019 123456782 was issued"):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [("tfn", VALID_TFN)], text
 
 
 def test_the_spaced_out_label_does_not_need_its_trailing_dot() -> None:
@@ -273,6 +312,40 @@ def test_medicare_accepts_a_card_qualifier() -> None:
         assert [(k, t) for _s, _e, k, t in spans] == [("medicare", value)], text
     assert not patterns.valid_medicare("2123456711")
     assert patterns.structured_spans("2123456711") == []
+
+
+def test_every_labelled_pattern_takes_up_to_two_qualifier_words() -> None:
+    """One qualifier vocabulary across all four labels, not one per pattern.
+
+    The shape of the label says nothing about which qualifier a typist reaches
+    for, so "no." must work after ABN exactly as it does after Medicare. Every
+    vector below fails its check digit, so the label and its qualifier are the
+    only thing admitting it: if the qualifier stops matching, the digits fall
+    through to the bare pattern and a real identifier is lost.
+    """
+    for text, kind, value in (
+        ("Medicare card number 2123456711", "medicare", "2123456711"),
+        ("Medicare card no. 2123456711", "medicare", "2123456711"),
+        ("Medicare cardholder 2123456711", "medicare", "2123456711"),
+        ("ABN no. 51824753557", "abn", "51824753557"),
+        ("ACN number 123456781", "acn", "123456781"),
+        ("TFN no. 123456783", "tfn", "123456783"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
+        assert patterns.structured_spans(value) == [], value
+
+
+def test_the_label_separator_accepts_a_hash() -> None:
+    """A transcribed card writes "Medicare card # 2123456711"."""
+    for text, kind, value in (
+        ("Medicare card # 2123456711", "medicare", "2123456711"),
+        ("TFN # 123456783", "tfn", "123456783"),
+        ("ABN #51824753557", "abn", "51824753557"),
+        ("A.C.N. # 123 456 781", "acn", "123 456 781"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
 
 
 def test_structured_spans_are_sorted_non_overlapping_and_slice_back() -> None:
