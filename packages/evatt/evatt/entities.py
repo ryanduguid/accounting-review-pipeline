@@ -108,9 +108,21 @@ def save(path: Path, entities: Sequence[Entity]) -> None:
 
     A plain write truncates before it fills. If that is interrupted, the only
     copy of the key is gone, so write a neighbouring temporary file and rename.
-    The temporary holds the same real values, so it never outlives the attempt:
-    no .gitignore rule written for the map is obliged to cover its .tmp name.
+
+    The temporary holds the same real values as the map, so it is held to the
+    same standard before a byte is written to it. The ``finally`` clause removes
+    it after any Python-level failure, but a hard kill, a container stop or a
+    power loss all leave it on disk, so "it is short lived" is not a reason to
+    let a plaintext copy of the key sit at a committable path. Guarding the
+    temporary rather than naming ``.tmp`` in one .gitignore is what makes this
+    correct wherever the map lives, and it means ``save`` requires a work tree.
+
+    The temporary is flushed and fsynced before the rename, because a rename
+    that reaches the disk ahead of the data it points at produces exactly the
+    truncated map the temporary exists to prevent.
     """
+    temporary = path.with_name(path.name + ".tmp")
+    require_gitignored(temporary)
     document = {
         "schema_version": SCHEMA_VERSION,
         "entries": [
@@ -119,9 +131,11 @@ def save(path: Path, entities: Sequence[Entity]) -> None:
         ],
     }
     text = json.dumps(document, indent=2, ensure_ascii=False) + "\n"
-    temporary = path.with_name(path.name + ".tmp")
     try:
-        temporary.write_text(text, encoding="utf-8")
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -170,7 +184,8 @@ def require_gitignored(map_path: Path) -> None:
     Git owns gitignore semantics: negation, precedence, .git/info/exclude, and
     the fact that an already-tracked file is not ignored at all. Asking git is
     the only answer that matches what a commit would do, and every uncertainty
-    fails closed, because the map is the key.
+    fails closed, because the map is the key. ``save`` calls this on the .tmp
+    path too, which is why *map_path* need not exist yet.
     """
     target = map_path.resolve()
     tracked = _git(["ls-files", "--error-unmatch"], target)

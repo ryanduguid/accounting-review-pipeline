@@ -29,6 +29,44 @@ def write_map(tmp_path, document):
     return path
 
 
+git_required = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+
+
+@pytest.fixture(autouse=True)
+def isolated_git(tmp_path, monkeypatch):
+    """Keep the developer's own git configuration out of the guard tests.
+
+    A global core.excludesFile could otherwise decide whether a map counts as
+    ignored, and an ancestor of the pytest directory could pose as a repository.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "absent-gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(tmp_path / "absent-gitconfig"))
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+
+
+def git(cwd, *args):
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def new_repo(tmp_path, gitignore=None):
+    """Build a throwaway repository holding an entity map, and return its path."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q")
+    if gitignore is not None:
+        (repo / ".gitignore").write_text(gitignore, encoding="utf-8")
+    target = repo / "entities.json"
+    target.write_text("{}", encoding="utf-8")
+    return target
+
+
+def repo_map(tmp_path, document, gitignore="entities.json\n*.tmp\n"):
+    """A real map inside a repository. save guards the .tmp, so it needs one."""
+    target = new_repo(tmp_path, gitignore)
+    target.write_text(json.dumps(document), encoding="utf-8")
+    return target
+
+
 def test_load_returns_entities_in_file_order(tmp_path) -> None:
     loaded = entities.load(write_map(tmp_path, SAMPLE))
     assert [e.placeholder for e in loaded] == ["CLIENT_01", "PERSON_01"]
@@ -136,16 +174,18 @@ def test_assign_is_stable_for_the_same_input(tmp_path) -> None:
     assert first == second
 
 
+@git_required
 def test_save_then_load_round_trips(tmp_path) -> None:
-    path = tmp_path / "entities.json"
-    original = entities.load(write_map(tmp_path, SAMPLE))
+    path = repo_map(tmp_path, SAMPLE)
+    original = entities.load(path)
     entities.save(path, original)
     assert entities.load(path) == original
 
 
+@git_required
 def test_save_leaves_the_previous_map_intact_when_the_write_fails(tmp_path, monkeypatch) -> None:
     """An interrupted save must not truncate the only copy of the key."""
-    path = write_map(tmp_path, SAMPLE)
+    path = repo_map(tmp_path, SAMPLE)
     before = path.read_text(encoding="utf-8")
 
     def fail(source, destination):
@@ -156,38 +196,21 @@ def test_save_leaves_the_previous_map_intact_when_the_write_fails(tmp_path, monk
         entities.save(path, entities.load(path)[:1])
     assert path.read_text(encoding="utf-8") == before
     # The temporary holds the same real values, so it must not survive the failure.
-    assert list(tmp_path.glob("*.tmp")) == []
+    assert list(path.parent.glob("*.tmp")) == []
 
 
-git_required = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+@git_required
+def test_save_refuses_a_temporary_git_would_let_you_commit(tmp_path) -> None:
+    """A rule covering the map does not cover its .tmp, which holds the same values.
 
-
-@pytest.fixture(autouse=True)
-def isolated_git(tmp_path, monkeypatch):
-    """Keep the developer's own git configuration out of the guard tests.
-
-    A global core.excludesFile could otherwise decide whether a map counts as
-    ignored, and an ancestor of the pytest directory could pose as a repository.
+    The refusal has to name the temporary, not the map: the map here is ignored.
     """
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "absent-gitconfig"))
-    monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(tmp_path / "absent-gitconfig"))
-    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
-
-
-def git(cwd, *args):
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
-
-
-def new_repo(tmp_path, gitignore=None):
-    """Build a throwaway repository holding an entity map, and return its path."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    git(repo, "init", "-q")
-    if gitignore is not None:
-        (repo / ".gitignore").write_text(gitignore, encoding="utf-8")
-    target = repo / "entities.json"
-    target.write_text("{}", encoding="utf-8")
-    return target
+    path = repo_map(tmp_path, SAMPLE, gitignore="entities.json\n")
+    before = path.read_text(encoding="utf-8")
+    with pytest.raises(EvattError, match=re.escape("entities.json.tmp")):
+        entities.save(path, entities.load(path)[:1])
+    assert path.read_text(encoding="utf-8") == before
+    assert list(path.parent.glob("*.tmp")) == []
 
 
 @git_required
@@ -208,11 +231,17 @@ def test_require_gitignored_rejects_a_map_no_rule_covers(tmp_path) -> None:
 
 @git_required
 def test_require_gitignored_rejects_a_tracked_map_listed_in_gitignore(tmp_path) -> None:
-    """A .gitignore rule does not ignore an already-tracked file, so the guard must not pass."""
+    """A .gitignore rule does not ignore an already-tracked file, so the guard must not pass.
+
+    Match the tracked message, not merely EvattError. check-ignore is index-aware
+    by default and already exits 1 here, so the ignored branch refuses this file
+    on its own and the tracked branch looks redundant. It is one flag from being
+    the only thing refusing: check-ignore --no-index exits 0 for a tracked file.
+    """
     target = new_repo(tmp_path)
     git(target.parent, "add", "-f", "entities.json")
     (target.parent / ".gitignore").write_text("entities.json\n", encoding="utf-8")
-    with pytest.raises(EvattError):
+    with pytest.raises(EvattError, match="git already tracks it"):
         entities.require_gitignored(target)
 
 
@@ -271,6 +300,21 @@ def test_require_gitignored_fails_closed_when_git_times_out(tmp_path, monkeypatc
     monkeypatch.setattr(entities.subprocess, "run", slow)
     with pytest.raises(EvattError):
         entities.require_gitignored(tmp_path / "entities.json")
+
+
+def test_require_gitignored_gives_every_git_call_a_timeout(tmp_path, monkeypatch) -> None:
+    """A hung git would otherwise block the guard, and so the caller, indefinitely."""
+    timeouts: list[object] = []
+
+    def record(*args, **kwargs):
+        timeouts.append(kwargs.get("timeout"))
+        return subprocess.CompletedProcess(args=list(args), returncode=1)
+
+    monkeypatch.setattr(entities.subprocess, "run", record)
+    with pytest.raises(EvattError):
+        entities.require_gitignored(tmp_path / "entities.json")
+    assert len(timeouts) == 2
+    assert all(isinstance(t, (int, float)) and t > 0 for t in timeouts)
 
 
 def test_require_gitignored_fails_closed_on_an_unexpected_exit_code(tmp_path, monkeypatch) -> None:

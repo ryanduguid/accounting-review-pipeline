@@ -1,5 +1,9 @@
 entities.json
 *.entities.json
+# save writes the map through a neighbouring .tmp holding the same real values.
+# It refuses to write one at a path git would let you commit, and a hard kill or
+# a power loss can leave one behind, so a rule has to cover the .tmp as well.
+*.tmp
 build/
 dist/
 *.egg-info/
