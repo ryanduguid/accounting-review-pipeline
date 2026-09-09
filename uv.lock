@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "elizabeth-anne-alexander",
+    "evatt",
     "monthly-close-control-plane",
     "review-ready-gate",
     "xero-trial-balance-export",
@@ -442,6 +443,27 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==7.1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.6" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "evatt"
+source = { editable = "packages/evatt" }
+
+[package.optional-dependencies]
+dev = [
+    { name = "build" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
 ]
 provides-extras = ["dev"]
 
