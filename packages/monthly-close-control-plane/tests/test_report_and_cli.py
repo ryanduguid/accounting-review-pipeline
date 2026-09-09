@@ -3,6 +3,7 @@ from __future__ import annotations
 import codecs
 import csv
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1005,6 +1006,21 @@ def _fake_checkout(root: Path, *, git_is_a_file: bool = False, marker: str = ".g
     return root
 
 
+def _require_symlinks(tmp_path: Path) -> None:
+    """Skip when the host will not create a symbolic link.
+
+    Windows needs Developer Mode or SeCreateSymbolicLinkPrivilege, and this
+    package declares no platform restriction, so a contributor running the
+    suite there should see a skip rather than an error inside a test whose
+    subject is the guard, not the filesystem."""
+    probe = tmp_path / "symlink-probe"
+    try:
+        probe.symlink_to(tmp_path, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:  # pragma: no cover - POSIX CI
+        pytest.skip(f"symbolic links unavailable here: {exc}")
+    probe.unlink()
+
+
 @pytest.mark.parametrize("marker", CHECKOUT_MARKERS)
 def test_every_checkout_marker_is_refused(tmp_path: Path, marker: str) -> None:
     """The harm is the pack going under version control, and Mercurial,
@@ -1025,6 +1041,7 @@ def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
     traceback. From 3.13 resolve hands back the unresolved path instead, and
     the loop surfaced two layers later in mkdir. The guard stats the resolved
     destination so both end here, with the same error."""
+    _require_symlinks(tmp_path)
     looped = tmp_path / "loop"
     other = tmp_path / "other"
     looped.symlink_to(other)
@@ -1034,27 +1051,45 @@ def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
         write_review_pack(_single_exception_pack(), looped / "july")
 
 
-def test_an_uninspectable_parent_is_refused_rather_than_assumed_safe(
+def test_an_uninspectable_marker_is_refused_rather_than_assumed_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`Path.exists` swallows only the errors it documents; a permission error
-    propagates. A directory this run cannot inspect is not one it can show to
-    be outside a checkout, so it is refused rather than read as an absence.
+    """A marker this run cannot read is not a marker that is not there.
 
-    Monkeypatched rather than chmod-ed because the suite may run as a user that
-    bypasses directory permissions, which would quietly turn this into a test
-    of nothing."""
-    real_exists = Path.exists
+    `os.lstat` is patched, not `Path.exists`, because the guard deliberately
+    stopped asking exists(): up to 3.13 it swallowed a symlink loop and
+    propagated a permission error, and from 3.14 it answers False for every
+    OSError, which would let an unreadable `.git` read as an absent one and
+    approve an output inside the checkout it could not see. Patching lstat
+    tests the call the guard actually makes, on every interpreter.
 
-    def refuse_to_stat(self: Path, *args: object, **kwargs: object) -> bool:
-        if self.name in CHECKOUT_MARKERS:
+    Patched rather than chmod-ed because the suite may run as a user that
+    bypasses directory permissions, which would turn this into a test of
+    nothing."""
+    real_lstat = os.lstat
+
+    def refuse_to_stat(path, *args: object, **kwargs: object):
+        if Path(path).name in CHECKOUT_MARKERS:
             raise PermissionError(13, "Permission denied")
-        return real_exists(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_lstat(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "exists", refuse_to_stat)
+    monkeypatch.setattr(os, "lstat", refuse_to_stat)
 
     with pytest.raises(ControlInputError, match="cannot be examined"):
         write_review_pack(_single_exception_pack(), tmp_path / "outside" / "july")
+
+
+def test_a_marker_that_is_a_dangling_symlink_still_counts(tmp_path: Path) -> None:
+    """lstat does not follow the entry, so a `.git` symlink is evidence of a
+    checkout whether or not its target is currently reachable. Following it
+    would let a broken pointer read as no checkout at all."""
+    _require_symlinks(tmp_path)
+    checkout = tmp_path / "firm-repo"
+    checkout.mkdir()
+    (checkout / ".git").symlink_to(tmp_path / "nowhere")
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
 
 
 def test_the_cli_reports_an_uninspectable_output_as_exit_one(
@@ -1063,6 +1098,7 @@ def test_the_cli_reports_an_uninspectable_output_as_exit_one(
     """The documented contract is exit 1 for an unwritable --output, with a
     message, so a path the guard cannot examine must not escape as a
     traceback."""
+    _require_symlinks(tmp_path)
     looped = tmp_path / "loop"
     other = tmp_path / "other"
     looped.symlink_to(other)
@@ -1193,6 +1229,7 @@ def test_a_symlink_swapped_after_the_check_cannot_redirect_the_pack(
     writer takes the resolved directory back from the guard and builds every
     destination from it, so the swap below changes nothing.
     """
+    _require_symlinks(tmp_path)
     safe = tmp_path / "close-data"
     safe.mkdir()
     checkout = _fake_checkout(tmp_path / "firm-repo")
