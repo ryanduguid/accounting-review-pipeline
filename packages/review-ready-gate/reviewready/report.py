@@ -245,24 +245,44 @@ def _reject_unreachable(directory: Path) -> None:
         return
 
 
+def _marker_present(candidate: Path, marker: str) -> bool:
+    """Is the marker there? Raise OSError when that cannot be determined.
+
+    ``os.lstat`` rather than ``Path.exists``, because exists() decides for
+    itself which failures mean "no" and that decision has moved twice: up to
+    3.13 it swallowed a symlink loop and propagated a permission error, and
+    from 3.14 it returns False for every OSError. On 3.14 an unreadable marker
+    would therefore read as an absent one and the guard would approve an output
+    inside the very checkout it could not see. This package sets no upper bound
+    on the interpreter, so that is a version it will meet.
+
+    lstat answers only the question asked and leaves the caller to judge the
+    failures. It also does not follow the entry, so a ``.git`` symlink counts
+    as the checkout it names rather than as whatever it points at.
+    """
+    try:
+        os.lstat(candidate / marker)
+    except (FileNotFoundError, NotADirectoryError):
+        # Genuinely not there, or a path component that cannot hold one.
+        return False
+    return True
+
+
 def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
     """Return the checkout root holding directory and the marker naming it, or None.
 
     A marker is a directory in an ordinary checkout, and ``.git`` is a file in
-    a worktree or a submodule, so existence is the test rather than is_dir. The
+    a worktree or a submodule, so presence is the test rather than is_dir. The
     directory itself counts: an --output pointed at a checkout root is inside
     that checkout.
 
-    Raises OSError when a candidate cannot be inspected. ``Path.exists``
-    answers False only for the errors it is documented to ignore, a missing
-    path and a symlink loop among them, and propagates the rest, so an
-    unreadable parent or an over-long name arrives here as an error rather than
-    as a settled absence. The caller refuses on it: a directory this process
-    cannot inspect is not one it can show to be outside a checkout.
+    Raises OSError when a candidate cannot be inspected. The caller refuses on
+    it: a directory this process cannot inspect is not one it can show to be
+    outside a checkout.
     """
     for candidate in (directory, *directory.parents):
         for marker in CHECKOUT_MARKERS:
-            if (candidate / marker).exists():
+            if _marker_present(candidate, marker):
                 return candidate, marker
     return None
 
@@ -291,10 +311,11 @@ def require_output_outside_repository(output_dir: Path) -> Path:
     A path this function cannot examine is refused too, rather than allowed
     through or left to raise. ``resolve`` raises RuntimeError for a
     symbolic-link loop on every Python before 3.13 and returns the unresolved
-    path from 3.13, and ``exists`` propagates a permission error or an
-    over-long name, so without this the command would answer a bad --output
-    with a traceback on one interpreter and a later mkdir failure on another,
-    where the README promises a message and exit 1.
+    path from 3.13, so without the reachability check the command would answer
+    a bad --output with a traceback on one interpreter and a later mkdir
+    failure on another, where the README promises a message and exit 1. The
+    marker scan uses lstat for the same reason from the other direction: it
+    must not decide that a marker it cannot read is a marker that is not there.
 
     The check is a refusal rather than a warning, and there is no override,
     because every other gate in this package fails closed and because the
