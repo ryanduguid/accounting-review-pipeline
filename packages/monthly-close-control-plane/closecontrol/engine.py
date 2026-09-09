@@ -13,7 +13,8 @@ from .loader import (
     load_reviewer_acknowledgement,
     load_subledger,
 )
-from .models import ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow
+from .models import ClientQuery, ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow
+from .queries import derive_client_queries
 
 
 ZERO = Decimal("0")
@@ -30,6 +31,15 @@ class CloseReviewPack:
     reconciliation_tolerance: Decimal
     exceptions: tuple[ExceptionItem, ...]
     acknowledgement: ReviewerAcknowledgement | None
+
+    @property
+    def client_queries(self) -> tuple[ClientQuery, ...]:
+        """The questions for the client that these exceptions raise.
+
+        Derived rather than stored, so a pack assembled by a library caller
+        cannot carry a register that disagrees with its own exceptions.
+        """
+        return derive_client_queries(self.exceptions)
 
 
 def _financial_year(when: date) -> int:

@@ -44,7 +44,7 @@ close-control review \
   --output outputs/gateway-tb-loop
 ```
 
-Leave the default materiality thresholds ($1,000 absolute and 10%). The command exits `2` because the pack is `REVIEW`, not because the files are invalid. It writes `close-summary.md`, `exceptions.csv`, and `close-review-pack.json` under `outputs/gateway-tb-loop`.
+Leave the default materiality thresholds ($1,000 absolute and 10%). The command exits `2` because the pack is `REVIEW`, not because the files are invalid. It writes `close-summary.md`, `exceptions.csv`, `client-queries.csv`, and `close-review-pack.json` under `outputs/gateway-tb-loop`.
 
 Do not pass this package's Varrock mapping, subledger, or review note: those fixtures belong to a different tenant and a different date pair.
 

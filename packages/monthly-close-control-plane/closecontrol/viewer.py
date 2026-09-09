@@ -1,6 +1,6 @@
 """Read-only display of an existing close-review pack.
 
-Phase B of the workbench: load the three generated artefacts, prove they agree
+Phase B of the workbench: load the four generated artefacts, prove they agree
 with each other before showing anything, and render a review sheet. The viewer
 never writes, renames or deletes a file, never opens a network connection, and
 never changes what the engine computed. A tampered, partial or mismatched
@@ -24,18 +24,25 @@ from pathlib import Path
 
 from .errors import ControlInputError
 
-PACK_FILE_NAMES = ("close-review-pack.json", "close-summary.md", "exceptions.csv")
+PACK_FILE_NAMES = (
+    "close-review-pack.json",
+    "close-summary.md",
+    "exceptions.csv",
+    "client-queries.csv",
+)
 
 _JSON_NAME = "close-review-pack.json"
 _SUMMARY_NAME = "close-summary.md"
 _CSV_NAME = "exceptions.csv"
+_QUERY_CSV_NAME = "client-queries.csv"
 
 # The exact top-level members report._as_json emits, no more and no less. An
 # added or removed member means the file was edited by something other than
-# the writer that produced the other two artefacts.
+# the writer that produced the other three artefacts.
 _JSON_MEMBERS = frozenset(
     {
         "acknowledgement",
+        "client_queries",
         "current_report_dates",
         "exceptions",
         "overall_status",
@@ -71,6 +78,19 @@ _CSV_FIELDS = (
     "reviewer_action",
 )
 
+_QUERY_CSV_FIELDS = (
+    "query_id",
+    "control",
+    "tenant",
+    "account_id",
+    "account_code",
+    "account_name",
+    "review_group",
+    "difference",
+    "question",
+    "evidence_requested",
+)
+
 # Fields report._csv_safe guards with a leading apostrophe on the CSV side. It
 # tests the value after lstrip, so the mirror below must strip too or a guarded
 # value carrying leading whitespace looks like a tampered cell.
@@ -78,9 +98,19 @@ _CSV_GUARDED_FIELDS = frozenset(
     {"tenant", "account_id", "account_code", "account_name", "review_group"}
 )
 
+_QUERY_CSV_GUARDED_FIELDS = _CSV_GUARDED_FIELDS | {"question", "evidence_requested"}
+
 _BOUNDARY_SENTENCE = (
     "This pack is a review aid. It does not approve a close, post a journal, "
     "make a payment, lodge a return, or lock a period."
+)
+
+# The client-query section's own boundary. Without it the section reads as
+# correspondence somebody has already approved, which is the one way a list of
+# a client's accounts and unexplained movements could do harm.
+_CLIENT_QUERY_SENTENCE = (
+    "These are draft questions for the preparer, derived from the exceptions "
+    "above. Nothing has been sent to anyone."
 )
 
 _STATUS_LINE = re.compile(r"\*\*Overall status: (PASS|REVIEW|BLOCKED)\*\*")
@@ -210,6 +240,29 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: exceptions[{index}].status is not a pack status"
             )
 
+    # A query names an account and a movement, so a malformed or duplicated
+    # register has to be named here rather than reach a preparer as a question
+    # they might put to a client.
+    client_queries = document["client_queries"]
+    if not isinstance(client_queries, list):
+        raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
+    seen_ids: set[str] = set()
+    for index, query in enumerate(client_queries):
+        if not isinstance(query, dict):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}] must be an object"
+            )
+        query_id = query.get("query_id")
+        if not isinstance(query_id, str) or not query_id:
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}].query_id must be a non-empty string"
+            )
+        if query_id in seen_ids:
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries holds {query_id} more than once"
+            )
+        seen_ids.add(query_id)
+
     # An acknowledgement records a human action, so a malformed one must be
     # named here rather than reach the sheet as a traceback or as text the
     # renderer never checked.
@@ -251,10 +304,55 @@ def _summary_source_evidence(summary_text: str) -> dict[str, str]:
     return found
 
 
+def _verify_rows_match(
+    *,
+    csv_name: str,
+    member: str,
+    noun: str,
+    json_items: list,
+    csv_rows: list[dict[str, str]],
+    fields: tuple[str, ...],
+    guarded: frozenset[str] | set[str],
+) -> None:
+    """Prove one CSV states exactly what the JSON pack states, cell by cell.
+
+    Shared by the exception and client-query files: both are a flat projection
+    of a JSON member, and a row that disagrees with the member it came from
+    means the pack is no longer one run's evidence. ``member`` names the JSON
+    member for a shape complaint and ``noun`` reads as one item in a
+    disagreement, because a reviewer is being told about one row, not a list.
+    """
+    if len(csv_rows) != len(json_items):
+        raise ControlInputError(
+            f"{noun} counts disagree: {_JSON_NAME} holds {len(json_items)}, "
+            f"{csv_name} holds {len(csv_rows)} data rows"
+        )
+    for index, (item, row) in enumerate(zip(json_items, csv_rows)):
+        for field in fields:
+            expected = item.get(field)
+            if not isinstance(expected, str):
+                raise ControlInputError(
+                    f"{_JSON_NAME}: {member}[{index}].{field} must be a string"
+                )
+            actual = row.get(field)
+            if actual is None:
+                raise ControlInputError(
+                    f"{csv_name}: row {index + 1} has no {field} column value"
+                )
+            if field in guarded and expected.lstrip().startswith(("=", "+", "-", "@")):
+                expected = "'" + expected
+            if actual != expected:
+                raise ControlInputError(
+                    f"{field} disagrees on {noun} {index + 1}: {_JSON_NAME} says "
+                    f"{expected!r}, {csv_name} says {actual!r}"
+                )
+
+
 def _verify_cross_file_agreement(
     document: dict[str, object],
     summary_text: str,
     csv_rows: list[dict[str, str]],
+    query_rows: list[dict[str, str]],
 ) -> None:
     status = document["overall_status"]
     assert isinstance(status, str)
@@ -285,41 +383,47 @@ def _verify_cross_file_agreement(
             f"list different source digests"
         )
 
+    if _CLIENT_QUERY_SENTENCE not in " ".join(summary_text.split()):
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the client-query boundary statement is missing or altered"
+        )
+
     exceptions = document["exceptions"]
     assert isinstance(exceptions, list)
-    if len(csv_rows) != len(exceptions):
-        raise ControlInputError(
-            f"exception counts disagree: {_JSON_NAME} holds {len(exceptions)}, "
-            f"{_CSV_NAME} holds {len(csv_rows)} data rows"
-        )
-    for index, (item, row) in enumerate(zip(exceptions, csv_rows)):
-        for field in _CSV_FIELDS:
-            expected = item.get(field)
-            if not isinstance(expected, str):
-                raise ControlInputError(
-                    f"{_JSON_NAME}: exceptions[{index}].{field} must be a string"
-                )
-            actual = row.get(field)
-            if actual is None:
-                raise ControlInputError(f"{_CSV_NAME}: row {index + 1} has no {field} column value")
-            if field in _CSV_GUARDED_FIELDS and expected.lstrip().startswith(("=", "+", "-", "@")):
-                expected = "'" + expected
-            if actual != expected:
-                raise ControlInputError(
-                    f"{field} disagrees on exception {index + 1}: {_JSON_NAME} says "
-                    f"{expected!r}, {_CSV_NAME} says {actual!r}"
-                )
+    _verify_rows_match(
+        csv_name=_CSV_NAME,
+        member="exceptions",
+        noun="exception",
+        json_items=exceptions,
+        csv_rows=csv_rows,
+        fields=_CSV_FIELDS,
+        guarded=_CSV_GUARDED_FIELDS,
+    )
+
+    client_queries = document["client_queries"]
+    assert isinstance(client_queries, list)
+    _verify_rows_match(
+        csv_name=_QUERY_CSV_NAME,
+        member="client_queries",
+        noun="client query",
+        json_items=client_queries,
+        csv_rows=query_rows,
+        fields=_QUERY_CSV_FIELDS,
+        guarded=_QUERY_CSV_GUARDED_FIELDS,
+    )
 
 
-def _read_csv_rows(payload: bytes) -> list[dict[str, str]]:
+def _read_csv_rows(
+    payload: bytes, name: str, fields: tuple[str, ...]
+) -> list[dict[str, str]]:
     try:
         text = payload.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise ControlInputError(f"{_CSV_NAME}: not valid UTF-8") from exc
+        raise ControlInputError(f"{name}: not valid UTF-8") from exc
     reader = csv.DictReader(io.StringIO(text, newline=""))
-    if reader.fieldnames != list(_CSV_FIELDS):
+    if reader.fieldnames != list(fields):
         raise ControlInputError(
-            f"{_CSV_NAME}: header row does not match the written contract"
+            f"{name}: header row does not match the written contract"
         )
     return [
         {key: ("" if value is None else value) for key, value in row.items()}
@@ -330,6 +434,7 @@ def _read_csv_rows(payload: bytes) -> list[dict[str, str]]:
 def verify_pack(pack_dir: Path) -> tuple[
     dict[str, object],
     str,
+    list[dict[str, str]],
     list[dict[str, str]],
     dict[str, str],
 ]:
@@ -346,12 +451,15 @@ def verify_pack(pack_dir: Path) -> tuple[
         summary_text = payloads[_SUMMARY_NAME].decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ControlInputError(f"{_SUMMARY_NAME}: not valid UTF-8") from exc
-    csv_rows = _read_csv_rows(payloads[_CSV_NAME])
-    _verify_cross_file_agreement(document, summary_text, csv_rows)
+    csv_rows = _read_csv_rows(payloads[_CSV_NAME], _CSV_NAME, _CSV_FIELDS)
+    query_rows = _read_csv_rows(
+        payloads[_QUERY_CSV_NAME], _QUERY_CSV_NAME, _QUERY_CSV_FIELDS
+    )
+    _verify_cross_file_agreement(document, summary_text, csv_rows, query_rows)
     artefact_digests = {
         name: hashlib.sha256(payload).hexdigest() for name, payload in payloads.items()
     }
-    return document, summary_text, csv_rows, artefact_digests
+    return document, summary_text, csv_rows, query_rows, artefact_digests
 
 
 def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
@@ -361,7 +469,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     ``ControlInputError`` instead of rendering whenever any artefact is
     missing, malformed or inconsistent with its siblings.
     """
-    document, summary_text, csv_rows, artefact_digests = verify_pack(pack_dir)
+    document, summary_text, csv_rows, query_rows, artefact_digests = verify_pack(pack_dir)
     thresholds = document["thresholds"]
     assert isinstance(thresholds, dict)
     exceptions = document["exceptions"]
@@ -392,6 +500,9 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     lines.append(
         f"- Exceptions: {len(exceptions)} total; {blocked} blocked; {review} requiring review."
     )
+    queries_in_scope = document["client_queries"]
+    assert isinstance(queries_in_scope, list)
+    lines.append(f"- Client queries drafted: {len(queries_in_scope)}.")
     lines += ["", "Source evidence", ""]
     source_hashes = document["source_sha256"]
     assert isinstance(source_hashes, dict)
@@ -415,6 +526,33 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             )
             lines.append(f"     reason: {item['reason']}")
             lines.append(f"     action: {item['reviewer_action']}")
+    lines += ["", "Client queries", ""]
+    lines.append(
+        "Draft questions for the preparer. Nothing has been sent. Edit them before "
+        "they reach a client and record answers in the firm's own tracker."
+    )
+    lines.append("")
+    client_queries = document["client_queries"]
+    assert isinstance(client_queries, list)
+    if not client_queries:
+        lines.append(
+            "No exception raised a question for the client."
+        )
+    else:
+        width = max(len(str(index + 1)) for index in range(len(client_queries)))
+        for index, query in enumerate(client_queries):
+            account = " / ".join(
+                piece
+                for piece in (query.get("account_code"), query.get("account_name"))
+                if piece
+            ) or query.get("account_id") or "n/a"
+            lines.append(
+                f"[{str(index + 1).rjust(width)}] {query['query_id']} {query['control']}"
+                f" | {query['tenant'] or 'n/a'} | {account}"
+                f" | difference {query['difference'] or 'n/a'}"
+            )
+            lines.append(f"     ask: {query['question']}")
+            lines.append(f"     evidence: {query['evidence_requested']}")
     lines += ["", "Human acknowledgement", ""]
     if acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")

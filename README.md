@@ -59,11 +59,12 @@ and import records. Historical releases and tags remain owned by the source repo
 ## Review-pack contract
 
 Review packs are deterministic evidence for a human reviewer; they do not approve a close,
-post a journal, make a payment, lodge a return or lock a period. Each pack is a three-file
-directory: the JSON file is the machine-readable source of truth, Markdown is its human-readable
-summary, and CSV exposes the findings or exceptions as rows. The producing command writes all
-three files; the component's `view` command consumes and cross-checks an existing pack without
-changing it.
+post a journal, make a payment, lodge a return or lock a period. Each pack is a directory whose
+files must agree with each other: the JSON file is the machine-readable source of truth, Markdown
+is its human-readable summary, and CSV exposes the findings or exceptions as rows. The
+monthly-close pack carries a second CSV holding the questions for the client that those exceptions
+raise. The producing command writes every file in one pass; the component's `view` command
+consumes and cross-checks an existing pack without changing it.
 
 ### Readiness-gate output
 
@@ -84,13 +85,15 @@ changing it.
 ### Monthly-close pack
 
 `close-control review`, called with `--current <csv> --prior <csv> --output <directory>`, produces
-`close-review-pack.json`, `close-summary.md` and `exceptions.csv`.
+`close-review-pack.json`, `close-summary.md` and `exceptions.csv`, together with
+`client-queries.csv`.
 
 | JSON field | Meaning |
 |---|---|
 | `overall_status` | The aggregate Monthly Close `PackState` produced by the configured controls. |
 | `current_report_dates` / `prior_report_dates` | Report dates read from the current and prior validated trial-balance exports. |
 | `exceptions` | Material variances, integrity failures and other conditions requiring attention. |
+| `client_queries` | Draft questions derived from the exceptions only a client can answer, with the evidence each one asks for. Nothing is sent, and answering them approves nothing. |
 | `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
 | `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
 | `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |

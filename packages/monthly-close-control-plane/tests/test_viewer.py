@@ -93,7 +93,7 @@ def test_valid_pack_renders_sheet(pack_dir: Path) -> None:
     assert "does not approve a close" in sheet
     for name in PACK_FILE_NAMES:
         assert f"{name}: sha256 " in sheet
-    assert len(digests) == 3
+    assert len(digests) == 4
     assert "No reviewer acknowledgement was supplied" in sheet
 
 
@@ -107,10 +107,65 @@ def test_acknowledged_pack_renders_the_acknowledgement(tmp_path: Path) -> None:
     assert "does not change the control status or approve a close" in sheet
 
 
+def test_sheet_shows_the_client_queries_and_says_nothing_was_sent(pack_dir: Path) -> None:
+    """The fixture's one exception is a subledger difference, which is a
+    question for the client. The sheet has to carry the boundary with it: a
+    list of a client's accounts and unexplained movements reads as ready-to-send
+    correspondence unless it says otherwise."""
+    sheet, _ = render_review_sheet(pack_dir)
+    assert "Client queries" in sheet
+    assert "Client queries drafted: 1." in sheet
+    assert "Nothing has been sent." in sheet
+    assert "ask: What makes up the difference between the general ledger balance" in sheet
+    assert "evidence: The reconciling items" in sheet
+
+
+def test_a_pack_whose_query_boundary_was_removed_fails_closed(pack_dir: Path) -> None:
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text.replace("Nothing has been sent to anyone.", ""), encoding="utf-8"
+    )
+    with pytest.raises(ControlInputError, match="client-query boundary statement"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_dropped_query_row_fails_closed(pack_dir: Path) -> None:
+    path = pack_dir / "client-queries.csv"
+    lines = path.read_text(encoding="utf-8-sig").splitlines(keepends=True)
+    del lines[1]
+    path.write_text("".join(lines), encoding="utf-8-sig")
+    with pytest.raises(ControlInputError, match="client query counts disagree"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_reworded_question_fails_closed(pack_dir: Path) -> None:
+    """A question edited in the CSV alone is the failure that matters here: it
+    is the cell somebody would change before sending, and the pack would then
+    no longer be evidence of what the run actually asked."""
+    path = pack_dir / "client-queries.csv"
+    text = path.read_text(encoding="utf-8-sig")
+    path.write_text(
+        text.replace("What makes up the difference", "Please explain the difference"),
+        encoding="utf-8-sig",
+    )
+    with pytest.raises(ControlInputError, match="question disagrees on client query 1"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_duplicated_query_id_fails_closed(pack_dir: Path) -> None:
+    path = pack_dir / "close-review-pack.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["client_queries"].append(dict(document["client_queries"][0]))
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with pytest.raises(ControlInputError, match="more than once"):
+        render_review_sheet(pack_dir)
+
+
 def test_verify_returns_artefact_digests_matching_files(pack_dir: Path) -> None:
     import hashlib
 
-    _, _, _, artefact_digests = verify_pack(pack_dir)
+    *_, artefact_digests = verify_pack(pack_dir)
     assert set(artefact_digests) == set(PACK_FILE_NAMES)
     for name, digest in artefact_digests.items():
         assert len(digest) == 64

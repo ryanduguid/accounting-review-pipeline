@@ -23,7 +23,12 @@ from closecontrol.report import write_review_pack
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
 EXAMPLES = ROOT / "examples"
-PACK_FILES = ["close-review-pack.json", "close-summary.md", "exceptions.csv"]
+PACK_FILES = [
+    "client-queries.csv",
+    "close-review-pack.json",
+    "close-summary.md",
+    "exceptions.csv",
+]
 
 
 def test_openaccountants_au_redirects_without_running_a_review(
@@ -160,7 +165,7 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
 
     assert first["json"].read_text(encoding="utf-8") == second["json"].read_text(encoding="utf-8")
     assert first["summary"].read_text(encoding="utf-8") == second["summary"].read_text(encoding="utf-8")
-    # A completed pack is exactly the three named files; nothing staged survives.
+    # A completed pack is exactly the four named files; nothing staged survives.
     assert sorted(item.name for item in (tmp_path / "one").iterdir()) == PACK_FILES
     with first["exceptions"].open(encoding="utf-8-sig", newline="") as source:
         rows = list(csv.DictReader(source))
@@ -430,7 +435,7 @@ def test_a_failed_pack_write_rolls_back_to_the_previous_run(tmp_path: Path, bloc
         write_review_pack(_single_exception_pack(digest="bbb", difference="85000.00"), output)
 
     # A run that cannot finish must leave the previous pack whole, whichever of
-    # the three files blocks it. Deleting evidence this run never wrote - the
+    # the four files blocks it. Deleting evidence this run never wrote - the
     # untouched exception detail from the last close - is worse than the mixed
     # pack the staging exists to prevent, and the CLI reports only the OSError.
     for name, content in survivors.items():
@@ -459,7 +464,13 @@ def test_a_failed_write_removes_a_pack_file_that_had_no_previous_version(tmp_pat
     # either file to tell a reviewer they describe different trial balances.
     assert not (output / "close-review-pack.json").exists()
     assert (output / "close-summary.md").read_bytes() == survivor
-    assert sorted(item.name for item in output.iterdir()) == ["close-summary.md", "exceptions.csv"]
+    # client-queries.csv is swapped after exceptions.csv, so this run never
+    # reached it and the previous run's copy is still the one on disk.
+    assert sorted(item.name for item in output.iterdir()) == [
+        "client-queries.csv",
+        "close-summary.md",
+        "exceptions.csv",
+    ]
 
 
 def test_a_staging_write_that_dies_part_way_leaves_no_orphan(monkeypatch, tmp_path: Path) -> None:
@@ -804,7 +815,9 @@ def test_workbench_writes_the_existing_review_pack_and_hands_off_to_the_reviewer
     assert payload["overall_status"] == "REVIEW"
     stdout = capsys.readouterr().out
     assert "close-control workbench: REVIEW; 8 exception(s)" in stdout
-    assert "Review close-summary.md, exceptions.csv, and close-review-pack.json." in stdout
+    assert "close-control workbench: REVIEW; 8 exception(s); 6 client query(ies) drafted" in stdout
+    assert "Review close-summary.md, exceptions.csv, client-queries.csv, and close-review-pack.json." in stdout
+    assert "client-queries.csv holds draft questions; nothing has been sent to a client." in stdout
     assert "does not approve or close a period" in stdout
 
 
