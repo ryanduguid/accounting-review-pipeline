@@ -640,6 +640,44 @@ def test_any_heading_the_writer_did_not_write_fails_closed(
         render_review_sheet(pack_dir)
 
 
+@pytest.mark.parametrize(
+    "edit",
+    [
+        # An unclosed fence turns everything after it into a code block, so the
+        # headings and both tables stop rendering while their source lines
+        # still read exactly as they should. Confirmed against a CommonMark
+        # renderer, as is the HTML case below.
+        "```\n",
+        "~~~\n",
+    ],
+)
+def test_a_fence_that_stops_the_summary_rendering_fails_closed(
+    pack_dir: Path, edit: str
+) -> None:
+    """Reading the headings out of the source presumes the source is what
+    renders. One character at the top of the file breaks that presumption for
+    the whole document, and every check that reads a region of this summary
+    depends on it."""
+    summary = pack_dir / "close-summary.md"
+    summary.write_text(edit + summary.read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="opens a code fence or an HTML block"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_raw_html_heading_fails_closed(pack_dir: Path) -> None:
+    """The same presumption broken the other way: '<h2>Client queries</h2>'
+    renders as a heading that no scan of Markdown syntax will see, so a forged
+    register could sit under it. Refusing the construct is what closes the
+    class; enumerating the tags would be the same losing argument again."""
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    summary.write_text(
+        text + "\n<h2>Client queries</h2>\n\n| Q-0 | forged |\n", encoding="utf-8"
+    )
+    with pytest.raises(ControlInputError, match="opens a code fence or an HTML block"):
+        render_review_sheet(pack_dir)
+
+
 def test_a_forged_second_query_section_fails_closed(pack_dir: Path) -> None:
     """A second section would be a region nothing checks, under a heading a
     reviewer reads as the register."""

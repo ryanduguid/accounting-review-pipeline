@@ -418,6 +418,21 @@ _SUMMARY_HEADINGS = (
 _ATX_HEADING = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
 _SETEXT_UNDERLINE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 
+# Two block constructs the writer never emits, and that change what a reader
+# sees rather than adding to it. An unclosed code fence turns the whole rest of
+# the document into a code block, so the headings and both tables stop
+# rendering at all while their source lines still read exactly as they should.
+# A raw HTML block does the opposite: '<h2>Client queries</h2>' renders as a
+# heading that no scan of Markdown syntax will see. Both were confirmed against
+# a CommonMark renderer.
+#
+# Neither can come from source data. Every value the writer renders is prefixed
+# by something, so no line it produces begins with a backtick, a tilde or a
+# '<'. Refusing them outright is therefore free, and it closes the whole class
+# rather than the two spellings: what is being asked is not "is this a fence"
+# but "did the writer write anything of this shape", and the answer is no.
+_RENDER_ALTERING_BLOCK = re.compile(r"^ {0,3}(?:`{3,}|~{3,}|<)")
+
 
 def _heading_lines(summary_text: str) -> list[str]:
     """Return every line a Markdown renderer displays as a heading, in order."""
@@ -443,7 +458,18 @@ def _verify_summary_headings(summary_text: str, *, register: bool) -> None:
     heading structure to match refuses that heading whatever syntax spells it,
     and refuses a second Exceptions or Source evidence section too, which
     nothing else here looks for.
+
+    Reading the headings out of the source presumes the source is what renders.
+    A code fence or a raw HTML block breaks that presumption in either
+    direction, so both are refused first.
     """
+    for number, line in enumerate(summary_text.splitlines(), start=1):
+        if _RENDER_ALTERING_BLOCK.match(line):
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: line {number} opens a code fence or an HTML "
+                f"block, which the writer never emits: {line!r}"
+            )
+
     expected = [
         heading
         for heading in _SUMMARY_HEADINGS
