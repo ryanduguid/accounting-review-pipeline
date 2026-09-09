@@ -304,10 +304,17 @@ def _same_directory(candidate: Path, work_tree: Path) -> bool:
     so the caller keeps plain equality alongside it for the parts of an output
     path the writer has not created yet. Those cannot be the work tree anyway,
     because a work tree Git is using exists.
+
+    Only a path that is genuinely not there answers no. Every other failure,
+    a permission error, a stale mount, an over-long path, is an inspection
+    this process could not complete, and answering no to it would tell the
+    caller these are different directories on no evidence. Those propagate to
+    require_output_outside_repository, which refuses. Same rule as
+    _marker_present, and for the same reason.
     """
     try:
         return os.path.samefile(candidate, work_tree)
-    except OSError:
+    except (FileNotFoundError, NotADirectoryError):
         return False
 
 

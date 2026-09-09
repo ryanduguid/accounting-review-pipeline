@@ -401,6 +401,32 @@ def test_two_spellings_of_one_directory_are_recognised_as_one(
     assert not _same_directory(tmp_path / "elsewhere", real)
 
 
+def test_a_work_tree_that_cannot_be_inspected_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An identity check that could not be completed is not a no.
+
+    `samefile` returning False on any OSError would tell the guard these are
+    different directories on no evidence, and a marker-free work tree it could
+    not read would be approved. Only a path that is genuinely not there answers
+    no; the rest refuse, the same rule the marker scan follows.
+
+    Patched rather than chmod-ed for the same reason as the marker test: the
+    suite may run as a user that bypasses directory permissions.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+
+    def refuse_to_compare(*args: object, **kwargs: object) -> bool:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(os.path, "samefile", refuse_to_compare)
+
+    with pytest.raises(GateInputError, match="cannot be examined"):
+        write_review_pack(_ready_pack(), tmp_path / "outside" / "march")
+
+
 def test_a_differently_cased_work_tree_is_still_the_same_work_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
