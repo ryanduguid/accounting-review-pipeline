@@ -76,9 +76,10 @@ PHONE = re.compile(
     r"|13[\s-]?\d{2}[\s-]?\d{2}"
     r")(?!\d)"
 )
-# Every labelled pattern is built from the same two pieces and ends with the
-# same trailing ``(?![\s-]?\d)`` digit-count pin. The TFN label alone accepts
-# eight digits as well as nine, because TFNs issued before 1988 were eight.
+# Every labelled pattern is built from the same gap expression and ends with
+# the same trailing ``(?![\s-]?\d)`` digit-count pin. The TFN label alone
+# accepts eight digits as well as nine, because TFNs issued before 1988 were
+# eight.
 #
 # _QUALIFIER takes up to two of "number", "no" and "card", the last also spelled
 # "cardholder", each with an optional full stop: a workpaper writes "Medicare
@@ -87,30 +88,46 @@ PHONE = re.compile(
 # check digit fails. Uniform across all four, because the shape of the label
 # says nothing about which qualifier a typist reaches for.
 #
-# _SEP keeps the ``(?:[.:#\u2013-]\s*)?`` form: the equivalent ``[.:#\u2013-]?\s*``
-# backtracks quadratically on long space runs. "#" earns its place beside "."
-# and ":" because a transcribed card writes "Medicare card # 2123456701".
-# _QUALIFIER adds no backtracking risk of its own: each repetition must consume
-# at least one space and then a literal word, so over a run of spaces with no
-# word after it the group fails once and the search falls through to _SEP.
-_QUALIFIER = r"(?:\s+(?:number|no|card(?:holder)?)\b\.?){0,2}"
-_SEP = r"\s*(?:[.:#\u2013-]\s*)?"
+# _GAP puts _QUALIFIER on BOTH sides of _SEP, because a typist writes it on
+# either: "Medicare card, 2123456711" puts it before the separator and "ABN:
+# no. 51824753557" puts it after. With one _QUALIFIER only, whichever side it
+# was not on left the digits to the bare pattern, and the bare pattern drops
+# them the moment the check digit fails. That is under-detection of an
+# identifier something wrote a label next to.
+#
+# _SEP keeps the ``(?:[.:#,(\u2013-]\s*)?`` form: the equivalent
+# ``[.:#,(\u2013-]?\s*`` backtracks quadratically on long space runs. "#" earns
+# its place beside "." and ":" because a transcribed card writes "Medicare card
+# # 2123456701"; "," and "(" earn theirs because "Medicare card, 2123456711"
+# and "TFN (123456783)" are ordinary workpaper punctuation and both returned
+# nothing.
+#
+# _GAP carries exactly one leading ``\s*``. Every other whitespace run it can
+# consume sits behind a mandatory non-whitespace token, a qualifier word or a
+# separator character, and that is what keeps a failing scan linear. Two
+# ``\s*`` able to reach the same space, which is what ``_SEP + _SEP`` would
+# have given, is the quadratic form under another name: every way of splitting
+# the space run between them is a separate path to try.
+_WORD = r"(?:number|no|card(?:holder)?)\b\.?"
+_QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
+_SEP = r"(?:[.:#,(\u2013-]\s*)?"
+_GAP = r"\s*%s%s%s" % (_QUALIFIER, _SEP, _QUALIFIER)
 TFN_LABELLED = re.compile(
-    r"\b(?:tax file number|TFN)\b%s%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % (_QUALIFIER, _SEP),
+    r"\b(?:tax file number|TFN)\b%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 # The trailing dot of the spaced-out form is optional: "A.B.N 51 824 753 556"
 # is written as often as "A.B.N.", and the label is the evidence either way.
 ABN_LABELLED = re.compile(
-    r"(?:\bABN\b|\bA\.B\.N\.?)%s%s(\d(?:[\s-]?\d){10})(?![\s-]?\d)" % (_QUALIFIER, _SEP),
+    r"(?:\bABN\b|\bA\.B\.N\.?)%s(\d(?:[\s-]?\d){10})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 ACN_LABELLED = re.compile(
-    r"(?:\bACN\b|\bA\.C\.N\.?)%s%s(\d(?:[\s-]?\d){8})(?![\s-]?\d)" % (_QUALIFIER, _SEP),
+    r"(?:\bACN\b|\bA\.C\.N\.?)%s(\d(?:[\s-]?\d){8})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 MEDICARE_LABELLED = re.compile(
-    r"\bMedicare\b%s%s(\d(?:[\s-]?\d){9})(?![\s-]?\d)" % (_QUALIFIER, _SEP),
+    r"\bMedicare\b%s(\d(?:[\s-]?\d){9})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 # All four bare runs take the same one-character money guard, ``(?<![\d$])``,
@@ -176,6 +193,42 @@ PLACEHOLDER = re.compile(
     r"(?<!%s)(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
     % PLACEHOLDER_BOUNDARY
 )
+
+
+def value_pattern(value: str) -> re.Pattern[str]:
+    """Compile the pattern that matches an entity map *value* in a document.
+
+    One definition, because pass two and ``verify`` have to agree on what
+    counts as a mention. While pass two compiled ``re.escape(value)`` on its
+    own, the two modules left a gap between them that nothing could see: a
+    mapped value in lower case was replaced by nothing, and the residual sweep
+    could not report the miss either, because NAME requires every token to
+    start with a capital. ``evatt redact`` wrote "client: sample holdings pty
+    ltd" straight through with an empty manifest and ``evatt verify`` then
+    called the leaked file clean. "Jane roe" is one mistyped shift key and
+    lower-case front matter is ordinary markdown.
+
+    Two foldings, both in the safe direction:
+
+    * ``re.IGNORECASE``, so "jane roe", "Jane roe" and "JANE ROE" are all the
+      mapped person.
+    * every run of whitespace inside the value becomes ``\\s+``, so a hard wrap
+      or a double space still matches. Markdown is wrapped, and NAME's own
+      ``\\s+`` spans a newline, so the map has to as well.
+
+    The cost is over-replacement of a value that is also a common word, and
+    that costs one placeholder in a private file. Under-detection leaks a
+    client, so this is the direction to be wrong in.
+
+    Folding here is what makes ``entities._fold`` load-bearing: two map entries
+    that differ only by case or whitespace are now one pattern, and the map
+    must refuse to hold both or one person owns two placeholders.
+
+    The word boundaries stay ``(?<!\\w)`` and ``(?!\\w)``, unchanged, so a value
+    is still matched as a whole word and never inside a longer one.
+    """
+    body = r"\s+".join(re.escape(part) for part in value.split())
+    return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.IGNORECASE)
 
 # The origin list ends with the twelve month names. They are dropped here: over
 # a workpaper they suppress "June Smith", "April Jones", "August Meyer" and

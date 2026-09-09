@@ -19,6 +19,17 @@ strictly. Adding an escape hatch here would silently remove the guarantee.
 is the key, and a key git would let you commit is the one failure this package
 exists to prevent, so the check does not wait for a command that writes.
 
+The triage path is guarded too, the way ``entities.save`` guards the map's
+.tmp: immediately before a byte is written to it. It carries whole unredacted
+residual lines, and ``--out`` derives it, so the operator never typed the path
+that would leak. It is guarded there rather than up front because it is an
+output, not the key: a run that never halts never writes one, and failing a
+clean redact over a file it was not going to create would be a refusal about
+nothing. ``restore --out`` is deliberately not guarded. That path is the
+operator's own choice for a document of real names, it can be anywhere, and a
+guard on it would demand a covering rule for every answer file anyone ever
+restores. The README says so rather than the code pretending otherwise.
+
 Errors go to stderr, where argparse already writes its own, so a caller
 redirecting stdout to the sanitised text still sees why a run failed.
 """
@@ -136,9 +147,11 @@ def _collision(args: argparse.Namespace) -> str | None:
     unrecoverable data loss. ``--out`` equal to ``--in`` destroys the source the
     same way.
 
-    The two paths ``--out`` derives are checked as well. They are not spelt on
-    the command line, so ``--out entities`` beside a map at ``entities.json``
-    looks harmless and is not: the manifest would land on the map.
+    The two paths ``--out`` derives are checked as well. Neither is spelt on the
+    command line, so neither collision is one the operator can see coming: a map
+    named ``out.md.manifest.json`` beside ``--out out.md`` is overwritten by the
+    manifest, and an input named ``out.md.triage.md`` beside the same ``--out``
+    is overwritten by the triage file.
     """
     if args.command == "verify":
         return None
@@ -176,8 +189,15 @@ def _write_triage(path: Path, halt: Halt) -> None:
     This file sits in the directory the operator is about to send from, so a
     context carrying a pre-redaction line would put a real tax file number, an
     email and a mapped client name in plaintext beside the sanitised document.
-    ``redact`` is what guarantees that; ``*.triage.md`` is gitignored as well,
-    because the file still names the candidates it wants classified.
+    ``redact`` is what guarantees that; the caller asks git whether it would let
+    you commit this path before a byte reaches it, because the file still names
+    every candidate it wants classified.
+
+    The candidate value is requoted with its whitespace collapsed. A candidate
+    can hold a newline, because NAME's ``\\s+`` spans one and a hard-wrapped
+    "Jane\\nRoe" is a single candidate, and writing that raw broke the markdown
+    bold span open across two lines. The context is a single line already, so
+    only the value needs it.
     """
     lines = [
         "# Triage",
@@ -189,7 +209,8 @@ def _write_triage(path: Path, halt: Halt) -> None:
         "",
     ]
     for unknown in sorted(halt.unknowns, key=lambda u: (u.line, u.kind, u.value)):
-        lines.append(f"- **{unknown.value}** ({unknown.kind}, line {unknown.line})")
+        value = " ".join(unknown.value.split())
+        lines.append(f"- **{value}** ({unknown.kind}, line {unknown.line})")
         lines.append(f"  > {unknown.context}")
     _write(path, "\n".join(lines) + "\n")
 
@@ -219,21 +240,32 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "redact":
         manifest = _manifest_path(args.out)
+        triage = _triage_path(args.out)
         # Halt is caught in its own block, ahead of anything broader. It
         # subclasses EvattError, so a wider except above it would report the
         # halt as an ordinary error and write no triage file.
         try:
             sanitised, counts = redact(text, entity_map)
         except Halt as halt:
-            triage = _triage_path(args.out)
+            # The stale output goes first. "Nothing was written" has to be true
+            # of the directory, not just of this run, and an earlier run's
+            # output is what an operator would send. Clearing it before the
+            # triage file is written keeps that true even when writing the
+            # triage file is what fails.
             try:
-                _write_triage(triage, halt)
-                # "nothing was written" has to be true of the directory, not
-                # just of this run. An earlier run's output sitting beside the
-                # new triage file is what an operator would send, so it goes.
                 _remove(args.out)
                 _remove(manifest)
             except OSError as error:
+                return _fail(error)
+            # The triage file holds whole unredacted residual lines at a path
+            # the operator never spelt, so it is held to the same standard as
+            # the map and the map's .tmp: git is asked before a byte is written,
+            # and an answer of "yes, you could commit this" is a refusal rather
+            # than a file.
+            try:
+                entities_module.require_gitignored(triage, "the triage file")
+                _write_triage(triage, halt)
+            except (EvattError, OSError) as error:
                 return _fail(error)
             print(f"halted: {halt}. See {triage}")
             return 2
@@ -243,11 +275,19 @@ def main(argv: list[str] | None = None) -> int:
             return _fail(error)
         try:
             _write(manifest, json.dumps({"schema_version": 1, "counts": counts}, indent=2) + "\n")
+            # An earlier run's triage file names real people in plaintext, and
+            # it sits in the directory the operator is about to send from. This
+            # run answered it, so it goes. Same argument as the halt path's
+            # removal of a stale output, in the other direction: what the
+            # operator sees is a directory, not one run's exit code.
+            _remove(triage)
         except OSError as error:
             # A sanitised document with no manifest is a document nobody can
             # say what was replaced in, so it does not survive the failure.
+            # Nor does one left beside a triage file this run could not clear.
             try:
                 _remove(args.out)
+                _remove(manifest)
             except OSError:
                 pass
             return _fail(error)

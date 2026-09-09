@@ -1,17 +1,26 @@
 """Re-scan an already-sanitised file and report every reason it is not clean.
 
-This is the command to run in front of someone else. It repeats the whole
-detection independently of the redaction path, so a bug that made redaction
-skip something has a second chance to be caught before the file is sent.
+This is the command to run in front of someone else. What it does is re-run
+the same detection over the output: ``structured_spans``, the map sweep, the
+carried-placeholder sweep and ``residual``, which are the same functions pass
+one, pass two and the residual sweep use.
+
+That catches a redaction application bug, a document redacted against a
+different map, a half-redacted file and an output somebody edited by hand. It
+does not catch a detection bug. Anything the detector cannot see on the way in
+it cannot see on the way out either, so a clean verify says the output agrees
+with the detector, not that the output is clean. This file used to claim the
+detection was repeated "independently", and a mapped name in lower case was
+the counter-example: it was replaced by nothing, reported by nothing and
+called clean here.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Sequence
 
 from .entities import _PREFIX, Entity
-from .patterns import PLACEHOLDER, structured_spans
+from .patterns import PLACEHOLDER, structured_spans, value_pattern
 from .redact import redact, residual
 
 # The four prefixes ``assign`` mints, taken from the table it mints them with so
@@ -27,8 +36,15 @@ class Finding:
 
 
 def _mentions(text: str, value: str) -> bool:
-    """True when *value* stands in *text* as a whole word, as pass two matches it."""
-    return re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", text) is not None
+    """True when *value* stands in *text* as a whole word, as pass two matches it.
+
+    "As pass two matches it" is the whole point, so the pattern comes from
+    ``patterns.value_pattern`` rather than being compiled again here. While
+    each module built its own, this one was case-sensitive too, so a leaked
+    lower-case client name was invisible to the command whose job is to say a
+    file is not ready to send.
+    """
+    return value_pattern(value).search(text) is not None
 
 
 def _carried_placeholders(text: str, entities: Sequence[Entity]) -> list[Finding]:

@@ -20,7 +20,8 @@ import subprocess
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Sequence
+from types import MappingProxyType
+from typing import Mapping, Sequence
 
 from .errors import EvattError
 from .patterns import PLACEHOLDER
@@ -43,7 +44,28 @@ def _placeholder_for(kind: str, ordinal: int) -> str:
     return f"{_PREFIX[kind]}_{ordinal:02d}"
 
 
-def _check_fields(value: object, kind: object, added: object) -> None:
+def _fold(value: str) -> str:
+    """The comparison form of a value: whitespace runs collapsed, then case-folded.
+
+    ``patterns.value_pattern`` matches a value case-insensitively and renders
+    every whitespace run as ``\\s+``, so "Jane Roe", "jane roe", "JANE ROE",
+    "Jane  Roe" and a hard-wrapped "Jane\\nRoe" are one name to pass two. Two
+    map entries that fold together would therefore claim two placeholders for
+    one person while a single pattern matched every occurrence, and whichever
+    entry the leftmost-longest resolution reached first would take the lot. The
+    other one would then sit in the map looking assigned and never appear in a
+    document, which is how a restore puts the wrong name back.
+
+    Casefold rather than lower, because it is the folding that compares "STRASSE"
+    with "strasse", and the value may be any Latin-1 name the token class
+    accepts.
+    """
+    return " ".join(value.split()).casefold()
+
+
+def _check_fields(
+    value: object, kind: object, added: object, folded: Mapping[str, str] = MappingProxyType({})
+) -> None:
     """Validate the fields ``load`` and ``assign`` share, so the two cannot drift.
 
     An ``assign`` that mints an entity ``load`` would later reject turns the map
@@ -55,6 +77,17 @@ def _check_fields(value: object, kind: object, added: object) -> None:
     one has just written, destroys the only record that a tax file number was
     there, and leaves a manifest that still counts the tfn. Refusing it here
     keeps it out of the map rather than repairing the damage later.
+
+    *folded* maps each already-accepted value's fold to the value it came from.
+    A new value that folds onto one of them is refused, which is what keeps two
+    spellings of one name from claiming two placeholders. ``load`` supplies it,
+    entry by entry, so the rejection covers a hand-edited map as well as one
+    this package wrote. ``assign`` supplies nothing, because it resolves the
+    fold to the existing entity and returns it before it gets here.
+
+    The exact-duplicate case is a fold collision too, and is reported by this
+    check rather than by a separate one: one comparison, so the two cannot
+    disagree about what counts as the same value.
     """
     if not isinstance(value, str) or not value.strip():
         raise EvattError("entity value must be a non-empty string")
@@ -71,6 +104,17 @@ def _check_fields(value: object, kind: object, added: object) -> None:
         exact = False
     if not exact:
         raise EvattError(f"entity added date must be YYYY-MM-DD, got {added!r}")
+    # Last, so the field errors keep the precedence they had: a malformed entry
+    # is reported as malformed rather than as a collision with a good one.
+    previous = folded.get(_fold(value))
+    if previous is not None:
+        if previous == value:
+            raise EvattError(f"duplicate entity value {value!r}")
+        raise EvattError(
+            f"entity value {value!r} is {previous!r} again once case and whitespace "
+            "are folded; pass two matches them as one value, so they cannot hold "
+            "two placeholders"
+        )
 
 
 def load(path: Path) -> tuple[Entity, ...]:
@@ -89,25 +133,24 @@ def load(path: Path) -> tuple[Entity, ...]:
         raise EvattError("entity map entries must be a list")
 
     loaded: list[Entity] = []
-    seen_values: set[str] = set()
+    # Folded value to the value it came from, so a rejection can name both.
+    seen_values: dict[str, str] = {}
     seen_placeholders: set[str] = set()
     for entry in document["entries"]:
         if not isinstance(entry, dict) or set(entry) != _REQUIRED:
             raise EvattError(f"entity map entry must hold exactly {sorted(_REQUIRED)}")
         value, placeholder = entry["value"], entry["placeholder"]
         kind, added = entry["kind"], entry["added"]
-        _check_fields(value, kind, added)
+        _check_fields(value, kind, added, seen_values)
         # The full shape, not just the prefix: a map holding both CLIENT_1 and
         # CLIENT_10 would let naive replacement corrupt the longer placeholder.
         if not isinstance(placeholder, str) or not re.fullmatch(
             rf"{_PREFIX[kind]}_[0-9]{{2,}}", placeholder
         ):
             raise EvattError(f"placeholder {placeholder!r} does not match kind {kind!r}")
-        if value in seen_values:
-            raise EvattError(f"duplicate entity value {value!r}")
         if placeholder in seen_placeholders:
             raise EvattError(f"duplicate placeholder {placeholder!r}")
-        seen_values.add(value)
+        seen_values[_fold(value)] = value
         seen_placeholders.add(placeholder)
         loaded.append(Entity(value=value, placeholder=placeholder, kind=kind, added=added))
     return tuple(loaded)
@@ -159,11 +202,19 @@ def assign(entities: Sequence[Entity], value: str, kind: str, added: str) -> Ent
     Ordinals are max+1 within the kind, never the lowest free number, so a
     deletion cannot hand a retired placeholder to somebody new.
 
+    The match is on ``_fold``, not on an exact string. An operator working a
+    triage file types what the document showed them, and the document may have
+    shouted the name, wrapped it across a line or lower-cased it. Pass two
+    matches all of those as the one mapped value, so minting a second
+    placeholder for the second spelling would put two placeholders on one
+    person and leave one of them meaning nothing. The entity that comes back
+    keeps the spelling the map already holds.
+
     Pure: it does not mutate *entities*. The caller appends and saves.
     """
     _check_fields(value, kind, added)
     for existing in entities:
-        if existing.value == value:
+        if _fold(existing.value) == _fold(value):
             return existing
     prefix = _PREFIX[kind] + "_"
     ordinals = [
@@ -188,14 +239,20 @@ def _git(subcommand: list[str], target: Path) -> int:
         ) from error
 
 
-def require_gitignored(map_path: Path) -> None:
-    """Refuse to proceed unless git both ignores the map and does not track it.
+def require_gitignored(map_path: Path, description: str = "the entity map") -> None:
+    """Refuse to proceed unless git both ignores the path and does not track it.
 
     Git owns gitignore semantics: negation, precedence, .git/info/exclude, and
     the fact that an already-tracked file is not ignored at all. Asking git is
     the only answer that matches what a commit would do, and every uncertainty
     fails closed, because the map is the key. ``save`` calls this on the .tmp
     path too, which is why *map_path* need not exist yet.
+
+    *description* names what is being refused, because this guard now covers
+    three different files. The map and its .tmp are the key; the CLI's triage
+    file is a worklist quoting whole residual lines about a real document, and
+    telling an operator that "the entity map must never be committed" about a
+    path ending ``.triage.md`` sends them to fix the wrong file.
     """
     target = map_path.resolve()
     tracked = _git(["ls-files", "--error-unmatch"], target)
@@ -210,4 +267,4 @@ def require_gitignored(map_path: Path) -> None:
         problem = "git does not ignore it; add a covering rule to .gitignore"
     else:
         return
-    raise EvattError(f"the entity map must never be committed. {target}: {problem}")
+    raise EvattError(f"{description} must never be committed. {target}: {problem}")

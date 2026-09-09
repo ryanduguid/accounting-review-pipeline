@@ -544,8 +544,16 @@ def test_no_sample_ships_a_real_identifier() -> None:
     identifiers.md. Since Task 2 a labelled identifier is admitted on its label
     alone, so a checksum-invalid ABN still yields an "abn" count without
     shipping anybody's number, and ACMA reserves 0491 570 006 to 0491 570 016
-    for fiction. The check-digit vectors stay in tests/test_patterns.py, which
-    is where they belong.
+    for fiction.
+
+    What this file does ship is four check-digit-valid vectors of the documented
+    ATO and ASIC kind, because a sheet demonstrating the labelled patterns has
+    to give them something to fire on: TFN 123 456 782, ACN 123 456 780,
+    Medicare 2123 45670 1 and BSB 062-000. They are the same vectors
+    tests/test_patterns.py uses, and none of them belongs to anybody. The BSB is
+    the exception: no reserved or fictitious range is published, so 062-000 is a
+    real Commonwealth Bank branch code. It names a branch and not a person, an
+    account or a balance, and CONTRIBUTING.md records why it stays.
     """
     text = sample("identifiers.md")
     assert "51 824 753 556" not in text
@@ -572,3 +580,60 @@ def test_a_carried_placeholder_whose_own_digits_are_redacted_still_halts() -> No
         "placeholder", "MEDICARE_2123456701", 2
     )
     assert "2123456701" not in unknown.context
+
+
+def test_a_mapped_value_is_replaced_in_every_case_and_whitespace_form() -> None:
+    """The failure the whole component exists to prevent, in the forms it took.
+
+    Pass two once compiled each map value case-sensitively, so a mapped name in
+    lower case was replaced by nothing. The residual sweep could not report the
+    miss either, because NAME requires every token to start with a capital, and
+    verify re-runs that same detection, so it called the leaked file clean.
+    "Jane roe" is one mistyped shift key and "client: sample holdings pty ltd"
+    is ordinary markdown front matter.
+
+    Every row is redacted strictly, so a halt fails this test as loudly as a
+    leak does. Three of these rows used to halt, which was safe but wrong: the
+    triage file then asked the operator to classify a name the map already held.
+    """
+    for form, placeholder in (
+        ("Jane Roe", "PERSON_01"),
+        ("JANE ROE", "PERSON_01"),
+        ("Jane  Roe", "PERSON_01"),
+        ("Jane\nRoe", "PERSON_01"),
+        ("jane roe", "PERSON_01"),
+        ("Jane roe", "PERSON_01"),
+        ("Sample Holdings Pty Ltd", "CLIENT_01"),
+        ("sample holdings pty ltd", "CLIENT_01"),
+        ("SAMPLE HOLDINGS PTY LTD", "CLIENT_01"),
+        ("Sample Holdings\nPty Ltd", "CLIENT_01"),
+    ):
+        text, counts = redact_module.redact("client: %s\n" % form, MAP)
+        assert text == "client: %s\n" % placeholder, form
+        assert sum(counts.values()) == 1, form
+
+
+def test_verify_reports_a_mapped_value_whatever_case_it_leaked_in() -> None:
+    """verify has to match a value the way pass two matches it, or it agrees with the leak."""
+    for form in ("jane roe", "JANE ROE", "Jane\nRoe", "sample holdings pty ltd"):
+        found = verify_module.findings("client: %s\n" % form, MAP)
+        assert found, form
+
+
+def test_a_wrapped_mapped_value_round_trips_through_restore() -> None:
+    """A hard wrap inside a mapped name is matched, and comes back on one line.
+
+    restore writes the spelling the map holds, which is the point of the map:
+    the placeholder means the entity, not the typing that produced it.
+    """
+    text, counts = redact_module.redact("Prepared by Jane\nRoe today.\n", MAP)
+    assert text == "Prepared by PERSON_01 today.\n"
+    assert counts["person"] == 1
+    assert restore(text, MAP) == "Prepared by Jane Roe today.\n"
+
+
+def test_a_mapped_value_is_still_matched_only_as_a_whole_word() -> None:
+    """Folding case and whitespace must not also drop the word boundaries."""
+    text, counts = redact("Sample Holdings Pty Ltdx and xSample Holdings Pty Ltd stayed")
+    assert "CLIENT_01" not in text
+    assert counts.get("client", 0) == 0

@@ -20,7 +20,14 @@ from typing import Sequence
 
 from .entities import Entity
 from .errors import Halt
-from .patterns import ADDRESS, DOB, PLACEHOLDER, person_name_spans, structured_spans
+from .patterns import (
+    ADDRESS,
+    DOB,
+    PLACEHOLDER,
+    person_name_spans,
+    structured_spans,
+    value_pattern,
+)
 
 _KIND_PREFIX = {
     "tfn": "TFN", "abn": "ABN", "acn": "ACN", "bsb": "BSB",
@@ -108,6 +115,13 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
 
     Leftmost-longest, with the map's own order as the final tie-break, so the
     result does not depend on how the caller happened to sort the map.
+
+    ``patterns.value_pattern`` is what a value is matched with, rather than a
+    pattern compiled here. This function once compiled ``re.escape(value)``
+    case-sensitively, which meant a mapped name written in lower case was
+    replaced by nothing while the residual sweep, which requires a capital,
+    could not report it either. One definition, read by ``verify`` as well, is
+    what closes that gap for good.
     """
     found: list[tuple[int, int, int, Entity]] = []
     for priority, entity in enumerate(entities):
@@ -125,8 +139,7 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # counting a client that never appeared.
         if not entity.value.strip() or PLACEHOLDER.search(entity.value):
             continue
-        pattern = re.compile(r"(?<!\w)" + re.escape(entity.value) + r"(?!\w)")
-        for match in pattern.finditer(text):
+        for match in value_pattern(entity.value).finditer(text):
             found.append((match.start(), match.end(), priority, entity))
     found.sort(key=lambda f: (f[0], -(f[1] - f[0]), f[2]))
     counts: Counter = Counter()

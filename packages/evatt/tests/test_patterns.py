@@ -1,11 +1,16 @@
 """Check-digit vectors are documented ATO/ASIC test identifiers, not real ones.
 
-They live in test code only. Nothing under evatt/samples/ carries them.
+Most live in test code. evatt/samples/identifiers.md ships four of the same
+kind, because a sample sheet demonstrating the labelled patterns has to carry
+something for them to fire on. CONTRIBUTING.md lists them and explains the one
+that is not a fiction, the BSB, for which no reserved range is published.
 """
 import re
 import time
 
+from evatt import entities
 from evatt import patterns
+from evatt import redact as redact_module
 
 VALID_TFN = "123456782"
 VALID_ABN = "51824753556"
@@ -545,3 +550,75 @@ def test_person_name_spans_are_ordered_and_report_each_person_once() -> None:
         for start, end, _value in spans:
             assert start >= previous_end, (text, spans)
             previous_end = end
+
+
+def test_a_qualifier_after_the_separator_is_still_labelled() -> None:
+    """"ABN: no. 51824753557" returned nothing, so a failed check digit lost it.
+
+    The qualifier sat before the separator only. A typist puts it on either
+    side, and a labelled identifier whose check digit fails falls through to
+    the bare pattern, which rejects it. That is under-detection of digits
+    something wrote "ABN" next to.
+    """
+    assert not patterns.valid_abn("51824753557")
+    assert patterns.structured_spans("ABN: no. 51824753557") == [(9, 20, "abn", "51824753557")]
+    assert patterns.structured_spans("TFN: number 123456783")[0][2] == "tfn"
+    assert patterns.structured_spans("Medicare - card 2123456711")[0][2] == "medicare"
+
+
+def test_a_comma_or_opening_bracket_separates_a_label_from_its_digits() -> None:
+    """Both are ordinary workpaper punctuation and both used to return nothing."""
+    assert not patterns.valid_tfn("123456783")
+    assert patterns.structured_spans("TFN (123456783)") == [(5, 14, "tfn", "123456783")]
+    assert patterns.structured_spans("Medicare card, 2123456711") == [
+        (15, 25, "medicare", "2123456711")
+    ]
+    assert patterns.structured_spans("ACN, 123456781")[0][2] == "acn"
+
+
+def test_the_widened_separator_keeps_every_form_that_already_worked() -> None:
+    for text, kind in (
+        ("TFN: 123 456 782", "tfn"),
+        ("TFN 123456782", "tfn"),
+        ("tax file number 123456782", "tfn"),
+        ("ABN no. 51 824 753 556", "abn"),
+        ("A.B.N. 51 824 753 556", "abn"),
+        ("A.B.N 51 824 753 556", "abn"),
+        ("ACN 000 000 019", "acn"),
+        ("Medicare card number 2123 45670 1", "medicare"),
+        ("Medicare card # 2123456701", "medicare"),
+        ("Medicare cardholder 2123456701", "medicare"),
+    ):
+        spans = patterns.structured_spans(text)
+        assert spans and spans[0][2] == kind, text
+
+
+def test_the_widened_separator_still_scans_a_failing_search_linearly() -> None:
+    """Two ``\\s*`` able to reach one space run is the quadratic form renamed.
+
+    _GAP carries exactly one leading ``\\s*``; every other whitespace run it can
+    consume sits behind a mandatory qualifier word or separator character. Four
+    times the input therefore costs about four times as much, not sixteen.
+    """
+    small = _failing_scan_seconds(patterns.ABN_LABELLED, "ABN", 2_000)
+    large = _failing_scan_seconds(patterns.ABN_LABELLED, "ABN", 8_000)
+    assert large < small * 8, (small, large)
+
+
+def test_the_placeholder_prefixes_stay_in_union_with_both_tables() -> None:
+    """PLACEHOLDER, redact._KIND_PREFIX and entities._PREFIX must agree.
+
+    Three consumers read the union: ``redact._input_placeholders`` decides what
+    a carried placeholder is, ``verify._carried_placeholders`` decides which of
+    them an entity map should assign, and ``restore`` decides which it may
+    reverse. Add a kind to ``_STRUCTURED`` without touching the other two and
+    ``_replace_structured`` raises KeyError; add a prefix without touching
+    PLACEHOLDER and all three go blind to it instead, which is the quiet half.
+    """
+    body = re.search(r"\(\?:([A-Z|]+)\)_", patterns.PLACEHOLDER.pattern)
+    assert body is not None
+    minted = set(redact_module._KIND_PREFIX.values()) | set(entities._PREFIX.values())
+    assert set(body.group(1).split("|")) == minted
+    assert {kind for kind, _pattern, _validator in patterns._STRUCTURED} == set(
+        redact_module._KIND_PREFIX
+    )

@@ -342,3 +342,61 @@ def test_a_value_that_merely_looks_placeholder_ish_is_still_accepted() -> None:
     """The guard must not cost a real client whose name happens to end in digits."""
     assert entities.assign([], "Precinct 88", "client", "2026-09-10").value == "Precinct 88"
     assert entities.assign([], "MY_CLIENT_01", "client", "2026-09-10").value == "MY_CLIENT_01"
+
+
+def test_load_rejects_two_values_that_fold_onto_one_another(tmp_path) -> None:
+    """Two spellings of one name cannot hold two placeholders.
+
+    Pass two matches a value case-insensitively and across a whitespace run, so
+    "Jane Roe" and "jane  roe" are one pattern. A map holding both would have
+    one of them take every occurrence while the other sat there looking
+    assigned and never appearing, which is how a restore puts a wrong name back.
+    """
+    for second in ("jane roe", "JANE ROE", "Jane  Roe", "Jane\nRoe", " Jane Roe "):
+        document = {
+            "schema_version": 1,
+            "entries": [
+                dict(SAMPLE["entries"][1]),
+                {"value": second, "placeholder": "PERSON_02",
+                 "kind": "person", "added": "2026-09-09"},
+            ],
+        }
+        with pytest.raises(EvattError, match="once case and whitespace are folded"):
+            entities.load(write_map(tmp_path, document))
+
+
+def test_load_still_calls_an_exact_duplicate_a_duplicate(tmp_path) -> None:
+    """The fold check subsumes the exact one, so it must keep the exact wording."""
+    entry = dict(SAMPLE["entries"][1])
+    document = {
+        "schema_version": 1,
+        "entries": [entry, {**entry, "placeholder": "PERSON_02"}],
+    }
+    with pytest.raises(EvattError, match="duplicate entity value"):
+        entities.load(write_map(tmp_path, document))
+
+
+def test_assign_returns_the_existing_entity_for_a_folded_spelling() -> None:
+    """An operator types what the document showed them, which may be shouted or wrapped.
+
+    Minting a second placeholder there would put two on one person, and the
+    second would never appear in a document because a single pattern already
+    matched every occurrence.
+    """
+    existing = entities.Entity("Jane Roe", "PERSON_01", "person", "2026-09-09")
+    for typed in ("Jane Roe", "jane roe", "JANE ROE", "Jane  Roe", "Jane\nRoe"):
+        assert entities.assign((existing,), typed, "person", "2026-09-10") is existing
+
+
+def test_assign_still_mints_a_new_placeholder_for_a_different_person() -> None:
+    existing = entities.Entity("Jane Roe", "PERSON_01", "person", "2026-09-09")
+    minted = entities.assign((existing,), "Jane Rowe", "person", "2026-09-10")
+    assert minted.placeholder == "PERSON_02"
+
+
+def test_the_shipped_sample_map_holds_no_two_values_that_fold_together() -> None:
+    """The map this package ships has to satisfy the rule load now enforces."""
+    sample = Path(entities.__file__).resolve().parent / "samples" / "entities.sample.json"
+    loaded = entities.load(sample)
+    folds = [entities._fold(entity.value) for entity in loaded]
+    assert len(set(folds)) == len(folds)

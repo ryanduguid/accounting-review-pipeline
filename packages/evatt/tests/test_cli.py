@@ -38,13 +38,21 @@ def new_repo(root: Path, gitignore: str) -> Path:
 
 
 def workspace(
-    tmp_path: Path, gitignore: str = "entities.json\n", name: str = "entities.json"
+    tmp_path: Path,
+    gitignore: str = "entities.json\n*.triage.md\n",
+    name: str = "entities.json",
 ) -> Path:
     """A repository holding a gitignored copy of the sample map.
 
     The collision tests need the map under a name of their own choosing, so the
     ignore rule and the file name are both adjustable. Everything else uses the
     defaults and reads the same as it always did.
+
+    The default rules are the two the package's own .gitignore ships and the CI
+    demo writes. ``*.triage.md`` is not decoration: a halt asks git about the
+    triage path before it writes it, so a workspace without that rule refuses
+    to halt at all. ``test_a_halt_refuses_a_committable_triage_path`` is the
+    test that pins the refusal, and it builds its own repository without it.
     """
     root = new_repo(tmp_path / "repo", gitignore)
     shutil.copy(SAMPLES / "entities.sample.json", root / name)
@@ -425,3 +433,107 @@ def test_a_usage_error_is_exit_one_not_two(tmp_path, capsys) -> None:
         with pytest.raises(SystemExit) as caught:
             main(argv)
         assert caught.value.code == 0, argv
+
+
+def test_a_halt_refuses_a_committable_triage_path(tmp_path, capsys) -> None:
+    """The triage file is guarded before a byte reaches it, the way the map's .tmp is.
+
+    It quotes whole residual lines about a real document at a path the operator
+    never typed, because --out derives it. A run that cannot write it safely
+    writes nothing at all, and the stale output goes anyway.
+    """
+    root = workspace(tmp_path, gitignore="entities.json\n")
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    argv = ["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+            "--out", str(root / "out.md")]
+    assert main(argv) == 0
+    capsys.readouterr()
+
+    shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
+    assert main(argv) == 1
+    error = capsys.readouterr().err
+    assert "the triage file must never be committed" in error
+    assert "git does not ignore it" in error
+    assert not (root / "out.md.triage.md").exists()
+    assert not (root / "out.md").exists()
+    assert not (root / "out.md.manifest.json").exists()
+
+
+def test_a_clean_run_removes_an_earlier_runs_triage_file(tmp_path) -> None:
+    """The other direction of the same argument the halt path already accepted.
+
+    Run one halts and writes a triage file naming a real person. Run two
+    succeeds. Without this the operator sees exit 0 and a sanitised document
+    with that plaintext worklist sitting in the directory they send from.
+    """
+    root = workspace(tmp_path)
+    triage = root / "out.md.triage.md"
+    argv = ["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+            "--out", str(root / "out.md")]
+    shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
+    assert main(argv) == 2
+    assert "John Smith" in triage.read_text(encoding="utf-8")
+
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    assert main(argv) == 0
+    assert (root / "out.md").exists()
+    assert not triage.exists()
+
+
+def test_a_triage_value_holding_a_line_break_keeps_its_bold_span(tmp_path) -> None:
+    """NAME spans a newline, so a candidate can carry one, and markdown cannot.
+
+    The raw value broke the bold span open across two lines and left the
+    worklist unreadable at exactly the entry that needed reading.
+    """
+    root = workspace(tmp_path)
+    (root / "in.md").write_text("# meeting\n\nJohn\nSmith attended.\n", encoding="utf-8")
+    assert main(["redact", "--in", str(root / "in.md"),
+                 "--map", str(root / "entities.json"),
+                 "--out", str(root / "out.md")]) == 2
+    triage = (root / "out.md.triage.md").read_text(encoding="utf-8")
+    assert "**John Smith** (name, line 3)" in triage
+    # The candidate really did carry the break, so the collapse is what fixed it.
+    assert "John\nSmith" not in triage
+
+
+CASE_MATRIX = (
+    ("Jane Roe", "PERSON_01"),
+    ("JANE ROE", "PERSON_01"),
+    ("Jane  Roe", "PERSON_01"),
+    ("Jane\nRoe", "PERSON_01"),
+    ("jane roe", "PERSON_01"),
+    ("Jane roe", "PERSON_01"),
+    ("sample holdings pty ltd", "CLIENT_01"),
+)
+
+
+def test_no_case_or_wrapping_of_a_mapped_name_survives_redact_and_verify(tmp_path) -> None:
+    """The finding-1 matrix, end to end through the commands an operator runs.
+
+    Three of these rows left the name in the output with an empty manifest, and
+    verify then exited 0 on the leaked file. The other four halted, which was
+    safe but still wrong: the triage file asked the operator to classify a name
+    the map already held, and assign would have minted a second placeholder.
+    """
+    root = workspace(tmp_path)
+    for index, (form, placeholder) in enumerate(CASE_MATRIX):
+        source, out = root / f"in{index}.md", root / f"out{index}.md"
+        source.write_text("client: %s\n" % form, encoding="utf-8")
+        assert main(["redact", "--in", str(source), "--map", str(root / "entities.json"),
+                     "--out", str(out)]) == 0, form
+        written = out.read_text(encoding="utf-8")
+        assert written == "client: %s\n" % placeholder, form
+        for token in form.split():
+            assert token.casefold() not in written.casefold(), form
+        manifest = json.loads((root / f"out{index}.md.manifest.json").read_text(encoding="utf-8"))
+        assert sum(manifest["counts"].values()) == 1, form
+        assert main(["verify", "--in", str(out), "--map", str(root / "entities.json")]) == 0, form
+
+
+def test_verify_exits_two_on_a_mapped_name_left_in_lower_case(tmp_path) -> None:
+    """The half of finding 1 verify owns: it must not agree with the leak."""
+    root = workspace(tmp_path)
+    (root / "leaked.md").write_text("client: sample holdings pty ltd\n", encoding="utf-8")
+    assert main(["verify", "--in", str(root / "leaked.md"),
+                 "--map", str(root / "entities.json")]) == 2
