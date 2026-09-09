@@ -964,7 +964,8 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     )
     lines.append("")
     client_queries = document.get("client_queries")
-    if client_queries is None:
+    predates_the_register = client_queries is None
+    if predates_the_register:
         lines.append(
             "This pack was written before the client-query register existed, so it "
             "carries none. Its exceptions are unchanged."
@@ -972,9 +973,14 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         client_queries = []
     assert isinstance(client_queries, list)
     if not client_queries:
-        lines.append(
-            "No exception raised a question for the client."
-        )
+        # Only a run that derived the register can report an empty one. An
+        # archived pack carries no register at all, and its exceptions may well
+        # include ones this version would turn into questions, so saying none
+        # arose would be a claim nothing in the pack supports.
+        if not predates_the_register:
+            lines.append(
+                "No exception raised a question for the client."
+            )
     else:
         width = max(len(str(index + 1)) for index in range(len(client_queries)))
         for index, query in enumerate(client_queries):

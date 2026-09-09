@@ -239,6 +239,11 @@ def test_a_pack_written_before_the_register_still_opens(pack_dir: Path) -> None:
     assert "Overall status: REVIEW" in sheet
     assert "written before the client-query register existed" in sheet
     assert "Client queries drafted" not in sheet
+    # An archived pack carries no register, so nothing in it establishes that
+    # no exception raised a question. Its exceptions may well include ones this
+    # version would turn into questions, and the fixture's subledger difference
+    # is exactly that, so the empty-register sentence would be a false claim.
+    assert "No exception raised a question for the client." not in sheet
     assert set(digests) == {"close-review-pack.json", "close-summary.md", "exceptions.csv"}
 
 
