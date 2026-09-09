@@ -140,7 +140,10 @@ through a root caller pinned to the independently reviewed Release Policy commit
 `accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
-is the only difference. `IMPORTS.md` lists the callers and publisher environments.
+is the only difference, except that `release-evatt.yml` has no `pypi` job at all, so an
+`evatt/v*` tag produces GitHub release assets and publishes to no index while the disclosure
+policy that package enforces is unsigned. `IMPORTS.md` lists the callers and publisher
+environments.
 
 ## Contract
 

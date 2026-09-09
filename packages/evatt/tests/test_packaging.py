@@ -20,11 +20,33 @@ def test_halt_is_an_evatt_error_carrying_unknowns() -> None:
     assert error.unknowns == ("Jane Roe",)
 
 
-def test_gitignore_covers_the_real_map() -> None:
+def test_gitignore_covers_every_file_that_holds_real_values() -> None:
+    """All four rules, not just the two the map needs.
+
+    ``*.triage.md`` and ``*.tmp`` were unasserted, and each covers a file that
+    holds real values: the triage worklist quotes whole residual lines, and
+    ``entities.save`` writes the map through a neighbouring .tmp that a hard
+    kill can leave behind. A halt now refuses to write a triage file at a path
+    git would let you commit, so dropping that rule from this repository stops
+    the suite as well as the operator.
+    """
     lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     ignored = [line.strip() for line in lines]
-    assert "entities.json" in ignored
-    assert "*.entities.json" in ignored
+    for rule in ("entities.json", "*.entities.json", "*.triage.md", "*.tmp"):
+        assert rule in ignored, rule
+
+
+def test_the_sdist_manifest_carries_every_document_the_readme_points_at() -> None:
+    """README.md is the PyPI long description, and it names four documents.
+
+    None of them was in either artefact, so an installed reader was sent to a
+    DISCLAIMER that was not there, and DISCLAIMER.md is the file carrying the
+    Privacy Act position and the "does not authorise disclosure" sentence.
+    """
+    manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    for document in ("DISCLAIMER.md", "DATA-FLOW.md", "SECURITY.md", "CONTRIBUTING.md"):
+        assert f"include {document}" in manifest, document
+        assert (ROOT / document).exists(), document
 
 
 SAMPLES = ROOT / "evatt" / "samples"

@@ -30,6 +30,15 @@ jobs:
   verify:
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    # pyproject declares requires-python >= 3.10 and mypy is configured for
+    # 3.10, and until now nothing anywhere executed that floor: every job ran
+    # 3.12. A declared floor no test runs is a claim, not a support statement.
+    # Both legs run the whole job, the wheel demo included, because the demo is
+    # what exercises the installed console script rather than the checkout.
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
     defaults:
       run:
         working-directory: packages/evatt
@@ -39,7 +48,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -49,6 +58,8 @@ jobs:
       # No -q here: pyproject's addopts already supplies it, and a second one
       # is -qq, which drops the "N passed" summary from the job log.
       - run: uv run --locked --extra dev pytest
+        env:
+          UV_PYTHON: ${{ matrix.python }}
       - run: uv run --locked --extra dev ruff check evatt tests
       - run: uv run --locked --extra dev mypy evatt
       - run: uv run --locked --extra dev --python 3.12 python -m build

@@ -8,8 +8,15 @@
 
 evatt performs **pseudonymisation with local key retention**. It replaces
 Australian structured identifiers and known named entities in markdown with
-stable placeholders, so that a document can be handed to an external model
-without the model receiving the identifiers.
+placeholders, so that a document can be handed to an external model without the
+model receiving the identifiers.
+
+Entity placeholders are stable across documents, because they come from the
+map: `CLIENT_01` means the same client in every file redacted against it.
+Structured placeholders are not. They are numbered per document, so `TFN_01` in
+one workpaper and `TFN_01` in the next are two different tax file numbers.
+Putting two redacted documents in front of one model is putting two meanings of
+`TFN_01` in front of it.
 
 **The key never leaves the local machine.** The entity map is a gitignored file
 on disk. It is not transmitted, and no network client exists in this package.
@@ -27,6 +34,12 @@ this. A human check before sending is the only mitigation.
 evatt is a control that makes a policy enforceable. It is not authority to
 disclose anything.
 
+**No client data passes through evatt until the policy governing it is signed
+off, and that includes testing.** A trial run is a disclosure of the document to
+whatever the operator does with the output, and a control being evaluated is not
+yet a control anyone has agreed to rely on. Use the fabricated files under
+`evatt/samples/` until the sign-off exists.
+
 ```
 evatt redact  --in notes.md --map entities.json --out build/notes.md
 evatt verify  --in build/notes.md --map entities.json
@@ -37,10 +50,20 @@ evatt restore --in answer.md --map entities.json --out build/answer.md
 
 Python 3.10 or later, and `git` on `PATH`. Every command asks git whether it
 would let you commit the map, and refuses to run when the answer is yes or
-unclear. That question has no answer outside a work tree, so the map, and
-therefore the run, must live inside a repository that ignores it. The rule
-this package ships covers `entities.json`, `*.entities.json`, `*.triage.md`
-and `*.tmp`.
+unclear. A halt asks the same question about the triage path before it writes
+one. That question has no answer outside a work tree, so the map, and therefore
+the run, must live inside a repository that ignores it.
+
+The rules covering `entities.json`, `*.entities.json`, `*.triage.md` and `*.tmp`
+live in this repository's own `.gitignore`, which ships in neither the wheel nor
+the source distribution. **If you installed evatt as a package, you have none of
+them and must write your own**, in the repository your map and your run live in.
+Two lines are enough:
+
+```
+entities.json
+*.triage.md
+```
 
 ## Exit codes
 
@@ -64,8 +87,15 @@ This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
 
 A halt also deletes any output and manifest already sitting at `--out` from an
-earlier run. "Nothing was written" has to be true of the directory the operator
-is about to send from, not only of the run that just stopped.
+earlier run, and a clean run deletes any triage file left there by an earlier
+one. What the operator sees is a directory, not one run's exit code, and a
+sanitised document sitting beside a worklist that names a real person is what
+gets sent.
+
+The triage path is checked against git before it is written, the same question
+every command asks about the map. It quotes whole residual lines about a real
+document at a path `--out` derived rather than one you typed, so a halt that
+cannot write it safely writes nothing and exits 1.
 
 ## Structured identifiers are one-way
 
@@ -87,6 +117,22 @@ an extra placeholder costs a triage decision while a miss leaks.
   it useful in front of someone else, and it also means a full tax file number
   can land in a shell recording, a scrollback buffer or a CI log. Run it where
   the output is as private as the document.
+- **`verify` re-runs the same detection over the output.** It is not a second,
+  independent detector. It catches redaction applied wrongly, a file redacted
+  against a different map, a half-redacted file and an output edited by hand.
+  It cannot catch a detection bug: what the detector could not see going in it
+  cannot see coming out. A clean `verify` says the output agrees with the
+  detector, not that the output is clean.
+- **evatt does not detect an ATO client reference.** No single fixed published
+  format exists for one, so a pattern would be guesswork producing either noise
+  or false confidence, and a detector nobody can calibrate is worse than a
+  documented gap. A document carrying a client reference is the human check's
+  job, not the tool's.
+- **`restore --out` is not gitignore-guarded.** It writes real names to a path
+  you choose, anywhere, so the tool cannot know what rule would cover it. The
+  map, its `.tmp` and the triage path are guarded, because those three are
+  either the key or a path evatt derived rather than one you typed. Where the
+  restored answer lands is yours to keep out of a commit.
 - **A labelled identifier is admitted on the label alone**, with no check
   digit, because something wrote "TFN" next to those digits and a typo in a
   real tax file number is still a real tax file number. Only a bare digit run
