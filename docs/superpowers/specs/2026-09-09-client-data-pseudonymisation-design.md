@@ -117,7 +117,13 @@ output.
 4. Emit the sanitised markdown and a `manifest.json` recording counts by type
    and no values.
 
-**`restore.py`.** Reverses the map over a model's answer, locally.
+**`restore.py`.** Reverses the entity map over a model's answer, locally.
+
+Structured identifiers are one-way. `restore` reverses named entities only.
+A TFN, ABN, ACN, BSB or Medicare number that pass one replaced is gone, and no
+sidecar records its value. A model's answer never needs to echo a real tax file
+number back, so holding the values to reverse them would create a second copy
+of the most sensitive material for no benefit.
 
 ## 4. Data flow
 
@@ -161,7 +167,10 @@ spaced appropriation amounts must not trigger.
 
 **`test_redact.py`.** Four properties.
 
-- Round trip: `restore(redact(x)) == x` for every fixture.
+- Round trip on named entities: `restore(redact(x)) == x` for a fixture whose
+  only sensitive content is mapped entities.
+- One-way structured identifiers: after `restore`, no original TFN, ABN, ACN,
+  BSB or Medicare string appears anywhere in the output.
 - Halt on unknown: a fixture containing an unmapped name-shaped token must
   raise and the output file must not exist. Asserting only that it raised is
   insufficient.
@@ -176,8 +185,17 @@ required README wording, and blocks the retired claims "anonymised",
 "safe to send". This test is what prevents a later README edit from quietly
 upgrading the claim.
 
-**`test_packaging.py`.** House convention, plus assertions that the map file is
-gitignored and that no fixture contains a checksum-valid TFN or ABN.
+**`test_packaging.py`.** House convention, plus assertions that `.gitignore`
+covers the real map file, that the shipped sample map contains only names
+carrying the documented synthetic marker, and that every email address under
+`samples/` uses an RFC 2606 reserved domain.
+
+An earlier draft asserted that no fixture contains a checksum-valid TFN or ABN.
+That is self-defeating, because a fixture must carry valid identifiers to
+exercise the checksum path at all. A randomly generated valid TFN is synthetic
+by construction; the property worth pinning is the absence of real values, not
+the absence of valid ones. Documented ATO test identifiers are used as vectors
+in test code and are not shipped in `samples/`.
 
 ### Fixtures
 
