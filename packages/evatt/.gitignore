@@ -1,0 +1,6 @@
+entities.json
+*.entities.json
+build/
+dist/
+*.egg-info/
+__pycache__/
