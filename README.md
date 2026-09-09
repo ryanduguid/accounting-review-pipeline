@@ -25,7 +25,7 @@ uv run --locked --extra dev close-control review --current examples/current_tria
 
 Local monorepo assembly anchored in Monthly Close Controls. Its canonical GitHub repository
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
-It holds six independently versioned components joined only by local files and commands:
+It holds seven independently versioned components joined only by local files and commands:
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
@@ -35,10 +35,13 @@ It holds six independently versioned components joined only by local files and c
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.2 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.5 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
+| evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.1.0 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the ten-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly
 close surfaces exceptions, and the ledger-review boundary or Power BI consumes the result.
+evatt stands beside that flow rather than in it: it pseudonymises markdown locally before an
+operator hands it to an external model, and reads no trial balance.
 Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is
 offline, exact-Decimal and fabricated-data-only.
 
@@ -137,11 +140,14 @@ component READMEs.
 Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
 `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`: `monthly-close-control-plane/v*`,
-`review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*` and
-`accounting-excel-toolkit/v*`. One tag publishes exactly one component; the identity gate
-refuses a tag whose prefix does not equal the component directory leaf and its distribution
-name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
-is the only difference. `IMPORTS.md` lists the callers and publisher environments.
+`review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*`,
+`accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
+identity gate refuses a tag whose prefix does not equal the component directory leaf and its
+distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
+is the only difference, except that `release-evatt.yml` has no `pypi` job at all, so an
+`evatt/v*` tag produces GitHub release assets and publishes to no index while the disclosure
+policy that package enforces is unsigned. `IMPORTS.md` lists the callers and publisher
+environments.
 
 ## Contract
 

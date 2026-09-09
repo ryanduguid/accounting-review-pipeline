@@ -7,7 +7,11 @@ from pathlib import Path
 
 from .engine import review_close
 from .errors import ControlInputError
-from .report import PACK_FILE_NAMES as _PACK_FILE_NAMES, write_review_pack
+from .report import (
+    PACK_FILE_NAMES as _PACK_FILE_NAMES,
+    require_output_outside_repository,
+    write_review_pack,
+)
 from .viewer import render_review_sheet
 
 
@@ -74,7 +78,16 @@ def main(argv: list[str] | None = None) -> int:
             "a close or change any computed status."
         )
         return 0
-    # write_review_pack replaces its three destinations and deletes what it
+    # Both output guards run before any client file is opened. write_review_pack
+    # repeats this one so a library caller cannot get past it, but a reviewer who
+    # mistyped --output should hear about it before the run reads a trial
+    # balance, not after.
+    try:
+        require_output_outside_repository(args.output)
+    except ControlInputError as exc:
+        print(f"close-control: output error: {exc}", file=sys.stderr)
+        return 1
+    # write_review_pack replaces its four destinations and deletes what it
     # parked aside. If a source file IS one of those destinations, that source
     # is destroyed and the pack still records a source_sha256 for it, so the
     # provenance chain points at evidence that no longer exists. Refuse before

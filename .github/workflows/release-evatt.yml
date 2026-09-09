@@ -1,0 +1,39 @@
+name: Release evatt
+
+# One namespaced tag releases exactly one component. The reusable workflow
+# refuses the release unless the directory leaf, the tag prefix and the
+# normalised distribution name agree (evatt). The version is read as data from
+# the tracked literal in evatt/version.py.
+#
+# The sibling release-elizabeth-anne-alexander.yml has a second pypi job that
+# publishes through trusted publishing. It is deliberately absent here: a PyPI
+# release is out of scope until the disclosure policy this package enforces is
+# signed off, and an absent job is a better guard than a job that would fire on
+# a stray tag. Add it, with its own pypi-evatt environment, when a release is
+# actually wanted.
+on:
+  push:
+    tags:
+      - "evatt/v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      actions: read # Inspect and download only the exact bound release candidate.
+      attestations: write # Record provenance and SBOM attestations for release assets.
+      contents: write # Create the draft release, upload assets and publish it.
+      id-token: write # Obtain the OIDC identity required to sign attestations.
+    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
+    with:
+      source-directory: packages/evatt
+      tag-prefix: evatt
+      upload-dist-artifact: true
+      version-parser: python-literal
+      version-file: evatt/version.py

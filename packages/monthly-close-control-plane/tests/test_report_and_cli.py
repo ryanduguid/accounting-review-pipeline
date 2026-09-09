@@ -3,6 +3,8 @@ from __future__ import annotations
 import codecs
 import csv
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,7 +19,7 @@ from closecontrol.errors import ControlInputError
 from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
 from closecontrol.pipeline_cli import main as quarantined_main
-from closecontrol.report import write_review_pack
+from closecontrol.report import CHECKOUT_MARKERS, _same_directory, write_review_pack
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -997,3 +999,370 @@ def test_a_blank_line_does_not_shift_the_reported_row_number(tmp_path: Path) -> 
     # The offending record is physically on line 4: header, row, blank, row.
     assert "row 4" in str(caught.value)
     assert "row 3" not in str(caught.value)
+
+
+# --- a pack never lands inside a checkout ----------------------------------
+
+
+def _fake_checkout(root: Path, *, git_is_a_file: bool = False, marker: str = ".git") -> Path:
+    """Create a directory that looks like a version-control checkout.
+
+    A worktree and a submodule carry a `.git` file holding a gitdir pointer
+    rather than a directory, and both are still checkouts, so the guard has to
+    read existence rather than directory-ness.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    if git_is_a_file:
+        (root / marker).write_text("gitdir: /elsewhere/.git/worktrees/wt\n", encoding="utf-8")
+    else:
+        (root / marker).mkdir()
+    return root
+
+
+def _require_symlinks(tmp_path: Path) -> None:
+    """Skip when the host will not create a symbolic link.
+
+    Windows needs Developer Mode or SeCreateSymbolicLinkPrivilege, and this
+    package declares no platform restriction, so a contributor running the
+    suite there should see a skip rather than an error inside a test whose
+    subject is the guard, not the filesystem."""
+    probe = tmp_path / "symlink-probe"
+    try:
+        probe.symlink_to(tmp_path, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:  # pragma: no cover - POSIX CI
+        pytest.skip(f"symbolic links unavailable here: {exc}")
+    probe.unlink()
+
+
+@pytest.mark.parametrize("marker", CHECKOUT_MARKERS)
+def test_every_checkout_marker_is_refused(tmp_path: Path, marker: str) -> None:
+    """The harm is the pack going under version control, and Mercurial,
+    Subversion and Bazaar copy a committed pack to every clone exactly as Git
+    does. A firm on one of them is the one least likely to be told the tool
+    assumed the other."""
+    checkout = _fake_checkout(tmp_path / "firm-repo", marker=marker)
+
+    with pytest.raises(ControlInputError, match=f"which holds {re.escape(marker)}"):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+
+def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
+    """One refusal on every supported interpreter, from the guard.
+
+    `Path.resolve` raises RuntimeError, not OSError, for a symlink loop before
+    Python 3.13, which left the CLI's handlers untouched and printed a
+    traceback. From 3.13 resolve hands back the unresolved path instead, and
+    the loop surfaced two layers later in mkdir. The guard stats the resolved
+    destination so both end here, with the same error."""
+    _require_symlinks(tmp_path)
+    looped = tmp_path / "loop"
+    other = tmp_path / "other"
+    looped.symlink_to(other)
+    other.symlink_to(looped)
+
+    with pytest.raises(ControlInputError, match="cannot be examined"):
+        write_review_pack(_single_exception_pack(), looped / "july")
+
+
+def test_an_uninspectable_marker_is_refused_rather_than_assumed_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A marker this run cannot read is not a marker that is not there.
+
+    `os.lstat` is patched, not `Path.exists`, because the guard deliberately
+    stopped asking exists(): up to 3.13 it swallowed a symlink loop and
+    propagated a permission error, and from 3.14 it answers False for every
+    OSError, which would let an unreadable `.git` read as an absent one and
+    approve an output inside the checkout it could not see. Patching lstat
+    tests the call the guard actually makes, on every interpreter.
+
+    Patched rather than chmod-ed because the suite may run as a user that
+    bypasses directory permissions, which would turn this into a test of
+    nothing."""
+    real_lstat = os.lstat
+
+    def refuse_to_stat(path, *args: object, **kwargs: object):
+        if Path(path).name in CHECKOUT_MARKERS:
+            raise PermissionError(13, "Permission denied")
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", refuse_to_stat)
+
+    with pytest.raises(ControlInputError, match="cannot be examined"):
+        write_review_pack(_single_exception_pack(), tmp_path / "outside" / "july")
+
+
+def test_a_marker_that_is_a_dangling_symlink_still_counts(tmp_path: Path) -> None:
+    """lstat does not follow the entry, so a `.git` symlink is evidence of a
+    checkout whether or not its target is currently reachable. Following it
+    would let a broken pointer read as no checkout at all."""
+    _require_symlinks(tmp_path)
+    checkout = tmp_path / "firm-repo"
+    checkout.mkdir()
+    (checkout / ".git").symlink_to(tmp_path / "nowhere")
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+
+def test_the_cli_reports_an_uninspectable_output_as_exit_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The documented contract is exit 1 for an unwritable --output, with a
+    message, so a path the guard cannot examine must not escape as a
+    traceback."""
+    _require_symlinks(tmp_path)
+    looped = tmp_path / "loop"
+    other = tmp_path / "other"
+    looped.symlink_to(other)
+    other.symlink_to(looped)
+
+    code = main([
+        "review",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--output", str(looped / "july"),
+    ])
+
+    assert code == 1
+    assert "output error" in capsys.readouterr().err
+
+
+def test_writer_refuses_an_output_inside_a_checkout(tmp_path: Path) -> None:
+    """A pack names a client's accounts, balances and unexplained movements.
+    Inside a checkout it is one `git add -A` away from a history every clone
+    copies, and a .gitignore entry is a convention the next commit can waive."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+
+def test_a_refused_output_leaves_nothing_behind(tmp_path: Path) -> None:
+    """The guard runs before mkdir, so a refused run does not create the tree it
+    was told to write into and then abandon it."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+
+    with pytest.raises(ControlInputError):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+    assert not (checkout / "reports").exists()
+
+
+@pytest.mark.parametrize("git_is_a_file", [False, True])
+def test_a_worktree_pointer_counts_as_a_checkout(tmp_path: Path, git_is_a_file: bool) -> None:
+    checkout = _fake_checkout(tmp_path / "firm-repo", git_is_a_file=git_is_a_file)
+
+    with pytest.raises(ControlInputError, match=re.escape(str(checkout))):
+        write_review_pack(_single_exception_pack(), checkout / "packs")
+
+
+def test_the_checkout_root_itself_is_refused(tmp_path: Path) -> None:
+    """`--output .` from a repository root is the same mistake as any nested
+    path, so the directory itself counts, not only its parents."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), checkout)
+
+
+def test_a_relative_path_climbing_into_a_checkout_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The path is resolved first, so `..` segments and a working directory
+    cannot walk a pack back into a repository the literal argument never named."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+
+    with pytest.raises(ControlInputError, match="inside the version-control checkout"):
+        write_review_pack(_single_exception_pack(), Path("..") / "firm-repo" / "packs")
+
+
+def test_an_output_outside_any_checkout_still_writes(tmp_path: Path) -> None:
+    """The guard must not refuse the ordinary case: an access-controlled
+    directory that is not under version control at all."""
+    _fake_checkout(tmp_path / "firm-repo")
+    outputs = write_review_pack(_single_exception_pack(), tmp_path / "close-data" / "july")
+
+    assert sorted(path.name for path in outputs.values()) == sorted(PACK_FILES)
+
+
+def test_a_work_tree_named_only_by_the_environment_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tracked work tree need not carry a marker to walk up to.
+
+    Git can keep its metadata elsewhere, with GIT_DIR and GIT_WORK_TREE. The
+    work tree then holds tracked files and no `.git` at all, so the ancestor
+    scan finds nothing and would approve a pack written among them. Where the
+    environment names that tree, the guard can see it and refuses.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "metadata.git"))
+
+    assert not any((work_tree / marker).exists() for marker in CHECKOUT_MARKERS)
+    with pytest.raises(ControlInputError, match="GIT_WORK_TREE"):
+        write_review_pack(_single_exception_pack(), work_tree / "packs" / "july")
+
+
+def test_two_spellings_of_one_directory_are_recognised_as_one(
+    tmp_path: Path,
+) -> None:
+    """The comparison the work-tree check rests on answers by identity.
+
+    A case alias needs a case-insensitive filesystem, which the Linux runners
+    are not, so the test below skips there and this one carries the mechanism.
+    A symbolic link is the same shape of question, two paths and one inode, and
+    every supported host can make one: `Path` equality says they differ, and
+    the guard's comparison says they do not.
+    """
+    _require_symlinks(tmp_path)
+    real = tmp_path / "client-files"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+
+    assert alias != real
+    assert _same_directory(alias, real)
+    assert not _same_directory(tmp_path / "elsewhere", real)
+
+
+def test_a_work_tree_that_cannot_be_inspected_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An identity check that could not be completed is not a no.
+
+    `samefile` returning False on any OSError would tell the guard these are
+    different directories on no evidence, and a marker-free work tree it could
+    not read would be approved. Only a path that is genuinely not there answers
+    no; the rest refuse, the same rule the marker scan follows.
+
+    Patched rather than chmod-ed for the same reason as the marker test: the
+    suite may run as a user that bypasses directory permissions.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+
+    def refuse_to_compare(*args: object, **kwargs: object) -> bool:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(os.path, "samefile", refuse_to_compare)
+
+    with pytest.raises(ControlInputError, match="cannot be examined"):
+        write_review_pack(_single_exception_pack(), tmp_path / "outside" / "july")
+
+
+def test_a_differently_cased_work_tree_is_still_the_same_work_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Comparing spelling would let a case alias walk past the guard.
+
+    macOS and Windows accept both spellings of a directory and hand back
+    whichever the caller used, so a work tree named `client-files` and an
+    output written under `CLIENT-FILES` are one directory that plain `Path`
+    equality calls two. Linux runners are case-sensitive, where the two really
+    are separate directories and there is nothing to test, so this skips there
+    rather than asserting something the host cannot show.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    alias = tmp_path / "CLIENT-FILES"
+    if not alias.exists():  # pragma: no cover - POSIX CI
+        pytest.skip("this filesystem is case-sensitive, so there is no alias")
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+
+    with pytest.raises(ControlInputError, match="GIT_WORK_TREE"):
+        write_review_pack(_single_exception_pack(), alias / "packs" / "july")
+
+
+def test_a_work_tree_elsewhere_does_not_refuse_an_unrelated_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The environment check refuses what is inside that tree, not everything."""
+    monkeypatch.setenv("GIT_WORK_TREE", str(tmp_path / "client-files"))
+    outputs = write_review_pack(_single_exception_pack(), tmp_path / "close-data" / "july")
+
+    assert sorted(path.name for path in outputs.values()) == sorted(PACK_FILES)
+
+
+def test_the_cli_refuses_before_it_reads_a_trial_balance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A reviewer who mistyped --output should hear about it before the run
+    opens a client's ledger, and the exit code is the documented 1 for an
+    invalid command configuration."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    unreadable = tmp_path / "does-not-exist.csv"
+
+    code = main([
+        "review",
+        "--current", str(unreadable),
+        "--prior", str(unreadable),
+        "--output", str(checkout / "packs"),
+    ])
+
+    assert code == 1
+    error = capsys.readouterr().err
+    assert "output error" in error
+    assert "inside the version-control checkout" in error
+    # The input error never fires: the run stopped before reading anything.
+    assert "input error" not in error
+
+
+def test_view_still_opens_a_pack_that_is_inside_a_checkout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The refusal is on writing. A firm that already has packs under version
+    control must still be able to read them, or the guard would take evidence
+    out of its hands."""
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    pack_dir = tmp_path / "outside" / "july"
+    # The viewer checks the recorded digests, so this pack needs real ones.
+    write_review_pack(_single_exception_pack(digest="a" * 64), pack_dir)
+    moved = checkout / "archive"
+    shutil.copytree(pack_dir, moved)
+
+    assert main(["view", "--pack-dir", str(moved)]) == 0
+    assert "Close Review Sheet" in capsys.readouterr().out
+
+
+def test_a_symlink_swapped_after_the_check_cannot_redirect_the_pack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard's decision has to bind to the destination it approved.
+
+    `resolve` follows a path's symlinks once; every later `mkdir` and
+    `write_text` follows them again. Checking one path and writing through
+    another leaves a component free to be re-pointed in between, which would
+    put a client's accounts and balances somewhere the guard refused. The
+    writer takes the resolved directory back from the guard and builds every
+    destination from it, so the swap below changes nothing.
+    """
+    _require_symlinks(tmp_path)
+    safe = tmp_path / "close-data"
+    safe.mkdir()
+    checkout = _fake_checkout(tmp_path / "firm-repo")
+    link = tmp_path / "link"
+    link.symlink_to(safe, target_is_directory=True)
+
+    real_mkdir = Path.mkdir
+
+    def swap_then_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        # Fires between the guard and the first write: the link the caller
+        # named now points at a checkout.
+        link.unlink()
+        link.symlink_to(checkout, target_is_directory=True)
+        return real_mkdir(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "mkdir", swap_then_mkdir)
+    outputs = write_review_pack(_single_exception_pack(), link / "july")
+
+    assert (safe / "july" / "close-review-pack.json").exists()
+    assert not list(checkout.glob("july"))
+    for path in outputs.values():
+        assert safe in path.parents

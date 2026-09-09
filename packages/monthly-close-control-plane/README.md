@@ -67,12 +67,32 @@ close-control review \
   --percentage-threshold 0.10 \
   --reconciliation-tolerance 0.01 \
   --review-note examples/review_note.json \
-  --output outputs/demo
+  --output ../../../close-control-demo
 ```
 
 The demo exits `2` because its deliberately fabricated exceptions need human review. It writes the four pack files described above.
 
-Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
+`--output` points outside this checkout, and it has to: the command refuses an
+output directory inside a version-control checkout, exiting `1` without
+creating anything. A review pack names a client's accounts, balances and
+unexplained movements, and inside a checkout it is one `git add -A` away from a
+history that every clone copies. A `.gitignore` entry is a convention the next
+commit can waive, and it does nothing about the copy sitting in the working
+tree meanwhile. A checkout is any directory at or above the output holding
+`.git`, `.hg`, `.svn` or `.bzr`, because the harm is the pack going under
+version control and every one of those copies a committed pack to each clone.
+A directory inside the work tree named by `GIT_WORK_TREE` counts too, since
+Git can hold its metadata elsewhere and leave a tracked tree carrying no
+marker to find. A work tree selected some other way, by `--work-tree` on
+another process's git invocation or by `core.worktree` in a repository this
+command never opens, cannot be discovered from here: the check is a backstop
+for the location you chose, not a proof that a directory is untracked.
+An output the command cannot examine, such as one behind a symbolic-link loop
+or an unreadable parent, is refused on the same grounds rather than assumed
+safe. The refusal applies to writing only: `close-control view` still opens a
+pack wherever it already is.
+
+Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, an `--output` path inside a version-control checkout, or an `--output` path that cannot be written.
 
 To run the check on a schedule in CI, copy [examples/github-actions-close-check.yml](examples/github-actions-close-check.yml) into `.github/workflows/`.
 It runs against a repo-stored synthetic trial balance and fails the job when the pack is `BLOCKED`.
@@ -153,10 +173,15 @@ Running the quick-demo command above against the fabricated fixtures in `example
 
 ```text
 close-control: REVIEW; 8 exception(s)
-  json: outputs/demo/close-review-pack.json
-  summary: outputs/demo/close-summary.md
-  exceptions: outputs/demo/exceptions.csv
+  json: /home/you/close-control-demo/close-review-pack.json
+  summary: /home/you/close-control-demo/close-summary.md
+  exceptions: /home/you/close-control-demo/exceptions.csv
 ```
+
+The paths are absolute and have their symlinks resolved, whatever `--output`
+was written as. The writer builds every destination from the directory the
+checkout guard approved rather than from the argument, so what is printed is
+where the pack actually went.
 
 `close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to four of the eight rows):
 
@@ -348,7 +373,8 @@ Passed through unchanged:
 ## Data and operational boundaries
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name wherever `--output` points them, including inside those two fixture directories.
+- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage, and client authorisation are deliberately outside this MVP.
 - Do not use this as tax, financial, audit, or legal advice. It is a configurable review aid that requires professional judgement.
 

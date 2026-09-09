@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {"value": "Sample Holdings Pty Ltd", "placeholder": "CLIENT_01", "kind": "client", "added": "2026-09-09"},
+    {"value": "Sample Freight Co", "placeholder": "CLIENT_02", "kind": "client", "added": "2026-09-09"},
+    {"value": "Jane Roe", "placeholder": "PERSON_01", "kind": "person", "added": "2026-09-09"},
+    {"value": "Mary O\u2019Brien", "placeholder": "PERSON_02", "kind": "person", "added": "2026-09-09"},
+    {"value": "MACDONALD, Alan", "placeholder": "PERSON_03", "kind": "person", "added": "2026-09-09"},
+    {"value": "Sample Trust", "placeholder": "ENTITY_01", "kind": "entity", "added": "2026-09-09"}
+  ]
+}
