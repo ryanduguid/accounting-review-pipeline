@@ -349,6 +349,80 @@ def test_verify_finds_nothing_in_redacted_output() -> None:
     assert verify_module.findings(text, MAP) == ()
 
 
+# An identifier and a person, each wrapped across the break, so both halves of
+# detection are exercised by one document.
+WRAPPED = "Engagement file.\n\nTFN: 123 456\n782 was quoted by Priya\nSharma today.\n"
+
+
+def test_redact_gives_one_result_for_an_lf_and_a_crlf_copy() -> None:
+    """The CLI normalising was one layer too high to protect any other caller.
+
+    ``redact`` is public, ships with ``py.typed`` and takes ``str``, so a hook,
+    a test or another tool calls it with whatever the file held. Every pattern
+    separates digit groups with ``[\\s-]?``, exactly one character, and a CRLF
+    pair is two: the CRLF copy returned the live tax file number unchanged with
+    an empty manifest and no halt, while the LF copy gave "TFN: TFN_01" and a
+    count of one. The guard belongs where every caller goes through.
+    """
+    lf = redact(WRAPPED)
+    crlf = redact(WRAPPED.replace("\n", "\r\n"))
+    assert lf == crlf
+    text, counts = lf
+    assert "123 456" not in text
+    assert counts["tfn"] == 1
+    # The normalised form, not the input's form, is what comes back out.
+    assert "\r" not in text
+
+
+def test_redact_halts_identically_on_an_lf_and_a_crlf_copy() -> None:
+    """Strict mode is the operator's path, and the line numbers must agree too.
+
+    Collapsing CRLF removes no break, so the triage file still points at the
+    line the operator will find the candidate on.
+    """
+    reported = []
+    for payload in (WRAPPED, WRAPPED.replace("\n", "\r\n")):
+        with pytest.raises(Halt) as caught:
+            redact_module.redact(payload, MAP)
+        reported.append(caught.value.unknowns)
+    assert reported[0] == reported[1]
+    assert [(u.kind, u.value, u.line) for u in reported[0]] == [
+        ("name", "Priya\nSharma", 3)
+    ]
+
+
+def test_verify_gives_one_set_of_findings_for_an_lf_and_a_crlf_copy() -> None:
+    """``findings`` runs ``structured_spans`` on the raw text, so it needed its own.
+
+    Inheriting the fix through its internal ``redact`` call covers the residual
+    sweep and nothing else: the surviving-identifier scan reads the text it was
+    handed. Without normalising here the CRLF copy of a document holding a
+    wrapped tax file number verified clean, which is the operator's last check
+    clearing a live identifier.
+    """
+    lf = verify_module.findings(WRAPPED, MAP)
+    crlf = verify_module.findings(WRAPPED.replace("\n", "\r\n"), MAP)
+    assert lf == crlf
+    assert [f.kind for f in lf] == ["tfn", "name"]
+    assert all("\r" not in f.value for f in crlf)
+
+
+def test_restore_is_indifferent_to_line_endings() -> None:
+    """A placeholder holds no whitespace, so no break can split one.
+
+    Nothing is normalised here: ``restore`` is a substitution, and the text
+    comes back carrying the endings it arrived with. ``cli._write`` is what
+    owns putting the source's ending back, which is why ``cli._read`` still
+    hands this function LF text.
+    """
+    answer = "CLIENT_01 and PERSON_01 spoke.\nPERSON_01 will write.\n"
+    assert restore(answer, MAP) == (
+        "Sample Holdings Pty Ltd and Jane Roe spoke.\nJane Roe will write.\n"
+    )
+    crlf = answer.replace("\n", "\r\n")
+    assert restore(crlf, MAP) == restore(answer, MAP).replace("\n", "\r\n")
+
+
 def test_verify_finds_a_surviving_identifier() -> None:
     found = verify_module.findings("TFN 123 456 782", MAP)
     assert [f.kind for f in found] == ["tfn"]

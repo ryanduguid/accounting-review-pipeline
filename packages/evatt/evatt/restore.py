@@ -84,6 +84,14 @@ def restore(text: str, entities: Sequence[Entity]) -> str:
     buys one thing more: "CLIENT_01s" is left standing instead of restored to
     "Sample Holdings Pty Ltds", so a token that is not a placeholder stays
     visibly unrestored rather than silently wrong.
+
+    Line endings are not this function's business either way. ``redact`` and
+    ``verify.findings`` normalise CRLF to LF because their patterns separate
+    digit groups with a single character; a placeholder holds no whitespace at
+    all, so no break can split one and there is nothing here for a normalising
+    pass to rescue. The text comes back with the endings it arrived with, and
+    ``cli._read`` hands this LF text so ``cli._write`` can put the source's own
+    ending back on every break.
     """
     for entity in entities:
         if not _restorable(entity):

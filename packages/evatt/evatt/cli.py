@@ -77,14 +77,15 @@ def _fail(message: object) -> int:
 def _read(path: Path) -> tuple[str, str]:
     """Read *path* as LF text, with the line ending to give it back on the way out.
 
-    Every pass downstream works in LF only. The detection patterns separate
-    digit groups with ``[\\s-]?``, which is exactly one character, so a CRLF
-    file put a two-character break inside a wrapped identifier and no pattern
-    matched it: "TFN: 123 456\\r\\n782" reached the output whole, with an empty
-    manifest and a clean ``verify``, while the same document saved with LF
-    endings was redacted and counted. Normalising once here is one change in
-    one place; widening the separator would have been seven edits across the
-    detection core, each free to drift from the others later.
+    Detection no longer depends on this. ``redact`` and ``verify.findings``
+    each normalise their own input, because they are public and every other
+    caller needs the same guard; those two docstrings carry the reasoning. What
+    is normalised here is still load-bearing for ``restore``, which is a
+    placeholder substitution that neither reads nor rewrites line endings: it
+    hands back whatever it was given, and ``_write`` then expands every ``\\n``
+    to the source's ending, so a CRLF pair reaching it would come out ``\\r\\r\\n``.
+    Normalising on the way in is one line and keeps all three commands feeding
+    ``_write`` the LF text it expects.
 
     The dominant ending is returned so ``_write`` can restore it, which keeps
     the round trip byte-exact for the ordinary file that uses one ending

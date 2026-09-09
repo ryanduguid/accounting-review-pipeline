@@ -76,7 +76,16 @@ def findings(text: str, entities: Sequence[Entity]) -> tuple[Finding, ...]:
     it raw would report a known client twice, once as a mapped entity and
     again as an unclassified name, which buries the genuinely unknown items
     the operator has to act on.
+
+    CRLF is normalised the same way ``redact`` normalises it, and for the same
+    reason. Inheriting the fix through the ``redact`` call below is not enough:
+    ``structured_spans`` runs here over the raw text, so a tax file number
+    wrapped across a CRLF break was reported in an LF copy of a document and
+    passed clean in the CRLF copy. Normalising also settles the cosmetic half,
+    a name reported as "Jane\\r\\nRoe" against the LF copy's "Jane\\nRoe", which
+    is what stops the two copies giving different findings for the same file.
     """
+    text = text.replace("\r\n", "\n")
     found = [Finding(kind, value) for _start, _end, kind, value in structured_spans(text)]
     for entity in entities:
         if _mentions(text, entity.value):

@@ -244,11 +244,30 @@ def _input_placeholders(text: str, redacted: str) -> tuple[Unknown, ...]:
 def redact(
     text: str, entities: Sequence[Entity], *, strict: bool = True
 ) -> tuple[str, dict[str, int]]:
-    """Return the sanitised text and a manifest of counts by kind.
+    """Return the sanitised text, always LF, and a manifest of counts by kind.
 
     The manifest carries counts only. Putting values in it would defeat the
     purpose of the file it accompanies.
+
+    CRLF is normalised to LF here, before any pass runs, because every pass
+    downstream works in LF only. The detection patterns separate digit groups
+    with ``[\\s-]?``, which is exactly one character, so a CRLF pair inside a
+    wrapped identifier matched nothing: "TFN: 123 456\\r\\n782" came back whole
+    with an empty manifest, while the same document saved with LF endings was
+    redacted and counted.
+
+    The guard sits in this function rather than in a caller because ``redact``
+    is the public entry every caller routes through, and a guard in one caller
+    leaves every other one, a test, a hook, another tool, with the silent
+    under-detection. Widening the separator instead would have been
+    seven edits across the detection core, each free to drift from the others.
+
+    Normalising costs the caller nothing it was promised: this function owns
+    detection, not byte fidelity. Line numbers in a ``Halt`` are unchanged,
+    because collapsing CRLF removes no break. Giving a document its original
+    endings back is the CLI's job, and ``cli._read`` and ``cli._write`` own it.
     """
+    text = text.replace("\r\n", "\n")
     redacted, structured_counts = _replace_structured(text)
     redacted, entity_counts = _replace_entities(redacted, entities)
     unknowns = _input_placeholders(text, redacted) + residual(redacted)
