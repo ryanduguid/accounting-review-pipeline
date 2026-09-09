@@ -86,15 +86,74 @@ def test_save_then_load_round_trips(tmp_path) -> None:
     assert entities.load(path) == original
 
 
-def test_require_gitignored_rejects_an_untracked_directory(tmp_path) -> None:
+def bound_the_walk(monkeypatch, root):
+    """Stop the .gitignore walk at ``root``.
+
+    The real walk climbs to the filesystem root, so an unrelated .gitignore
+    anywhere above the pytest temporary directory would decide the outcome.
+    Bounding it keeps these tests about the tree the test itself built.
+    """
+    def walk(map_path):
+        for directory in [map_path.parent, *map_path.parent.parents]:
+            candidate = directory / ".gitignore"
+            if candidate.exists():
+                yield candidate
+            if directory == root:
+                return
+
+    monkeypatch.setattr(entities, "_ancestor_gitignores", walk)
+
+
+def test_require_gitignored_rejects_an_untracked_directory(tmp_path, monkeypatch) -> None:
+    bound_the_walk(monkeypatch, tmp_path)
     target = tmp_path / "entities.json"
     target.write_text("{}", encoding="utf-8")
     with pytest.raises(EvattError):
         entities.require_gitignored(target)
 
 
-def test_require_gitignored_accepts_a_covered_directory(tmp_path) -> None:
+def test_require_gitignored_accepts_a_covered_directory(tmp_path, monkeypatch) -> None:
+    bound_the_walk(monkeypatch, tmp_path)
     (tmp_path / ".gitignore").write_text("entities.json\n", encoding="utf-8")
     target = tmp_path / "entities.json"
+    target.write_text("{}", encoding="utf-8")
+    entities.require_gitignored(target)
+
+
+def test_require_gitignored_rejects_a_commented_out_rule(tmp_path, monkeypatch) -> None:
+    bound_the_walk(monkeypatch, tmp_path)
+    (tmp_path / ".gitignore").write_text("# entities.json\n", encoding="utf-8")
+    target = tmp_path / "entities.json"
+    target.write_text("{}", encoding="utf-8")
+    with pytest.raises(EvattError):
+        entities.require_gitignored(target)
+
+
+def test_require_gitignored_rejects_a_commented_out_wildcard(tmp_path, monkeypatch) -> None:
+    bound_the_walk(monkeypatch, tmp_path)
+    (tmp_path / ".gitignore").write_text("#*.entities.json\n", encoding="utf-8")
+    target = tmp_path / "acme.entities.json"
+    target.write_text("{}", encoding="utf-8")
+    with pytest.raises(EvattError):
+        entities.require_gitignored(target)
+
+
+def test_require_gitignored_accepts_a_rule_among_comments_and_blanks(
+    tmp_path, monkeypatch
+) -> None:
+    bound_the_walk(monkeypatch, tmp_path)
+    (tmp_path / ".gitignore").write_text(
+        "# local secrets\n\n  # entities.json was here\n\n  entities.json  \n\n# end\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "entities.json"
+    target.write_text("{}", encoding="utf-8")
+    entities.require_gitignored(target)
+
+
+def test_require_gitignored_accepts_the_wildcard_for_a_suffixed_map(tmp_path, monkeypatch) -> None:
+    bound_the_walk(monkeypatch, tmp_path)
+    (tmp_path / ".gitignore").write_text("# maps\n*.entities.json\n", encoding="utf-8")
+    target = tmp_path / "acme.entities.json"
     target.write_text("{}", encoding="utf-8")
     entities.require_gitignored(target)

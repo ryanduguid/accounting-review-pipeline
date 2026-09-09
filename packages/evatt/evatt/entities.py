@@ -14,7 +14,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 from .errors import EvattError
 
@@ -102,6 +102,29 @@ def assign(entities: Sequence[Entity], value: str, kind: str, added: str) -> Ent
     return Entity(value=value, placeholder=_placeholder_for(kind, ordinal), kind=kind, added=added)
 
 
+def _ancestor_gitignores(map_path: Path) -> Iterator[Path]:
+    """Yield the .gitignore files beside and above the map, nearest first."""
+    for directory in [map_path.parent, *map_path.parent.parents]:
+        candidate = directory / ".gitignore"
+        if candidate.exists():
+            yield candidate
+
+
+def _patterns(gitignore: Path) -> set[str]:
+    """Read the active patterns from a .gitignore, one per line.
+
+    Splitting the file on all whitespace would turn a commented-out rule such
+    as ``# entities.json`` into the two tokens ``#`` and ``entities.json``, so
+    a disabled rule would satisfy the guard. Parse line by line instead.
+    """
+    active = set()
+    for line in gitignore.read_text(encoding="utf-8").splitlines():
+        pattern = line.strip()
+        if pattern and not pattern.startswith("#"):
+            active.add(pattern)
+    return active
+
+
 def require_gitignored(map_path: Path) -> None:
     """Refuse to proceed unless a .gitignore beside or above the map covers it.
 
@@ -110,11 +133,8 @@ def require_gitignored(map_path: Path) -> None:
     .gitignore files on the path to the root catches that.
     """
     name = map_path.name
-    for directory in [map_path.parent, *map_path.parent.parents]:
-        candidate = directory / ".gitignore"
-        if not candidate.exists():
-            continue
-        patterns = candidate.read_text(encoding="utf-8").split()
+    for candidate in _ancestor_gitignores(map_path):
+        patterns = _patterns(candidate)
         wildcard = "*.entities.json" in patterns and name.endswith(".entities.json")
         if name in patterns or wildcard:
             return
