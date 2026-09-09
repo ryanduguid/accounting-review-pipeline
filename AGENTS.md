@@ -1,6 +1,6 @@
 # Accounting Review Pipeline agent instructions
 
-This repository is the local assembly of the Accounting Review Pipeline: six independently
+This repository is the local assembly of the Accounting Review Pipeline: seven independently
 versioned components joined only by local files and commands. Its canonical GitHub repository
 is `ryanduguid/accounting-review-pipeline`.
 Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for component work.
@@ -29,8 +29,8 @@ These repository-wide rules apply everywhere:
 - Release only through the root callers `.github/workflows/release-<component>.yml` on a
   namespaced annotated tag `<component>/vMAJOR.MINOR.PATCH`, never through a nested
   `release.yml`. One tag publishes exactly one component.
-- Never commit client data, workpapers, credentials, tokens, generated review packs or native
-  application evidence containing client data.
+- Never commit client data, workpapers, credentials, tokens, generated review packs,
+  entity maps or native application evidence containing client data.
 
 ## Path decision
 
@@ -54,6 +54,7 @@ Run every check from the owning component directory with its documented commands
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `elizabeth_anne_alexander tests`; mypy over `elizabeth_anne_alexander`; `python -m build`; clean-wheel `evaluate` and `validate-review` demo |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | pinned actionlint and ShellCheck; `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
+| evatt | `packages/evatt/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `evatt tests`; mypy over `evatt`; `python -m build`; clean-wheel redact, verify, restore and halt demo |
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all three review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test.
