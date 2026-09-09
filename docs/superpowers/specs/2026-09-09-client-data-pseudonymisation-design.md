@@ -81,8 +81,17 @@ policy when it goes to a partner.
 
 **`patterns.py`.** Copied from
 `au-tax-legislation-corpus/fadden/pii_patterns.py` with a provenance note, then
-extended with ABN (modulus 89), ACN, BSB, Medicare check digit and ATO client
-reference.
+extended with ABN (modulus 89), ACN, BSB and Medicare check digit.
+
+This section originally asked for an ATO client reference detector as well.
+**It was not built, deliberately, and the design is amended to record that.**
+No single published fixed format exists for one, so a pattern would be
+guesswork producing either noise or false confidence, and a detector nobody can
+calibrate is worse than a documented gap. The limit is named in the package
+README, in `DATA-FLOW.md` and in `RELEASE_NOTES.md`, and
+`tests/test_assurance_claims.py` keeps it named in the first two: a document
+carrying a client reference is the human check's job, not the tool's. The
+approved design must not keep promising coverage the code does not provide.
 
 Copied rather than shared. A common package spanning two repositories for
 roughly 200 lines of regular expressions costs more machinery than the drift it
