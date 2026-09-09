@@ -102,6 +102,22 @@ def test_valid_pack_renders_sheet(pack_dir: Path) -> None:
     assert "No reviewer acknowledgement was supplied" in sheet
 
 
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_summary_line_endings_preserve_verification_and_digest(
+    pack_dir: Path, newline: bytes
+) -> None:
+    import hashlib
+
+    summary = pack_dir / "close-summary.md"
+    content = summary.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
+    summary.write_bytes(content)
+
+    sheet, digests = render_review_sheet(pack_dir)
+
+    assert "Overall status: REVIEW" in sheet
+    assert digests["close-summary.md"] == hashlib.sha256(content).hexdigest()
+
+
 def test_acknowledged_pack_renders_the_acknowledgement(tmp_path: Path) -> None:
     output = tmp_path / "acknowledged-pack"
     write_review_pack(_pack(with_acknowledgement=True), output)

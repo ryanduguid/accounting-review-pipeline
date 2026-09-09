@@ -391,7 +391,7 @@ def _verify_rows_match(
 # '| ', a one-line reviewer comment by '- Comment: ', a quoted comment line by
 # '  > '. Searching the document instead would count a client's own figure as a
 # second count line and refuse a pack whose four artefacts agree.
-_QUERY_COUNT_LINE = re.compile(r"^- Client queries drafted: (\d+)\.$", re.MULTILINE)
+_QUERY_COUNT_LINE = re.compile(r"^- Client queries drafted: (\d+)\.\r?$", re.MULTILINE)
 
 _CLIENT_QUERY_HEADING = "## Client queries"
 
