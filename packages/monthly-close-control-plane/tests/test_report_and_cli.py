@@ -1176,6 +1176,36 @@ def test_an_output_outside_any_checkout_still_writes(tmp_path: Path) -> None:
     assert sorted(path.name for path in outputs.values()) == sorted(PACK_FILES)
 
 
+def test_a_work_tree_named_only_by_the_environment_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tracked work tree need not carry a marker to walk up to.
+
+    Git can keep its metadata elsewhere, with GIT_DIR and GIT_WORK_TREE. The
+    work tree then holds tracked files and no `.git` at all, so the ancestor
+    scan finds nothing and would approve a pack written among them. Where the
+    environment names that tree, the guard can see it and refuses.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "metadata.git"))
+
+    assert not any((work_tree / marker).exists() for marker in CHECKOUT_MARKERS)
+    with pytest.raises(ControlInputError, match="GIT_WORK_TREE"):
+        write_review_pack(_single_exception_pack(), work_tree / "packs" / "july")
+
+
+def test_a_work_tree_elsewhere_does_not_refuse_an_unrelated_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The environment check refuses what is inside that tree, not everything."""
+    monkeypatch.setenv("GIT_WORK_TREE", str(tmp_path / "client-files"))
+    outputs = write_review_pack(_single_exception_pack(), tmp_path / "close-data" / "july")
+
+    assert sorted(path.name for path in outputs.values()) == sorted(PACK_FILES)
+
+
 def test_the_cli_refuses_before_it_reads_a_trial_balance(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

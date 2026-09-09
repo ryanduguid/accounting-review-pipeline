@@ -359,13 +359,37 @@ def _marker_present(candidate: Path, marker: str) -> bool:
     return True
 
 
+def _configured_work_tree() -> Path | None:
+    """The work tree this process's environment points Git at, if any.
+
+    Git can keep its metadata away from the files it tracks, through GIT_DIR
+    and GIT_WORK_TREE, --git-dir and --work-tree, or core.worktree. A work tree
+    arranged that way holds no marker at all, so the ancestor scan walks
+    straight past it and would approve a pack written among tracked files.
+
+    Only the environment is readable from here. A work tree chosen by a flag on
+    someone else's git invocation, or by core.worktree in a repository this
+    process never opens, cannot be discovered, so this closes the case this
+    process can see rather than the whole class. That is the honest limit of
+    the guard: it is a backstop for a location the firm chose, not a proof that
+    a directory is untracked.
+    """
+    value = os.environ.get("GIT_WORK_TREE")
+    if not value:
+        return None
+    return Path(value).resolve()
+
+
 def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
-    """Return the checkout root holding directory and the marker naming it, or None.
+    """Return the checkout root holding directory and why it counts, or None.
 
     A marker is a directory in an ordinary checkout, and ``.git`` is a file in
     a worktree or a submodule, so presence is the test rather than is_dir. The
     directory itself counts: an --output pointed at a checkout root is inside
     that checkout.
+
+    The marker scan runs first, because when both apply the marker is the more
+    useful thing to name in the refusal.
 
     Raises OSError when a candidate cannot be inspected. The caller refuses on
     it: a directory this process cannot inspect is not one it can show to be
@@ -374,7 +398,12 @@ def _enclosing_repository(directory: Path) -> tuple[Path, str] | None:
     for candidate in (directory, *directory.parents):
         for marker in CHECKOUT_MARKERS:
             if _marker_present(candidate, marker):
-                return candidate, marker
+                return candidate, f"which holds {marker}"
+    work_tree = _configured_work_tree()
+    if work_tree is not None and (
+        directory == work_tree or work_tree in directory.parents
+    ):
+        return work_tree, "which the GIT_WORK_TREE environment variable names"
     return None
 
 
@@ -429,10 +458,10 @@ def require_output_outside_repository(output_dir: Path) -> Path:
         ) from exc
     if checkout is None:
         return resolved
-    repository, marker = checkout
+    repository, reason = checkout
     raise ControlInputError(
         f"{output_dir} is inside the version-control checkout at {repository}, "
-        f"which holds {marker}. A review pack names a client's accounts and "
+        f"{reason}. A review pack names a client's accounts and "
         "balances, so it belongs in an access-controlled directory outside "
         "version control. Point --output somewhere outside that checkout."
     )

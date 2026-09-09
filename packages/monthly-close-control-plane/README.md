@@ -80,6 +80,12 @@ commit can waive, and it does nothing about the copy sitting in the working
 tree meanwhile. A checkout is any directory at or above the output holding
 `.git`, `.hg`, `.svn` or `.bzr`, because the harm is the pack going under
 version control and every one of those copies a committed pack to each clone.
+A directory inside the work tree named by `GIT_WORK_TREE` counts too, since
+Git can hold its metadata elsewhere and leave a tracked tree carrying no
+marker to find. A work tree selected some other way, by `--work-tree` on
+another process's git invocation or by `core.worktree` in a repository this
+command never opens, cannot be discovered from here: the check is a backstop
+for the location you chose, not a proof that a directory is untracked.
 An output the command cannot examine, such as one behind a symbolic-link loop
 or an unreadable parent, is refused on the same grounds rather than assumed
 safe. The refusal applies to writing only: `close-control view` still opens a
