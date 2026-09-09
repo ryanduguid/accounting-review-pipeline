@@ -354,6 +354,38 @@ def test_every_checkout_marker_is_refused(tmp_path: Path, marker: str) -> None:
         write_review_pack(_ready_pack(), checkout / "packs" / "march")
 
 
+def test_a_work_tree_named_only_by_the_environment_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tracked work tree need not carry a marker to walk up to.
+
+    Git can keep its metadata elsewhere, with GIT_DIR and GIT_WORK_TREE. The
+    work tree then holds tracked files and no `.git` at all, so the ancestor
+    scan finds nothing and would approve a pack written among them. Where the
+    environment names that tree, the guard can see it and refuses.
+    """
+    work_tree = tmp_path / "client-files"
+    work_tree.mkdir()
+    monkeypatch.setenv("GIT_WORK_TREE", str(work_tree))
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "metadata.git"))
+
+    assert not any((work_tree / marker).exists() for marker in CHECKOUT_MARKERS)
+    with pytest.raises(GateInputError, match="GIT_WORK_TREE"):
+        write_review_pack(_ready_pack(), work_tree / "packs" / "march")
+
+
+def test_a_work_tree_elsewhere_does_not_refuse_an_unrelated_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The environment check refuses what is inside that tree, not everything."""
+    monkeypatch.setenv("GIT_WORK_TREE", str(tmp_path / "client-files"))
+    outside = tmp_path / "review-ready-demo" / "march"
+
+    outputs = write_review_pack(_ready_pack(), outside)
+
+    assert sorted(path.name for path in outputs.values()) == sorted(PACK_FILE_NAMES)
+
+
 def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
     """One refusal on every supported interpreter, from the guard.
 
