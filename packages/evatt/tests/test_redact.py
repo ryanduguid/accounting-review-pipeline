@@ -161,6 +161,16 @@ def test_an_empty_entity_value_cannot_rewrite_the_document() -> None:
         assert counts == {}
 
 
+def test_a_hand_built_placeholder_value_cannot_destroy_a_real_placeholder() -> None:
+    """``load`` refuses this value, but ``redact`` takes any Sequence[Entity]."""
+    forged = (Entity("TFN_01", "CLIENT_07", "client", "2026-09-09"),)
+    text, counts = redact("TFN: 123 456 782 on file", forged)
+    assert "123 456 782" not in text
+    assert text == "TFN: TFN_01 on file"
+    assert "CLIENT_07" not in text
+    assert counts == {"tfn": 1}
+
+
 def test_a_placeholder_already_in_the_input_halts() -> None:
     """Otherwise restore writes a real client name where it never appeared."""
     with pytest.raises(Halt) as caught:

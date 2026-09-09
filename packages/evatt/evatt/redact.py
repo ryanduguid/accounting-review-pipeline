@@ -111,12 +111,19 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
     """
     found: list[tuple[int, int, int, Entity]] = []
     for priority, entity in enumerate(entities):
-        # ``load`` rejects an empty value, but ``redact`` takes any
-        # Sequence[Entity] and a caller can build one by hand. An empty value
-        # reaches re.escape as "", giving "(?<!\\w)(?!\\w)", which matches at
-        # every non-word boundary and scatters the placeholder through the
-        # whole document.
-        if not entity.value.strip():
+        # ``load`` rejects both of these, but ``redact`` takes any
+        # Sequence[Entity] and a caller can build one by hand, so the map gate
+        # is not the only place they have to be stopped.
+        #
+        # An empty value reaches re.escape as "", giving "(?<!\\w)(?!\\w)",
+        # which matches at every non-word boundary and scatters the placeholder
+        # through the whole document.
+        #
+        # A value shaped like an assigned placeholder rewrites what pass one
+        # has just written: Entity("TFN_01", "CLIENT_07", ...) destroys the only
+        # record that a tax file number was there and leaves a manifest
+        # counting a client that never appeared.
+        if not entity.value.strip() or PLACEHOLDER.search(entity.value):
             continue
         pattern = re.compile(r"(?<!\w)" + re.escape(entity.value) + r"(?!\w)")
         for match in pattern.finditer(text):
