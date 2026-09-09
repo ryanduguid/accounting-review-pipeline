@@ -25,6 +25,7 @@ A small, **review-first** monthly-close control pack for a validated trial-balan
 
 - `close-summary.md` answers "what needs my attention this close?": a concise, deterministic review pack with an overall status, the thresholds used, source evidence, and an exception table a reviewer reads top to bottom.
 - `exceptions.csv` answers "which accounts, by how much, and why?": filterable exception detail for Excel or Power BI, one row per exception with values, differences, thresholds, and a suggested reviewer action.
+- `client-queries.csv` answers "what do I have to ask the client?": the exceptions only a client can settle, turned into a question and the evidence that would answer it, with the ones the firm resolves itself left out.
 - `close-review-pack.json` answers "what exactly did this run look at?": structured evidence, thresholds, source hashes, and any supplied review acknowledgement, for archiving or downstream tooling.
 
 The pack surfaces material YTD variances, new and missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences as explicit exceptions. Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
@@ -66,12 +67,32 @@ close-control review \
   --percentage-threshold 0.10 \
   --reconciliation-tolerance 0.01 \
   --review-note examples/review_note.json \
-  --output outputs/demo
+  --output ../../../close-control-demo
 ```
 
-The demo exits `2` because its deliberately fabricated exceptions need human review. It writes the three pack files described above.
+The demo exits `2` because its deliberately fabricated exceptions need human review. It writes the four pack files described above.
 
-Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, or an `--output` path that cannot be written.
+`--output` points outside this checkout, and it has to: the command refuses an
+output directory inside a version-control checkout, exiting `1` without
+creating anything. A review pack names a client's accounts, balances and
+unexplained movements, and inside a checkout it is one `git add -A` away from a
+history that every clone copies. A `.gitignore` entry is a convention the next
+commit can waive, and it does nothing about the copy sitting in the working
+tree meanwhile. A checkout is any directory at or above the output holding
+`.git`, `.hg`, `.svn` or `.bzr`, because the harm is the pack going under
+version control and every one of those copies a committed pack to each clone.
+A directory inside the work tree named by `GIT_WORK_TREE` counts too, since
+Git can hold its metadata elsewhere and leave a tracked tree carrying no
+marker to find. A work tree selected some other way, by `--work-tree` on
+another process's git invocation or by `core.worktree` in a repository this
+command never opens, cannot be discovered from here: the check is a backstop
+for the location you chose, not a proof that a directory is untracked.
+An output the command cannot examine, such as one behind a symbolic-link loop
+or an unreadable parent, is refused on the same grounds rather than assumed
+safe. The refusal applies to writing only: `close-control view` still opens a
+pack wherever it already is.
+
+Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, an `--output` path inside a version-control checkout, or an `--output` path that cannot be written.
 
 To run the check on a schedule in CI, copy [examples/github-actions-close-check.yml](examples/github-actions-close-check.yml) into `.github/workflows/`.
 It runs against a repo-stored synthetic trial balance and fails the job when the pack is `BLOCKED`.
@@ -94,8 +115,8 @@ close-control workbench \
   --output C:\close-data\review-pack
 ```
 
-It writes exactly `close-summary.md`, `exceptions.csv`, and
-`close-review-pack.json`. Open or import `exceptions.csv` in Excel or Power
+It writes exactly `close-summary.md`, `exceptions.csv`, `client-queries.csv`
+and `close-review-pack.json`. Open or import `exceptions.csv` in Excel or Power
 Query if useful, then investigate and document conclusions through your normal
 workpaper process. The command never starts Excel, creates a workbook, calls
 Xero, reads OAuth credentials or tokens, calls an AI service, posts anything,
@@ -109,7 +130,7 @@ exports and generated packs becoming repository content.
 ## Viewing an existing pack
 
 `close-control view` is the read-only half of the workbench: it loads a
-generated pack, proves the three files still agree with each other, and prints
+generated pack, proves the four files still agree with each other, and prints
 a review sheet. It never writes, renames or deletes anything, and it cannot
 change what the engine computed.
 
@@ -122,9 +143,27 @@ not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated
 top-level members; a threshold or source digest that no longer parses as the
 writer rendered it; a `close-summary.md` whose overall status, source-evidence
 digests or review-boundary statement disagree with the JSON (including a second,
-conflicting status line); and an `exceptions.csv` whose header, row count or
-any cell disagrees with the JSON exceptions, honouring the writer's
-formula-injection guard exactly. On success the sheet ends with the SHA-256 of
+conflicting status line, or a missing client-query boundary statement); and an
+`exceptions.csv` or `client-queries.csv` whose header, row count or any cell
+disagrees with the JSON member it projects, honouring the writer's
+formula-injection guard exactly. A data row holding more or fewer cells than
+the header declares fails closed as well: a surplus cell would otherwise sit
+outside every named column, unguarded against formula prefixes and compared
+with nothing.
+
+The summary's client-query section is checked against the JSON register too,
+not only for its boundary sentence: the count line, every `query_id` and every
+question must agree. That file is what a preparer reads and copies a question
+out of, so a question edited only there is the divergence worth catching. A
+duplicated `query_id` fails closed for the same reason: one identifier against
+two questions leaves a firm unable to tell which one a client answered.
+
+A pack written before the client-query register existed still opens. Its three
+files verify and display as before, and the sheet says the pack predates the
+register rather than leaving a reviewer to wonder. A pack holding half a
+register, the file without the JSON member or the member without the file, was
+assembled from two runs or edited, and is refused rather than read as an older
+one. On success the sheet ends with the SHA-256 of
 each artefact's exact bytes, so the displayed evidence can itself be archived.
 Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
@@ -134,10 +173,15 @@ Running the quick-demo command above against the fabricated fixtures in `example
 
 ```text
 close-control: REVIEW; 8 exception(s)
-  json: outputs/demo/close-review-pack.json
-  summary: outputs/demo/close-summary.md
-  exceptions: outputs/demo/exceptions.csv
+  json: /home/you/close-control-demo/close-review-pack.json
+  summary: /home/you/close-control-demo/close-summary.md
+  exceptions: /home/you/close-control-demo/exceptions.csv
 ```
+
+The paths are absolute and have their symlinks resolved, whatever `--output`
+was written as. The writer builds every destination from the directory the
+checkout guard approved rather than from the argument, so what is printed is
+where the pack actually went.
 
 `close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to four of the eight rows):
 
@@ -205,6 +249,50 @@ The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.0
 }
 ```
 
+## Client queries
+
+An exception says what a control found. A query says what somebody has to ask,
+and of whom. They are not the same list, so `client-queries.csv` is the second
+one: the exceptions a client can settle, each turned into a question and the
+evidence that would answer it.
+
+| Column | Meaning |
+|---|---|
+| `query_id` | Derived from the control and the account, so the same open question keeps its identifier next month rather than being renumbered by an unrelated exception appearing earlier in the pack. |
+| `control` | The control that raised the underlying exception. |
+| `tenant`, `account_id`, `account_code`, `account_name`, `review_group` | The account the question is about, matching `exceptions.csv`. |
+| `difference` | The amount at issue, rendered with the same exact-decimal arithmetic as everywhere else. |
+| `question` | What to ask, as a question rather than a finding. |
+| `evidence_requested` | What would answer it. |
+
+Three controls never produce a query, because nobody should send them to a
+client: `trial_balance_integrity` is an export the firm re-runs,
+`financial_year_reset` is a comparison the firm chose, and `account_mapping` is
+the firm's own reporting file. A `subledger_reconciliation` exception raised
+because a subledger balance has no matching trial-balance account is held back
+for the same reason: it is a mapping or source fault, and asking a client to
+explain the difference between two figures that are not yet comparable produces
+an answer nobody can use. A control this package gains later asks nothing until
+somebody decides it should.
+
+When the pack also carries `financial_year_reset`, every `period_variance`
+query says so in its evidence column. Year-to-date figures for
+profit-and-loss accounts restart at nil on 1 July, so a comparison across the
+reset can show a movement that is an artefact of the two dates. The engine will
+not guess which rows reset without section rules it does not have, and neither
+does the register: it flags the rows that could be affected rather than asking
+a client to explain arithmetic the firm chose.
+
+The file carries no answer or status column, deliberately. A pack is evidence
+of one run and `close-control view` proves its files still agree, so an answer
+written back into the file would invalidate the pack that raised the question.
+Copy the queries into the firm's own tracker and leave the pack as written.
+
+Nothing is sent. These are draft questions for a preparer to read and edit
+before they reach a client, through the firm's channel and under the firm's
+own review. Answering every query does not close the period, and an empty
+register is not evidence that nothing needs asking.
+
 ## Canonical trial-balance contract
 
 The initial input is the ten-column, normalised trial-balance schema from `xero-trial-balance-export`:
@@ -264,12 +352,12 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later. Each digest is calculated from the same immutable byte snapshot the loader parses, so a file replaced during a run cannot be misidentified as the source of the calculations.
 - Spreadsheet-facing source text whose first non-whitespace character is `=`, `+`, `-` or `@` is neutralised with a leading apostrophe. This includes identifier- and number-shaped text such as `+unsafe`, `@123` and `-1000`; the guard does not try to decide which formula-looking values a particular spreadsheet may evaluate. Every exception table cell rendered into `close-summary.md` is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads. A reviewer-note comment keeps its line breaks: a multi-line comment renders as an indented blockquote under the acknowledgement item, with each line escaped the same way and a leading `#` escaped so quoted text cannot forge a document heading.
 - `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
-- The three pack files are staged beside their destinations and moved into place only once all three have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
+- The four pack files are staged beside their destinations and moved into place only once all four have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
 - Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a per cent is flattened to `0.00`.
 
 ### What formula neutralisation covers, exactly
 
-The escaping in `exceptions.csv` applies to the five source-controlled text fields: `tenant`, `account_id`, `account_code`, `account_name`, and `review_group`. For those fields:
+The escaping in `exceptions.csv` applies to the five source-controlled text fields: `tenant`, `account_id`, `account_code`, `account_name`, and `review_group`. `client-queries.csv` guards the same five plus `question` and `evidence_requested`: those two are project text rather than client text, but a template reworded to start with a dash would otherwise become a formula the day somebody edits one. For those fields:
 
 Neutralised (prefixed with an apostrophe so a spreadsheet reads them as text):
 
@@ -285,7 +373,8 @@ Passed through unchanged:
 ## Data and operational boundaries
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name wherever `--output` points them, including inside those two fixture directories.
+- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage, and client authorisation are deliberately outside this MVP.
 - Do not use this as tax, financial, audit, or legal advice. It is a configurable review aid that requires professional judgement.
 

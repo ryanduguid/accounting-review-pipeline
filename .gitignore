@@ -11,16 +11,22 @@
 outputs/
 review-notes/
 
-# A review pack goes wherever --output points, not only to outputs/.
+# close-control now refuses an --output directory inside a checkout, so it can
+# no longer write a monthly-close pack here at all. These stay as the second
+# line: they still catch a pack copied in by hand, a pack from an older release,
+# and the packs the other components write.
 # exceptions.csv is caught by *.csv above; these two were not caught by
 # anything, so a pack written into the checkout was committable.
 close-review-pack.json
 close-summary.md
-# exceptions.csv is a generated pack file, not a fixture. The two negations
-# above re-include every CSV in these directories, so --output pointed at
-# either of them left the exception detail committable.
+# exceptions.csv and client-queries.csv are generated pack files, not fixtures.
+# The two negations above re-include every CSV in these directories, so --output
+# pointed at either of them left the exception detail, and the client questions
+# drawn from it, committable.
 packages/monthly-close-control-plane/examples/exceptions.csv
 packages/monthly-close-control-plane/schemas/exceptions.csv
+packages/monthly-close-control-plane/examples/client-queries.csv
+packages/monthly-close-control-plane/schemas/client-queries.csv
 # Staged pack files. One is left behind only if a run is killed mid-write or a
 # rollback cannot put a previous file back; it may hold either run's content.
 *.partial
@@ -32,6 +38,11 @@ packages/monthly-close-control-plane/schemas/exceptions.csv
 *.pem
 __pycache__/
 .pytest_cache/
+# Every component's test gate writes these; CI adds --cov-report=xml.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 .venv/
 build/
 dist/
