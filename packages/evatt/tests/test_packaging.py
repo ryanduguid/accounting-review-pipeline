@@ -19,6 +19,7 @@ def test_halt_is_an_evatt_error_carrying_unknowns() -> None:
 
 
 def test_gitignore_covers_the_real_map() -> None:
-    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").split()
+    lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    ignored = [line.strip() for line in lines]
     assert "entities.json" in ignored
     assert "*.entities.json" in ignored
