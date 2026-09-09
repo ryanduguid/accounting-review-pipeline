@@ -1,8 +1,10 @@
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
+from evatt import entities as entities_module
 from evatt import redact as redact_module
 from evatt import verify as verify_module
 from evatt.entities import Entity
@@ -399,3 +401,61 @@ def test_redaction_is_deterministic_across_processes() -> None:
         for _ in range(3)
     }
     assert len(runs) == 1
+
+
+SAMPLES = Path(entities_module.__file__).resolve().parent / "samples"
+SAMPLE_MAP = entities_module.load(SAMPLES / "entities.sample.json")
+
+
+def sample(name: str) -> str:
+    return (SAMPLES / name).read_text(encoding="utf-8")
+
+
+def test_every_sample_exists() -> None:
+    expected = {
+        "clean.md", "entities-only.md", "identifiers.md",
+        "unmapped-name.md", "negatives.md", "unicode-names.md",
+    }
+    assert {p.name for p in SAMPLES.glob("*.md")} == expected
+
+
+def test_clean_sample_needs_no_redaction() -> None:
+    text, counts = redact_module.redact(sample("clean.md"), SAMPLE_MAP)
+    assert text == sample("clean.md")
+    assert counts == {}
+
+
+def test_entities_only_sample_round_trips() -> None:
+    original = sample("entities-only.md")
+    text, counts = redact_module.redact(original, SAMPLE_MAP)
+    assert counts
+    assert restore(text, SAMPLE_MAP) == original
+
+
+def test_identifiers_sample_yields_every_structured_kind() -> None:
+    _text, counts = redact_module.redact(sample("identifiers.md"), SAMPLE_MAP)
+    assert {"tfn", "abn", "acn", "bsb", "medicare", "email", "phone"} <= set(counts)
+
+
+def test_unmapped_name_sample_halts() -> None:
+    with pytest.raises(Halt):
+        redact_module.redact(sample("unmapped-name.md"), SAMPLE_MAP)
+
+
+def test_negatives_sample_is_left_untouched() -> None:
+    text, counts = redact_module.redact(sample("negatives.md"), SAMPLE_MAP)
+    assert text == sample("negatives.md")
+    assert counts == {}
+
+
+def test_unicode_names_sample_is_recognised() -> None:
+    text, counts = redact_module.redact(sample("unicode-names.md"), SAMPLE_MAP)
+    assert counts
+    assert restore(text, SAMPLE_MAP) == sample("unicode-names.md")
+
+
+def test_verify_is_clean_on_every_redactable_sample() -> None:
+    for name in ("clean.md", "entities-only.md", "identifiers.md",
+                 "negatives.md", "unicode-names.md"):
+        text, _counts = redact_module.redact(sample(name), SAMPLE_MAP)
+        assert verify_module.findings(text, SAMPLE_MAP) == (), name
