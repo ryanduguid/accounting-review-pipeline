@@ -3,6 +3,7 @@ from __future__ import annotations
 import codecs
 import csv
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -17,7 +18,7 @@ from closecontrol.errors import ControlInputError
 from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
 from closecontrol.pipeline_cli import main as quarantined_main
-from closecontrol.report import write_review_pack
+from closecontrol.report import CHECKOUT_MARKERS, write_review_pack
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -989,7 +990,7 @@ def test_a_blank_line_does_not_shift_the_reported_row_number(tmp_path: Path) -> 
 # --- a pack never lands inside a checkout ----------------------------------
 
 
-def _fake_checkout(root: Path, *, git_is_a_file: bool = False) -> Path:
+def _fake_checkout(root: Path, *, git_is_a_file: bool = False, marker: str = ".git") -> Path:
     """Create a directory that looks like a version-control checkout.
 
     A worktree and a submodule carry a `.git` file holding a gitdir pointer
@@ -998,10 +999,81 @@ def _fake_checkout(root: Path, *, git_is_a_file: bool = False) -> Path:
     """
     root.mkdir(parents=True, exist_ok=True)
     if git_is_a_file:
-        (root / ".git").write_text("gitdir: /elsewhere/.git/worktrees/wt\n", encoding="utf-8")
+        (root / marker).write_text("gitdir: /elsewhere/.git/worktrees/wt\n", encoding="utf-8")
     else:
-        (root / ".git").mkdir()
+        (root / marker).mkdir()
     return root
+
+
+@pytest.mark.parametrize("marker", CHECKOUT_MARKERS)
+def test_every_checkout_marker_is_refused(tmp_path: Path, marker: str) -> None:
+    """The harm is the pack going under version control, and Mercurial,
+    Subversion and Bazaar copy a committed pack to every clone exactly as Git
+    does. A firm on one of them is the one least likely to be told the tool
+    assumed the other."""
+    checkout = _fake_checkout(tmp_path / "firm-repo", marker=marker)
+
+    with pytest.raises(ControlInputError, match=f"which holds {re.escape(marker)}"):
+        write_review_pack(_single_exception_pack(), checkout / "reports" / "july")
+
+
+def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
+    """`Path.resolve` raises RuntimeError, not OSError, for a symlink loop on
+    every Python before 3.13. Uncaught it left the CLI's handlers untouched and
+    printed a traceback; from 3.13 resolve returns the unresolved path and the
+    later write fails instead. Either way the caller gets the guard's error."""
+    looped = tmp_path / "loop"
+    other = tmp_path / "other"
+    looped.symlink_to(other)
+    other.symlink_to(looped)
+
+    with pytest.raises(ControlInputError, match="cannot be examined|inside the version-control"):
+        write_review_pack(_single_exception_pack(), looped / "july")
+
+
+def test_an_uninspectable_parent_is_refused_rather_than_assumed_safe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`Path.exists` swallows only the errors it documents; a permission error
+    propagates. A directory this run cannot inspect is not one it can show to
+    be outside a checkout, so it is refused rather than read as an absence.
+
+    Monkeypatched rather than chmod-ed because the suite may run as a user that
+    bypasses directory permissions, which would quietly turn this into a test
+    of nothing."""
+    real_exists = Path.exists
+
+    def refuse_to_stat(self: Path, *args: object, **kwargs: object) -> bool:
+        if self.name in CHECKOUT_MARKERS:
+            raise PermissionError(13, "Permission denied")
+        return real_exists(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "exists", refuse_to_stat)
+
+    with pytest.raises(ControlInputError, match="cannot be examined"):
+        write_review_pack(_single_exception_pack(), tmp_path / "outside" / "july")
+
+
+def test_the_cli_reports_an_uninspectable_output_as_exit_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The documented contract is exit 1 for an unwritable --output, with a
+    message, so a path the guard cannot examine must not escape as a
+    traceback."""
+    looped = tmp_path / "loop"
+    other = tmp_path / "other"
+    looped.symlink_to(other)
+    other.symlink_to(looped)
+
+    code = main([
+        "review",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--output", str(looped / "july"),
+    ])
+
+    assert code == 1
+    assert "output error" in capsys.readouterr().err
 
 
 def test_writer_refuses_an_output_inside_a_checkout(tmp_path: Path) -> None:
