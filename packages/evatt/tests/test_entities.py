@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -183,6 +184,21 @@ def test_save_then_load_round_trips(tmp_path) -> None:
 
 
 @git_required
+def test_save_writes_the_entries_it_validated(tmp_path) -> None:
+    path = repo_map(tmp_path, SAMPLE)
+    original = entities.load(path)
+
+    class ChangingSequence(list):
+        def __iter__(self):
+            snapshot = tuple(super().__iter__())
+            self[:] = [entities.Entity("Jane Roe", "TFN_01", "person", "2026-09-09")]
+            return iter(snapshot)
+
+    entities.save(path, ChangingSequence(original))
+    assert entities.load(path) == original
+
+
+@git_required
 @pytest.mark.parametrize("tracked", [False, True])
 def test_save_refuses_a_committable_destination(tmp_path, tracked) -> None:
     path = repo_map(tmp_path, SAMPLE, gitignore="*.tmp\n")
@@ -238,6 +254,164 @@ def test_save_refuses_a_temporary_git_would_let_you_commit(tmp_path) -> None:
         entities.save(path, entities.load(path)[:1])
     assert path.read_text(encoding="utf-8") == before
     assert list(path.parent.glob("*.tmp")) == []
+
+
+def fixed_tokens(monkeypatch, *tokens):
+    """Make the temporary's name predictable, so a test can lie in wait at it."""
+    minted = iter(tokens)
+    monkeypatch.setattr(entities.secrets, "token_hex", lambda _bytes: next(minted))
+
+
+def temporary_named(path, token):
+    return path.with_name(f"{path.name}.tmp.{token}.tmp")
+
+
+@git_required
+@pytest.mark.parametrize("kind", ["symbolic", "hard"])
+def test_a_link_at_the_temporary_path_is_never_written_through(
+    tmp_path, monkeypatch, kind
+) -> None:
+    """The temporary is created exclusively, so a name that already exists is not opened.
+
+    ``save`` used to open the fixed name ``entities.json.tmp`` in write mode.
+    A symbolic or hard link sitting there, at a name in a directory the
+    operator's own tools write to, was followed and its target truncated, and
+    the map was then moved on top of the overwritten file. Both files are
+    ignored by construction, which is why nobody would see it: the destroyed
+    one never appears in a diff.
+
+    The victim here is another ignored file, which is the case in the report.
+    """
+    path = repo_map(tmp_path, SAMPLE)
+    victim = path.with_name("other-ignored.tmp")
+    victim.write_text("not the map\n", encoding="utf-8")
+    ambush = temporary_named(path, "aaaaaaaa")
+    try:
+        if kind == "symbolic":
+            ambush.symlink_to(victim)
+        else:
+            os.link(victim, ambush)
+    except OSError:
+        pytest.skip(f"creating a {kind} link is unavailable")
+    fixed_tokens(monkeypatch, "aaaaaaaa", "bbbbbbbb")
+
+    updated = entities.load(path)[:1]
+    entities.save(path, updated)
+
+    assert victim.read_text(encoding="utf-8") == "not the map\n"
+    assert entities.load(path) == updated
+    # The ambush is left exactly as it was found: not written through, not
+    # removed, and not mistaken for this run's own temporary.
+    assert ambush.exists()
+    assert sorted(p.name for p in path.parent.glob("*.tmp")) == [ambush.name, victim.name]
+
+
+@git_required
+def test_save_stops_when_the_temporary_name_cannot_be_created(tmp_path, monkeypatch) -> None:
+    """Every attempt blocked is a refusal, never a write through whatever is there."""
+    path = repo_map(tmp_path, SAMPLE)
+    before = path.read_bytes()
+    occupied = temporary_named(path, "aaaaaaaa")
+    occupied.write_text("somebody else's file\n", encoding="utf-8")
+    fixed_tokens(monkeypatch, *["aaaaaaaa"] * entities._TEMPORARY_ATTEMPTS)
+
+    with pytest.raises(EvattError, match="attempts"):
+        entities.save(path, entities.load(path)[:1])
+
+    assert path.read_bytes() == before
+    assert occupied.read_text(encoding="utf-8") == "somebody else's file\n"
+
+
+@git_required
+def test_save_refuses_when_a_file_cannot_be_created_exclusively(tmp_path, monkeypatch) -> None:
+    """Exclusive creation is the whole protection, so its absence is a refusal.
+
+    No platform CPython supports lacks O_CREAT and O_EXCL. The point of the
+    branch is that the day one does, ``save`` stops rather than falling back to
+    opening a pathname something else may already own.
+    """
+    path = repo_map(tmp_path, SAMPLE)
+    before = path.read_bytes()
+    monkeypatch.setattr(entities, "_EXCLUSIVE_CREATION", False)
+
+    with pytest.raises(EvattError, match="exclusively"):
+        entities.save(path, entities.load(path)[:1])
+
+    assert path.read_bytes() == before
+    assert list(path.parent.glob("*.tmp")) == []
+
+
+@git_required
+def test_the_temporary_is_removed_whatever_it_was_named(tmp_path, monkeypatch) -> None:
+    """A unique name must not mean a leftover copy of the key nobody looks for."""
+    path = repo_map(tmp_path, SAMPLE)
+    fixed_tokens(monkeypatch, "aaaaaaaa")
+    entities.save(path, entities.load(path)[:1])
+    assert not temporary_named(path, "aaaaaaaa").exists()
+    assert sorted(p.name for p in path.parent.iterdir()) == [".git", ".gitignore", "entities.json"]
+
+
+@git_required
+def test_the_saved_map_is_lf_on_every_platform(tmp_path) -> None:
+    """The map is this package's own file, so it holds one encoding of one document."""
+    path = repo_map(tmp_path, SAMPLE)
+    entities.save(path, entities.load(path))
+    assert b"\r\n" not in path.read_bytes()
+
+
+ENTITY = entities.Entity
+REJECTED = [
+    # A second spelling of one value, which pass two matches as the first one.
+    ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
+      ENTITY("JANE  ROE", "PERSON_02", "person", "2026-09-09")), "once case and whitespace"),
+    ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
+      ENTITY("Jane Roe", "PERSON_02", "person", "2026-09-09")), "duplicate entity value"),
+    ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
+      ENTITY("John Smith", "PERSON_01", "person", "2026-09-09")), "duplicate placeholder"),
+    ((ENTITY("Jane Roe", "CLIENT_01", "person", "2026-09-09"),), "does not match kind"),
+    ((ENTITY("Jane Roe", "PERSON_1", "person", "2026-09-09"),), "does not match kind"),
+    ((ENTITY("Jane Roe", "", "person", "2026-09-09"),), "does not match kind"),
+    ((ENTITY("", "PERSON_01", "person", "2026-09-09"),), "non-empty string"),
+    ((ENTITY("TFN_01", "PERSON_01", "person", "2026-09-09"),), "shaped like an assigned"),
+    ((ENTITY("Jane Roe", "PERSON_01", "friend", "2026-09-09"),), "unknown entity kind"),
+    ((ENTITY("Jane Roe", "PERSON_01", "person", "9 September"),), "must be YYYY-MM-DD"),
+]
+
+
+@git_required
+@pytest.mark.parametrize("sequence, message", REJECTED)
+def test_save_refuses_a_sequence_load_would_reject(tmp_path, sequence, message) -> None:
+    """The map is the only copy of the key, so it is never replaced with an unreadable one.
+
+    ``save`` serialised whatever it was handed. A library caller could
+    atomically replace the map with a document every later command fails to
+    load, and nothing said so until the next run, by which point the readable
+    copy was gone.
+
+    Nothing is created either: the directory holds what it held, so the
+    validation runs before a temporary exists rather than after one is cleaned
+    up.
+    """
+    path = repo_map(tmp_path, SAMPLE)
+    before = path.read_bytes()
+    with pytest.raises(EvattError, match=message):
+        entities.save(path, sequence)
+    assert path.read_bytes() == before
+    assert sorted(p.name for p in path.parent.iterdir()) == [".git", ".gitignore", "entities.json"]
+
+
+@pytest.mark.parametrize("sequence, message", REJECTED)
+def test_load_refuses_what_save_refuses(tmp_path, sequence, message) -> None:
+    """The pairing itself, so the two cannot drift into disagreeing about a map."""
+    document = {
+        "schema_version": 1,
+        "entries": [
+            {"value": e.value, "placeholder": e.placeholder, "kind": e.kind, "added": e.added}
+            for e in sequence
+        ],
+    }
+    with pytest.raises(EvattError, match=message):
+        entities.load(write_map(tmp_path, document))
 
 
 @git_required
