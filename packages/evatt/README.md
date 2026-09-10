@@ -57,12 +57,23 @@ The rules covering `entities.json`, `*.entities.json`, `*.triage.md` and `*.tmp`
 live in this repository's own `.gitignore`, which ships in neither the wheel nor
 the source distribution. **If you installed evatt as a package, you have none of
 them and must write your own**, in the repository your map and your run live in.
-Two lines are enough:
+Three kinds of path are guarded, and a rule has to cover every one of them:
 
 ```
 entities.json
+*.entities.json
+*.tmp
 *.triage.md
 ```
+
+The first two are the map itself, under whichever of the two names you use. The
+`*.tmp` rule covers the temporary `save` writes beside the map before renaming
+it over the top, which is named `<map>.tmp.<random>.tmp` and holds the same real
+values as the map; a hard kill can leave one behind. The last is the triage
+worklist a halt writes beside `--out`.
+
+Leave any of them out and the run fails closed, naming the path and the rule it
+wants, rather than writing the file.
 
 ## Exit codes
 
@@ -135,9 +146,19 @@ an extra placeholder costs a triage decision while a miss leaks.
   job, not the tool's.
 - **`restore --out` is not gitignore-guarded.** It writes real names to a path
   you choose, anywhere, so the tool cannot know what rule would cover it. The
-  map, its `.tmp` and the triage path are guarded, because those three are
-  either the key or a path evatt derived rather than one you typed. Where the
-  restored answer lands is yours to keep out of a commit.
+  map, every temporary written beside it and the triage path are guarded,
+  because those are either the key or a path evatt derived rather than one you
+  typed. Where the restored answer lands is yours to keep out of a commit.
+- **The map's temporary is created exclusively, at a name that does not already
+  exist.** `save` writes `<map>.tmp.<random>.tmp` and renames it over the map.
+  The name is fresh each time and the file is created with `O_CREAT | O_EXCL`,
+  so a symbolic or hard link left at that path is never followed or truncated,
+  and a temporary left behind by a hard kill cannot block the next save. On
+  Windows `O_NOFOLLOW` does not exist and is not used; exclusive creation is
+  what refuses a link on both platforms, because a link is a name that already
+  exists and creating one therefore fails. What Windows does not honour is the
+  POSIX file mode, so there the temporary is readable by whoever can read the
+  directory rather than by its owner alone.
 - **A labelled identifier is admitted on the label alone**, with no check
   digit, because something wrote "TFN" next to those digits and a typo in a
   real tax file number is still a real tax file number. Only a bare digit run
