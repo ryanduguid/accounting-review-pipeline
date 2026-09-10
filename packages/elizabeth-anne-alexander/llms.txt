@@ -1,5 +1,4 @@
 # Xero Ledger Review Gate (elizabeth-anne-alexander)
-> High-density context for AI safety auditors, LLM architects, and security engineers.
 
 ## Package Overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander
