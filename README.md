@@ -20,7 +20,7 @@ uv run --locked --extra dev close-control review --current examples/current_tria
 
 [Read the five-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Inspect all eight exceptions](packages/monthly-close-control-plane/README.md#worked-example)
 
-<details>
+<details open>
 <summary>Setup, component identities, file contracts and reference</summary>
 
 Local monorepo assembly anchored in Monthly Close Controls. Its canonical GitHub repository
