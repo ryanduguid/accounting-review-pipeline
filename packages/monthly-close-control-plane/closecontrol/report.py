@@ -5,6 +5,7 @@ import io
 import json
 import os
 import uuid
+from decimal import Context, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 
 from .engine import CloseReviewPack
@@ -43,10 +44,11 @@ def _percentage(value) -> str:
     """
     if value is None:
         return ""
-    scaled = value * 100
-    adjusted = getattr(scaled, "adjusted", None)
-    places = max(2, -adjusted()) if adjusted is not None else 2
-    return f"{scaled:.{places}f}%"
+    with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
+        scaled = value * 100
+        adjusted = getattr(scaled, "adjusted", None)
+        places = max(2, -adjusted()) if adjusted is not None else 2
+        return f"{scaled:.{places}f}%"
 
 
 def _exception_dict(item: ExceptionItem) -> dict[str, str]:
