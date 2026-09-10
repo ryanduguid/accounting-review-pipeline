@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -13,6 +14,8 @@ from .report import (
     write_review_pack,
 )
 from .viewer import render_review_sheet
+from .reconciliation import reconcile
+from .reconciliation_report import write_reconciliation
 
 
 def _non_negative_decimal(value: str) -> Decimal:
@@ -47,6 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_close_arguments(workbench)
     view = commands.add_parser("view", help="display an existing review pack after verifying its four files agree")
     view.add_argument("--pack-dir", required=True, type=Path, help="directory holding close-review-pack.json, close-summary.md, exceptions.csv and client-queries.csv")
+    clearing = commands.add_parser("reconcile", help="review clearing-account transactions and carry outstanding items forward")
+    clearing.add_argument("--transactions", required=True, type=Path, help="mapped transaction CSV; see docs/clearing-reconciliation.md")
+    for flag in ("tenant", "account-id", "currency", "period-start", "period-end", "opening-balance", "closing-balance"):
+        clearing.add_argument(f"--{flag}", required=True)
+    clearing.add_argument("--opening-items", type=Path, help="previous period's carry-forward.json")
+    clearing.add_argument("--decisions", type=Path, help="reviewed Group,TransactionID,Decision,Note CSV")
+    clearing.add_argument("--output", required=True, type=Path, help="new directory outside version control")
     return parser
 
 
@@ -62,8 +72,25 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command not in {"review", "workbench", "view"}:  # pragma: no cover - argparse validates command choices.
+    if args.command not in {"review", "workbench", "view", "reconcile"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
+    if args.command == "reconcile":
+        try:
+            destination = require_output_outside_repository(args.output)
+            if destination.exists():
+                raise ControlInputError("Output already exists; use a new directory for each run.")
+            reconciliation = reconcile(args.transactions, tenant=args.tenant, account_id=args.account_id,
+                             currency=args.currency, period_start=args.period_start,
+                             period_end=args.period_end, opening_balance=args.opening_balance,
+                             closing_balance=args.closing_balance, opening_items=args.opening_items,
+                             decisions=args.decisions)
+            review_path = write_reconciliation(reconciliation, destination)
+        except (ControlInputError, OSError, ValueError, csv.Error) as exc:
+            print(f"close-control reconcile: {exc}", file=sys.stderr)
+            return 1
+        print(f"close-control reconcile: {reconciliation['status']}; {len(reconciliation['outstanding'])} outstanding items")
+        print(f"  Review: {review_path}")
+        return 0 if reconciliation["status"] == "PASS" else 2
     if args.command == "view":
         # The viewer reads only. It never writes, renames or deletes, so the
         # source/destination collision guard below does not apply to it.
