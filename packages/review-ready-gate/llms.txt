@@ -1,5 +1,4 @@
 # Workpaper Review Gate
-> High-density context for LLM agents and accounting automation pipelines.
 
 ## Package Overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate
