@@ -21,7 +21,8 @@ RELEASE_CALLERS = (
 EXPECTED_POLICY = """\
 # Agent instructions
 
-This repository is a local, deterministic review-pack generator. Preserve these
+This component is a local, deterministic review-pack generator. Read
+[root AGENTS.md](../../AGENTS.md) for workspace, component and release routing. Preserve these
 accounting and human-review boundaries:
 
 - Preserve exactly the `PASS`, `REVIEW`, and `BLOCKED` pack states. For `review` and
@@ -38,9 +39,11 @@ accounting and human-review boundaries:
   arithmetic, never binary floating point. Preserve fail-closed schema and integrity gates.
 - Do not add network or live Xero access, credential or token handling, journal, payment
   or report mutation, approval or sign-off authority, period locking, or tax lodgement.
-- Route release work through [RELEASING.md](RELEASING.md) and the existing GitHub Actions
-  workflows. Never build or upload release assets by hand, and do not tag or publish
-  without explicit action-time approval.
+- For release work, read [RELEASING.md](RELEASING.md) together with the root
+  instructions. The active caller is
+  [release-monthly-close-control-plane.yml](../../.github/workflows/release-monthly-close-control-plane.yml),
+  using the component tag prefix required at the root. Never build or upload release
+  assets by hand, and do not tag or publish without explicit action-time approval.
 """
 
 
@@ -315,8 +318,8 @@ def test_agents_links_existing_docs_and_tracks_scalar_ci_commands() -> None:
     assert _fenced_commands(ci) == _scalar_ci_commands()
     assert _normalise(_without_fenced_commands(ci)) == _normalise(
         """\
-        The fenced list records the unique single-line commands in
-        `.github/workflows/ci.yml`. The multiline package-smoke gate is explained and
+        Run the commands below from `packages/monthly-close-control-plane/`. They come
+        from [the root ci.yml](../../.github/workflows/ci.yml). The multiline package-smoke gate is explained and
         matched semantically below without duplicating its shell body:
         """
     )
