@@ -76,7 +76,15 @@ function Invoke-NamedOrModuleCli {
     & $python -m $ModuleName @Arguments
 }
 
-$OutputDir = Join-Path $RepoRoot "outputs"
+# Beside the checkout, not inside it: close-control refuses an --output
+# directory under version control, because a pack names a client's accounts and
+# balances and a .gitignore entry is a convention the next commit can waive.
+# $RepoRoot is this package's directory, and this script already assumes the
+# co-located layout, so three levels leave the checkout behind:
+# monthly-close-control-plane -> packages -> the checkout root -> its parent.
+# This is the ../../../close-control-demo of close-loop.md and the README.
+$DemoParent = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $RepoRoot))
+$OutputDir = Join-Path $DemoParent "close-control-demo"
 $OutputDir = Join-Path $OutputDir "gateway-tb-loop"
 $ReviewArgs = @(
     "review",
