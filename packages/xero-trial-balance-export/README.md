@@ -116,7 +116,21 @@ Task Scheduler records the exit code as the task's "Last Run Result", so a `1` o
 
 Xero refresh tokens **rotate on use**: every refresh returns a replacement refresh token. If the refresh response does not arrive, Xero permits retrying the previous token for up to a 30-minute grace period; outside that window, the user must re-authorise. The [Xero OAuth FAQ](https://developer.xero.com/faq/oauth2) was checked on 20 August 2026 (`2026-08-20`); recheck it for apps created or used after that date.
 
-[`xero_client.py`](xero_client.py) keeps those guarantees behind one `TokenSession` for the selected cache path: a cross-process lock covers the cache read, migration, refresh and write; the new token pair is persisted **before** the access token is first used; and the write is atomic (temp file + `os.replace`), so a crash can't half-write `token.json`. The session accepts a refresh callback, leaving Xero's endpoint and HTTP handling outside the cache boundary. On Windows, the complete cache and any fully written recovery temp are DPAPI-protected before bytes reach disk. The first read of a valid older plaintext cache migrates it atomically under the same lock, preserves its original `obtained_at`, and completes before any Xero request. A corrupt cache or unknown envelope version stops without a network call or rewrite. If you still manage to burn the token (e.g. restored an old `token.json` from backup), the script says so plainly and points you back to `auth.py`.
+[`xero_client.py`](xero_client.py) uses one `TokenSession` for the selected cache
+path. A cross-process lock covers cache reads, migration, refresh and writes.
+The session persists the new token pair before using the access token, writing
+through a temporary file and `os.replace` so a crash cannot leave a partial
+`token.json`. A refresh callback keeps Xero's endpoint and HTTP handling outside
+the cache boundary.
+
+On Windows, the cache and any fully written recovery temporary file are
+DPAPI-protected before bytes reach disk. The first read of a valid plaintext
+cache migrates it atomically under the same lock, preserving its original
+`obtained_at`, before any Xero request.
+
+A corrupt cache or unknown envelope version stops the run without a network
+call or rewrite. If a token is unusable, for example after restoring an old
+`token.json` from backup, the error directs the operator back to `auth.py`.
 
 ## Files
 
@@ -154,7 +168,29 @@ A disk that refuses the final flush is handled the same way: once the rows are w
 
 ## Filename reference
 
-The `{tenant}` segment of the default filename is the org name lowercased, with every run of characters other than **ASCII** letters, digits, `.`, `_` and `-` collapsed to a single `-` and any leading or trailing `-` trimmed; everything outside ASCII is dropped like punctuation: a macron, an accent, Cyrillic, Chinese, an emoji. That transform also folds case and ASCII punctuation, so it can put two different orgs on one name: "Acme (Holdings) Pty Ltd" and "Acme Holdings Pty Ltd" both sanitise to `acme-holdings-pty-ltd`, "ACME Pty Ltd" and "Acme Pty Ltd" both to `acme-pty-ltd`, and two orgs whose names differ only in their Chinese characters both to `pty-ltd`. The first eight characters of the tenant ID are therefore appended to **every** default filename (sanitised the same way, so the default filename is always one path segment), so "Demo Company (AU)" writes `demo-company-au-{tenantid8}-tb-2026-06-30-accrual.csv`. The tenant ID is used because it is the only value Xero guarantees is distinct per organisation, and nothing narrower keeps two clients' trial balances apart. The name is composed to NFC first, so the same org name typed decomposed writes the same file. An org name that sanitises away to nothing leaves the tenant ID as the whole segment. Every default filename **changed** with this rule, so a refresh pointed at an old default path will keep reading a file nothing writes any more. Pin the destination with `--out`.
+The default filename is `{tenant}-{tenantid8}-tb-{date}-{basis}.csv`, for example
+`demo-company-au-{tenantid8}-tb-2026-06-30-accrual.csv`. This naming rule changed
+every default filename. If a refresh still reads an old path, pin the destination
+with `--out` so it reads the file the exporter writes.
+
+The exporter composes the organisation name to NFC. For the `{tenant}` segment,
+it collapses each run of characters outside ASCII letters, digits, `.`, `_` and
+`-` to a single `-`, trims leading and trailing `-`, then lowercases the result.
+Accents, macrons, Cyrillic, Chinese and emoji are treated like punctuation.
+NFC normalisation gives composed and decomposed spellings the same filename.
+
+Different names can therefore collapse to the same segment:
+
+- "Acme (Holdings) Pty Ltd" and "Acme Holdings Pty Ltd" both become
+  `acme-holdings-pty-ltd`.
+- "ACME Pty Ltd" and "Acme Pty Ltd" both become `acme-pty-ltd`.
+- Names differing only in Chinese characters can both become `pty-ltd`.
+
+The exporter also collapses unsafe character runs in the tenant ID to `-`,
+takes the first eight characters and trims leading and trailing `-` from that
+suffix. It appends the suffix to every default name to distinguish organisations
+whose names collide, keeping the filename to one path segment. If the organisation
+name leaves no usable characters, the suffix forms the whole tenant segment.
 
 ## Related
 

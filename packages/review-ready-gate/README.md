@@ -180,7 +180,7 @@ The ten-column canonical CSV from [xero-trial-balance-export](https://github.com
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
 ```
 
-One tenant, one report date, unique `Tenant`+`AccountID`. Movement debit must equal movement credit, and YTD debit must equal YTD credit, or the pack is `BLOCKED`. An unbalanced ledger is not a review topic. It is a reason not to start.
+One tenant, one report date, unique `Tenant`+`AccountID`. Movement debit must equal movement credit, and YTD debit must equal YTD credit, or the pack is `BLOCKED`.
 
 ### BAS tie-out
 
