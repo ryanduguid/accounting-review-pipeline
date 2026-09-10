@@ -7,7 +7,11 @@ from pathlib import Path
 
 from .engine import review_close
 from .errors import ControlInputError
-from .report import PACK_FILE_NAMES as _PACK_FILE_NAMES, write_review_pack
+from .report import (
+    PACK_FILE_NAMES as _PACK_FILE_NAMES,
+    require_output_outside_repository,
+    write_review_pack,
+)
 from .viewer import render_review_sheet
 
 
@@ -41,8 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_close_arguments(review)
     workbench = commands.add_parser("workbench", help="run the local close-review workbench")
     _add_close_arguments(workbench)
-    view = commands.add_parser("view", help="display an existing review pack after verifying its three files agree")
-    view.add_argument("--pack-dir", required=True, type=Path, help="directory holding close-review-pack.json, close-summary.md and exceptions.csv")
+    view = commands.add_parser("view", help="display an existing review pack after verifying its four files agree")
+    view.add_argument("--pack-dir", required=True, type=Path, help="directory holding close-review-pack.json, close-summary.md, exceptions.csv and client-queries.csv")
     return parser
 
 
@@ -74,7 +78,16 @@ def main(argv: list[str] | None = None) -> int:
             "a close or change any computed status."
         )
         return 0
-    # write_review_pack replaces its three destinations and deletes what it
+    # Both output guards run before any client file is opened. write_review_pack
+    # repeats this one so a library caller cannot get past it, but a reviewer who
+    # mistyped --output should hear about it before the run reads a trial
+    # balance, not after.
+    try:
+        require_output_outside_repository(args.output)
+    except ControlInputError as exc:
+        print(f"close-control: output error: {exc}", file=sys.stderr)
+        return 1
+    # write_review_pack replaces its four destinations and deletes what it
     # parked aside. If a source file IS one of those destinations, that source
     # is destroyed and the pack still records a source_sha256 for it, so the
     # provenance chain points at evidence that no longer exists. Refuse before
@@ -119,14 +132,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"close-control: output error: {exc}", file=sys.stderr)
         return 1
     prefix = "close-control workbench" if args.command == "workbench" else "close-control"
-    print(f"{prefix}: {pack.status}; {len(pack.exceptions)} exception(s)")
+    print(
+        f"{prefix}: {pack.status}; {len(pack.exceptions)} exception(s); "
+        f"{len(pack.client_queries)} client query(ies) drafted"
+    )
     if pack.status == "PASS" and not pack.exceptions:
         print(f"{prefix}: Nothing interesting happens.")
     for name, path in outputs.items():
         print(f"  {name}: {path}")
     if args.command == "workbench":
-        print("Review close-summary.md, exceptions.csv, and close-review-pack.json.")
+        print("Review close-summary.md, exceptions.csv, client-queries.csv, and close-review-pack.json.")
         print("This pack records review evidence only; it does not approve or close a period.")
+        print("client-queries.csv holds draft questions; nothing has been sent to a client.")
     return 0 if pack.status == "PASS" else 2
 
 

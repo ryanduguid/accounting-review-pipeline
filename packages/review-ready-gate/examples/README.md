@@ -19,13 +19,17 @@ Varrock Ventures Pty Ltd (month-end and year-end).
 status.
 
 ```bash
-review-ready gate --profile bas --pack examples/bas-ready --output outputs/bas-ready
-review-ready gate --profile bas --pack examples/bas-not-ready --output outputs/bas-not-ready
-review-ready gate --profile bas --pack examples/bas-blocked --output outputs/bas-blocked
-review-ready gate --profile month_end --pack examples/month-end-ready --output outputs/month-end-ready
-review-ready gate --profile year_end --pack examples/year-end-ready --output outputs/year-end-ready
-review-ready view --pack-dir outputs/bas-ready
+review-ready gate --profile bas --pack examples/bas-ready --output ../../../review-ready-demo/bas-ready
+review-ready gate --profile bas --pack examples/bas-not-ready --output ../../../review-ready-demo/bas-not-ready
+review-ready gate --profile bas --pack examples/bas-blocked --output ../../../review-ready-demo/bas-blocked
+review-ready gate --profile month_end --pack examples/month-end-ready --output ../../../review-ready-demo/month-end-ready
+review-ready gate --profile year_end --pack examples/year-end-ready --output ../../../review-ready-demo/year-end-ready
+review-ready view --pack-dir ../../../review-ready-demo/bas-ready
 ```
+
+Those paths sit beside the repository rather than inside it. `review-ready`
+refuses an `--output` directory inside a version-control checkout and exits
+`1`, so an in-repo path such as `outputs/bas-ready` writes nothing.
 
 To run the gate on a schedule in CI, copy
 [github-actions-readiness-check.yml](github-actions-readiness-check.yml) into
