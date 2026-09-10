@@ -453,17 +453,21 @@ source = { editable = "packages/evatt" }
 [package.optional-dependencies]
 dev = [
     { name = "build" },
+    { name = "coverage" },
     { name = "mypy" },
     { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "ruff" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
+    { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==7.1.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.6" },
 ]
 provides-extras = ["dev"]
 
