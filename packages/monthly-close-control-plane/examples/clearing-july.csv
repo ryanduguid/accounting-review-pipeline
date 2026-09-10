@@ -1,0 +1,6 @@
+Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit
+Demo,clearing,AUD,p1,2026-07-02,June,June settlement,0,100
+Demo,clearing,AUD,s1,2026-07-03,Batch,First receipt,60,0
+Demo,clearing,AUD,s2,2026-07-03,Batch,Second receipt,40,0
+Demo,clearing,AUD,p2,2026-07-04,Batch,Combined settlement,0,100
+Demo,clearing,AUD,s3,2026-07-31,Pending,Receipt awaiting August settlement,25,0

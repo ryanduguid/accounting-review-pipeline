@@ -1,0 +1,6 @@
+Group,TransactionID,Decision,Note
+june-settlement,june1,accept,June receipt agrees to the fabricated July remittance
+june-settlement,p1,accept,June receipt agrees to the fabricated July remittance
+batch-settlement,s1,accept,Two receipts agree to the fabricated batch settlement
+batch-settlement,s2,accept,Two receipts agree to the fabricated batch settlement
+batch-settlement,p2,accept,Two receipts agree to the fabricated batch settlement

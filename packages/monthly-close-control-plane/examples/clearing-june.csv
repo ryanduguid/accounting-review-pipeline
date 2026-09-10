@@ -1,0 +1,2 @@
+Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit
+Demo,clearing,AUD,june1,2026-06-30,June,June receipt awaiting settlement,100,0

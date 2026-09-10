@@ -1,0 +1,6 @@
+Group,TransactionID,Decision,Note
+july-settlement,s3,accept,July receipt traced to the fabricated August settlement
+july-settlement,p3,accept,July receipt traced to the fabricated August settlement
+manual-august,a1,accept,Different references traced to one fabricated remittance
+manual-august,a2,accept,Different references traced to one fabricated remittance
+manual-august,a3,accept,Different references traced to one fabricated remittance
