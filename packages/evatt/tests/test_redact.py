@@ -228,6 +228,87 @@ def test_a_lower_case_placeholder_value_cannot_rewrite_a_mapped_placeholder() ->
     assert counts == {}
 
 
+def test_a_hand_built_structured_placeholder_is_never_emitted() -> None:
+    """Entity("Jane Roe", "TFN_01") made a real name irreversible and invisible.
+
+    Pass two guarded the value and not the placeholder, so the name was
+    replaced by TFN_01. ``restore._restorable`` then refused to reverse it,
+    because reversing a structured placeholder is what would undo the one-way
+    guarantee, and ``verify`` read TFN_01 as ordinary one-way output and called
+    the file clean. The name was gone, unrestorable, and reported by nothing.
+
+    Skipping the entry is what makes the name visible again: it survives pass
+    two, so the residual sweep reports it and strict mode halts on it, which is
+    the operator's cue to fix the entry.
+    """
+    forged = (Entity("Jane Roe", "TFN_01", "person", "2026-09-09"),)
+    text, counts = redact("Jane Roe lodged the return", forged)
+    assert text == "Jane Roe lodged the return"
+    assert "TFN_01" not in text
+    assert counts == {}
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("Jane Roe lodged the return", forged)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("name", "Jane Roe")]
+
+
+@pytest.mark.parametrize(
+    "placeholder, kind",
+    [
+        # A structured prefix, which restore refuses to reverse.
+        ("TFN_01", "client"),
+        ("MEDICARE_02", "person"),
+        # An entity prefix that contradicts the kind. The manifest counts by
+        # kind while the document carries the prefix, and a later ``assign``
+        # reads the map by prefix, so it would mint CLIENT_01 again for someone
+        # else while this document already spends it on a person.
+        ("CLIENT_01", "person"),
+        ("PERSON_01", "client"),
+        # Shapes ``load`` refuses outright. An empty or whitespace-only
+        # placeholder is the dangerous one: inserted at every match, it replaces
+        # the real name with nothing at all.
+        ("", "person"),
+        ("   ", "person"),
+        ("PERSON_1", "person"),
+        ("person_01", "person"),
+        ("PERSON", "person"),
+        ("XPERSON_01", "person"),
+    ],
+)
+def test_a_placeholder_the_map_would_reject_is_skipped(placeholder, kind) -> None:
+    """The mirror of the value guard, held to the shapes ``load`` accepts."""
+    forged = (Entity("Jane Roe", placeholder, kind, "2026-09-09"),)
+    text, counts = redact("Jane Roe lodged the return", forged)
+    assert text == "Jane Roe lodged the return", repr(placeholder)
+    assert counts == {}
+
+
+def test_an_entity_whose_halves_both_pass_is_still_replaced() -> None:
+    """The guards skip malformed entries, not ordinary ones."""
+    text, counts = redact("Jane Roe lodged the return", (PERSON,))
+    assert text == "PERSON_01 lodged the return"
+    assert counts == {"person": 1}
+
+
+@pytest.mark.parametrize(
+    "value, placeholder, kind",
+    [
+        ("Jane Roe", None, "person"),
+        ("Jane Roe", 1, "person"),
+        ("Jane Roe", [], "person"),
+        ("Jane Roe", "PERSON_01", []),
+        ("Jane Roe", "PERSON_01", {}),
+        (None, "PERSON_01", "person"),
+        ([], "PERSON_01", "person"),
+    ],
+)
+def test_malformed_entity_fields_are_skipped(value, placeholder, kind) -> None:
+    forged = (Entity(value, placeholder, kind, "2026-09-09"),)
+    assert redact_module.redact("nothing to replace", forged) == ("nothing to replace", {})
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("Jane Roe lodged the return", forged)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("name", "Jane Roe")]
+
+
 def test_a_placeholder_already_in_the_input_halts() -> None:
     """Otherwise restore writes a real client name where it never appeared."""
     with pytest.raises(Halt) as caught:

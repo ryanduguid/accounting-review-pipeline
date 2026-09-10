@@ -18,7 +18,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Sequence
 
-from .entities import Entity
+from .entities import _PREFIX, Entity
 from .errors import Halt
 from .patterns import (
     ADDRESS,
@@ -126,9 +126,12 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
     """
     found: list[tuple[int, int, int, Entity]] = []
     for priority, entity in enumerate(entities):
-        # ``load`` rejects both of these, but ``redact`` takes any
-        # Sequence[Entity] and a caller can build one by hand, so the map gate
-        # is not the only place they have to be stopped.
+        # ``load`` rejects every entry these guards skip, but ``redact`` takes
+        # any Sequence[Entity] and a caller can build one by hand, so the map
+        # gate is not the only place they have to be stopped. The value is
+        # checked first and the placeholder second, and the two are meant to be
+        # read as a pair: an entry is only used when both halves of it are ones
+        # this package would have minted itself.
         #
         # An empty value reaches re.escape as "", giving "(?<!\\w)(?!\\w)",
         # which matches at every non-word boundary and scatters the placeholder
@@ -143,7 +146,40 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # pattern ``value_pattern`` compiles below. Case-sensitive, it let
         # "tfn_01" straight through and did exactly that damage, and ``load``
         # accepted the same value, so the map gate was no backstop either.
-        if not entity.value.strip() or PLACEHOLDER_CI.search(entity.value):
+        if (
+            not isinstance(entity.value, str)
+            or not entity.value.strip()
+            or PLACEHOLDER_CI.search(entity.value)
+        ):
+            continue
+        # The mirror of the guard above, on the other half of the entry, and
+        # skipping for the same reason: only a placeholder ``restore`` can
+        # reverse is ever emitted.
+        #
+        # Entity("Jane Roe", "TFN_01", ...) is the case that matters. Nothing
+        # here validated the placeholder, so the name was replaced by TFN_01,
+        # ``restore._restorable`` then refused to reverse it because reversing a
+        # structured placeholder is what would undo the one-way guarantee, and
+        # ``verify`` read TFN_01 as ordinary one-way output and called the file
+        # clean. The name was gone, unrestorable and invisible to the command
+        # whose job is to say a file is not ready.
+        #
+        # ``PLACEHOLDER.fullmatch`` is the same shape test ``restore`` applies,
+        # so the two agree on what a placeholder is, and it also covers an empty
+        # or whitespace-only placeholder, which would otherwise be inserted at
+        # every match and leave the value replaced by nothing.
+        #
+        # The prefix has to be the one ``assign`` mints for this entry's kind.
+        # A kind and a prefix that disagree are what ``load`` rejects, because
+        # the manifest counts by kind while the document carries the prefix, and
+        # a later ``assign`` reading the map by prefix would mint the same
+        # placeholder again for someone else.
+        if (
+            not isinstance(entity.placeholder, str)
+            or not isinstance(entity.kind, str)
+            or PLACEHOLDER.fullmatch(entity.placeholder) is None
+            or entity.placeholder.rsplit("_", 1)[0] != _PREFIX.get(entity.kind)
+        ):
             continue
         for match in value_pattern(entity.value).finditer(text):
             found.append((match.start(), match.end(), priority, entity))
