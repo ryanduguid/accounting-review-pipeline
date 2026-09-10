@@ -49,6 +49,12 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
+For transaction-level clearing-account matching, see the
+[three-month reconciliation example](docs/clearing-reconciliation.md).
+The new `reconcile` command suggests matches, records reviewed allocations and
+carries outstanding items forward. It is an unreleased source addition and uses a
+separate mapped transaction schema; a trial-balance export is insufficient.
+
 The repository contains fabricated data only. Do not commit client trial balances, workpapers, exports, or credentials.
 
 `examples/` is the assault course: every move the tool has, run against
