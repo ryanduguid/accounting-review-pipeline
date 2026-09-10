@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date
-from decimal import Decimal, DivisionByZero, InvalidOperation
+from decimal import Context, Decimal, DivisionByZero, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 
 from .errors import DateMismatchError, SchemaError
@@ -382,16 +382,18 @@ def review_close(
 
     current_by_key = {row.key: row for row in current_rows}
     prior_by_key = {row.key: row for row in prior_rows}
-    exceptions = _integrity_exceptions(current_rows, "Current") + _integrity_exceptions(prior_rows, "Prior")
-    exceptions += _financial_year_reset_exceptions(current_date, prior_date)
-    exceptions += _period_comparison_exceptions(
-        current_by_key, prior_by_key, absolute_threshold, percentage_threshold
-    )
-    # Only a supplied mapping file makes the mapping control run: with no file
-    # every account would be an exception against an empty mapping.
-    if mapping_path is not None:
-        exceptions += _mapping_exceptions(current_rows, mapping)
-    exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
+    # Keep the standard precision and rounding even when a host changes its decimal context.
+    with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
+        exceptions = _integrity_exceptions(current_rows, "Current") + _integrity_exceptions(prior_rows, "Prior")
+        exceptions += _financial_year_reset_exceptions(current_date, prior_date)
+        exceptions += _period_comparison_exceptions(
+            current_by_key, prior_by_key, absolute_threshold, percentage_threshold
+        )
+        # Only a supplied mapping file makes the mapping control run: with no file
+        # every account would be an exception against an empty mapping.
+        if mapping_path is not None:
+            exceptions += _mapping_exceptions(current_rows, mapping)
+        exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
 
     # The mapping's ReviewGroup travels with every exception that names an
     # account it covers, so a reviewer can filter exceptions.csv or the JSON
