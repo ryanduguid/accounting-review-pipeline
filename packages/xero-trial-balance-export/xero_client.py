@@ -342,7 +342,7 @@ def _try_token_lock(lock_file) -> bool:
     """Try to acquire the platform lock without blocking."""
     lock_file.seek(0)
     try:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             win_msvcrt = cast(Any, msvcrt)
@@ -360,7 +360,7 @@ def _try_token_lock(lock_file) -> bool:
 
 def _release_token_lock(lock_file) -> None:
     lock_file.seek(0)
-    if os.name == "nt":
+    if sys.platform == "win32":
         import msvcrt
 
         win_msvcrt = cast(Any, msvcrt)
