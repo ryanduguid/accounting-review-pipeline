@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from decimal import Decimal
+from decimal import Context, Decimal, Inexact, Rounded, ROUND_UP, localcontext
 from pathlib import Path
 
 import pytest
@@ -67,6 +67,50 @@ def test_demo_pack_is_review_not_approval() -> None:
         "subledger_reconciliation",
     }
     assert all(item.status == "REVIEW" for item in pack.exceptions)
+
+
+@pytest.mark.parametrize("precision", [4, 50])
+def test_review_and_saved_pack_ignore_caller_decimal_settings(tmp_path, precision):
+    from closecontrol.report import write_review_pack
+
+    expected = _demo_pack()
+    write_review_pack(expected, tmp_path / "normal")
+    with localcontext(Context(prec=precision, rounding=ROUND_UP, Emin=-2, Emax=2)) as context:
+        context.traps[Inexact] = True
+        context.traps[Rounded] = True
+        context.flags[Inexact] = True
+        before = str(context)
+        actual = _demo_pack()
+        write_review_pack(actual, tmp_path / "altered")
+        assert str(context) == before
+    assert actual == expected
+    assert {p.name: p.read_bytes() for p in (tmp_path / "altered").iterdir()} == {
+        p.name: p.read_bytes() for p in (tmp_path / "normal").iterdir()}
+
+
+def test_low_decimal_precision_cannot_hide_a_one_cent_imbalance(tmp_path):
+    from closecontrol.cli import main
+    import json
+
+    paths = {}
+    for name, date, debit in [("current", "2026-08-31", "1000.01"),
+                               ("prior", "2026-07-31", "1000.00")]:
+        paths[name] = _write(tmp_path / f"{name}.csv", [
+            f"{date},{TENANT},Assets,a,Cash,100,{debit},0,{debit},0",
+            f"{date},{TENANT},Equity,b,Capital,200,0,1000.00,0,1000.00",
+        ])
+    with localcontext(Context(prec=4)) as context:
+        before = str(context)
+        pack = review_close(current_path=paths["current"], prior_path=paths["prior"])
+        code = main(["review", "--current", str(paths["current"]), "--prior", str(paths["prior"]),
+                     "--output", str(tmp_path / "pack")])
+        assert str(context) == before
+    assert pack.status == "BLOCKED"
+    assert [item.difference for item in pack.exceptions
+            if item.control == "trial_balance_integrity"] == [Decimal("0.01"), Decimal("0.01")]
+    assert code == 2
+    saved = json.loads((tmp_path / "pack/close-review-pack.json").read_text())
+    assert saved["overall_status"] == "BLOCKED"
 
 
 def test_demo_pack_raises_exactly_the_expected_exceptions() -> None:
