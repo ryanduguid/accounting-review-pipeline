@@ -43,7 +43,9 @@ close surfaces exceptions, and the ledger-review boundary or Power BI consumes t
 evatt stands beside that flow rather than in it: it pseudonymises markdown locally before an
 operator hands it to an external model, and reads no trial balance.
 Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is
-offline, exact-Decimal and fabricated-data-only.
+offline and ships fabricated data only. Python review packages use exact `Decimal`
+arithmetic for money. The Excel adapter and Power BI application use their native
+numeric types, including VBA `Double`, so that Decimal guarantee does not cover them.
 
 Directory names follow each component's normalised distribution name so that the reviewed
 Release Policy identity gate (directory leaf, `tag-prefix` and distribution name must agree)

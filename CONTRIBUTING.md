@@ -69,9 +69,10 @@ changes.
 
 ## Data Handling
 
-Review components may not gain a network or Xero dependency, may not import the exporter or
-a sibling component, and must keep exact `Decimal` arithmetic and their documented status
-and exit-code boundaries. One shared `.venv` makes every Python component importable from
+Review components may not gain a network or Xero dependency or import the exporter or
+a sibling component. Preserve their documented status and exit-code boundaries and
+the Python review packages' exact `Decimal` arithmetic. Document native Excel and
+Power BI numeric types separately. One shared `.venv` makes every Python component importable from
 every other; that does not relax the rule. Only Xero Trial Balance Export may handle Xero
 OAuth, HTTP, credentials or tokens. Keep client data and generated workpapers outside the
 checkout.

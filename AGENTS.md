@@ -9,8 +9,10 @@ These repository-wide rules apply everywhere:
 - Only `packages/xero-trial-balance-export/` may use OAuth, call Xero, use an HTTP client,
   hold tokens or read Xero credentials (the environment names documented in the exporter's
   `.env.example`). Review packages, the Excel adapter and the Power BI application stay
-  offline, read local files, parse money with exact `Decimal` arithmetic and ship
-  fabricated data only.
+  offline, read local files and ship fabricated data only. Python review packages
+  parse and calculate money with exact `Decimal` arithmetic. Describe the Excel
+  adapter and Power BI application's native numeric types separately; VBA
+  `Double` is floating point and is outside the Decimal guarantee.
 - Roles stay separate. The readiness gate emits `READY`, `NOT_READY` or `BLOCKED` and
   decides whether a pack reaches review. Monthly close emits `PASS`, `REVIEW` or `BLOCKED`
   (exit 0 only for `PASS`, exit 2 for `REVIEW` or `BLOCKED`, exit 1 for malformed input) and
