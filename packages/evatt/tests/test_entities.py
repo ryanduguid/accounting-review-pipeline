@@ -184,6 +184,21 @@ def test_save_then_load_round_trips(tmp_path) -> None:
 
 
 @git_required
+def test_save_writes_the_entries_it_validated(tmp_path) -> None:
+    path = repo_map(tmp_path, SAMPLE)
+    original = entities.load(path)
+
+    class ChangingSequence(list):
+        def __iter__(self):
+            snapshot = tuple(super().__iter__())
+            self[:] = [entities.Entity("Jane Roe", "TFN_01", "person", "2026-09-09")]
+            return iter(snapshot)
+
+    entities.save(path, ChangingSequence(original))
+    assert entities.load(path) == original
+
+
+@git_required
 @pytest.mark.parametrize("tracked", [False, True])
 def test_save_refuses_a_committable_destination(tmp_path, tracked) -> None:
     path = repo_map(tmp_path, SAMPLE, gitignore="*.tmp\n")

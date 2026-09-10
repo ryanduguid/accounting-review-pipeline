@@ -146,7 +146,11 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # pattern ``value_pattern`` compiles below. Case-sensitive, it let
         # "tfn_01" straight through and did exactly that damage, and ``load``
         # accepted the same value, so the map gate was no backstop either.
-        if not entity.value.strip() or PLACEHOLDER_CI.search(entity.value):
+        if (
+            not isinstance(entity.value, str)
+            or not entity.value.strip()
+            or PLACEHOLDER_CI.search(entity.value)
+        ):
             continue
         # The mirror of the guard above, on the other half of the entry, and
         # skipping for the same reason: only a placeholder ``restore`` can
@@ -171,7 +175,9 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # a later ``assign`` reading the map by prefix would mint the same
         # placeholder again for someone else.
         if (
-            PLACEHOLDER.fullmatch(entity.placeholder) is None
+            not isinstance(entity.placeholder, str)
+            or not isinstance(entity.kind, str)
+            or PLACEHOLDER.fullmatch(entity.placeholder) is None
             or entity.placeholder.rsplit("_", 1)[0] != _PREFIX.get(entity.kind)
         ):
             continue

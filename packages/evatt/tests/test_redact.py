@@ -289,6 +289,26 @@ def test_an_entity_whose_halves_both_pass_is_still_replaced() -> None:
     assert counts == {"person": 1}
 
 
+@pytest.mark.parametrize(
+    "value, placeholder, kind",
+    [
+        ("Jane Roe", None, "person"),
+        ("Jane Roe", 1, "person"),
+        ("Jane Roe", [], "person"),
+        ("Jane Roe", "PERSON_01", []),
+        ("Jane Roe", "PERSON_01", {}),
+        (None, "PERSON_01", "person"),
+        ([], "PERSON_01", "person"),
+    ],
+)
+def test_malformed_entity_fields_are_skipped(value, placeholder, kind) -> None:
+    forged = (Entity(value, placeholder, kind, "2026-09-09"),)
+    assert redact_module.redact("nothing to replace", forged) == ("nothing to replace", {})
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("Jane Roe lodged the return", forged)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("name", "Jane Roe")]
+
+
 def test_a_placeholder_already_in_the_input_halts() -> None:
     """Otherwise restore writes a real client name where it never appeared."""
     with pytest.raises(Halt) as caught:

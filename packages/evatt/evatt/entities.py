@@ -319,6 +319,8 @@ def save(path: Path, entities: Sequence[Entity]) -> None:
     and nothing reads it by line, so one encoding of one document is worth more
     than matching a local convention.
     """
+    # Validate and serialise the same entries even if the caller's sequence changes.
+    entities = tuple(entities)
     _check_sequence(entities)
     # Write to the same resolved target that the ignore guard checks. A map
     # reached through a symbolic link is written at the link's target, and the
