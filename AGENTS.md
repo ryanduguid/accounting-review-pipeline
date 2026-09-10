@@ -73,11 +73,11 @@ Run every check from the owning component directory with its documented commands
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
-| evatt | `packages/evatt/` | `uv lock --check`; `uv run --locked --extra dev pytest`; Ruff over `evatt tests`; mypy over `evatt`; `python -m build`; clean-wheel redact, verify, restore and halt demo |
+| evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
-`ci.yml` calls for the exporter, Workpaper Review Gate and Xero Ledger Review Gate with the
-component directory. Run them from the component directory:
+`ci.yml` calls for the exporter, Workpaper Review Gate, Xero Ledger Review Gate and evatt
+with the component directory. Run them from the component directory:
 
 ```bash
 uv lock --check

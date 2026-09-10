@@ -38,13 +38,21 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
 
+  - package-ecosystem: "uv"
+    directory: "/packages/evatt"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+
   # The root uv workspace lock. `uv run --locked` inside every component
   # directory validates this lock, not the component's, so it must move too.
   # The workspace declares no package of its own: its only direct requirements
   # are the shared `dev` group in the root pyproject.toml.
   #
   # Dependabot's uv support reads the member pyproject.toml files as well as
-  # the root one, so this entry sees the same direct requirements the four
+  # the root one, so this entry sees the same direct requirements the five
   # component entries see. Every one of them is a loose floor that Dependabot
   # leaves alone (a component bump changes only that component's uv.lock), and
   # the five exact pins are ignored below, so a root run moves only the root

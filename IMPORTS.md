@@ -158,7 +158,7 @@ pull request. The component workflows used explicit `paths` filters for their co
 directory, the future `contracts/xero-trial-balance-v1/` directory, `.github/**` and the root
 policy files. Each granted `contents: read` only and referenced no secret. The readiness and
 ledger workflows carried their source-defined clean-wheel demonstrations. Dependabot scopes
-Python updates to each component directory (`uv` for the three uv packages, `pip` for the
+Python updates to each component directory (`uv` for the four uv packages, `pip` for the
 exporter) and groups root GitHub Actions updates.
 
 Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml` and
@@ -167,10 +167,11 @@ Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml
 required-check names and `codeql.yml` are unchanged; the checks the matrix reports are
 `component (<directory>, <import>) / <gate>`. The reusable workflow filters itself on the
 same paths the deleted workflows listed, and the readiness and ledger clean-wheel
-demonstrations run as its per-component `smoke` input. `AGENTS.md` lists the current gates.
-
-evatt uses its own `evatt.yml` workflow for Python 3.10 and 3.12, including
-the clean-wheel redact, verify, restore and halt demonstration.
+demonstrations run as its per-component `smoke` input. evatt runs through the same matrix
+rather than through a workflow of its own: `evatt.yml` was replaced by a fourth `component`
+entry (`packages/evatt`, import `evatt`), and its clean-wheel redact, verify, restore and
+halt demonstration runs as that entry's `smoke` input, over the reusable workflow's Python
+3.10, 3.12 and 3.13 legs. `AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
 
