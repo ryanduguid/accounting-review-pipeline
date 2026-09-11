@@ -4,7 +4,8 @@ The 1280 × 640 PNG is rendered from [social-preview.svg](social-preview.svg).
 The SVG retains the existing repository card's purple palette, border and
 type hierarchy. It contains text and geometry only.
 
-Copy source: README.md at commit 1d7ef1b1028704581d97019b4cf386d4d2d55b9d.
+The card paraphrases README.md and the review boundaries in AGENTS.md at
+commit 1d7ef1b1028704581d97019b4cf386d4d2d55b9d.
 Checked 11 September 2026. No package version, accounting rule or source-review
 date changes in this card.
 
