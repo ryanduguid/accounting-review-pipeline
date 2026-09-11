@@ -1,4 +1,4 @@
-# Accounting Review Pipeline: a balanced trial balance still needs review
+# Accounting Review Pipeline: Xero month-end close controls
 
 Synthetic examples. Review aid, not professional advice; a human decides whether the close is acceptable.
 
