@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">accounting-review-pipeline</title>
+  <desc id="description">Xero exports, readiness gates and close-review evidence. Review aids. Human sign-off; no ledger writes.</desc>
+  <defs>
+    <radialGradient id="background" cx="82%" cy="12%" r="85%" gradientTransform="translate(0 .06) scale(1 .5)">
+      <stop offset="0" stop-color="#331764"/>
+      <stop offset=".45" stop-color="#140a31"/>
+      <stop offset="1" stop-color="#04001f"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="#04001f"/>
+  <rect width="1280" height="640" fill="url(#background)"/>
+  <rect x="25" y="25" width="1230" height="590" fill="none" stroke="#4f485e" stroke-width="2"/>
+  <text x="88" y="116" fill="#9f6fd8" font-family="Consolas, monospace" font-size="24">ryanduguid /</text>
+  <text x="88" y="225" fill="#ececec" font-family="Segoe UI, sans-serif" font-size="64" font-weight="700">accounting-review-pipeline</text>
+  <path d="M88 245H788" stroke="#5c2d91" stroke-width="3"/>
+  <g fill="#b1afad" font-family="Segoe UI, sans-serif" font-size="36">
+    <text x="88" y="330">Xero exports, readiness gates and close-review evidence.</text>
+    <text x="88" y="380">Review aids. Human sign-off; no ledger writes.</text>
+  </g>
+  <text x="88" y="532" fill="#9f6fd8" font-family="Consolas, monospace" font-size="26">Python · Local review · Fabricated examples</text>
+  <path d="M88 568H1192" stroke="#4f485e"/>
+</svg>
