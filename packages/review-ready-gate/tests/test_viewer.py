@@ -367,7 +367,7 @@ def test_viewer_imports_nothing_that_can_touch_a_network_or_ledger() -> None:
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             imported.add(node.module.split(".")[0])
-    allowed = {"__future__", "csv", "hashlib", "io", "json", "re", "decimal", "pathlib"}
+    allowed = {"__future__", "csv", "hashlib", "io", "json", "re", "decimal", "pathlib", "datetime", "typing"}
     assert imported <= allowed, f"viewer gained imports outside its sandbox: {sorted(imported - allowed)}"
 
 
@@ -415,3 +415,32 @@ def test_viewer_accepts_engine_output_end_to_end(tmp_path: Path) -> None:
     write_review_pack(pack, output)
     sheet, _ = render_review_sheet(output)
     assert f"**Overall status: {pack.status}**" in sheet
+
+
+def test_extra_unverified_summary_text_is_refused(pack_dir: Path) -> None:
+    path = pack_dir / "readiness-summary.md"
+    path.write_text(path.read_text(encoding="utf-8") + "\nAll items approved for payment.\n", encoding="utf-8")
+    with pytest.raises(GateInputError, match="canonical"):
+        render_review_sheet(pack_dir)
+
+
+def test_consistent_files_cannot_claim_ready_with_findings(pack_dir: Path) -> None:
+    document = _read_json(pack_dir)
+    document["overall_status"] = "READY"
+    _rewrite_json(pack_dir, document)
+    path = pack_dir / "readiness-summary.md"
+    path.write_text(path.read_text(encoding="utf-8").replace("Overall status: NOT_READY", "Overall status: READY"), encoding="utf-8")
+    with pytest.raises(GateInputError, match="overall_status.*findings"):
+        verify_pack(pack_dir)
+
+
+def test_unreadable_artefact_reports_its_name(pack_dir: Path, monkeypatch) -> None:
+    original = Path.read_bytes
+    def read(path):
+        if path.name == "findings.csv":
+            raise PermissionError("fabricated denial")
+        return original(path)
+    monkeypatch.setattr(Path, "read_bytes", read)
+    with pytest.raises(GateInputError, match="findings.csv") as exc:
+        verify_pack(pack_dir)
+    assert isinstance(exc.value.__cause__, PermissionError)

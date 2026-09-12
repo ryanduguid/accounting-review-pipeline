@@ -151,8 +151,8 @@ Python's standard library has no equivalent portable secret store. On non-Window
 
 ## Tests
 
-With the dependencies installed, run the offline regression suite from the
-repository root:
+With the dependencies installed, run the offline regression suite from this
+component directory (`packages/xero-trial-balance-export`):
 
 ```bash
 python -B -m unittest discover -s tests -v

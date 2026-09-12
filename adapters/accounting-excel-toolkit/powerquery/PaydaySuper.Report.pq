@@ -246,14 +246,19 @@ let
         ParseAmount = (value as nullable any, column as text) as nullable number =>
             let
                 raw = if value = null then "" else Text.Trim(Text.From(value)),
-                parsed = if raw = "" then [HasError = false, Value = null] else
-                    try Number.FromText(raw, "en-AU")
+                // The producer emits ordinary decimal text. Refuse precision loss
+                // before Currency.From can round a fifth fractional digit.
+                fraction = if Text.Contains(raw, ".") then Text.AfterDelimiter(raw, ".") else "",
+                validScale = not Text.Contains(Text.Lower(raw), "e") and Text.Length(fraction) <= 4,
+                parsed = if raw = "" then [HasError = false, Value = null]
+                    else if not validScale then [HasError = true]
+                    else try Currency.From(raw, "en-AU")
             in
                 if parsed[HasError] then
                     error Error.Record(
                         "PaydaySuper.Report",
                         "Invalid amount",
-                        "Column " & column & " must be blank or an en-AU number."
+                        "Column " & column & " must be blank or an en-AU fixed decimal with at most four decimal places."
                     )
                 else parsed[Value],
         AmountTyped = List.Accumulate(
@@ -262,12 +267,19 @@ let
             (state as table, column as text) as table =>
                 Table.TransformColumns(
                     state,
-                    {{column, each ParseAmount(_, column), type nullable number}}
+                    {{column, each ParseAmount(_, column), Currency.Type}}
                 )
         ),
         // Force producer amount validation before a caller can count or join
         // the table without touching each amount column.
-        Buffered = Table.Buffer(AmountTyped),
+        BufferedAmounts = Table.Buffer(AmountTyped),
+        Buffered = if Table.IsEmpty(Table.SelectRowsWithErrors(BufferedAmounts, AmountHeaders)) then
+            BufferedAmounts
+            else error Error.Record(
+                "PaydaySuper.Report",
+                "Invalid amount",
+                "Producer amounts must be blank or fixed decimals with at most four decimal places."
+            ),
         Result = Table.RemoveColumns(Buffered, {"__source_index"}),
         // Metadata record fields are lazy in M. Make ordinary table use depend
         // on the provenance text so absent or malformed provenance cannot be

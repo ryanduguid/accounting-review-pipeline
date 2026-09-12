@@ -1,7 +1,7 @@
 # Local-file monthly close loop. No Xero OAuth.
 #
 # 1. close-control review of the co-located Elizabeth Anne Alexander same-FY
-#    sample TBs into outputs/gateway-tb-loop (relative to this package).
+#    sample TBs into close-control-demo/gateway-tb-loop in the checkout's parent.
 # 2. elizabeth-anne-alexander evaluate against that package's bundled samples/
 #    context, if the CLI is on PATH or importable. Context is never this package's
 #    examples/ (the Varrock June/July pair crosses the 1 July FY reset).

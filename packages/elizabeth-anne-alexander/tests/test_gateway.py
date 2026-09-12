@@ -1279,3 +1279,18 @@ def test_the_run_id_moves_when_only_the_source_manifest_changes(tmp_path: Path, 
             path.write_bytes(originals[path])
 
     assert moved["run_id"] != baseline_run_id
+
+
+@pytest.mark.parametrize("field,value", [
+    ("account_id", 7), ("account_code", []), ("account_name", None),
+    ("current_values", 1), ("prior_values", {}),
+    ("current_values", {"debit": 0.1, "credit": "0", "ytd_debit": "0", "ytd_credit": "0"}),
+    ("current_values", {"debit": "NaN", "credit": "0", "ytd_debit": "0", "ytd_credit": "0"}),
+    ("source_refs", "source:current"), ("source_refs", ["source:unknown"]),
+    ("source_refs", ["source:current", "source:current"]),
+])
+def test_malformed_resealed_evidence_is_refused(field, value, tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    paths = _resealed_run(tmp_path, evidence_edit=lambda evidence: evidence["items"][0].__setitem__(field, value))
+    with pytest.raises(GatewayError):
+        _validate(paths)

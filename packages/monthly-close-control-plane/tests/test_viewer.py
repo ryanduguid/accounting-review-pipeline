@@ -59,7 +59,7 @@ def _pack(status: str = "REVIEW", *, with_acknowledgement: bool = False) -> Clos
         else None
     )
     return CloseReviewPack(
-        status="REVIEW",
+        status=status,
         current_report_dates=("2026-07-31",),
         prior_report_dates=("2026-06-30",),
         source_hashes={"current_trial_balance": "a" * 64, "prior_trial_balance": "b" * 64},
@@ -1016,7 +1016,7 @@ def test_blocked_pack_renders_blocked_state(tmp_path: Path) -> None:
     sheet, _ = render_review_sheet(output)
     assert "[1] BLOCKED subledger_reconciliation" in sheet
     document = _read_json(output)
-    assert document["overall_status"] == "REVIEW"
+    assert document["overall_status"] == "BLOCKED"
 
 
 # --- malformed encodings ----------------------------------------------------

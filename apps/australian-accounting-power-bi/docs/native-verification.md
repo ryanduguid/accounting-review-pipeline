@@ -86,3 +86,19 @@ card interaction, every visual, every calculation group combination, statutory
 currency or production data. A blank aggregate is accepted only for an expected
 zero category; row-count assertions still require a populated result. Numeric
 differences greater than half a cent fail.
+
+## Review corrections, 12 September 2026
+
+Power BI Desktop 2.157.1354.0 refreshed a disposable copy of the corrected model
+based on commit `b2f340845b422b0a822b1b60cedd39d119a9fe32`. All four pages rendered.
+The native checks passed 192 financial assertions across 16 filter cases, eight
+ABN cases and nine fixed-decimal column checks.
+
+A fabricated budget value of `TBC` still loaded as blank after removing
+`returnErrorValuesAsNull`. Explicit error guards in all six CSV source expressions
+then rejected that value. Restoring the sample CSV allowed refresh to complete;
+the 192 financial assertions passed again. The committed `SampleFolder` remains
+blank. No production data or Power BI Service deployment was used.
+
+The final component suite passed 47 tests. The Microsoft report validator 0.1.4
+returned zero errors and warnings; Ruff and Mypy passed.

@@ -15,12 +15,16 @@ Import-Csv (Join-Path $samples 'sample-chart-of-accounts.csv') | ForEach-Object 
     $accounts[$_.AccountCode] = $_
 }
 $ledger = @(Import-Csv (Join-Path $samples 'sample-general-ledger.csv') | ForEach-Object {
+    if (-not $accounts.ContainsKey($_.AccountCode)) {
+        throw "Fabricated ledger account '$($_.AccountCode)' is missing from the chart of accounts."
+    }
+    $account = $accounts[$_.AccountCode]
     [pscustomobject]@{
         Entity = $_.EntityID
         Date = [datetime]::ParseExact($_.PostingDate, 'yyyy-MM-dd', $culture)
         Account = $_.AccountCode
-        Class = $accounts[$_.AccountCode].Class
-        SubClass = $accounts[$_.AccountCode].SubClass
+        Class = $account.Class
+        SubClass = $account.SubClass
         Net = [decimal]::Parse($_.Debit, $culture) - [decimal]::Parse($_.Credit, $culture)
     }
 })

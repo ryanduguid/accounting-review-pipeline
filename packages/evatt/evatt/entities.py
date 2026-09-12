@@ -379,10 +379,14 @@ def assign(entities: Sequence[Entity], value: str, kind: str, added: str) -> Ent
 
 def _git(subcommand: list[str], target: Path) -> int:
     """Run one local, offline git query about *target* and return its exit code."""
+    environment = os.environ.copy()
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+                 "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
+        environment.pop(name, None)
     try:
         return subprocess.run(
             ["git", *subcommand, "--", target.name],
-            cwd=target.parent, capture_output=True, timeout=30, check=False
+            cwd=target.parent, env=environment, capture_output=True, timeout=30, check=False
         ).returncode
     except (OSError, subprocess.TimeoutExpired) as error:
         raise EvattError(

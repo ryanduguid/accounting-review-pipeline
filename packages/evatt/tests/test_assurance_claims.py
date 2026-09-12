@@ -36,19 +36,10 @@ def test_public_docs_state_the_residual_risk() -> None:
         assert "residual risk is contextual re-identification" in normalise(document)
 
 
-def test_readme_keeps_the_two_disclosures_that_flatter_nobody() -> None:
-    """The honest detail is the first thing a tidying edit drops.
-
-    Both are behaviours an operator only finds out about by being bitten:
-    the BSB pattern fires on any hyphenated three-three digit pair, so
-    Australian GL account codes produce BSB placeholders, and ``verify``
-    prints what it found, so a full tax file number can land in a shell
-    recording. Neither is a defect the package can fix, which is exactly why
-    the README has to keep saying so.
-    """
+def test_readme_describes_bsb_false_positives_and_private_verify_output() -> None:
     readme = normalise(README)
     assert "410-100" in readme
-    assert "prints the values it found" in readme
+    assert "prints finding kinds and locations, without detected values" in readme
 
 
 def test_the_readme_states_the_sign_off_gate() -> None:

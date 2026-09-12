@@ -97,21 +97,21 @@ table Fact_PayrollSuper
 		sourceColumn: PayDate
 
 	column GrossEarnings
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: stp-col-0006
 		summarizeBy: sum
 		sourceColumn: GrossEarnings
 
 	column QualifyingEarnings_CodeQ
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: stp-col-0007
 		summarizeBy: sum
 		sourceColumn: QualifyingEarnings_CodeQ
 
 	column SuperLiability_CodeL
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: stp-col-0008
 		summarizeBy: sum
@@ -157,14 +157,14 @@ table Fact_PayrollSuper
 		sourceColumn: ComplianceStatus
 
 	column SGC_Shortfall
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: stp-col-0015
 		summarizeBy: sum
 		sourceColumn: SGC_Shortfall
 
 	column GIC_NominalInterest
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: stp-col-0016
 		summarizeBy: sum

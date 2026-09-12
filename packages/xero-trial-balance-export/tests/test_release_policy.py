@@ -1,5 +1,6 @@
 """The active release caller is the shared Python policy with a caller-side PyPI job."""
 
+import re
 from pathlib import Path
 import unittest
 
@@ -33,7 +34,10 @@ class ReleasePolicyTests(unittest.TestCase):
         self.assertNotIn("version-parser:", release_job)
 
     def test_pypi_publishes_only_the_exact_attested_distribution(self) -> None:
-        pypi_job = self.workflow().split("  pypi:\n", 1)[1]
+        sections = re.split(r"(?m)^  ([A-Za-z_][\w-]*):\s*$", self.workflow().split("jobs:\n", 1)[1])
+        jobs = dict(zip(sections[1::2], sections[2::2]))
+        self.assertEqual([name for name, body in jobs.items() if "pypa/gh-action-pypi-publish@" in body], ["pypi"])
+        pypi_job = jobs["pypi"]
         self.assertIn("needs: release", pypi_job)
         self.assertIn("name: pypi-xero-trial-balance-export", pypi_job)
         self.assertIn("id-token: write", pypi_job)

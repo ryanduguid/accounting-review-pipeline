@@ -168,6 +168,23 @@ class RetryAfterTests(unittest.TestCase):
 
 
 class ApiGet429Test(unittest.TestCase):
+    def test_forced_refresh_response_still_obeys_the_rate_limit(self):
+        for delay in ("2", str(xero_client.RETRY_AFTER_MAX + 1)):
+            with self.subTest(delay=delay), \
+                 mock.patch.object(xero_client.requests, "get", side_effect=[
+                     _Response(401), _Response(429, headers={"Retry-After": delay}),
+                     _Response(200, payload={"ok": True}),
+                 ]) as get, mock.patch.object(xero_client.time, "sleep") as sleep:
+                if delay == "2":
+                    self.assertEqual(xero_client.api_get("https://example.invalid", ("id", "secret")), {"ok": True})
+                    sleep.assert_called_once_with(2)
+                    self.assertEqual(get.call_count, 3)
+                else:
+                    with self.assertRaisesRegex(SystemExit, "cap"):
+                        xero_client.api_get("https://example.invalid", ("id", "secret"))
+                    sleep.assert_not_called()
+                    self.assertEqual(get.call_count, 2)
+
     def setUp(self):
         patcher = mock.patch.object(
             xero_client, "get_access_token", return_value="tok"

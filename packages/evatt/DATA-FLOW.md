@@ -52,7 +52,7 @@ shipped file only satisfies it here.
 
 `restore --out` is not guarded. It writes real names to an operator-chosen path
 that can be anywhere, so no rule the package could name would cover it. Keeping
-that path out of a commit is the operator's.
+that path out of a commit is the operator's responsibility.
 
 ## 6. Limits
 
