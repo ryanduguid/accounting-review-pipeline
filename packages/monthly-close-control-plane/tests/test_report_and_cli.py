@@ -1171,7 +1171,7 @@ def test_a_relative_path_climbing_into_a_checkout_is_refused(
 ) -> None:
     """The path is resolved first, so `..` segments and a working directory
     cannot walk a pack back into a repository the literal argument never named."""
-    checkout = _fake_checkout(tmp_path / "firm-repo")
+    _fake_checkout(tmp_path / "firm-repo")
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     monkeypatch.chdir(outside)

@@ -51,17 +51,6 @@ def snapshot_file(path: Path, *, label: str = "source file") -> FileSnapshot:
     return _snapshot_file(path, label=label, missing_is_unreadable=True)
 
 
-def sha256_file(path: Path, *, label: str = "source file") -> str:
-    """Digest a file, converting a filesystem failure the way load_json_object does.
-
-    path_within only guarantees the resolved path exists and is contained; it
-    cannot say the name is a readable file. A manifest naming a directory must
-    stay inside the fail-closed contract rather than escape as a traceback that
-    prints the local filesystem layout.
-    """
-    return snapshot_file(path, label=label).sha256
-
-
 def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 

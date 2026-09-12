@@ -12,7 +12,8 @@ import pytest
 
 from elizabeth_anne_alexander import __version__
 from elizabeth_anne_alexander.errors import GatewayError
-from elizabeth_anne_alexander.gateway import ALLOWED_DECISIONS, MODEL_PROJECTION, BalanceRow, _assert_model_is_redacted, _iso_timestamp, _load_tb, _variance_findings, evaluate, validate_review, write_evaluation
+from elizabeth_anne_alexander.gateway import ALLOWED_DECISIONS, MODEL_PROJECTION, BalanceRow, _assert_model_is_redacted, _iso_timestamp, _load_tb, _variance_findings, evaluate, validate_review
+from elizabeth_anne_alexander.persist import write_evaluation
 from elizabeth_anne_alexander.util import canonical_json, package_root, sha256_bytes
 
 PKG = Path(__file__).resolve().parents[1] / "elizabeth_anne_alexander"

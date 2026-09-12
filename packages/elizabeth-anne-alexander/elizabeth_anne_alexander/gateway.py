@@ -694,5 +694,3 @@ def validate_review(*, evidence_path: Path, receipt_path: Path, decision_path: P
         "limitation": "Validation records a structurally valid human decision; it does not approve, resolve, post, pay, lodge, or lock anything.",
     }
 
-
-from .persist import write_evaluation
