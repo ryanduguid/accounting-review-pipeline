@@ -300,7 +300,7 @@ def validated_connections(value: object) -> list[dict]:
             raise SystemExit(f"error: Xero connection {index} is not an object.")
         for field in ("tenantId", "tenantName"):
             text = item.get(field)
-            if not isinstance(text, str) or not text.strip() or any(ord(char) < 32 or ord(char) == 127 for char in text):
+            if not isinstance(text, str) or not text.strip() or any(unicodedata.category(char) == "Cc" for char in text):
                 raise SystemExit(f"error: Xero connection {index} has an invalid {field}.")
         result.append(item)
     return result

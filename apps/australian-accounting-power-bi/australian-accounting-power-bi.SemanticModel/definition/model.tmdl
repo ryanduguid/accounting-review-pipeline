@@ -5,7 +5,6 @@ model Model
 	sourceQueryCulture: en-AU
 	dataAccessOptions
 		legacyRedirects
-		returnErrorValuesAsNull
 
 annotation __PBI_TimeIntelligenceEnabled = 0
 annotation PBIDesktopVersion = 2.138.1452.0 (24.11)

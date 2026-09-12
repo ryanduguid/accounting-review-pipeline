@@ -612,3 +612,14 @@ def test_the_shipped_sample_map_holds_no_two_values_that_fold_together() -> None
     loaded = entities.load(sample)
     folds = [entities._fold(entity.value) for entity in loaded]
     assert len(set(folds)) == len(folds)
+
+
+@git_required
+def test_git_guard_ignores_inherited_repository_selection(tmp_path, monkeypatch) -> None:
+    target = new_repo(tmp_path, "entities.json\n")
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    git(foreign, "init", "-q")
+    monkeypatch.setenv("GIT_DIR", str(foreign / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(foreign))
+    entities.require_gitignored(target)

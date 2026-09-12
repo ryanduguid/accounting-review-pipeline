@@ -243,7 +243,10 @@ def test_verify_reports_findings_with_exit_two(tmp_path, capsys) -> None:
     shutil.copy(SAMPLES / "identifiers.md", root / "raw.md")
     code = main(["verify", "--in", str(root / "raw.md"), "--map", str(root / "entities.json")])
     assert code == 2
-    assert "tfn" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "tfn: line " in output
+    assert "123 456 782" not in output
+    assert "2123 45670" not in output
 
 
 def test_a_missing_input_file_is_exit_one(tmp_path) -> None:

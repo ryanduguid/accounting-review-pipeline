@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from test_workflow_examples import _load_workflow
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -18,7 +19,7 @@ def _workflow_text() -> str:
 def test_release_is_triggered_only_by_namespaced_tags() -> None:
     workflow = _workflow_text()
 
-    assert 'tags:\n      - "monthly-close-control-plane/v*"' in workflow
+    assert _load_workflow(workflow)["on"] == {"push": {"tags": ["monthly-close-control-plane/v*"]}}
     assert "workflow_dispatch:" not in workflow
     assert "inputs.tag" not in workflow
     assert "group: release-${{ github.repository }}-${{ github.ref_name }}" in workflow

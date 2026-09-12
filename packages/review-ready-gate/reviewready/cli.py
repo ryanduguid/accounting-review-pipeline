@@ -104,7 +104,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         if source.is_dir():
-            for child in source.iterdir():
+            try:
+                children = list(source.iterdir())
+            except OSError as exc:
+                print(f"review-ready: input error: cannot inspect {flag}: {exc}", file=sys.stderr)
+                return 1
+            for child in children:
                 if child.resolve() in destinations:
                     print(
                         f"review-ready: output error: {flag} contains {child.name}, which "

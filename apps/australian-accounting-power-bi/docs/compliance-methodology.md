@@ -39,7 +39,7 @@ Where a contribution is not received in time, the SG charge for the qualifying e
 Every late event in `samples/sample-payroll-super.csv` records a fund receipt date, so each one models a contribution that **reached the fund before any assessment**. Under **SGAA s 18D** that reduces the individual final SG shortfall to nil, leaving only notional earnings and the administrative uplift on them. The modelled `SGC_Shortfall` is therefore small relative to the underlying liability, and that is the correct result rather than an understatement.
 
 The offset applies only where the fund receipt date is **strictly after** the due day. A contribution that arrived by the due day was never a shortfall and must not be allowed to offset a real one. The fixtures do not model an employer who never pays, so they do not exercise the case where the full shortfall stands at assessment.
-- **Tax Deductibility**: Under the amended regime, statutory SG charges are tax-deductible.
+- **Tax Deductibility**: SG charge relating to QE days from 1 July 2026 is deductible under the amended regime. Schedule 1 item 80 of the [Treasury Laws Amendment (Payday Superannuation) Act 2025](https://www.legislation.gov.au/C2025A00057/asmade/2025-11-06/text/original/epub/OEBPS/document_1/document_1.html) repealed ITAA 1997 s 26-95. The transitional provisions preserve the earlier law for pre-commencement quarters; this statement does not extend to those charges or separate penalties.
 
 ---
 

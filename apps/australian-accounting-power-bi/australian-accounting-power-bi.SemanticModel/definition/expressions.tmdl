@@ -20,7 +20,9 @@ expression Source_Dim_Account = ```
 	        {"SortOrder", Int64.Type}
 	    })
 	in
-	    TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    else error Error.Record("Source_Dim_Account", "Invalid source values",
+	        "Correct the source CSV before refreshing the model.")
 	```
 
 expression Dim_Date_AU = ```
@@ -80,7 +82,9 @@ expression Source_Dim_Entity = ```
 	        {"ConsolidationWeight", type number}
 	    })
 	in
-	    TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    else error Error.Record("Source_Dim_Entity", "Invalid source values",
+	        "Correct the source CSV before refreshing the model.")
 	```
 
 expression Source_Fact_ATOBenchmark = ```
@@ -113,7 +117,9 @@ expression Source_Fact_ATOBenchmark = ```
 	    LowerBound = Table.AddColumn(TypedTable, "TurnoverLowerBound", each ParseAmount(Text.BeforeDelimiter([TurnoverRange], "-")), Int64.Type),
 	    UpperBound = Table.AddColumn(LowerBound, "TurnoverUpperBound", each ParseAmount(Text.AfterDelimiter([TurnoverRange], "-")), Int64.Type)
 	in
-	    UpperBound
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(UpperBound)) then UpperBound
+	    else error Error.Record("Source_Fact_ATOBenchmark", "Invalid source values",
+	        "Correct the source CSV before refreshing the model.")
 	```
 
 expression Source_Fact_Budget = ```
@@ -126,10 +132,12 @@ expression Source_Fact_Budget = ```
 	        {"PeriodDate", type date},
 	        {"EntityID", type text},
 	        {"AccountCode", type text},
-	        {"BudgetAmount", type number}
+	        {"BudgetAmount", Currency.Type}
 	    })
 	in
-	    TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    else error Error.Record("Source_Fact_Budget", "Invalid source values",
+	        "Correct the source CSV before refreshing the model.")
 	```
 
 expression Source_Fact_GeneralLedger = ```
@@ -145,15 +153,17 @@ expression Source_Fact_GeneralLedger = ```
 	        {"PostingDate", type date},
 	        {"EntityID", type text},
 	        {"AccountCode", type text},
-	        {"Debit", type number},
-	        {"Credit", type number},
-	        {"Amount", type number},
+	        {"Debit", Currency.Type},
+	        {"Credit", Currency.Type},
+	        {"Amount", Currency.Type},
 	        {"Description", type text},
 	        {"IntercompanyEntityID", type text},
 	        {"IsIntercompany", type logical}
 	    })
 	in
-	    TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    else error Error.Record("Source_Fact_GeneralLedger", "Invalid source values",
+	        "Correct the source CSV before refreshing the model.")
 	```
 
 expression Source_Fact_PayrollSuper = ```
@@ -169,20 +179,22 @@ expression Source_Fact_PayrollSuper = ```
 	        {"EntityID", type text},
 	        {"EmployeeName", type text},
 	        {"PayDate", type date},
-	        {"GrossEarnings", type number},
-	        {"QualifyingEarnings_CodeQ", type number},
-	        {"SuperLiability_CodeL", type number},
+	        {"GrossEarnings", Currency.Type},
+	        {"QualifyingEarnings_CodeQ", Currency.Type},
+	        {"SuperLiability_CodeL", Currency.Type},
 	        {"SuperFundUSI", type text},
 	        {"SuperFundName", type text},
 	        {"RemittanceDate", type date},
 	        {"FundReceiptDate", type date},
 	        {"StatutoryDueDate", type date},
 	        {"ComplianceStatus", type text},
-	        {"SGC_Shortfall", type number},
-	        {"GIC_NominalInterest", type number}
+	        {"SGC_Shortfall", Currency.Type},
+	        {"GIC_NominalInterest", Currency.Type}
 	    })
 	in
-	    TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    else error Error.Record("Source_Fact_PayrollSuper", "Invalid source values",
+	        "Correct the source CSV before refreshing the model.")
 	```
 
 expression Fx_ValidateABN = ```
@@ -197,9 +209,11 @@ expression Fx_ValidateABN = ```
 	let
 	    ValidateABN = (abnInput as any) as logical =>
 	    let
-	        RawText = Text.Select(Text.From(abnInput), {"0".."9"}),
+	        RawText = try Text.Remove(Text.From(abnInput), {" ", "-"}) otherwise "",
 	        Weights = {10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19},
-	        IsValid = if Text.Length(RawText) <> 11 then
+	        IsValid = if RawText = null or Text.Length(RawText) <> 11
+	            or Text.Select(RawText, {"0".."9"}) <> RawText
+	            or Text.StartsWith(RawText, "0") then
 	            false
 	        else
 	            let

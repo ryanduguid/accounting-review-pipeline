@@ -124,10 +124,8 @@ an extra placeholder costs a triage decision while a miss leaks.
   general ledger account code written `410-100` is therefore replaced with a
   BSB placeholder, and a real workpaper contains a great many of them. The
   manifest counts will look wrong until you read them that way.
-- **`verify` prints the values it found to the terminal.** That is what makes
-  it useful in front of someone else, and it also means a full tax file number
-  can land in a shell recording, a scrollback buffer or a CI log. Run it where
-  the output is as private as the document.
+- **`verify` prints finding kinds and locations, without detected values.**
+  Inspect the source document privately to review each finding.
 - **`verify` re-runs the same detection over the output.** It is not a second,
   independent detector. It catches redaction applied wrongly, a file redacted
   against a different map, a half-redacted file and an output edited by hand.

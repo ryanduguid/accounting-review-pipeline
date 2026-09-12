@@ -69,6 +69,32 @@ class TestPowerQueryM(unittest.TestCase):
         self.assertIn("Number.Mod", content)
         self.assertIn("89", content)
 
+    def test_abn_validator_refuses_unapproved_characters(self) -> None:
+        content = named_expressions()["Fx_ValidateABN"]
+        self.assertIn('Text.Remove(Text.From(abnInput), {" ", "-"})', content)
+        self.assertIn('Text.Select(RawText, {"0".."9"}) <> RawText', content)
+
+    def test_csv_imports_raise_cell_errors_before_model_loading(self) -> None:
+        for name, content in named_expressions().items():
+            if name.startswith("Source_"):
+                with self.subTest(expression=name):
+                    self.assertIn("Table.SelectRowsWithErrors(", content)
+                    self.assertIn('error Error.Record("' + name + '"', content)
+
+    def test_financial_imports_use_fixed_decimal_columns(self) -> None:
+        expressions = named_expressions()
+        for name, columns in {
+            "Source_Fact_Budget": ["BudgetAmount"],
+            "Source_Fact_GeneralLedger": ["Debit", "Credit", "Amount"],
+            "Source_Fact_PayrollSuper": ["GrossEarnings", "QualifyingEarnings_CodeQ",
+                "SuperLiability_CodeL", "SGC_Shortfall", "GIC_NominalInterest"],
+        }.items():
+            for column in columns:
+                with self.subTest(expression=name, column=column):
+                    self.assertIn('{"' + column + '", Currency.Type}', expressions[name])
+        model = EXPRESSIONS_FILE.with_name("model.tmdl").read_text(encoding="utf-8")
+        self.assertNotIn("returnErrorValuesAsNull", model)
+
     def test_sample_entity_abns_pass_the_shipped_checksum(self) -> None:
         """Run Fx_ValidateABN's own weights over every ABN in the entity master.
 

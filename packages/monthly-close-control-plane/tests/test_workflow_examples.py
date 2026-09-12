@@ -230,7 +230,10 @@ def _validate_uses(
         if not isinstance(value, str):
             errors.append(f"{label} uses value must be a string")
             continue
-        if value.startswith("./") or WHOLE_EXPRESSION.fullmatch(value):
+        if value.startswith("./"):
+            errors.append(f"{label} local action has not been reviewed")
+            continue
+        if WHOLE_EXPRESSION.fullmatch(value):
             continue
         match = PINNED_ACTION.fullmatch(value)
         if not match:
@@ -653,8 +656,12 @@ def test_yaml_reference_characters_in_scalar_text_are_allowed(suffix: str) -> No
         "      - {'uses': '${{ matrix.action }}'}\n",
     ],
 )
-def test_local_actions_and_whole_value_expressions_are_allowed(step: str) -> None:
-    _assert_workflow(_secure_workflow() + step)
+def test_only_whole_value_expressions_are_allowed_without_a_pin(step: str) -> None:
+    if "./local-action" in step:
+        with pytest.raises(AssertionError, match="local action"):
+            _assert_workflow(_secure_workflow() + step)
+    else:
+        _assert_workflow(_secure_workflow() + step)
 
 
 @pytest.mark.parametrize(
@@ -836,3 +843,8 @@ def test_workflow_package_version_must_match_project_version() -> None:
 def test_safety_control_mutations_are_rejected(old: str, new: str) -> None:
     with pytest.raises(AssertionError):
         _assert_workflow(_secure_workflow().replace(old, new))
+
+
+def test_unreviewed_local_action_is_rejected() -> None:
+    with pytest.raises(AssertionError, match="local action"):
+        _assert_workflow(_secure_workflow() + "      - uses: ./.github/actions/unreviewed\n")

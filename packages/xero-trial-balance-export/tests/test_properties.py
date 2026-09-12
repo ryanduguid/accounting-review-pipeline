@@ -65,6 +65,13 @@ class ExactMoneyProperties(unittest.TestCase):
 
                 out_rows, totals = build_rows(rows, tenant, "2026-06-30")
 
+                by_id = {row["AccountID"]: row for row in out_rows}
+                self.assertEqual(set(by_id), {row["AccountID"] for row in rows})
+                for source in rows:
+                    actual = by_id[source["AccountID"]]
+                    for output, input_name in (("Debit", "Debit"), ("Credit", "Credit"),
+                                               ("YTDDebit", "YTD Debit"), ("YTDCredit", "YTD Credit")):
+                        self.assertEqual(to_number(actual[output]), Decimal(source[input_name]))
                 self.assertEqual(totals, (expected, expected, expected * 3, expected * 3))
                 self.assertEqual(
                     sum((to_number(row["Debit"]) for row in out_rows), Decimal("0")),

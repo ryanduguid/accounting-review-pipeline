@@ -78,7 +78,7 @@ the cost of being wrong. Rework anything here that reads wrong.
 - Unknown.context is an unbounded whole line, so a wide table row carries a lot of raw client text into the triage file.
 - verify imports the private _PREFIX from entities. Justified in a comment as drift-proofing.
 - an entity whose value is itself a structured identifier is reported twice by verify, once as the identifier kind and once as the entity kind. Over-detection.
-- verify prints the real values it found to the terminal, so a TFN can land in a shell recording or CI log. To be noted in the Task 9 README.
+- Resolved 12 September 2026: verify prints finding kinds and locations without detected values. Task 9 README guidance now describes this behaviour.
 - the strict= source tripwire in test_cli.py is defeatable by spacing.
 - --out naming a directory raises rather than exiting 1.
 - Unknown.context is still an unbounded whole line in the triage file, now always post-redaction.

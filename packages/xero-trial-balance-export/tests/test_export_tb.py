@@ -1676,3 +1676,16 @@ class AbsurdMagnitudeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConnectionControlCharactersTest(unittest.TestCase):
+    def test_c1_controls_are_refused_but_nonbreaking_space_is_allowed(self):
+        from export_tb import validated_connections
+        for field in ("tenantId", "tenantName"):
+            for char in ("\x80", "\x85", "\x9f"):
+                with self.subTest(field=field, char=ord(char)):
+                    row = {"tenantId": "fabricated-id", "tenantName": "Fabricated tenant"}
+                    row[field] += char
+                    with self.assertRaises(SystemExit):
+                        validated_connections([row])
+        self.assertEqual(len(validated_connections([{"tenantId": "id", "tenantName": "Fabricated\u00a0tenant"}])), 1)

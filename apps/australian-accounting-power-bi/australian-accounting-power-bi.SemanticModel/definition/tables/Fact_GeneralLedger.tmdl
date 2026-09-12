@@ -172,21 +172,21 @@ table Fact_GeneralLedger
 		sourceColumn: AccountCode
 
 	column Debit
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: gl-col-0006
 		summarizeBy: sum
 		sourceColumn: Debit
 
 	column Credit
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: gl-col-0007
 		summarizeBy: sum
 		sourceColumn: Credit
 
 	column Amount
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: gl-col-0008
 		summarizeBy: sum

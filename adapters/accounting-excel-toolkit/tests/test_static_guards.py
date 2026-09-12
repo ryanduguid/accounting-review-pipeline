@@ -281,11 +281,11 @@ class NativeExcelAcceptanceSafetyTests(unittest.TestCase):
         self.assertIn("attempt[Error][Detail]", source)
         self.assertIn('Text.Contains(detail, "CSV record 3")', source)
         self.assertIn(
-            "$expectedChildCount = if ($childSet -eq 'Core') { 46 } else { 26 }",
+            "$expectedChildCount = if ($childSet -eq 'Core') { 53 } else { 27 }",
             source,
         )
         self.assertIn("if ($childRows.Count -ne $expectedChildCount)", source)
-        self.assertIn("if ($rowCount -ne 72)", source)
+        self.assertIn("if ($rowCount -ne 80)", source)
         self.assertIn("foreach ($scaleRows in @(500, 5000, 10000))", source)
         self.assertIn("[Diagnostics.Stopwatch]::StartNew()", source)
         self.assertIn("ScaleRows = $scaleRows", source)
@@ -1591,7 +1591,7 @@ class XeroAgedReceivablesSafetyTests(unittest.TestCase):
                 r'let t = Text\.Trim\(Text\.From\(raw \?\? ""\)\) in\s*'
                 r'if t = "" then 0\s*'
                 r"else\s*"
-                r'try Number\.From\(t, "en-AU"\)\s*'
+                r'try Currency\.From\(t, "en-AU"\)\s*'
                 r"otherwise error Error\.Record\(\s*"
                 r'"Xero\.AgedReceivables",\s*'
                 r'"Amount is not a number",',
@@ -1607,7 +1607,7 @@ class XeroAgedReceivablesSafetyTests(unittest.TestCase):
         # reaches the message through a named parameter: the nested each this
         # replaced shadowed it with the cell value.
         self.assertIn(
-            "(columnName as text) => {columnName, parseAmount(columnName), type number}",
+            "(columnName as text) => {columnName, parseAmount(columnName), Currency.Type}",
             source,
         )
         # The silent-zero form cannot come back beside the parser.
@@ -1692,7 +1692,7 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
                 r'let t = Text\.Trim\(Text\.From\(raw \?\? ""\)\) in\s*'
                 r'if t = "" then 0\s*'
                 r"else\s*"
-                r'try Number\.From\(t, "en-AU"\)\s*'
+                r'try Currency\.From\(t, "en-AU"\)\s*'
                 r"otherwise error Error\.Record\(\s*"
                 r'"Xero\.AgedPayables",\s*'
                 r'"Amount is not a number",',
@@ -1708,7 +1708,7 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         # reaches the message through a named parameter: the nested each this
         # replaced shadowed it with the cell value.
         self.assertIn(
-            "(columnName as text) => {columnName, parseAmount(columnName), type number}",
+            "(columnName as text) => {columnName, parseAmount(columnName), Currency.Type}",
             source,
         )
         # The silent-zero form cannot come back beside the parser.

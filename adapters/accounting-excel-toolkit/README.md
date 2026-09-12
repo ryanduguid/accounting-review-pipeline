@@ -61,7 +61,17 @@ Facts read from the Excel exports of the Trial Balance and both aged summaries, 
 - Zero ageing buckets export as `0`, not blank. The aged summaries end with `Total`, a blank row and `Percentage of total`; the payables summary also wraps its suppliers in an `Aged Payables` section row (amount cells blank) closed by `Total Aged Payables`.
 - The Excel export mode was observed. The CSV export mode of the same reports has not been observed separately.
 
-After loading a TB, the first check is always: `Number.Abs(List.Sum(result[Debit]) - List.Sum(result[Credit])) < 0.005`, a tolerance, because the sums are IEEE doubles and exact `=` can fail on a genuinely balanced TB.
+After loading a TB, the first check is always a tie-out. Sum and subtract using decimal precision and require a difference strictly below half a cent:
+
+```powerquery
+Number.Abs(Value.Subtract(
+    List.Sum(result[Debit], Precision.Decimal),
+    List.Sum(result[Credit], Precision.Decimal),
+    Precision.Decimal
+)) < Currency.From("0.005")
+```
+
+The aged-summary and Payday Super adapters use `Currency.Type` (four decimal places). Payday Super refuses amounts with more fractional digits rather than rounding producer evidence.
 
 `PaydaySuper.Report` accepts the named, 18-column CSV producer contract from `payday-super-checker`; additional producer columns are ignored, but a renamed, missing or duplicate contract header raises an error. [`samples/sample-payday-super-report.csv`](samples/sample-payday-super-report.csv) is a wholly fabricated Payday Super report. It includes a leading-zero ID and a formula-like ID already escaped with an apostrophe so both remain text through the adapter.
 
@@ -99,7 +109,7 @@ Three layers check this repository, and each covers different ground:
 
 1. **Source as text.** M in `.pq` files, VBA in `.bas` files. Nothing lives only inside a binary workbook.
 2. **Exports are hostile input.** Parsers find the header row instead of assuming row counts, force account codes to text, and fail loudly when the format changed.
-3. **No client data, ever.** Fixtures are fabricated and follow the `samples/sample-*.csv` naming convention. The `.gitignore` allowlists only that pattern, so a real export dropped into `samples/` stays blocked. Real exports stay outside any repo.
+3. **No client data, ever.** Fixtures are fabricated and follow the `samples/sample-*.csv` naming convention. The `.gitignore` allowlists only the six reviewed fixture filenames, so a real export dropped into `samples/` stays blocked. Real exports stay outside any repo.
 
 ## Roadmap
 
@@ -122,6 +132,6 @@ Ryan Duguid, accountant in Newcastle NSW, provisional member of Chartered Accoun
 ## CI coverage
 
 The root [`accounting-excel-toolkit.yml`](../../.github/workflows/accounting-excel-toolkit.yml) runs static Python guards. `tools/native_excel_acceptance.ps1`
-(72 checks) and VBA end-to-end remain local Windows work. Power Query
+(80 checks) and VBA end-to-end remain local Windows work. Power Query
 behaviour is not executed on GitHub-hosted runners. Tagged releases call
 `ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA.

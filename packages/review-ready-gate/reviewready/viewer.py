@@ -19,11 +19,15 @@ import hashlib
 import io
 import json
 import re
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any, cast
 
+from .engine import ReadinessPack, _overall
 from .errors import GateInputError
-from .report import PACK_FILE_NAMES, REVIEW_BOUNDARY, _ABSENT, _md_cell
+from .models import Finding, ReviewerAcknowledgement, SourceEvidence
+from .report import PACK_FILE_NAMES, REVIEW_BOUNDARY, _ABSENT, _as_markdown, _md_cell
 
 _JSON_NAME = "readiness-pack.json"
 _SUMMARY_NAME = "readiness-summary.md"
@@ -107,6 +111,8 @@ def _load_artefact_bytes(pack_dir: Path) -> dict[str, bytes]:
             raise GateInputError(f"{name}: not found in {pack_dir}") from exc
         except IsADirectoryError as exc:
             raise GateInputError(f"{name}: expected a file, found a directory") from exc
+        except OSError as exc:
+            raise GateInputError(f"{name}: cannot read artefact: {exc}") from exc
     return payloads
 
 
@@ -493,6 +499,33 @@ def _read_csv_rows(payload: bytes) -> list[dict[str, str]]:
     ]
 
 
+def _canonical_pack(document: dict[str, object], summary_text: str) -> ReadinessPack:
+    """Rebuild the typed pack after schema and cross-file validation."""
+    data = cast(dict[str, Any], document)
+    ack = data["acknowledgement"]
+    try:
+        acknowledgement = None if ack is None else ReviewerAcknowledgement(
+            ack["reviewer_initials"], date.fromisoformat(ack["reviewed_on"]), ack["comment"]
+        )
+    except ValueError as exc:
+        raise GateInputError(f"{_JSON_NAME}: acknowledgement.reviewed_on is not a date") from exc
+    return ReadinessPack(
+        status=data["overall_status"], engagement_type=data["engagement_type"],
+        period_end=data["period_end"], preparer_initials=data["preparer_initials"],
+        findings=tuple(Finding(
+            code=item["code"], status=item["status"], slot=item["slot"],
+            reason=item["reason"], reviewer_action=item["reviewer_action"],
+            repeat=item["repeat"] == "true",
+        ) for item in data["findings"]),
+        # JSON sorts object keys, while the summary preserves the engine's slot order.
+        # Cross-file validation has already checked every source tuple.
+        source_evidence=tuple(SourceEvidence(slot, filename, digest)
+                              for slot, filename, digest in _SOURCE_EVIDENCE_LINE.findall(summary_text)),
+        tieout_tolerance=_parse_threshold(data["thresholds"]["tieout_tolerance"], "tieout_tolerance"),
+        acknowledgement=acknowledgement,
+    )
+
+
 def verify_pack(pack_dir: Path) -> tuple[
     dict[str, object],
     str,
@@ -514,6 +547,11 @@ def verify_pack(pack_dir: Path) -> tuple[
         raise GateInputError(f"{_SUMMARY_NAME}: not valid UTF-8") from exc
     csv_rows = _read_csv_rows(payloads[_CSV_NAME])
     _verify_cross_file_agreement(document, summary_text, csv_rows)
+    pack = _canonical_pack(document, summary_text)
+    if pack.status != _overall(list(pack.findings)):
+        raise GateInputError(f"{_JSON_NAME}: overall_status disagrees with the findings")
+    if summary_text.replace("\r\n", "\n") != _as_markdown(pack):
+        raise GateInputError(f"{_SUMMARY_NAME}: document does not match its canonical rendering")
     artefact_digests = {
         name: hashlib.sha256(payload).hexdigest() for name, payload in payloads.items()
     }

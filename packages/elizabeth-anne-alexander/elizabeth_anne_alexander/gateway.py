@@ -630,6 +630,22 @@ def validate_review(*, evidence_path: Path, receipt_path: Path, decision_path: P
     evidence_fields = {"finding_id", "account_id", "account_code", "account_name", "current_values", "prior_values", "source_refs"}
     if not isinstance(items, list) or not all(isinstance(item, dict) and set(item) == evidence_fields for item in items):
         raise GatewayError("Reviewer evidence items must be a list of objects with the exact evidence shape.")
+    for item in items:
+        for field in ("account_id", "account_name"):
+            _non_empty(item[field], field=f"evidence {field}")
+        _optional_text(item["account_code"], field="evidence account_code")
+        expected_refs = []
+        for period in ("current", "prior"):
+            values = item[f"{period}_values"]
+            if values is None:
+                continue
+            if not isinstance(values, dict) or set(values) != {"debit", "credit", "ytd_debit", "ytd_credit"}:
+                raise GatewayError(f"evidence {period}_values must contain the four monetary fields or be null.")
+            for field, value in values.items():
+                _decimal(value, field=f"evidence {period}_values.{field}")
+            expected_refs.append(f"source:{period}")
+        if not expected_refs or item["source_refs"] != expected_refs:
+            raise GatewayError("evidence source_refs must identify exactly the supplied current and prior values.")
     finding_ids = [_non_empty(item["finding_id"], field="evidence finding_id") for item in items]
     if len(finding_ids) != len(set(finding_ids)):
         raise GatewayError("Reviewer evidence contains duplicate finding IDs.")
