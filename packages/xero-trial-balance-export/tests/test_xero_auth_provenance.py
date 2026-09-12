@@ -14,8 +14,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Only the test working-directory paragraph changed; OAuth claims are unchanged.
-README_SHA256 = "EC5A3587851F88AF010C390B04A7B63562C802C7191503952F625C4ECE207742"
+# Only the badge line changed, adding the PyPI badge the sibling publishers
+# carry; the scope, refresh and reviewer paragraphs are unchanged.
+README_SHA256 = "3C1849023BC55F72C6F9194A6F7C7BF9C75E486201CC085F1791871087E0CD90"
 # Re-pinned for the widened ruff baseline: isort sorted the urllib.parse
 # names and separated requests from xero_client. SCOPES, every statement and
 # the OAuth claims are unchanged, and the AST digest is identical on 3.10
