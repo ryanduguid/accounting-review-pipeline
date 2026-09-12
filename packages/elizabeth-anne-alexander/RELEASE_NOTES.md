@@ -4,7 +4,7 @@ First maintained release from `packages/elizabeth-anne-alexander` in the
 Accounting Review Pipeline. Project, citation, security and workflow links
 now identify the canonical monorepo, and the namespaced release uses the
 shared attested Python policy. The no-network claim applies to this package,
-not to the monorepo's separate exporter. Runtime behavior, persisted schema
+not to the monorepo's separate exporter. Runtime behaviour, persisted schema
 identifiers, source contracts and fabricated fixtures are unchanged from v0.2.1.
 
 # v0.2.1
