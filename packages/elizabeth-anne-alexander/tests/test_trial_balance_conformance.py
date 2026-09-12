@@ -12,6 +12,11 @@ from elizabeth_anne_alexander.gateway import CANONICAL_COLUMNS, _load_tb
 REPO = Path(__file__).resolve().parents[1]
 CORPUS = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"
 CONTRACT = CORPUS / "expected_results.json"
+MONOREPO = REPO.parents[1]
+pytestmark = pytest.mark.skipif(
+    not (MONOREPO / ".git").exists() and not (MONOREPO / "IMPORTS.md").is_file(),
+    reason="joined contract checks require the monorepo source checkout",
+)
 
 
 def _json(path: Path) -> dict:

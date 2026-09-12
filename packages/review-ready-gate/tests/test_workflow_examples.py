@@ -73,14 +73,14 @@ def test_release_guidance_is_repo_specific_and_durable() -> None:
 def test_current_release_metadata_uses_immutable_documentation() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert metadata["project"]["version"] == "0.1.5"
+    assert metadata["project"]["version"] == "0.1.6"
     assert metadata["project"]["urls"]["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.5/"
+        f"{REPOSITORY_URL}/tree/review-ready-gate/v0.1.6/"
         "packages/review-ready-gate/evaluation/manager_review_gate"
     )
     assert (
         "| Workpaper Review Gate | `packages/review-ready-gate/` | distribution "
-        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.5 |"
+        "`review-ready-gate`, import `reviewready`, command `review-ready` | 0.1.6 |"
     ) in root_readme
 
 
@@ -101,12 +101,12 @@ def test_readme_development_uses_the_locked_uv_entrypoint() -> None:
 def test_citation_declares_the_current_release_identity() -> None:
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
     assert 'title: "Workpaper Review Gate"' in citation
-    assert "version: 0.1.5" in citation
+    assert "version: 0.1.6" in citation
     assert 'family-names: "Duguid"' in citation
     assert 'given-names: "Ryan"' in citation
     assert "license: MIT" in citation
     assert f'repository-code: "{PACKAGE_URL}"' in citation
-    assert "date-released: 2026-09-07" in citation
+    assert "date-released:" not in citation
 
 
 def test_project_identity_preserves_package_and_command_compatibility() -> None:
