@@ -1,0 +1,40 @@
+# Accounting Review Pipeline
+
+## Repository Overview
+- **Repository**: https://github.com/ryanduguid/accounting-review-pipeline
+- **Domain**: Local, deterministic month-end close review for Australian public practice, from a Xero trial-balance export through readiness gating, close controls and a ledger-review boundary.
+- **Shape**: Seven independently versioned components joined only by local files and commands. There is no root runtime package, shared library or unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint: `uv sync` then `just check` verifies a fresh clone from the top, and each component is still checked and released from its own directory.
+
+## Components
+| Component | Directory | Identity |
+|---|---|---|
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer |
+| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, commands `close-control` and `openaccountants-au` |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA), no Python distribution |
+| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release |
+| evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary |
+
+Each component carries its own `llms.txt` where one exists, plus its own README, version, lockfile, licence, release notes and release cadence.
+
+## Data Flow
+The exporter, or a manual Excel export, produces the ten-column Xero trial-balance file. The readiness gate decides whether a pack reaches review. Monthly close surfaces exceptions. The ledger-review boundary or Power BI consumes the result. evatt works separately: it pseudonymises markdown locally before an operator hands it to an external model, and it does not read trial balances.
+
+## Architectural Boundaries
+1. **One network producer.** Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is offline and ships fabricated data only.
+2. **Review, not authority.** A pack is deterministic evidence for a human reviewer. Nothing here approves a close, posts a journal, makes a payment, lodges a return or locks a period. An acknowledgement records that a human looked; it never changes a status.
+3. **Exact money in Python.** The Python review packages use `Decimal` arithmetic. The Excel adapter and the Power BI application use their native numeric types, including VBA `Double`, so that guarantee does not cover them.
+4. **Separate status domains.** Pack state means the Monthly Close `PackState` (`PASS`, `REVIEW`, `BLOCKED`). The readiness gate emits a separate `ReadinessStatus` (`READY`, `NOT_READY`, `BLOCKED`), and the ledger gateway uses result and receipt statuses rather than pack states.
+5. **One exit-code convention.** Exit `0` is the clean result, `2` is the reviewable or blocked result, and `1` is malformed input or an operational error.
+6. **One tag, one component.** Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`, through a root caller pinned to a reviewed Release Policy commit. The identity gate refuses a tag whose prefix does not equal the component directory leaf and its distribution name or archive stem.
+
+## Shared Contract
+`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned `xero-tb-csv.v1` corpus: the ten-column schema, three fabricated fixtures, the expected accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared runtime package. `tests/test_xero_trial_balance_contract.py` and the `joined-conformance.yml` workflow run the exporter runner and all three offline review implementations against it.
+
+## Repository Documents
+- `README.md`: the worked close example, the component table, the review-pack, status and exit-code contracts.
+- `CONTRIBUTING.md`: how to set up and verify a fresh clone, and the per-component commands CI runs.
+- `AGENTS.md`: the working rules for this repository, including the directory-naming rule the release identity gate depends on.
+- `IMPORTS.md`: source identities, tree digests, import records, release callers and publisher environments.
+- `SECURITY.md`: the security boundary and how to report a vulnerability.

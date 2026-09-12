@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
 import re
+from pathlib import Path, PurePosixPath
 
 import yaml
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
-
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]

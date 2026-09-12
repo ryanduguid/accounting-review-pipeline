@@ -4,7 +4,6 @@ from importlib.metadata import distribution
 from pathlib import Path
 
 import pytest
-
 from elizabeth_anne_alexander import __version__
 from elizabeth_anne_alexander.cli import main as cli_main
 

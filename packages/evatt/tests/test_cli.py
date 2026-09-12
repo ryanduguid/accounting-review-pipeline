@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from evatt import cli
 from evatt import entities as entities_module
 from evatt.cli import main

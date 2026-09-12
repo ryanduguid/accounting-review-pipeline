@@ -1,8 +1,8 @@
 """The active release caller is the shared Python policy with a caller-side PyPI job."""
 
 import re
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 MONOREPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = MONOREPO_ROOT / ".github" / "workflows" / "release-xero-trial-balance-export.yml"

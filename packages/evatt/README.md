@@ -4,6 +4,11 @@
 | --- | --- | --- |
 | `evatt` | `evatt` | `evatt` |
 
+evatt has never been released from this repository: no `evatt/v*` tag has
+been published and the distribution does not exist on PyPI, so the names above
+are the identifiers a release would use, and the way to run it today is
+`uv run --locked evatt ...` from `packages/evatt/` in a checkout.
+
 ## Scope and assurance boundary
 
 evatt performs **pseudonymisation with local key retention**. It replaces

@@ -3,11 +3,11 @@ import json
 import multiprocessing
 import os
 import stat
-from pathlib import Path
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
+from pathlib import Path
 from unittest import mock
 from unittest.mock import patch
 

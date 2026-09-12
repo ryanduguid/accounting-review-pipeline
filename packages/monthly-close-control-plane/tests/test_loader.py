@@ -5,7 +5,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from closecontrol.errors import (
     ControlInputError,
     DateMismatchError,
@@ -20,7 +19,6 @@ from closecontrol.loader import (
     load_subledger,
     parse_money,
 )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

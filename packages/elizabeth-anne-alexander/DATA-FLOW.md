@@ -17,7 +17,7 @@ or establish that input came from Xero.
 flowchart LR
     Source["Synthetic Xero-Shaped Trial Balance CSV"] --> Ingestion["Schema & Hash Validation"]
     Ingestion --> Sandbox["In-Memory Decimal Math Engine"]
-    Sandbox --> Split{"Artifact Splitter"}
+    Sandbox --> Split{"Artefact Splitter"}
     
     Split -->|Redacted Values Only| ModelArtifact["model-result.json<br/><i>(Bounded Review Values)</i>"]
     Split -->|Local Evidence Only| HumanArtifact["reviewer-evidence.json<br/><i>(For Human Review)</i>"]

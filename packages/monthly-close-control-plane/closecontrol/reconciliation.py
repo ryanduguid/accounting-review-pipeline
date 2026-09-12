@@ -12,7 +12,6 @@ from pathlib import Path
 from .errors import ControlInputError
 from .loader import SourceSnapshot, _read_csv_rows, _text, parse_money
 
-
 COLUMNS = ("Tenant", "AccountID", "Currency", "TransactionID", "Date", "Reference",
            "Description", "Debit", "Credit")
 DECISION_COLUMNS = ("Group", "TransactionID", "Decision", "Note")

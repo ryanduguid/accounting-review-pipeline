@@ -15,6 +15,7 @@
 ```
 
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/review-ready-gate.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/review-ready-gate/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
 
@@ -27,7 +28,7 @@ in the Accounting Review Pipeline. The `review-ready-gate` distribution,
 
 A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team, or an AI agent. It tells you whether that folder is allowed to enter manager review.
 
-A public evaluation pack reproduces the v0.1.1 manager-review result on fabricated BAS fixtures. It is a local review aid, not an approval system.
+A public evaluation pack reproduces the v0.1.5 manager-review result on fabricated BAS fixtures. It is a local review aid, not an approval system.
 
 ### Fabricated proof
 

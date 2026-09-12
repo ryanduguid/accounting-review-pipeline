@@ -3,9 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
-
 from closecontrol.cli import main
-
 
 COLUMNS = "Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit\n"
 

@@ -11,7 +11,6 @@ from unittest import mock
 
 from tools import render_quick_proof
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "samples" / "sample-output.csv"
 SVG = ROOT / "assets" / "quick-proof.svg"

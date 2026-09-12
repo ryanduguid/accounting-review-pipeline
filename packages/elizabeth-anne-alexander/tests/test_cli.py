@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from elizabeth_anne_alexander.cli import main
 
 EVALUATE = [

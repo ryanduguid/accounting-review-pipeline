@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MONOREPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
-from export_tb import check_balanced
+from export_tb import check_balanced  # noqa: E402  resolves only after the sys.path line above
 
 HEADER = [
     "ReportDate",

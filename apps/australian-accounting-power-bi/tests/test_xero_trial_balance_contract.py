@@ -4,7 +4,6 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-
 CONTRACT = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"
 HEADER = [
     "ReportDate",

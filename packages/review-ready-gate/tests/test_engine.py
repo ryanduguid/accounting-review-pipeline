@@ -4,7 +4,6 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from tests.support import EXAMPLES, copy_example_pack
 from reviewready.cli import main
 from reviewready.engine import review_pack
 from reviewready.models import (
@@ -13,6 +12,7 @@ from reviewready.models import (
     FINDING_PERIOD_ORDER,
     FINDING_SELF_REVIEW_INCOMPLETE,
 )
+from tests.support import EXAMPLES, copy_example_pack
 
 
 def test_empty_required_artefact_is_not_ready(tmp_path: Path) -> None:

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-from decimal import Context, Decimal, Inexact, Rounded, ROUND_UP, localcontext
+from decimal import ROUND_UP, Context, Decimal, Inexact, Rounded, localcontext
 from pathlib import Path
 
 import pytest
-
 from closecontrol.engine import review_close
 from closecontrol.errors import ControlInputError
 from closecontrol.loader import SourceSnapshot
-
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
@@ -89,8 +87,9 @@ def test_review_and_saved_pack_ignore_caller_decimal_settings(tmp_path, precisio
 
 
 def test_low_decimal_precision_cannot_hide_a_one_cent_imbalance(tmp_path):
-    from closecontrol.cli import main
     import json
+
+    from closecontrol.cli import main
 
     paths = {}
     for name, date, debit in [("current", "2026-08-31", "1000.01"),

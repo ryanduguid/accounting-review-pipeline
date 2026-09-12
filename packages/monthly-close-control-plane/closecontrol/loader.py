@@ -21,7 +21,6 @@ from .errors import (
 )
 from .models import ReviewerAcknowledgement, TrialBalanceRow
 
-
 CANONICAL_COLUMNS = (
     "ReportDate",
     "Tenant",

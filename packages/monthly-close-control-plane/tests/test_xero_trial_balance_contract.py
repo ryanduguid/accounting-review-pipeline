@@ -4,7 +4,6 @@ from pathlib import Path
 from closecontrol.engine import _integrity_exceptions
 from closecontrol.loader import load_canonical_tb
 
-
 CONTRACT = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"
 TENANT = "Catherby Fisheries Pty Ltd"
 

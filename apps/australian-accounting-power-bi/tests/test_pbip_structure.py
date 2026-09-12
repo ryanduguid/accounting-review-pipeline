@@ -9,7 +9,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parent.parent
 NAME = "australian-accounting-power-bi"
 MODEL = ROOT / f"{NAME}.SemanticModel"

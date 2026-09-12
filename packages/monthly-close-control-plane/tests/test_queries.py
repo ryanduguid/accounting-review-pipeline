@@ -6,7 +6,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from closecontrol.engine import review_close
 from closecontrol.errors import ControlInputError
 from closecontrol.models import ExceptionItem
@@ -15,7 +14,6 @@ from closecontrol.queries import (
     FIRM_RESOLVED_CONTROLS,
     derive_client_queries,
 )
-
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 

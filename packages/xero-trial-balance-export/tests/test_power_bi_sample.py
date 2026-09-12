@@ -13,7 +13,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 QUERY_PATH = ROOT / "samples" / "power-bi-query.pq"
 SAMPLE_PATH = ROOT / "samples" / "sample-output.csv"

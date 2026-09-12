@@ -47,6 +47,15 @@ on:
 permissions:
   contents: read
 
+# ci.yml's group pattern, with the component added. github.workflow in a
+# called workflow is the caller's name, so without the component every call
+# in the matrix would share one group with the caller and cancel the run it
+# belongs to. Keyed this way, a new push cancels only the superseded run of
+# that component.
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.package_dir }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   UV_VERSION: "0.12.0"
 

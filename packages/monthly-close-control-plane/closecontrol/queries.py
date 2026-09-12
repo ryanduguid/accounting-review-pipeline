@@ -20,7 +20,6 @@ import hashlib
 from .errors import ControlInputError
 from .models import ClientQuery, ExceptionItem
 
-
 # Controls whose exceptions never become a client query, and why. A control
 # absent from both this mapping and CLIENT_ANSWERABLE_CONTROLS is unclassified,
 # which _classify treats as firm-resolved: a new control raises no client

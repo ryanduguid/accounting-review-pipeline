@@ -19,14 +19,12 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from closecontrol.cli import main
 from closecontrol.engine import CloseReviewPack, review_close
 from closecontrol.errors import ControlInputError
 from closecontrol.models import ExceptionItem, ReviewerAcknowledgement
 from closecontrol.report import write_review_pack
 from closecontrol.viewer import PACK_FILE_NAMES, render_review_sheet, verify_pack
-
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 

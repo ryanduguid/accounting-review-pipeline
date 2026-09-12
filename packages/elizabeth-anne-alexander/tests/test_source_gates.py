@@ -17,11 +17,16 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from elizabeth_anne_alexander import gateway
 from elizabeth_anne_alexander.errors import GatewayError
-from elizabeth_anne_alexander.gateway import _load_context, _load_manifest, _load_policy, _load_request, _load_tb
-from elizabeth_anne_alexander.util import canonical_json, sha256_bytes, sha256_file
+from elizabeth_anne_alexander.gateway import (
+    _load_context,
+    _load_manifest,
+    _load_policy,
+    _load_request,
+    _load_tb,
+)
+from elizabeth_anne_alexander.util import canonical_json, sha256_bytes, snapshot_file
 
 PKG = Path(__file__).resolve().parents[1] / "elizabeth_anne_alexander"
 CURRENT_MANIFEST = "sample-tb-2026-06-30.manifest.json"
@@ -73,7 +78,7 @@ def _redate(root: Path, manifest_name: str, new_date: str) -> None:
     old_date = text.splitlines()[1].split(",")[0]
     csv_path.write_text(text.replace(old_date, new_date), encoding="utf-8")
     manifest["report"]["as_at"] = new_date
-    manifest["export"]["sha256"] = sha256_file(csv_path)
+    manifest["export"]["sha256"] = snapshot_file(csv_path).sha256
     _write(path, manifest)
 
 
@@ -203,7 +208,7 @@ def test_a_source_csv_the_csv_module_refuses_is_blocked_not_a_traceback(tmp_path
 
 def test_a_manifest_csv_that_cannot_be_read_is_blocked_not_a_traceback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The digest is taken before the CSV is parsed, so a manifest naming a
-    # directory fails in sha256_file, not in _load_tb.
+    # directory fails in snapshot_file, not in _load_tb.
     root = _sandbox(tmp_path, monkeypatch)
     path = _manifest_path(root, CURRENT_MANIFEST)
     manifest = _read(path)

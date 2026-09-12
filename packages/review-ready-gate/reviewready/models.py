@@ -5,7 +5,6 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-
 Status = Literal["READY", "NOT_READY", "BLOCKED"]
 FindingStatus = Literal["NOT_READY", "BLOCKED"]
 Severity = Literal["BLOCKING", "EXPLAIN", "TRIVIAL"]

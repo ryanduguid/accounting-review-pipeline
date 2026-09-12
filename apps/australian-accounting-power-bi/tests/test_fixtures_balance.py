@@ -45,9 +45,9 @@ class TestFixturesBalance(unittest.TestCase):
         self.assertGreater(len(journals), 0, "GL fixture must contain journals")
 
         for jid, lines in journals.items():
-            total_debit = round(sum(float(l["Debit"]) for l in lines), 2)
-            total_credit = round(sum(float(l["Credit"]) for l in lines), 2)
-            net_amount = round(sum(float(l["Amount"]) for l in lines), 2)
+            total_debit = round(sum(float(line["Debit"]) for line in lines), 2)
+            total_credit = round(sum(float(line["Credit"]) for line in lines), 2)
+            net_amount = round(sum(float(line["Amount"]) for line in lines), 2)
 
             self.assertEqual(
                 total_debit,

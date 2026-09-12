@@ -29,10 +29,18 @@ from datetime import date
 from decimal import Decimal, Inexact, InvalidOperation, localcontext
 
 import requests
+
 import xero_client
 from xero_client import REPLACE_ATTEMPTS, api_get, durable_replace, get_connections, load_dotenv
 
 REPORT_URL = "https://api.xero.com/api.xro/2.0/Reports/TrialBalance"
+
+# The exported header, in order. This module owns it: every other file that
+# needs the tuple imports it from here rather than restating it.
+CANONICAL_COLUMNS = (
+    "ReportDate", "Tenant", "Section", "AccountID", "AccountName", "AccountCode",
+    "Debit", "Credit", "YTDDebit", "YTDCredit",
+)
 
 # "Business Bank Account (090)" -> name + code
 ACCOUNT_PATTERN = re.compile(r"^(?P<name>.*?)\s*\((?P<code>[^()]+)\)\s*$")
@@ -532,10 +540,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
     durable_replace keeps the temp file and names it in the error instead
     of deleting it.
     """
-    fieldnames = [
-        "ReportDate", "Tenant", "Section", "AccountID", "AccountName", "AccountCode",
-        "Debit", "Credit", "YTDDebit", "YTDCredit",
-    ]
+    fieldnames = list(CANONICAL_COLUMNS)
 
     out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     # output_path accepts a nested relative --out ("exports/tb.csv") whose

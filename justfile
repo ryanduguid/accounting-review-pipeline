@@ -39,7 +39,8 @@ default:
 setup:
     uv sync
 
-# Run every component's test suite, then the joined trial-balance conformance test.
+# Run every component's test suite, then the joined trial-balance conformance
+# test and the root check on the blocks the two review packages each copy.
 test: setup
     #!/usr/bin/env bash
     set -euo pipefail
@@ -56,6 +57,8 @@ test: setup
     done
     echo "==> joined conformance"
     uv run --no-sync python -B -m unittest tests.test_xero_trial_balance_contract -v
+    echo "==> shared blocks"
+    uv run --no-sync python -B -m unittest tests.test_shared_blocks -v
 
 # Lint every Python component with Ruff.
 lint: setup
