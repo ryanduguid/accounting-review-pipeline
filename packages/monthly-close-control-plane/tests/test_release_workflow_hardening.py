@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-from test_workflow_examples import _load_workflow
 
+from test_workflow_examples import _load_workflow
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release-monthly-close-control-plane.yml"

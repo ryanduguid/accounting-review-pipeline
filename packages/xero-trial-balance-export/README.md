@@ -2,7 +2,7 @@
 
 ![xero-trial-balance-export](assets/banner.svg)
 
-[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
+[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/xero-trial-balance-export.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/xero-trial-balance-export/) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 
 Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. The four Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) handle consent, token refresh, the API request and CSV output.
 

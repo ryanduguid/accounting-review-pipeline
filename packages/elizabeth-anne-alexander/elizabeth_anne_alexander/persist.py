@@ -9,6 +9,7 @@ from typing import Any
 from .errors import GatewayError
 from .util import build_root, path_within
 
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

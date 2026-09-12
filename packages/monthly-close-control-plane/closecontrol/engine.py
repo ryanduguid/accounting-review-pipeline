@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date
-from decimal import Context, Decimal, DivisionByZero, InvalidOperation, ROUND_HALF_EVEN, localcontext
+from decimal import (
+    ROUND_HALF_EVEN,
+    Context,
+    Decimal,
+    DivisionByZero,
+    InvalidOperation,
+    localcontext,
+)
 from pathlib import Path
 
 from .errors import DateMismatchError, SchemaError
@@ -15,7 +22,6 @@ from .loader import (
 )
 from .models import ClientQuery, ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow
 from .queries import derive_client_queries
-
 
 ZERO = Decimal("0")
 

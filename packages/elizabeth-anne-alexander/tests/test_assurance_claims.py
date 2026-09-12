@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 DATA_FLOW = (ROOT / "DATA-FLOW.md").read_text(encoding="utf-8")

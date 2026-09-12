@@ -5,8 +5,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
-from tests.support import EXAMPLES, copy_example_pack
 from reviewready.engine import review_pack
 from reviewready.errors import (
     DateMismatchError,
@@ -24,6 +22,7 @@ from reviewready.loader import (
     parse_iso_date,
     parse_money,
 )
+from tests.support import EXAMPLES, copy_example_pack
 
 
 def _snapshot(path: Path) -> SourceSnapshot:

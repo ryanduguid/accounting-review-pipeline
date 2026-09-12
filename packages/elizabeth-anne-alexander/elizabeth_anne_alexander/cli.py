@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import TextIO
 
 from .errors import GatewayError
-from .gateway import evaluate, validate_review, write_evaluation
+from .gateway import evaluate, validate_review
+from .persist import write_evaluation
 from .util import build_root, path_within
 
 

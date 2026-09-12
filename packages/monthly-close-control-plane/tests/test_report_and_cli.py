@@ -12,7 +12,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from closecontrol.cli import main
 from closecontrol.engine import CloseReviewPack, review_close
 from closecontrol.errors import ControlInputError
@@ -20,7 +19,6 @@ from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
 from closecontrol.pipeline_cli import main as quarantined_main
 from closecontrol.report import CHECKOUT_MARKERS, _same_directory, write_review_pack
-
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
@@ -1171,7 +1169,7 @@ def test_a_relative_path_climbing_into_a_checkout_is_refused(
 ) -> None:
     """The path is resolved first, so `..` segments and a working directory
     cannot walk a pack back into a repository the literal argument never named."""
-    checkout = _fake_checkout(tmp_path / "firm-repo")
+    _fake_checkout(tmp_path / "firm-repo")
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     monkeypatch.chdir(outside)

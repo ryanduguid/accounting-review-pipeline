@@ -5,26 +5,21 @@ from __future__ import annotations
 import argparse
 import csv
 import html
+import sys
 from decimal import Decimal
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+# Run as a script, sys.path[0] is tools/, so the exporter has to be put on
+# the path before the module that owns the header can be imported.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from export_tb import CANONICAL_COLUMNS  # noqa: E402  needs the sys.path line above
+
 SAMPLE = ROOT / "samples" / "sample-output.csv"
 SVG = ROOT / "assets" / "quick-proof.svg"
 TRANSCRIPT = ROOT / "assets" / "quick-proof.md"
-EXPECTED_COLUMNS = (
-    "ReportDate",
-    "Tenant",
-    "Section",
-    "AccountID",
-    "AccountName",
-    "AccountCode",
-    "Debit",
-    "Credit",
-    "YTDDebit",
-    "YTDCredit",
-)
 
 
 def _money(value: Decimal) -> str:
@@ -38,7 +33,7 @@ def _summary() -> dict[str, str | int]:
         rows = list(reader)
     if not rows:
         raise ValueError("the fabricated sample has no account rows")
-    if columns != EXPECTED_COLUMNS:
+    if columns != CANONICAL_COLUMNS:
         raise ValueError("the fabricated sample has unexpected columns")
 
     tenants = {row["Tenant"] for row in rows}

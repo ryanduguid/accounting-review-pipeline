@@ -1,0 +1,25 @@
+# evatt
+
+## Package Overview
+- **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/evatt
+- **Distribution name**: `evatt`
+- **Python import**: `evatt`
+- **CLI command**: `evatt`, with the subcommands `redact`, `restore` and `verify`
+- **Domain**: Local pseudonymisation of Australian client data in markdown, so a document can be handed to an external model without the identifiers in it.
+- **Release state**: Never released from this repository. No `evatt/v*` tag exists, the distribution is not on PyPI, and `release-evatt.yml` carries no `pypi` job by design. It is run from a checkout.
+
+## Core Modules
+- `evatt.patterns`: Detection patterns and check digits for TFN, ABN, ACN, BSB and Medicare numbers, plus names, emails, phone numbers and the statutory vocabulary the residual sweep filters.
+- `evatt.entities`: The local entity map, real value to stable placeholder, with a kind (`client`, `person`, `staff` or `entity`) and the date it was added. Kept append-only; saved through an exclusively created temporary renamed over the map.
+- `evatt.redact`: The three passes. Structured identifiers by check digit, then known entities from the map, then a residual sweep that halts rather than guessing.
+- `evatt.restore`: Reverses the entity map over a model's answer. Named entities only.
+- `evatt.verify`: Re-scans an already sanitised file and reports every reason it is not clean, naming finding kinds and line numbers without printing detected values.
+- `evatt.cli`: `redact`, `restore` and `verify`, and the question every command asks git about the map before it runs.
+
+## Architectural Boundaries
+1. **No network client.** The package contains no HTTP, API or model client. The entity map never leaves the local machine.
+2. **Pseudonymisation, not anonymisation.** Pseudonymised data remains personal information in the hands of anyone holding the map. Nothing here takes a document outside the Privacy Act.
+3. **Structured identifiers are one-way.** A TFN, ABN, ACN, BSB or Medicare number replaced by `redact` is gone, and no record of its value is kept.
+4. **Detection has no comprehension.** Contextual re-identification through surviving detail is not addressed, lower-case and single names can escape the residual sweep, and no ATO client reference is detected. A human check before sending is the only mitigation.
+5. **Fail closed.** An unclassified candidate halts the run, writes nothing and leaves a triage worklist. A map git would let you commit refuses the run outright. Exit `0` is clean, `2` is a halt or a `verify` finding, and `1` is malformed input or a usage error.
+6. **Fabricated data only.** Every file under `evatt/samples/` is written from nothing, never by redacting a real document.

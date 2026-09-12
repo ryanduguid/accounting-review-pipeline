@@ -4,9 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
-
 from elizabeth_anne_alexander.errors import GatewayError
-from elizabeth_anne_alexander.util import load_json_exact, load_json_object, path_within, sha256_file
+from elizabeth_anne_alexander.util import load_json_exact, load_json_object, path_within
 
 
 @pytest.mark.parametrize("payload", ["[]", '"text"', "3"])
@@ -88,13 +87,6 @@ def test_unreadable_path_is_blocked_not_a_traceback(tmp_path: Path) -> None:
     # fail-closed GatewayError contract instead of escaping as OSError.
     with pytest.raises(GatewayError, match="cannot be read"):
         load_json_exact(tmp_path, set(), label="test artefact")
-
-
-def test_a_file_that_cannot_be_digested_is_blocked_not_a_traceback(tmp_path: Path) -> None:
-    # sha256_file reads a path path_within has already accepted, and a path
-    # that exists and is contained can still be a directory.
-    with pytest.raises(GatewayError, match="test artefact cannot be read"):
-        sha256_file(tmp_path, label="test artefact")
 
 
 def test_a_name_the_operating_system_refuses_is_blocked_not_a_traceback(

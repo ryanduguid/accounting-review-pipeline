@@ -9,16 +9,20 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Only the test working-directory paragraph changed; OAuth claims are unchanged.
-README_SHA256 = "EC5A3587851F88AF010C390B04A7B63562C802C7191503952F625C4ECE207742"
-AUTH_SHA256 = "12A131537C09F681F95371291D778CFE8B52AEF7040F5296079309E298976940"
-AUTH_AST_SHA256 = "EE2801130F86C708917EE7189FC61F4696F5327DFD4E5D6CD6BBD3ECFDCC2710"
+# Only the badge line changed, adding the PyPI badge the sibling publishers
+# carry; the scope, refresh and reviewer paragraphs are unchanged.
+README_SHA256 = "3C1849023BC55F72C6F9194A6F7C7BF9C75E486201CC085F1791871087E0CD90"
+# Re-pinned for the widened ruff baseline: isort sorted the urllib.parse
+# names and separated requests from xero_client. SCOPES, every statement and
+# the OAuth claims are unchanged, and the AST digest is identical on 3.10
+# through 3.13.
+AUTH_SHA256 = "15C64DA31196D7DDF30324E087CFB4F9FB08B2756CD3DBF44721AF4B918057D5"
+AUTH_AST_SHA256 = "0D6DBEF431E626A5A15B594ACFE3D52EC6EB2A1D86275B41719BCF6B1344C487"
 
 SCOPES_URL = "https://developer.xero.com/documentation/guides/oauth2/scopes/"
 GRANULAR_FAQ_URL = "https://developer.xero.com/faq/granular-scopes"

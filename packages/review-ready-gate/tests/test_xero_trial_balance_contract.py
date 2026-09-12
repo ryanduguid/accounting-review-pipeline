@@ -4,7 +4,6 @@ from pathlib import Path
 from reviewready.engine import _tb_balanced
 from reviewready.loader import SourceSnapshot, load_canonical_tb
 
-
 CONTRACT = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"
 TENANT = "Catherby Fisheries Pty Ltd"
 
