@@ -56,7 +56,7 @@ flowchart TD
         Validate --> Engine["Decimal Variance Review Engine<br/><i>(Fixed Policy v1)</i>"]
     end
 
-    subgraph ArtifactSplit ["Deterministic Artifact Generation"]
+    subgraph ArtifactSplit ["Deterministic Artefact Generation"]
         Engine --> Split{"Split Boundary"}
         Split --> Model["model-result.json<br/><i>(Redacted Bounded Values for AI)</i>"]
         Split --> Evidence["reviewer-evidence.json<br/><i>(Local Review Display Data)</i>"]
