@@ -1,4 +1,4 @@
-# Data Flow and Zero-Network Boundary
+# Data flow and network restrictions
 
 ## 1. Purpose and scope
 
@@ -7,9 +7,9 @@ reviewing Xero-shaped trial-balance fixtures. It does not process client exports
 or establish that input came from Xero.
 
 ## 2. Zero-network contract
-- **No Inbound / Outbound Sockets**: The engine contains zero HTTP, socket, or cloud telemetry libraries.
-- **No Cloud LLM Calls**: Data is processed in-memory locally.
-- **Redaction-Before-Exposure**: Account display names, entity names, and identifying metadata are stripped or pseudonymised before any downstream agent artifact is generated.
+- The engine has no HTTP, socket or cloud telemetry libraries.
+- It processes data locally in memory and makes no cloud LLM calls.
+- It removes or pseudonymises account display names, entity names and identifying metadata before generating any artefact for a downstream agent.
 
 ## 3. Data flow model
 

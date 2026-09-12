@@ -23,7 +23,7 @@ uv run --locked --extra dev close-control review --current examples/current_tria
 <details open>
 <summary>Setup, component identities, file contracts and reference</summary>
 
-Local monorepo assembly anchored in Monthly Close Controls. Its canonical GitHub repository
+This repository brings together Monthly Close Controls and its related tools. Its canonical GitHub repository
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
 It holds seven independently versioned components joined only by local files and commands:
 
@@ -40,8 +40,8 @@ It holds seven independently versioned components joined only by local files and
 Data flows in one direction: the exporter (or a manual Excel export) produces the ten-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly
 close surfaces exceptions, and the ledger-review boundary or Power BI consumes the result.
-evatt stands beside that flow rather than in it: it pseudonymises markdown locally before an
-operator hands it to an external model, and reads no trial balance.
+evatt works separately: it pseudonymises Markdown locally before an operator hands it to an
+external model. It does not read trial balances.
 Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is
 offline and ships fabricated data only. Python review packages use exact `Decimal`
 arithmetic for money. The Excel adapter and Power BI application use their native
