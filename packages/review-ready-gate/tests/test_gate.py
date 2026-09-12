@@ -557,3 +557,89 @@ def test_view_still_opens_a_pack_that_is_inside_a_checkout(
 
     assert main(["view", "--pack-dir", str(moved)]) == 0
     assert "Overall status: READY" in capsys.readouterr().out
+
+
+# --- a run that cannot finish leaves the previous pack whole ----------------
+
+
+def _not_ready_pack():
+    return review_pack(profile="bas", pack_dir=EXAMPLES / "bas-not-ready")
+
+
+def _hold_open(path: Path) -> None:
+    """Stand in for the reviewer's spreadsheet holding a pack file open.
+
+    The path exists and can be neither written nor replaced.
+    """
+    path.unlink()
+    path.mkdir()
+    (path / "held-open.txt").write_text("locked", encoding="utf-8")
+
+
+@pytest.mark.parametrize("blocked", PACK_FILE_NAMES)
+def test_a_failed_pack_write_rolls_back_to_the_previous_run(tmp_path: Path, blocked: str) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_ready_pack(), output)
+    survivors = {
+        name: (output / name).read_bytes() for name in PACK_FILE_NAMES if name != blocked
+    }
+    _hold_open(output / blocked)
+
+    with pytest.raises(OSError):
+        write_review_pack(_not_ready_pack(), output)
+
+    # A run that cannot finish must leave the previous pack whole, whichever of
+    # the three files blocks it. Deleting evidence this run never wrote - the
+    # untouched findings from the last pack - is worse than the mixed pack the
+    # staging exists to prevent, and the CLI reports only the OSError.
+    for name, content in survivors.items():
+        assert (output / name).read_bytes() == content
+    assert sorted(item.name for item in output.iterdir()) == sorted(PACK_FILE_NAMES)
+
+
+def test_a_failed_write_removes_a_pack_file_that_had_no_previous_version(tmp_path: Path) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_ready_pack(), output)
+    # The directory holds only part of a previous pack: this file was deleted,
+    # or the run that should have written it was interrupted.
+    (output / "readiness-pack.json").unlink()
+    survivor = (output / "readiness-summary.md").read_bytes()
+    _hold_open(output / "findings.csv")
+
+    with pytest.raises(OSError):
+        write_review_pack(_not_ready_pack(), output)
+
+    # Rolling back only the files that had something to restore would leave this
+    # run's readiness-pack.json beside the previous run's readiness-summary.md -
+    # the mixed pack the staging exists to prevent, with nothing on the face of
+    # either file to tell a reviewer they describe different packs.
+    assert not (output / "readiness-pack.json").exists()
+    assert (output / "readiness-summary.md").read_bytes() == survivor
+    assert sorted(item.name for item in output.iterdir()) == [
+        "findings.csv",
+        "readiness-summary.md",
+    ]
+
+
+def test_a_staging_write_that_dies_part_way_leaves_no_orphan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "pack"
+    real_write_text = Path.write_text
+    calls = {"count": 0}
+
+    def flaky(self: Path, data: str, *args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            real_write_text(self, data[:40], *args, **kwargs)
+            raise OSError(28, "No space left on device")
+        return real_write_text(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", flaky)
+
+    with pytest.raises(OSError):
+        write_review_pack(_ready_pack(), output)
+
+    # A staged file the run could not finish writing must go with the rest, not
+    # sit in the output directory as a truncated fragment of a pack.
+    assert list(output.iterdir()) == []

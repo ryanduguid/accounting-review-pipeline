@@ -4,12 +4,17 @@ name: Joined Xero Trial Balance Conformance
 # implementations against every root contract fixture. Only the exporter's
 # hash-locked runtime is installed; the review packages are imported from
 # their directories with no network dependency and no credentials.
+#
+# It also runs the root check on the blocks Monthly Close Controls and the
+# Workpaper Review Gate each keep a copy of. That check reads and parses the
+# two files; it imports no component and needs nothing installed.
 on:
   push:
     branches: [main]
     paths:
       - "contracts/xero-trial-balance-v1/**"
       - "tests/test_xero_trial_balance_contract.py"
+      - "tests/test_shared_blocks.py"
       - "packages/xero-trial-balance-export/**"
       - "packages/review-ready-gate/**"
       - "packages/monthly-close-control-plane/**"
@@ -29,6 +34,7 @@ on:
     paths:
       - "contracts/xero-trial-balance-v1/**"
       - "tests/test_xero_trial_balance_contract.py"
+      - "tests/test_shared_blocks.py"
       - "packages/xero-trial-balance-export/**"
       - "packages/review-ready-gate/**"
       - "packages/monthly-close-control-plane/**"
@@ -70,3 +76,5 @@ jobs:
         run: sha256sum --check --strict SHA256SUMS
       - name: Run joined offline conformance
         run: python -B -m unittest tests.test_xero_trial_balance_contract -v
+      - name: Check the duplicated review-package blocks have not drifted
+        run: python -B -m unittest tests.test_shared_blocks -v
