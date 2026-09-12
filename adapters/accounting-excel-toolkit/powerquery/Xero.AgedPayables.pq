@@ -16,17 +16,15 @@
 //
 // Key contract rules:
 //   1. Supplier identifier is forced to text so leading zeros and punctuation survive.
-//   2. Ageing buckets and Total columns are parsed as numbers (Currency/type
-//      number) under a pinned en-AU culture, the same rule Xero.TrialBalance
-//      uses. A blank cell is a genuine zero; any other cell that will not
+//   2. Ageing buckets and Total columns use fixed decimal Currency.Type
+//      (four decimal places) under a pinned en-AU culture. A blank cell is a genuine zero; any other cell that will not
 //      parse raises an error naming the column and the value, instead of
 //      loading as 0.
 //   3. The trailing summary "Total" row is excluded from the returned supplier rows.
 //   4. Bucket and Total columns are returned as Xero exported them. This query
 //      does not tie row buckets to the exported Total, so check it yourself:
-//      Number.Abs(List.Sum(row buckets) - row[Total]) < 0.005, the same
-//      tolerance Xero.TrialBalance documents, because the sums are IEEE
-//      doubles and an exact = can fail on a genuinely tying row.
+//      use List.Sum and Value.Subtract with Precision.Decimal, then require
+//      an absolute difference strictly below Currency.From("0.005").
 //   5. Negative balances (supplier credit notes and prepayments) are preserved as signed numbers.
 //
 // Usage: Xero.AgedPayables("C:\exports\aged-payables-2026-06-30.csv")
@@ -74,7 +72,11 @@ let
                 else
                     List.Min(HeaderMatches),
             Sliced = Table.RemoveFirstN(Raw, HeaderIdx),
-            Promoted = Table.PromoteHeaders(Sliced, [PromoteAllScalars = true]),
+            PromotedRaw = Table.PromoteHeaders(Sliced, [PromoteAllScalars = true]),
+            requiredBuckets = {"< 1 Month", "1 Month", "2 Months", "3 Months", "Older", "Total"},
+            Promoted = if List.ContainsAll(Table.ColumnNames(PromotedRaw), requiredBuckets) then
+                PromotedRaw
+                else error Error.Record("Xero.AgedPayables", "Missing ageing buckets", "The export must contain every ageing bucket and Total."),
             cols = Table.ColumnNames(Promoted),
             supplierCol = if List.Contains(cols, "Supplier") then "Supplier" else if List.Contains(cols, "Vendor") then "Vendor" else cols{0},
             // Identify amount columns (all columns except the supplier column)
@@ -127,7 +129,7 @@ let
                     let t = Text.Trim(Text.From(raw ?? "")) in
                         if t = "" then 0
                         else
-                            try Number.From(t, "en-AU")
+                            try Currency.From(t, "en-AU")
                             otherwise error Error.Record(
                                 "Xero.AgedPayables",
                                 "Amount is not a number",
@@ -138,7 +140,7 @@ let
             // message reports would be unreachable from inside the transform.
             TransformOps = List.Transform(
                 amountCols,
-                (columnName as text) => {columnName, parseAmount(columnName), type number}
+                (columnName as text) => {columnName, parseAmount(columnName), Currency.Type}
             ) & {{supplierCol, each Text.Trim(Text.From(_ ?? "")), type text}},
             Typed = Table.TransformColumns(Filtered, TransformOps),
             // Rename supplier column to canonical "Supplier" if needed

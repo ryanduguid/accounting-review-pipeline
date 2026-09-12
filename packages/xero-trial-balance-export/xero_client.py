@@ -837,42 +837,49 @@ def api_get(
     if tenant_id:
         headers["Xero-tenant-id"] = tenant_id
 
-    resp = requests.get(url, headers=headers, params=params, timeout=30)
-    if resp.status_code == 429:
-        raw_retry_after = resp.headers.get("Retry-After")
-        wait = retry_after_seconds(raw_retry_after)
-        if wait > RETRY_AFTER_MAX:
-            # wait is clamped by retry_after_seconds, so this addition cannot
-            # overflow however large the header was.
-            reset_at = datetime.now().astimezone() + timedelta(seconds=wait)
-            # The header as sent, not the clamped number: reporting the clamp
-            # as the server's own figure told anyone debugging the header a
-            # value Xero never sent. Truncated and stripped of non-printables
-            # because it is remote input on its way to a terminal.
-            asked = "".join(ch for ch in str(raw_retry_after)[:40] if ch.isprintable())
-            raise SystemExit(
-                f"error: Xero rate limit hit and sent Retry-After: {asked}, "
-                f"over the {RETRY_AFTER_MAX}s cap this script will sleep for. "
-                f"The limit resets at or after "
-                f"{reset_at.isoformat(timespec='seconds')} - re-run after that "
-                f"(computed from the clamped {wait}s wait; the real reset may "
-                f"be later)."
-            )
-        time.sleep(wait)
+    refreshed = False
+    waited = False
+    wait = 0
+    while True:
         resp = requests.get(url, headers=headers, params=params, timeout=30)
         if resp.status_code == 429:
-            raise SystemExit(
-                f"error: Xero is still rate limiting after a {wait}s wait - "
-                "re-run later."
-            )
-    if resp.status_code == 401:
-        headers["Authorization"] = f"Bearer {get_access_token(*credentials, force=True)}"
-        resp = requests.get(url, headers=headers, params=params, timeout=30)
+            if waited:
+                raise SystemExit(
+                    f"error: Xero is still rate limiting after a {wait}s wait - "
+                    "re-run later."
+                )
+            raw_retry_after = resp.headers.get("Retry-After")
+            wait = retry_after_seconds(raw_retry_after)
+            if wait > RETRY_AFTER_MAX:
+                # wait is clamped by retry_after_seconds, so this addition cannot
+                # overflow however large the header was.
+                reset_at = datetime.now().astimezone() + timedelta(seconds=wait)
+                # The header as sent, not the clamped number: reporting the clamp
+                # as the server's own figure told anyone debugging the header a
+                # value Xero never sent. Truncated and stripped of non-printables
+                # because it is remote input on its way to a terminal.
+                asked = "".join(ch for ch in str(raw_retry_after)[:40] if ch.isprintable())
+                raise SystemExit(
+                    f"error: Xero rate limit hit and sent Retry-After: {asked}, "
+                    f"over the {RETRY_AFTER_MAX}s cap this script will sleep for. "
+                    f"The limit resets at or after "
+                    f"{reset_at.isoformat(timespec='seconds')} - re-run after that "
+                    f"(computed from the clamped {wait}s wait; the real reset may "
+                    f"be later)."
+                )
+            time.sleep(wait)
+            waited = True
+            continue
         if resp.status_code == 401:
-            raise SystemExit(
-                "Xero rejected the access token even after a forced refresh. "
-                "Re-authorise with: python auth.py"
-            )
+            if refreshed:
+                raise SystemExit(
+                    "Xero rejected the access token even after a forced refresh. "
+                    "Re-authorise with: python auth.py"
+                )
+            headers["Authorization"] = f"Bearer {get_access_token(*credentials, force=True)}"
+            refreshed = True
+            continue
+        break
     resp.raise_for_status()
     try:
         return resp.json()

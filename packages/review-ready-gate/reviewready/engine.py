@@ -179,6 +179,8 @@ def review_pack(
 
     acknowledgement = load_reviewer_acknowledgement(acknowledgement_path)
     if acknowledgement is not None and isinstance(self_review, SelfReview):
+        if acknowledgement.reviewer_initials.strip().casefold() == self_review.preparer_initials.strip().casefold():
+            raise GateInputError("reviewer initials must differ from the preparer initials.")
         if acknowledgement.reviewed_on < self_review.period_end:
             raise GateInputError(
                 "review note reviewed_on is earlier than the pack period_end; "
@@ -403,6 +405,16 @@ def _apply_year_end_tieout(loaded: dict[str, object], findings: list[Finding]) -
                         "there is no source for the figure."
                     ),
                     reviewer_action="Return the pack. Unsupported lines are not review-ready.",
+                )
+            )
+        elif row.status == "EXCEPTION":
+            findings.append(
+                Finding(
+                    code=FINDING_TIEOUT_BREAK,
+                    status="NOT_READY",
+                    slot="tie_out_matrix",
+                    reason=f"Statement line {row.statement_line!r} has an unresolved tie-out exception.",
+                    reviewer_action="Return the pack. Resolve the tie-out exception before review.",
                 )
             )
         elif row.status == "TIED" and (not row.workpaper_ref or not row.source_file):

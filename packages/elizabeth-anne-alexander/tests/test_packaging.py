@@ -15,6 +15,9 @@ PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/elizabeth-anne-alexander"
 RELEASE_WORKFLOW = MONOREPO / ".github" / "workflows" / "release-elizabeth-anne-alexander.yml"
 # ci.yml calls this reusable workflow for the package; it is where pytest runs.
 CI_WORKFLOW = MONOREPO / ".github" / "workflows" / "ci-package.yml"
+pytestmark = pytest.mark.skipif(
+    not CI_WORKFLOW.is_file(), reason="repository policy checks require a source checkout"
+)
 
 
 def test_active_package_identity_is_consistent() -> None:
@@ -61,8 +64,6 @@ def test_release_workflow_keeps_the_pinned_reusable_policy_caller() -> None:
 def test_build_artefacts_cannot_be_committed_by_accident() -> None:
     """The README tells the reader to run `python -m build`, which fills dist/."""
     ignore = REPO / ".gitignore"
-    if not ignore.is_file():
-        pytest.skip("not running from a source checkout")
     entries = {line.strip() for line in ignore.read_text(encoding="utf-8").splitlines()}
 
     assert {"build/", "dist/"} <= entries
@@ -77,8 +78,6 @@ def test_the_ci_test_step_does_not_repeat_the_quiet_flag_from_addopts() -> None:
     """
     workflow = CI_WORKFLOW
     pyproject = REPO / "pyproject.toml"
-    if not (workflow.is_file() and pyproject.is_file()):
-        pytest.skip("not running from a source checkout")
     addopts = [line for line in pyproject.read_text(encoding="utf-8").splitlines() if line.startswith("addopts")]
     steps = [line for line in workflow.read_text(encoding="utf-8").splitlines() if " pytest" in line]
 

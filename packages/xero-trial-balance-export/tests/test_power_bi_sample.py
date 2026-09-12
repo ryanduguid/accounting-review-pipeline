@@ -27,16 +27,18 @@ MONEY_COLUMNS = ("Debit", "Credit", "YTDDebit", "YTDCredit")
 
 def _declared_columns() -> list[str]:
     """The ExpectedColumns list the query fails closed against."""
-    block = re.search(r"ExpectedColumns = \{(.*?)\}", QUERY, re.DOTALL)
+    block = re.search(r"ExpectedColumns = \{(.*?)\}", _code_only(), re.DOTALL)
     assert block is not None, "the query must declare ExpectedColumns"
     return re.findall(r'"([^"]+)"', block.group(1))
 
 
 def _assigned_types() -> dict[str, str]:
     """Every {"Column", type} pair in the Table.TransformColumnTypes step."""
+    block = re.search(r"Table\.TransformColumnTypes\s*\(\s*[^,]+,\s*\{((?:[^{}]|\{[^{}]*\})*)\}", _code_only())
+    assert block is not None, "the query must transform its column types"
     return {
         name: assigned.strip()
-        for name, assigned in re.findall(r'\{"(\w+)",\s*([^}]+)\}', QUERY)
+        for name, assigned in re.findall(r'\{"(\w+)",\s*([^}]+)\}', block.group(1))
     }
 
 
@@ -46,9 +48,9 @@ def _code_only() -> str:
     The comments talk about tokens and credentials to explain their absence,
     so a scan for those words has to read the code rather than the prose.
     """
-    return "\n".join(
-        line for line in QUERY.splitlines() if not line.lstrip().startswith("//")
-    )
+    return re.sub(r'"(?:[^"]|"")*"|//[^\r\n]*',
+                  lambda match: "" if match.group().startswith("//") else match.group(), QUERY)
+
 
 
 def _sample_header() -> list[str]:

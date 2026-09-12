@@ -43,6 +43,7 @@ from pathlib import Path
 from . import entities as entities_module
 from . import verify as verify_module
 from .errors import EvattError, Halt
+from .patterns import value_pattern
 from .redact import redact
 from .restore import restore
 from .version import __version__
@@ -307,7 +308,9 @@ def main(argv: list[str] | None = None) -> int:
     found = verify_module.findings(text, entity_map)
     if found:
         for finding in found:
-            print(f"{finding.kind}: {finding.value}")
+            match = value_pattern(finding.value).search(text)
+            location = f"line {text.count(chr(10), 0, match.start()) + 1}" if match else "detected in input"
+            print(f"{finding.kind}: {location}")
         print(f"{len(found)} finding(s); this file is not ready to send")
         return 2
     print("no findings")

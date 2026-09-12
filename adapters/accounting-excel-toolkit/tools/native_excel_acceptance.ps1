@@ -4,8 +4,8 @@
 Runs the repository's Power Query acceptance checks in desktop Excel.
 
 .DESCRIPTION
-Evaluates 72 checks in Excel's real Power Query engine. The default All mode
-isolates the 46 core checks and 26 Payday Super checks in fresh child
+Evaluates 80 checks in Excel's real Power Query engine. The default All mode
+isolates the 53 core checks and 27 Payday Super checks in fresh child
 PowerShell and Excel processes. The Payday child uses 20 independent
 single-source queries across 19 fabricated files so Excel's
 cross-source privacy/firewall composition state cannot mask adapter behaviour.
@@ -27,7 +27,7 @@ repository containing this script.
 
 .PARAMETER CheckSet
 Internal isolation mode. The default All mode launches fresh child PowerShell
-processes for the 46 core checks and 26 Payday Super checks. Core and Payday
+processes for the 53 core checks and 27 Payday Super checks. Core and Payday
 are child modes so Excel's Mashup host cannot carry file-source state from one
 group into the other.
 
@@ -308,7 +308,7 @@ if ($CheckSet -eq 'All') {
             if ($payload.SchemaVersion -ne 1 -or $payload.CheckSet -ne $childSet) {
                 throw "$childSet native acceptance result has the wrong schema or check-set identity."
             }
-            $expectedChildCount = if ($childSet -eq 'Core') { 46 } else { 26 }
+            $expectedChildCount = if ($childSet -eq 'Core') { 53 } else { 27 }
             $childRows = @($payload.Rows)
             if ($childRows.Count -ne $expectedChildCount) {
                 throw (
@@ -359,8 +359,8 @@ if ($CheckSet -eq 'All') {
         }
         $allRows = @($childPayloads['Core'].Rows) + @($childPayloads['Payday'].Rows)
         $rowCount = $allRows.Count
-        if ($rowCount -ne 72) {
-            throw "Combined native acceptance count was $rowCount; expected exactly 72."
+        if ($rowCount -ne 80) {
+            throw "Combined native acceptance count was $rowCount; expected exactly 80."
         }
         $failedChecks = Write-NativeCheckSummary `
             -Rows $allRows `
@@ -624,6 +624,15 @@ Acme Pty Ltd,INV-001,30/06/2026,1100.00
             -ProvenanceLine $paydayLines[-1]
     }
 
+    $agedMissing = Join-Path $temporaryDirectory 'aged-missing.csv'
+    [IO.File]::WriteAllText($agedMissing, "Contact`r`n", $utf8WithBom)
+    $agedExact = Join-Path $temporaryDirectory 'aged-exact.csv'
+    [IO.File]::WriteAllText($agedExact, "Contact,< 1 Month,1 Month,2 Months,3 Months,Older,Total`r`nFabricated,0.1234,0,0,0,0,0.1234`r`n", $utf8WithBom)
+    $mAgedMissing = ConvertTo-MText $agedMissing
+    $mAgedExact = ConvertTo-MText $agedExact
+    $paydayScaleAmount = Join-Path $temporaryDirectory 'payday-scale-amount.csv'
+    [IO.File]::WriteAllText($paydayScaleAmount, ([IO.File]::ReadAllText($paydaySuperFixture).Replace('780.00', '780.00001')), $utf8WithBom)
+    $mPaydayScaleAmount = ConvertTo-MText $paydayScaleAmount
     $mCombined = ConvertTo-MText $combinedFixture
     $mColumns = ConvertTo-MText $columnsFixture
     $mPeriodOnly = ConvertTo-MText $periodOnlyFixture
@@ -678,7 +687,23 @@ let
         each Text.Combine(List.Transform(Record.FieldValues(_),
             each if _ = null then "~" else Text.From(_)), "|"))),
 
+    ties = (difference) => Number.Abs(Value.Subtract(
+        List.Sum({Currency.From("1.0000"), Currency.From(difference)}, Precision.Decimal),
+        List.Sum({Currency.From("1.0000")}, Precision.Decimal), Precision.Decimal)) < Currency.From("0.005"),
     checks = {
+        chk("tie-out: 0.0049 accepted", true, ties("0.0049")),
+        chk("tie-out: 0.0050 rejected", false, ties("0.0050")),
+        chk("tie-out: 0.0051 rejected", false, ties("0.0051")),
+        chk("aged payables: fixed decimal column and four places", true,
+            Table.SelectRows(Table.Schema(Xero_AgedPayables($mAgedExact)), each [Name] = "Total"){0}[TypeName] = "Currency.Type"
+            and Xero_AgedPayables($mAgedExact){0}[Total] = Currency.From("0.1234")),
+        chk("aged receivables: fixed decimal column and four places", true,
+            Table.SelectRows(Table.Schema(Xero_AgedReceivables($mAgedExact)), each [Name] = "Total"){0}[TypeName] = "Currency.Type"
+            and Xero_AgedReceivables($mAgedExact){0}[Total] = Currency.From("0.1234")),
+        chk("aged payables: header-only missing buckets refused", true,
+            raises(() => Table.RowCount(Xero_AgedPayables($mAgedMissing)))),
+        chk("aged receivables: header-only missing buckets refused", true,
+            raises(() => Table.RowCount(Xero_AgedReceivables($mAgedMissing)))),
         // -- combined layout, as-at (YTD) pair is the default
         chk("combined: 12 data rows (Total + blanks dropped)", 12, Table.RowCount(tbC)),
         chk("combined: YTD debit total 129934.50", true, near(List.Sum(tbC[Debit]), 129934.50)),
@@ -785,7 +810,7 @@ in
     # Each Payday query reads one fabricated file only. Combining the file
     # sources in one M expression triggers Excel's privacy/firewall host
     # bug (a spurious missing Source step) even though every predicate passes
-    # independently. Separate query materialisations preserve all 26 checks.
+    # independently. Separate query materialisations preserve all 27 checks.
     $paydayBaseChecksM = @"
 let
     s = (v) => if v = null then "(null)" else Text.From(v),
@@ -935,6 +960,13 @@ in
             Source = New-PaydayExpectedErrorCheckM `
                 -Name 'Payday Super: malformed contribution row raises' `
                 -MExpression "Table.RowCount(PaydaySuper_Report($mPaydayMalformed))"
+        },
+        [pscustomobject]@{
+            Name = 'ZZ_PaydayScaleAmountCheck'
+            ExpectedRows = 1
+            Source = New-PaydayExpectedErrorCheckM `
+                -Name 'Payday Super: excess monetary precision raises' `
+                -MExpression "Table.RowCount(PaydaySuper_Report($mPaydayScaleAmount))"
         },
         [pscustomobject]@{
             Name = 'ZZ_PaydayBadAmountCheck'
@@ -1117,7 +1149,7 @@ in
         if ($CheckSet -eq 'Core') {
             [pscustomobject]@{
                 Name = 'ZZ_CoreChecks'
-                ExpectedRows = 46
+                ExpectedRows = 53
                 Source = $coreChecksM
             }
         }
@@ -1214,7 +1246,7 @@ in
         Release-ComReference $worksheet 'Worksheet'
         $worksheet = $null
     }
-    $expectedRowCount = if ($CheckSet -eq 'Core') { 46 } else { 26 }
+    $expectedRowCount = if ($CheckSet -eq 'Core') { 53 } else { 27 }
     if ($checkRows.Count -ne $expectedRowCount) {
         throw (
             "$CheckSet child aggregated $($checkRows.Count) rows; " +
@@ -1230,8 +1262,8 @@ in
         Timings = $timings
     }
     $json = $payload | ConvertTo-Json -Depth 5
-    $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText($ResultPath, $json, $utf8WithoutBom)
+    $utf8WithBom = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($ResultPath, $json, $utf8WithBom)
 
     # A child succeeded when it produced a complete, validated result set.
     # Failed predicates remain structured rows for the parent to print and

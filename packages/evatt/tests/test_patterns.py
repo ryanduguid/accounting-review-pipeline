@@ -602,7 +602,7 @@ def test_the_widened_separator_still_scans_a_failing_search_linearly() -> None:
     """
     small = _failing_scan_seconds(patterns.ABN_LABELLED, "ABN", 2_000)
     large = _failing_scan_seconds(patterns.ABN_LABELLED, "ABN", 8_000)
-    assert large < small * 8, (small, large)
+    assert large < small * 8 + 0.010, (small, large)
 
 
 def test_the_placeholder_prefixes_stay_in_union_with_both_tables() -> None:

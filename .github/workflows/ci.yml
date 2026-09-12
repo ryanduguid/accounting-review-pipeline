@@ -90,9 +90,8 @@ jobs:
               evatt restore --in build/crlf.md --map entities.json --out build/crlf-back.md
               cmp crlf.md build/crlf-back.md
               # verify exits 2 on a file that is not ready. Its output is
-              # redirected rather than echoed, because verify prints the values
-              # it found and a tax file number in a job log is the leak this
-              # package exists to prevent.
+              # captured to check the diagnostic. Findings identify kinds and
+              # line numbers without printing matched values.
               evatt verify --in identifiers.md --map entities.json > verify.log 2>&1 && vf=0 || vf=$?
               test "$vf" = "2"
               grep -q "not ready to send" verify.log

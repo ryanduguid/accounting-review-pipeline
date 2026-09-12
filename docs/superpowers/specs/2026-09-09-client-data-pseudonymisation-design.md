@@ -33,9 +33,8 @@ enumerate what to strip from a markdown file. Redaction is driven by an entity
 taxonomy plus a policy decision about how far to go. A general-purpose model
 already knows the APPs at the level this task needs.
 
-Separately, the identifiers that matter most are deterministic. TFN, ABN, ACN,
-BSB and Medicare numbers all carry check digits. A script catches every
-well-formed instance; a model catches most of them.
+TFN, ABN, ACN and Medicare numbers carry check digits. BSB detection is
+format-only and requires a hyphen between two groups of three digits.
 
 ## 2. Scope decisions
 

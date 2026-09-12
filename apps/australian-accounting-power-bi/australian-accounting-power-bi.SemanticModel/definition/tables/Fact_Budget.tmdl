@@ -54,7 +54,7 @@ table Fact_Budget
 		sourceColumn: AccountCode
 
 	column BudgetAmount
-		dataType: double
+		dataType: decimal
 		formatString: $#,##0.00
 		lineageTag: bud-col-0004
 		summarizeBy: sum

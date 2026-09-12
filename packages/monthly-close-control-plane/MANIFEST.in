@@ -1,8 +1,11 @@
 include LICENSE
 include README.md
+include DISCLAIMER.md
 include SECURITY.md
 include CONTRIBUTING.md
 recursive-include docs *.md
 recursive-include examples *.csv *.json
 include examples/clearing_demo.py
+include examples/close-loop.md
+include examples/github-actions-close-check.yml
 recursive-include schemas *.csv

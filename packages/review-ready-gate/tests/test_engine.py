@@ -137,3 +137,35 @@ def test_acknowledgement_never_flips_blocked(tmp_path: Path) -> None:
     assert pack.status == "BLOCKED"
     assert pack.acknowledgement is not None
     assert pack.tieout_tolerance == Decimal("0.01")
+
+
+def test_exception_tieout_is_not_ready(tmp_path: Path) -> None:
+    from reviewready.engine import _apply_year_end_tieout, _overall
+    from reviewready.models import TieOutRow
+    findings = []
+    _apply_year_end_tieout({"tie_out_matrix": [TieOutRow("Cash", Decimal("10"), "WP1", "cash.csv", "EXCEPTION")]}, findings)
+    assert _overall(findings) == "NOT_READY"
+    assert any(item.code == "TIEOUT_BREAK" for item in findings)
+
+
+def test_preparer_cannot_acknowledge_own_pack(tmp_path: Path) -> None:
+    import pytest
+    from reviewready.errors import GateInputError
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    initials = json.loads((dest / "self_review.json").read_text())["preparer_initials"]
+    note = tmp_path / "note.json"
+    note.write_text(json.dumps({"reviewer_initials": " " + initials.lower() + " ", "reviewed_on": "2026-07-01", "comment": "Fabricated self-review."}))
+    with pytest.raises(GateInputError, match="preparer"):
+        review_pack(profile="bas", pack_dir=dest, acknowledgement_path=note)
+
+
+def test_unreadable_pack_directory_returns_input_error(tmp_path: Path, monkeypatch, capsys) -> None:
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    original = Path.iterdir
+    def iterdir(path):
+        if path == dest:
+            raise PermissionError("fabricated denial")
+        return original(path)
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    assert main(["gate", "--profile", "bas", "--pack", str(dest), "--output", str(tmp_path / "out")]) == 1
+    assert "input error" in capsys.readouterr().err
