@@ -22,7 +22,9 @@ def _csv(columns: tuple[str, ...], rows: list[list[str]]) -> str:
 
 
 def render_html(pack: dict) -> str:
-    esc = lambda value: html.escape(str(value), quote=True)
+    def esc(value: object) -> str:
+        return html.escape(str(value), quote=True)
+
     outstanding = []
     end = date.fromisoformat(pack["period_end"])
     with localcontext(Context(prec=40)):

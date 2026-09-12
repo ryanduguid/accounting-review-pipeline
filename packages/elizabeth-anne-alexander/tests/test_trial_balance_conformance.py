@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from elizabeth_anne_alexander.errors import GatewayError
 from elizabeth_anne_alexander.gateway import CANONICAL_COLUMNS, _load_tb
 

@@ -8,7 +8,6 @@ import html
 from decimal import Decimal
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "samples" / "sample-output.csv"
 SVG = ROOT / "assets" / "quick-proof.svg"

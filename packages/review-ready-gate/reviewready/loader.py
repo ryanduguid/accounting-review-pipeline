@@ -4,13 +4,13 @@ import csv
 import hashlib
 import io
 import json
+import re
 import unicodedata
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-import re
 
 from .errors import (
     DateMismatchError,
@@ -30,7 +30,6 @@ from .models import (
     TieOutRow,
     TrialBalanceRow,
 )
-
 
 CANONICAL_TB_COLUMNS = (
     "ReportDate",

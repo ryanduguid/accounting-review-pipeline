@@ -27,7 +27,7 @@ from typing import Any, cast
 from .engine import ReadinessPack, _overall
 from .errors import GateInputError
 from .models import Finding, ReviewerAcknowledgement, SourceEvidence
-from .report import PACK_FILE_NAMES, REVIEW_BOUNDARY, _ABSENT, _as_markdown, _md_cell
+from .report import _ABSENT, PACK_FILE_NAMES, REVIEW_BOUNDARY, _as_markdown, _md_cell
 
 _JSON_NAME = "readiness-pack.json"
 _SUMMARY_NAME = "readiness-summary.md"

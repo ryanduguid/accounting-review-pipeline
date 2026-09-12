@@ -25,8 +25,8 @@ import stat
 import sys
 import tempfile
 import time
-from ctypes import wintypes
 from contextlib import contextmanager
+from ctypes import wintypes
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -37,7 +37,7 @@ import requests
 TOKEN_URL = "https://identity.xero.com/connect/token"
 CONNECTIONS_URL = "https://api.xero.com/connections"
 from token_store import (  # noqa: E402
-    DEFAULT_TOKEN_FILE,
+    DEFAULT_TOKEN_FILE,  # noqa: F401  re-exported: tests read xero_client.DEFAULT_TOKEN_FILE
     allowed_token_roots,
     resolve_token_file,
 )

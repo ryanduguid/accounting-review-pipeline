@@ -25,7 +25,6 @@ from .util import (
 )
 from .version import __version__
 
-
 CANONICAL_COLUMNS = (
     "ReportDate", "Tenant", "Section", "AccountID", "AccountName", "AccountCode", "Debit", "Credit", "YTDDebit", "YTDCredit"
 )

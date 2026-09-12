@@ -1,9 +1,9 @@
 """The release workflow is the shared archive policy, not a local copy."""
 
-from pathlib import Path
 import re
 import shlex
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MONOREPO = ROOT.parents[1]

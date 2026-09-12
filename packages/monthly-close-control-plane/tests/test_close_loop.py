@@ -4,10 +4,8 @@ import os
 from pathlib import Path
 
 import pytest
-
 from closecontrol.engine import review_close
 from closecontrol.loader import CANONICAL_COLUMNS
-
 
 ROOT = Path(__file__).resolve().parents[1]
 TEN_COLUMN_CONTRACT = (

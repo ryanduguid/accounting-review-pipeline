@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from evatt import entities
 from evatt.errors import EvattError
 

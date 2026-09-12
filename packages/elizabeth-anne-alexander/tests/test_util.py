@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from elizabeth_anne_alexander.errors import GatewayError
 from elizabeth_anne_alexander.util import load_json_exact, load_json_object, path_within
 

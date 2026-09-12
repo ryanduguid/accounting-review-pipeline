@@ -7,8 +7,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
-from tests.support import EXAMPLES
 from reviewready.cli import main
 from reviewready.engine import review_pack
 from reviewready.errors import GateInputError
@@ -20,6 +18,7 @@ from reviewready.report import (
     write_review_pack,
 )
 from reviewready.viewer import render_review_sheet
+from tests.support import EXAMPLES
 
 
 def test_bas_ready_pack_is_ready() -> None:

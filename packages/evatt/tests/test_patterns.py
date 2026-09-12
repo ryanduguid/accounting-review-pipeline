@@ -8,8 +8,7 @@ that is not a fiction, the BSB, for which no reserved range is published.
 import re
 import time
 
-from evatt import entities
-from evatt import patterns
+from evatt import entities, patterns
 from evatt import redact as redact_module
 
 VALID_TFN = "123456782"

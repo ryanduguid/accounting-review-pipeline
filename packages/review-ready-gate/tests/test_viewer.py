@@ -13,14 +13,13 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
-from tests.support import EXAMPLES, copy_example_pack
 from reviewready.cli import main
 from reviewready.engine import ReadinessPack, review_pack
 from reviewready.errors import GateInputError
 from reviewready.models import Finding, SourceEvidence
 from reviewready.report import PACK_FILE_NAMES, write_review_pack
 from reviewready.viewer import render_review_sheet, verify_pack
+from tests.support import EXAMPLES, copy_example_pack
 
 
 def _synthetic_pack() -> ReadinessPack:

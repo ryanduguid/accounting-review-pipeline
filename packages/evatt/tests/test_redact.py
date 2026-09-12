@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from evatt import entities as entities_module
 from evatt import patterns
 from evatt import redact as redact_module
