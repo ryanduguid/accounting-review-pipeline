@@ -6,7 +6,15 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import (
+    ROUND_HALF_EVEN,
+    ROUND_HALF_UP,
+    Context,
+    Decimal,
+    Inexact,
+    InvalidOperation,
+    localcontext,
+)
 from pathlib import Path
 from typing import Any
 
@@ -213,9 +221,21 @@ def _load_tb_snapshot(snapshot: FileSnapshot) -> tuple[BalanceRow, ...]:
     if len({row.tenant for row in rows}) != 1 or len({row.report_date for row in rows}) != 1:
         raise GatewayError("CSV must contain exactly one tenant and report date.")
     zero = Decimal("0")
-    if sum((row.debit for row in rows), zero) != sum((row.credit for row in rows), zero):
+    # Sum exactly or refuse: a total the 28-digit context rounds can equal its
+    # counterpart while the source amounts differ, which would pass an imbalance.
+    with localcontext() as context:
+        context.traps[Inexact] = True
+        try:
+            debit, credit = sum((row.debit for row in rows), zero), sum((row.credit for row in rows), zero)
+            ytd_debit = sum((row.ytd_debit for row in rows), zero)
+            ytd_credit = sum((row.ytd_credit for row in rows), zero)
+        except Inexact as exc:
+            raise GatewayError(
+                "CSV totals exceed the supported 28-digit precision, so debits and credits cannot be compared exactly."
+            ) from exc
+    if debit != credit:
         raise GatewayError("CSV movement debit and credit totals are not exactly balanced.")
-    if sum((row.ytd_debit for row in rows), zero) != sum((row.ytd_credit for row in rows), zero):
+    if ytd_debit != ytd_credit:
         raise GatewayError("CSV YTD debit and credit totals are not exactly balanced.")
     return tuple(rows)
 
@@ -489,6 +509,12 @@ def _variance_findings(
 
 def evaluate(*, context_path: Path, request_path: Path, policy_path: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Evaluate the one fixed, read-only synthetic operation without network or ledger access."""
+    # Keep the standard precision and rounding even when a host changes its decimal context.
+    with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
+        return _evaluate(context_path=context_path, request_path=request_path, policy_path=policy_path)
+
+
+def _evaluate(*, context_path: Path, request_path: Path, policy_path: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     context_path = _resolve_bundled(context_path, "samples", label="context")
     request_path = _resolve_bundled(request_path, "samples", label="request")
     policy_path = _resolve_bundled(policy_path, "policy", label="policy")

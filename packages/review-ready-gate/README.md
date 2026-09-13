@@ -219,7 +219,7 @@ Before displaying anything it fails closed on: a missing artefact; JSON that is 
 
 ## Design
 
-- Exact `Decimal` arithmetic for money, never binary floating point.
+- Exact `Decimal` arithmetic for money, never binary floating point. The gate fixes its own 28-digit context, ignoring the caller's, and refuses a pack whose trial-balance totals would round instead of comparing them inexactly.
 - Schema, duplicate-key, date, and numeric gates fail closed: a malformed file is exit `1` and writes no pack.
 - Missing or empty required artefacts are findings, not crashes, so the cover sheet can tell the preparer what to send back.
 - Source SHA-256 digests travel with the pack. Each digest is taken from the same immutable byte snapshot the loader parsed.

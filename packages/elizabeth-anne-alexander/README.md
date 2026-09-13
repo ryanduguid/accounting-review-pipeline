@@ -109,7 +109,7 @@ elizabeth-anne-alexander validate-review \
   `xero-tb-csv.v1` corpus. Its `SHA256SUMS` file and every consumer's tests verify the same bytes
   locally, with no runtime network dependency.
 - CSV schema, duplicate account IDs, reporting dates, balance pairs, source hashes, entity, basis, currency, tracking filters, and draft setting are all checked before review.
-- Monetary values use `Decimal`, never binary floating point.
+- Monetary values use `Decimal`, never binary floating point. Evaluation runs under its own fixed 28-digit context, and a CSV whose totals would round in it is refused instead of compared inexactly.
 - `percent_change` in the model result is expressed in per cent and quantized to 4 decimal places (`"18.3333"` means 18.3333%). It is `null` when there is no prior balance to compare against.
 - The model result states its own `currency` and `sign_convention`. Amounts are debit-positive (`ytd_net = YTDDebit - YTDCredit`), so a revenue, liability, or equity balance is negative and a revenue increase shows as a negative `delta`.
 - Current and prior reports must sit in the same Australian financial year, or be the same day and month in different years. YTD columns reset on 1 July, so a comparison across the reset would report a whole prior-year balance as a movement.

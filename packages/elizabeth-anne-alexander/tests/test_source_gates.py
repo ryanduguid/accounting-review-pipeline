@@ -14,6 +14,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+from decimal import Context, localcontext
 from pathlib import Path
 
 import pytest
@@ -538,3 +539,47 @@ def test_policy_max_results_at_either_bound_is_accepted(tmp_path: Path, value: i
     _write(path, policy)
 
     assert _load_policy(path)["operations"]["trial_balance_variance"]["max_results"] == value
+
+
+def _rewrite_current_bank_row(root: Path, replacement: str) -> None:
+    """Change the current CSV's bank row and re-bind its manifest digest."""
+    manifest_path = _manifest_path(root, CURRENT_MANIFEST)
+    manifest = _read(manifest_path)
+    csv_path = root / manifest["export"]["csv"]
+    text = csv_path.read_text(encoding="utf-8")
+    original = "10000.00,0.00,50000.00,0.00"
+    assert original in text
+    csv_path.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+    manifest["export"]["sha256"] = sha256_bytes(csv_path.read_bytes())
+    _write(manifest_path, manifest)
+
+
+def _evaluate_samples() -> None:
+    gateway.evaluate(
+        context_path=Path("samples/contexts") / CONTEXT,
+        request_path=Path("samples/requests/sample-revenue-variance.request.json"),
+        policy_path=Path("policy/demo-policy-v1.json"),
+    )
+
+
+def test_caller_decimal_context_cannot_hide_a_one_cent_imbalance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # At four significant digits 10000.01 rounds to 10000 and the imbalance
+    # vanished; the gateway must fix its own context.
+    root = _sandbox(tmp_path, monkeypatch)
+    _rewrite_current_bank_row(root, "10000.01,0.00,50000.01,0.00")
+    with localcontext(Context(prec=4)) as context:
+        before = str(context)
+        with pytest.raises(GatewayError, match="not exactly balanced"):
+            _evaluate_samples()
+        assert str(context) == before
+
+
+def test_totals_beyond_the_context_precision_are_refused_not_rounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _sandbox(tmp_path, monkeypatch)
+    _rewrite_current_bank_row(root, "10000.0000000000000000000000001,0.00,50000.00,0.00")
+    with pytest.raises(GatewayError, match="28-digit precision"):
+        _evaluate_samples()
