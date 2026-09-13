@@ -14,7 +14,7 @@ This document details the Australian statutory frameworks, tax laws, and account
 ### Statutory 7-business-day rule
 1. **Due Date Test**: Contributions must be **received by the employee's superannuation fund** within **7 business days** after payday (20 business days for new employees or newly nominated funds).
 2. **Transit Risk**: Remittance to a commercial clearing house on day 6 is non-compliant if the fund receives the money on day 8. Transit time is the employer's risk.
-3. **National Business Day Calendar**: A business day excludes Saturdays, Sundays, and any public holiday gazetted for the **whole of any State or Territory**. Regional holidays (for example, Brisbane Ekka, Melbourne Cup regional gazettals) do not stop the national clock.
+3. **National Business Day Calendar**: A business day excludes Saturdays, Sundays, and any public holiday gazetted for the **whole of any State or Territory**. Regional holidays (for example, Brisbane Ekka, Melbourne Cup regional gazettals) do not stop the national clock. The synthetic fixtures use a reduced calendar: the eight nationwide holidays plus NT Picnic Day, as listed in `tools/generate_fixtures.py`. Whole-of-state holidays missing from that list make a sample due date earlier than the rule requires, never later.
 
 ### Base earnings and rates
 - **Statutory SG Rate**: **12.0%** (effective since 1 July 2025).
