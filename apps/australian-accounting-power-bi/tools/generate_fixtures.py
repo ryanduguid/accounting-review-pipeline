@@ -18,10 +18,30 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = BASE_DIR / "samples"
 
-# Sample business-day calendar 2024-2027: the eight nationwide public holidays plus NT
-# Picnic Day (first Monday in August, whole of the Territory). Other whole-of-state
-# holidays are not listed, so a sample due date can fall earlier than the statutory
-# rule requires, never later.
+# Sample business-day calendar 2024-2027: the eight nationwide public holidays, plus the
+# whole-of-state and whole-of-territory dates listed below.
+#
+# NT Picnic Day, first Monday in August, whole of the Territory:
+#   https://nt.gov.au/nt-public-holidays
+# WA King's Birthday, proclaimed annually rather than by a fixed rule, whole of the state
+# apart from 2 local government districts that substitute another day:
+#   https://www.wa.gov.au/service/employment/workplace-arrangements/public-holidays-western-australia
+# Queensland King's Birthday, first Monday in October under the Holidays Act 1983, which
+# is also NSW, SA and ACT Labour Day:
+#   https://www.qld.gov.au/recreation/travel/holidays/public
+#   https://www.nsw.gov.au/about-nsw/public-holidays
+#   https://www.safework.sa.gov.au/resources/public-holidays
+#   https://www.act.gov.au/__data/assets/pdf_file/0004/2155495/ACT-Public-Holidays-2026.pdf
+#
+# The WA and Queensland King's Birthday dates are listed for 2026 and 2027 only, because
+# those are the years the current official pages publish and WA's date is proclaimed each
+# year rather than following a rule this file could extend. 2024 and 2025 keep the earlier
+# reduced calendar.
+#
+# Still not listed, so a sample due date can fall earlier than the statutory rule requires,
+# never later: Victoria's Friday before the AFL Grand Final (Friday 25 September 2026) and
+# Melbourne Cup Day (Tuesday 3 November 2026), and the part-day evening holidays South
+# Australia and Queensland observe on 24 and 31 December.
 NATIONAL_HOLIDAYS = {
     # 2024
     datetime.date(2024, 1, 1),   # New Year's Day
@@ -51,6 +71,8 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2026, 4, 25),  # Anzac Day
     datetime.date(2026, 6, 8),   # King's Birthday
     datetime.date(2026, 8, 3),   # Picnic Day (NT)
+    datetime.date(2026, 9, 28),  # King's Birthday (WA)
+    datetime.date(2026, 10, 5),  # King's Birthday (Qld); Labour Day (NSW, SA, ACT)
     datetime.date(2026, 12, 25), # Christmas Day
     datetime.date(2026, 12, 28), # Boxing Day (Observed)
     # 2027
@@ -62,6 +84,8 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2027, 4, 26),  # Anzac Day (Observed)
     datetime.date(2027, 6, 14),  # King's Birthday
     datetime.date(2027, 8, 2),   # Picnic Day (NT)
+    datetime.date(2027, 9, 27),  # King's Birthday (WA)
+    datetime.date(2027, 10, 4),  # King's Birthday (Qld); Labour Day (NSW, SA, ACT)
     datetime.date(2027, 12, 25),
     datetime.date(2027, 12, 27), # Christmas Day (Observed)
     datetime.date(2027, 12, 28), # Boxing Day (Observed)

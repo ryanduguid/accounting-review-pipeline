@@ -179,10 +179,11 @@ Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
 
 ```text
-close-control: REVIEW; 8 exception(s)
+close-control: REVIEW; 8 exception(s); 6 client query(ies) drafted
   json: /home/you/close-control-demo/close-review-pack.json
   summary: /home/you/close-control-demo/close-summary.md
   exceptions: /home/you/close-control-demo/exceptions.csv
+  client_queries: /home/you/close-control-demo/client-queries.csv
 ```
 
 The paths are absolute and have their symlinks resolved, whatever `--output`

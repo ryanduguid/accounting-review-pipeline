@@ -26,14 +26,31 @@ from generate_fixtures import (  # noqa: E402
     notional_earnings,
 )
 
-# The holidays the documented sample calendar covers (the nationwide dates plus NT Picnic
-# Day) that fall between 1 July and 31 December 2026, listed here from their own sources
-# rather than imported from the generator: a date the generator drops must fail this suite.
+# Every whole-of-state or whole-of-territory public holiday between 1 July and 31 December
+# 2026 that the documented sample calendar covers, listed here from its own source rather
+# than imported from the generator: a date the generator drops must fail this suite.
+#
 # Picnic Day, Monday 3 August 2026, appears on https://nt.gov.au/nt-public-holidays without
-# the footnote that marks the regional show days, so it applies across the whole Territory
-# and stops the clock under the methodology's whole-of-any-state-or-territory rule.
+# the footnote that marks the regional show days, so it applies across the whole Territory.
+# WA's King's Birthday, Monday 28 September 2026, is on
+# https://www.wa.gov.au/service/employment/workplace-arrangements/public-holidays-western-australia
+# in the statewide table; the same page lists the 2 local government districts that
+# substitute another day. Queensland's King's Birthday, Monday 5 October 2026, is on
+# https://www.qld.gov.au/recreation/travel/holidays/public, which states the first-Monday-in-
+# October rule; the same Monday is Labour Day in NSW
+# (https://www.nsw.gov.au/about-nsw/public-holidays), South Australia
+# (https://www.safework.sa.gov.au/resources/public-holidays) and the ACT
+# (https://www.act.gov.au/__data/assets/pdf_file/0004/2155495/ACT-Public-Holidays-2026.pdf).
+# All of them stop the clock under the methodology's whole-of-any-state-or-territory rule.
+#
+# Deliberately absent, and disclosed in docs/compliance-methodology.md: Victoria's Friday
+# before the AFL Grand Final (25 September 2026) and Melbourne Cup Day (3 November 2026),
+# and the part-day evening holidays South Australia and Queensland observe on 24 and 31
+# December. Each omission can only make a sample due date earlier, never later.
 INDEPENDENT_2026_HOLIDAYS = {
     datetime.date(2026, 8, 3): "Picnic Day (NT)",
+    datetime.date(2026, 9, 28): "King's Birthday (WA)",
+    datetime.date(2026, 10, 5): "King's Birthday (Qld); Labour Day (NSW, SA, ACT)",
     datetime.date(2026, 12, 25): "Christmas Day",
     datetime.date(2026, 12, 28): "Boxing Day (Monday observance)",
 }
@@ -135,9 +152,13 @@ class TestPaydaySuperRules(unittest.TestCase):
                 f"Event {row['EventID']} due date disagrees with the independent calendar",
             )
 
-        # The payday whose window crosses Picnic Day, and a control whose window does not.
+        # The 3 paydays whose 7-business-day windows cross one of these holidays, and 2
+        # controls whose windows cross none.
         self.assertEqual(due_date(datetime.date(2026, 7, 29)), datetime.date(2026, 8, 10))
+        self.assertEqual(due_date(datetime.date(2026, 9, 23)), datetime.date(2026, 10, 6))
+        self.assertEqual(due_date(datetime.date(2026, 9, 30)), datetime.date(2026, 10, 12))
         self.assertEqual(due_date(datetime.date(2026, 8, 26)), datetime.date(2026, 9, 4))
+        self.assertEqual(due_date(datetime.date(2026, 9, 16)), datetime.date(2026, 9, 25))
         self.assertIn(datetime.date(2026, 7, 29), checked)
         self.assertIn(datetime.date(2026, 8, 26), checked)
 
