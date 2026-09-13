@@ -24,7 +24,7 @@ class ReleasePolicyTests(unittest.TestCase):
         release_job = self.workflow().split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
         self.assertIn(
             "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-            "fcf25e532e9eb60056ae6e5c819cf3125c4f4b91",
+            "171aa487dbc0a8f437ed84407f0d506f814548c1",
             release_job,
         )
         self.assertIn("source-directory: packages/xero-trial-balance-export", release_job)
