@@ -17,7 +17,7 @@ amended in the change that creates the firm (section 3).
 Every name in the tables is invented. Two places name real parties and are
 deliberately not repeated here: the `progress-claim-preparation` skill cites
 a NSW Supreme Court security-of-payment judgment by its parties, which is a
-citation, not a fixture; and `FireFalcon/examples/arb/` is a worked example
+citation, not a fixture; and `au-fpa-pack/examples/arb/` is a worked example
 built from a listed company's published Appendix 4E figures. That example is
 outside the firm and stays or goes on the owner's call; it is not a
 fabricated entity.
@@ -25,8 +25,8 @@ fabricated entity.
 | Entity | Files | Facts asserted | Consumers |
 | --- | --- | --- | --- |
 | Cedar and Pine Consulting Pty Ltd | `australian-accounting-skills/assets/readme/bas-workpaper-synthetic.svg` and `README.md` (preview); `packages/review-ready-gate/examples/bas-ready` and `bas-blocked` (`trial_balance.csv`, `activity_statement.csv`, `gst_control_gl.csv`, `open_items.csv`, `self_review.json`) and `bas-not-ready` (`prior_findings.csv` in place of `gst_control_gl.csv`); `tests/test_loader.py`, `tests/test_engine.py` | Two fact sets that do not agree. The preview: consulting company, cash basis, quarterly BAS, quarter ended 31 March 2026, identifier `SYNTH-0001`, ABN withheld, G1 48,400.00, 1A 4,400.00, 1B 1,210.00, net 3,190.00 tied to the GST control account, two carried exceptions. The gate examples: 1A 10,000.00, 1B 2,500.00 and a seven-account trial balance for the same quarter | Skills README preview; Workpaper Review Gate examples and tests; the site's refusals page (pending on site PR #69) cites the `bas-not-ready` and `bas-blocked` runs at `review-ready-gate/v0.1.3` |
-| Harbour Light Pty Ltd | `FireFalcon/examples/harbour-light/` (`data/xero_pl.csv`, `xero_bs.csv`, `xero_pl_tracking.csv`, `harbour_model.py`, `run_harbour.py`, `.fpa/` intake, profile, source and mapping registries, `output/briefing.md`); `FireFalcon/tests/test_harbour_light.py` | Victorian lighting wholesaler, FY2027, AUD, quarterly BAS; North and South tracking (monthly GST-exclusive sales of 70,000 North, being 58,000 domestic and 12,000 GST-free, and 41,000 South); five VIC roles, 499,200 gross, super at 12 per cent, workers compensation 2 per cent, payroll tax nil under the Victorian threshold; opening cash 85,420; 13-week window from 1 October 2026 | FireFalcon pipeline and nine tests; `model_to_excel` verification |
-| CivilCo and HaulCo (Group) | `PaciolisCube/model/dimensions/Entity.hierarchies/Entity.json`, `model/cubes/PnL.rules`, `examples/capex.csv`, `drivers.csv`, `pnl-direct.csv`, `revenue.csv`, `workforce.csv`, `docs/model-assumptions.md`, four test files | Two operating entities of a mining-services group rolling up to `Group`; FY2026-27 budget; CivilCo (civil earthworks) is the NSW group employer for payroll tax; SG rate 0.12 and maximum contribution base 270,830 as drivers; headcount, rates, fleet capex and asset lives per cost centre | PaciolisCube engine, CLI and CI recomputation |
+| Harbour Light Pty Ltd | `au-fpa-pack/examples/harbour-light/` (`data/xero_pl.csv`, `xero_bs.csv`, `xero_pl_tracking.csv`, `harbour_model.py`, `run_harbour.py`, `.fpa/` intake, profile, source and mapping registries, `output/briefing.md`); `au-fpa-pack/tests/test_harbour_light.py` | Victorian lighting wholesaler, FY2027, AUD, quarterly BAS; North and South tracking (monthly GST-exclusive sales of 70,000 North, being 58,000 domestic and 12,000 GST-free, and 41,000 South); five VIC roles, 499,200 gross, super at 12 per cent, workers compensation 2 per cent, payroll tax nil under the Victorian threshold; opening cash 85,420; 13-week window from 1 October 2026 | au-fpa-pack pipeline and nine tests; `model_to_excel` verification |
+| CivilCo and HaulCo (Group) | `planning-analytics-model/model/dimensions/Entity.hierarchies/Entity.json`, `model/cubes/PnL.rules`, `examples/capex.csv`, `drivers.csv`, `pnl-direct.csv`, `revenue.csv`, `workforce.csv`, `docs/model-assumptions.md`, four test files | Two operating entities of a mining-services group rolling up to `Group`; FY2026-27 budget; CivilCo (civil earthworks) is the NSW group employer for payroll tax; SG rate 0.12 and maximum contribution base 270,830 as drivers; headcount, rates, fleet capex and asset lives per cost centre | pacioliscube engine, CLI and CI recomputation |
 | Varrock group (Varrock Ventures Pty Ltd, Draynor Produce Pty Ltd, Falador Freight Pty Ltd, Ardougne Holdings Trust) | `apps/australian-accounting-power-bi/samples/` (`sample-entities.csv`, `sample-chart-of-accounts.csv`, `sample-general-ledger.csv`, `sample-budgets.csv`, `sample-payroll-super.csv`, `sample-ato-benchmarks.csv`), `tools/generate_fixtures.py`, `tests/test_fixtures_balance.py`; Varrock Ventures is also the tenant in `packages/monthly-close-control-plane/examples/` and in Workpaper Review Gate `month-end-ready` and `year-end-ready` | ENT001 to ENT004 with checksum-valid ABNs, ACNs, tax structure, role and ANZSIC code; 30-account chart; balanced journals from 1 July 2024 with intercompany management fees and freight; monthly budgets; payroll events with remittance, fund receipt and statutory due dates and `ON_TIME` or `LATE_BREACH` status; opening balances per entity | Power BI model and tests (balance, intercompany, byte-for-byte regeneration); Monthly Close Controls examples; Workpaper Review Gate examples |
 | Catherby Fisheries Pty Ltd | `contracts/xero-trial-balance-v1/fixtures/` (`passing.csv`, `failing_movement.csv`, `failing_ytd.csv`), `expected_results.json`, `SHA256SUMS`; `packages/xero-trial-balance-export/samples/sample-output.csv`, `assets/quick-proof.*`, exporter tests | Report date 30 June 2026, GUID `AccountID`s and text `AccountCode` (`090`); two accounts in the contract fixtures and ten in the exporter sample; movement 1,200.00 and YTD 15,234.50, one cent breaks in the two failing files; exit codes and output markers per scenario | Exporter evaluation and quick proof; conformance tests in all three review packages, the Excel adapter, Power BI and the root joined test; the site's exporter page and refusals page |
 
@@ -137,7 +137,7 @@ and a test proves it:
    contract liability, retention and revenue balances in ENT005's trial
    balance; certified billings equal ledger billings.
 5. Intercompany lines net to zero across the group (the Power BI test).
-6. Budgets for ENT003 and ENT005 may later be pinned to PaciolisCube's
+6. Budgets for ENT003 and ENT005 may later be pinned to planning-analytics-model's
    computed budget by hash; that coupling is optional and separate.
 
 Versioning and hashes follow the v1 contract: the directory leaf carries the
@@ -181,16 +181,16 @@ runs:
    structural, balance and intercompany tests pass, the regeneration test
    becomes the drift test against the contract copies, and the report shows
    the five entities with eliminations.
-8. Excel adapter and FireFalcon. The Xero report-shaped CSVs feed the Power
+8. Excel adapter and au-fpa-pack. The Xero report-shaped CSVs feed the Power
    Query import; ENT002's July 2026 profit and loss and balance sheet feed
-   the FireFalcon pipeline in place of Harbour Light.
+   the au-fpa-pack pipeline in place of Harbour Light.
 
 ## 6. Migration path per existing entity
 
 | Today | Becomes | How | Constraint |
 | --- | --- | --- | --- |
 | Cedar and Pine Consulting | ENT001 Varrock Ventures | Regenerate the skills README preview from the ENT001 September 2026 pack; add firm-based Workpaper Review Gate examples beside the existing three | The existing `bas-*` examples are pinned by `test_loader.py`, `test_engine.py` and the site's refusals page at `v0.1.3`; remove them only in a later minor release, in their own pull request |
-| Harbour Light | ENT002 Draynor Produce, VIC | Regenerate `data/xero_pl.csv`, `xero_bs.csv` and `xero_pl_tracking.csv` from the ENT002 July 2026 ledger; rename the example directory, intake, profile and registries; update the nine tests to the firm figures | FireFalcon is source-only, so no distribution identity changes; keep the 13-week window and the 28 October BAS due date |
+| Harbour Light | ENT002 Draynor Produce, VIC | Regenerate `data/xero_pl.csv`, `xero_bs.csv` and `xero_pl_tracking.csv` from the ENT002 July 2026 ledger; rename the example directory, intake, profile and registries; update the nine tests to the firm figures | au-fpa-pack is source-only, so no distribution identity changes; keep the 13-week window and the 28 October BAS due date |
 | CivilCo and HaulCo | ENT005 Lumbridge Civil and ENT003 Falador Freight | Rename the `Entity` dimension elements and every rule and example row; recompute; `Group` stays | The model is recomputed in CI, so every expected figure moves with the rename in one change |
 | Varrock group (Power BI) | The base of the firm | Retire `generate_fixtures.py` in favour of the root generator; the six samples become copies with a drift test against `contracts/fabricated-firm-v1/`; add ENT005 and the three columns; update the `Dim_Entity` width | `Fx_ValidateABN` must keep passing, so ENT005 needs a checksum-valid ABN |
 | Varrock Ventures (Monthly Close, Workpaper Review Gate month-end and year-end) | ENT001 | Add firm-based examples beside the existing ones | The Monthly Close README pins `REVIEW; 8 exception(s)` and the refusals page pins `BLOCKED; 10 exception(s)` with its totals at `monthly-close-control-plane/v0.1.3`, so the existing examples go only in a later minor release, as for the `bas-*` examples above; exit codes and status vocabularies never change |
@@ -208,7 +208,7 @@ runs:
 3. Whether the five ABNs are checked by hand against ABR Lookup so that no
    synthetic checksum-valid number coincides with a registered one. The
    Power BI fixtures carry the same exposure today; the site withholds ABNs.
-4. Whether the PaciolisCube budget coupling in rule 6 is in scope.
+4. Whether the planning-analytics-model budget coupling in rule 6 is in scope.
 5. Coverage from 1 July 2024 (three years, matching the ledger) or FY2027
    only (smaller, but no prior-period comparisons for the close and BAS).
 6. The generator's home: the root `tools/fabricated_firm.py` proposed in
