@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref != 'refs/tags/elizabeth-anne-alexander/v0.2.3-pypi-recovery'
     permissions:
       actions: read # Inspect and download only the exact bound release candidate.
       attestations: write # Record provenance and SBOM attestations for release assets.
@@ -63,7 +63,7 @@ jobs:
 
   recover-pypi-0-2-3:
     name: Publish the verified 0.2.3 release to PyPI
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/tags/elizabeth-anne-alexander/v0.2.3-pypi-recovery'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
