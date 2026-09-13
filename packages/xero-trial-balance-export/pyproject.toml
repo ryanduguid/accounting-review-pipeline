@@ -44,7 +44,7 @@ xero-tb-auth = "auth:main"
 [tool.setuptools]
 py-modules = ["auth", "xero_client", "export_tb", "token_store"]
 
-# The exporter is four flat modules, not a package, so the type-check and
+# The exporter is 4 flat modules, not a package, so the type-check and
 # coverage scopes are the module list. Ruff reads ruff.toml beside this file.
 [tool.mypy]
 python_version = "3.10"

@@ -10,7 +10,7 @@ This pack is for a reviewer who wants to reproduce the offline integrity gate wi
 
 ## Fabricated inputs
 
-The three CSVs in the repository root's `contracts/xero-trial-balance-v1/fixtures/` directory are fabricated output-shape fixtures. They are not Xero API responses and are not client records. No OAuth flow runs in this evaluation.
+The 3 CSVs in the repository root's `contracts/xero-trial-balance-v1/fixtures/` directory are fabricated output-shape fixtures. They are not Xero API responses and are not client records. No OAuth flow runs in this evaluation.
 
 ## Reproduce the result
 
@@ -22,7 +22,7 @@ python -B -m unittest tests.test_evaluation_pack -v
 python -B -m unittest discover -s tests -v
 ```
 
-Dependency installation may download the hash-locked packages. Once dependencies are installed, the three evaluation runner commands are fully offline, make no network request and write no output file:
+Dependency installation may download the hash-locked packages. Once dependencies are installed, the 3 evaluation runner commands are fully offline, make no network request and write no output file:
 
 ```bash
 python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/passing.csv
@@ -38,7 +38,7 @@ They use only the fabricated local fixtures and need no credentials.
 
 ## Shared conformance corpus
 
-This repository owns the data-only `xero-tb-csv.v1` conformance corpus. The contract records the canonical ten-column order, every fabricated fixture's SHA-256 digest, and whether a conforming consumer must accept or reject it. The corpus files use LF line endings so those byte-level pins are identical on every supported platform. Downstream repositories can vendor these four files at a named commit and verify them without a runtime network dependency.
+This repository owns the data-only `xero-tb-csv.v1` conformance corpus. The contract records the canonical 10-column order, every fabricated fixture's SHA-256 digest, and whether a conforming consumer must accept or reject it. The corpus files use LF line endings so those byte-level pins are identical on every supported platform. Downstream repositories can vendor these 4 files at a named commit and verify them without a runtime network dependency.
 
 ## Controls triggered
 
@@ -46,7 +46,7 @@ This repository owns the data-only `xero-tb-csv.v1` conformance corpus. The cont
 
 ## Primary sources and review date
 
-The contract records Xero's [Accounting API Reports](https://developer.xero.com/documentation/api/accounting/reports) and [OAuth scopes](https://developer.xero.com/documentation/guides/oauth2/scopes/) pages. They were reviewed on 2026-08-26.
+The contract records Xero's [Accounting API Reports](https://developer.xero.com/documentation/api/accounting/reports) and [OAuth scopes](https://developer.xero.com/documentation/guides/oauth2/scopes/) pages. They were reviewed on 26 August 2026.
 
 ## Product and fixture version
 

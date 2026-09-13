@@ -14,7 +14,7 @@ not authority to disclose any client file.
 
 ## PyPI is deliberately out of scope
 
-`release-evatt.yml` has no `pypi` job. Its four siblings publish through trusted
+`release-evatt.yml` has no `pypi` job. Its 4 siblings publish through trusted
 publishing; this one does not, because a public release of the tool is out of
 scope until the disclosure policy the tool enforces is signed off. An absent job
 is a better guard than a job that would fire on a stray tag.
@@ -58,7 +58,7 @@ the first tag that would use them.
    `uv lock --check` passes.
 5. Confirm the source distribution still carries `DISCLAIMER.md`,
    `DATA-FLOW.md`, `SECURITY.md` and `CONTRIBUTING.md`. `README.md` is the long
-   description and points a reader at all four, and `MANIFEST.in` is the only
+   description and points a reader at all 4, and `MANIFEST.in` is the only
    thing putting them in the artefact:
 
     ```bash

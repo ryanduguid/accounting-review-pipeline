@@ -70,7 +70,7 @@ def test_policy_bound_evaluation_returns_one_redacted_revenue_finding() -> None:
     assert model["status"] == "REVIEW_READY"
     assert len(model["findings"]) == 1
     assert model["findings"][0]["section"] == "Revenue"
-    # 11000 / 60000, expressed in percent and quantized to four decimal places.
+    # 11000 / 60000, expressed in per cent and quantized to 4 decimal places.
     assert model["findings"][0]["percent_change"] == "18.3333"
     assert model["total_findings"] == 1
     assert model["truncated"] is False
@@ -331,7 +331,7 @@ def test_one_sided_account_outside_the_requested_section_is_not_reported() -> No
 def test_a_movement_over_the_absolute_floor_but_under_the_percent_floor_is_not_reported() -> None:
     """Both floors bound the reported set, so clearing one of them is not enough.
 
-    Every other variance test either clears both floors or has percent None,
+    Every other variance test either clears both floors or has per cent None,
     the one-sided case where the percentage clause is skipped by design, so the
     percentage half of the policy's bounded-results contract never ran.
     """
@@ -574,7 +574,7 @@ def test_exact_account_id_leaf_still_trips_the_disclosure_check() -> None:
 
 @pytest.mark.parametrize("leaf", ["Unit Test Tenant", "Name acct-1", "9999"])
 def test_every_source_display_value_the_readme_names_is_forbidden_as_a_leaf(leaf: str) -> None:
-    """Tenant, account name and account code are the three values README "Control boundary" names.
+    """Tenant, account name and account code are the 3 values README "Control boundary" names.
 
     AccountID has its own test above. The account code was reachable only as a
     key name, so a code leaking into a model leaf under some future projection
@@ -621,7 +621,7 @@ def _decided_run(tmp_path: Path, state: str) -> tuple[dict[str, Path], Path]:
 
 def test_the_decision_allowlist_is_exactly_the_three_documented_states() -> None:
     # Widening this set is a decision to be argued for in a test change, not
-    # something a refactor can do quietly. The README promises these three.
+    # something a refactor can do quietly. The README promises these 3.
     assert ALLOWED_DECISIONS == {"ACKNOWLEDGED", "NEEDS_EVIDENCE", "ESCALATED"}
 
 
@@ -755,7 +755,7 @@ def test_a_run_id_that_disagrees_across_the_pack_is_refused(
 ) -> None:
     """This is the only line binding a human sign-off to the run it claims to be about.
 
-    Nothing else compares the three run_id values: the receipt digests seal the
+    Nothing else compares the 3 run_id values: the receipt digests seal the
     evidence and the model result, not the decision. Without this check a
     decision written for one run validates against another run's evidence and
     receipt whenever the finding IDs coincide, and validate_review reports
@@ -771,7 +771,7 @@ def test_a_run_id_that_disagrees_across_the_pack_is_refused(
 
 
 def test_reviewer_evidence_carrying_one_finding_twice_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Two items sharing a finding_id make one decision look like two, or hide one of the pair."""
+    """Two items sharing a finding_id make one decision look like 2, or hide one of the pair."""
     monkeypatch.chdir(tmp_path)
 
     def duplicate(evidence: dict) -> None:
@@ -1097,8 +1097,8 @@ def test_a_pack_mixed_by_a_failed_move_is_refused_by_validate_review(tmp_path: P
 
     The staged writes all succeed here and the failure lands between the moves,
     which leaves the second run's model result beside the first run's evidence
-    and receipt. Those two still agree with each other, so only the receipt's
-    result digest can tell that the pack describes two runs.
+    and receipt. Those 2 still agree with each other, so only the receipt's
+    result digest can tell that the pack describes 2 runs.
     """
 
     monkeypatch.chdir(tmp_path)
@@ -1170,11 +1170,11 @@ def test_the_scope_note_names_exactly_the_artefacts_that_carry_the_mode_marker(t
 
 
 def test_the_three_artefacts_the_scope_note_exempts_reject_an_added_mode_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The scope note says adding a `mode` key to these three is rejected; this runs that rule.
+    """The scope note says adding a `mode` key to these 3 is rejected; this runs that rule.
 
     The test above asserts the README sentence is present. Only the exact
     key-set comparison in load_json_exact enforces it, and with that one line
-    disabled all three of these artefacts load and the run completes, so the
+    disabled all 3 of these artefacts load and the run completes, so the
     tie-out was pinning prose that nothing policed.
     """
     from elizabeth_anne_alexander.gateway import _load_policy, _load_request
@@ -1258,7 +1258,7 @@ def test_a_non_iterable_model_projection_is_refused_not_a_type_error(tmp_path: P
 
 def test_the_run_id_moves_when_only_the_source_manifest_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The manifests carry entity_ref, include_drafts and tracking_filters, all
-    of which change what the figures mean. Sealing only the CSVs let two runs
+    of which change what the figures mean. Sealing only the CSVs let 2 runs
     over different entities share one run_id, so a receipt did not identify its
     own inputs and the reproducibility claim did not hold."""
     monkeypatch.chdir(tmp_path)

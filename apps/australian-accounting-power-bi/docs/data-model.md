@@ -1,4 +1,4 @@
-# Dimensional Data Model Architecture
+# Dimensional data model architecture
 
 The semantic model follows Kimball star schema principles, strictly separating dimension tables from fact tables with unidirectional `1:*` relationships to ensure optimal DAX performance and unambiguous filter propagation.
 
@@ -23,41 +23,41 @@ erDiagram
 
 ---
 
-## 1. Dimension Tables
+## 1. Dimension tables
 
-### `Dim_Date` (Australian Financial Year Calendar)
+### `Dim_Date` (Australian financial year calendar)
 - **Primary Key**: `Date`
 - **Granularity**: One row per calendar day (1 July 2024 to 30 June 2027).
 - **Core Attributes**:
   - `CalendarYear`, `MonthNumber`, `MonthName`, `DayOfMonth`, `DayOfWeek`, `DayName`.
-  - `FinancialYear`: Australian financial year label (e.g. `FY24-25`, `FY25-26`, `FY26-27`).
+  - `FinancialYear`: Australian financial year label (for example, `FY24-25`, `FY25-26`, `FY26-27`).
   - `FinancialQuarter`: `FQ1` (Jul-Sep), `FQ2` (Oct-Dec), `FQ3` (Jan-Mar), `FQ4` (Apr-Jun).
   - `FinancialMonthNumber`: `1` (July) through `12` (June).
   - `FYStartDate`, `FYEndDate`: Standard financial period boundaries.
 
-### `Dim_Entity` (Multi-Entity Corporate Hierarchy)
+### `Dim_Entity` (multi-entity corporate hierarchy)
 - **Primary Key**: `EntityID`
 - **Granularity**: One row per legal entity in the corporate group.
-- **Attributes**: `LegalName`, `TradingName`, `ABN`, `ACN`, `TaxStructure` (Company vs Unit Trust), `EntityRole`, `ANZSIC_Code`, `Currency`, `ConsolidationWeight`.
+- **Attributes**: `LegalName`, `TradingName`, `ABN`, `ACN`, `TaxStructure` (Company versus Unit Trust), `EntityRole`, `ANZSIC_Code`, `Currency`, `ConsolidationWeight`.
 
-### `Dim_Account` (Chart of Accounts & Financial Reporting)
+### `Dim_Account` (chart of accounts and financial reporting)
 - **Primary Key**: `AccountCode`
 - **Granularity**: One row per general ledger account.
-- **Attributes**: `AccountName`, `Class` (Asset, Liability, Equity, Revenue, Expense), `SubClass`, `ReportSection` (Balance Sheet vs Profit and Loss), `BalanceSheetGroup`, `CashFlowCategory` (Operating, Investing, Financing), `NormalBalance` (Debit/Credit), `SortOrder`.
+- **Attributes**: `AccountName`, `Class` (Asset, Liability, Equity, Revenue, Expense), `SubClass`, `ReportSection` (Balance Sheet versus Profit and Loss), `BalanceSheetGroup`, `CashFlowCategory` (Operating, Investing, Financing), `NormalBalance` (Debit/Credit), `SortOrder`.
 
-### `Dim_ANZSIC` (Industry Classifications)
+### `Dim_ANZSIC` (industry classifications)
 - **Primary Key**: `ANZSIC_Code`
 - **Granularity**: One row per Australian and New Zealand Standard Industrial Classification 4-digit code.
 - **Attributes**: `Division`, `Subdivision`, `IndustryTitle`.
 
-### `Dim_Employee` (Synthetic Workforce Master)
+### `Dim_Employee` (synthetic workforce master)
 - **Primary Key**: `EmployeeID`
 - **Granularity**: One row per employee.
 - **Attributes**: `EntityID`, `EmployeeName`, `SuperFundUSI`, `SuperFundName`.
 
 ---
 
-## 2. Fact Tables
+## 2. Fact tables
 
 ### `Fact_GeneralLedger`
 - **Granularity**: Individual double-entry journal lines.

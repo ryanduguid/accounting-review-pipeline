@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     except ControlInputError as exc:
         print(f"close-control: output error: {exc}", file=sys.stderr)
         return 1
-    # write_review_pack replaces its four destinations and deletes what it
+    # write_review_pack replaces its 4 destinations and deletes what it
     # parked aside. If a source file IS one of those destinations, that source
     # is destroyed and the pack still records a source_sha256 for it, so the
     # provenance chain points at evidence that no longer exists. Refuse before

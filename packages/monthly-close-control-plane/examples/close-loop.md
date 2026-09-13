@@ -2,7 +2,7 @@
 
 This checkout does not connect to Xero. There is no OAuth step, token file, or live ledger call.
 
-The loop is two local commands over fabricated trial-balance CSVs that share the ten-column contract:
+The loop is 2 local commands over fabricated trial-balance CSVs that share the 10-column contract:
 
 ```text
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
@@ -17,8 +17,8 @@ A Windows driver for the same steps is [close-loop.ps1](close-loop.ps1). It uses
 
 This repo's quick-demo pair is the wrong pair for the gateway step:
 
-- `examples/prior_trial_balance.csv` is Varrock Ventures Pty Ltd at 2026-06-30
-- `examples/current_trial_balance.csv` is Varrock Ventures Pty Ltd at 2026-07-31
+- `examples/prior_trial_balance.csv` is Varrock Ventures Pty Ltd at 30 June 2026
+- `examples/current_trial_balance.csv` is Varrock Ventures Pty Ltd at 31 July 2026
 
 Those dates straddle the Australian financial-year reset on 1 July. Close-control will still write a pack, and it will raise `financial_year_reset` because YTD figures restart. The gateway **refuses** a current/prior pair in different financial years (unless they are the same calendar day and month, for a year-on-year comparison). Feeding it the Varrock files would not be a variance review; it would be a blocked run.
 

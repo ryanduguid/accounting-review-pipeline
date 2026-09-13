@@ -14,7 +14,7 @@ uv run --locked --extra dev python examples/clearing_demo.py --output ../../../c
 ```
 
 Choose a new output directory. Open `clearing-demo/july-reviewed/review.html` in
-your browser. The four runs use fabricated inputs and allocations:
+your browser. The 4 runs use fabricated inputs and allocations:
 
 | Run | Opening balance | Current movement | Closing balance | Outstanding items | Result |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -23,7 +23,7 @@ your browser. The four runs use fabricated inputs and allocations:
 | July with reviewed allocations | 100.00 | -75.00 | 25.00 | 1 | REVIEW |
 | August with reviewed allocations | 25.00 | -25.00 | 0.00 | 0 | PASS |
 
-July matches a June receipt against a July settlement, then two July receipts
+July matches a June receipt against a July settlement, then 2 July receipts
 against one settlement. The remaining $25 retains its original 31 July date.
 August settles that item and demonstrates a manually supplied group with different
 references. The expected amounts above are hand-derived from the supplied CSVs.
@@ -40,14 +40,14 @@ for a period with no movements. Supply ledger balances separately.
 | --- | --- |
 | Tenant | One consistent entity label |
 | AccountID | One consistent account identifier |
-| Currency | One uppercase three-letter code; no currency conversion |
+| Currency | One uppercase 3-letter code; no currency conversion |
 | TransactionID | Stable, unique source-line identifier; 1-80 ASCII letters, digits, dots, underscores, colons or hyphens; first character alphanumeric |
 | Date | Posting date as YYYY-MM-DD |
 | Reference | Source reference; may be empty |
 | Description | Source description; may be empty |
 | Debit / Credit | Explicit non-negative amounts; exactly one side positive and the other 0 |
 
-Amounts have at most two decimal places and magnitude below 10^15. The first
+Amounts have at most 2 decimal places and magnitude below 10^15. The first
 version supports at most 100,000 opening and current items together. It rejects
 missing fields, non-finite amounts, duplicate IDs and mixed account identities.
 It cannot detect an omitted transaction or a duplicate given a new ID merely by
@@ -56,7 +56,7 @@ inspecting that ID. Balance checks can also miss offsetting source errors.
 Map your source export to this schema and retain the original. A trial balance
 contains totals and is insufficient. Native Xero Account Transactions file import
 has not been verified. Do not treat this as a drop-in importer for any export
-headed "Xero". If the export lacks stable line IDs, document a repeatable mapping
+headed 'Xero'. If the export lacks stable line IDs, document a repeatable mapping
 before use; renumbering or inventing fresh IDs each month defeats duplicate checks.
 
 ## Review and record matches
@@ -71,7 +71,7 @@ Exit 2 is the expected REVIEW result. Open the generated `review.html` and
 `suggestions.csv`. The HTML needs no server, scripts or internet connection.
 
 Suggestions group all items with an identical, non-empty reference only when the
-group has 2-20 items and sums exactly to zero. Amount alone never produces a match.
+group has 2 to 20 items and sums exactly to zero. Amount alone never produces a match.
 Repeated references are not proof of a relationship; examine the source evidence.
 Large groups, partial reference groups and different references require manual
 selection. The tool does not search arbitrary combinations or split a transaction.
@@ -81,7 +81,7 @@ In the decisions CSV:
 1. Set every row of a group to `accept` or `reject`, with the same explanatory
    note on each row. Leave Decision blank to keep the group pending. Pending
    groups retain their IDs, labels and draft notes when you rerun the period.
-2. Add a manual group by giving two or more outstanding IDs a common Group label.
+2. Add a manual group by giving 2 or more outstanding IDs a common Group label.
 3. Each ID may occur only once in the decisions file. Accepted groups must sum
    exactly to zero. A rejected group remains outstanding with its note.
 4. Run the command again with `--decisions path/to/reviewed-decisions.csv` and a

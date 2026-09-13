@@ -408,7 +408,7 @@ def generate_fixtures():
             event_id += 1
             pay_date = cur_date
             # Payday Super regime is live from 1 July 2026: 7 national business days
-            # Before 1 July 2026: quarterly due dates (e.g. 28 days after quarter end)
+            # Before 1 July 2026: quarterly due dates (for example, 28 days after quarter end)
             is_post_transition = pay_date >= datetime.date(2026, 7, 1)
             due_date = add_business_days(pay_date, 7) if is_post_transition else datetime.date(2026, 4, 28) if pay_date.month <= 3 else datetime.date(2026, 7, 28)
 

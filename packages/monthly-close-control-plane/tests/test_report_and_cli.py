@@ -165,7 +165,7 @@ def test_report_files_are_deterministic_and_csv_text_is_formula_safe(tmp_path: P
 
     assert first["json"].read_text(encoding="utf-8") == second["json"].read_text(encoding="utf-8")
     assert first["summary"].read_text(encoding="utf-8") == second["summary"].read_text(encoding="utf-8")
-    # A completed pack is exactly the four named files; nothing staged survives.
+    # A completed pack is exactly the 4 named files; nothing staged survives.
     assert sorted(item.name for item in (tmp_path / "one").iterdir()) == PACK_FILES
     with first["exceptions"].open(encoding="utf-8-sig", newline="") as source:
         rows = list(csv.DictReader(source))
@@ -269,7 +269,7 @@ def test_markdown_table_escapes_pipes_backslashes_and_newlines(tmp_path: Path) -
     data_row = next(line for line in lines if line.startswith("| REVIEW |"))
 
     # An extra cell shifts every column after it, so the reviewer reads the
-    # value under the wrong heading. The row must parse to the same six cells
+    # value under the wrong heading. The row must parse to the same 6 cells
     # the header declares, each holding the value it was given.
     assert _table_cells(header_row) == ["Status", "Control", "Tenant", "Account", "Difference", "Reason"]
     assert _table_cells(data_row) == [
@@ -435,7 +435,7 @@ def test_a_failed_pack_write_rolls_back_to_the_previous_run(tmp_path: Path, bloc
         write_review_pack(_single_exception_pack(digest="bbb", difference="85000.00"), output)
 
     # A run that cannot finish must leave the previous pack whole, whichever of
-    # the four files blocks it. Deleting evidence this run never wrote - the
+    # the 4 files blocks it. Deleting evidence this run never wrote - the
     # untouched exception detail from the last close - is worse than the mixed
     # pack the staging exists to prevent, and the CLI reports only the OSError.
     for name, content in survivors.items():
@@ -500,7 +500,7 @@ def test_a_staged_file_from_another_run_is_not_reused(tmp_path: Path) -> None:
     output.mkdir(parents=True)
     # A concurrent run staging into the same directory holds this file. Staging
     # under a fixed name overwrites it and then moves that run's content into
-    # place beside this run's other two files.
+    # place beside this run's other 2 files.
     decoy = output / "close-review-pack.json.partial"
     decoy.write_text("another run's staged pack", encoding="utf-8")
 
@@ -698,7 +698,7 @@ def test_sub_cent_amounts_survive_into_every_pack_file(tmp_path: Path) -> None:
     assert payload["exceptions"][0]["difference"] == "0.0040"
     assert payload["exceptions"][0]["threshold"] == "0.001"
     assert payload["thresholds"]["reconciliation_tolerance"] == "0.001"
-    # Whole-dollar figures keep their familiar two places.
+    # Whole-dollar figures keep their familiar 2 places.
     assert payload["thresholds"]["absolute_variance"] == "1000.00"
     with outputs["exceptions"].open(encoding="utf-8-sig", newline="") as source:
         row = next(csv.DictReader(source))
@@ -792,7 +792,7 @@ def test_workbench_writes_the_existing_review_pack_and_hands_off_to_the_reviewer
     """A missing workbench façade would make the command unrecognised.
 
     The workbench must keep the existing review engine and pack writer as the
-    one source of truth: a reviewer receives the same three artefacts and an
+    one source of truth: a reviewer receives the same 3 artefacts and an
     explicit reminder that the pack is not an approval.
     """
     output = tmp_path / "workbench-pack"
@@ -956,7 +956,7 @@ def test_a_review_note_surrogate_is_refused_instead_of_crashing(tmp_path: Path) 
     work = tmp_path / "client"
     work.mkdir()
     note = tmp_path / "note.json"
-    # written as bytes so the file holds the six-character escape; json.loads
+    # written as bytes so the file holds the 6-character escape; json.loads
     # is what turns it into a lone surrogate.
     note.write_bytes(
         b'{"reviewer_initials":"RD","reviewed_on":"2026-08-08",'
@@ -1050,7 +1050,7 @@ def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
     `Path.resolve` raises RuntimeError, not OSError, for a symlink loop before
     Python 3.13, which left the CLI's handlers untouched and printed a
     traceback. From 3.13 resolve hands back the unresolved path instead, and
-    the loop surfaced two layers later in mkdir. The guard stats the resolved
+    the loop surfaced 2 layers later in mkdir. The guard stats the resolved
     destination so both end here, with the same error."""
     _require_symlinks(tmp_path)
     looped = tmp_path / "loop"
@@ -1214,7 +1214,7 @@ def test_two_spellings_of_one_directory_are_recognised_as_one(
 
     A case alias needs a case-insensitive filesystem, which the Linux runners
     are not, so the test below skips there and this one carries the mechanism.
-    A symbolic link is the same shape of question, two paths and one inode, and
+    A symbolic link is the same shape of question, 2 paths and one inode, and
     every supported host can make one: `Path` equality says they differ, and
     the guard's comparison says they do not.
     """
@@ -1263,7 +1263,7 @@ def test_a_differently_cased_work_tree_is_still_the_same_work_tree(
     macOS and Windows accept both spellings of a directory and hand back
     whichever the caller used, so a work tree named `client-files` and an
     output written under `CLIENT-FILES` are one directory that plain `Path`
-    equality calls two. Linux runners are case-sensitive, where the two really
+    equality calls 2. Linux runners are case-sensitive, where the 2 really
     are separate directories and there is nothing to test, so this skips there
     rather than asserting something the host cannot show.
     """

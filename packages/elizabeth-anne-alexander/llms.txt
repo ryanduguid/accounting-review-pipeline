@@ -1,13 +1,13 @@
 # Xero Ledger Review Gate (elizabeth-anne-alexander)
 
-## Package Overview
+## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander
 - **Package Name**: `elizabeth-anne-alexander`
 - **CLI Command**: `elizabeth-anne-alexander`
 - **Domain**: Local, synthetic-data demonstration of a fixed-policy boundary for AI-assisted trial-balance review.
 - **Core Principles**: Data minimisation, deterministic pre-validation, explicit model-facing and reviewer-only artefacts, and validation of recorded human review decisions.
 
-## Architectural Boundaries
+## Architectural boundaries
 1. **Demonstration Has No Network Client**: The package contains no OAuth, API, HTTP, MCP, or LLM client, credential store, or accounting-system write path.
 2. **Synthetic Data Only**: Samples, tests, manifests, review context, model results, reviewer evidence, and receipts are synthetic. Real Xero exports, client data, tokens, and workpapers do not belong in this repository.
 3. **Not an Access-Control System**: Separating model-facing and reviewer-only files demonstrates disclosure minimisation; it is not an air gap, multi-user security boundary, client-data processor, or production security system.

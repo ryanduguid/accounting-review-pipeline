@@ -2,14 +2,14 @@
 """Guard the VBA text source against the VBE's ANSI import.
 
 File > Import File... reads VBA source as system ANSI (cp1252 on an en-AU/en-US
-box), not UTF-8. A UTF-8 em dash in a comment arrives as three mojibake
+box), not UTF-8. A UTF-8 em dash in a comment arrives as 3 mojibake
 characters, and the VBE offers no encoding choice on import. Keeping the source
 pure ASCII makes the ANSI read lossless on every code page that is
 ASCII-compatible.
 
-The VBE's File > Export File... writes three text formats, and every one of
+The VBE's File > Export File... writes 3 text formats, and every one of
 them comes back in through that same ANSI import: .bas for a standard module,
-.cls for a class module, .frm for a form. All three are checked. The .frx
+.cls for a class module, .frm for a form. All 3 are checked. The .frx
 companion a form export also writes is binary by design and is deliberately
 left out.
 
@@ -157,7 +157,7 @@ def run(argv: list[str], vba_dir: Path | None = None) -> int:
 
     if failures:
         # To stderr, with the "error:" line main() writes there. Split across
-        # the two streams, a redirected capture showed the per-file detail
+        # the 2 streams, a redirected capture showed the per-file detail
         # somewhere other than the summary it explains, or lost the ordering
         # entirely when only one stream was buffered.
         sys.stdout.flush()

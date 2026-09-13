@@ -385,7 +385,7 @@ def test_two_spellings_of_one_directory_are_recognised_as_one(
 
     A case alias needs a case-insensitive filesystem, which the Linux runners
     are not, so the test above skips there and this one carries the mechanism.
-    A symbolic link is the same shape of question, two paths and one inode, and
+    A symbolic link is the same shape of question, 2 paths and one inode, and
     every supported host can make one: `Path` equality says they differ, and
     the guard's comparison says they do not.
     """
@@ -434,7 +434,7 @@ def test_a_differently_cased_work_tree_is_still_the_same_work_tree(
     macOS and Windows accept both spellings of a directory and hand back
     whichever the caller used, so a work tree named `client-files` and an
     output written under `CLIENT-FILES` are one directory that plain `Path`
-    equality calls two. Linux runners are case-sensitive, where the two really
+    equality calls 2. Linux runners are case-sensitive, where the 2 really
     are separate directories and there is nothing to test, so this skips there
     rather than asserting something the host cannot show.
     """
@@ -467,7 +467,7 @@ def test_a_symlink_loop_in_the_output_path_is_refused(tmp_path: Path) -> None:
     `Path.resolve` raises RuntimeError, not OSError, for a symlink loop before
     Python 3.13, which left the CLI's handlers untouched and printed a
     traceback. From 3.13 resolve hands back the unresolved path instead, and
-    the loop surfaced two layers later in mkdir. The guard stats the resolved
+    the loop surfaced 2 layers later in mkdir. The guard stats the resolved
     destination so both end here, with the same error."""
     _require_symlinks(tmp_path)
     looped = tmp_path / "loop"
@@ -589,7 +589,7 @@ def test_a_failed_pack_write_rolls_back_to_the_previous_run(tmp_path: Path, bloc
         write_review_pack(_not_ready_pack(), output)
 
     # A run that cannot finish must leave the previous pack whole, whichever of
-    # the three files blocks it. Deleting evidence this run never wrote - the
+    # the 3 files blocks it. Deleting evidence this run never wrote - the
     # untouched findings from the last pack - is worse than the mixed pack the
     # staging exists to prevent, and the CLI reports only the OSError.
     for name, content in survivors.items():

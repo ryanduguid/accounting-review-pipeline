@@ -36,8 +36,8 @@ def test_manager_review_evaluation_keeps_the_human_decision_visible() -> None:
     boundary = contract["human_decision"]
     assert boundary == (
         "READY means no configured gate tripped; it is not approval, not a tax or "
-        "BAS agent service, not advice and not lodgment authority. A human remains "
-        "accountable for professional judgement, approval, client impact and lodgment "
+        "BAS agent service, not advice and not lodgement authority. A human remains "
+        "accountable for professional judgement, approval, client impact and lodgement "
         "decisions."
     )
     assert boundary in readme
@@ -45,9 +45,9 @@ def test_manager_review_evaluation_keeps_the_human_decision_visible() -> None:
         "not approval",
         "not a tax or BAS agent service",
         "not advice",
-        "not lodgment authority",
+        "not lodgement authority",
         "A human remains accountable for professional judgement, approval, client impact "
-        "and lodgment decisions",
+        "and lodgement decisions",
     ):
         assert clause in boundary
         assert clause in readme

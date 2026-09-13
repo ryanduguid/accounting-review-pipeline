@@ -1,4 +1,4 @@
-"""Every string these three modules can print must be encodable anywhere.
+"""Every string these 3 modules can print must be encodable anywhere.
 
 export_tb.main() reconfigures stdout and stderr to UTF-8 before anything is
 printed, because an org name is remote input and can hold any character.

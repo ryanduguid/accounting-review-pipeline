@@ -23,7 +23,7 @@ class XeroTrialBalanceContractTests(unittest.TestCase):
     """The adapter's Power Query parsers load the exporter's canonical CSV shape.
 
     These checks read the root data-only contract with the standard library
-    only: the exact ten-column header, the pinned bytes, text account codes
+    only: the exact 10-column header, the pinned bytes, text account codes
     with a leading zero, Tenant plus AccountID as the row identity, and the
     independent movement and YTD balance pairs.
     """

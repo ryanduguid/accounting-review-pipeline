@@ -99,7 +99,7 @@ class TestFixtureRegeneration(unittest.TestCase):
         """README calls samples/ the deterministic output of tools/generate_fixtures.py.
 
         The generator wrote CRLF while the committed CSVs are LF, so anyone who ran it
-        rewrote all six files end to end: 2,401 changed lines that are identical once
+        rewrote all 6 files end to end: 2,401 changed lines that are identical once
         newlines are normalised. Churn on that scale hides any real fixture edit inside
         it and leaves the determinism claim unreviewable.
         """
