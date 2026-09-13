@@ -14,9 +14,12 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Only the badge line changed, adding the PyPI badge the sibling publishers
-# carry; the scope, refresh and reviewer paragraphs are unchanged.
-README_SHA256 = "AB8328F2194750930BFF9D0C929D15C394DF625BCB1AEDEE4322E43ACD00FF23"
+# Re-pinned for the Xero platform-limit correction: the fixed 25-organisation
+# limit and App Partner certification requirement were replaced by the current
+# Starter, Core and Plus tiers and the 2-uncertified-app cap, read from Xero's
+# own limits page on 13 September 2026. The scope, refresh and reviewer
+# paragraphs are unchanged.
+README_SHA256 = "89B7FF2E9DF50984847C7C67F3F53323C04F7AD6A2FD14F2D59E8A5307626B8B"
 # Re-pinned for a Style Manual prose pass: 2 comments changed the number word
 # "two" to the numeral "2". SCOPES, every statement and the OAuth claims are
 # unchanged, and the executable AST digest below is unchanged with it.

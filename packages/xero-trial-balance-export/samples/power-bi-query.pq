@@ -33,13 +33,21 @@ let
     // Read one column wider than the contract, on purpose.
     //
     // Csv.Document normalises to whatever column count it is given: it drops
-    // fields beyond that count and pads shorter rows with null. Asking for
-    // exactly 10 would therefore reshape a malformed file into the expected
-    // shape before any check could see it, and an 11-column export would
-    // sail through the header comparison below. Reading 11 leaves the
-    // evidence intact: in a well-formed file the eleventh column is null in
-    // every row, so any value there proves the file is wider than the 10
-    // columns export_tb.py writes.
+    // fields beyond that count and pads shorter rows. Asking for exactly 10
+    // would therefore reshape a malformed file into the expected shape before
+    // any check could see it, and an 11-column export would sail through the
+    // header comparison below. Reading 11 leaves the evidence intact: in a
+    // well-formed file the eleventh column holds no value in any row, so any
+    // value there proves the file is wider than the 10 columns export_tb.py
+    // writes.
+    //
+    // What "no value" looks like is not the same in every host. Power BI
+    // Desktop pads a short record with null; Excel 16.0's engine pads it with
+    // empty text. Removing nulls alone therefore refused an ordinary
+    // ten-column file in Excel, because "" survived the removal and read as a
+    // value past column 10. Both forms of padding mean the record had no such
+    // field, so IsAbsent below treats both as absent and neither is mistaken
+    // for data.
     //
     // Encoding 65001 is UTF-8. The exporter writes a BOM so Excel decodes
     // non-ASCII account names on a double-click open; Power Query strips it.
@@ -53,7 +61,9 @@ let
             QuoteStyle = QuoteStyle.Csv
         ]
     ),
-    Overflow = List.RemoveNulls(Table.Column(Probe, OverflowColumn)),
+    IsAbsent = (value as any) as logical => value = null or value = "",
+    Present = (values as list) as list => List.Select(values, (value) => not IsAbsent(value)),
+    Overflow = Present(Table.Column(Probe, OverflowColumn)),
     Narrowed =
         if List.IsEmpty(Overflow) then
             Table.RemoveColumns(Probe, {OverflowColumn})
@@ -85,16 +95,21 @@ let
             ),
 
     // A truncated row is the other half of the same problem: Csv.Document
-    // padded it with null to reach the column count, so the header check
-    // above cannot see it. The exporter writes every column on every row and
-    // never leaves one empty, so a null here means a damaged file. Wholly
-    // blank lines are ignored rather than rejected, since a trailing newline
-    // is not a defect.
+    // padded it to reach the column count, so the header check above cannot
+    // see it. The exporter writes every column on every row and never leaves
+    // one empty, so an absent field here means a damaged file. Absence is
+    // read through IsAbsent for the same host reason as the overflow column:
+    // a check for null alone misses every short row in Excel's engine.
+    // Wholly blank lines are ignored rather than rejected, since a trailing
+    // newline is not a defect.
     Populated = Table.SelectRows(
         Checked,
-        each not List.IsEmpty(List.RemoveNulls(Record.FieldValues(_)))
+        each not List.IsEmpty(Present(Record.FieldValues(_)))
     ),
-    Gaps = Table.SelectRows(Populated, each List.Contains(Record.FieldValues(_), null)),
+    Gaps = Table.SelectRows(
+        Populated,
+        each List.Count(Present(Record.FieldValues(_))) <> List.Count(ExpectedColumns)
+    ),
     Complete =
         if Table.IsEmpty(Gaps) then
             Populated

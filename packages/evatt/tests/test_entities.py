@@ -576,6 +576,75 @@ def test_load_rejects_two_values_that_fold_onto_one_another(tmp_path) -> None:
             entities.load(write_map(tmp_path, document))
 
 
+def test_load_rejects_two_spellings_the_matcher_cannot_tell_apart(tmp_path) -> None:
+    """The dotless i is one character to casefold and the same letter to the matcher.
+
+    A map holding "Sample Iris" and "Sample Irıs" was accepted because the
+    two casefold apart, while patterns.value_pattern matched both names with
+    either entry. One placeholder was written over both occurrences and restore
+    put one spelling back in both positions, losing a distinction the accepted
+    map recorded.
+    """
+    for second in ("Sample Irıs", "Sample İris", "sample irıs"):
+        document = {
+            "schema_version": 1,
+            "entries": [
+                {"value": "Sample Iris", "placeholder": "CLIENT_01",
+                 "kind": "client", "added": "2026-09-09"},
+                {"value": second, "placeholder": "CLIENT_02",
+                 "kind": "client", "added": "2026-09-09"},
+            ],
+        }
+        with pytest.raises(EvattError, match="once case and whitespace are folded"):
+            entities.load(write_map(tmp_path, document))
+
+
+def test_the_fold_matches_every_equivalence_the_matcher_applies() -> None:
+    """Re-derive the fold's extra table from re, so an interpreter change fails here.
+
+    The fold has to agree with patterns.value_pattern, not with a table copied
+    from one Python version. Every character that carries a case mapping is
+    probed against its own relatives under the compiled pattern; any pair the
+    matcher unites has to fold together too.
+    """
+    from evatt.patterns import value_pattern
+
+    characters = [chr(cp) for cp in range(0x110000)
+                  if chr(cp).lower() != chr(cp) or chr(cp).upper() != chr(cp)
+                  or chr(cp).casefold() != chr(cp)]
+    for character in characters:
+        pattern = value_pattern(character)
+        relatives = {character.lower(), character.upper(), character.casefold()}
+        for relative in relatives:
+            if not relative.strip() or not pattern.fullmatch(relative):
+                continue
+            assert entities._fold(character) == entities._fold(relative), (
+                f"{character!r} and {relative!r} are one value to the matcher "
+                "but two to the fold"
+            )
+
+
+def test_a_distinct_name_is_still_a_distinct_name(tmp_path) -> None:
+    """The control: two values the matcher keeps apart keep their own placeholders."""
+    document = {
+        "schema_version": 1,
+        "entries": [
+            {"value": "Sample Iris", "placeholder": "CLIENT_01",
+             "kind": "client", "added": "2026-09-09"},
+            {"value": "Sample Irus", "placeholder": "CLIENT_02",
+             "kind": "client", "added": "2026-09-09"},
+        ],
+    }
+    loaded = entities.load(write_map(tmp_path, document))
+    assert [entity.placeholder for entity in loaded] == ["CLIENT_01", "CLIENT_02"]
+
+
+def test_assign_returns_the_existing_entity_for_a_dotless_spelling() -> None:
+    """An operator who types the dotless spelling must not mint a second placeholder."""
+    existing = entities.Entity("Sample Iris", "CLIENT_01", "client", "2026-09-09")
+    assert entities.assign((existing,), "Sample Irıs", "client", "2026-09-10") is existing
+
+
 def test_load_still_calls_an_exact_duplicate_a_duplicate(tmp_path) -> None:
     """The fold check subsumes the exact one, so it must keep the exact wording."""
     entry = dict(SAMPLE["entries"][1])

@@ -72,6 +72,17 @@ def _placeholder_for(kind: str, ordinal: int) -> str:
     return f"{_PREFIX[kind]}_{ordinal:02d}"
 
 
+# The one place ``re.IGNORECASE`` folds further than ``str.casefold`` does.
+# Python matches the Turkish dotless and dotted i against ASCII "i" and "I",
+# while casefold leaves U+0131 as itself and turns U+0130 into "i" plus a
+# combining dot. Without this, a map could hold "Sample Iris" and "Sample Irıs"
+# as separate entries while one pattern matched both names, so one placeholder
+# was written twice and one spelling restored to both occurrences. The test
+# suite re-derives this table from ``re`` itself, so a future interpreter that
+# folds a different character fails there rather than here.
+_EXTRA_IGNORECASE_FOLDS = str.maketrans({"İ": "i", "ı": "i"})
+
+
 def _fold(value: str) -> str:
     """The comparison form of a value: whitespace runs collapsed, then case-folded.
 
@@ -86,9 +97,11 @@ def _fold(value: str) -> str:
 
     Casefold rather than lower, because it is the folding that compares "STRASSE"
     with "strasse", and the value may be any Latin-1 name the token class
-    accepts.
+    accepts. The dotted and dotless i are folded first, because casefold alone
+    keeps them apart while the matcher does not, and it is the matcher that
+    decides which entries claim which occurrences.
     """
-    return " ".join(value.split()).casefold()
+    return " ".join(value.split()).translate(_EXTRA_IGNORECASE_FOLDS).casefold()
 
 
 def _check_fields(

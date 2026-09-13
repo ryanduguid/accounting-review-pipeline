@@ -16,10 +16,12 @@ Both inputs are fabricated repository fixtures: `examples/bas-not-ready` and `ex
 
 ```bash
 uv sync --locked --all-extras
-uv run review-ready gate --profile bas --pack examples/bas-not-ready --output outputs/evaluation-not-ready
-uv run review-ready gate --profile bas --pack examples/bas-ready --output outputs/evaluation-ready
+uv run review-ready gate --profile bas --pack examples/bas-not-ready --output ../../../review-ready-demo/evaluation-not-ready
+uv run review-ready gate --profile bas --pack examples/bas-ready --output ../../../review-ready-demo/evaluation-ready
 uv run pytest tests/test_evaluation_pack.py -q
 ```
+
+Run both from the component directory. `--output` points outside the checkout because the command refuses an output directory inside a version-control checkout, exiting `1` before it reads a fixture.
 
 ## Expected findings
 

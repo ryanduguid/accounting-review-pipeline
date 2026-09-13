@@ -1,8 +1,16 @@
 include LICENSE
 include README.md
 include SECURITY.md
+include CITATION.cff
+include CONTRIBUTING.md
 include DATA-FLOW.md
 include DISCLAIMER.md
 include RELEASE_NOTES.md
+include RELEASING.md
+# The component lockfile is the authority for building and releasing this
+# distribution alone, so an archive reader can reproduce the locked run.
+include uv.lock
+# setuptools ships tests/test*.py by default and nothing else under tests/.
+recursive-include tests *.py
 recursive-include elizabeth_anne_alexander/policy *.json
 recursive-include elizabeth_anne_alexander/samples *.csv *.json

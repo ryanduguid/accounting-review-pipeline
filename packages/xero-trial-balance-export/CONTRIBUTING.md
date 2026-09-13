@@ -24,6 +24,12 @@ python -m pip install --require-hashes -r requirements.lock
 python -m unittest discover -s tests -v
 ```
 
+`tests/test_evaluation_pack.py` reads the shared trial-balance contract at
+`contracts/xero-trial-balance-v1/`, which lives above this component and is not
+in the source archive. Run it from a full `accounting-review-pipeline` checkout;
+from an extracted archive it fails for want of that directory, not for a defect
+in this package. Every other test in the suite runs from the archive alone.
+
 ## Pull requests
 
 Say which failure mode your change closes and include the test that reproduces it. For anything touching the OAuth or token-cache flow, describe what happens when the token endpoint returns an error mid-rotation, DPAPI refuses a payload, or an atomic migration/write fails.

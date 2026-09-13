@@ -59,9 +59,19 @@ through the tool before the policy is signed off, including for testing.
 **The claim must be stated narrowly.** Reversible pseudonymisation does not
 take data outside the Privacy Act. Pseudonymised data remains personal
 information in the hands of anyone holding the key. The defensible claim is
-that the recipient cannot re-identify because the key never leaves the local
-machine. The words "anonymised" and "Privacy Act compliant" must not appear as
-claims about this tool.
+that the recipient does not receive the map needed to reverse the entity
+substitutions, because the key never leaves the local machine. The words
+"anonymised" and "Privacy Act compliant" must not appear as claims about this
+tool.
+
+Correction, 13 September 2026: this section originally said the recipient
+cannot re-identify. That is wider than the control does. Withholding the key
+stops the substitutions being reversed; it does nothing about surviving
+detail, such as an industry, a location, a balance date and a turnover figure
+appearing together, which is the contextual re-identification risk sections 8
+and 11 name and which no part of this design removes. The shipped package states
+the narrow claim: read `packages/evatt/README.md` for the wording that
+governs.
 
 ## 3. Architecture
 

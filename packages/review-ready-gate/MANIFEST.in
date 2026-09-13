@@ -4,7 +4,16 @@ include README.md
 include SECURITY.md
 include CONTRIBUTING.md
 include DISCLAIMER.md
+include RELEASING.md
+include RELEASE_NOTES.md
 include llms.txt
+# The component lockfile is the authority for building and releasing this
+# distribution alone, so an archive reader can reproduce the locked run.
+include uv.lock
+# setuptools ships tests/test*.py by default and nothing else under tests/.
+# Without the shared helper every one of those modules fails to import, so
+# pytest stops at collection and no test runs at all.
+recursive-include tests *.py
 recursive-include examples *.csv *.json *.yml *.md
 recursive-include schemas *.csv *.json
 recursive-include evaluation *.md *.json

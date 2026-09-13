@@ -23,31 +23,54 @@ Receivables ageing summary (customer balances by ageing bucket). Payables
 follows as its own contract once receivables is observed and shipped; do not
 assume identical shapes.
 
-## Export-mode constraints (from MYOB support, checked 2026-08-24)
+## Export-mode constraints (from MYOB support, checked 2026-08-24, re-read 2026-09-13)
 
 Sources:
 
-- <https://www.myob.com/au/support/myob-business/reporting/exporting-reports>
-- <https://www.myob.com/au/support/myob-business/import-export/exporting-data>
+- Browser view: <https://www.myob.com/au/support/myob-business/reporting/exporting-reports?productview=Browser>
+- Desktop view: <https://www.myob.com/au/support/myob-business/reporting/exporting-reports?productview=Desktop>
+- Company-file data export: <https://www.myob.com/au/support/myob-business/import-export/exporting-data>
 
-1. Reports in MYOB Business export as **Excel or PDF only**. There is no CSV
-   option for reports. The parser contract must therefore accept an `.xlsx`
+The exporting-reports article carries a Browser view and a Desktop view of the
+same URL, and they describe different report windows. Only the Browser view
+covers the product under contract. The Desktop view is recorded below as
+background so nobody reads its instructions as constraints on our export.
+
+### Browser view (the product under contract)
+
+1. Reports export as **Excel or PDF only**. The Browser view offers no CSV or
+   TSV option for reports, so the parser contract must accept an `.xlsx`
    workbook, not a text export like the Xero contracts do.
 2. **What you see is what you get**: the exported report mirrors on-screen
-   customisation. Filters, removed columns and reordered columns all flow into
-   the export. Two observers with different customisations produce different
-   headers. The observation step must fix one named customisation and record it.
-3. **Account No. is not shown by default.** Adding it requires the Insert /
-   Modify > Show/Hide column flow before export, saved via Print Preview. The
-   contract must decide whether the customer key is the display name (default)
-   or the account number (customised), and reject the wrong variant rather
-   than guessing.
-4. MYOB names 2 reports as not exportable at all (Card List [Detail],
-   Employee Employment Details). Neither is our target, but the fact confirms
-   report-level quirks are real in this product.
-5. Separately from reports, the Import and export data assistant exports
-   selected fields for some data types. That is a list export, not an aged
-   balance, and is out of scope for this contract.
+   customisation. Filtering the information, and adding, removing or
+   reordering columns, all flow into the export, and a report with account
+   levels keeps the level chosen on screen. Two observers with different
+   customisations produce different headers. The observation step must fix one
+   named customisation and record it.
+3. Exporting to Excel requires Microsoft Excel 2010 or later installed on the
+   machine, not Excel reached through a web browser.
+
+### Desktop view (AccountRight report window, background only)
+
+4. The Desktop view is where the `Insert/Modify` tab, the Show/Hide column
+   flow and the `Print Preview` step that saves a customisation before export
+   appear, together with the `Account No.` column. Its FAQ names the balance
+   sheet, profit and loss, accounts list and trial balance reports as the ones
+   that omit account numbers by default. It also offers XPS, CSV and TSV
+   alongside PDF and Excel. None of this has been observed in the browser
+   product.
+5. The Desktop view names 2 reports as not exportable at all (Card List
+   [Detail], Employee Employment Details). Neither is our target, and neither
+   exception has been shown to apply to the browser product.
+6. Separately from reports, the Import and export data assistant exports
+   selected fields of company-file data as comma-separated or tab-separated
+   text, for moving data into another AccountRight company file. That is a
+   list export, not an aged balance, and is out of scope for this contract.
+
+**Unresolved:** whether the browser product exposes a customer account number
+on this report at all, and what it is called there. The contract keeps the
+display name as the customer key until an observation settles it. Do not
+import the Desktop view's account-number flow into this contract.
 
 ## Contract skeleton v0.1 (`MYOB.AgedReceivables`, not implemented)
 
@@ -60,7 +83,7 @@ below.
 | Sheet | Single worksheet; first sheet | To confirm at observation |
 | Title rows | Expected above headers; skipped by exact match | To observe |
 | Header row | Matched by exact header names, order-insensitive | Repo convention |
-| Customer key | Display name coerced to text | Default export; revisit if Account No. variant observed |
+| Customer key | Display name coerced to text | Default export; the `Account No.` column is Desktop-view guidance and is unresolved in the browser product |
 | Bucket columns | Returned exactly as exported | Xero contract precedent |
 | Total column | Returned exactly as exported | Xero contract precedent |
 | Summary/total rows | Dropped; tie-out stays the caller's | Xero contract precedent |

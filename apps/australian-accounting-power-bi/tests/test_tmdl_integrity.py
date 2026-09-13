@@ -20,6 +20,8 @@ TMDL_TABLES_DIR = TMDL_DIR / "tables"
 RELATIONSHIPS_FILE = TMDL_DIR / "relationships.tmdl"
 DATABASE_FILE = TMDL_DIR / "database.tmdl"
 SAMPLES_DIR = BASE_DIR / "samples"
+README_FILE = BASE_DIR / "README.md"
+DATA_MODEL_FILE = BASE_DIR / "docs" / "data-model.md"
 
 # The star schema drawn by README.md and docs/data-model.md, as (fromColumn, toColumn) pairs.
 DOCUMENTED_RELATIONSHIPS = {
@@ -70,6 +72,19 @@ def measure_expressions(tmdl_file: Path) -> dict[str, str]:
         expressions[name] = " ".join(part.strip() for part in body if part.strip())
 
     return expressions
+
+
+def mermaid_er_edges(document: Path) -> set[tuple[str, str, str]]:
+    """Read every `one ||--o{ many : "key"` edge out of a document's mermaid ER diagram."""
+    diagram = re.search(
+        r"```mermaid\s*\nerDiagram\n(.*?)```",
+        document.read_text(encoding="utf-8"),
+        re.DOTALL,
+    )
+    if diagram is None:
+        return set()
+
+    return set(re.findall(r'(\w+)\s+\|\|--o\{\s+(\w+)\s*:\s*"([^"]+)"', diagram.group(1)))
 
 
 class TestTmdlIntegrity(unittest.TestCase):
@@ -128,6 +143,40 @@ class TestTmdlIntegrity(unittest.TestCase):
             [],
             "relationships.tmdl declares an edge the ER diagrams do not document",
         )
+
+    def test_er_diagrams_draw_each_edge_in_the_direction_the_model_declares(self) -> None:
+        """A reversed edge tells the reader that filters propagate the opposite way.
+
+        Mermaid `A ||--o{ B : "Key"` means one A row to many B rows, so B holds the foreign
+        key and TMDL must declare fromColumn B.Key. Both diagrams drew Dim_Entity as the one
+        side of Dim_ANZSIC while the model runs many entities into one industry row, which is
+        why entity selection needs TREATAS to reach the benchmark facts at all.
+        """
+        declared = set(
+            re.findall(
+                r"fromColumn:\s+([\w\.]+)\s+toColumn:\s+([\w\.]+)",
+                RELATIONSHIPS_FILE.read_text(encoding="utf-8"),
+            )
+        )
+        from_column_by_tables = {
+            (from_column.split(".")[0], to_column.split(".")[0]): from_column
+            for from_column, to_column in declared
+        }
+
+        for document in (README_FILE, DATA_MODEL_FILE):
+            edges = mermaid_er_edges(document)
+            self.assertEqual(
+                len(edges),
+                len(declared),
+                f"{document.name} draws {len(edges)} edges for {len(declared)} relationships",
+            )
+            for one_side, many_side, key in sorted(edges):
+                self.assertEqual(
+                    from_column_by_tables.get((many_side, one_side)),
+                    f"{many_side}.{key}",
+                    f"{document.name} draws '{one_side} ||--o{{ {many_side} : {key}' but the "
+                    f"model declares no {many_side}.{key} relationship into {one_side}",
+                )
 
     def test_dim_anzsic_declares_every_industry_code_the_model_joins_on(self) -> None:
         """Dim_ANZSIC is a literal lookup, so both ANZSIC relationships die without these codes."""
@@ -199,11 +248,47 @@ class TestTmdlIntegrity(unittest.TestCase):
                 f"[{measure_name}] must accumulate all {legs} of its legs to the last visible date",
             )
 
-    def test_benchmark_measures_follow_the_selected_entity_industry(self) -> None:
-        """Dim_Entity filters one way into Dim_ANZSIC, so entity context never reaches the facts.
+    def test_account_category_predicates_keep_the_row_selection(self) -> None:
+        """A bare column predicate inside CALCULATE replaces the matrix's own row filter.
 
-        Without TREATAS, every benchmark averages all industries at once and the risk
-        rating becomes a constant.
+        Both financial matrices use Dim_Account[Class] or [SubClass] as row headings, so
+        Revenue on the Asset row reported the whole group's $30,415,500 and each P&L
+        subclass row repeated the full cost of sales and operating expenses. KEEPFILTERS
+        intersects the category with the row instead of overwriting it. The cumulative
+        DATESBETWEEN override stays bare on purpose: balance sheet measures must reach past
+        the period in context.
+        """
+        offenders = [
+            f"{table}.tmdl:{number}: {line.strip()}"
+            for table in ("Fact_GeneralLedger", "Fact_Budget")
+            for number, line in enumerate(
+                (TMDL_TABLES_DIR / f"{table}.tmdl").read_text(encoding="utf-8").splitlines(), 1
+            )
+            if "Dim_Account[" in line and "KEEPFILTERS(" not in line
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            "Every account category predicate must be wrapped in KEEPFILTERS or it "
+            "overwrites the account row heading the financial matrices select on",
+        )
+
+        expressions = measure_expressions(TMDL_TABLES_DIR / "Fact_GeneralLedger.tmdl")
+        total_assets = expressions["Total Assets"]
+        self.assertIn('KEEPFILTERS(Dim_Account[Class] = "Asset")', total_assets)
+        self.assertIn(
+            "DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))",
+            total_assets,
+            "The cumulative date override must keep replacing the period filter",
+        )
+        self.assertNotIn("KEEPFILTERS(DATESBETWEEN", total_assets)
+
+    def test_benchmark_measures_follow_the_selected_entity_industry(self) -> None:
+        """Dim_ANZSIC filters one way into Dim_Entity, so entity context never reaches the facts.
+
+        Many entities point at one industry row, so selecting an entity leaves Dim_ANZSIC
+        and Fact_ATOBenchmark unfiltered. Without TREATAS, every benchmark averages all
+        industries at once and the risk rating becomes a constant.
         """
         expressions = measure_expressions(TMDL_TABLES_DIR / "Fact_ATOBenchmark.tmdl")
         industry_filter = "TREATAS(VALUES(Dim_Entity[ANZSIC_Code]), Fact_ATOBenchmark[ANZSIC_Code])"

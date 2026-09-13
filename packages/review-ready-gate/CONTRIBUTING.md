@@ -28,11 +28,20 @@ uv run mypy reviewready
 uv build
 ```
 
-CI also runs those checks on 3.10 to 3.13, plus CodeQL on the Python source. Do not expand the ruff rule set; it is `E9`/`F82` only, matching Monthly Close Controls.
+CI also runs those checks on Python 3.10, 3.12 and 3.13, plus CodeQL on the Python source. Do not expand the ruff rule set; it is `E4`, `E7`, `E9`, `F` and `I`, matching Monthly Close Controls.
 
 For a behaviour change, add or update a focused test under `tests/`. Keep the
 output deterministic: no wall-clock timestamps, client identifiers or hidden
 state in a readiness pack.
+
+Two checks read files that live above this component and are not in the source
+archive. Run them from a full `accounting-review-pipeline` checkout:
+`tests/test_xero_trial_balance_contract.py` reads
+`contracts/xero-trial-balance-v1/`, and
+`test_current_release_metadata_uses_immutable_documentation` in
+`tests/test_workflow_examples.py` reads the root release caller. From an
+extracted source archive they fail for want of those files, not for a defect in
+this package.
 
 ## Pull requests
 

@@ -2,6 +2,8 @@
 
 Power BI Desktop 2.157.1354.0 on Windows opened the corrected project, refreshed the fabricated samples, and rendered all 4 pages and 21 visuals without visual error placeholders. This check used the changes accompanying this record, based on Accounting Review Pipeline commit `a42fd75ef1f70c58dd54a55e9cd5dc1e2359e072`.
 
+This record predates the `KEEPFILTERS` change to the account category predicates described in [DAX patterns](dax-patterns.md). It describes the pages as they rendered before that change, so repeat the Desktop refresh, the page inspection and `tools/test_financial_filters.ps1` before relying on it again.
+
 ## Defects found in Desktop
 
 - Opening failed because 6 named M expressions duplicated table query names. Prefixing those expressions with `Source_` and updating their partition references removes the collisions.

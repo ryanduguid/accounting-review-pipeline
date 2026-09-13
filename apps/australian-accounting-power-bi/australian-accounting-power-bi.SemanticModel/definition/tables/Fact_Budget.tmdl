@@ -10,7 +10,7 @@ table Fact_Budget
 	measure 'Budget Revenue' =
 			CALCULATE(
 				SUM(Fact_Budget[BudgetAmount]),
-				Dim_Account[Class] = "Revenue"
+				KEEPFILTERS(Dim_Account[Class] = "Revenue")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: bud-meas-0002
@@ -19,7 +19,7 @@ table Fact_Budget
 	measure 'Budget Expenses' =
 			CALCULATE(
 				SUM(Fact_Budget[BudgetAmount]),
-				Dim_Account[Class] = "Expense"
+				KEEPFILTERS(Dim_Account[Class] = "Expense")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: bud-meas-0003

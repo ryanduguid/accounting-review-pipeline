@@ -80,7 +80,7 @@ A ready-made query is committed at [`samples/power-bi-query.pq`](samples/power-b
 
 When a run hits a locked destination, a concurrent export, or a disk that refuses the final flush, see the 'Power BI failure modes' appendix below.
 
-Two Xero platform limits worth knowing: uncertified apps connect to at most 25 organisations (the Demo Company doesn't count), and going past that requires App Partner certification.
+Two Xero platform limits worth knowing, checked against Xero's [OAuth 2.0 API limits](https://developer.xero.com/documentation/guides/oauth2/limits/) on 13 September 2026: a new app starts in the Starter tier with 5 connections and Core raises that to 50, while a listing on the Xero App Store needs the Plus tier or above; and each organisation or practice can connect at most 2 uncertified apps, with no limit on certified ones. Read the current tiers from that page rather than from this line.
 
 ## Scheduled runs
 

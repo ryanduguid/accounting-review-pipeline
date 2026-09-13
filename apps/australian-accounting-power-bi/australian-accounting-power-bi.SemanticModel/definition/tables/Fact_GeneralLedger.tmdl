@@ -20,7 +20,7 @@ table Fact_GeneralLedger
 	measure Revenue =
 			CALCULATE(
 				SUM(Fact_GeneralLedger[Credit]) - SUM(Fact_GeneralLedger[Debit]),
-				Dim_Account[Class] = "Revenue"
+				KEEPFILTERS(Dim_Account[Class] = "Revenue")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-meas-0004
@@ -29,7 +29,7 @@ table Fact_GeneralLedger
 	measure COGS =
 			CALCULATE(
 				SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
-				Dim_Account[SubClass] = "Cost of Sales"
+				KEEPFILTERS(Dim_Account[SubClass] = "Cost of Sales")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-meas-0005
@@ -48,7 +48,7 @@ table Fact_GeneralLedger
 	measure 'Operating Expenses' =
 			CALCULATE(
 				SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
-				Dim_Account[SubClass] = "Operating Expenses"
+				KEEPFILTERS(Dim_Account[SubClass] = "Operating Expenses")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-meas-0008
@@ -59,7 +59,7 @@ table Fact_GeneralLedger
 			[Net Profit Before Tax]
 			+ CALCULATE(
 				SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
-				Dim_Account[AccountCode] IN {"890", "895"}
+				KEEPFILTERS(Dim_Account[AccountCode] IN {"890", "895"})
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-meas-0009
@@ -78,7 +78,7 @@ table Fact_GeneralLedger
 	measure 'Total Assets' =
 			CALCULATE(
 				SUM(Fact_GeneralLedger[Amount]),
-				Dim_Account[Class] = "Asset",
+				KEEPFILTERS(Dim_Account[Class] = "Asset"),
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
@@ -88,7 +88,7 @@ table Fact_GeneralLedger
 	measure 'Total Liabilities' =
 			CALCULATE(
 				-1 * SUM(Fact_GeneralLedger[Amount]),
-				Dim_Account[Class] = "Liability",
+				KEEPFILTERS(Dim_Account[Class] = "Liability"),
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
@@ -103,7 +103,7 @@ table Fact_GeneralLedger
 	measure 'Total Equity' =
 			CALCULATE(
 				-1 * SUM(Fact_GeneralLedger[Amount]),
-				Dim_Account[Class] = "Equity",
+				KEEPFILTERS(Dim_Account[Class] = "Equity"),
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
@@ -128,12 +128,12 @@ table Fact_GeneralLedger
 	measure 'Working Capital' =
 			CALCULATE(
 				SUM(Fact_GeneralLedger[Amount]),
-				Dim_Account[SubClass] = "Current Assets",
+				KEEPFILTERS(Dim_Account[SubClass] = "Current Assets"),
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 			- CALCULATE(
 				-1 * SUM(Fact_GeneralLedger[Amount]),
-				Dim_Account[SubClass] = "Current Liabilities",
+				KEEPFILTERS(Dim_Account[SubClass] = "Current Liabilities"),
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00

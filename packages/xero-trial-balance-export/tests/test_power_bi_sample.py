@@ -115,7 +115,63 @@ class PowerBiSampleTests(unittest.TestCase):
         self.assertIn("Table.TransformColumnTypes(\n        Complete,", code)
 
     def test_a_blank_trailing_line_is_not_treated_as_a_damaged_row(self) -> None:
-        self.assertIn("List.IsEmpty(List.RemoveNulls(Record.FieldValues(_)))", _code_only())
+        self.assertIn("List.IsEmpty(Present(Record.FieldValues(_)))", _code_only())
+
+    def test_padding_is_recognised_however_the_host_engine_spells_it(self) -> None:
+        """The refusal has to read padding, not one host's spelling of it.
+
+        Csv.Document pads a short record to the requested column count. Power
+        BI Desktop pads with null; Excel 16.0 build 20430 pads with empty
+        text. While the query removed nulls only, the empty text in the
+        eleventh column survived and an ordinary ten-column export was refused
+        as being wider than ten columns.
+        """
+        code = _code_only()
+        self.assertIn('IsAbsent = (value as any) as logical => value = null or value = ""', code)
+        self.assertIn("Overflow = Present(Table.Column(Probe, OverflowColumn))", code)
+        self.assertNotIn("List.RemoveNulls", code)
+        self.assertNotIn("List.Contains(Record.FieldValues(_), null)", code)
+
+    def test_the_width_rule_refuses_a_wide_file_and_accepts_the_committed_sample(self) -> None:
+        """Port the query's width rule and run both host paddings through it.
+
+        The M cannot be evaluated here, so the rule is reimplemented from the
+        query's own ExpectedColumns count and applied to records parsed from
+        the committed sample and from a fabricated 11-column file. Native
+        Power Query confirmation is a separate, native check.
+        """
+        expected = len(_declared_columns())
+
+        def probe(records: list[list[str]], padding: object) -> list[object]:
+            """Csv.Document with Columns = expected + 1, as each host pads."""
+            overflow = []
+            for record in records:
+                widened = list(record[: expected + 1])
+                widened += [padding] * (expected + 1 - len(widened))
+                overflow.append(widened[expected])
+            return overflow
+
+        def is_absent(value: object) -> bool:
+            return value is None or value == ""
+
+        with SAMPLE_PATH.open(encoding="utf-8-sig", newline="") as handle:
+            sample = [row for row in csv.reader(handle) if row]
+        self.assertTrue(all(len(row) == expected for row in sample))
+
+        for padding in (None, ""):
+            present = [v for v in probe(sample, padding) if not is_absent(v)]
+            self.assertEqual(present, [], f"the committed sample is refused when padded with {padding!r}")
+
+        wide = [row + ["surplus"] for row in sample]
+        for padding in (None, ""):
+            present = [v for v in probe(wide, padding) if not is_absent(v)]
+            self.assertEqual(len(present), len(sample), "an 11-column file must still be refused")
+
+        # The defect itself: removing nulls alone kept every empty-text pad, so
+        # under Excel's engine the committed sample looked wider than ten
+        # columns in every row.
+        null_only = [v for v in probe(sample, "") if v is not None]
+        self.assertEqual(len(null_only), len(sample))
 
     def test_the_source_path_is_an_unusable_placeholder(self) -> None:
         """A path the reader must replace, not one that quietly half-works."""

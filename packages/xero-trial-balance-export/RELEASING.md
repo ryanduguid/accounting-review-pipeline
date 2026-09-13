@@ -17,13 +17,25 @@ Do not move, delete or reuse `v0.1.2`. The no-bypass tag ruleset prevents those 
 
 ## Protected xero-trial-balance-export/v0.1.5 failed tag
 
-The annotated `xero-trial-balance-export/v0.1.5` tag is protected and records
-tag object `c979f669468c838e5f247ed60cdda728170d46a1`, which peels to commit
-`9b1cc3b8d1403c6779436b96f3f54e3202b9b407`. [Release workflow run
+The annotated `xero-trial-balance-export/v0.1.5` tag is protected. [Release
+workflow run
 33648952579](https://github.com/ryanduguid/accounting-review-pipeline/actions/runs/33648952579)
-stopped in the read-only consumer-test job because the clean runner had no
-`requirements-test.txt` and therefore did not install `requests`. It created no
-draft, release or release asset.
+ran at commit `9b1cc3b8d1403c6779436b96f3f54e3202b9b407`, reached through tag
+object `c979f669468c838e5f247ed60cdda728170d46a1`, and stopped in the read-only
+consumer-test job because the clean runner had no `requirements-test.txt` and
+therefore did not install `requests`. It created no draft, release or release
+asset.
+
+Those are the failed run's historical identifiers, not the tag's current ones.
+`git ls-remote` and GitHub's ref API now return tag object
+`7544c83b00e8d8332c4c51a6325327d7345d1a46`, peeling to commit
+`ddbf527559035457082bbccfb8c10ba64c0d4f91`. Both commits have the same tree,
+`622121e924cac737d032032df071270718ae089f`, and different parents, so no file
+differs between them; when and why the tag came to name the second commit is
+not recorded here, and this guide does not treat the discrepancy as resolved.
+Verify against whichever identifier the check you are running needs: the
+attestation for that run is bound to `9b1cc3b`, while a fresh `ls-remote`
+answers `ddbf527`.
 
 Do not move, delete or reuse that tag. Version 0.1.6 adds the complete pinned
 test manifest required by the shared archive policy and is the recovery

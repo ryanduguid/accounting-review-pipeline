@@ -316,6 +316,41 @@ class ReportStructureTests(unittest.TestCase):
         self.assertEqual(titled, 17, "Expected 17 titled visuals across the four pages")
         self.assertEqual(unsupported, [])
 
+    def test_only_consolidated_bindings_may_carry_a_consolidated_label(self) -> None:
+        """A statement labelled consolidated must apply the consolidation calculation group.
+
+        The executive P&L was titled "Consolidated Statement of Financial Performance (P&L)"
+        while binding the ordinary measures, so it displayed $882,000 of intercompany
+        revenue: $576,000 of management fees and $306,000 of internal freight. Only
+        CalcGroup_Consolidation removes those rows, and it lives on page 2.
+        """
+        claims: list[str] = []
+        checked = 0
+
+        for page_path in sorted((REPORT_DEFINITION / "pages").glob("*/page.json")):
+            page_visuals = sorted(page_path.parent.glob("visuals/*/visual.json"))
+            consolidated_bindings = {
+                table
+                for visual_path in page_visuals
+                for _, table, _ in query_field_bindings(read_json(visual_path).get("visual"))
+                if table == "CalcGroup_Consolidation"
+            }
+
+            labels = [(page_path.parent.name, read_json(page_path).get("displayName", ""))]
+            labels.extend(
+                (visual_path.parent.name, visual_title(read_json(visual_path).get("visual")))
+                for visual_path in page_visuals
+            )
+            for name, label in labels:
+                if not isinstance(label, str) or not label:
+                    continue
+                checked += 1
+                if "consolidat" in label.lower() and not consolidated_bindings:
+                    claims.append(f"{name}: {label!r} claims consolidation with no binding")
+
+        self.assertGreater(checked, 20, "Expected every page and titled visual to be checked")
+        self.assertEqual(claims, [])
+
 
 if __name__ == "__main__":
     unittest.main()

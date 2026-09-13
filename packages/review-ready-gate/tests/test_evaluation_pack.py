@@ -66,3 +66,28 @@ def test_manager_review_evaluation_names_sources_and_review_date() -> None:
         source["url"].startswith("https://www.ato.gov.au/")
         for source in contract["sources"]
     )
+
+
+def test_the_evaluation_commands_use_an_output_the_gate_accepts() -> None:
+    """A copyable command that exits 1 on the output guard produces no result.
+
+    Both commands wrote to `outputs/evaluation-...` inside the checkout, so the
+    gate refused them before it read a fixture and neither reproduced the
+    readiness result this guide records.
+    """
+    import re
+
+    from reviewready.errors import GateInputError
+    from reviewready.report import require_output_outside_repository
+
+    readme = (PACK / "README.md").read_text(encoding="utf-8")
+    outputs = re.findall(r"--output (\S+)", readme)
+    assert len(outputs) == 2
+    for relative in outputs:
+        candidate = (ROOT / relative).resolve()
+        assert not candidate.exists()
+        try:
+            require_output_outside_repository(candidate)
+        except GateInputError as exc:  # pragma: no cover - the failure this pins
+            raise AssertionError(f"the guide's --output {relative} is refused: {exc}") from exc
+        assert not candidate.exists()

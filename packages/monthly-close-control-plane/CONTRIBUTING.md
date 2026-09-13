@@ -21,6 +21,18 @@ uv build
 
 For a behaviour change, add or update a focused test under `tests/`. Keep the output deterministic: no wall-clock timestamps, client identifiers or hidden state in a review pack.
 
+Some of these checks read files that live above this component and are not in
+the source archive. Run them from a full `accounting-review-pipeline` checkout:
+`tests/test_repository_guidance.py` reads the root `AGENTS.md`, `README.md` and
+`.github/workflows/`; `tests/test_xero_trial_balance_contract.py` reads
+`contracts/xero-trial-balance-v1/`; and
+`test_repository_identity_is_distinct_from_package_identity` in
+`tests/test_workflow_examples.py` reads the root release caller. From an
+extracted source archive they fail for want of those files, not for a defect in
+this package. `test_output_inside_repository_rejected_before_source_read` needs
+the run to sit inside a version-control checkout, which an extracted archive is
+not.
+
 ## Pull requests
 
 Explain which control or boundary your change affects, include the test result, and name any operational limitation that remains. Never present a review acknowledgement as an approved or completed close.
