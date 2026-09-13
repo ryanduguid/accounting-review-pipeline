@@ -153,7 +153,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Consolidated Statement of Financial Performance (P&L)'"
+                  "Value": "'Group Statement of Financial Performance (P&L), gross of intercompany'"
                 }
               }
             }
