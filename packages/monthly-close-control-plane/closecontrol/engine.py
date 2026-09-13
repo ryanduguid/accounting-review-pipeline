@@ -7,12 +7,14 @@ from decimal import (
     Context,
     Decimal,
     DivisionByZero,
+    Inexact,
     InvalidOperation,
     localcontext,
 )
 from pathlib import Path
+from typing import Iterable
 
-from .errors import DateMismatchError, SchemaError
+from .errors import DateMismatchError, NumericGateError, SchemaError
 from .loader import (
     SourceSnapshot,
     load_canonical_tb,
@@ -136,11 +138,29 @@ def _exception(
     )
 
 
+def _exact_total(values: Iterable[Decimal], *, period: str, field: str) -> Decimal:
+    """Sum money exactly, or refuse the file when the total would be rounded.
+
+    The 28-digit context rounds a total whose digits exceed it, and a rounded
+    total can equal its counterpart while the source amounts differ. Trapping
+    Inexact turns that silent pass into a refusal of the input.
+    """
+    with localcontext() as context:
+        context.traps[Inexact] = True
+        try:
+            return sum(values, ZERO)
+        except Inexact as exc:
+            raise NumericGateError(
+                f"{period} {field} total exceeds the supported 28-digit precision, "
+                "so debits and credits cannot be compared exactly."
+            ) from exc
+
+
 def _integrity_exceptions(rows: list[TrialBalanceRow], period: str) -> list[ExceptionItem]:
-    debit_total = sum((row.debit for row in rows), ZERO)
-    credit_total = sum((row.credit for row in rows), ZERO)
-    ytd_debit_total = sum((row.ytd_debit for row in rows), ZERO)
-    ytd_credit_total = sum((row.ytd_credit for row in rows), ZERO)
+    debit_total = _exact_total((row.debit for row in rows), period=period, field="Debit")
+    credit_total = _exact_total((row.credit for row in rows), period=period, field="Credit")
+    ytd_debit_total = _exact_total((row.ytd_debit for row in rows), period=period, field="YTDDebit")
+    ytd_credit_total = _exact_total((row.ytd_credit for row in rows), period=period, field="YTDCredit")
     result: list[ExceptionItem] = []
     if debit_total != credit_total:
         result.append(

@@ -609,3 +609,23 @@ def test_review_note_cannot_predate_the_pack_it_claims_to_review(tmp_path: Path)
             prior_path=EXAMPLES / "prior_trial_balance.csv",
             acknowledgement_path=note,
         )
+
+
+@pytest.mark.parametrize(
+    ("debit", "credit"),
+    [
+        ("1.0000000000000000000000000001", "1.00"),
+        ("100000000000000000000000000.01", "100000000000000000000000000.00"),
+    ],
+)
+def test_totals_beyond_the_context_precision_are_refused_not_rounded(tmp_path, debit, credit):
+    # Each pair differs, yet a 28-digit sum rounds the excess away and the
+    # totals compare equal. Refusing the file keeps the exact-balance promise.
+    paths = {}
+    for name, date in [("current", "2026-08-31"), ("prior", "2026-07-31")]:
+        paths[name] = _write(tmp_path / f"{name}.csv", [
+            f"{date},{TENANT},Assets,a,Cash,100,{debit},0,{debit},0",
+            f"{date},{TENANT},Equity,b,Capital,200,0,{credit},0,{credit}",
+        ])
+    with pytest.raises(ControlInputError, match="28-digit precision"):
+        review_close(current_path=paths["current"], prior_path=paths["prior"])

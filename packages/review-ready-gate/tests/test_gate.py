@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from decimal import Decimal
+from decimal import Context, Decimal, localcontext
 from pathlib import Path
 
 import pytest
@@ -18,7 +18,7 @@ from reviewready.report import (
     write_review_pack,
 )
 from reviewready.viewer import render_review_sheet
-from tests.support import EXAMPLES
+from tests.support import EXAMPLES, copy_example_pack
 
 
 def test_bas_ready_pack_is_ready() -> None:
@@ -643,3 +643,31 @@ def test_a_staging_write_that_dies_part_way_leaves_no_orphan(
     # A staged file the run could not finish writing must go with the rest, not
     # sit in the output directory as a truncated fragment of a pack.
     assert list(output.iterdir()) == []
+
+
+def _bas_ready_with_bank_row(tmp_path: Path, replacement: str) -> Path:
+    pack = copy_example_pack("bas-ready", tmp_path / "pack")
+    tb = pack / "trial_balance.csv"
+    text = tb.read_text(encoding="utf-8")
+    original = "15000.00,0.00,120000.00,0.00"
+    assert original in text
+    tb.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+    return pack
+
+
+def test_caller_decimal_context_cannot_hide_a_one_cent_imbalance(tmp_path: Path) -> None:
+    # At four significant digits 15000.01 rounds to 15000 and the imbalance
+    # vanished; the gate must fix its own context.
+    pack = _bas_ready_with_bank_row(tmp_path, "15000.01,0.00,120000.01,0.00")
+    with localcontext(Context(prec=4)) as context:
+        before = str(context)
+        result = review_pack(profile="bas", pack_dir=pack)
+        assert str(context) == before
+    assert result.status == "BLOCKED"
+    assert any(item.code == FINDING_TB_UNBALANCED for item in result.findings)
+
+
+def test_totals_beyond_the_context_precision_are_refused_not_rounded(tmp_path: Path) -> None:
+    pack = _bas_ready_with_bank_row(tmp_path, "15000.0000000000000000000000001,0.00,120000.00,0.00")
+    with pytest.raises(GateInputError, match="28-digit precision"):
+        review_pack(profile="bas", pack_dir=pack)
