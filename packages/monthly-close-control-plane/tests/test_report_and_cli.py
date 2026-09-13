@@ -792,7 +792,7 @@ def test_workbench_writes_the_existing_review_pack_and_hands_off_to_the_reviewer
     """A missing workbench façade would make the command unrecognised.
 
     The workbench must keep the existing review engine and pack writer as the
-    one source of truth: a reviewer receives the same 3 artefacts and an
+    one source of truth: a reviewer receives the same 4 artefacts and an
     explicit reminder that the pack is not an approval.
     """
     output = tmp_path / "workbench-pack"

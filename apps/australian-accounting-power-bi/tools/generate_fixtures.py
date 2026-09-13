@@ -3,7 +3,7 @@
 generate_fixtures.py - Deterministic synthetic fixture generator for Australian Accounting Power BI.
 
 Generates balanced double-entry general ledger journals, chart of accounts, multi-entity masters,
-budgets, Payday Super payroll events (STP Phase 2), and ATO Small Business Benchmark distributions.
+budgets, Payday Super payroll events (STP Phase 2), and fabricated industry benchmark reference values.
 
 Zero client or real taxpayer data is used. All entities use fictional place names per project standards.
 """
@@ -479,7 +479,9 @@ def generate_fixtures():
         writer.writeheader()
         writer.writerows(payroll_rows)
 
-    # 6. Write ATO Benchmarks (Real ATO Small Business benchmark distributions by ANZSIC)
+    # 6. Write the benchmark reference table. Every row below is a fabricated sample value
+    # invented for this model, not an ATO benchmark distribution or percentile. The rows
+    # carry no source date, citation or percentile definition.
     benchmarks = [
         # ANZSIC 6962 - Management Advice & Consulting
         {"ANZSIC_Code": "6962", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "88.0", "GrossProfitPct_Avg": "92.5", "GrossProfitPct_High": "96.0", "TotalExpensesPct_Avg": "68.0", "RentPct_Avg": "4.5", "MotorVehiclePct_Avg": "3.2", "LabourPct_Avg": "42.0"},

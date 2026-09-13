@@ -34,7 +34,7 @@
 let
     AgedPayables = (FilePath as text, optional IncludeSection as nullable logical) as table =>
         let
-            fileBinary = File.Contents(FilePath),
+            fileBinary = Binary.Buffer(File.Contents(FilePath)),
             lines = Lines.FromBinary(fileBinary, null, null, 65001),
             headerLines = List.Select(
                 lines,
@@ -55,10 +55,110 @@ let
                 else
                     List.First(headerLines),
             firstField = Text.Trim(List.First(Text.Split(headerLine, ","))),
-            columnCount = List.Count(Text.Split(headerLine, ",")),
+            // Csv.Document takes every record's width from Columns alone: a
+            // short record is padded with nulls, so a contact row whose Total
+            // field has gone missing loads as a genuine zero, and an extra
+            // field is dropped without a word. Frame the records with the
+            // engine's CSV quote rules and measure each one from the header
+            // down, the same width check PaydaySuper.Report makes.
+            csvText = Text.TrimStart(
+                Text.FromBinary(fileBinary, TextEncoding.Utf8),
+                {Character.FromNumber(65279)}
+            ),
+            recordTable = Table.SelectRows(
+                Table.AddIndexColumn(
+                    Table.FromList(
+                        Lines.FromText(csvText, QuoteStyle.Csv, false),
+                        Splitter.SplitByNothing(),
+                        {"RecordText"},
+                        null,
+                        ExtraValues.Error
+                    ),
+                    "RecordNumber",
+                    1,
+                    1,
+                    Int64.Type
+                ),
+                // A blank line separates the observed sections and carries no
+                // fields to check.
+                each Text.Trim([RecordText]) <> ""
+            ),
+            recordWidth = (recordText as text, recordNumber as number) as number =>
+                let
+                    attempt = try Csv.Document(
+                        Text.ToBinary(recordText, TextEncoding.Utf8),
+                        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+                    ),
+                    parsed = if attempt[HasError] then
+                        error Error.Record(
+                            "Xero.AgedPayables",
+                            "Malformed export row",
+                            "CSV record " & Text.From(recordNumber) & " is not valid CSV."
+                        )
+                        else attempt[Value]
+                in
+                    if Table.RowCount(parsed) = 1 then Table.ColumnCount(parsed)
+                    else error Error.Record(
+                        "Xero.AgedPayables",
+                        "Malformed export row",
+                        "CSV record " & Text.From(recordNumber)
+                            & " did not parse as exactly one record."
+                    ),
+            isHeaderRecord = (recordText as text) as logical =>
+                Text.StartsWith(Text.TrimStart(recordText), firstField & ",")
+                    or Text.Trim(recordText) = firstField,
+            headerRecordNumbers = Table.SelectRows(
+                recordTable,
+                each isHeaderRecord([RecordText])
+            )[RecordNumber],
+            headerRecordNumber =
+                if List.IsEmpty(headerRecordNumbers) then
+                    error Error.Record(
+                        "Xero.AgedPayables",
+                        "Header row not found",
+                        "Header line detected in raw text but not in the framed CSV records: format changed."
+                    )
+                else
+                    List.Min(headerRecordNumbers),
+            headerWidth = recordWidth(
+                Table.SelectRows(recordTable, each [RecordNumber] = headerRecordNumber){0}[RecordText],
+                headerRecordNumber
+            ),
+            firstBadRecord = Table.FirstN(
+                Table.SelectRows(
+                    Table.AddColumn(
+                        Table.SelectRows(recordTable, each [RecordNumber] > headerRecordNumber),
+                        "Width",
+                        each recordWidth([RecordText], [RecordNumber]),
+                        Int64.Type
+                    ),
+                    each [Width] <> headerWidth
+                ),
+                1
+            ),
+            columnCount =
+                if Table.IsEmpty(firstBadRecord) then
+                    headerWidth
+                else
+                    let bad = firstBadRecord{0} in
+                        error Error.Record(
+                            "Xero.AgedPayables",
+                            "Record width does not match the header",
+                            "CSV record " & Text.From(bad[RecordNumber]) & " has "
+                                & Text.From(bad[Width]) & " fields; the header has "
+                                & Text.From(headerWidth)
+                                & ". A missing field is not a blank amount and an extra field is not"
+                                & " nothing, so the export is refused instead of read as a zero."
+                        ),
             Raw = Csv.Document(
                 fileBinary,
-                [Delimiter = ",", Columns = columnCount, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+                [
+                    Delimiter = ",",
+                    Columns = columnCount,
+                    Encoding = 65001,
+                    QuoteStyle = QuoteStyle.Csv,
+                    ExtraValues = ExtraValues.Error
+                ]
             ),
             Indexed = Table.AddIndexColumn(Raw, "__idx", 0, 1, Int64.Type),
             HeaderMatches = Table.SelectRows(

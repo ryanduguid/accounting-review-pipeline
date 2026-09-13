@@ -3,9 +3,17 @@ include README.md
 include DISCLAIMER.md
 include SECURITY.md
 include CONTRIBUTING.md
+include RELEASING.md
+include RELEASE_NOTES.md
+# The component lockfile is the authority for building and releasing this
+# distribution alone, so an archive reader can reproduce the locked run.
+include uv.lock
 recursive-include docs *.md
 recursive-include examples *.csv *.json
 include examples/clearing_demo.py
 include examples/close-loop.md
+# close-loop.md links this driver. A link in the archive that opens nothing is
+# the defect; every file a shipped document points at ships with it.
+include examples/close-loop.ps1
 include examples/github-actions-close-check.yml
 recursive-include schemas *.csv

@@ -256,6 +256,6 @@ uv build
 
 The test suite covers schema gates, the 3 fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.10, 3.11, 3.12, and 3.13, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
+Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.10, 3.12 and 3.13, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
 
 MIT licensed. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).

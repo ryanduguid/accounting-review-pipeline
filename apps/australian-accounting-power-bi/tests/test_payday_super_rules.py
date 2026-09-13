@@ -26,6 +26,21 @@ from generate_fixtures import (  # noqa: E402
     notional_earnings,
 )
 
+# The holidays the documented sample calendar covers (the nationwide dates plus NT Picnic
+# Day) that fall between 1 July and 31 December 2026, listed here from their own sources
+# rather than imported from the generator: a date the generator drops must fail this suite.
+# Picnic Day, Monday 3 August 2026, appears on https://nt.gov.au/nt-public-holidays without
+# the footnote that marks the regional show days, so it applies across the whole Territory
+# and stops the clock under the methodology's whole-of-any-state-or-territory rule.
+INDEPENDENT_2026_HOLIDAYS = {
+    datetime.date(2026, 8, 3): "Picnic Day (NT)",
+    datetime.date(2026, 12, 25): "Christmas Day",
+    datetime.date(2026, 12, 28): "Boxing Day (Monday observance)",
+}
+
+# Every due date for a payday on or before 16 December 2026 lands inside that same window.
+INDEPENDENT_WINDOW = (datetime.date(2026, 7, 1), datetime.date(2026, 12, 16))
+
 
 def payroll_rows() -> list[dict[str, str]]:
     with open(SAMPLES_DIR / "sample-payroll-super.csv", "r", encoding="utf-8") as f:
@@ -79,6 +94,52 @@ class TestPaydaySuperRules(unittest.TestCase):
                 f"Event {row['EventID']}: due date {due_date} falls on a weekend or national public holiday",
             )
         self.assertGreater(checked, 0, "Fixture has no post-1 July 2026 pay events to check")
+
+    def test_sample_calendar_carries_the_independently_sourced_2026_holidays(self) -> None:
+        """The calendar is checked against its sources, not against itself.
+
+        NT Picnic Day was missing while the methodology already claimed the nationwide
+        holidays plus Picnic Day, so a 29 July 2026 payday fell due on 7 August rather than
+        10 August. Every other test here counts business days with the generator's own list,
+        which cannot catch a date the generator never had.
+        """
+        for holiday, name in sorted(INDEPENDENT_2026_HOLIDAYS.items()):
+            self.assertIn(
+                holiday,
+                NATIONAL_HOLIDAYS,
+                f"{name} on {holiday} applies across a whole state or territory and must "
+                "stop the sample business-day clock",
+            )
+
+    def test_committed_due_dates_recompute_from_the_independent_calendar(self) -> None:
+        """Recompute the shipped due dates without touching the generator's holiday list."""
+
+        def due_date(payday: datetime.date) -> datetime.date:
+            business_days, current = 0, payday
+            while business_days < 7:
+                current += datetime.timedelta(days=1)
+                if current.weekday() < 5 and current not in INDEPENDENT_2026_HOLIDAYS:
+                    business_days += 1
+            return current
+
+        start, end = INDEPENDENT_WINDOW
+        checked = set()
+        for row in payroll_rows():
+            payday = datetime.date.fromisoformat(row["PayDate"])
+            if not start <= payday <= end:
+                continue
+            checked.add(payday)
+            self.assertEqual(
+                datetime.date.fromisoformat(row["StatutoryDueDate"]),
+                due_date(payday),
+                f"Event {row['EventID']} due date disagrees with the independent calendar",
+            )
+
+        # The payday whose window crosses Picnic Day, and a control whose window does not.
+        self.assertEqual(due_date(datetime.date(2026, 7, 29)), datetime.date(2026, 8, 10))
+        self.assertEqual(due_date(datetime.date(2026, 8, 26)), datetime.date(2026, 9, 4))
+        self.assertIn(datetime.date(2026, 7, 29), checked)
+        self.assertIn(datetime.date(2026, 8, 26), checked)
 
     def test_gic_divisor_is_days_in_the_calendar_year(self) -> None:
         """TAA 1953 s 8AAD divides the annual rate by the days in the calendar year, leap years included."""

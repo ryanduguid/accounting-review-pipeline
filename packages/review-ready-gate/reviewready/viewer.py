@@ -231,10 +231,22 @@ def _verify_json_schema(document: dict[str, object]) -> None:
 
 
 def _summary_source_evidence(summary_text: str) -> dict[str, tuple[str, str]]:
-    found = {
-        slot: (filename, digest)
-        for slot, filename, digest in _SOURCE_EVIDENCE_LINE.findall(summary_text)
-    }
+    """Read the summary's source-evidence lines, one per slot.
+
+    A dict comprehension keeps the last line for a repeated slot, so a
+    contradictory digest inserted above the writer's own line disappeared
+    before the comparison ran, and the reviewer read the false digest off a
+    sheet the viewer had just called verified. Two lines for one slot is the
+    disagreement, whichever of them is true, so the pack is refused instead.
+    """
+    found: dict[str, tuple[str, str]] = {}
+    for slot, filename, digest in _SOURCE_EVIDENCE_LINE.findall(summary_text):
+        if slot in found:
+            raise GateInputError(
+                f"{_SUMMARY_NAME}: source slot {slot!r} carries more than one "
+                "evidence line"
+            )
+        found[slot] = (filename, digest)
     if not found:
         raise GateInputError(f"{_SUMMARY_NAME}: no source-evidence digest lines found")
     return found
@@ -484,19 +496,37 @@ def _verify_cross_file_agreement(
 
 
 def _read_csv_rows(payload: bytes) -> list[dict[str, str]]:
+    """Read findings.csv, requiring every row to hold exactly the declared cells.
+
+    csv.DictReader would collect a surplus cell under a key of None and pad a
+    short row with a default, and the field-by-field comparison downstream
+    reads only the declared columns, so neither would ever be looked at. The
+    surplus cell is the one that matters: the writer's formula guard covers
+    named fields only, so an appended ``=1+1`` cell would pass verification and
+    be live the moment a reviewer opened the file in a spreadsheet. Counting
+    cells here closes that. A blank line is refused for the same reason,
+    DictReader having skipped it in silence: the writer emits none, so one
+    means the file was edited after it was written.
+    """
     try:
         text = payload.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise GateInputError(f"{_CSV_NAME}: not valid UTF-8") from exc
-    reader = csv.DictReader(io.StringIO(text, newline=""))
-    if reader.fieldnames != list(_CSV_FIELDS):
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header = next(reader, None)
+    if header != list(_CSV_FIELDS):
         raise GateInputError(
             f"{_CSV_NAME}: header row does not match the written contract"
         )
-    return [
-        {key: ("" if value is None else value) for key, value in row.items()}
-        for row in reader
-    ]
+    rows: list[dict[str, str]] = []
+    for number, cells in enumerate(reader, start=1):
+        if len(cells) != len(_CSV_FIELDS):
+            raise GateInputError(
+                f"{_CSV_NAME}: row {number} holds {len(cells)} cells, but the "
+                f"header declares {len(_CSV_FIELDS)}"
+            )
+        rows.append(dict(zip(_CSV_FIELDS, cells)))
+    return rows
 
 
 def _canonical_pack(document: dict[str, object], summary_text: str) -> ReadinessPack:

@@ -12,9 +12,14 @@
 // Australian jurisdiction observes daylight saving across 30 June, so the
 // FY boundary is never a DST boundary. Residual: an instant in the last
 // 2 hours of 30 June in Perth (last 30 minutes in Adelaide/Darwin) is
-// already 1 July in AEST and is stamped FY+1 - switch zone yourself before
-// calling if the local calendar of a western or central state is the one
-// that has to decide. Text is parsed as an Australian date, so "01/07/2026"
+// already 1 July in AEST and is stamped FY+1. Switching zone alone does
+// not change that: the result is still a datetimezone, so this function
+// converts it back to +10 and answers FY+1 again. To let a western or
+// central state's local calendar decide, convert the instant and then
+// remove the offset yourself, and pass the plain datetime in:
+// DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(d, 8)) for Perth,
+// DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(d, 9, 30)) for
+// Adelaide and Darwin. Text is parsed as an Australian date, so "01/07/2026"
 // is 1 July whatever the machine's locale; a number is read as an Excel
 // serial. A null date returns a record of nulls, so a blank cell leaves a
 // blank FY on that row rather than an error.
@@ -22,6 +27,12 @@
 // Usage:
 //   Fx.AUFinancialYear(#date(2026, 3, 15))[Label]   // "FY2026"
 //   Fx.AUFinancialYear(#date(2026, 8, 1))[Label]    // "FY2027"
+// Perth local calendar for 30 June 2026 at 23:00 there (FY2026, not FY2027):
+//   Fx.AUFinancialYear(
+//       DateTimeZone.RemoveZone(
+//           DateTimeZone.SwitchZone(#datetimezone(2026, 7, 1, 1, 0, 0, 10, 0), 8)
+//       )
+//   )[Label]
 // Add an FY column to a table:
 //   Table.AddColumn(t, "FY", each Fx.AUFinancialYear([Date])[Label], type text)
 let

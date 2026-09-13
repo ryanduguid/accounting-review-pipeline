@@ -26,8 +26,9 @@ Verify the downloaded release with:
 tag=v0.1.2
 repo=ryanduguid/accounting-review-pipeline
 wheel="monthly_close_control_plane-${tag#v}-py3-none-any.whl"
-release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
-test -n "$release_commit"
+# The commit the v0.1.2 attestations were issued for. Read the discrepancy note
+# below before substituting anything a fresh ls-remote returns.
+release_commit=623f0a3f8c4832c92bf0fc1a2a215441808b15b4
 gh release download "$tag" -R "$repo" --dir "release-$tag"
 cd "release-$tag"
 sha256sum --check SHA256SUMS
@@ -50,7 +51,20 @@ gh release verify-asset "$tag" "$wheel" -R "$repo"
 The `v0.1.2` certificate retains the repository's historical
 `monthly-close-control-plane` source identity, so its attestation checks are
 owner-scoped and then bound to the exact source digest, source ref, workflow
-and signer digest. Releases cut after the rename and shared Python-policy
+and signer digest.
+
+Its source digest is pinned rather than read from the tag, because the two
+disagree. The certificate attests `623f0a3f8c4832c92bf0fc1a2a215441808b15b4`,
+while the annotated `v0.1.2` tag in this repository peels to
+`8aabc23648ed922103e7860a4c6abbc89e0c5af1`. Both commits carry the same tree,
+`2cfbb3043353680205ebf0cefabd1df38b1dd660`, and different parents, so no file
+differs between them. When and why the tag came to name the second commit is
+not recorded here, and this guide does not treat it as settled. The two
+`gh attestation verify` commands above therefore establish the historical
+attestations only. `gh release verify` and `gh release verify-asset` fail for
+this tag, because no attestation is bound to the current tag object; run them
+and record the failure rather than reading it as a passing check. Never move a
+published tag to make these agree. Releases cut after the rename and shared Python-policy
 migration use the current repository identity and hardened policy digest. For
 the next release, update `tag` if the intended version changes and run these
 checks after downloading the assets and checking `SHA256SUMS`:

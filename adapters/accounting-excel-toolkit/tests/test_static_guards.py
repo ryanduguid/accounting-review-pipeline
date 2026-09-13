@@ -8,6 +8,7 @@ releasing changes to the modules.
 """
 
 import csv
+import io
 import re
 import shutil
 import string
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from collections import namedtuple
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -97,6 +99,54 @@ def _aged_body_rows(data_rows):
             continue
         kept.append(row)
     return kept
+
+
+class AgedSummaryError(Exception):
+    """What the ported aged-summary width rule raises where the M raises."""
+
+
+def _aged_records(text):
+    """Frame an export the way Lines.FromText(..., QuoteStyle.Csv, false) and
+    Csv.Document do in the M: quoted newlines stay inside one record, and a
+    blank separator line carries no fields to check."""
+    framed = []
+    for number, row in enumerate(csv.reader(io.StringIO(text), strict=True), start=1):
+        if len(row) <= 1 and not "".join(row).strip():
+            continue
+        framed.append((number, row))
+    return framed
+
+
+def _aged_record_widths(text, first_field):
+    """The record-width rule Xero.AgedReceivables.pq and Xero.AgedPayables.pq
+    share, ported: every record from the header down carries the header's
+    field count, or the export is refused.
+
+    Csv.Document takes each record's width from Columns alone. Without this
+    check a short record was padded with nulls, so a contact row whose Total
+    field had gone missing loaded as a genuine zero, and a ninth field was
+    dropped in silence. Returns the header width and the records below it.
+    """
+    framed = _aged_records(text)
+    header = next(
+        (entry for entry in framed if entry[1] and entry[1][0].strip() == first_field),
+        None,
+    )
+    if header is None:
+        raise AgedSummaryError("header row not found")
+    header_number, header_row = header
+    header_width = len(header_row)
+    body = []
+    for number, row in framed:
+        if number <= header_number:
+            continue
+        if len(row) != header_width:
+            raise AgedSummaryError(
+                f"CSV record {number} has {len(row)} fields;"
+                f" the header has {header_width}"
+            )
+        body.append(row)
+    return header_width, body
 
 
 class TrialBalanceError(Exception):
@@ -492,6 +542,44 @@ class NativeExcelAcceptanceSafetyTests(unittest.TestCase):
                 self.assertIn(step, finally_body)
                 positions.append(finally_body.index(step))
         self.assertEqual(positions, sorted(positions))
+
+    def test_payday_child_counts_match_the_registered_queries_and_fixtures(self):
+        """The runner's synopsis and CONTRIBUTING both describe the Payday
+        child's isolation, and they disagreed: 20 queries across 19 files
+        against 21 across 20.  Count the registered cases from the script
+        itself rather than trusting either sentence."""
+        source = self.source()
+        scale_names = re.findall(
+            r"\[pscustomobject\]@\{\s*Name\s*=\s*'(ZZ_PaydayScale\d+Check)'", source
+        )
+        all_names = re.findall(r"Name\s*=\s*'(ZZ_Payday[A-Za-z0-9]*)'", source)
+        # The 3 scale queries are appended by a foreach over their
+        # specifications; every other query is a literal registry entry.
+        literal_names = [name for name in all_names if name not in scale_names]
+        self.assertEqual(len(scale_names), 3)
+        query_count = len(literal_names) + len(scale_names)
+        self.assertEqual(query_count, 21)
+        # Each query reads exactly one fabricated file through its own
+        # ConvertTo-MText path variable; ZZ_PaydayNoProvenance* share one.
+        fixture_variables = re.findall(
+            r"^\s*\$(mPayday[A-Za-z0-9]*)\s*=\s*ConvertTo-MText", source, re.MULTILINE
+        )
+        self.assertEqual(len(fixture_variables), len(set(fixture_variables)))
+        fixture_count = len(fixture_variables)
+        self.assertEqual(fixture_count, 20)
+        self.assertIn(
+            f"The Payday child uses {query_count} independent",
+            source,
+        )
+        self.assertIn(
+            f"single-source queries across {fixture_count} fabricated files",
+            source,
+        )
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        self.assertRegex(
+            contributing,
+            rf"each of\s+{query_count} queries reads only one of {fixture_count} fabricated files",
+        )
 
 
 def _fixture_rows(path):
@@ -1140,6 +1228,41 @@ class TrialBalanceFixtureTests(unittest.TestCase):
         self.assertIn("Residual:", source)
         self.assertIn("Adelaide/Darwin", source)
 
+    def test_local_calendar_advice_says_to_remove_the_offset_as_well(self):
+        """Switching zone on its own leaves a datetimezone, which the
+        normalised step above converts straight back to +10, so 30 June 23:00
+        in Perth and 23:45 in Adelaide still come back FY2027.  The advice has
+        to end in RemoveZone, which yields the plain datetime the function
+        passes through untouched."""
+
+        def helper_end_year(value):
+            """The normalised and endYear steps of Fx.AUFinancialYear, ported."""
+            if value.tzinfo is not None:
+                aest = timezone(timedelta(hours=10))
+                value = value.astimezone(aest).replace(tzinfo=None)
+            return value.year + (1 if value.month >= 7 else 0)
+
+        perth = timezone(timedelta(hours=8))
+        adelaide = timezone(timedelta(hours=9, minutes=30))
+        for local, zone in (
+            (datetime(2026, 6, 30, 23, 0, tzinfo=perth), perth),
+            (datetime(2026, 6, 30, 23, 45, tzinfo=adelaide), adelaide),
+        ):
+            switched = local.astimezone(zone)
+            # SwitchZone alone: the value is still zoned, so AEST decides.
+            self.assertEqual(helper_end_year(switched), 2027)
+            # SwitchZone then RemoveZone: the state's own calendar decides.
+            self.assertEqual(helper_end_year(switched.replace(tzinfo=None)), 2026)
+
+        source = (ROOT / "powerquery" / "Fx.AUFinancialYear.pq").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for text in (source, readme):
+            self.assertIn("DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(d, 8))", text)
+            self.assertIn("DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(d, 9, 30))", text)
+        # The advice that stopped at SwitchZone cannot come back.
+        self.assertNotIn("switch zone yourself before", source)
+        self.assertNotIn("unless you switch the zone first", readme)
+
 
 class PaydaySuperReportContractTests(unittest.TestCase):
     def test_fabricated_producer_fixture_preserves_the_18_field_contract(self):
@@ -1620,6 +1743,57 @@ class XeroAgedReceivablesSafetyTests(unittest.TestCase):
         self.assertIn("not List.Contains(sectionSubtotals, val)", source)
         self.assertIn('each "Total " & Text.Trim(Text.From(_))', source)
 
+    def test_aged_receivables_refuses_a_record_the_header_width_does_not_match(self):
+        """A short record used to load with its absent Total padded to a
+        genuine zero, and a ninth field was dropped in silence, because
+        Csv.Document takes every record's width from Columns alone.  The
+        contact's Current amount stayed $1,250, so nothing downstream had a
+        reason to look.  Pinned as: the header's field count is measured from
+        the framed record, every record below it has to match, and a present
+        empty cell stays valid."""
+        fixture = (ROOT / "samples" / "sample-xero-aged-receivables.csv").read_text(
+            encoding="utf-8-sig"
+        )
+        # Control: the fabricated export is unchanged and still reconciles.
+        width, body = _aged_record_widths(fixture, "Contact")
+        self.assertEqual(width, 8)
+        contacts = [row for row in _aged_body_rows(body) if row[0].strip().lower() != "total"]
+        self.assertEqual(len(contacts), 4)
+        self.assertEqual(sum(Decimal(row[-1]) for row in contacts), Decimal("3920.50"))
+
+        row = "Apex Building Supplies,1250.00,0.00,0.00,0.00,0.00,0.00,1250.00"
+        self.assertIn(row, fixture)
+        # A present blank amount is a genuine zero, not a missing field.
+        blank_total = fixture.replace(row, row[: row.rindex(",") + 1])
+        self.assertEqual(_aged_record_widths(blank_total, "Contact")[0], 8)
+        # The audited cases: the final field removed, and a ninth field added.
+        for malformed in (row[: row.rindex(",")], row + ",extra"):
+            with self.assertRaises(AgedSummaryError):
+                _aged_record_widths(fixture.replace(row, malformed), "Contact")
+
+    def test_aged_receivables_pins_the_record_width_and_bucket_guards(self):
+        source = self.source()
+        # The width check runs on the framed records, so a quoted newline
+        # stays inside one record rather than becoming a short one.
+        self.assertIn("Binary.Buffer(File.Contents(FilePath))", source)
+        self.assertIn("Lines.FromText(csvText, QuoteStyle.Csv, false)", source)
+        self.assertIn(
+            "recordWidth = (recordText as text, recordNumber as number) as number =>",
+            source,
+        )
+        self.assertIn('"Record width does not match the header"', source)
+        self.assertIn("ExtraValues = ExtraValues.Error", source)
+        # Csv.Document is shaped to the checked header width, so the refusal
+        # cannot be stepped over.
+        self.assertLess(source.index("firstBadRecord ="), source.index("Raw = Csv.Document"))
+        self.assertIn("Columns = columnCount,", source)
+        # A missing Total header is still refused before any row is typed.
+        self.assertIn(
+            'requiredBuckets = {"< 1 Month", "1 Month", "2 Months", "3 Months", "Older", "Total"}',
+            source,
+        )
+        self.assertIn("List.ContainsAll(Table.ColumnNames(PromotedRaw), requiredBuckets)", source)
+
     def test_aged_receivables_sample_fixture_is_reconciled(self):
         fixture_path = ROOT / "samples" / "sample-xero-aged-receivables.csv"
         self.assertTrue(fixture_path.is_file())
@@ -1718,6 +1892,46 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         self.assertIn('Text.Lower(val) <> "percentage of total"', source)
         self.assertIn("not List.Contains(sectionSubtotals, val)", source)
         self.assertIn('each "Total " & Text.Trim(Text.From(_))', source)
+
+    def test_aged_payables_refuses_a_record_the_header_width_does_not_match(self):
+        """The payables half of the same pin, kept separate because the 2
+        files are separate copies.  The section row and its subtotal are
+        full-width in the observed export, so the width rule does not have to
+        make an exception for them."""
+        fixture = (ROOT / "samples" / "sample-xero-aged-payables.csv").read_text(
+            encoding="utf-8-sig"
+        )
+        width, body = _aged_record_widths(fixture, "Contact")
+        self.assertEqual(width, 8)
+        suppliers = [row for row in _aged_body_rows(body) if row[0].strip().lower() != "total"]
+        self.assertEqual(len(suppliers), 4)
+        self.assertEqual(sum(Decimal(row[-1]) for row in suppliers), Decimal("5030.00"))
+
+        row = "Alpha Hardware Supplies,2340.00,0.00,0.00,0.00,0.00,0.00,2340.00"
+        self.assertIn(row, fixture)
+        blank_total = fixture.replace(row, row[: row.rindex(",") + 1])
+        self.assertEqual(_aged_record_widths(blank_total, "Contact")[0], 8)
+        for malformed in (row[: row.rindex(",")], row + ",extra"):
+            with self.assertRaises(AgedSummaryError):
+                _aged_record_widths(fixture.replace(row, malformed), "Contact")
+
+    def test_aged_payables_pins_the_record_width_and_bucket_guards(self):
+        source = self.source()
+        self.assertIn("Binary.Buffer(File.Contents(FilePath))", source)
+        self.assertIn("Lines.FromText(csvText, QuoteStyle.Csv, false)", source)
+        self.assertIn(
+            "recordWidth = (recordText as text, recordNumber as number) as number =>",
+            source,
+        )
+        self.assertIn('"Record width does not match the header"', source)
+        self.assertIn("ExtraValues = ExtraValues.Error", source)
+        self.assertLess(source.index("firstBadRecord ="), source.index("Raw = Csv.Document"))
+        self.assertIn("Columns = columnCount,", source)
+        self.assertIn(
+            'requiredBuckets = {"< 1 Month", "1 Month", "2 Months", "3 Months", "Older", "Total"}',
+            source,
+        )
+        self.assertIn("List.ContainsAll(Table.ColumnNames(PromotedRaw), requiredBuckets)", source)
 
     def test_aged_payables_sample_fixture_is_reconciled(self):
         fixture_path = ROOT / "samples" / "sample-xero-aged-payables.csv"

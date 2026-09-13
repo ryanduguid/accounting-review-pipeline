@@ -172,10 +172,17 @@ def _reconcile(transactions: Path, tenant: str, account_id: str, currency: str,
         if item["Reference"] and item["TransactionID"] not in grouped:
             references[item["Reference"]].append(item)
     suggestions: list[dict] = []
+    # A supplied review group may already hold the next S name. Settle the label here, once,
+    # so reconciliation.json, review.html and suggestions.csv all name the same group.
+    used_groups = {group["group"] for group in allocations}
     # ponytail: suggest whole reference groups only; manual groups cover partial and cross-reference matches.
     for reference, items in sorted(references.items()):
         if 2 <= len(items) <= 20 and _total(items) == 0:
-            suggestions.append({"group": f"S{len(suggestions) + 1}",
+            name = f"S{len(suggestions) + 1}"
+            while name in used_groups:
+                name = "new-" + name
+            used_groups.add(name)
+            suggestions.append({"group": name,
                                 "ids": [item["TransactionID"] for item in items],
                                 "reason": f"Shared reference {reference!r}; total 0.00."})
     movement = _total(current)
