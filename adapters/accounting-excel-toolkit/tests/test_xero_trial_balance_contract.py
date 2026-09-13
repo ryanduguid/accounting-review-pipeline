@@ -57,7 +57,7 @@ class XeroTrialBalanceContractTests(unittest.TestCase):
         readme = (component / "README.md").read_text(encoding="utf-8")
         self.assertIn("accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit", readme)
         self.assertIn("../../contracts/xero-trial-balance-v1/", readme)
-        self.assertIn("../../.github/workflows/accounting-excel-toolkit.yml", readme)
+        self.assertIn("../../.github/workflows/standard-library-components.yml", readme)
         self.assertIn("accounting-review-pipeline/tree/main/packages/xero-trial-balance-export", readme)
         self.assertNotIn("accounting-excel-toolkit/actions/workflows/verify.yml", readme)
 
