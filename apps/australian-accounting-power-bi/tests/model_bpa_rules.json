@@ -2,33 +2,37 @@
   {
     "ID": "BPA_MEASURE_FORMAT_STRING",
     "Name": "Measures must have format string",
+    "Description": "Selects measures with no format string. Measures that return text are exempt.",
     "Category": "Formatting",
     "Severity": 1,
     "Scope": "Measure",
-    "Expression": "!string.IsNullOrEmpty(FormatString)"
+    "Expression": "string.IsNullOrEmpty(FormatString) && DataType <> \"String\""
   },
   {
     "ID": "BPA_MEASURE_DESCRIPTION",
     "Name": "Visible measures should have descriptions",
+    "Description": "Selects visible measures with no description.",
     "Category": "Documentation",
     "Severity": 2,
     "Scope": "Measure",
-    "Expression": "!IsHidden && !string.IsNullOrEmpty(Description)"
+    "Expression": "!IsHidden && string.IsNullOrEmpty(Description)"
   },
   {
     "ID": "BPA_STAR_SCHEMA_RELATIONSHIPS",
     "Name": "Avoid bidirectional cross filtering on fact tables",
+    "Description": "Selects relationships that filter in more than one direction.",
     "Category": "Performance",
     "Severity": 1,
     "Scope": "Relationship",
-    "Expression": "CrossFilteringBehavior == CrossFilteringBehavior.OneDirection"
+    "Expression": "CrossFilteringBehavior <> \"OneDirection\""
   },
   {
     "ID": "BPA_CALC_GROUP_PRECEDENCE",
     "Name": "Calculation groups must have positive precedence",
+    "Description": "Selects calculation groups whose precedence is not positive.",
     "Category": "Design",
     "Severity": 1,
     "Scope": "CalculationGroup",
-    "Expression": "Precedence > 0"
+    "Expression": "Precedence <= 0"
   }
 ]

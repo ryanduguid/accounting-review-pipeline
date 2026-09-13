@@ -1135,3 +1135,69 @@ def test_viewer_accepts_engine_output_end_to_end(tmp_path: Path) -> None:
     write_review_pack(pack, output)
     sheet, _ = render_review_sheet(output)
     assert f"Overall status: {pack.status}" in sheet
+
+
+# --- a value edited in the summary alone ----------------------------------
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "region"),
+    [
+        ("| REVIEW | subledger_reconciliation | Varrock Ventures Pty Ltd "
+         "| 100 / Operating Bank | 15.00 |",
+         "| REVIEW | subledger_reconciliation | Varrock Ventures Pty Ltd "
+         "| 100 / Operating Bank | 999.00 |",
+         "Exceptions"),
+        ("- Current report date(s): 2026-07-31", "- Current report date(s): 2030-01-31", "Scope"),
+        (
+            "- Material variance thresholds: $1000.00 and 10.00%",
+            "- Material variance thresholds: $999999.00 and 99.00%",
+            "Scope",
+        ),
+        ("- Exceptions: 1 total; 0 blocked; 1 requiring review.",
+         "- Exceptions: 0 total; 0 blocked; 0 requiring review.", "Scope"),
+        ("- Reconciliation tolerance: $0.01", "- Reconciliation tolerance: $9.99", "Scope"),
+    ],
+)
+def test_a_summary_only_edit_fails_closed(
+    pack_dir: Path, original: str, replacement: str, region: str
+) -> None:
+    """The sheet a reviewer reads has to be the pack the JSON records.
+
+    Each of these changed only close-summary.md, leaving the JSON and both CSVs
+    byte for byte as written, and the viewer still called all 4 artefacts
+    verified while displaying the edited figure among them. A reviewer who acts
+    on a difference, a period, a threshold or a count is acting on the sheet.
+    """
+    summary = pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    assert text.count(original) == 1
+    summary.write_text(text.replace(original, replacement), encoding="utf-8")
+
+    with pytest.raises(ControlInputError, match=f"the '{region}' section disagrees"):
+        render_review_sheet(pack_dir)
+
+
+def test_edited_reviewer_initials_fail_closed(tmp_path: Path) -> None:
+    """Initials and a date are the pack's only claim about who reviewed it."""
+    output = tmp_path / "acknowledged-pack"
+    write_review_pack(_pack(with_acknowledgement=True), output)
+    summary = output / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    assert "- Reviewer initials: RD" in text
+    summary.write_text(
+        text.replace("- Reviewer initials: RD", "- Reviewer initials: ZZ"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ControlInputError, match="the 'Human acknowledgement' section disagrees"):
+        render_review_sheet(output)
+
+
+def test_an_unedited_acknowledged_pack_still_verifies(tmp_path: Path) -> None:
+    """The control: the writer's own 4 artefacts pass every rebuilt section."""
+    output = tmp_path / "untouched-pack"
+    write_review_pack(_pack(with_acknowledgement=True), output)
+    sheet, digests = render_review_sheet(output)
+    assert "Overall status: REVIEW" in sheet
+    assert len(digests) == 4

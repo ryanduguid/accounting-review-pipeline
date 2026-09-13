@@ -539,9 +539,38 @@ _CLIENT_QUERY_EMPTY_REGISTER = (
 # The renderer's placeholder for a tenant, account or difference it has none of.
 _ABSENT = "n/a"
 
+_SCOPE_HEADING = "## Scope"
+_EXCEPTIONS_HEADING = "## Exceptions"
+_ACKNOWLEDGEMENT_HEADING = "## Human acknowledgement"
 
-def _client_query_section_lines(summary_text: str) -> list[str]:
-    """Return the lines under the one client-query heading, or raise.
+# report._as_markdown's exception table and the 2 lines it writes in place of a
+# section, mirrored here for the same reason _CLIENT_QUERY_PREAMBLE is.
+_EXCEPTION_TABLE_HEADER = (
+    "| Status | Control | Tenant | Account | Difference | Reason |"
+)
+
+_EXCEPTION_TABLE_DELIMITER = "| --- | --- | --- | --- | ---: | --- |"
+
+_EMPTY_EXCEPTIONS_LINE = (
+    "No exceptions were raised. A human must still decide whether the close "
+    "is appropriate."
+)
+
+_NO_ACKNOWLEDGEMENT_LINE = (
+    "No reviewer acknowledgement was supplied. This does not create or imply "
+    "an approval."
+)
+
+# The writer states this effect itself rather than printing the JSON member, so
+# it is a fixed line, not a value to compare against the pack.
+_ACKNOWLEDGEMENT_EFFECT_LINE = (
+    "- Effect: acknowledgement records a human action only; it does not change "
+    "the control status or approve a close."
+)
+
+
+def _section_lines(summary_text: str, heading: str) -> list[str]:
+    """Return the lines under the one occurrence of ``heading``, or raise.
 
     The heading has to be a heading. report._md_cell escapes a cell's pipes,
     backslashes, asterisks and backticks but not its hashes, and a one-line
@@ -555,19 +584,22 @@ def _client_query_section_lines(summary_text: str) -> list[str]:
     the writer emitted. This finds it and returns what sits under it.
     """
     lines = summary_text.splitlines()
-    headings = [
-        index for index, line in enumerate(lines) if line == _CLIENT_QUERY_HEADING
-    ]
+    headings = [index for index, line in enumerate(lines) if line == heading]
     if len(headings) != 1:
         raise ControlInputError(
-            f"{_SUMMARY_NAME}: expected exactly one {_CLIENT_QUERY_HEADING!r} "
-            f"heading, found {len(headings)}"
+            f"{_SUMMARY_NAME}: expected exactly one {heading!r} heading, "
+            f"found {len(headings)}"
         )
     start = headings[0] + 1
     for index in range(start, len(lines)):
         if _MD_SECTION_HEADING.match(lines[index]):
             return lines[start:index]
     return lines[start:]
+
+
+def _client_query_section_lines(summary_text: str) -> list[str]:
+    """Return the lines under the one client-query heading, or raise."""
+    return _section_lines(summary_text, _CLIENT_QUERY_HEADING)
 
 
 def _md_cell_mirror(value: str) -> str:
@@ -702,6 +734,144 @@ def _verify_summary_states_the_register(
             )
 
 
+def _verify_rebuilt_section(
+    summary_text: str, heading: str, expected: list[str], *, trailing_blank: bool
+) -> None:
+    """Prove one summary section is line for line what the writer would emit.
+
+    Rebuilding beats searching for the same reason it does in the client-query
+    section: a search leaves whatever it does not look for unchecked, and what
+    a reviewer reads off the sheet is the whole section, not the parts a check
+    happened to name. The leading blank line and, for every section but the
+    last, the trailing one are part of what the writer emits, so they are
+    compared too.
+    """
+    observed = _section_lines(summary_text, heading)
+    wanted = ["", *expected, ""] if trailing_blank else ["", *expected]
+    if observed != wanted:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the {heading.lstrip('# ')!r} section disagrees with "
+            f"{_JSON_NAME}: renders {observed!r}, expected {wanted!r}"
+        )
+
+
+def _expected_scope_lines(document: dict[str, object], *, register: bool) -> list[str]:
+    """Rebuild the scope bullets report._as_markdown renders.
+
+    Every one of them is a number a reviewer acts on: the periods compared, the
+    thresholds that decided what counted as an exception, the tolerance that
+    decided what counted as reconciled, and the counts that say how much there
+    is to look at. Left uncompared, each could be edited in the sheet alone
+    while the pack still verified.
+    """
+    current = _require_string_list(document, "current_report_dates")
+    prior = _require_string_list(document, "prior_report_dates")
+    thresholds = document["thresholds"]
+    assert isinstance(thresholds, dict)
+    exceptions = document["exceptions"]
+    assert isinstance(exceptions, list)
+    blocked = sum(1 for item in exceptions if _exception_field(item, "status") == "BLOCKED")
+    review = sum(1 for item in exceptions if _exception_field(item, "status") == "REVIEW")
+    lines = [
+        f"- Current report date(s): {', '.join(current)}",
+        f"- Prior report date(s): {', '.join(prior)}",
+        f"- Material variance thresholds: ${thresholds['absolute_variance']}"
+        f" and {thresholds['percentage_variance']}",
+        f"- Reconciliation tolerance: ${thresholds['reconciliation_tolerance']}",
+        f"- Exceptions: {len(exceptions)} total; {blocked} blocked; "
+        f"{review} requiring review.",
+    ]
+    if register:
+        queries = document["client_queries"]
+        assert isinstance(queries, list)
+        lines.append(f"- Client queries drafted: {len(queries)}.")
+    return lines
+
+
+def _exception_field(item: object, name: str) -> str:
+    if not isinstance(item, dict) or not isinstance(item.get(name), str):
+        raise ControlInputError(
+            f"{_JSON_NAME}: exceptions[].{name} must be a string"
+        )
+    value = item[name]
+    assert isinstance(value, str)
+    return value
+
+
+def _expected_exception_row(item: object) -> str:
+    """Rebuild the table row report._as_markdown renders for one exception."""
+    account = " / ".join(
+        piece
+        for piece in (
+            _exception_field(item, "account_code"),
+            _exception_field(item, "account_name"),
+        )
+        if piece
+    ) or _exception_field(item, "account_id") or _ABSENT
+    cells = (
+        _exception_field(item, "status"),
+        _exception_field(item, "control"),
+        _md_cell_mirror(_exception_field(item, "tenant") or _ABSENT),
+        _md_cell_mirror(account),
+        _exception_field(item, "difference") or _ABSENT,
+        _md_cell_mirror(_exception_field(item, "reason")),
+    )
+    return "| " + " | ".join(cells) + " |"
+
+
+def _expected_exception_lines(exceptions: list) -> list[str]:
+    """Rebuild the exceptions section, table and all.
+
+    This is the section the finding turned on: a difference of -$250 read as
+    -$999 on the sheet while exceptions.csv and the JSON still said -$250. The
+    CSV was already compared with the JSON; the sheet the reviewer reads was
+    not.
+    """
+    if not exceptions:
+        return [_EMPTY_EXCEPTIONS_LINE]
+    return [
+        _EXCEPTION_TABLE_HEADER,
+        _EXCEPTION_TABLE_DELIMITER,
+        *(_expected_exception_row(item) for item in exceptions),
+    ]
+
+
+def _md_note_lines_mirror(comment: str) -> list[str]:
+    """Mirror report._md_note_lines, as _md_cell_mirror mirrors report._md_cell."""
+    if "\n" not in comment and "\r" not in comment:
+        return [f"- Comment: {_md_cell_mirror(comment)}"]
+    lines = ["- Comment:"]
+    for raw in comment.splitlines():
+        line = _md_cell_mirror(raw)
+        if line.startswith("#"):
+            line = "\\" + line
+        lines.append(f"  > {line}".rstrip())
+    return lines
+
+
+def _expected_acknowledgement_lines(acknowledgement: object) -> list[str]:
+    """Rebuild the acknowledgement section.
+
+    Initials and a date are the only claim in the pack about who looked at it
+    and when. An acknowledgement is not an approval, which is exactly why the
+    name against it has to be the name the run recorded.
+    """
+    if acknowledgement is None:
+        return [_NO_ACKNOWLEDGEMENT_LINE]
+    assert isinstance(acknowledgement, dict)
+    initials = acknowledgement["reviewer_initials"]
+    reviewed_on = acknowledgement["reviewed_on"]
+    comment = acknowledgement["comment"]
+    assert isinstance(initials, str) and isinstance(reviewed_on, str)
+    assert isinstance(comment, str)
+    return [
+        f"- Reviewer initials: {_md_cell_mirror(initials)}",
+        f"- Reviewed on: {reviewed_on}",
+        *_md_note_lines_mirror(comment),
+        _ACKNOWLEDGEMENT_EFFECT_LINE,
+    ]
+
+
 def _verify_summary_holds_no_register(summary_text: str) -> None:
     """A pack without the register must not have a summary that shows one.
 
@@ -775,6 +945,7 @@ def _verify_cross_file_agreement(
 
     exceptions = document["exceptions"]
     assert isinstance(exceptions, list)
+
     _verify_rows_match(
         csv_name=_CSV_NAME,
         member="exceptions",
@@ -787,20 +958,44 @@ def _verify_cross_file_agreement(
 
     if query_rows is None:
         _verify_summary_holds_no_register(summary_text)
-        return
+    else:
+        client_queries = document["client_queries"]
+        assert isinstance(client_queries, list)
+        _verify_rows_match(
+            csv_name=_QUERY_CSV_NAME,
+            member="client_queries",
+            noun="client query",
+            json_items=client_queries,
+            csv_rows=query_rows,
+            fields=_QUERY_CSV_FIELDS,
+            guarded=_QUERY_CSV_GUARDED_FIELDS,
+        )
+        _verify_summary_states_the_register(summary_text, client_queries)
 
-    client_queries = document["client_queries"]
-    assert isinstance(client_queries, list)
-    _verify_rows_match(
-        csv_name=_QUERY_CSV_NAME,
-        member="client_queries",
-        noun="client query",
-        json_items=client_queries,
-        csv_rows=query_rows,
-        fields=_QUERY_CSV_FIELDS,
-        guarded=_QUERY_CSV_GUARDED_FIELDS,
+    # The 3 sections left: the numbers a reviewer acts on, the exception table
+    # the sheet displays, and the name and date against the acknowledgement.
+    # Each is rebuilt from the JSON, so a value edited in the sheet alone is a
+    # refusal rather than a pack that still reports all 4 artefacts verified.
+    # These run last so the member-by-member checks above keep naming the one
+    # file and field that disagree before a whole-section diff is reported.
+    _verify_rebuilt_section(
+        summary_text,
+        _SCOPE_HEADING,
+        _expected_scope_lines(document, register=query_rows is not None),
+        trailing_blank=True,
     )
-    _verify_summary_states_the_register(summary_text, client_queries)
+    _verify_rebuilt_section(
+        summary_text,
+        _EXCEPTIONS_HEADING,
+        _expected_exception_lines(exceptions),
+        trailing_blank=True,
+    )
+    _verify_rebuilt_section(
+        summary_text,
+        _ACKNOWLEDGEMENT_HEADING,
+        _expected_acknowledgement_lines(document["acknowledgement"]),
+        trailing_blank=False,
+    )
 
 
 def _read_csv_rows(

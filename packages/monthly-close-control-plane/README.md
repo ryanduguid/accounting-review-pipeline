@@ -109,7 +109,7 @@ To run this pack against the co-located gateway's same-financial-year sample CSV
 ## Local close workbench
 
 `close-control workbench` is a local façade over the same validation, control
-engine, and 3-file writer used by `close-control review`. It is useful when
+engine, and 4-file writer used by `close-control review`. It is useful when
 the close process starts with 2 already-created canonical exports in an
 access-controlled directory outside this repository:
 
@@ -179,10 +179,11 @@ Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
 
 ```text
-close-control: REVIEW; 8 exception(s)
+close-control: REVIEW; 8 exception(s); 6 client query(ies) drafted
   json: /home/you/close-control-demo/close-review-pack.json
   summary: /home/you/close-control-demo/close-summary.md
   exceptions: /home/you/close-control-demo/exceptions.csv
+  client_queries: /home/you/close-control-demo/client-queries.csv
 ```
 
 The paths are absolute and have their symlinks resolved, whatever `--output`
@@ -381,7 +382,7 @@ Passed through unchanged:
 
 - Use a separate, access-controlled working directory for client source files and outputs.
 - A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, names `close-review-pack.json` and `close-summary.md`, and names `exceptions.csv` and `client-queries.csv` inside those two re-included directories, so all 4 generated pack files are covered. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage, and client authorisation are deliberately outside this MVP.
 - Do not use this as tax, financial, audit, or legal advice. It is a configurable review aid that requires professional judgement.
 

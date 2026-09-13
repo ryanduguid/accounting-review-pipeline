@@ -327,6 +327,38 @@ def test_generated_decisions_can_be_reused_without_losing_allocations(tmp_path):
     assert len(second["outstanding"]) == 5
 
 
+def test_a_renamed_suggestion_carries_the_same_label_into_every_output(tmp_path):
+    """A reviewer who searches the HTML for the CSV's group name has to find it.
+
+    Renaming the suggestion in suggestions.csv alone left the same transactions
+    under S1 in reconciliation.json and review.html and under new-S1 in the CSV
+    that guides the next revision.
+    """
+    decisions = decision_file(tmp_path, [f"S1,{item},reject,Unrelated activity"
+                                        for item in ["p1", "s3"]])
+    _, output = run_pack(tmp_path, decisions=decisions)
+    pack = json.loads((output / "reconciliation.json").read_text())
+    assert pack["suggestions"] == [{"group": "new-S1", "ids": ["s1", "s2", "p2"],
+                                    "reason": "Shared reference 'Batch'; total 0.00."}]
+    assert "new-S1" in (output / "review.html").read_text(encoding="utf-8")
+    with (output / "suggestions.csv").open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert {row["Group"] for row in rows if row["TransactionID"] in {"s1", "s2", "p2"}} == {"new-S1"}
+
+
+def test_an_uncontested_suggestion_keeps_its_plain_label(tmp_path):
+    """The control: with no colliding review group the suggestion stays S1 everywhere."""
+    decisions = decision_file(tmp_path, [f"batch,{item},reject,Unrelated activity"
+                                        for item in ["p1", "s3"]])
+    _, output = run_pack(tmp_path, decisions=decisions)
+    pack = json.loads((output / "reconciliation.json").read_text())
+    assert [group["group"] for group in pack["suggestions"]] == ["S1"]
+    assert "new-S1" not in (output / "review.html").read_text(encoding="utf-8")
+    with (output / "suggestions.csv").open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert {row["Group"] for row in rows if row["TransactionID"] in {"s1", "s2", "p2"}} == {"S1"}
+
+
 @pytest.mark.parametrize("note", ["", "Awaiting remittance"])
 @pytest.mark.parametrize("reference", ["Shared", "Other"])
 def test_pending_groups_survive_reruns_without_clearing_or_duplicate_suggestions(tmp_path, note, reference):

@@ -25,7 +25,6 @@ erDiagram
     Dim_Entity ||--o{ Fact_GeneralLedger : "EntityID"
     Dim_Entity ||--o{ Fact_Budget : "EntityID"
     Dim_Entity ||--o{ Fact_PayrollSuper : "EntityID"
-    Dim_Entity ||--o{ Dim_ANZSIC : "ANZSIC_Code"
     
     Dim_Account ||--o{ Fact_GeneralLedger : "AccountCode"
     Dim_Account ||--o{ Fact_Budget : "AccountCode"
@@ -36,6 +35,7 @@ erDiagram
     
     Dim_Employee ||--o{ Fact_PayrollSuper : "EmployeeID"
     
+    Dim_ANZSIC ||--o{ Dim_Entity : "ANZSIC_Code"
     Dim_ANZSIC ||--o{ Fact_ATOBenchmark : "ANZSIC_Code"
 ```
 
@@ -45,7 +45,7 @@ See [docs/data-model.md](docs/data-model.md) for table grain, schema description
 
 ## Report structure (4 pages)
 
-1. **Executive Financial Performance**: Consolidated P&L matrix with revenue, gross margin, EBITDA, and net asset cards, and a cumulative working capital trend.
+1. **Executive Financial Performance**: Group P&L matrix gross of intercompany, with revenue, gross margin, EBITDA, and net asset cards, and a cumulative working capital trend. Page 2 carries the consolidation calculation group, so use it for figures net of intercompany.
 2. **Multi-Entity Consolidation & Eliminations**: Entity-level matrix views with automated intra-group elimination columns and intercompany loan audit trails.
 3. **ATO Benchmark & Practice Diagnostic**: Industry and turnover-band comparisons, gross margin and cost ratios, and a gross profit comparison against the sample range.
 4. **Payday Super & STP Compliance Monitor**: 7-business-day timeline tracker, clearing-house transit risk analyser, and estimated Super Guarantee Charge (SGC) exposure calculators.

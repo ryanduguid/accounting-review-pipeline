@@ -89,13 +89,11 @@ def write_reconciliation(pack: dict, output: Path) -> Path:
                         for item in pack["outstanding"]]
     decision_rows = [[_csv_safe(group["group"]), key, group["decision"], _csv_safe(group["note"])]
                      for group in pack["decisions"] for key in group["ids"]]
-    used = {group["group"] for group in pack["decisions"]}
+    # compute() settles a suggestion's label against the supplied review groups, so every
+    # output writes the name the pack carries. Renaming here would only split the CSV
+    # from reconciliation.json and review.html.
     for group in pack["suggestions"]:
-        name = group["group"]
-        while name in used:
-            name = "new-" + name
-        used.add(name)
-        decision_rows.extend([[name, key, "", ""] for key in group["ids"]])
+        decision_rows.extend([[_csv_safe(group["group"]), key, "", ""] for key in group["ids"]])
     rendered = {
         "reconciliation.json": (json.dumps(pack, indent=2, ensure_ascii=False) + "\n", "utf-8"),
         "review.html": (render_html(pack), "utf-8"),

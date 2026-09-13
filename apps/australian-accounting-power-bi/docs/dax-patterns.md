@@ -111,3 +111,18 @@ CALCULATE(
 The `ATO Compliance Risk Profile` identifier is retained for existing bindings. Its visible output is a gross profit comparison, with no red/amber/green thresholds or audit-risk prediction. Expense reference averages are not treated as range boundaries.
 
 The [native regression checks](benchmark-verification.md) exercise the source expressions in the Power BI engine, including the previously misclassified upper endpoint and turnover-band boundaries.
+
+---
+
+## 4. Account category predicates
+
+Both financial matrices use `Dim_Account[Class]` or `Dim_Account[SubClass]` as row headings. A bare predicate inside `CALCULATE` replaces the filter on the column it names, so `Revenue` evaluated on the Asset row returned the whole group's revenue and each profit and loss subclass row repeated the full cost of sales and operating expenses. Every account category predicate in `Fact_GeneralLedger.tmdl` and `Fact_Budget.tmdl` is therefore wrapped in `KEEPFILTERS`, which intersects the category with the row selection instead of overwriting it:
+
+```dax
+CALCULATE(
+    SUM(Fact_GeneralLedger[Credit]) - SUM(Fact_GeneralLedger[Debit]),
+    KEEPFILTERS(Dim_Account[Class] = "Revenue")
+)
+```
+
+The cumulative `DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))` argument in the balance sheet measures stays bare on purpose: those measures must reach past the period in context. `Benchmark Annual Turnover` still removes the account filter itself, so the turnover band is unaffected.

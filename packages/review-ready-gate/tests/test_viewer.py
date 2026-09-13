@@ -443,3 +443,60 @@ def test_unreadable_artefact_reports_its_name(pack_dir: Path, monkeypatch) -> No
     with pytest.raises(GateInputError, match="findings.csv") as exc:
         verify_pack(pack_dir)
     assert isinstance(exc.value.__cause__, PermissionError)
+
+
+# --- a summary or CSV edited after the run --------------------------------
+
+
+def test_a_contradictory_duplicate_source_line_fails_closed(pack_dir: Path) -> None:
+    """Two digests for one slot are a disagreement whichever one is true.
+
+    The summary's evidence lines were collected into a dict, so a false line
+    inserted above the writer's own was overwritten by it before the
+    comparison ran. The pack verified, and the sheet showed the reviewer a
+    digest no run produced.
+    """
+    summary = pack_dir / "readiness-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    line = next(line for line in text.splitlines() if line.startswith("- `"))
+    false_line = line.replace("a" * 64, "f" * 64)
+    assert false_line != line
+    summary.write_text(text.replace(line, false_line + "\n" + line), encoding="utf-8")
+
+    with pytest.raises(GateInputError, match="carries more than one evidence line"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_surplus_findings_cell_fails_closed(pack_dir: Path) -> None:
+    """The writer's formula guard covers the named fields only.
+
+    An appended seventh cell was collected under DictReader's restkey and never
+    compared, so `=1+1` survived verification and was live the moment the
+    reviewer opened findings.csv in a spreadsheet.
+    """
+    path = pack_dir / "findings.csv"
+    text = path.read_text(encoding="utf-8-sig")
+    lines = text.splitlines()
+    lines[1] = lines[1] + ",=1+1"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+
+    with pytest.raises(GateInputError, match="holds 7 cells"):
+        render_review_sheet(pack_dir)
+
+
+def test_a_short_findings_row_fails_closed(pack_dir: Path) -> None:
+    """A dropped trailing cell was padded to empty rather than reported."""
+    path = pack_dir / "findings.csv"
+    lines = path.read_text(encoding="utf-8-sig").splitlines()
+    lines[1] = lines[1].rsplit(",", 1)[0]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+
+    with pytest.raises(GateInputError, match="holds 5 cells"):
+        render_review_sheet(pack_dir)
+
+
+def test_the_written_pack_still_verifies(pack_dir: Path) -> None:
+    """The control: the writer's own 3 artefacts pass both added checks."""
+    sheet, digests = render_review_sheet(pack_dir)
+    assert "**Overall status: NOT_READY**" in sheet
+    assert len(digests) == 3

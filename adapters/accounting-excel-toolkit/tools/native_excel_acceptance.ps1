@@ -6,8 +6,8 @@ Runs the repository's Power Query acceptance checks in desktop Excel.
 .DESCRIPTION
 Evaluates 87 checks in Excel's real Power Query engine. The default All mode
 isolates the 60 core checks and 27 Payday Super checks in fresh child
-PowerShell and Excel processes. The Payday child uses 20 independent
-single-source queries across 19 fabricated files so Excel's
+PowerShell and Excel processes. The Payday child uses 21 independent
+single-source queries across 20 fabricated files so Excel's
 cross-source privacy/firewall composition state cannot mask adapter behaviour.
 The checks cover both fabricated Xero trial-balance layouts, financial-year
 boundaries, ABN validation, header promotion, and adverse and lazy-evaluation

@@ -1,0 +1,27 @@
+# Everything README.md links to locally, plus the files its documented commands
+# read. A link in the archive that opens nothing, or an install command whose
+# lockfile is absent, is what this file exists to prevent.
+include LICENSE
+include CITATION.cff
+include README.md
+include SECURITY.md
+include CONTRIBUTING.md
+include DISCLAIMER.md
+include RELEASING.md
+include RELEASE_NOTES.md
+include llms.txt
+include ruff.toml
+# The documented installation is `pip install --require-hashes -r
+# requirements.lock`; without the lockfile that command cannot run at all.
+include requirements.txt
+include requirements-test.txt
+include requirements.lock
+# The component lockfile is the authority for building and releasing this
+# distribution alone, so an archive reader can reproduce the locked run.
+include uv.lock
+# setuptools ships tests/test*.py by default and nothing else under tests/.
+recursive-include tests *.py
+recursive-include assets *.md *.svg
+recursive-include evaluation *.md *.json *.py
+recursive-include samples *.csv *.pq
+recursive-include tools *.py *.ps1

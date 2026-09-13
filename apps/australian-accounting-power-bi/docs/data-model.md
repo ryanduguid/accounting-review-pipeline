@@ -7,7 +7,6 @@ erDiagram
     Dim_Entity ||--o{ Fact_GeneralLedger : "EntityID"
     Dim_Entity ||--o{ Fact_Budget : "EntityID"
     Dim_Entity ||--o{ Fact_PayrollSuper : "EntityID"
-    Dim_Entity ||--o{ Dim_ANZSIC : "ANZSIC_Code"
     
     Dim_Account ||--o{ Fact_GeneralLedger : "AccountCode"
     Dim_Account ||--o{ Fact_Budget : "AccountCode"
@@ -18,6 +17,7 @@ erDiagram
     
     Dim_Employee ||--o{ Fact_PayrollSuper : "EmployeeID"
     
+    Dim_ANZSIC ||--o{ Dim_Entity : "ANZSIC_Code"
     Dim_ANZSIC ||--o{ Fact_ATOBenchmark : "ANZSIC_Code"
 ```
 
@@ -38,6 +38,7 @@ erDiagram
 ### `Dim_Entity` (multi-entity corporate hierarchy)
 - **Primary Key**: `EntityID`
 - **Granularity**: One row per legal entity in the corporate group.
+- **Foreign Keys**: `ANZSIC_Code` -> `Dim_ANZSIC[ANZSIC_Code]`. Many entities share one industry row, so the industry dimension filters the entity dimension and not the reverse.
 - **Attributes**: `LegalName`, `TradingName`, `ABN`, `ACN`, `TaxStructure` (Company versus Unit Trust), `EntityRole`, `ANZSIC_Code`, `Currency`, `ConsolidationWeight`.
 
 ### `Dim_Account` (chart of accounts and financial reporting)
@@ -75,6 +76,6 @@ erDiagram
 - **Metrics**: `GrossEarnings`, `QualifyingEarnings_CodeQ`, `SuperLiability_CodeL` (12.0%), `RemittanceDate`, `FundReceiptDate`, `StatutoryDueDate` (7 national business days from payday), `ComplianceStatus`, `SGC_Shortfall`, `GIC_NominalInterest`.
 
 ### `Fact_ATOBenchmark`
-- **Granularity**: ATO small business benchmark percentiles by ANZSIC code and turnover bracket.
+- **Granularity**: One fabricated sample reference row per ANZSIC code and turnover bracket. The values are invented for this sample model. They are not ATO benchmark percentiles and carry no source date, citation or percentile definition.
 - **Foreign Keys**: `ANZSIC_Code` -> `Dim_ANZSIC[ANZSIC_Code]`.
 - **Metrics**: `GrossProfitPct_Low`, `GrossProfitPct_Avg`, `GrossProfitPct_High`, `TotalExpensesPct_Avg`, `RentPct_Avg`, `MotorVehiclePct_Avg`, `LabourPct_Avg`.
