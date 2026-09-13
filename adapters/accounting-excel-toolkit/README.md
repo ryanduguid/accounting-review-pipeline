@@ -61,7 +61,39 @@ Facts read from the Excel exports of the Trial Balance and both aged summaries, 
 - Every `Total` and subtotal row is a live `SUM` formula whose cached value is `0`. Excel recalculates it on open, and the parsers recompute rather than trust it, but pandas, openpyxl in data-only mode and any other reader that takes the cached value sees zero for every total. Save the file from Excel before handing it to such a reader, or drop the total rows, which these parsers already do.
 - Account codes are text cells (`090` keeps its leading zero). Amounts are numbers stored to four decimal places; a nil debit or credit is an empty cell, not `0`. The trial-balance comparative column holds signed balances, debit positive.
 - Zero ageing buckets export as `0`, not blank. The aged summaries end with `Total`, a blank row and `Percentage of total`; the payables summary also wraps its suppliers in an `Aged Payables` section row (amount cells blank) closed by `Total Aged Payables`.
-- The Excel export mode was observed. The CSV export mode of the same reports has not been observed separately.
+- On 13 September 2026, the Trial Balance and both aged-summary export menus offered Excel, PDF and Google Sheets, with no CSV option. Export Excel, recalculate in Excel, then save the required worksheet as CSV UTF-8. Keep the original workbook and record this conversion; renaming an `.xlsx` file does not convert it.
+
+The fresh Excel-to-CSV files were also loaded through the actual Power Query
+functions on 13 September 2026. Trial Balance retained all 26 account rows and
+the leading-zero code; aged receivables loaded without `Current`, and aged
+payables loaded with it. Parsed totals agreed with the corresponding displayed
+reports. This observation covers those settings, not every custom ageing layout.
+
+An Aged Payables Summary can also contain an `Expense Claims` section. The
+parser retains its detail rows, so the result is not a supplier-only population.
+Use `Xero.AgedPayables(FilePath, true)` to append a nullable text `Section` column
+carrying the source labels. Select `Section = "Aged Payables"` for suppliers and
+`Section = "Expense Claims"` for claims. Rows before any section have null labels;
+rows after a closing subtotal have empty labels until another section starts.
+Treat both as unclassified and retain them for review. The one-argument call
+keeps its existing columns; section labels and subtotals are still removed there.
+Keep the original report and compare
+its `Total Aged Payables` with the Accounts Payable control separately from
+expense claims. Do not compare the combined grand total with Accounts Payable,
+or deduplicate repeated contact names to force agreement. Any difference in the
+expense-claim section remains a separate exception.
+
+During the 13 September 2026 demo investigation, the expense-claim detail
+repeated the same two invoice IDs four times each. Their individual amounts
+matched the two postings in the control-account detail. This explains the
+observed report difference, but does not authorise deduplication of names or
+equal amounts in other exports. The summary CSV carries no stable invoice IDs.
+
+These interactive reports do not supply the stable `AccountID` or both movement
+and YTD pairs required by `xero-tb-csv.v1`. The adapter output is not the canonical
+ten-column input for Monthly Close or Workpaper Review Gate. Use the existing
+API exporter for that contract; renaming headers or copying YTD into movement
+would invent missing evidence.
 
 After loading a TB, the first check is always a tie-out. Sum and subtract using decimal precision and require a difference strictly below half a cent:
 
@@ -104,7 +136,7 @@ To import a module into Excel:
 Three layers check this repository, and each covers different ground:
 
 - **CI (GitHub Actions, [`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml))** runs the Python suite in `tests/` on every push and pull request, with no Excel present. These are static source checks: they read the `.pq` and `.bas` files as text and pin the guards, constants and structures the docs promise. Covered: the M parsers' predicates, pair selection, header promotion and AEST conversion expressions; the VBA recon sheet-marker safety logic and protected-sheet guards; the accounting number format staying byte-identical across both modules; `.bas` files staying ASCII with CRLF endings; sample fixtures balancing and matching across both layouts; README sentences the test docstrings quote; release archive determinism; and the PowerShell runner's own safety properties (portability, fabricated inputs only, COM cleanup). CI never executes M or VBA.
-- **[`tools/native_excel_acceptance.ps1`](tools/native_excel_acceptance.ps1)** runs the Power Query functions for real. It evaluates 72 checks in Excel's actual Power Query engine: both fabricated trial-balance layouts, the fabricated Payday Super producer contract, financial-year boundaries, ABN validation, header promotion, and adverse and lazy-evaluation branches. The default run isolates the 46 core checks and 26 Payday Super checks in fresh child PowerShell and Excel processes; the Payday child uses 20 separate single-source queries across 19 fabricated files to avoid Excel's cross-source privacy/firewall composition boundary. The suite also preserves a quoted multiline field, materialises 500-, 5,000- and 10,000-contribution fabricated reports, and prints each measured refresh time. It needs Windows, Windows PowerShell 5.1+, desktop Excel with Power Query, and the `Microsoft.Mashup.OleDb.1` provider. It does not import or execute VBA. The two aged parsers load into the workbook with every other `.pq` file, but no check yet calls them.
+- **[`tools/native_excel_acceptance.ps1`](tools/native_excel_acceptance.ps1)** runs the Power Query functions for real. It evaluates 87 checks in Excel's actual Power Query engine: both fabricated trial-balance layouts, the fabricated Payday Super producer contract, financial-year boundaries, ABN validation, header promotion, and adverse and lazy-evaluation branches. The default run isolates the 60 core checks and 27 Payday Super checks in fresh child PowerShell and Excel processes; the Payday child uses 21 separate single-source queries across 20 fabricated files to avoid Excel's cross-source privacy/firewall composition boundary. The suite also preserves a quoted multiline field, materialises 500-, 5,000- and 10,000-contribution fabricated reports, and prints each measured refresh time. It needs Windows, Windows PowerShell 5.1+, desktop Excel with Power Query, and the `Microsoft.Mashup.OleDb.1` provider. It does not import or execute VBA. The aged-parser checks cover fixed decimal amounts, absent ageing buckets, invalid values and separate supplier and expense-claim sections.
 - **Manual Excel run** is the only check for VBA behaviour end to end: importing the modules, running `modWorkpaperFormat` and `modReconCompare` against real worksheets, and confirming Mac behaviour (the recon module's platform error message). Nothing automated executes the macros.
 
 ## Principles
@@ -134,6 +166,6 @@ Ryan Duguid, accountant in Newcastle NSW, provisional member of Chartered Accoun
 ## CI coverage
 
 The root [`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml) runs static Python guards. `tools/native_excel_acceptance.ps1`
-(80 checks) and VBA end-to-end remain local Windows work. Power Query
+(87 checks) and VBA end-to-end remain local Windows work. Power Query
 behaviour is not executed on GitHub-hosted runners. Tagged releases call
 `ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA.

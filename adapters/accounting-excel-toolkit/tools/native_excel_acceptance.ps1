@@ -4,8 +4,8 @@
 Runs the repository's Power Query acceptance checks in desktop Excel.
 
 .DESCRIPTION
-Evaluates 80 checks in Excel's real Power Query engine. The default All mode
-isolates the 53 core checks and 27 Payday Super checks in fresh child
+Evaluates 87 checks in Excel's real Power Query engine. The default All mode
+isolates the 60 core checks and 27 Payday Super checks in fresh child
 PowerShell and Excel processes. The Payday child uses 20 independent
 single-source queries across 19 fabricated files so Excel's
 cross-source privacy/firewall composition state cannot mask adapter behaviour.
@@ -27,7 +27,7 @@ repository containing this script.
 
 .PARAMETER CheckSet
 Internal isolation mode. The default All mode launches fresh child PowerShell
-processes for the 53 core checks and 27 Payday Super checks. Core and Payday
+processes for the 60 core checks and 27 Payday Super checks. Core and Payday
 are child modes so Excel's Mashup host cannot carry file-source state from one
 group into the other.
 
@@ -308,7 +308,7 @@ if ($CheckSet -eq 'All') {
             if ($payload.SchemaVersion -ne 1 -or $payload.CheckSet -ne $childSet) {
                 throw "$childSet native acceptance result has the wrong schema or check-set identity."
             }
-            $expectedChildCount = if ($childSet -eq 'Core') { 53 } else { 27 }
+            $expectedChildCount = if ($childSet -eq 'Core') { 60 } else { 27 }
             $childRows = @($payload.Rows)
             if ($childRows.Count -ne $expectedChildCount) {
                 throw (
@@ -359,8 +359,8 @@ if ($CheckSet -eq 'All') {
         }
         $allRows = @($childPayloads['Core'].Rows) + @($childPayloads['Payday'].Rows)
         $rowCount = $allRows.Count
-        if ($rowCount -ne 80) {
-            throw "Combined native acceptance count was $rowCount; expected exactly 80."
+        if ($rowCount -ne 87) {
+            throw "Combined native acceptance count was $rowCount; expected exactly 87."
         }
         $failedChecks = Write-NativeCheckSummary `
             -Rows $allRows `
@@ -630,6 +630,25 @@ Acme Pty Ltd,INV-001,30/06/2026,1100.00
     [IO.File]::WriteAllText($agedExact, "Contact,< 1 Month,1 Month,2 Months,3 Months,Older,Total`r`nFabricated,0.1234,0,0,0,0,0.1234`r`n", $utf8WithBom)
     $mAgedMissing = ConvertTo-MText $agedMissing
     $mAgedExact = ConvertTo-MText $agedExact
+    $agedSections = Join-Path $temporaryDirectory 'aged-sections.csv'
+    @'
+Aged Payables Summary,,,,,,,
+Fabricated Company,,,,,,,
+Contact,Current,< 1 Month,1 Month,2 Months,3 Months,Older,Total
+Before section,0,1,0,0,0,0,1
+Aged Payables,,,,,,,
+000123,0,100,0,0,0,0,100
+Total Tools Trade Card,0,-10,0,0,0,0,-10
+Total Aged Payables,0,90,0,0,0,0,90
+Between sections,0,2,0,0,0,0,2
+Expense Claims,,,,,,,
+000123,0,5.1234,0,0,0,0,5.1234
+000123,0,5.1234,0,0,0,0,5.1234
+Total Expense Claims,0,10.2468,0,0,0,0,10.2468
+Total,0,103.2468,0,0,0,0,103.2468
+Percentage of total,0,100,0,0,0,0,100
+'@ | Set-Content -LiteralPath $agedSections -Encoding UTF8
+    $mAgedSections = ConvertTo-MText $agedSections
     $paydayScaleAmount = Join-Path $temporaryDirectory 'payday-scale-amount.csv'
     [IO.File]::WriteAllText($paydayScaleAmount, ([IO.File]::ReadAllText($paydaySuperFixture).Replace('780.00', '780.00001')), $utf8WithBom)
     $mPaydayScaleAmount = ConvertTo-MText $paydayScaleAmount
@@ -667,6 +686,10 @@ let
     chk = (name, expected, actual) =>
         [Check = name, Expected = s(expected), Actual = s(actual), Pass = (s(expected) = s(actual))],
     raises = (f) => (try f())[HasError],
+    payablesSections = Xero_AgedPayables($mAgedSections, true),
+    payablesLegacy = Xero_AgedPayables($mAgedSections),
+    suppliers = Table.SelectRows(payablesSections, each [Section] = "Aged Payables"),
+    claims = Table.SelectRows(payablesSections, each [Section] = "Expense Claims"),
 
     // --- Xero_TrialBalance: both layouts -------------------------------
     tbC    = Xero_TrialBalance($mCombined),
@@ -691,6 +714,25 @@ let
         List.Sum({Currency.From("1.0000"), Currency.From(difference)}, Precision.Decimal),
         List.Sum({Currency.From("1.0000")}, Precision.Decimal), Precision.Decimal)) < Currency.From("0.005"),
     checks = {
+        chk("payables sections: legacy columns and values preserved", true,
+            not List.Contains(Table.ColumnNames(payablesLegacy), "Section")
+            and Table.ToRows(payablesLegacy) = Table.ToRows(Table.RemoveColumns(payablesSections, {"Section"}))),
+        chk("payables sections: supplier population and signed credit", true,
+            Table.RowCount(suppliers) = 2
+            and List.Sum(suppliers[Total], Precision.Decimal) = Currency.From("90")),
+        chk("payables sections: repeated claims and leading-zero keys retained", true,
+            Table.RowCount(claims) = 2 and claims[Supplier] = {"000123", "000123"}
+            and List.Sum(claims[Total], Precision.Decimal) = Currency.From("10.2468")),
+        chk("payables sections: amounts retain fixed decimal type", true,
+            Table.SelectRows(Table.Schema(payablesSections), each [Name] = "Total"){0}[TypeName] = "Currency.Type"),
+        chk("payables sections: no label invented before first section", true,
+            payablesSections{0}[Section] = null
+            and Xero_AgedPayables($mAgedExact, true){0}[Section] = null),
+        chk("payables sections: subtotal closes preceding section", "",
+            Table.SelectRows(payablesSections, each [Supplier] = "Between sections"){0}[Section]),
+        chk("payables sections: all six detail rows preserved", true,
+            Table.RowCount(payablesSections) = 6
+            and List.Sum(payablesSections[Total], Precision.Decimal) = Currency.From("103.2468")),
         chk("tie-out: 0.0049 accepted", true, ties("0.0049")),
         chk("tie-out: 0.0050 rejected", false, ties("0.0050")),
         chk("tie-out: 0.0051 rejected", false, ties("0.0051")),
@@ -1149,7 +1191,7 @@ in
         if ($CheckSet -eq 'Core') {
             [pscustomobject]@{
                 Name = 'ZZ_CoreChecks'
-                ExpectedRows = 53
+                ExpectedRows = 60
                 Source = $coreChecksM
             }
         }
@@ -1246,7 +1288,7 @@ in
         Release-ComReference $worksheet 'Worksheet'
         $worksheet = $null
     }
-    $expectedRowCount = if ($CheckSet -eq 'Core') { 53 } else { 27 }
+    $expectedRowCount = if ($CheckSet -eq 'Core') { 60 } else { 27 }
     if ($checkRows.Count -ne $expectedRowCount) {
         throw (
             "$CheckSet child aggregated $($checkRows.Count) rows; " +

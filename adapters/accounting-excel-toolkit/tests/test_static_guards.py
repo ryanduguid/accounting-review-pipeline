@@ -280,11 +280,11 @@ class NativeExcelAcceptanceSafetyTests(unittest.TestCase):
         self.assertIn("attempt[Error][Detail]", source)
         self.assertIn('Text.Contains(detail, "CSV record 3")', source)
         self.assertIn(
-            "$expectedChildCount = if ($childSet -eq 'Core') { 53 } else { 27 }",
+            "$expectedChildCount = if ($childSet -eq 'Core') { 60 } else { 27 }",
             source,
         )
         self.assertIn("if ($childRows.Count -ne $expectedChildCount)", source)
-        self.assertIn("if ($rowCount -ne 80)", source)
+        self.assertIn("if ($rowCount -ne 87)", source)
         self.assertIn("foreach ($scaleRows in @(500, 5000, 10000))", source)
         self.assertIn("[Diagnostics.Stopwatch]::StartNew()", source)
         self.assertIn("ScaleRows = $scaleRows", source)

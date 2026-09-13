@@ -8,8 +8,8 @@ accounting, legal or exposure decision.
 ## Contracted parsers
 
 - `PaydaySuper.Report`: Fixed 18-column CSV producer contract emitted by `payday-super-checker`.
-- `Xero.AgedReceivables`: Observed Xero aged receivables summary CSV export contract. Returns the bucket and Total columns as exported, drops the summary total row, and coerces contact keys to text. The bucket-to-total tie-out is the caller's, not this query's.
-- `Xero.AgedPayables`: Observed Xero aged payables summary CSV export contract. Returns the bucket and Total columns as exported, drops the summary total row, and coerces supplier keys to text. The bucket-to-total tie-out is the caller's, not this query's.
+- `Xero.AgedReceivables`: Xero aged receivables summary Excel export saved as CSV. Returns the bucket and Total columns as exported, drops the summary total row, and coerces contact keys to text. The bucket-to-total tie-out is the caller's, not this query's.
+- `Xero.AgedPayables`: Xero aged payables summary Excel export saved as CSV. Returns the bucket and Total columns as exported, drops the summary total row, and coerces supplier keys to text. The bucket-to-total tie-out is the caller's, not this query's. Pass `true` as the second argument to preserve source labels in an added `Section` column; the default columns remain unchanged. Expense-claim detail remains in the output when the source includes that section; see the README's separate control-account checks.
 
 ## Evidence gate: observed Xero aged receivables/payables
 
@@ -21,10 +21,14 @@ mode and date. The fixtures carry the observed shape: title rows ending in
 `3 Months`, `Older` and `Total` with a leading `Current` column, the trailing
 `Percentage of total` row, and on the payables side an `Aged Payables`
 section row closed by a `Total Aged Payables` subtotal; the static checks
-parse them through the same drop rules the M applies. Still open: the CSV
-export mode has not been observed separately, and no native Excel acceptance
-case calls either function. The requirement below stays as the record of
-what a further observation has to collect.
+parse them through the same drop rules the M applies. On 13 September 2026,
+fresh Excel exports saved as CSV UTF-8 were loaded through both functions in
+desktop Excel. Receivables without `Current` and payables with `Current` agreed
+with their displayed report totals. The menus offered no direct CSV export.
+The native acceptance runner calls both functions with fabricated fixed-decimal
+and missing-header cases, and tests section preservation in payables. Other
+ageing periods, currencies and grouping options remain unverified. The
+requirement below applies to any additional supported layout.
 
 Before adding a Xero aged receivables or aged payables parser, collect a fresh,
 non-client interactive export outside this repository and record only the
