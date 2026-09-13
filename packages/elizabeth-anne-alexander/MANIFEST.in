@@ -1,5 +1,8 @@
 include LICENSE
 include README.md
 include SECURITY.md
+include DATA-FLOW.md
+include DISCLAIMER.md
+include RELEASE_NOTES.md
 recursive-include elizabeth_anne_alexander/policy *.json
 recursive-include elizabeth_anne_alexander/samples *.csv *.json

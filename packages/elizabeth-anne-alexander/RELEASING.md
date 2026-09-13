@@ -39,7 +39,7 @@ moving or reusing a protected tag.
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
 4. Confirm `elizabeth_anne_alexander/version.py` matches the `RELEASE_NOTES.md` heading and `uv lock --check` passes.
-5. Create the annotated component tag on current remote `main`, for example `git tag -a elizabeth-anne-alexander/v0.2.2 -m "elizabeth-anne-alexander/v0.2.2"` (or `-s` when signing is configured), then push only that tag.
+5. Create the annotated component tag on current remote `main`, for example `git tag -a elizabeth-anne-alexander/v0.2.3 -m "elizabeth-anne-alexander/v0.2.3"` (or `-s` when signing is configured), then push only that tag.
 
 The workflow runs the locked tests, builds the wheel and source distribution once, generates an SPDX 2.3 SBOM for the wheel and `SHA256SUMS`, records GitHub provenance and an SBOM attestation, then publishes the completed draft. An existing release is never overwritten.
 
@@ -84,7 +84,7 @@ Update `tag` if the intended version changes, then download and verify the
 exact namespaced release:
 
 ```bash
-tag=elizabeth-anne-alexander/v0.2.2
+tag=elizabeth-anne-alexander/v0.2.3
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#elizabeth-anne-alexander/v}"
 wheel="elizabeth_anne_alexander-${version}-py3-none-any.whl"

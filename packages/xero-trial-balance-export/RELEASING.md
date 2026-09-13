@@ -80,7 +80,7 @@ Before tagging:
 6. Confirm the versions in `pyproject.toml` and `uv.lock` match the first line of
    `RELEASE_NOTES.md` (`# vX.Y.Z`).
 7. Fetch current remote `main`, create a namespaced annotated tag on that exact
-   commit, for example `git tag -a xero-trial-balance-export/v0.1.7 -m "xero-trial-balance-export v0.1.7"`
+   commit, for example `git tag -a xero-trial-balance-export/v0.1.8 -m "xero-trial-balance-export v0.1.8"`
    (or `-s` when signing is configured), then push only that tag.
 
 The workflow runs the locked test suite, builds the wheel and source
@@ -96,7 +96,7 @@ The authenticated release inventory must prove that no release or draft already 
 Verify the downloaded release with:
 
 ```bash
-tag=xero-trial-balance-export/v0.1.7
+tag=xero-trial-balance-export/v0.1.8
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#xero-trial-balance-export/v}"
 wheel="xero_trial_balance_export-${version}-py3-none-any.whl"

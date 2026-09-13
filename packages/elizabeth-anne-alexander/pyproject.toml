@@ -19,7 +19,7 @@ classifiers = [
 ]
 [project.urls]
 Homepage = "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander"
-Documentation = "https://github.com/ryanduguid/accounting-review-pipeline/tree/elizabeth-anne-alexander/v0.2.2/packages/elizabeth-anne-alexander"
+Documentation = "https://github.com/ryanduguid/accounting-review-pipeline/tree/elizabeth-anne-alexander/v0.2.3/packages/elizabeth-anne-alexander"
 Repository = "https://github.com/ryanduguid/accounting-review-pipeline.git"
 Issues = "https://github.com/ryanduguid/accounting-review-pipeline/issues"
 
