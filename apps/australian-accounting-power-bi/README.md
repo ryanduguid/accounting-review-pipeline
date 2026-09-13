@@ -8,7 +8,7 @@ Maintain this application at [Accounting Review Pipeline](https://github.com/rya
 
 ---
 
-## What This Project Solves
+## What this project solves
 
 This project keeps Power BI models and reports in text files so changes can be reviewed in git:
 1. **Plain-Text Version Control**: Built entirely on the Power BI Project format (`.pbip`), using Tabular Model Definition Language (`.tmdl`) and Enhanced Report Format (`.pbir`). Measures, visuals, relationships, and M expressions produce reviewable git diffs.
@@ -18,7 +18,7 @@ This project keeps Power BI models and reports in text files so changes can be r
 
 ---
 
-## Data Model Architecture (Star Schema)
+## Data model architecture (star schema)
 
 ```mermaid
 erDiagram
@@ -43,7 +43,7 @@ See [docs/data-model.md](docs/data-model.md) for table grain, schema description
 
 ---
 
-## Report Structure (4 Pages)
+## Report structure (4 pages)
 
 1. **Executive Financial Performance**: Consolidated P&L matrix with revenue, gross margin, EBITDA, and net asset cards, and a cumulative working capital trend.
 2. **Multi-Entity Consolidation & Eliminations**: Entity-level matrix views with automated intra-group elimination columns and intercompany loan audit trails.
@@ -52,7 +52,7 @@ See [docs/data-model.md](docs/data-model.md) for table grain, schema description
 
 ---
 
-## Calculation Groups & Advanced DAX
+## Calculation groups and advanced DAX
 
 The semantic model uses calculation groups to dynamically apply time intelligence and consolidation filters across any base measure without measure proliferation:
 
@@ -63,7 +63,7 @@ See [docs/dax-patterns.md](docs/dax-patterns.md) for full DAX formulas and prece
 
 ---
 
-## Repository Layout
+## Repository layout
 
 ```text
 australian-accounting-power-bi/
@@ -111,7 +111,7 @@ australian-accounting-power-bi/
 
 ---
 
-## Verification & Automated Testing
+## Verification and automated testing
 
 Run the test suite locally:
 
@@ -132,27 +132,27 @@ The test suite verifies:
 - Every relationship the ER diagrams document exists, and `Dim_ANZSIC` declares every industry code the entity and benchmark fixtures join on.
 - Every DAX measure uses supported `///` description syntax, and every numeric measure has an explicit format string.
 - All relationships enforce strict single-direction star schema filtering.
-- All eight named Power Query expressions use balanced `let ... in` blocks, valid fixture widths, and valid ABN algorithm weights.
+- All 8 named Power Query expressions use balanced `let ... in` blocks, valid fixture widths, and valid ABN algorithm weights.
 - The semantic model uses the supported TMDL folder contract and resolves every import partition.
-- All four report pages and 21 visuals are materialised, and every visual field binding resolves to a declared model column or measure.
+- All 4 report pages and 21 visuals are materialised, and every visual field binding resolves to a declared model column or measure.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
 The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs both the Python suite and the pinned Microsoft PBIR validator.
 
 ---
 
-## Opening the Project
+## Opening the project
 
 1. Open `australian-accounting-power-bi.pbip` in **Power BI Desktop**.
 2. Under **Home > Transform data > Edit parameters**, set `SampleFolder` to the absolute path of this checkout's `samples` folder, then apply the change. The committed parameter is blank because the folder location differs on each PC.
-3. Select **Home > Refresh > Schema and data**, then inspect all four report pages.
+3. Select **Home > Refresh > Schema and data**, then inspect all 4 report pages.
 4. On the benchmark page, use the Filters pane to select one `Dim_Date[FinancialYear]`. Select one entity for the comparison card; each entity row in the matrix supplies its own entity selection. Multiple entities or years have no combined benchmark.
 
 The turnover band uses revenue for the complete selected financial year, even when a month or account is filtered. Ratios describe the currently displayed period, so use the complete year for an annual comparison. The sample bands use a strict lower turnover bound and an inclusive upper bound: $1,000,000 belongs to the $500k-$1m band; $1,000,001 belongs to $1m-$5m. Gross profit bounds include both endpoints. Missing or overlapping bands leave the comparison unavailable. See [benchmark verification](docs/benchmark-verification.md).
 
 You can also inspect the semantic model directory in **Tabular Editor 3 / 2**, or edit TMDL files in **Visual Studio Code** with the Microsoft TMDL extension.
 
-The [8 September 2026 native verification](docs/native-verification.md) records a fabricated-data refresh and inspection of all four pages in Desktop 2.157.1354.0. Automated checks cover structure and bindings; repeat the native check after model or report changes. This smoke test does not establish production readiness or validate every accounting calculation.
+The [8 September 2026 native verification](docs/native-verification.md) records a fabricated-data refresh and inspection of all 4 pages in Desktop 2.157.1354.0. Automated checks cover structure and bindings; repeat the native check after model or report changes. This smoke test does not establish production readiness or validate every accounting calculation.
 
 ---
 

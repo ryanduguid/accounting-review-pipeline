@@ -182,7 +182,7 @@ def test_a_duplicated_query_id_fails_closed(pack_dir: Path) -> None:
 
 
 def test_an_added_query_field_fails_closed(pack_dir: Path) -> None:
-    """The CSV projects exactly the ten fields the writer emits, so a member
+    """The CSV projects exactly the 10 fields the writer emits, so a member
     outside them is one no other file witnesses: it passes every cross-file
     comparison and leaves an edited pack verifying. `approved_by` is the shape
     that matters here, since the pack exists to show nothing approved
@@ -246,7 +246,7 @@ def _legacy_pack(pack_dir: Path) -> Path:
 
 
 def test_a_pack_written_before_the_register_still_opens(pack_dir: Path) -> None:
-    """An archived three-file pack is evidence a firm may still have to show.
+    """An archived 3-file pack is evidence a firm may still have to show.
     Requiring a file that did not exist when it was written would make the
     older evidence unreadable by the command that exists to display it."""
     sheet, digests = render_review_sheet(_legacy_pack(pack_dir))
@@ -263,7 +263,7 @@ def test_a_pack_written_before_the_register_still_opens(pack_dir: Path) -> None:
 
 def test_half_a_register_fails_closed(pack_dir: Path) -> None:
     """A pack holding the file without the member, or the member without the
-    file, was assembled from two runs or edited. It is evidence of neither
+    file, was assembled from 2 runs or edited. It is evidence of neither
     format, so it is refused rather than read as the older one."""
     file_only = _legacy_pack(pack_dir)
     (file_only / "client-queries.csv").write_text(
@@ -317,10 +317,10 @@ def test_a_question_edited_only_in_the_summary_fails_closed(pack_dir: Path) -> N
 
 
 def _two_query_pack(tmp_path: Path) -> Path:
-    """A pack with two queries whose questions differ.
+    """A pack with 2 queries whose questions differ.
 
     Two period_variance rows would carry the same question, and exchanging
-    identical cells proves nothing, so the two exceptions are of different
+    identical cells proves nothing, so the 2 exceptions are of different
     controls.
     """
     base = _pack()
@@ -450,7 +450,7 @@ def test_summary_landmarks_quoted_in_an_account_name_do_not_refuse_a_sound_pack(
 
     Under a substring search an account named after one of them would count as
     a second heading, a second table or a second count, and the viewer would
-    refuse a pack whose four artefacts the writer produced together and which
+    refuse a pack whose 4 artefacts the writer produced together and which
     agree with each other in every particular.
     """
     output = tmp_path / "quoting-pack"
@@ -586,7 +586,7 @@ def test_a_section_running_into_the_next_one_fails_closed(pack_dir: Path) -> Non
     [
         # Every one of these renders as a heading reading "Client queries",
         # confirmed against a CommonMark renderer: a closing run of hashes is
-        # optional, its length is free, and up to three leading spaces are
+        # optional, its length is free, and up to 3 leading spaces are
         # allowed. A level-1 heading reads as the register to somebody
         # scrolling past it just as a level-2 one does.
         "## Client queries ##",
@@ -598,7 +598,7 @@ def test_a_section_running_into_the_next_one_fails_closed(pack_dir: Path) -> Non
 def test_a_second_section_in_any_heading_spelling_fails_closed(
     pack_dir: Path, heading: str
 ) -> None:
-    """A forged register is spelled by whoever forges it.
+    """A forged register is spelt by whoever forges it.
 
     Matching the writer's exact line and nothing else leaves every equivalent
     spelling as a region no check reads, sitting under a heading that renders
@@ -909,7 +909,7 @@ def test_duplicated_source_evidence_label_in_summary_fails_closed(pack_dir: Path
     # "## Source evidence" heading at the end of the file. And a parser scoped
     # to the first section misses the inverse: an untouched true section with
     # the contradicting digest planted under a trailing forged heading. All
-    # three shapes must refuse.
+    # 3 shapes must refuse.
     summary = pack_dir / "close-summary.md"
     text = summary.read_text(encoding="utf-8")
     falsified = text.replace(

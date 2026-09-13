@@ -1,6 +1,6 @@
 """Pin the code Monthly Close Controls and the Workpaper Review Gate each keep a copy of.
 
-The two packages publish independently: separate distributions, versions,
+The 2 packages publish independently: separate distributions, versions,
 lockfiles, licences and release tags, joined only by local files and commands.
 Moving the helpers below into a shared module would mean a new distribution
 every release has to carry, so the copies stay. A copy nobody checks is a fork

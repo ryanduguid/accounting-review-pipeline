@@ -23,10 +23,10 @@ distribution and `close-control` command remain compatibility identifiers.
 
 A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
 
-- `close-summary.md` answers "what needs my attention this close?": a concise, deterministic review pack with an overall status, the thresholds used, source evidence, and an exception table a reviewer reads top to bottom.
-- `exceptions.csv` answers "which accounts, by how much, and why?": filterable exception detail for Excel or Power BI, one row per exception with values, differences, thresholds, and a suggested reviewer action.
-- `client-queries.csv` answers "what do I have to ask the client?": the exceptions only a client can settle, turned into a question and the evidence that would answer it, with the ones the firm resolves itself left out.
-- `close-review-pack.json` answers "what exactly did this run look at?": structured evidence, thresholds, source hashes, and any supplied review acknowledgement, for archiving or downstream tooling.
+- `close-summary.md` answers 'what needs my attention this close?': a concise, deterministic review pack with an overall status, the thresholds used, source evidence, and an exception table a reviewer reads top to bottom.
+- `exceptions.csv` answers 'which accounts, by how much, and why?': filterable exception detail for Excel or Power BI, one row per exception with values, differences, thresholds, and a suggested reviewer action.
+- `client-queries.csv` answers 'what do I have to ask the client?': the exceptions only a client can settle, turned into a question and the evidence that would answer it, with the ones the firm resolves itself left out.
+- `close-review-pack.json` answers 'what exactly did this run look at?': structured evidence, thresholds, source hashes, and any supplied review acknowledgement, for archiving or downstream tooling.
 
 The pack surfaces material YTD variances, new and missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences as explicit exceptions. Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 
@@ -51,7 +51,7 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 The [architecture note](docs/architecture.md) sets out the control boundary and
 the review-pack pipeline. For transaction-level clearing-account matching, see the
-[three-month reconciliation example](docs/clearing-reconciliation.md).
+[3-month reconciliation example](docs/clearing-reconciliation.md).
 The new `reconcile` command suggests matches, records reviewed allocations and
 carries outstanding items forward. It is an unreleased source addition and uses a
 separate mapped transaction schema; a trial-balance export is insufficient.
@@ -77,7 +77,7 @@ close-control review \
   --output ../../../close-control-demo
 ```
 
-The demo exits `2` because its deliberately fabricated exceptions need human review. It writes the four pack files described above.
+The demo exits `2` because its deliberately fabricated exceptions need human review. It writes the 4 pack files described above.
 
 `--output` points outside this checkout, and it has to: the command refuses an
 output directory inside a version-control checkout, exiting `1` without
@@ -109,8 +109,8 @@ To run this pack against the co-located gateway's same-financial-year sample CSV
 ## Local close workbench
 
 `close-control workbench` is a local façade over the same validation, control
-engine, and three-file writer used by `close-control review`. It is useful when
-the close process starts with two already-created canonical exports in an
+engine, and 3-file writer used by `close-control review`. It is useful when
+the close process starts with 2 already-created canonical exports in an
 access-controlled directory outside this repository:
 
 ```bash
@@ -137,7 +137,7 @@ exports and generated packs becoming repository content.
 ## Viewing an existing pack
 
 `close-control view` is the read-only half of the workbench: it loads a
-generated pack, proves the four files still agree with each other, and prints
+generated pack, proves the 4 files still agree with each other, and prints
 a review sheet. It never writes, renames or deletes anything, and it cannot
 change what the engine computed.
 
@@ -163,13 +163,13 @@ not only for its boundary sentence: the count line, every `query_id` and every
 question must agree. That file is what a preparer reads and copies a question
 out of, so a question edited only there is the divergence worth catching. A
 duplicated `query_id` fails closed for the same reason: one identifier against
-two questions leaves a firm unable to tell which one a client answered.
+2 questions leaves a firm unable to tell which one a client answered.
 
-A pack written before the client-query register existed still opens. Its three
+A pack written before the client-query register existed still opens. Its 3
 files verify and display as before, and the sheet says the pack predates the
 register rather than leaving a reviewer to wonder. A pack holding half a
 register, the file without the JSON member or the member without the file, was
-assembled from two runs or edited, and is refused rather than read as an older
+assembled from 2 runs or edited, and is refused rather than read as an older
 one. On success the sheet ends with the SHA-256 of
 each artefact's exact bytes, so the displayed evidence can itself be archived.
 Exit code is 0 when a pack was verified and shown, 1 when verification failed.
@@ -190,7 +190,7 @@ was written as. The writer builds every destination from the directory the
 checkout guard approved rather than from the argument, so what is printed is
 where the pack actually went.
 
-`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to four of the eight rows):
+`close-summary.md` opens with the status, scope, and source digests, then lists every exception (abridged here to 4 of the eight rows):
 
 ```markdown
 # Monthly Close Review Pack
@@ -302,7 +302,7 @@ register is not evidence that nothing needs asking.
 
 ## Canonical trial-balance contract
 
-The initial input is the ten-column, normalised trial-balance schema from `xero-trial-balance-export`:
+The initial input is the 10-column, normalised trial-balance schema from `xero-trial-balance-export`:
 
 ```text
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
@@ -314,7 +314,7 @@ The current-period `Debit`/`Credit` pair represents movement. `YTDDebit`/`YTDCre
 
 ## Optional mapping and reconciliation inputs
 
-An account mapping is a two-column CSV:
+An account mapping is a 2-column CSV:
 
 ```text
 AccountID,ReviewGroup
@@ -354,17 +354,17 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Schema, duplicate-key, date, and numeric gates fail closed.
 - Current-period and YTD debits must exactly equal credits.
 - Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
-- A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and render `percentage_change` as `n/a (prior period zero)`, rather than reporting that a percentage test passed that never ran. The sentinel is used instead of a blank cell because a blank reads as "no change", while no consumer can read `n/a (prior period zero)` as a zero percentage.
+- A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and render `percentage_change` as `n/a (prior period zero)`, rather than reporting that a percentage test passed that never ran. The sentinel is used instead of a blank cell because a blank reads as 'no change', while no consumer can read `n/a (prior period zero)` as a zero percentage.
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later. Each digest is calculated from the same immutable byte snapshot the loader parses, so a file replaced during a run cannot be misidentified as the source of the calculations.
 - Spreadsheet-facing source text whose first non-whitespace character is `=`, `+`, `-` or `@` is neutralised with a leading apostrophe. This includes identifier- and number-shaped text such as `+unsafe`, `@123` and `-1000`; the guard does not try to decide which formula-looking values a particular spreadsheet may evaluate. Every exception table cell rendered into `close-summary.md` is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads. A reviewer-note comment keeps its line breaks: a multi-line comment renders as an indented blockquote under the acknowledgement item, with each line escaped the same way and a leading `#` escaped so quoted text cannot forge a document heading.
 - `exceptions.csv` is written with a UTF-8 byte-order mark, matching the canonical input files, so a spreadsheet reads non-ASCII entity and account names correctly.
-- The four pack files are staged beside their destinations and moved into place only once all four have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
-- Amounts are rendered with at least two decimal places and never fewer than the value carries. A percentage is rendered with at least two places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a per cent is flattened to `0.00`.
+- The 4 pack files are staged beside their destinations and moved into place only once all 4 have been written. If one cannot be replaced (a reviewer holding `exceptions.csv` open is the usual cause), the files already moved are rolled back to the content they replaced, so the previous pack survives whole instead of half describing one trial balance and half describing another. A failed run never deletes a pack file it did not write. Run one export at a time into a given `--output` directory; concurrent runs are not serialised.
+- Amounts are rendered with at least 2 decimal places and never fewer than the value carries. A percentage is rendered with at least 2 places and always enough to show its leading significant digit, so neither a tolerance finer than one cent nor a threshold finer than a hundredth of a per cent is flattened to `0.00`.
 
 ### What formula neutralisation covers, exactly
 
-The escaping in `exceptions.csv` applies to the five source-controlled text fields: `tenant`, `account_id`, `account_code`, `account_name`, and `review_group`. `client-queries.csv` guards the same five plus `question` and `evidence_requested`: those two are project text rather than client text, but a template reworded to start with a dash would otherwise become a formula the day somebody edits one. For those fields:
+The escaping in `exceptions.csv` applies to the 5 source-controlled text fields: `tenant`, `account_id`, `account_code`, `account_name`, and `review_group`. `client-queries.csv` guards the same 5 plus `question` and `evidence_requested`: those 2 are project text rather than client text, but a template reworded to start with a dash would otherwise become a formula the day somebody edits one. For those fields:
 
 Neutralised (prefixed with an apostrophe so a spreadsheet reads them as text):
 
@@ -381,7 +381,7 @@ Passed through unchanged:
 
 - Use a separate, access-controlled working directory for client source files and outputs.
 - A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage, and client authorisation are deliberately outside this MVP.
 - Do not use this as tax, financial, audit, or legal advice. It is a configurable review aid that requires professional judgement.
 

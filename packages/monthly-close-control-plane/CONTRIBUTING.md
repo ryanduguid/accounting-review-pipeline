@@ -5,7 +5,7 @@ Keep this project in its narrow role: a local, deterministic review-pack generat
 ## Data boundary
 
 - Use fabricated fixtures. Keep client trial balances, subledgers, workpapers, review packs, credentials, `.env` files, tokens and screenshots from a live accounting system out of the repository.
-- Put fabricated CSV fixtures under `examples/` and header-only schema references under `schemas/`. The `.gitignore` blocks ordinary CSV files outside those two directories.
+- Put fabricated CSV fixtures under `examples/` and header-only schema references under `schemas/`. The `.gitignore` blocks ordinary CSV files outside those 2 directories.
 - Treat source CSV content and review notes as untrusted input. Keep the fail-closed validation and the spreadsheet-formula safeguards in place.
 
 ## Local verification

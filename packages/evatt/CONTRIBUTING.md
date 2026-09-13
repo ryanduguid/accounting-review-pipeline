@@ -21,7 +21,7 @@ placeholder person names. Sample email addresses use RFC 2606 reserved
 domains. `tests/test_packaging.py` enforces both.
 
 Check-digit test vectors are documented ATO and ASIC test identifiers. Most
-live in `tests/test_patterns.py`, but `evatt/samples/identifiers.md` ships four
+live in `tests/test_patterns.py`, but `evatt/samples/identifiers.md` ships 4
 of the same kind, because the sample sheet exists to show the labelled patterns
 firing and an empty one would show nothing: TFN `123 456 782`, ACN
 `123 456 780`, Medicare `2123 45670 1` and BSB `062-000`. None belongs to

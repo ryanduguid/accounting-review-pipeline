@@ -297,7 +297,7 @@ class DecimalMoneyTest(_ExportCase):
     The figures below are chosen to sit either side of 2**53, where a float
     can no longer hold every cent and the arithmetic silently rounds. That
     is the property under test; the magnitudes are extreme so the difference
-    shows up in two rows instead of a million.
+    shows up in 2 rows instead of a million.
     """
 
     def test_an_unbalanced_report_is_not_totalled_into_balance(self):
@@ -543,7 +543,7 @@ class ExcelInjectionExportTest(_ExportCase):
 
 class DefaultFilenameTest(unittest.TestCase):
     """The sanitiser drops everything outside ASCII, folds ASCII punctuation
-    onto "-" and folds case, so it can collapse two different orgs onto one
+    onto "-" and folds case, so it can collapse 2 different orgs onto one
     filename and let the second export overwrite the first client's numbers.
     The tenant ID is the only per-org value in the name, so every default
     filename carries it."""
@@ -569,7 +569,7 @@ class DefaultFilenameTest(unittest.TestCase):
 
     def test_names_differing_only_in_a_non_alphanumeric_character_still_split(self):
         """The collision does not need a letter. An emoji, a fullwidth comma
-        and a combining macron are all str.isalnum() == False, and all three
+        and a combining macron are all str.isalnum() == False, and all 3
         collapse to "-" like any other character outside ASCII."""
         for first_name, second_name, stem in (
             ("\U0001F40D Pty Ltd", "\U0001F986 Pty Ltd", "pty-ltd"),
@@ -970,7 +970,7 @@ class FlattenReportShapeTest(unittest.TestCase):
                 self.assertIn("not text or a number", message)
 
     def test_a_null_or_numeric_cell_value_is_still_read(self):
-        """The two JSON shapes that are not a shape change.
+        """The 2 JSON shapes that are not a shape change.
 
         A null cell is the blank the report format uses for a nil balance -
         the same thing a missing Value key has always meant here, and what
@@ -1644,7 +1644,7 @@ class AbsurdMagnitudeTest(unittest.TestCase):
 
     def test_the_arithmetic_that_used_to_overflow_now_never_runs(self):
         """The proof the guard is in the right place: without it, summing
-        two of these raises decimal.Overflow rather than reaching any check."""
+        2 of these raises decimal.Overflow rather than reaching any check."""
         from decimal import Overflow
 
         with self.assertRaises(Overflow):

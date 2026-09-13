@@ -25,7 +25,7 @@ The application cannot cross the final boundary. It has no code to create a jour
 ## Local workbench façade
 
 `close-control workbench` is a second local entry point to the same loader,
-control engine, source/output collision guard, and four-file review-pack
+control engine, source/output collision guard, and 4-file review-pack
 writer as `close-control review`. It accepts the same already-created
 canonical CSV inputs and returns the same status and exit codes; it adds only a
 concise reviewer handoff to the console.
@@ -46,7 +46,7 @@ Human reviewer opens or imports the exception detail
 The façade does not launch Excel, create a workbook, import VBA, run Power
 Query, access Xero or OAuth tokens, call a model or AI gateway, copy inputs, or
 write to an accounting system. It is not a new data contract or a workflow
-approval state: the four local artefacts remain the only outputs.
+approval state: the 4 local artefacts remain the only outputs.
 
 ## Source contract
 
@@ -67,7 +67,7 @@ Money is parsed into `Decimal`, not `float`. The integrity controls compare debi
 | Missing supplied mapping | `REVIEW` | Grouped review should not silently omit a new account. |
 | Supplied subledger difference | `REVIEW` | An out-of-tolerance control-account difference needs supporting reconciliation. |
 
-Account movement is raised only when a YTD variance clears both the absolute and the percentage threshold. The one carve-out is a nil prior YTD balance, which leaves no percentage change to compute: the absolute threshold decides alone, `percentage_change` carries the sentinel `n/a (prior period zero)`, and the exception reason names the absolute threshold only. The sentinel is used instead of a blank cell because a blank reads as "no change", while no consumer can read `n/a (prior period zero)` as a zero percentage.
+Account movement is raised only when a YTD variance clears both the absolute and the percentage threshold. The one carve-out is a nil prior YTD balance, which leaves no percentage change to compute: the absolute threshold decides alone, `percentage_change` carries the sentinel `n/a (prior period zero)`, and the exception reason names the absolute threshold only. The sentinel is used instead of a blank cell because a blank reads as 'no change', while no consumer can read `n/a (prior period zero)` as a zero percentage.
 
 ## Deterministic evidence
 
@@ -77,4 +77,4 @@ The acknowledgement is separate from calculation and never flips `REVIEW` or `BL
 
 ## Data handling
 
-The repository contains fabricated data. Its `.gitignore` blocks ordinary CSV files outside `examples/` and `schemas/`, the four generated review-pack files by name (`exceptions.csv` and `client-queries.csv` explicitly inside those two directories as well, since their fixture negations would otherwise re-include them), token-like files, and environment files. Client exports and review packs belong in an access-controlled local location outside the repository.
+The repository contains fabricated data. Its `.gitignore` blocks ordinary CSV files outside `examples/` and `schemas/`, the 4 generated review-pack files by name (`exceptions.csv` and `client-queries.csv` explicitly inside those 2 directories as well, since their fixture negations would otherwise re-include them), token-like files, and environment files. Client exports and review packs belong in an access-controlled local location outside the repository.

@@ -12,7 +12,7 @@
 #
 # NOT_READY and BLOCKED share exit code 2, so the exit code alone cannot single
 # out BLOCKED. The step below treats exit 1 as job-stopping, then reads
-# overall_status from readiness-pack.json to distinguish the two: BLOCKED
+# overall_status from readiness-pack.json to distinguish the 2: BLOCKED
 # fails the job, NOT_READY is reported and left for a human. READY is green.
 # READY still does not mean the file is approved.
 #

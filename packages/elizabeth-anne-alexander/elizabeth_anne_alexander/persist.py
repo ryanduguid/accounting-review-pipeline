@@ -19,19 +19,19 @@ def _replace(source: Path, destination: Path) -> None:
 
 
 def write_evaluation(model: dict[str, Any], evidence: dict[str, Any], receipt: dict[str, Any], output_dir: Path) -> dict[str, Path]:
-    """Stage all three artefacts, then move them into place, receipt last.
+    """Stage all 3 artefacts, then move them into place, receipt last.
 
-    The three files describe one run. Writing them straight into the output
+    The 3 files describe one run. Writing them straight into the output
     directory means an interrupted second run can leave a truncated file, or a
     new model-result.json beside the previous run's evidence and receipt. Each
     file is written under a temporary name first, and nothing is moved until
-    all three staged files exist.
+    all 3 staged files exist.
 
     Three separate moves are not one atomic step, so a failure between them can
-    still leave one new file beside two old ones. The receipt seals both the
+    still leave one new file beside 2 old ones. The receipt seals both the
     evidence and the model result and is moved last, so validate_review refuses
     every such mixed pack rather than reporting a decision against artefacts
-    that came from two different runs.
+    that came from 2 different runs.
     """
     output_dir = path_within(output_dir, build_root(), label="output directory", require_exists=False)
     paths = {"model": output_dir / "model-result.json", "evidence": output_dir / "reviewer-evidence.json", "receipt": output_dir / "receipt.json"}

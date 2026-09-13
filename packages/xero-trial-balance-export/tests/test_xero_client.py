@@ -327,7 +327,7 @@ class RetryAfterMessageTruthTest(unittest.TestCase):
 
 
 class ApiGet401Test(unittest.TestCase):
-    """The surprise-401 path: the local expiry math can lie (skewed clock, a
+    """The surprise-401 path: the local expiry maths can lie (skewed clock, a
     token.json copied between machines), so one forced refresh and one retry
     stand between that and a traceback."""
 
@@ -1006,7 +1006,7 @@ class TokenCacheConcurrencyTest(unittest.TestCase):
 
 
 class RefreshRejectionTest(unittest.TestCase):
-    """The two everyday refresh failures must read as instructions, not as
+    """The 2 everyday refresh failures must read as instructions, not as
     HTTPError tracebacks out of a scheduled task's log."""
 
     def setUp(self):

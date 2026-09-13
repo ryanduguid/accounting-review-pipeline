@@ -48,7 +48,7 @@ test ! -f build/halt.md
 test ! -f build/halt.md.manifest.json
 test -f build/halt.md.triage.md
 # --out refuses to be the map or the input, and refuses through the
-# two paths it derives as well. A map named map.triage.md is
+# 2 paths it derives as well. A map named map.triage.md is
 # covered by the same ignore rule as a triage file, and --out map
 # derives that exact path.
 before=$(cksum < entities.json)

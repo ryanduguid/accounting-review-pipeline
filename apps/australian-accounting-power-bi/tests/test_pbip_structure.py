@@ -163,7 +163,7 @@ class SemanticModelStructureTests(unittest.TestCase):
                 if symbol not in expression_names and symbol not in standard_library_roots:
                     unresolved.append(f"{path.name}:{symbol}")
 
-        # Nine import partitions are declared here. The two calculation-group
+        # Nine import partitions are declared here. The 2 calculation-group
         # tables receive implicit partitions when the model is loaded.
         self.assertEqual(partition_count, 9)
         self.assertEqual(unresolved, [])

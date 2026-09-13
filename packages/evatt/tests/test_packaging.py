@@ -21,7 +21,7 @@ def test_halt_is_an_evatt_error_carrying_unknowns() -> None:
 
 
 def test_gitignore_covers_every_file_that_holds_real_values() -> None:
-    """All four rules, not just the two the map needs.
+    """All 4 rules, not just the 2 the map needs.
 
     ``*.triage.md`` and ``*.tmp`` were unasserted, and each covers a file that
     holds real values: the triage worklist quotes whole residual lines, and
@@ -37,7 +37,7 @@ def test_gitignore_covers_every_file_that_holds_real_values() -> None:
 
 
 def test_the_sdist_manifest_carries_every_document_the_readme_points_at() -> None:
-    """README.md is the PyPI long description, and it names four documents.
+    """README.md is the PyPI long description, and it names 4 documents.
 
     None of them was in either artefact, so an installed reader was sent to a
     DISCLAIMER that was not there, and DISCLAIMER.md is the file carrying the

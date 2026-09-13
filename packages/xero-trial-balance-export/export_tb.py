@@ -72,7 +72,7 @@ def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
     Every nested list is checked before it is walked, and so is every scalar
     taken out of one. main() proves the Reports envelope is a list of
     objects, and the strict zip below proves a row's cell count; without
-    these checks everything between those two was unguarded, so a Rows, Cells
+    these checks everything between those 2 was unguarded, so a Rows, Cells
     or Attributes value that was a string, a mapping or a list of strings
     called .get() on a str and printed a raw AttributeError traceback, after
     the tenant name had gone to stdout and the single-use refresh token
@@ -175,7 +175,7 @@ def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
     return column_titles, flat
 
 
-# A balance of 1e30 is eighteen orders of magnitude past the largest company
+# A balance of 1e30 is 18 orders of magnitude past the largest company
 # on earth. The bound exists to keep arithmetic inside Decimal's context and
 # the CSV inside one line, not to police the ledger.
 MAX_EXPONENT = 30
@@ -219,7 +219,7 @@ def to_number(value: object) -> Decimal:
     # would print a traceback after the tenant name had already gone to
     # stdout. A shade under that, "1E999999"
     # does not overflow but makes format_amount build a one-million-character
-    # CSV field. MAX_EXPONENT is eighteen orders of magnitude past the largest
+    # CSV field. MAX_EXPONENT is 18 orders of magnitude past the largest
     # balance sheet on earth, so nothing real is refused here. The mirror
     # bound refuses vanishing exponents ("1E-31") for the same reason: no
     # ledger holds them, and format_amount would build the same absurd field.
@@ -396,7 +396,7 @@ def select_tenant(connections: list[dict], tenant_arg: str | None) -> dict:
 
     A bare multi-organisation run is refused on purpose: silently picking
     the first connection can export the wrong entity. An exact tenantId
-    match (case-insensitive) wins over a name substring, so two orgs that
+    match (case-insensitive) wins over a name substring, so 2 orgs that
     share a display name remain selectable.
     """
     if tenant_arg:
@@ -428,7 +428,7 @@ def select_tenant(connections: list[dict], tenant_arg: str | None) -> dict:
 def build_rows(
     rows: list[dict], tenant: dict, report_date: str
 ) -> tuple[list[dict], tuple[Decimal, Decimal, Decimal, Decimal]]:
-    """Build the CSV rows and the four exact totals, entirely in memory.
+    """Build the CSV rows and the 4 exact totals, entirely in memory.
 
     Totals are (movement debit, movement credit, YTD debit, YTD credit),
     the shape check_balanced reads.

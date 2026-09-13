@@ -1,12 +1,12 @@
 # Native Desktop verification, 8 September 2026
 
-Power BI Desktop 2.157.1354.0 on Windows opened the corrected project, refreshed the fabricated samples, and rendered all four pages and 21 visuals without visual error placeholders. This check used the changes accompanying this record, based on Accounting Review Pipeline commit `a42fd75ef1f70c58dd54a55e9cd5dc1e2359e072`.
+Power BI Desktop 2.157.1354.0 on Windows opened the corrected project, refreshed the fabricated samples, and rendered all 4 pages and 21 visuals without visual error placeholders. This check used the changes accompanying this record, based on Accounting Review Pipeline commit `a42fd75ef1f70c58dd54a55e9cd5dc1e2359e072`.
 
 ## Defects found in Desktop
 
-- Opening failed because six named M expressions duplicated table query names. Prefixing those expressions with `Source_` and updating their partition references removes the collisions.
+- Opening failed because 6 named M expressions duplicated table query names. Prefixing those expressions with `Source_` and updating their partition references removes the collisions.
 - Opening then failed because calculation groups require `discourageImplicitMeasures`. The model now declares that flag.
-- Refresh failed because `File.Contents` requires absolute paths. All six CSV imports now use one required `SampleFolder` text parameter. Its committed default is blank; configure it for each checkout.
+- Refresh failed because `File.Contents` requires absolute paths. All 6 CSV imports now use one required `SampleFolder` text parameter. Its committed default is blank; configure it for each checkout.
 - The benchmark risk card clipped its text. Its width now uses the spare space beside it, and the variance card moves to the right.
 
 Existing tests now reject expression/table name collisions, the missing calculation-group flag, and CSV imports that omit the folder parameter.
@@ -19,10 +19,10 @@ Open the PBIP, set `SampleFolder`, and run **Home > Refresh > Schema and data**.
 
 | Page | Visuals inspected | Observed result |
 | --- | --- | --- |
-| Executive Financial Performance | Title, four cards, P&L matrix, working-capital trend | Revenue $30.42 million; gross margin 66.8%; EBITDA $9.32 million; net assets $11.04 million. Matrix and trend populated. |
+| Executive Financial Performance | Title, 4 cards, P&L matrix, working-capital trend | Revenue $30.42 million; gross margin 66.8%; EBITDA $9.32 million; net assets $11.04 million. Matrix and trend populated. |
 | Multi-Entity Consolidation & Eliminations | Title, entity matrix, transaction table | Entity totals and fabricated ledger rows rendered. |
-| ATO Benchmark & Practice Diagnostic | Title, two cards, ratio matrix, scatter chart | Risk text and gross-profit variance rendered; variance was -6.6%. Four entities appeared in the matrix and scatter chart. |
-| Payday Super & STP Compliance Monitor | Title, four cards, payroll table | Compliance 94.9%; SGC exposure $13.48; nominal interest $8.42; 16 late events. Payroll rows rendered. |
+| ATO Benchmark & Practice Diagnostic | Title, 2 cards, ratio matrix, scatter chart | Risk text and gross-profit variance rendered; variance was -6.6%. Four entities appeared in the matrix and scatter chart. |
+| Payday Super & STP Compliance Monitor | Title, 4 cards, payroll table | Compliance 94.9%; SGC exposure $13.48; nominal interest $8.42; 16 late events. Payroll rows rendered. |
 
 Wide matrices and tables use horizontal scrollbars. This check covers opening, local sample refresh and visible rendering. It does not validate every DAX result, filter combination, statutory assumption, production data source or Power BI Service deployment.
 
@@ -37,7 +37,7 @@ python -m ruff check .
 python -m mypy
 ```
 
-The suite ran 43 tests. The Microsoft validator returned zero errors and zero warnings. Ruff 0.16.6 passed, and Mypy 2.3.1 reported no issues in seven source files. Lint tools ran in isolated uv environments using the workflow's pinned versions.
+The suite ran 43 tests. The Microsoft validator returned zero errors and zero warnings. Ruff 0.16.6 passed, and Mypy 2.3.1 reported no issues in 7 source files. Lint tools ran in isolated uv environments using the workflow's pinned versions.
 
 ## Entity and period checks, 9 September 2026
 
@@ -54,12 +54,12 @@ powershell -NoProfile -File tools/test_financial_filters.ps1 -Server localhost:<
 ```
 
 All 16 filter cases passed, with 192 assertions: FY2025 and FY2026 group totals,
-each of four entities, a two-entity selection, June and July across the financial
+each of 4 entities, a 2-entity selection, June and July across the financial
 year boundary, a July group selection, September FYTD through the calculation
-group, and a two-year selection. Four additional cases select financial years
+group, and a 2-year selection. Four additional cases select financial years
 through `FinancialYearNumber` and `FinancialYear`, and June/July through
 `FinancialYearMonth`. Their CSV expectations still use independent date ranges.
-Each case checks the filtered row count and eleven financial measures, including
+Each case checks the filtered row count and 11 financial measures, including
 Working Capital and cumulative balance-sheet amounts.
 
 | Selection | Revenue | EBITDA | Net assets |
@@ -90,12 +90,12 @@ differences greater than half a cent fail.
 ## Review corrections, 12 September 2026
 
 Power BI Desktop 2.157.1354.0 refreshed a disposable copy of the corrected model
-based on commit `b2f340845b422b0a822b1b60cedd39d119a9fe32`. All four pages rendered.
-The native checks passed 192 financial assertions across 16 filter cases, eight
-ABN cases and nine fixed-decimal column checks.
+based on commit `b2f340845b422b0a822b1b60cedd39d119a9fe32`. All 4 pages rendered.
+The native checks passed 192 financial assertions across 16 filter cases, 8
+ABN cases and 9 fixed-decimal column checks.
 
 A fabricated budget value of `TBC` still loaded as blank after removing
-`returnErrorValuesAsNull`. Explicit error guards in all six CSV source expressions
+`returnErrorValuesAsNull`. Explicit error guards in all 6 CSV source expressions
 then rejected that value. Restoring the sample CSV allowed refresh to complete;
 the 192 financial assertions passed again. The committed `SampleFolder` remains
 blank. No production data or Power BI Service deployment was used.

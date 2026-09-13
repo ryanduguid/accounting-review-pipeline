@@ -16,7 +16,7 @@ Keep client data out. The `.gitignore` blocks `input/`, `output/`, `clients/`, `
 
 - `Csv.Document` infers width from the first row, so a one-field title row collapses the parse. Pass `Columns`, and put a caveat in a full-width trailing row.
 - Typed M parameters such as `(x as date)` reject the shapes Excel hands over. Widen the type and use `Date.From(d, "en-AU")` so financial-year results stop following the machine locale.
-- CSV formula injection: guard `=` in every case, and `+`, `-`, `@` only when the remainder is not a plain code. Otherwise account codes like `-00123` stop joining back to payroll. An A1-style reference such as `+A1` starts a formula, so an "inert remainder" test has to be narrower than "anything alphanumeric".
+- CSV formula injection: guard `=` in every case, and `+`, `-`, `@` only when the remainder is not a plain code. Otherwise account codes like `-00123` stop joining back to payroll. An A1-style reference such as `+A1` starts a formula, so an 'inert remainder' test has to be narrower than 'anything alphanumeric'.
 - `IsNumeric(True)` returns `True` in VBA, so Booleans sum as -1. `Activate` on a hidden sheet activates the visible neighbour. `Scripting.Dictionary` runs on Windows Excel only.
 - `Trim$` misses non-breaking spaces, tabs and CRLF in reconciliation keys.
 
@@ -51,7 +51,7 @@ fresh child PowerShell and Excel processes. Within the Payday child, each of
 21 queries reads only one of 20 fabricated files. This keeps Excel's
 cross-source privacy/firewall composition state from masking adapter behaviour
 while preserving the exact 87-check result contract. One check preserves a
-quoted multiline field; three others materialise fabricated reports containing
+quoted multiline field; 3 others materialise fabricated reports containing
 500, 5,000 and 10,000 contribution
 rows and print their measured refresh times.
 
@@ -64,7 +64,7 @@ VBA is not imported by automation because doing so depends on Excel's
 machine-wide **Trust access to the VBA project object model** policy. Test VBA
 in a disposable workbook by importing both `.bas` files, running
 `ApplyWorkpaperHeader` against an entity name beginning with `=`, and running
-`CompareKeyedRanges` against fabricated two-column ranges with a leading-zero
+`CompareKeyedRanges` against fabricated 2-column ranges with a leading-zero
 key. Confirm the header is text rather than a formula, existing rows move down,
 and `Recon Result` carries the expected difference. Do not weaken the Office
 trust policy solely to run this check.

@@ -12,8 +12,8 @@ from typing import Callable, Sequence
 from .entities import _PREFIX, Entity
 from .patterns import PLACEHOLDER, PLACEHOLDER_BOUNDARY
 
-# The four prefixes ``assign`` mints, read from the table it mints them with so
-# the two cannot drift, exactly as ``verify`` reads them. The structured
+# The 4 prefixes ``assign`` mints, read from the table it mints them with so
+# the 2 cannot drift, exactly as ``verify`` reads them. The structured
 # prefixes are deliberately absent: TFN_01 is what a clean redacted file looks
 # like, and nothing reverses it.
 _ENTITY_PREFIXES = frozenset(_PREFIX.values())
@@ -53,7 +53,7 @@ def _restorable(entity: Entity) -> bool:
 
     A value carrying another entity's placeholder is refused too. The loop is
     sequential, so a value holding PERSON_01 is itself rewritten by the entry
-    that owns PERSON_01, and two real values end up spliced together at a
+    that owns PERSON_01, and 2 real values end up spliced together at a
     position neither of them occupied.
     """
     return (
@@ -69,16 +69,16 @@ def restore(text: str, entities: Sequence[Entity]) -> str:
     The boundaries are symmetric, ``(?<![A-Za-z0-9_])`` before and
     ``(?![A-Za-z0-9_])`` after, and both sides are load-bearing.
 
-    Without the right one, replacing CLIENT_10 also rewrites the first nine
+    Without the right one, replacing CLIENT_10 also rewrites the first 9
     characters of CLIENT_100, and the map holds both the moment a client list
-    passes ninety-nine entries. Without the left one, "PRIOR_CLIENT_01" and
+    passes 99 entries. Without the left one, "PRIOR_CLIENT_01" and
     "XCLIENT_01", which are ordinary shapes for a ledger column, a code fence
     or a heading, become a real client name in a position it never occupied.
     That direction is the dangerous one, because neither guard reports it:
     ``redact._input_placeholders`` and ``verify._carried_placeholders`` both
     read ``PLACEHOLDER``, which carries the left boundary this function once
     dropped. Taking both sides from ``PLACEHOLDER_BOUNDARY`` is what stops the
-    three drifting apart again.
+    3 drifting apart again.
 
     Pinning the trailing side on any word character rather than only a digit
     buys one thing more: "CLIENT_01s" is left standing instead of restored to

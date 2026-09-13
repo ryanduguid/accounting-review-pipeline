@@ -2,8 +2,8 @@
 
 Captured: 2026-09-02 (Australia/Sydney).
 
-This repository is assembled from freshly fetched default branches. "Git tree" is the
-commit's `HEAD^{tree}` object. "Tracked-tree SHA-256" is SHA-256 over the exact
+This repository is assembled from freshly fetched default branches. 'Git tree' is the
+commit's `HEAD^{tree}` object. 'Tracked-tree SHA-256' is SHA-256 over the exact
 NUL-delimited bytes of `git ls-tree -r --full-tree -z HEAD`. Historical tags remain
 authoritative in the source repositories; none is copied here.
 
@@ -47,11 +47,11 @@ Every source default branch is `main`. Each clone was clean at the recorded comm
 The plan's audited references were compared with the fetched heads before selection:
 
 - Monthly Close Controls advanced from `f31572d6a5a7a8897b169e9b5e12fa3f24cfa7f0` by one commit, "Use pinned setup-uv action (#76)", touching `.github/workflows/ci.yml` and one line of `AGENTS.md`.
-- Xero Trial Balance Export advanced from `ffffd05a9da2965075d409b8f8c986f1a8458c0b` by two commits, "Add reproducible trial balance proof (#73)" and "Add a reusable Power Query sample for Power BI (#75)"; the exporter-owned `xero-tb-csv.v1` corpus did not change.
-- Workpaper Review Gate advanced from `6c733e27e4db027176775fdf30f399dd1144a254` by two commits, "Use pinned setup-uv action (#15)" and "Name the canonical host and drop the em dashes from the README (#16)"; the distribution stays `review-ready-gate` 0.1.2.
+- Xero Trial Balance Export advanced from `ffffd05a9da2965075d409b8f8c986f1a8458c0b` by 2 commits, 'Add reproducible trial balance proof (#73)' and 'Add a reusable Power Query sample for Power BI (#75)'; the exporter-owned `xero-tb-csv.v1` corpus did not change.
+- Workpaper Review Gate advanced from `6c733e27e4db027176775fdf30f399dd1144a254` by 2 commits, "Use pinned setup-uv action (#15)" and "Name the canonical host and drop the em dashes from the README (#16)"; the distribution stays `review-ready-gate` 0.1.2.
 - Xero Ledger Review Gate advanced from `562e6c6204a558b9161a83e9bacae338a4e02115` by one commit, "Use pinned setup-uv action (#61)".
 - Accounting Excel Toolkit still equals the audited `5c2a779d316d2e0338f2189f3c98f0add4e7cbea`.
-- Australian Accounting Power BI advanced from `22029eb8b0c7f5df887ef026ae599a7883078ed2` by two commits, "Add Dependabot for GitHub Actions (#9)" and "build(deps): bump actions/setup-node from 6.5.0 to 7.0.0 (#10)".
+- Australian Accounting Power BI advanced from `22029eb8b0c7f5df887ef026ae599a7883078ed2` by 2 commits, "Add Dependabot for GitHub Actions (#9)" and "build(deps): bump actions/setup-node from 6.5.0 to 7.0.0 (#10)".
 
 The fetched heads above are the selected import snapshots.
 
@@ -87,7 +87,7 @@ enforcement, so the root `ci.yml` keeps the workflow name `tests` with job ids `
 has exactly one environment, `pypi`. The latest anchor release is `v0.1.2`. No remote
 setting was changed.
 
-## Release Policy prerequisite
+## Release policy prerequisite
 
 The reviewed Release Policy extension (`source-directory`, `tag-prefix`, `version-parser`,
 `version-file` and `upload-dist-artifact` inputs) was candidate
@@ -115,7 +115,7 @@ table above.
 
 Only the root `.github/workflows/` directory is active. The movement-only change replaced
 the anchor's root-default `release.yml` (tag pattern `v*`, pin
-`2fe690d8dbb90c9b680c43822b7819f6aa1408ff`) with five namespaced callers pinned to the
+`2fe690d8dbb90c9b680c43822b7819f6aa1408ff`) with 5 namespaced callers pinned to the
 independently approved and squash-landed Release Policy commit, now
 `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91` after the rewrites recorded above.
 One tag publishes one component; the reusable workflow's identity gate refuses a release
@@ -131,7 +131,7 @@ disagree.
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
 | evatt | `release-evatt.yml` | `evatt/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: evatt/version.py` | `packages/evatt` | `evatt` | none (GitHub release assets only; the caller has no `pypi` job) |
 
-The four Python callers upload the attested distribution (`upload-dist-artifact: true`) and
+The 4 Python callers upload the attested distribution (`upload-dist-artifact: true`) and
 publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
 exactly one wheel and one source distribution, and uses
 `pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`.
@@ -158,7 +158,7 @@ pull request. The component workflows used explicit `paths` filters for their co
 directory, the future `contracts/xero-trial-balance-v1/` directory, `.github/**` and the root
 policy files. Each granted `contents: read` only and referenced no secret. The readiness and
 ledger workflows carried their source-defined clean-wheel demonstrations. Dependabot scopes
-Python updates to each component directory (`uv` for the four uv packages, `pip` for the
+Python updates to each component directory (`uv` for the 4 uv packages, `pip` for the
 exporter) and groups root GitHub Actions updates.
 
 Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml` and
@@ -175,7 +175,7 @@ halt demonstration runs as that entry's `smoke` input, over the reusable workflo
 
 ## Whitespace declarations for exact upstream bytes
 
-`git diff --check` over the movement diff reported exact upstream bytes in four imported
+`git diff --check` over the movement diff reported exact upstream bytes in 4 imported
 files. The bytes are unchanged; the root `.gitattributes` narrows the whitespace check for
 exactly these paths:
 
@@ -189,7 +189,7 @@ exactly these paths:
 ## Contract provenance
 
 `contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
-`xero-tb-csv.v1` corpus. `expected_results.json` and the three fixtures were moved with
+`xero-tb-csv.v1` corpus. `expected_results.json` and the 3 fixtures were moved with
 `git mv` from `packages/xero-trial-balance-export/evaluation/xero_tb_integrity/` (exporter
 source commit `2a0966e89e5f8daa587be8466f988d9adc16003a`), so the blobs are byte-identical:
 `1568687d5ccc809d0267d024b34869061cf10d436a28501e57888314238add91` (expected results),
@@ -199,8 +199,8 @@ source commit `2a0966e89e5f8daa587be8466f988d9adc16003a`), so the blobs are byte
 ledger-review gate's vendored copy under `tests/conformance/xero_trial_balance_v1/` (pinned
 to exporter commit `f87b5e4e224b930b3f6d9c9c43e365a9d4ea98d4` and byte-identical) was removed
 with its `UPSTREAM.json`, the `MANIFEST.in` line and the packaging test that asserted it,
-after every consumer read the root authority. `schema.csv` is exactly the ten-column header
-plus one LF and `SHA256SUMS` covers all six files. The exporter runner, its evaluation
+after every consumer read the root authority. `schema.csv` is exactly the 10-column header
+plus one LF and `SHA256SUMS` covers all 6 files. The exporter runner, its evaluation
 README and `tests/test_evaluation_pack.py` read the root contract; the readiness,
 monthly-close and ledger-review suites gained root-contract tests; the Excel adapter and
 Power BI suites verify the same files with the standard library only;

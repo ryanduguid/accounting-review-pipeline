@@ -47,7 +47,7 @@ def workspace(
     ignore rule and the file name are both adjustable. Everything else uses the
     defaults and reads the same as it always did.
 
-    The default rules are the two the package's own .gitignore ships and the CI
+    The default rules are the 2 the package's own .gitignore ships and the CI
     demo writes. ``*.triage.md`` is not decoration: a halt asks git about the
     triage path before it writes it, so a workspace without that rule refuses
     to halt at all. ``test_a_halt_refuses_a_committable_triage_path`` is the
@@ -107,10 +107,10 @@ def test_output_hardlink_cannot_overwrite_a_protected_file(tmp_path, command, pr
 
 
 def test_the_halt_sentence_is_written_once(tmp_path, capsys) -> None:
-    """The triage file and the console must not carry two copies of one sentence.
+    """The triage file and the console must not carry 2 copies of one sentence.
 
     Both read the Halt's own message, so the wording lives in errors.py alone
-    and the two cannot drift apart.
+    and the 2 cannot drift apart.
     """
     root = workspace(tmp_path)
     shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
@@ -158,7 +158,7 @@ def test_redact_refuses_an_ungitignored_map(tmp_path, capsys) -> None:
     """The branch is asserted, not just the exit code.
 
     This test and the work-tree one below both exit 1 on the same guard, so
-    without matching the message the two could swap which branch they exercise
+    without matching the message the 2 could swap which branch they exercise
     and both would still pass.
     """
     root = new_repo(tmp_path / "repo", "")
@@ -305,7 +305,7 @@ def test_redact_refuses_to_overwrite_the_map_or_the_input(tmp_path, capsys) -> N
     """One typo destroyed the only copy of the key, and it exited 0 doing it.
 
     Structured identifiers are replaced one way, so every document already
-    redacted against that map becomes unrestorable. The two paths ``--out``
+    redacted against that map becomes unrestorable. The 2 paths ``--out``
     derives are covered too: neither is spelt on the command line, so neither
     is a collision the operator can see coming.
     """
@@ -425,7 +425,7 @@ def test_a_manifest_that_cannot_be_written_takes_the_output_with_it(tmp_path, ca
 def test_a_halt_removes_an_earlier_runs_output(tmp_path) -> None:
     """Nothing written has to be true of the directory, not just of this run.
 
-    Run one succeeds. The input then gains an unmapped name and run two halts,
+    Run one succeeds. The input then gains an unmapped name and run 2 halts,
     leaving run one's out.md beside the new triage file, which is the file an
     operator sends.
     """
@@ -487,7 +487,7 @@ def test_a_halt_refuses_a_committable_triage_path(tmp_path, capsys) -> None:
 def test_a_clean_run_removes_an_earlier_runs_triage_file(tmp_path) -> None:
     """The other direction of the same argument the halt path already accepted.
 
-    Run one halts and writes a triage file naming a real person. Run two
+    Run one halts and writes a triage file naming a real person. Run 2
     succeeds. Without this the operator sees exit 0 and a sanitised document
     with that plaintext worklist sitting in the directory they send from.
     """
@@ -508,7 +508,7 @@ def test_a_clean_run_removes_an_earlier_runs_triage_file(tmp_path) -> None:
 def test_a_triage_value_holding_a_line_break_keeps_its_bold_span(tmp_path) -> None:
     """NAME spans a newline, so a candidate can carry one, and markdown cannot.
 
-    The raw value broke the bold span open across two lines and left the
+    The raw value broke the bold span open across 2 lines and left the
     worklist unreadable at exactly the entry that needed reading.
     """
     root = workspace(tmp_path)
@@ -537,7 +537,7 @@ def test_no_case_or_wrapping_of_a_mapped_name_survives_redact_and_verify(tmp_pat
     """The finding-1 matrix, end to end through the commands an operator runs.
 
     Three of these rows left the name in the output with an empty manifest, and
-    verify then exited 0 on the leaked file. The other four halted, which was
+    verify then exited 0 on the leaked file. The other 4 halted, which was
     safe but still wrong: the triage file asked the operator to classify a name
     the map already held, and assign would have minted a second placeholder.
     """

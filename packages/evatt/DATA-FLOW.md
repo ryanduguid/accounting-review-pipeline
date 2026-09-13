@@ -40,11 +40,11 @@ purpose of the file it accompanies.
 ## 5. What stays on the local disk
 
 The entity map, its `.tmp` while it is being replaced, and any triage file. All
-three name real values or real candidates. Every command refuses to read a map
+3 name real values or real candidates. Every command refuses to read a map
 git would let you commit, and a halt refuses to write a triage file at a path
 git would let you commit.
 
-The rules covering those three names live in this repository's `.gitignore`.
+The rules covering those 3 names live in this repository's `.gitignore`.
 That file is in neither the wheel nor the source distribution, so an installed
 user has none of them and has to write the equivalent rules in the repository
 their map and their runs live in. The guards are what enforce the rule; the

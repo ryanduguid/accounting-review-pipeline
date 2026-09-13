@@ -91,7 +91,7 @@ class PowerBiSampleTests(unittest.TestCase):
 
     def test_the_parse_is_wider_than_the_contract(self) -> None:
         """Csv.Document normalises to the column count it is handed, dropping
-        extra fields and padding short rows. Asking for exactly ten would
+        extra fields and padding short rows. Asking for exactly 10 would
         reshape a malformed file into the expected shape before the header
         check could see it, so the query reads one column wider and treats
         anything in that column as proof the file is too wide."""

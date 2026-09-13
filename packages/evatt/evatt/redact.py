@@ -1,7 +1,7 @@
 """The redaction passes.
 
 Pass one replaces structured identifiers, confirmed by check digit, one-way.
-Pass two replaces known entities from the map. Pass three sweeps for anything
+Pass 2 replaces known entities from the map. Pass 3 sweeps for anything
 left that looks like a person, an address or a date of birth, and halts rather
 than guessing.
 
@@ -129,7 +129,7 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # ``load`` rejects every entry these guards skip, but ``redact`` takes
         # any Sequence[Entity] and a caller can build one by hand, so the map
         # gate is not the only place they have to be stopped. The value is
-        # checked first and the placeholder second, and the two are meant to be
+        # checked first and the placeholder second, and the 2 are meant to be
         # read as a pair: an entry is only used when both halves of it are ones
         # this package would have minted itself.
         #
@@ -165,7 +165,7 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # whose job is to say a file is not ready.
         #
         # ``PLACEHOLDER.fullmatch`` is the same shape test ``restore`` applies,
-        # so the two agree on what a placeholder is, and it also covers an empty
+        # so the 2 agree on what a placeholder is, and it also covers an empty
         # or whitespace-only placeholder, which would otherwise be inserted at
         # every match and leave the value replaced by nothing.
         #
@@ -260,12 +260,12 @@ def _input_placeholders(text: str, redacted: str) -> tuple[Unknown, ...]:
     ends up in a triage file in the directory the operator sends from, and
     quoting the input put a real tax file number, an email address and a mapped
     client name in plaintext there, on the same line the sweep reported in
-    redacted form two lines above. Every context this module produces is now
+    redacted form 2 lines above. Every context this module produces is now
     post-redaction, the residual sweep's included.
 
     A carried token normally survives both passes untouched, so it can be found
     again in *redacted* and quoted exactly where it stands. It survives because
-    pass two skips any entity whose value is placeholder-shaped and pass one
+    pass 2 skips any entity whose value is placeholder-shaped and pass one
     matches digits, not words. The exception is a token whose own digits form a
     valid identifier, "MEDICARE_2123456701" being the reachable one: pass one
     replaces the digits and the token is gone from the output. Losing the halt

@@ -1,7 +1,7 @@
 """Derive the client-query register from the exceptions one run raised.
 
 An exception says what the control found. A query says what somebody has to
-ask, and of whom. The two are not the same list: a trial balance that does not
+ask, and of whom. The 2 are not the same list: a trial balance that does not
 balance is the firm's export to fix, while a material movement nobody can
 explain from the ledger is a question only the client's records or people can
 settle. Sending the first to a client wastes the client's time and the firm's
@@ -59,7 +59,7 @@ CLIENT_ANSWERABLE_CONTROLS = {
     ),
 }
 
-# period_comparison and subledger_reconciliation each raise two different
+# period_comparison and subledger_reconciliation each raise 2 different
 # situations under one control name, so their question depends on the shape of
 # the exception rather than on the control alone. The engine leaves
 # current_value empty in exactly one of each pair, which is what _classify
@@ -103,9 +103,9 @@ _YEAR_RESET_CAVEAT = (
 def _classify(item: ExceptionItem) -> tuple[str, str, str] | None:
     """Return the variant tag, question and evidence, or None for no query.
 
-    The variant distinguishes two questions raised under one control name. It
+    The variant distinguishes 2 questions raised under one control name. It
     is part of the query's identity, because an account that disappears one
-    period and returns later asks the firm two different things, and a tracker
+    period and returns later asks the firm 2 different things, and a tracker
     holding both under one number cannot tell them apart.
     """
     if item.control in FIRM_RESOLVED_CONTROLS:
@@ -121,7 +121,7 @@ def _classify(item: ExceptionItem) -> tuple[str, str, str] | None:
     return CLIENT_ANSWERABLE_CONTROLS.get(item.control)
 
 
-# Twelve hex characters, not eight. The identifier has to survive being carried
+# Twelve hex characters, not 8. The identifier has to survive being carried
 # into a firm's tracker, so the space it is drawn from should not be one a
 # register could plausibly fill: 48 bits leaves a collision beyond any number
 # of accounts a close produces, and the guard in derive_client_queries is then
@@ -155,10 +155,10 @@ def derive_client_queries(
 ) -> tuple[ClientQuery, ...]:
     """Build the register, preserving the order the exceptions were raised in.
 
-    Raises ControlInputError if two queries would share an identifier. Among
+    Raises ControlInputError if 2 queries would share an identifier. Among
     the client-answerable controls the engine raises at most one exception per
-    account and variant, so a collision means a control now raises two, and a
-    register with one number against two questions is worse than no register:
+    account and variant, so a collision means a control now raises 2, and a
+    register with one number against 2 questions is worse than no register:
     a client answers one of them and the firm cannot tell which. review_close
     forces this derivation once, so the condition is reported on the same
     failure path as a malformed input rather than escaping the pack writer,

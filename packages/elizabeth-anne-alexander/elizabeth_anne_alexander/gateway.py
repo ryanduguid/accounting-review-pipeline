@@ -30,7 +30,7 @@ CANONICAL_COLUMNS = (
 )
 # The model-facing keys each finding carries; emitted findings are built by
 # projecting through this tuple, so the declared contract cannot drift from
-# the emitted keys. percent_change is expressed in percent, quantized to four
+# the emitted keys. percent_change is expressed in per cent, quantized to 4
 # decimal places ("18.3333" means 18.3333%), and is null when there is no
 # prior balance to compare against.
 MODEL_PROJECTION = (
@@ -385,7 +385,7 @@ def _decimal_string(value: Decimal) -> str:
 
 
 def _percent_string(ratio: Decimal) -> str:
-    """Express a change ratio as a percentage quantized to four decimal places.
+    """Express a change ratio as a percentage quantized to 4 decimal places.
 
     quantize raises InvalidOperation once the result needs more digits than the
     context allows, which a large enough ratio reaches. Everything else in this
@@ -513,7 +513,7 @@ def evaluate(*, context_path: Path, request_path: Path, policy_path: Path) -> tu
         "current_csv_sha256": current.csv_snapshot.sha256,
         "prior_csv_sha256": prior.csv_snapshot.sha256,
         # The manifests carry entity_ref, include_drafts and tracking_filters,
-        # which change what the figures mean. Sealing only the CSVs let two
+        # which change what the figures mean. Sealing only the CSVs let 2
         # runs over different entities or filters share one run_id, so the
         # receipt did not identify its own inputs and the reproducibility claim
         # in the README was not true.
@@ -583,8 +583,8 @@ def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...
     # Compare each emitted leaf string for exact equality with a forbidden value;
     # substring matching over the serialised model false-positives when an
     # ordinary numeric AccountID happens to occur inside an amount or digest.
-    # Tenant, account name and account code are the three source display values
-    # the README promises the model result never carries, so all three are
+    # Tenant, account name and account code are the 3 source display values
+    # the README promises the model result never carries, so all 3 are
     # forbidden as leaves, not only as key names. AccountID joins them because
     # it is the join key the evidence file is indexed by.
     forbidden = (
@@ -615,7 +615,7 @@ def validate_review(*, evidence_path: Path, receipt_path: Path, decision_path: P
         raise GatewayError("Decision, evidence, and receipt must refer to the same run_id.")
     if "sha256:" + sha256_bytes(canonical_json(evidence)) != receipt["evidence_sha256"]:
         raise GatewayError("Reviewer evidence does not match the receipt's evidence digest.")
-    # write_evaluation moves three files one at a time, so a failure between
+    # write_evaluation moves 3 files one at a time, so a failure between
     # the moves can leave one run's model result beside another run's receipt.
     # The receipt seals the model result too, so check it whenever the file is
     # there. It is not required: the evidence/model split exists so a reviewer

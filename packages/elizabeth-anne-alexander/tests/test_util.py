@@ -56,9 +56,9 @@ def test_the_exact_declared_key_set_is_accepted(tmp_path: Path) -> None:
     [
         # Written as raw text: json.dumps cannot spell a key twice, which is
         # exactly why only the parser's own hook can see the duplicate. Plain
-        # json.loads is last-key-wins, so a manifest carrying two sha256 keys
+        # json.loads is last-key-wins, so a manifest carrying 2 sha256 keys
         # verified only the second digest and the exact key-set gate above
-        # never knew two were supplied.
+        # never knew 2 were supplied.
         ('{"schema_version": "v1", "schema_version": "v2", "run_id": "sha256:0"}', "schema_version"),
         # Nested one level down: the exact key-set gate only reads the top
         # level, so the hook is the one line that can refuse this.
