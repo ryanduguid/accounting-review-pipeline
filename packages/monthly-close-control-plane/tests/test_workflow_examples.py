@@ -424,7 +424,7 @@ def test_repository_versions_and_yaml_dev_dependency_agree() -> None:
     project_version, lock_version, release_version, yaml_version = _repository_versions()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert project_version == lock_version == release_version == "0.1.3"
+    assert project_version == lock_version == release_version == "0.1.4"
     assert "PyYAML>=6.0.3,<7" in project["project"]["optional-dependencies"]["dev"]
     assert yaml_version == yaml.__version__ == "6.0.3"
 
@@ -438,7 +438,7 @@ def test_repository_identity_is_distinct_from_package_identity() -> None:
     assert project["project"]["name"] == PACKAGE_NAME
     assert project["project"]["urls"]["Homepage"] == PACKAGE_URL
     assert project["project"]["urls"]["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/monthly-close-control-plane/v0.1.3/"
+        f"{REPOSITORY_URL}/tree/monthly-close-control-plane/v0.1.4/"
         "packages/monthly-close-control-plane"
     )
     assert project["project"]["urls"]["Repository"] == f"{REPOSITORY_URL}.git"
@@ -448,7 +448,7 @@ def test_repository_identity_is_distinct_from_package_identity() -> None:
     assert (
         "| Monthly Close Controls | `packages/monthly-close-control-plane/` | "
         "distribution `monthly-close-control-plane`, import `closecontrol`, commands "
-        "`close-control` and `openaccountants-au` | 0.1.3 |"
+        "`close-control` and `openaccountants-au` | 0.1.4 |"
     ) in root_readme
 
 
@@ -477,8 +477,8 @@ def test_current_docs_use_canonical_pipeline_component_links() -> None:
 def test_release_guidance_uses_the_namespaced_current_tag() -> None:
     guidance = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
 
-    assert "monthly-close-control-plane/v0.1.3" in guidance
-    assert "tag=monthly-close-control-plane/v0.1.3" in guidance
+    assert "monthly-close-control-plane/v0.1.4" in guidance
+    assert "tag=monthly-close-control-plane/v0.1.4" in guidance
     assert 'version="${tag#monthly-close-control-plane/v}"' in guidance
     assert "tag=v0.1.3" not in guidance
     assert guidance.count(

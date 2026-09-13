@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xero-trial-balance-export"
-version = "0.1.7"
+version = "0.1.8"
 description = "Export a Xero trial balance to a tidy CSV for Power BI, pandas or Excel."
 readme = "README.md"
 license = "MIT"

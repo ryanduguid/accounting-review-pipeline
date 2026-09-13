@@ -16,7 +16,7 @@ Before tagging:
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
 4. Confirm the versions in `pyproject.toml` and `uv.lock` match the `RELEASE_NOTES.md` heading.
-5. Create the annotated component tag on current remote `main`, for example `git tag -a monthly-close-control-plane/v0.1.3 -m "monthly-close-control-plane/v0.1.3"` (or `-s` when signing is configured), then push only that tag.
+5. Create the annotated component tag on current remote `main`, for example `git tag -a monthly-close-control-plane/v0.1.4 -m "monthly-close-control-plane/v0.1.4"` (or `-s` when signing is configured), then push only that tag.
 
 The workflow runs the locked tests, builds the wheel and source distribution once, generates an SPDX 2.3 SBOM for the wheel and `SHA256SUMS`, records GitHub provenance and an SBOM attestation, then publishes the completed draft. An existing release is never overwritten.
 
@@ -56,7 +56,7 @@ the next release, update `tag` if the intended version changes and run these
 checks after downloading the assets and checking `SHA256SUMS`:
 
 ```bash
-tag=monthly-close-control-plane/v0.1.3
+tag=monthly-close-control-plane/v0.1.4
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#monthly-close-control-plane/v}"
 wheel="monthly_close_control_plane-${version}-py3-none-any.whl"
