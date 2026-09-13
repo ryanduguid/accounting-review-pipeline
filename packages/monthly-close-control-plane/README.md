@@ -350,7 +350,7 @@ An acknowledgement is evidence of a human action only. It **never** changes `REV
 
 A close can be technically balanced and still need review. This tool keeps the evidence visible:
 
-- Exact `Decimal` arithmetic for money controls, never binary floating point.
+- Exact `Decimal` arithmetic for money controls, never binary floating point. Totals are summed under a fixed 28-digit context with rounding trapped, so a file whose amounts would round a control total is refused as malformed input rather than compared inexactly.
 - Schema, duplicate-key, date, and numeric gates fail closed.
 - Current-period and YTD debits must exactly equal credits.
 - Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Context, Decimal, Inexact, localcontext
 from pathlib import Path
 
-from .errors import GateInputError
+from .errors import GateInputError, NumericGateError
 from .loader import (
     SourceSnapshot,
     load_activity_statement,
@@ -76,8 +76,18 @@ def _empty(slot: str) -> Finding:
 
 
 def _tb_balanced(rows: list[TrialBalanceRow]) -> tuple[Decimal, Decimal]:
-    movement = sum((row.debit - row.credit for row in rows), Decimal("0.00"))
-    ytd = sum((row.ytd_debit - row.ytd_credit for row in rows), Decimal("0.00"))
+    # Sum exactly or refuse: a total the 28-digit context rounds can equal its
+    # counterpart while the source amounts differ, which would pass an imbalance.
+    with localcontext() as context:
+        context.traps[Inexact] = True
+        try:
+            movement = sum((row.debit - row.credit for row in rows), Decimal("0.00"))
+            ytd = sum((row.ytd_debit - row.ytd_credit for row in rows), Decimal("0.00"))
+        except Inexact as exc:
+            raise NumericGateError(
+                "trial balance totals exceed the supported 28-digit precision, "
+                "so debits and credits cannot be compared exactly."
+            ) from exc
     return movement, ytd
 
 
@@ -116,6 +126,23 @@ def review_pack(
     pack_dir: Path,
     acknowledgement_path: Path | None = None,
     tieout_tolerance: Decimal = Decimal("0.01"),
+) -> ReadinessPack:
+    # Keep the standard precision and rounding even when a host changes its decimal context.
+    with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
+        return _review_pack(
+            profile=profile,
+            pack_dir=pack_dir,
+            acknowledgement_path=acknowledgement_path,
+            tieout_tolerance=tieout_tolerance,
+        )
+
+
+def _review_pack(
+    *,
+    profile: str,
+    pack_dir: Path,
+    acknowledgement_path: Path | None,
+    tieout_tolerance: Decimal,
 ) -> ReadinessPack:
     if not tieout_tolerance.is_finite() or tieout_tolerance < 0:
         raise GateInputError("tie-out tolerance must be a finite non-negative decimal.")
