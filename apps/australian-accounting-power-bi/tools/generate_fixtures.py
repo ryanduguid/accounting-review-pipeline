@@ -18,7 +18,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = BASE_DIR / "samples"
 
-# Australian National Public Holidays (whole-of-state/territory national calendar 2024-2027)
+# Sample business-day calendar 2024-2027: the eight nationwide public holidays plus NT
+# Picnic Day (first Monday in August, whole of the Territory). Other whole-of-state
+# holidays are not listed, so a sample due date can fall earlier than the statutory
+# rule requires, never later.
 NATIONAL_HOLIDAYS = {
     # 2024
     datetime.date(2024, 1, 1),   # New Year's Day
@@ -27,6 +30,7 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2024, 4, 1),   # Easter Monday
     datetime.date(2024, 4, 25),  # Anzac Day
     datetime.date(2024, 6, 10),  # King's Birthday
+    datetime.date(2024, 8, 5),   # Picnic Day (NT)
     datetime.date(2024, 12, 25), # Christmas Day
     datetime.date(2024, 12, 26), # Boxing Day
     # 2025
@@ -36,6 +40,7 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2025, 4, 21),  # Easter Monday
     datetime.date(2025, 4, 25),  # Anzac Day
     datetime.date(2025, 6, 9),   # King's Birthday
+    datetime.date(2025, 8, 4),   # Picnic Day (NT)
     datetime.date(2025, 12, 25), # Christmas Day
     datetime.date(2025, 12, 26), # Boxing Day
     # 2026
@@ -45,6 +50,7 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2026, 4, 6),   # Easter Monday
     datetime.date(2026, 4, 25),  # Anzac Day
     datetime.date(2026, 6, 8),   # King's Birthday
+    datetime.date(2026, 8, 3),   # Picnic Day (NT)
     datetime.date(2026, 12, 25), # Christmas Day
     datetime.date(2026, 12, 28), # Boxing Day (Observed)
     # 2027
@@ -55,6 +61,7 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2027, 4, 25),  # Anzac Day
     datetime.date(2027, 4, 26),  # Anzac Day (Observed)
     datetime.date(2027, 6, 14),  # King's Birthday
+    datetime.date(2027, 8, 2),   # Picnic Day (NT)
     datetime.date(2027, 12, 25),
     datetime.date(2027, 12, 27), # Christmas Day (Observed)
     datetime.date(2027, 12, 28), # Boxing Day (Observed)
