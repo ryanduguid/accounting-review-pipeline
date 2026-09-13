@@ -5,6 +5,7 @@ name: Release elizabeth-anne-alexander
 # normalised distribution name agree (elizabeth-anne-alexander). The version
 # is read as data from the tracked literal in elizabeth_anne_alexander/version.py.
 on:
+  workflow_dispatch:
   push:
     tags:
       - "elizabeth-anne-alexander/v*"
@@ -18,6 +19,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name == 'push'
     permissions:
       actions: read # Inspect and download only the exact bound release candidate.
       attestations: write # Record provenance and SBOM attestations for release assets.
@@ -57,4 +59,55 @@ jobs:
           ls -l dist
 
       - name: Publish to PyPI via trusted publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  recover-pypi-0-2-3:
+    name: Publish the verified 0.2.3 release to PyPI
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi-elizabeth-anne-alexander
+      url: https://pypi.org/p/elizabeth-anne-alexander
+    permissions:
+      contents: read
+      attestations: read
+      id-token: write
+    steps:
+      - name: Verify the existing immutable release and its attested assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo=ryanduguid/accounting-review-pipeline
+          tag=elizabeth-anne-alexander/v0.2.3
+          commit=874e92d85458e87ebf726b1fc35ca3c333c88934
+          policy=fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
+          test "$GITHUB_REPOSITORY" = "$repo"
+          gh api "repos/$repo/releases/tags/$tag" \
+            | jq -e --arg tag "$tag" '.immutable == true and .draft == false and .prerelease == false and .tag_name == $tag and (.assets | length) == 5'
+          gh release verify "$tag" --repo "$repo"
+          mkdir proof dist
+          assets=(elizabeth_anne_alexander-0.2.3-py3-none-any.whl
+                  elizabeth_anne_alexander-0.2.3.tar.gz
+                  elizabeth_anne_alexander-0.2.3.spdx.json
+                  release-manifest.json SHA256SUMS)
+          for asset in "${assets[@]}"; do
+            gh release download "$tag" --repo "$repo" --pattern "$asset" --dir proof
+            gh release verify-asset "$tag" "proof/$asset" --repo "$repo"
+            gh attestation verify "proof/$asset" --repo "$repo" \
+              --source-digest "$commit" --source-ref "refs/tags/$tag" \
+              --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
+              --signer-digest "$policy"
+          done
+          (cd proof && sha256sum --check SHA256SUMS)
+          gh attestation verify proof/elizabeth_anne_alexander-0.2.3-py3-none-any.whl \
+            --repo "$repo" --source-digest "$commit" --source-ref "refs/tags/$tag" \
+            --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
+            --signer-digest "$policy" --predicate-type https://spdx.dev/Document/v2.3
+          cp proof/elizabeth_anne_alexander-0.2.3-py3-none-any.whl dist/
+          cp proof/elizabeth_anne_alexander-0.2.3.tar.gz dist/
+
+      - name: Publish the original wheel and source distribution via trusted publishing
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
