@@ -19,7 +19,10 @@ def test_normal_release_is_triggered_only_by_namespaced_tags() -> None:
 
     assert 'tags:\n      - "elizabeth-anne-alexander/v*"' in workflow
     release_job = workflow.split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
-    assert "if: github.event_name == 'push'" in release_job
+    assert (
+        "if: github.event_name == 'push' && "
+        "github.ref != 'refs/tags/elizabeth-anne-alexander/v0.2.3-pypi-recovery'"
+    ) in release_job
     assert "inputs.tag" not in workflow
     assert "group: release-${{ github.repository }}-${{ github.ref_name }}" in workflow
     assert "cancel-in-progress: false" in workflow
@@ -61,7 +64,8 @@ def test_manual_recovery_is_bound_to_the_original_verified_release() -> None:
 
     assert "workflow_dispatch:\n  push:" in workflow
     assert (
-        "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"
+        "if: github.event_name == 'workflow_dispatch' && "
+        "github.ref == 'refs/tags/elizabeth-anne-alexander/v0.2.3-pypi-recovery'"
     ) in recovery_job
     assert "inputs." not in recovery_job
     assert "tag=elizabeth-anne-alexander/v0.2.3" in recovery_job
