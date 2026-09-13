@@ -12,7 +12,7 @@
 // row, then the header. Bucket labels are "< 1 Month", "1 Month", "2 Months",
 // "3 Months", "Older" and "Total", with a leading "Current" column when the
 // as-at date leaves anything not yet due. Zero buckets export as 0, not blank.
-// The CSV export mode has not been observed separately.
+// The 13 September 2026 menu offered Excel, PDF and Google Sheets, with no CSV.
 //
 // Key contract rules:
 //   1. Supplier identifier is forced to text so leading zeros and punctuation survive.
@@ -26,10 +26,13 @@
 //      use List.Sum and Value.Subtract with Precision.Decimal, then require
 //      an absolute difference strictly below Currency.From("0.005").
 //   5. Negative balances (supplier credit notes and prepayments) are preserved as signed numbers.
+//   6. IncludeSection=true appends the source Section label for separate
+//      supplier and expense-claim controls. Missing labels stay null/empty.
+//      The default keeps the existing output columns. Repeated rows remain.
 //
 // Usage: Xero.AgedPayables("C:\exports\aged-payables-2026-06-30.csv")
 let
-    AgedPayables = (FilePath as text) as table =>
+    AgedPayables = (FilePath as text, optional IncludeSection as nullable logical) as table =>
         let
             fileBinary = File.Contents(FilePath),
             lines = Lines.FromBinary(fileBinary, null, null, 65001),
@@ -105,9 +108,24 @@ let
                 ),
                 each "Total " & Text.Trim(Text.From(_))
             ),
+            // Fill source labels down before dropping structural rows. An
+            // empty string closes a section at its subtotal; unlike null it
+            // is not filled from the preceding section.
+            WithSection = if IncludeSection ?? false then
+                Table.FillDown(
+                    Table.AddColumn(Promoted, "Section", each
+                        let val = supplierOf(_) in
+                            if isSectionRow(_) and val <> "" then val
+                            else if List.Contains(sectionSubtotals, val)
+                                or Text.Lower(val) = "total" then ""
+                            else null,
+                        type nullable text),
+                    {"Section"}
+                )
+                else Promoted,
             // Drop blank, section, subtotal, Total and Percentage of total rows
             Filtered = Table.SelectRows(
-                Promoted,
+                WithSection,
                 each let val = supplierOf(_) in
                     val <> ""
                     and not isSectionRow(_)
