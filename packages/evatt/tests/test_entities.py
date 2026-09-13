@@ -360,7 +360,7 @@ def test_the_saved_map_is_lf_on_every_platform(tmp_path) -> None:
 
 ENTITY = entities.Entity
 REJECTED = [
-    # A second spelling of one value, which pass two matches as the first one.
+    # A second spelling of one value, which pass 2 matches as the first one.
     ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
       ENTITY("JANE  ROE", "PERSON_02", "person", "2026-09-09")), "once case and whitespace"),
     ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
@@ -401,7 +401,7 @@ def test_save_refuses_a_sequence_load_would_reject(tmp_path, sequence, message) 
 
 @pytest.mark.parametrize("sequence, message", REJECTED)
 def test_load_refuses_what_save_refuses(tmp_path, sequence, message) -> None:
-    """The pairing itself, so the two cannot drift into disagreeing about a map."""
+    """The pairing itself, so the 2 cannot drift into disagreeing about a map."""
     document = {
         "schema_version": 1,
         "entries": [
@@ -529,7 +529,7 @@ def test_require_gitignored_fails_closed_on_an_unexpected_exit_code(tmp_path, mo
      "tfn_01", "Tfn_01", "client_01", "medicare_01", "Acme entity_12 Pty Ltd"],
 )
 def test_a_placeholder_shaped_value_never_enters_the_map(value, tmp_path) -> None:
-    """Pass two compiles the raw value into a pattern, so such a value destroys a real one.
+    """Pass 2 compiles the raw value into a pattern, so such a value destroys a real one.
 
     A map holding "TFN_01" rewrites the placeholder pass one has just written
     over a real tax file number, and leaves a manifest still counting the tfn.
@@ -556,9 +556,9 @@ def test_a_value_that_merely_looks_placeholder_ish_is_still_accepted() -> None:
 
 
 def test_load_rejects_two_values_that_fold_onto_one_another(tmp_path) -> None:
-    """Two spellings of one name cannot hold two placeholders.
+    """Two spellings of one name cannot hold 2 placeholders.
 
-    Pass two matches a value case-insensitively and across a whitespace run, so
+    Pass 2 matches a value case-insensitively and across a whitespace run, so
     "Jane Roe" and "jane  roe" are one pattern. A map holding both would have
     one of them take every occurrence while the other sat there looking
     assigned and never appearing, which is how a restore puts a wrong name back.
@@ -590,7 +590,7 @@ def test_load_still_calls_an_exact_duplicate_a_duplicate(tmp_path) -> None:
 def test_assign_returns_the_existing_entity_for_a_folded_spelling() -> None:
     """An operator types what the document showed them, which may be shouted or wrapped.
 
-    Minting a second placeholder there would put two on one person, and the
+    Minting a second placeholder there would put 2 on one person, and the
     second would never appear in a document because a single pattern already
     matched every occurrence.
     """

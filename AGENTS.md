@@ -1,6 +1,6 @@
 # Accounting Review Pipeline agent instructions
 
-This repository is the local assembly of the Accounting Review Pipeline: seven independently
+This repository is the local assembly of the Accounting Review Pipeline: 7 independently
 versioned components joined only by local files and commands. Its canonical GitHub repository
 is `ryanduguid/accounting-review-pipeline`.
 Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for component work.
@@ -53,11 +53,11 @@ adapter and the Power BI application keep the plan's paths. `IMPORTS.md` records
 
 ## Setup
 
-From a fresh clone, `uv sync` at the root installs the five Python components as editable
+From a fresh clone, `uv sync` at the root installs the 5 Python components as editable
 workspace members and the shared test toolchain into one `.venv`, and `just test` runs
 every component's suite plus the joined conformance test. That is the whole setup. `just`
 comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
-`test` and `check` (the last three together). Each recipe loops over the per-component
+`test` and `check` (the last 3 together). Each recipe loops over the per-component
 commands in the table below, which remain the authority. `just check` is not a CI
 equivalent: it does not verify component lockfiles, install the exporter's hash-locked
 requirements, build or smoke-test a wheel, run actionlint, the Power BI CLI
@@ -99,7 +99,7 @@ one component runs that component alone. Monthly Close Controls keeps its own `t
 root workflows run ruff and mypy from `ruff.toml` and `mypy.ini` and their unittest suites
 on the same Python matrix.
 
-A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all three review packages,
+A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change
 to the root `pyproject.toml`, `uv.lock` or `justfile` triggers every component workflow,
 because the root lock is what `uv run --locked` validates inside every component directory.

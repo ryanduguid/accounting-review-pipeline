@@ -103,7 +103,7 @@ TOKEN_CLOCK_SKEW = 300
 
 # os.replace fails on Windows while any other process holds the destination
 # open. Both durable writes in this project ride out a brief lock rather than
-# losing work, and both read these two constants, so retuning them changes
+# losing work, and both read these 2 constants, so retuning them changes
 # both: save_tokens onto token.json (the README tells users a second
 # concurrent run is possible, and a lost refresh token locks the app out) and
 # export_tb's CSV write onto a path Excel or Power BI Desktop may be holding
@@ -111,12 +111,12 @@ TOKEN_CLOCK_SKEW = 300
 REPLACE_ATTEMPTS = 5
 REPLACE_BACKOFF = 0.2
 
-# Refresh is a read/modify/write transaction: two processes that both read the
+# Refresh is a read/modify/write transaction: 2 processes that both read the
 # same expiring refresh token can each spend it and then race to replace the
 # cache. A separate, credential-free lock file serialises that transaction.
 # OS-backed locks are released when a process exits, so an interrupted export
 # cannot leave a stale lock behind. The file itself stays in place because
-# unlinking it while another process is waiting can create two independently
+# unlinking it while another process is waiting can create 2 independently
 # locked files on POSIX.
 TOKEN_LOCK_TIMEOUT = 90
 TOKEN_LOCK_POLL = 0.1
@@ -825,7 +825,7 @@ def api_get(
     passed in: a token captured once by a caller goes stale the moment any
     call refreshes it, and every later call then repeats the 401 + forced
     refresh, burning a single-use refresh token each time. A surprise 401
-    still gets one forced refresh and retry. The local expiry math can lie
+    still gets one forced refresh and retry. The local expiry maths can lie
     (skewed clock, stale cache). A second 401 exits with the same
     re-authorise guidance the invalid_grant path gives, instead of a raw
     traceback.

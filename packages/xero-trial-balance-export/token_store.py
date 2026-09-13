@@ -44,7 +44,7 @@ def safe_token_path(path: str) -> str:
     The cache must be named token.json and must stay under the home
     directory, the process working directory, the system temp directory,
     or the install directory. abspath + prefix check is the CodeQL
-    sanitizer for path injection.
+    sanitiser for path injection.
 
     Keep the prefix check as a written-out loop that returns the checked
     value. Folding it into any() over a generator hides the barrier from

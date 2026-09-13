@@ -54,7 +54,7 @@ _TEMPORARY_FLAGS = (
     | getattr(os, "O_NOINHERIT", 0)
 )
 # Attempts at a unique name before giving up. A collision means the name was
-# taken between minting and opening it, which eight 32-bit tokens in a row do
+# taken between minting and opening it, which 8 32-bit tokens in a row do
 # not lose to by accident; a run that does is being raced, and stopping is the
 # answer either way.
 _TEMPORARY_ATTEMPTS = 8
@@ -100,24 +100,24 @@ def _check_fields(
     into a file that cannot be read back, and the map is the only copy of the key.
 
     A value shaped like an assigned placeholder is refused outright. Nothing
-    downstream guards the shape of a value: pass two compiles the raw value into
+    downstream guards the shape of a value: pass 2 compiles the raw value into
     a pattern, so a map holding the value "TFN_01" rewrites the placeholder pass
     one has just written, destroys the only record that a tax file number was
     there, and leaves a manifest that still counts the tfn. Refusing it here
     keeps it out of the map rather than repairing the damage later. The shape
     test is ``PLACEHOLDER_CI`` rather than ``PLACEHOLDER``, because the pattern
-    pass two compiles is case-insensitive: while this guard was case-sensitive
+    pass 2 compiles is case-insensitive: while this guard was case-sensitive
     it accepted "tfn_01" and "Tfn_01", and those did the same damage.
 
     *folded* maps each already-accepted value's fold to the value it came from.
-    A new value that folds onto one of them is refused, which is what keeps two
-    spellings of one name from claiming two placeholders. ``load`` supplies it,
+    A new value that folds onto one of them is refused, which is what keeps 2
+    spellings of one name from claiming 2 placeholders. ``load`` supplies it,
     entry by entry, so the rejection covers a hand-edited map as well as one
     this package wrote. ``assign`` supplies nothing, because it resolves the
     fold to the existing entity and returns it before it gets here.
 
     The exact-duplicate case is a fold collision too, and is reported by this
-    check rather than by a separate one: one comparison, so the two cannot
+    check rather than by a separate one: one comparison, so the 2 cannot
     disagree about what counts as the same value.
 
     The accepted value and kind come back narrowed to ``str``, so a caller that
@@ -169,7 +169,7 @@ def _check_entry(
     could atomically replace the only local copy of the key with a document
     every later command refuses to load, and nothing said so until the next run.
 
-    The two collections are threaded in rather than rebuilt here, because both
+    The 2 collections are threaded in rather than rebuilt here, because both
     duplicate checks are about the entries already seen and the caller owns the
     order they are seen in. They are updated here as well, so a caller cannot
     check an entry and then forget to record it.
@@ -251,7 +251,7 @@ def _open_temporary(path: Path) -> tuple[Path, BinaryIO]:
     carries that, not the uniqueness: a name that exists, as any link does,
     fails the create rather than being followed. The uniqueness is what keeps a
     temporary left behind by a hard kill from wedging every later save, and what
-    lets two saves of two different maps in one directory proceed.
+    lets 2 saves of 2 different maps in one directory proceed.
 
     The name keeps ``<map>.tmp`` as its prefix and ``.tmp`` as its suffix. The
     suffix means one ``*.tmp`` rule still covers every temporary this writes, so
@@ -356,9 +356,9 @@ def assign(entities: Sequence[Entity], value: str, kind: str, added: str) -> Ent
 
     The match is on ``_fold``, not on an exact string. An operator working a
     triage file types what the document showed them, and the document may have
-    shouted the name, wrapped it across a line or lower-cased it. Pass two
+    shouted the name, wrapped it across a line or lower-cased it. Pass 2
     matches all of those as the one mapped value, so minting a second
-    placeholder for the second spelling would put two placeholders on one
+    placeholder for the second spelling would put 2 placeholders on one
     person and leave one of them meaning nothing. The entity that comes back
     keeps the spelling the map already holds.
 
@@ -405,7 +405,7 @@ def require_gitignored(map_path: Path, description: str = "the entity map") -> N
     temporary it is about to create, which is why *map_path* need not exist yet.
 
     *description* names what is being refused, because this guard now covers
-    three different files. The map and its temporaries are the key; the CLI's triage
+    3 different files. The map and its temporaries are the key; the CLI's triage
     file is a worklist quoting whole residual lines about a real document, and
     telling an operator that "the entity map must never be committed" about a
     path ending ``.triage.md`` sends them to fix the wrong file.

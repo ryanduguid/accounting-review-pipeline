@@ -1,6 +1,6 @@
 """Joined offline conformance for the data-only Xero trial-balance contract.
 
-The exporter-owned integrity runner and the three offline review implementations
+The exporter-owned integrity runner and the 3 offline review implementations
 are exercised against every root fixture. The review packages are imported from
 their directories; nothing here installs them, reaches a network, or reads a
 credential. The only runtime dependency is the exporter's hash-locked lock file.

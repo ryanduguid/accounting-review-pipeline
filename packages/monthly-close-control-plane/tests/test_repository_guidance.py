@@ -372,7 +372,7 @@ def test_agents_keeps_installed_wheel_smoke_outside_checkout() -> None:
     assert _guidance_smoke_contract(_fenced_commands(smoke)) == _ci_smoke_contract()
     assert _normalise(_without_fenced_commands(smoke)) == _normalise(
         """\
-        The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artifact
+        The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artefact
         and smoke directories. Fail immediately if a native build or install command fails,
         install only the one wheel produced by that build, and always restore the caller's
         location and remove both temporary directories. The fabricated demo deliberately

@@ -4,7 +4,7 @@ Each component is developed, checked and released from its own directory. The ro
 a development entrypoint so a fresh clone can be set up and verified in one command; it
 does not change where a component is developed or released from.
 
-## Quick Start
+## Quick start
 
 From a fresh clone, with [uv](https://docs.astral.sh/uv/) installed:
 
@@ -13,12 +13,12 @@ uv sync        # install every Python component and the shared toolchain
 just test      # every component's suite, plus the joined conformance test
 ```
 
-`uv sync` creates one `.venv` at the root and installs the five Python distributions into it
+`uv sync` creates one `.venv` at the root and installs the 5 Python distributions into it
 as editable workspace members. The Excel adapter and the Power BI application have no
 `pyproject.toml`; their standard-library unittest suites run from the same `.venv`.
 
 `just` is optional tooling; install it with `uv tool install rust-just`. The recipes are
-`setup`, `lint`, `typecheck`, `test` and `check` (the last three together). Each loops over
+`setup`, `lint`, `typecheck`, `test` and `check` (the last 3 together). Each loops over
 the per-component commands in the `AGENTS.md` command-routing table, which remain the
 authority; `just` runs them from one place, it does not replace them.
 
@@ -33,7 +33,7 @@ The shared component gates are defined once in `.github/workflows/ci-package.yml
 
 Every member's `dev` extra and the root `dev` group carry the same exact pins for `ruff`,
 `mypy`, `pytest`, `pytest-cov` and `coverage`, so one workspace resolution holds them all
-and the versions `just` runs are the versions CI runs. Move a pin in all five places
+and the versions `just` runs are the versions CI runs. Move a pin in all 5 places
 together, then regenerate the root and component lockfiles.
 
 Two consequences of the workspace are worth knowing before you run a component's own
@@ -46,7 +46,7 @@ commands:
 - A change to the root `pyproject.toml`, `uv.lock` or `justfile` runs every component
   workflow, for the same reason.
 
-## Pull Request Rules
+## Pull request rules
 
 Keep a change scoped to one component, to the data-only contract
 `contracts/xero-trial-balance-v1/`, or to the root policy, workspace and workflow files. Run
@@ -60,14 +60,14 @@ published from it. Do not add a root distribution, shared runtime package, unifi
 or monorepo framework. Movement-only changes and behaviour changes go in separate pull
 requests.
 
-## Test Fixtures
+## Test fixtures
 
 Use fabricated fixtures only. Do not add client exports, workpapers, credentials, tokens,
 generated packs or screenshots containing client data. Keep fixture expectations explicit,
 run the owning component's checks, and run joined conformance whenever the shared contract
 changes.
 
-## Data Handling
+## Data handling
 
 Review components may not gain a network or Xero dependency or import the exporter or
 a sibling component. Preserve their documented status and exit-code boundaries and

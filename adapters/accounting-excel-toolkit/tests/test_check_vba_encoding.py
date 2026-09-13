@@ -105,7 +105,7 @@ class TestNonAsciiIsCaught(unittest.TestCase):
             with redirect_stdout(out), redirect_stderr(err):
                 status = guard.main([], vba)
             self.assertEqual(status, 1)
-            # Detail and summary share stderr: split across the two streams, a
+            # Detail and summary share stderr: split across the 2 streams, a
             # redirected capture showed them out of order or lost one.
             self.assertIn("3 non-ASCII byte(s)", err.getvalue())
             self.assertIn("clsProbe.cls", err.getvalue())

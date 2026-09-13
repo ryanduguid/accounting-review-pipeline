@@ -56,11 +56,11 @@ def canonical_json(value: Any) -> bytes:
 
 
 def _object_refusing_duplicate_keys(pairs: list[tuple[str, Any]], *, label: str, path: Path) -> dict[str, Any]:
-    """Build a JSON object, refusing a key spelled twice instead of keeping its last value.
+    """Build a JSON object, refusing a key spelt twice instead of keeping its last value.
 
-    Plain json.loads is last-key-wins, so a manifest carrying two sha256 keys
+    Plain json.loads is last-key-wins, so a manifest carrying 2 sha256 keys
     parses to the second digest alone and the exact-key-set gate never sees
-    that two were supplied. json.loads runs this hook for every object at
+    that 2 were supplied. json.loads runs this hook for every object at
     every nesting level.
     """
     result: dict[str, Any] = {}

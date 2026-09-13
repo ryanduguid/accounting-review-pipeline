@@ -28,7 +28,7 @@ uv run mypy reviewready
 uv build
 ```
 
-CI also runs those checks on 3.10–3.13, plus CodeQL on the Python source. Do not expand the ruff rule set; it is `E9`/`F82` only, matching Monthly Close Controls.
+CI also runs those checks on 3.10 to 3.13, plus CodeQL on the Python source. Do not expand the ruff rule set; it is `E9`/`F82` only, matching Monthly Close Controls.
 
 For a behaviour change, add or update a focused test under `tests/`. Keep the
 output deterministic: no wall-clock timestamps, client identifiers or hidden

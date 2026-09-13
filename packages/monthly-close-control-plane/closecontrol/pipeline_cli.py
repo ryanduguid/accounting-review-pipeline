@@ -1,5 +1,5 @@
 """
-OpenAccountants Australian Monthly Close & ATO Benchmark Review CLI.
+OpenAccountants Australian Monthly Close and ATO Benchmark Review CLI.
 """
 
 from __future__ import annotations

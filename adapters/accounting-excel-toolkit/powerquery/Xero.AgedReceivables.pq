@@ -17,7 +17,7 @@
 // Key contract rules:
 //   1. Contact identifier is forced to text so leading zeros and punctuation survive.
 //   2. Ageing buckets and Total columns use fixed decimal Currency.Type
-//      (four decimal places) under a pinned en-AU culture. A blank cell is a genuine zero; any other cell that will not
+//      (4 decimal places) under a pinned en-AU culture. A blank cell is a genuine zero; any other cell that will not
 //      parse raises an error naming the column and the value, instead of
 //      loading as 0.
 //   3. The trailing summary "Total" row is excluded from the returned customer rows.

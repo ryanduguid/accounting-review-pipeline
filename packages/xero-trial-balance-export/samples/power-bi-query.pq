@@ -34,11 +34,11 @@ let
     //
     // Csv.Document normalises to whatever column count it is given: it drops
     // fields beyond that count and pads shorter rows with null. Asking for
-    // exactly ten would therefore reshape a malformed file into the expected
-    // shape before any check could see it, and an eleven-column export would
-    // sail through the header comparison below. Reading eleven leaves the
+    // exactly 10 would therefore reshape a malformed file into the expected
+    // shape before any check could see it, and an 11-column export would
+    // sail through the header comparison below. Reading 11 leaves the
     // evidence intact: in a well-formed file the eleventh column is null in
-    // every row, so any value there proves the file is wider than the ten
+    // every row, so any value there proves the file is wider than the 10
     // columns export_tb.py writes.
     //
     // Encoding 65001 is UTF-8. The exporter writes a BOM so Excel decodes
@@ -110,7 +110,7 @@ let
     // breaks both slicers and any join back to the ledger. AccountID is a
     // GUID, also text.
     //
-    // The four money columns use Currency.Type, a fixed decimal, rather than
+    // The 4 money columns use Currency.Type, a fixed decimal, rather than
     // type number: totals of a floating-point type drift, and a trial balance
     // that no longer sums to zero is worse than useless.
     Typed = Table.TransformColumnTypes(

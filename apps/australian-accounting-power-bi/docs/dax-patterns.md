@@ -1,23 +1,23 @@
-# DAX Patterns & Calculation Groups Reference
+# DAX patterns and calculation groups reference
 
 This model uses Calculation Groups for time intelligence and multi-entity consolidation so core measures stay in one place (DRY: Don't Repeat Yourself).
 
 ---
 
-## 1. Time Intelligence Calculation Group (`CalcGroup_TimeIntelligence`)
+## 1. Time intelligence calculation group (`CalcGroup_TimeIntelligence`)
 
 Precedence: `10`
 
 Instead of creating separate MTD, QTD, FYTD, and PY measures for every financial line item, a single calculation group dynamically modifies any base measure.
 
-### Calculation Items
+### Calculation items
 
-#### `Current Period` (Ordinal 0)
+#### `Current Period` (ordinal 0)
 ```dax
 SELECTEDMEASURE()
 ```
 
-#### `Month to Date (MTD)` (Ordinal 1)
+#### `Month to Date (MTD)` (ordinal 1)
 ```dax
 CALCULATE(
     SELECTEDMEASURE(),
@@ -25,7 +25,7 @@ CALCULATE(
 )
 ```
 
-#### `Quarter to Date (QTD)` (Ordinal 2)
+#### `Quarter to Date (QTD)` (ordinal 2)
 ```dax
 CALCULATE(
     SELECTEDMEASURE(),
@@ -33,7 +33,7 @@ CALCULATE(
 )
 ```
 
-#### `Financial Year to Date (FYTD)` (Ordinal 3)
+#### `Financial Year to Date (FYTD)` (ordinal 3)
 Calculates year-to-date across the Australian Financial Year (1 July to 30 June):
 ```dax
 VAR MaxDate = MAX(Dim_Date[Date])
@@ -45,7 +45,7 @@ RETURN
     )
 ```
 
-#### `Prior Year (PY)` (Ordinal 4)
+#### `Prior Year (PY)` (ordinal 4)
 ```dax
 CALCULATE(
     SELECTEDMEASURE(),
@@ -53,12 +53,12 @@ CALCULATE(
 )
 ```
 
-#### `Year-on-Year Variance ($)` (Ordinal 5)
+#### `Year-on-Year Variance ($)` (ordinal 5)
 ```dax
 SELECTEDMEASURE() - CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
 ```
 
-#### `Year-on-Year Variance (%)` (Ordinal 6)
+#### `Year-on-Year Variance (%)` (ordinal 6)
 ```dax
 VAR CurrentVal = SELECTEDMEASURE()
 VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
@@ -69,20 +69,20 @@ RETURN
 
 ---
 
-## 2. Multi-Entity Consolidation Calculation Group (`CalcGroup_Consolidation`)
+## 2. Multi-entity consolidation calculation group (`CalcGroup_Consolidation`)
 
 Precedence: `20`
 
 Enables simultaneous reporting of individual legal entity performance, intercompany elimination journals, and the consolidated group net total in matrix visuals.
 
-### Calculation Items
+### Calculation items
 
-#### `Gross Group Total` (Ordinal 0)
+#### `Gross Group Total` (ordinal 0)
 ```dax
 SELECTEDMEASURE()
 ```
 
-#### `Intercompany Eliminations` (Ordinal 1)
+#### `Intercompany Eliminations` (ordinal 1)
 Filters down to intercompany management fees, internal rent, and intra-group logistics transactions:
 ```dax
 CALCULATE(
@@ -91,7 +91,7 @@ CALCULATE(
 )
 ```
 
-#### `Consolidated Group Net` (Ordinal 2)
+#### `Consolidated Group Net` (ordinal 2)
 Presents the true third-party consolidated financial position:
 ```dax
 CALCULATE(
@@ -104,7 +104,7 @@ CALCULATE(
 
 ## 3. Gross profit comparison
 
-`Benchmark Annual Turnover` selects full financial-year revenue for one entity. `Benchmark Turnover Band` matches that revenue to exactly one industry band. All five reference measures use that same band and return blank when selection is ambiguous or unsupported.
+`Benchmark Annual Turnover` selects full financial-year revenue for one entity. `Benchmark Turnover Band` matches that revenue to exactly one industry band. All 5 reference measures use that same band and return blank when selection is ambiguous or unsupported.
 
 `Gross Profit Variance to Benchmark %` compares the displayed margin with the band's inclusive bounds. It returns zero inside the range, the signed distance to the nearest bound outside it, and blank when no comparison can be made. The source expressions are in [Fact_ATOBenchmark.tmdl](../australian-accounting-power-bi.SemanticModel/definition/tables/Fact_ATOBenchmark.tmdl).
 

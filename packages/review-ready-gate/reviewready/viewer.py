@@ -1,12 +1,12 @@
 """Read-only display of an existing readiness pack.
 
-Load the three generated artefacts, prove they agree with each other before
+Load the 3 generated artefacts, prove they agree with each other before
 showing anything, and render the cover sheet. The viewer never writes, renames
 or deletes a file, never opens a network connection, and never changes what
 the engine computed. A tampered, partial or mismatched artefact set fails
 closed with a named error instead of being displayed.
 
-Every check here re-reads what ``report.write_review_pack`` emitted. The two
+Every check here re-reads what ``report.write_review_pack`` emitted. The 2
 renderers are independent witnesses of one engine run: if their contents stop
 agreeing, the pack is no longer trustworthy evidence and the reviewer must hear
 that from this command rather than infer it from a plausible-looking sheet.
@@ -35,7 +35,7 @@ _CSV_NAME = "findings.csv"
 
 # The exact top-level members report._as_json emits, no more and no less. An
 # added or removed member means the file was edited by something other than
-# the writer that produced the other two artefacts.
+# the writer that produced the other 2 artefacts.
 _JSON_MEMBERS = frozenset(
     {
         "acknowledgement",
@@ -87,7 +87,7 @@ _FINDINGS_COLUMNS = ("status", "code", "slot", "repeat", "reason")
 def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Reject a JSON object that states any member twice.
 
-    A duplicated member is not valid evidence of anything: the two positions
+    A duplicated member is not valid evidence of anything: the 2 positions
     disagree about the pack, and standard json parsing would silently keep the
     last one, hiding the disagreement this command exists to surface.
     """

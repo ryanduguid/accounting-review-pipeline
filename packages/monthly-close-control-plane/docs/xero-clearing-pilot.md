@@ -1,6 +1,6 @@
 # Xero clearing-account export trial
 
-Use one Australian Xero Demo Company account over two adjacent months to verify
+Use one Australian Xero Demo Company account over 2 adjacent months to verify
 the mapping before using this reconciler in a practice. The command currently
 accepts [mapped CSV](clearing-reconciliation.md), not a native Xero workbook.
 This trial has not yet been run against a Xero export or by a bookkeeper.
@@ -24,7 +24,7 @@ readable article body during research. No native sample workbook was available.
 ## Collect the sample
 
 In Xero's Australian Demo Company, choose one account with transaction activity
-across two adjacent months. Prefer a clearing account with a known opening-item
+across 2 adjacent months. Prefer a clearing account with a known opening-item
 list or a zero opening balance. Record the account, dates, base currency, report
 basis and all filters used. Keep transaction detail unsummarised for this trial.
 
@@ -74,14 +74,14 @@ from the native-export trial and has no independent human review.
 
 | Case | July entries | July treatment | August treatment |
 | --- | --- | --- | --- |
-| Partial payment | Debit 100, credit 60 | Keep both original lines outstanding, net 40. | A further credit 40 allows all three lines to be accepted together. |
+| Partial payment | Debit 100, credit 60 | Keep both original lines outstanding, net 40. | A further credit 40 allows all 3 lines to be accepted together. |
 | Full reversal | Debit 20, credit 20 | Clear only after a reviewer accepts the pair. | No remaining lines. |
 | Settlement net of fee | Debit 200, credit 197 | Keep both lines outstanding, net 3. | An existing source-ledger credit 3 permits the group to clear. The tool does not create the fee posting. |
 | Unrelated equal amounts | Debit 50 and credit 50, different references | Keep both lines outstanding, net 0. | Keep REVIEW with both lines aged 52 days, despite the zero closing balance. |
 
 July's source debits total 370 and credits total 327. Its closing balance is 43
-with six outstanding lines after accepting the reversal. August's movement is
--43 and its closing balance is zero, but two unrelated lines remain outstanding.
+with 6 outstanding lines after accepting the reversal. August's movement is
+-43 and its closing balance is zero, but 2 unrelated lines remain outstanding.
 The test is `test_partial_settlements_roll_forward_without_clearing_unrelated_zero_net_items`
 in [test_reconciliation.py](../tests/test_reconciliation.py). Run the documented
 component test command, `uv run pytest`.

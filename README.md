@@ -11,14 +11,14 @@ cd packages/monthly-close-control-plane
 uv run --locked --extra dev close-control review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output ../../../close-control-demo
 ```
 
-**Output:** `REVIEW`, eight exceptions, exit 2. Open `../../../close-control-demo/close-summary.md`.
+**Output:** `REVIEW`, 8 exceptions, exit 2. Open `../../../close-control-demo/close-summary.md`.
 
 | Finding | Evidence | Human decision |
 | --- | --- | --- |
 | Creditors reconciliation | $250 difference | Trace and explain the difference before sign-off. |
 | Financial-year reset | 30 June compared with 31 July | Reconsider P&L YTD comparisons across the reset. |
 
-[Read the five-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Inspect all eight exceptions](packages/monthly-close-control-plane/README.md#worked-example)
+[Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Inspect all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example)
 
 Every invented entity the components share, and the proposal to consolidate them into one fabricated firm, is recorded in [docs/fabricated-firm.md](docs/fabricated-firm.md).
 
@@ -27,7 +27,7 @@ Every invented entity the components share, and the proposal to consolidate them
 
 This repository brings together Monthly Close Controls and its related tools. Its canonical GitHub repository
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
-It holds seven independently versioned components joined only by local files and commands:
+It holds 7 independently versioned components joined only by local files and commands:
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
@@ -39,7 +39,7 @@ It holds seven independently versioned components joined only by local files and
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.1.0 |
 
-Data flows in one direction: the exporter (or a manual Excel export) produces the ten-column
+Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly
 close surfaces exceptions, and the ledger-review boundary or Power BI consumes the result.
 evatt works separately: it pseudonymises Markdown locally before an operator hands it to an
@@ -156,10 +156,10 @@ environments.
 ## Contract
 
 `contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
-`xero-tb-csv.v1` corpus: the exact ten-column schema, three fabricated fixtures, the expected
+`xero-tb-csv.v1` corpus: the exact 10-column schema, 3 fabricated fixtures, the expected
 accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
 runtime package. `tests/test_xero_trial_balance_contract.py` and the
-`joined-conformance.yml` workflow run the exporter runner and all three offline review
+`joined-conformance.yml` workflow run the exporter runner and all 3 offline review
 implementations against it.
 
 </details>

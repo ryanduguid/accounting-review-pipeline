@@ -18,7 +18,7 @@ The current report date is 31 July 2026; the prior report date is 30 June 2026. 
 | Account mapping | Operating Expenses account 6000 has no review-group mapping | Confirm the mapping and who reviews the account. |
 | Financial-year reset | June and July are in different Australian financial years | Do not treat P&L YTD changes as ordinary monthly variances. |
 
-The result is REVIEW, with eight exceptions and none blocked. These three rows introduce the pack; the other five are threshold-triggered account movements. Eight exceptions do not establish eight accounting errors.
+The result is REVIEW, with 8 exceptions and none blocked. These 3 rows introduce the pack; the other 5 are threshold-triggered account movements. Eight exceptions do not establish 8 accounting errors.
 
 ## Reproduce
 

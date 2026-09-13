@@ -46,7 +46,7 @@ uv run --locked --extra dev mypy closecontrol
 
 ## Package smoke outside the checkout
 
-The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artifact
+The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artefact
 and smoke directories. Fail immediately if a native build or install command fails,
 install only the one wheel produced by that build, and always restore the caller's
 location and remove both temporary directories. The fabricated demo deliberately

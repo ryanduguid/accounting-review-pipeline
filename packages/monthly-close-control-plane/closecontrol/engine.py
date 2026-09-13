@@ -60,7 +60,7 @@ def _financial_year(when: date) -> int:
 def _financial_year_reset_exceptions(
     current_date: date, prior_date: date
 ) -> list[ExceptionItem]:
-    """Flag a YTD comparison whose two report dates straddle a 30 June reset.
+    """Flag a YTD comparison whose 2 report dates straddle a 30 June reset.
 
     YTD balances for profit-and-loss accounts restart from nil on 1 July, so a
     comparison across the reset puts a full year of activity against one or two
@@ -212,7 +212,7 @@ def _period_comparison_exceptions(
             # A nil prior balance leaves no percentage change to compute, so the
             # percentage gate cannot be applied and the absolute gate decides
             # alone. The exception says which gates were actually tested: the
-            # two-threshold wording alongside a blank percentage_change column
+            # 2-threshold wording alongside a blank percentage_change column
             # would tell the reviewer a percentage test passed that never ran.
             # The wording follows `percentage is None` rather than the nil prior
             # balance itself, so it stays true for the defensive None that

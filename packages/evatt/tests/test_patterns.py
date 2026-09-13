@@ -1,6 +1,6 @@
 """Check-digit vectors are documented ATO/ASIC test identifiers, not real ones.
 
-Most live in test code. evatt/samples/identifiers.md ships four of the same
+Most live in test code. evatt/samples/identifiers.md ships 4 of the same
 kind, because a sample sheet demonstrating the labelled patterns has to carry
 something for them to fire on. CONTRIBUTING.md lists them and explains the one
 that is not a fiction, the BSB, for which no reserved range is published.
@@ -167,7 +167,7 @@ def test_a_label_wins_the_tie_against_a_bare_run_over_the_same_digits() -> None:
 
 
 def test_month_names_no_longer_suppress_a_person() -> None:
-    """The twelve months are out of the statutory list; they hid real people."""
+    """The 12 months are out of the statutory list; they hid real people."""
     for text, name in (
         ("June Smith attended", "June Smith"),
         ("April Jones signed", "April Jones"),
@@ -213,7 +213,7 @@ def test_a_grouped_amount_tail_is_accepted_over_detection() -> None:
     """Deliberate over-detection, not an oversight: this ACN is a false positive.
 
     123 456 780 satisfies the ASIC check digit, so the tail of "$1 123 456 780"
-    reports as an ACN. Only the two-character money guard would suppress it,
+    reports as an ACN. Only the 2-character money guard would suppress it,
     and that guard also deletes every detection pinned in the table-row test
     below. Under-detection is the direction that matters, so no bare pattern
     carries that guard and this false positive is the accepted price: one
@@ -238,7 +238,7 @@ def test_a_grouped_amount_tail_valid_as_a_tfn_is_accepted_over_detection() -> No
     """The same accepted price, now paid by TFN_BARE as well.
 
     The tail of "$1 123 456 782" satisfies the ATO mod-11 sum, so it is
-    redacted as a TFN. Roughly one nine-digit tail in eleven will. Dropping the
+    redacted as a TFN. Roughly one 9-digit tail in 11 will. Dropping the
     origin's second lookbehind is what admits it, and the trade is deliberate:
     over-redaction costs one placeholder in a private file, under-detection
     leaks a tax file number.
@@ -256,9 +256,9 @@ def test_a_grouped_amount_tail_valid_as_a_tfn_is_accepted_over_detection() -> No
 
 
 def test_table_row_and_dated_prose_identifiers_are_detected() -> None:
-    """The two shapes a workpaper is full of, pinned against the guard returning.
+    """The 2 shapes a workpaper is full of, pinned against the guard returning.
 
-    A two-character money guard on ABN, ACN and MEDICARE reports nothing for
+    A 2-character money guard on ABN, ACN and MEDICARE reports nothing for
     any of these: the preceding "7 ", "2 " or "9 " is indistinguishable from
     the interior of a grouped amount.
     """
@@ -273,7 +273,7 @@ def test_table_row_and_dated_prose_identifiers_are_detected() -> None:
 
 
 def test_a_bare_tfn_is_detected_in_the_table_row_and_dated_prose_shapes() -> None:
-    """The same two shapes, pinned for the most sensitive identifier of the four.
+    """The same 2 shapes, pinned for the most sensitive identifier of the four.
 
     Both reported nothing while TFN_BARE kept the origin's second lookbehind:
     the preceding "7 " and "9 " are indistinguishable from the interior of a
@@ -319,7 +319,7 @@ def test_medicare_accepts_a_card_qualifier() -> None:
 
 
 def test_every_labelled_pattern_takes_up_to_two_qualifier_words() -> None:
-    """One qualifier vocabulary across all four labels, not one per pattern.
+    """One qualifier vocabulary across all 4 labels, not one per pattern.
 
     The shape of the label says nothing about which qualifier a typist reaches
     for, so "no." must work after ABN exactly as it does after Medicare. Every
@@ -353,7 +353,7 @@ def test_the_label_separator_accepts_a_hash() -> None:
 
 
 def test_structured_spans_are_sorted_non_overlapping_and_slice_back() -> None:
-    """The three guarantees Task 4's replacement pass depends on."""
+    """The 3 guarantees Task 4's replacement pass depends on."""
     document = (
         "Invoice for Jane Roe, ABN 51 824 753 556, TFN: 123456782, "
         "ACN: 123456780, BSB 062-000, Medicare 2123456701, "
@@ -380,7 +380,7 @@ def test_structured_spans_are_sorted_non_overlapping_and_slice_back() -> None:
 
 
 def _failing_scan_seconds(pattern: re.Pattern[str], label: str, spaces: int) -> float:
-    """Best of three searches that must fail after a long run of spaces.
+    """Best of 3 searches that must fail after a long run of spaces.
 
     The trap only shows itself on a failing search. When digits do follow the
     spaces the first greedy path succeeds and nothing backtracks.
@@ -395,7 +395,7 @@ def _failing_scan_seconds(pattern: re.Pattern[str], label: str, spaces: int) -> 
 
 
 def _best_span_seconds(unit: str, repetitions: int) -> float:
-    """Best of three name sweeps over *unit* repeated, for the growth check."""
+    """Best of 3 name sweeps over *unit* repeated, for the growth check."""
     text = unit * repetitions
     best = float("inf")
     for _ in range(3):
@@ -434,7 +434,7 @@ def test_the_labelled_separator_does_not_backtrack_quadratically() -> None:
 def test_a_statutory_word_no_longer_swallows_the_person_beside_it() -> None:
     """NAME takes a third token whenever one is there, and used to lose the pair.
 
-    Every vector below returned nothing at all before the three-token window
+    Every vector below returned nothing at all before the 3-token window
     retry. "<Given> <Family> Superannuation" is how an SMSF is named and "the
     Board <Given> <Family>" is ordinary workpaper prose, so both shapes are the
     normal case rather than a curiosity.
@@ -474,9 +474,9 @@ def test_a_statutory_heading_above_a_person_no_longer_orphans_the_family_name() 
 
 
 def test_the_single_line_form_of_that_shape_is_recovered_too() -> None:
-    """The same three-token rejection with a space where the newline was.
+    """The same 3-token rejection with a space where the newline was.
 
-    This one leaked before the three-token window retry existed and after it,
+    This one leaked before the 3-token window retry existed and after it,
     because both versions resumed past everything the rejected candidate had
     consumed. Only the resume position fixes it.
     """
@@ -610,9 +610,9 @@ def test_the_placeholder_prefixes_stay_in_union_with_both_tables() -> None:
     Three consumers read the union: ``redact._input_placeholders`` decides what
     a carried placeholder is, ``verify._carried_placeholders`` decides which of
     them an entity map should assign, and ``restore`` decides which it may
-    reverse. Add a kind to ``_STRUCTURED`` without touching the other two and
+    reverse. Add a kind to ``_STRUCTURED`` without touching the other 2 and
     ``_replace_structured`` raises KeyError; add a prefix without touching
-    PLACEHOLDER and all three go blind to it instead, which is the quiet half.
+    PLACEHOLDER and all 3 go blind to it instead, which is the quiet half.
     """
     body = re.search(r"\(\?:([A-Z|]+)\)_", patterns.PLACEHOLDER.pattern)
     assert body is not None
@@ -622,7 +622,7 @@ def test_the_placeholder_prefixes_stay_in_union_with_both_tables() -> None:
         redact_module._KIND_PREFIX
     )
     # PLACEHOLDER_CI is the same shape folded for case, so a prefix added to one
-    # cannot be missed by the other. The two guards that ask whether an entity
+    # cannot be missed by the other. The 2 guards that ask whether an entity
     # VALUE is placeholder-shaped read the CI form, because ``value_pattern`` is
     # itself IGNORECASE; everything that describes this package's own output
     # reads the case-sensitive original.

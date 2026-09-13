@@ -14,13 +14,13 @@ from .models import ClientQuery, ExceptionItem
 
 
 def _money(value) -> str:
-    """Render a monetary amount with at least two decimal places, never fewer than it has.
+    """Render a monetary amount with at least 2 decimal places, never fewer than it has.
 
-    A fixed two-place render reports a 0.0040 difference against a 0.001
+    A fixed 2-place render reports a 0.0040 difference against a 0.001
     tolerance as "0.00 exceeds 0.00" and leaves the reviewer no way back to the
     real figures, which defeats the exact-decimal arithmetic behind them.
     A Decimal drives the scale from its own exponent; an int or a float, which
-    a library caller may still put in an ExceptionItem, renders at two places.
+    a library caller may still put in an ExceptionItem, renders at 2 places.
     """
     if value is None:
         return ""
@@ -34,10 +34,10 @@ def _money(value) -> str:
 
 
 def _percentage(value) -> str:
-    """Render a ratio as a percentage at two places, or enough to show its leading digit.
+    """Render a ratio as a percentage at 2 places, or enough to show its leading digit.
 
     A percentage threshold finer than a hundredth of a per cent otherwise reads
-    as "0.00%" in all three files, the same loss of the configured figure that
+    as "0.00%" in all 3 files, the same loss of the configured figure that
     _money exists to avoid. The scale follows the leading significant digit
     rather than the exponent, because percentage_change is a division result
     carrying the full decimal context precision and would render 28 places.
@@ -340,7 +340,7 @@ def _restore_quietly(parked: Path, destination: Path) -> None:
 def _sibling_partial(destination: Path) -> Path:
     """Create an empty, uniquely named file beside `destination` to hold pack content.
 
-    A fixed `<name>.partial` lets two runs sharing an --output directory
+    A fixed `<name>.partial` lets 2 runs sharing an --output directory
     overwrite each other's staged file and then move the wrong pack into place.
     The file is created by an ordinary exclusive open rather than by
     tempfile.mkstemp, because a staged file becomes the pack file and mkstemp's
@@ -470,7 +470,7 @@ def _configured_work_tree() -> Path | None:
 
 
 def _same_directory(candidate: Path, work_tree: Path) -> bool:
-    """Do these two paths name one directory, whatever they are spelled?
+    """Do these 2 paths name one directory, whatever they are spelt?
 
     ``Path`` equality compares text. ``Path.resolve`` normalises separators,
     ``..`` and symbolic links, but it does not normalise case, and it hands
@@ -532,7 +532,7 @@ def require_output_outside_repository(output_dir: Path) -> Path:
     """Refuse an output directory inside a version-control checkout, and return it.
 
     The return value is the resolved directory, and it is what the caller must
-    then write to. Checking one path and writing to another leaves the two free
+    then write to. Checking one path and writing to another leaves the 2 free
     to disagree: ``resolve`` follows every symlink in the path once, while each
     later ``mkdir`` and ``write_text`` follows them again, so a component
     re-pointed in between would send the pack somewhere this function never
@@ -589,15 +589,15 @@ def require_output_outside_repository(output_dir: Path) -> Path:
 
 
 def write_review_pack(pack: CloseReviewPack, output_dir: Path) -> dict[str, Path]:
-    """Write the four pack files so a failed run cannot leave two runs mixed together.
+    """Write the 4 pack files so a failed run cannot leave 2 runs mixed together.
 
     Each file is rendered in full, staged beside its destination under a unique
     name, and only then moved into place. If a move fails - a locked
     exceptions.csv is the usual cause - the files this run had already moved are
     rolled back to the content they replaced, so the directory holds the whole
-    previous pack rather than one file from this run beside three from the last
-    one; all four carry the same SHA-256 provenance framing and a reviewer
-    cannot tell them apart. Apart from the four destinations themselves, no
+    previous pack rather than one file from this run beside 3 from the last
+    one; all 4 carry the same SHA-256 provenance framing and a reviewer
+    cannot tell them apart. Apart from the 4 destinations themselves, no
     file is ever deleted; a caller that points a source path at one of
     PACK_FILE_NAMES inside output_dir destroys that source, which is why the
     CLI refuses that combination before the run starts.

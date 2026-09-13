@@ -117,7 +117,7 @@ def test_query_ids_are_stable_across_runs_and_unique_within_one() -> None:
     subledger = _exception("subledger_reconciliation", account_id="2000")
 
     first = derive_client_queries((variance, subledger))
-    # The same two questions, reached after an unrelated exception appeared
+    # The same 2 questions, reached after an unrelated exception appeared
     # earlier in the pack, keep their identifiers.
     second = derive_client_queries((_exception("account_mapping"), variance, subledger))
 
@@ -140,7 +140,7 @@ def test_a_pipe_in_a_tenant_or_account_cannot_collide_two_queries() -> None:
 
 
 def test_two_queries_for_one_account_and_control_fail_loudly() -> None:
-    """One number against two questions is worse than no register: the client
+    """One number against 2 questions is worse than no register: the client
     answers one of them and the firm cannot tell which.
 
     ControlInputError, not RuntimeError: review_close forces the derivation, so
@@ -154,7 +154,7 @@ def test_two_queries_for_one_account_and_control_fail_loudly() -> None:
 
 def test_the_two_period_comparison_questions_get_different_identifiers() -> None:
     """An account that disappears one period and returns later asks the firm
-    two different things. One identifier against both would let a tracker
+    2 different things. One identifier against both would let a tracker
     attach a closure answer to a new-account question."""
     gone = _exception("period_comparison", current_value=None, difference=None)
     arrived = _exception("period_comparison", prior_value=None, difference=None)

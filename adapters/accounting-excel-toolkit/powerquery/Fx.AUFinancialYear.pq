@@ -6,12 +6,12 @@
 // date cells as datetime unless a Changed Type step has already run. A
 // datetimezone is CONVERTED to Australian Eastern Standard Time (+10:00)
 // and read there, so the same instant gets the same FY on a Sydney desktop
-// and on a UTC-hosted scheduled refresh: 9am +10:00 on 1 July 2026 is
+// and on a UTC-hosted scheduled refresh: 9 am +10:00 on 1 July 2026 is
 // FY2027, and so is the UTC-stamped 2026-06-30T14:30:00Z a Xero API export
-// carries for 12:30am on 1 July in Sydney. AEST is +10 all year and no
+// carries for 12:30 am on 1 July in Sydney. AEST is +10 all year and no
 // Australian jurisdiction observes daylight saving across 30 June, so the
 // FY boundary is never a DST boundary. Residual: an instant in the last
-// two hours of 30 June in Perth (last 30 minutes in Adelaide/Darwin) is
+// 2 hours of 30 June in Perth (last 30 minutes in Adelaide/Darwin) is
 // already 1 July in AEST and is stamped FY+1 - switch zone yourself before
 // calling if the local calendar of a western or central state is the one
 // that has to decide. Text is parsed as an Australian date, so "01/07/2026"
@@ -28,14 +28,14 @@ let
     AUFinancialYear = (d as any) as record =>
         let
             // Date.From on a datetimezone returns the date of the value's
-            // LOCAL equivalent, so the host's zone decided the answer: 9am
+            // LOCAL equivalent, so the host's zone decided the answer: 9 am
             // +10:00 on 1 July 2026 came out FY2027 on a Sydney desktop and
-            // FY2026 on a UTC-hosted scheduled refresh, and the two only
+            // FY2026 on a UTC-hosted scheduled refresh, and the 2 only
             // disagree on financial-year boundaries. Switch to a fixed +10
             // first and Australian Eastern Standard Time decides on every
             // host. RemoveZone alone would also be host-independent, but it
             // keeps the supplied wall clock, so a UTC-stamped
-            // 2026-06-30T14:30:00Z - 12:30am on 1 July in Sydney, and the
+            // 2026-06-30T14:30:00Z - 12:30 am on 1 July in Sydney, and the
             // shape the Xero API hands back - would read as 30 June and
             // land in FY2026 on the accountant's own desktop, which is the
             // wrong answer rather than merely an inconsistent one.

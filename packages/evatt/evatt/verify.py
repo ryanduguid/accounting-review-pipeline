@@ -3,7 +3,7 @@
 This is the command to run in front of someone else. What it does is re-run
 the same detection over the output: ``structured_spans``, the map sweep, the
 carried-placeholder sweep and ``residual``, which are the same functions pass
-one, pass two and the residual sweep use.
+one, pass 2 and the residual sweep use.
 
 That catches a redaction application bug, a document redacted against a
 different map, a half-redacted file and an output somebody edited by hand. It
@@ -23,8 +23,8 @@ from .entities import _PREFIX, Entity
 from .patterns import PLACEHOLDER, structured_spans, value_pattern
 from .redact import redact, residual
 
-# The four prefixes ``assign`` mints, taken from the table it mints them with so
-# the two cannot drift. The structured prefixes are deliberately not here: a
+# The 4 prefixes ``assign`` mints, taken from the table it mints them with so
+# the 2 cannot drift. The structured prefixes are deliberately not here: a
 # clean redacted file is full of TFN_01 and EMAIL_02, and nothing reverses them.
 _ENTITY_PREFIXES = frozenset(_PREFIX.values())
 
@@ -36,7 +36,7 @@ class Finding:
 
 
 def _mentions(text: str, value: str) -> bool:
-    """True when *value* stands in *text* as a whole word, as pass two matches it.
+    """True when *value* stands in *text* as a whole word, as pass 2 matches it.
 
     "As pass two matches it" is the whole point, so the pattern comes from
     ``patterns.value_pattern`` rather than being compiled again here. While
@@ -53,7 +53,7 @@ def _carried_placeholders(text: str, entities: Sequence[Entity]) -> list[Finding
     ``redact`` detects this at the input, but only strict mode acts on it, and
     ``findings`` needs the sanitised form, which it can only get with
     ``strict=False``. So the sweep is repeated here over the raw input, on the
-    two shapes that survive being told nothing about which pass wrote what:
+    2 shapes that survive being told nothing about which pass wrote what:
 
     * a placeholder the map does not assign, which ``restore`` cannot reverse.
       Either the file was redacted against a different map or the string is a

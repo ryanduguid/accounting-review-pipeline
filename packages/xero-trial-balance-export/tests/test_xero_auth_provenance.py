@@ -16,12 +16,11 @@ README_PATH = ROOT / "README.md"
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Only the badge line changed, adding the PyPI badge the sibling publishers
 # carry; the scope, refresh and reviewer paragraphs are unchanged.
-README_SHA256 = "3C1849023BC55F72C6F9194A6F7C7BF9C75E486201CC085F1791871087E0CD90"
-# Re-pinned for the widened ruff baseline: isort sorted the urllib.parse
-# names and separated requests from xero_client. SCOPES, every statement and
-# the OAuth claims are unchanged, and the AST digest is identical on 3.10
-# through 3.13.
-AUTH_SHA256 = "15C64DA31196D7DDF30324E087CFB4F9FB08B2756CD3DBF44721AF4B918057D5"
+README_SHA256 = "AB8328F2194750930BFF9D0C929D15C394DF625BCB1AEDEE4322E43ACD00FF23"
+# Re-pinned for a Style Manual prose pass: 2 comments changed the number word
+# "two" to the numeral "2". SCOPES, every statement and the OAuth claims are
+# unchanged, and the executable AST digest below is unchanged with it.
+AUTH_SHA256 = "2DB72EB501C79A77224A93E0A6B0D3C30C4058B68EB240CE091296A03E13306F"
 AUTH_AST_SHA256 = "0D6DBEF431E626A5A15B594ACFE3D52EC6EB2A1D86275B41719BCF6B1344C487"
 
 SCOPES_URL = "https://developer.xero.com/documentation/guides/oauth2/scopes/"

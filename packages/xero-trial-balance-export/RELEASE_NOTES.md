@@ -36,9 +36,9 @@
 
 Changes since published `v0.1.3`:
 
-- move the Xero token cache out of site-packages to a user-owned location and validate its path through one guard;
-- exercise the DPAPI token round-trip on the Windows CI leg;
-- let an explicit `--token-file` beat the `XERO_TOKEN_FILE` environment variable so scripts can pin their credentials source; and
+- move the Xero token cache out of site-packages to a user-owned location and validate its path through one guard
+- exercise the DPAPI token round-trip on the Windows CI leg
+- let an explicit `--token-file` beat the `XERO_TOKEN_FILE` environment variable so scripts can pin their credentials source
 - documentation corrections: the fact-check fixes, the sample organisation name, a DISCLAIMER linked from the README, the provisional-member CA ANZ designation, and retirement of the last codename from user-facing docs.
 
 The annotated `v0.1.2` tag is protected and permanently records commit `bd4cd417b06fb9dba3d6b36fbedbe544b1e0fec7`. [Workflow run 31832080223](https://github.com/ryanduguid/xero-trial-balance-export/actions/runs/31832080223) passed its tests, archives, checksums and attestations, then stopped before draft creation because one step lacked `GH_TOKEN`. No v0.1.2 GitHub release or draft was created. The protected tag must never be moved, deleted or reused; v0.1.3 is the recovery release.

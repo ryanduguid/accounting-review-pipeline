@@ -55,7 +55,7 @@ Manager review (judgement, risk, client impact)
 Monthly Close Controls / payday-super-checker / other engines
 ```
 
-[Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) answers "what material exceptions exist on these trial balances?". This tool answers a prior question: **"is the pack even allowed onto the review desk?"** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
+[Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) answers 'what material exceptions exist on these trial balances?'. This tool answers a prior question: **'is the pack even allowed onto the review desk?'** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
 
 It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM, or claim that a file is correct.
 
@@ -87,7 +87,7 @@ review-ready gate \
   --output ../../../review-ready-demo/bas-ready
 ```
 
-The ready demo exits `0` and writes three files:
+The ready demo exits `0` and writes 3 files:
 
 - `readiness-summary.md`: cover sheet a manager reads top to bottom
 - `findings.csv`: one row per finding, for Excel or Power BI
@@ -175,7 +175,7 @@ ItemID,Severity,Owner,DueDate,Status,Description,Resolution
 
 ### Trial balance
 
-The ten-column canonical CSV from [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export):
+The 10-column canonical CSV from [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export):
 
 ```text
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
@@ -191,7 +191,7 @@ If both the activity statement and the GST control GL are present:
 - `1A - 1B` is compared with GST-control `sum(Credit) - sum(Debit)`
 - a difference beyond `--tieout-tolerance` (default `$0.01`) is `NOT_READY`
 
-This is a cash-style control-account tie-out on the files you supply. It is not a lodgment, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
+This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
 
 ## Human acknowledgement
 
@@ -209,7 +209,7 @@ Optional `--review-note` JSON:
 
 ## Viewing an existing pack
 
-`review-ready view` is the read-only half of the gate: it loads a generated pack, proves the three files still agree with each other, and prints the cover sheet. It never writes, renames or deletes anything, and it cannot change what the engine computed.
+`review-ready view` is the read-only half of the gate: it loads a generated pack, proves the 3 files still agree with each other, and prints the cover sheet. It never writes, renames or deletes anything, and it cannot change what the engine computed.
 
 ```bash
 review-ready view --pack-dir outputs/bas-ready
@@ -224,14 +224,14 @@ Before displaying anything it fails closed on: a missing artefact; JSON that is 
 - Missing or empty required artefacts are findings, not crashes, so the cover sheet can tell the preparer what to send back.
 - Source SHA-256 digests travel with the pack. Each digest is taken from the same immutable byte snapshot the loader parsed.
 - Spreadsheet-facing finding text whose first non-whitespace character is `=`, `+`, `-` or `@` is prefixed with an apostrophe.
-- The three pack files are staged beside their destinations and moved into place only once all three have been written. A failed run does not leave two runs mixed together.
+- The 3 pack files are staged beside their destinations and moved into place only once all 3 have been written. A failed run does not leave 2 runs mixed together.
 - No wall-clock timestamps in the pack.
 
 ## Data boundary
 
 - Use a separate, access-controlled working directory for client source files and outputs.
 - A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all three generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Do not use this as tax, financial, audit, or legal advice.
 
 ## Related
@@ -254,7 +254,7 @@ uv run mypy reviewready
 uv build
 ```
 
-The test suite covers schema gates, the three fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
+The test suite covers schema gates, the 3 fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
 
 Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.10, 3.11, 3.12, and 3.13, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
 

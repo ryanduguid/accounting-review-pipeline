@@ -148,7 +148,7 @@ def _collision(args: argparse.Namespace) -> str | None:
     unrecoverable data loss. ``--out`` equal to ``--in`` destroys the source the
     same way.
 
-    The two paths ``--out`` derives are checked as well. Neither is spelt on the
+    The 2 paths ``--out`` derives are checked as well. Neither is spelt on the
     command line, so neither collision is one the operator can see coming: a map
     named ``out.md.manifest.json`` beside ``--out out.md`` is overwritten by the
     manifest, and an input named ``out.md.triage.md`` beside the same ``--out``

@@ -202,7 +202,7 @@ def test_a_hand_built_placeholder_value_cannot_destroy_a_real_placeholder() -> N
 
 @pytest.mark.parametrize("value", ["tfn_01", "Tfn_01", "TFN_01"])
 def test_a_lower_case_placeholder_value_cannot_destroy_a_real_placeholder(value) -> None:
-    """``value_pattern`` is IGNORECASE, so the skip in pass two has to be too.
+    """``value_pattern`` is IGNORECASE, so the skip in pass 2 has to be too.
 
     While the skip read the case-sensitive PLACEHOLDER, an entity valued
     "tfn_01" passed it, then matched the TFN_01 pass one had just written. The
@@ -220,7 +220,7 @@ def test_a_lower_case_placeholder_value_cannot_destroy_a_real_placeholder(value)
 
 
 def test_a_lower_case_placeholder_value_cannot_rewrite_a_mapped_placeholder() -> None:
-    """The same skip, on the prefix pass one never mints, so only pass two can be at fault."""
+    """The same skip, on the prefix pass one never mints, so only pass 2 can be at fault."""
     forged = (Entity("client_01", "PERSON_09", "person", "2026-09-09"),)
     text, counts = redact("CLIENT_01 was the code used.", forged)
     assert text == "CLIENT_01 was the code used."
@@ -230,14 +230,14 @@ def test_a_lower_case_placeholder_value_cannot_rewrite_a_mapped_placeholder() ->
 def test_a_hand_built_structured_placeholder_is_never_emitted() -> None:
     """Entity("Jane Roe", "TFN_01") made a real name irreversible and invisible.
 
-    Pass two guarded the value and not the placeholder, so the name was
+    Pass 2 guarded the value and not the placeholder, so the name was
     replaced by TFN_01. ``restore._restorable`` then refused to reverse it,
     because reversing a structured placeholder is what would undo the one-way
     guarantee, and ``verify`` read TFN_01 as ordinary one-way output and called
     the file clean. The name was gone, unrestorable, and reported by nothing.
 
     Skipping the entry is what makes the name visible again: it survives pass
-    two, so the residual sweep reports it and strict mode halts on it, which is
+    2, so the residual sweep reports it and strict mode halts on it, which is
     the operator's cue to fix the entry.
     """
     forged = (Entity("Jane Roe", "TFN_01", "person", "2026-09-09"),)
@@ -653,7 +653,7 @@ def test_no_sample_ships_a_real_identifier() -> None:
     shipping anybody's number, and ACMA reserves 0491 570 006 to 0491 570 016
     for fiction.
 
-    What this file does ship is four check-digit-valid vectors of the documented
+    What this file does ship is 4 check-digit-valid vectors of the documented
     ATO and ASIC kind, because a sheet demonstrating the labelled patterns has
     to give them something to fire on: TFN 123 456 782, ACN 123 456 780,
     Medicare 2123 45670 1 and BSB 062-000. They are the same vectors
@@ -692,7 +692,7 @@ def test_a_carried_placeholder_whose_own_digits_are_redacted_still_halts() -> No
 def test_a_mapped_value_is_replaced_in_every_case_and_whitespace_form() -> None:
     """The failure the whole component exists to prevent, in the forms it took.
 
-    Pass two once compiled each map value case-sensitively, so a mapped name in
+    Pass 2 once compiled each map value case-sensitively, so a mapped name in
     lower case was replaced by nothing. The residual sweep could not report the
     miss either, because NAME requires every token to start with a capital, and
     verify re-runs that same detection, so it called the leaked file clean.
@@ -721,7 +721,7 @@ def test_a_mapped_value_is_replaced_in_every_case_and_whitespace_form() -> None:
 
 
 def test_verify_reports_a_mapped_value_whatever_case_it_leaked_in() -> None:
-    """verify has to match a value the way pass two matches it, or it agrees with the leak."""
+    """verify has to match a value the way pass 2 matches it, or it agrees with the leak."""
     for form in ("jane roe", "JANE ROE", "Jane\nRoe", "sample holdings pty ltd"):
         found = verify_module.findings("client: %s\n" % form, MAP)
         assert found, form

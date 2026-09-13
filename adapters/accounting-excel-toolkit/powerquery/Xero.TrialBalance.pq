@@ -1,7 +1,7 @@
 // Xero.TrialBalance
 // Parse a Xero Trial Balance CSV export into a typed table.
 //
-// Accepts two CSV header shapes, told apart by the header row's first field:
+// Accepts 2 CSV header shapes, told apart by the header row's first field:
 //   "Account"      - combined account cell: code and name in one field.
 //   "Account Code" - separate "Account Code" and "Account Name" fields.
 // Both come out the same shape: AccountCode, AccountName, then the export's
@@ -17,7 +17,7 @@
 // the interactive report/export UI, revalidate the parser before relying on it.
 // Use a fresh non-client export kept outside the repository for that check.
 //
-// Handles three traps in Xero's export format:
+// Handles 3 traps in Xero's export format:
 //   1. Metadata rows above the real header (report title, entity, date).
 //      Csv.Document infers column count from the FIRST row. A one-field
 //      title row would collapse the whole file to one column, so the header

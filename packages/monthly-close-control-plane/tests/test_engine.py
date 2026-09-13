@@ -457,7 +457,7 @@ def _dated_pair(tmp_path: Path, prior_date: str, current_date: str) -> dict[str,
     [
         # Consecutive month ends inside FY2025 (1 July 2025 to 30 June 2026).
         ("2026-04-30", "2026-05-31"),
-        # The last two month ends of the same financial year.
+        # The last 2 month ends of the same financial year.
         ("2026-05-31", "2026-06-30"),
         # Both sides of a calendar-year end, which is mid financial year.
         ("2025-12-31", "2026-01-31"),

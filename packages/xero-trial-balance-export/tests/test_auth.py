@@ -457,7 +457,7 @@ class ExchangeResponseTest(unittest.TestCase):
 
 
 class ExchangeRejectionTest(unittest.TestCase):
-    """The two everyday identity answers to the code exchange must read as
+    """The 2 everyday identity answers to the code exchange must read as
     instructions, not as HTTPError tracebacks - the same rule
     RefreshRejectionTest pins for the refresh path in test_xero_client.py.
     Without the branches, the most common first-run failures (a wrong
@@ -517,7 +517,7 @@ class ExchangeRejectionTest(unittest.TestCase):
         save_tokens.assert_not_called()
 
     def test_any_other_http_failure_keeps_its_traceback(self):
-        """Only the two identity answers are translated; a 500 is not an
+        """Only the 2 identity answers are translated; a 500 is not an
         instruction anyone can follow, so raise_for_status still reports it."""
         with self.assertRaises(RuntimeError):
             self._run_main(_StubTokenResponse({}, status_code=500))

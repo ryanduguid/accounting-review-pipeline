@@ -187,7 +187,7 @@ class NativeExcelAcceptanceSafetyTests(unittest.TestCase):
         parameter_block = parameter_match.group(1)
 
         # Windows PowerShell 5.1 binds an omitted [string] parameter as the
-        # empty string.  Its initializer must stay empty: $PSScriptRoot is
+        # empty string.  Its initialiser must stay empty: $PSScriptRoot is
         # itself empty when a -File parameter default is evaluated.
         self.assertRegex(
             parameter_block,
@@ -513,7 +513,7 @@ def _without_ytd_columns(rows, name):
 
     Both committed fixtures carry both pairs, which is what makes the
     default and useYTD = true the same column choice on them. This is the
-    export shape that tells those two branches apart.
+    export shape that tells those 2 branches apart.
     """
     header = [cell.strip() for cell in rows[_header_index(rows, name)]]
     keep = [index for index, cell in enumerate(header) if not cell.startswith("YTD ")]
@@ -708,7 +708,7 @@ class TrialBalanceFixtureTests(unittest.TestCase):
                 self.assertEqual(summed, declared)
 
     def test_both_layouts_carry_the_same_accounts_and_amounts(self):
-        """The README calls the two fixtures "fabricated, balanced TBs
+        """The README calls the 2 fixtures "fabricated, balanced TBs
         carrying the same accounts and amounts in both shapes".  Stripping
         the 090 code from the separate-column fixture, or editing one amount
         in either, left the whole suite green."""
@@ -740,7 +740,7 @@ class TrialBalanceFixtureTests(unittest.TestCase):
     def test_default_takes_the_as_at_pair_and_useYTD_false_the_movement(self):
         """The contract the README states, in "picks the right Debit/Credit
         pair (plain pair = period movement, YTD pair = as-at balances;
-        default returns as-at, `useYTD = false` for movement)".  The two
+        default returns as-at, `useYTD = false` for movement)".  The 2
         answers both balance, so a swap is invisible to the balance check the
         README prescribes - only the totals tell them apart."""
         for path in (COMBINED_FIXTURE, SEPARATE_FIXTURE):
@@ -774,7 +774,7 @@ class TrialBalanceFixtureTests(unittest.TestCase):
         "Credit - Year to date", a comparative column is named for the prior
         date, and there is no period pair at all.  So the default and
         useYTD = true both take the as-at pair, useYTD = false refuses, and
-        the accounts and balances agree with the two CSV-export fixtures."""
+        the accounts and balances agree with the 2 CSV-export fixtures."""
         as_at = _parse_trial_balance(EXCEL_FIXTURE)
         self.assertEqual(len(as_at), 12)
         self.assertEqual(sum(a.debit for a in as_at), Decimal("129934.50"))
@@ -788,7 +788,7 @@ class TrialBalanceFixtureTests(unittest.TestCase):
         with self.assertRaises(TrialBalanceError) as refused:
             _parse_trial_balance(EXCEL_FIXTURE, use_ytd=False)
         self.assertIn("no period pair", str(refused.exception))
-        # The M maps the same three labels, in the split layout only, before
+        # The M maps the same 3 labels, in the split layout only, before
         # the pair is chosen; the port above is what the fixture exercises.
         source = (ROOT / "powerquery" / "Xero.TrialBalance.pq").read_text(encoding="utf-8")
         self.assertRegex(
@@ -841,12 +841,12 @@ class TrialBalanceFixtureTests(unittest.TestCase):
         self.assertIn("else if isCode(dashCandidate) then dashCandidate", source)
 
     def test_combined_parser_pins_the_code_taken_by_the_parenthetical_split(self):
-        """The arm that actually extracts the code, pinned like the two it
+        """The arm that actually extracts the code, pinned like the 2 it
         sits between.  isCode says what counts as a code and the AccountName
         arithmetic says what is left as the name, but neither looks at the
         offsets that lift "090" out of "Business Bank Account (090)", and
-        those offsets have the same off-by-one shape - a " (" two characters
-        wide and a " (" plus ")" three characters wide.
+        those offsets have the same off-by-one shape - a " (" 2 characters
+        wide and a " (" plus ")" 3 characters wide.
 
         Change the + 2 to a + 1 and every parenthetical candidate keeps a
         leading "(", which isCode rejects, so AccountCode goes null on every
@@ -856,7 +856,7 @@ class TrialBalanceFixtureTests(unittest.TestCase):
         because the fixture assertions run the Python port, not the M.
 
         Occurrence.Last and the trailing-")" gate are pinned in the same
-        regex because the three are one rule: on "Rent (Sydney) (469)" First
+        regex because the 3 are one rule: on "Rent (Sydney) (469)" First
         takes "Sydney) (469" and the real 469 is lost, and the "- 3" length
         is only correct because the gate has already established that the
         last character is the ")" it subtracts."""
@@ -879,7 +879,7 @@ class TrialBalanceFixtureTests(unittest.TestCase):
     def test_combined_parser_pins_the_name_left_by_the_split(self):
         """The other arm of the same code/name split.  isCode decides which
         text is the code; this decides what is left as the name, and it is
-        arithmetic on lengths - the " (" and the ")" it strips are three
+        arithmetic on lengths - the " (" and the ")" it strips are 3
         characters.  Change that 3 to a 2 and "Business Bank Account (090)"
         loads as "Business Bank Account " with a trailing space, which
         silently breaks every lead schedule and recon keyed on AccountName;
@@ -906,9 +906,9 @@ class TrialBalanceFixtureTests(unittest.TestCase):
     def test_combined_parser_pins_the_debit_credit_pair_selection(self):
         """Both pairs balance, so choosing the wrong one still passes the
         README's balance check and gives the accountant positive confirmation
-        of a materially wrong trial balance.  Pin all three branches: the
+        of a materially wrong trial balance.  Pin all 3 branches: the
         default prefers YTD, and each explicit choice errors rather than
-        falling back to the pair the caller did not ask for - and the two
+        falling back to the pair the caller did not ask for - and the 2
         predicates those branches read, because pinning a branch without its
         input leaves the default flippable from the other end.  Rename either
         YTD column header upstream and hasYTD goes false, so the default
@@ -1089,14 +1089,14 @@ class TrialBalanceFixtureTests(unittest.TestCase):
         the first DATA row as the column names: the first account disappears
         and every downstream column reference breaks.
 
-        Xero.TrialBalance.pq runs the same two steps over its own match list
+        Xero.TrialBalance.pq runs the same 2 steps over its own match list
         and is pinned here with the promoter, so the pair cannot be corrected
         in one file and left wrong in the other."""
         promoter = (ROOT / "powerquery" / "Fx.PromoteHeaderAt.pq").read_text(encoding="utf-8")
         self.assertIn("List.Min(Matches),", promoter)
         self.assertIn("Sliced = Table.RemoveFirstN(Raw, HeaderIdx),", promoter)
         # The function's own header comment states this contract; pinning it
-        # beside the code stops the two drifting apart.
+        # beside the code stops the 2 drifting apart.
         self.assertRegex(
             promoter,
             re.compile(
@@ -1112,12 +1112,12 @@ class TrialBalanceFixtureTests(unittest.TestCase):
 
     def test_financial_year_switches_a_datetimezone_to_australian_eastern(self):
         """Date.From on a datetimezone returns the date of the value's LOCAL
-        equivalent, so the HOST's zone decided the answer: 9am +10:00 on
+        equivalent, so the HOST's zone decided the answer: 9 am +10:00 on
         1 July 2026 came out FY2027 on a Sydney desktop and FY2026 on a
         UTC-hosted scheduled refresh.  The offset has to be resolved before
         the date is taken, and CONVERTED rather than dropped: RemoveZone on
         its own is host-independent too, but it reads the UTC-stamped
-        2026-06-30T14:30:00Z - the shape the Xero API returns for 12:30am on
+        2026-06-30T14:30:00Z - the shape the Xero API returns for 12:30 am on
         1 July in Sydney - as 30 June, which is the wrong FY on the AU
         desktop that the old code got right."""
         source = (ROOT / "powerquery" / "Fx.AUFinancialYear.pq").read_text(encoding="utf-8")
@@ -1469,7 +1469,7 @@ class WorkpaperFormatSafetyTests(unittest.TestCase):
     def test_header_insert_clears_the_clipboard_and_matches_the_freeze_default(self):
         """A live cut/copy marquee turns Insert into a paste, so the clipboard
         block lands in rows 1:5 instead of blank rows.  The inserted block and
-        FreezeBelowHeader's default have to stay the same five rows, or the
+        FreezeBelowHeader's default have to stay the same 5 rows, or the
         freeze lands inside the header."""
         source = self.source()
         self.assertIn("Application.CutCopyMode = False", source)
@@ -1486,9 +1486,9 @@ class WorkpaperFormatSafetyTests(unittest.TestCase):
 
         This deliberately does NOT claim every writing sub is guarded: the
         fourth public sub, FormatAsAccounting, takes a Range and carries no
-        worksheet-level guard, so a name promising all four would be false.
+        worksheet-level guard, so a name promising all 4 would be false.
         The module-wide count is a floor rather than an equality for the same
-        reason - pinning it at exactly three would fail the very change that
+        reason - pinning it at exactly 3 would fail the very change that
         adds a guard to FormatAsAccounting.
         """
         guard = "If ws.ProtectContents Then Err.Raise 5"
@@ -1508,7 +1508,7 @@ class WorkpaperFormatSafetyTests(unittest.TestCase):
         invisible, and the reviewer sign-off is written over live data.
 
         SearchFormat is the same trap from the other end and has to be pinned
-        with the other four: it is dialog-sticky too, so a user who last ran a
+        with the other 4: it is dialog-sticky too, so a user who last ran a
         Find restricted to a cell format leaves that format in force, "*"
         matches nothing on the sheet, Find returns Nothing, lastRow falls to
         0, and the sign-off lands on A2 - over the workpaper title."""
@@ -1673,7 +1673,7 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
 
     def test_aged_payables_pq_source_guards(self):
         """The payables half of the same pin, kept as its own assertion set
-        because the two files are separate copies: fixing one parser and
+        because the 2 files are separate copies: fixing one parser and
         leaving the other silently mistyping is exactly the drift a shared
         assertion would hide.  See the receivables docstring above for what
         the old `try Value.FromText(...) otherwise 0.0` shape let through."""
@@ -1713,7 +1713,7 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         # The silent-zero form cannot come back beside the parser.
         self.assertNotIn("otherwise 0.0", source)
         self.assertNotIn("Value.FromText", source)
-        # The payables copy carries the same three drop rules.
+        # The payables copy carries the same 3 drop rules.
         self.assertIn("not isSectionRow(_)", source)
         self.assertIn('Text.Lower(val) <> "percentage of total"', source)
         self.assertIn("not List.Contains(sectionSubtotals, val)", source)
@@ -1740,7 +1740,7 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         # Observed 5 September 2026: the payables export groups suppliers
         # under an "Aged Payables" section row with blank amounts, closes it
         # with "Total Aged Payables", and ends with "Percentage of total".
-        # The fixture must keep carrying all three, or the filters that drop
+        # The fixture must keep carrying all 3, or the filters that drop
         # them stop being exercised.
         names = [r[0] for r in data_rows]
         for marker in ("Aged Payables", "Total Aged Payables", "Percentage of total"):

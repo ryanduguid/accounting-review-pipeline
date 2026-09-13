@@ -78,14 +78,14 @@ PHONE = re.compile(
 )
 # Every labelled pattern is built from the same gap expression and ends with
 # the same trailing ``(?![\s-]?\d)`` digit-count pin. The TFN label alone
-# accepts eight digits as well as nine, because TFNs issued before 1988 were
-# eight.
+# accepts 8 digits as well as 9, because TFNs issued before 1988 were
+# 8.
 #
-# _QUALIFIER takes up to two of "number", "no" and "card", the last also spelled
+# _QUALIFIER takes up to 2 of "number", "no" and "card", the last also spelt
 # "cardholder", each with an optional full stop: a workpaper writes "Medicare
 # card number", "ABN no." and "Medicare cardholder", and without the qualifier
 # those digits fall through to the bare pattern and are lost the moment the
-# check digit fails. Uniform across all four, because the shape of the label
+# check digit fails. Uniform across all 4, because the shape of the label
 # says nothing about which qualifier a typist reaches for.
 #
 # _GAP puts _QUALIFIER on BOTH sides of _SEP, because a typist writes it on
@@ -130,17 +130,17 @@ MEDICARE_LABELLED = re.compile(
     r"\bMedicare\b%s(\d(?:[\s-]?\d){9})(?![\s-]?\d)" % _GAP,
     re.I,
 )
-# All four bare runs take the same one-character money guard, ``(?<![\d$])``,
+# All 4 bare runs take the same one-character money guard, ``(?<![\d$])``,
 # and so favour over-detection. The origin's second lookbehind,
 # ``(?<![\d$][\s-])``, also stopped a run starting part-way through a grouped
-# amount, but it deleted real detections in the two shapes a workpaper is full
+# amount, but it deleted real detections in the 2 shapes a workpaper is full
 # of, the table row ("row 7 123456782") and the dated sentence ("in 2019
 # 123456782 was issued"), and it deleted them for the most sensitive identifier
 # of the four as readily as for the rest.
 #
 # The trade-off accepted here is the other direction: a grouped amount whose
-# nine-digit tail happens to satisfy the mod-11 check is redacted as a TFN,
-# which for such tails is roughly one in eleven. That price is worth paying,
+# 9-digit tail happens to satisfy the mod-11 check is redacted as a TFN,
+# which for such tails is roughly one in 11. That price is worth paying,
 # because over-redaction costs one placeholder in a private file while
 # under-detection leaks a tax file number.
 TFN_BARE = re.compile(r"(?<![\d$])(\d{3}([\s-]?)\d{3}\2\d{3})(?![\s-]?\d)")
@@ -148,7 +148,7 @@ ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d
 ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
 MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
 # No check digit exists for a BSB, so the hyphen is required. Accepting bare
-# six-digit runs would swallow ordinary numbers with nothing to reject them on.
+# 6-digit runs would swallow ordinary numbers with nothing to reject them on.
 BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")
 
 # The street-name tokens take the same accented letters as ``_TOKEN``. While
@@ -178,13 +178,13 @@ DOB = re.compile(
 # the boundary from here, because the components that disagree are the ones that
 # leak: ``restore`` once built its own match, dropped the left lookbehind, and
 # rewrote "XCLIENT_01" into a real client name that neither ``redact`` nor
-# ``verify`` could see, precisely because those two use PLACEHOLDER and it did
+# ``verify`` could see, precisely because those 2 use PLACEHOLDER and it did
 # not. Spelt out rather than ``\w``, which is Unicode-wide under ``str``.
 PLACEHOLDER_BOUNDARY = "[A-Za-z0-9_]"
 # The left boundary matters because Task 5 reaches for this with ``search``, not
 # ``fullmatch``: without it "XCLIENT_01" reads as an assigned placeholder.
 #
-# There is deliberately no right boundary. This pattern is what the two guards
+# There is deliberately no right boundary. This pattern is what the 2 guards
 # sweep an input with, and "CLIENT_01s" in an input is a placeholder-shaped
 # token an operator has to be told about, so the halt in
 # ``redact._input_placeholders`` must still fire on it. ``restore`` pins both
@@ -193,9 +193,9 @@ PLACEHOLDER = re.compile(
     r"(?<!%s)(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
     % PLACEHOLDER_BOUNDARY
 )
-# The same shape, folded for case, and used by exactly the two guards that ask
+# The same shape, folded for case, and used by exactly the 2 guards that ask
 # whether an entity map VALUE is placeholder-shaped: ``entities._check_fields``
-# and ``redact._replace_entities``. Those two have to agree with
+# and ``redact._replace_entities``. Those 2 have to agree with
 # ``value_pattern``, which is ``re.IGNORECASE``, or a value the map accepts as
 # ordinary text still compiles into a pattern that eats the placeholder pass one
 # has just written. Entity(value="tfn_01", placeholder="CLIENT_07") turned
@@ -247,12 +247,12 @@ def value_pattern(value: str) -> re.Pattern[str]:
     body = r"\s+".join(re.escape(part) for part in value.split())
     return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.IGNORECASE)
 
-# The origin list ends with the twelve month names. They are dropped here: over
+# The origin list ends with the 12 month names. They are dropped here: over
 # a workpaper they suppress "June Smith", "April Jones", "August Meyer" and
 # "Ray May", and a person the sweep never reports is a person nobody redacts.
 # DOB keeps its own month names; it is a separate pattern and unaffected.
 #
-# "Appeals" is added to the origin list. It is the one word the three-token
+# "Appeals" is added to the origin list. It is the one word the 3-token
 # window retry in ``person_name_spans`` needs to keep "Administrative Appeals
 # Tribunal" filtered whole: the retry drops "Tribunal" and would otherwise
 # offer "Administrative Appeals" as a person. Nothing is lost by it, because no
@@ -274,14 +274,14 @@ _MEDICARE_WEIGHTS = (1, 3, 7, 9, 1, 3, 7, 9)
 
 
 def valid_tfn(digits: str) -> bool:
-    """True when a nine-digit run satisfies the ATO weighted mod-11 sum."""
+    """True when a 9-digit run satisfies the ATO weighted mod-11 sum."""
     if len(digits) != 9 or not digits.isdigit():
         return False
     return sum(w * int(d) for w, d in zip(_TFN_WEIGHTS, digits)) % 11 == 0
 
 
 def valid_abn(digits: str) -> bool:
-    """True when an eleven-digit run satisfies the mod-89 sum after the leading subtraction."""
+    """True when an 11-digit run satisfies the mod-89 sum after the leading subtraction."""
     if len(digits) != 11 or not digits.isdigit():
         return False
     values = [int(d) for d in digits]
@@ -290,7 +290,7 @@ def valid_abn(digits: str) -> bool:
 
 
 def valid_acn(digits: str) -> bool:
-    """True when a nine-digit run satisfies the ASIC complement check digit."""
+    """True when a 9-digit run satisfies the ASIC complement check digit."""
     if len(digits) != 9 or not digits.isdigit():
         return False
     total = sum(w * int(d) for w, d in zip(_ACN_WEIGHTS, digits))
@@ -298,7 +298,7 @@ def valid_acn(digits: str) -> bool:
 
 
 def valid_medicare(digits: str) -> bool:
-    """True when a ten-digit run has a leading 2 to 6 and a matching ninth check digit."""
+    """True when a 10-digit run has a leading 2 to 6 and a matching ninth check digit."""
     if len(digits) != 10 or not digits.isdigit() or digits[0] not in "23456":
         return False
     return sum(w * int(d) for w, d in zip(_MEDICARE_WEIGHTS, digits)) % 10 == int(digits[8])
@@ -312,11 +312,11 @@ def _length_six(digits: str) -> bool:
     return len(digits) == 6
 
 
-# Order is the tie-break when two kinds match the identical span, and a labelled
+# Order is the tie-break when 2 kinds match the identical span, and a labelled
 # pattern captures the same digits as its bare equivalent, so every labelled
 # entry is listed ahead of every bare one: the label names the kind, and a bare
 # run of the same length must not take the span off it. Within each group a
-# nine-digit run can satisfy both the TFN and the ACN check, so the more
+# 9-digit run can satisfy both the TFN and the ACN check, so the more
 # sensitive kind is listed first and wins.
 #
 # Labelled entries take ``_always``: the label is the evidence, so a labelled

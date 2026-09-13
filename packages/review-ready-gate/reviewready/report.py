@@ -293,7 +293,7 @@ def _configured_work_tree() -> Path | None:
 
 
 def _same_directory(candidate: Path, work_tree: Path) -> bool:
-    """Do these two paths name one directory, whatever they are spelled?
+    """Do these 2 paths name one directory, whatever they are spelt?
 
     ``Path`` equality compares text. ``Path.resolve`` normalises separators,
     ``..`` and symbolic links, but it does not normalise case, and it hands
@@ -362,7 +362,7 @@ def require_output_outside_repository(output_dir: Path) -> Path:
     tree in the meantime.
 
     The return value is the resolved directory, and it is what the caller must
-    then write to. Checking one path and writing to another leaves the two free
+    then write to. Checking one path and writing to another leaves the 2 free
     to disagree: ``resolve`` follows every symlink in the path once, while each
     later ``mkdir`` and ``write_text`` follows them again, so a component
     re-pointed in between would send the pack somewhere this function never
@@ -409,7 +409,7 @@ def require_output_outside_repository(output_dir: Path) -> Path:
 
 
 def write_review_pack(pack: ReadinessPack, output_dir: Path) -> dict[str, Path]:
-    """Write the three pack files, refusing an output inside a checkout first.
+    """Write the 3 pack files, refusing an output inside a checkout first.
 
     The refusal happens before any directory is created, so a rejected run
     leaves nothing behind, and every destination below is built from the

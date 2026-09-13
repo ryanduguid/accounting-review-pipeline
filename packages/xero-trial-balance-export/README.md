@@ -4,7 +4,7 @@
 
 [![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/xero-trial-balance-export.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/xero-trial-balance-export/) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 
-Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. The four Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) handle consent, token refresh, the API request and CSV output.
+Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. The 4 Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) handle consent, token refresh, the API request and CSV output.
 
 The maintained source is under `packages/xero-trial-balance-export` in the
 Accounting Review Pipeline. The `xero-trial-balance-export` distribution,
@@ -36,7 +36,7 @@ The exporter writes a fixed CSV schema, so downstream queries can use the same c
 ReportDate, Tenant, Section, AccountID, AccountName, AccountCode, Debit, Credit, YTDDebit, YTDCredit
 ```
 
-Column semantics, straight from Xero's report: `Debit`/`Credit` are the **current month's movement** up to the report date; `YTDDebit`/`YTDCredit` are the **cumulative as-at balances**, the pair an accountant means by "the trial balance". Slice year-end numbers on the YTD pair. `AccountID` is the account's stable GUID, the join key that survives code and name changes.
+Column semantics, straight from Xero's report: `Debit`/`Credit` are the **current month's movement** up to the report date; `YTDDebit`/`YTDCredit` are the **cumulative as-at balances**, the pair an accountant means by 'the trial balance'. Slice year-end numbers on the YTD pair. `AccountID` is the account's stable GUID, the join key that survives code and name changes.
 
 See [`samples/sample-output.csv`](samples/sample-output.csv) for the exact output shape (fabricated entity).
 
@@ -55,7 +55,7 @@ Reproduce the offline movement and YTD gate with the fabricated fixtures in the 
 python export_tb.py --date 2026-06-30
 ```
 
-Options: `--tenant "name-or-id"` (name substring, or an exact `tenantId` when display names collide), `--out relative/path.csv`, `--payments-only` (cash basis), `--token-file path/to/token.json` (where the token cache lives; the flag beats the `XERO_TOKEN_FILE` environment variable, and the default is the per-user state directory: `~/.local/state/xero-trial-balance-export/token.json` on Unix, `%LOCALAPPDATA%\xero-trial-balance-export\token.json` on Windows. An existing `token.json` beside `xero_client.py` is still used so older clones keep working). `--out` must be a `.csv` path beneath the process working directory; absolute paths outside the working directory, `..` traversal and paths through an existing symlink that escapes that directory are rejected. A missing parent directory under `--out` is created rather than refused (`--out exports/tb.csv` makes `exports/` if it is not there), so a fetched report is never thrown away for want of a folder. Default filename: `{tenant}-{tenantid8}-tb-{date}-{accrual|cash}.csv`, so the two bases never overwrite each other. The `{tenant}` segment is sanitised for filesystem safety; see the [Filename reference](#filename-reference) appendix for the exact rules and their edge cases.
+Options: `--tenant "name-or-id"` (name substring, or an exact `tenantId` when display names collide), `--out relative/path.csv`, `--payments-only` (cash basis), `--token-file path/to/token.json` (where the token cache lives; the flag beats the `XERO_TOKEN_FILE` environment variable, and the default is the per-user state directory: `~/.local/state/xero-trial-balance-export/token.json` on Unix, `%LOCALAPPDATA%\xero-trial-balance-export\token.json` on Windows. An existing `token.json` beside `xero_client.py` is still used so older clones keep working). `--out` must be a `.csv` path beneath the process working directory; absolute paths outside the working directory, `..` traversal and paths through an existing symlink that escapes that directory are rejected. A missing parent directory under `--out` is created rather than refused (`--out exports/tb.csv` makes `exports/` if it is not there), so a fetched report is never thrown away for want of a folder. Default filename: `{tenant}-{tenantid8}-tb-{date}-{accrual|cash}.csv`, so the 2 bases never overwrite each other. The `{tenant}` segment is sanitised for filesystem safety; see the [Filename reference](#filename-reference) appendix for the exact rules and their edge cases.
 
 `--date` is an as-at date, not a range. Xero's `Reports/TrialBalance` endpoint takes
 only `date` and `paymentsOnly`, so this tool reproduces the `Trial Balance` report and
@@ -72,13 +72,13 @@ The CSV is written as UTF-8 with a BOM (`utf-8-sig`): Excel's double-click open 
 ## Power BI
 
 1. Get Data → Text/CSV → point at the export. Columns arrive typed and tidy; `Section` and `AccountCode` are ready for slicers and drill-downs.
-2. For a zero-click refresh, set the scheduled task's working directory (Windows **Start in**, or cron's `cd`) to the fixed Power BI data directory, then schedule `export_tb.py` with an explicit `--tenant` and relative `--out`, e.g. from `C:\data`: `python C:\path\to\export_tb.py --tenant "Org Name" --out tb-latest.csv`.
+2. For a zero-click refresh, set the scheduled task's working directory (Windows **Start in**, or cron's `cd`) to the fixed Power BI data directory, then schedule `export_tb.py` with an explicit `--tenant` and relative `--out`, for example, from `C:\data`: `python C:\path\to\export_tb.py --tenant "Org Name" --out tb-latest.csv`.
 3. Run the Windows task in the same Windows user profile that ran `auth.py`: current-user DPAPI is deliberately not a portable cache format, and a non-Windows process cannot decrypt it.
 4. Pin the output name with `--out`, as above. The default filename embeds the report date, so a bare scheduled run writes a new file every day while Power BI keeps refreshing the stale one from setup day.
 
-A ready-made query is committed at [`samples/power-bi-query.pq`](samples/power-bi-query.pq). Paste it into Power BI Desktop (Home → Transform data → New Source → Blank Query → Advanced Editor), set the path at the top, and it loads the ten exported columns with explicit types, refusing any file whose header is not the exporter's. Point it at the fabricated [`samples/sample-output.csv`](samples/sample-output.csv) to exercise the whole load path with no Xero connection. It types `AccountCode` as text on purpose: codes like `090` lose their leading zero as a number, which breaks slicers and joins back to the ledger.
+A ready-made query is committed at [`samples/power-bi-query.pq`](samples/power-bi-query.pq). Paste it into Power BI Desktop (Home → Transform data → New Source → Blank Query → Advanced Editor), set the path at the top, and it loads the 10 exported columns with explicit types, refusing any file whose header is not the exporter's. Point it at the fabricated [`samples/sample-output.csv`](samples/sample-output.csv) to exercise the whole load path with no Xero connection. It types `AccountCode` as text on purpose: codes like `090` lose their leading zero as a number, which breaks slicers and joins back to the ledger.
 
-When a run hits a locked destination, a concurrent export, or a disk that refuses the final flush, see the "Power BI failure modes" appendix below.
+When a run hits a locked destination, a concurrent export, or a disk that refuses the final flush, see the 'Power BI failure modes' appendix below.
 
 Two Xero platform limits worth knowing: uncertified apps connect to at most 25 organisations (the Demo Company doesn't count), and going past that requires App Partner certification.
 
@@ -104,13 +104,13 @@ cron (Linux or macOS), daily at 06:30, with both streams appended to a log:
 30 6 * * * cd /srv/powerbi-data && XERO_TOKEN_FILE=$HOME/.xero/token.json /usr/bin/python3 /opt/xero-trial-balance-export/export_tb.py --tenant "Org Name" --out tb-latest.csv >> /var/log/xero-export.log 2>&1
 ```
 
-Windows Task Scheduler: create a task that runs as the Windows user who ran `auth.py`, with "Start in" set to the Power BI data directory. Action program: `cmd.exe`. Arguments:
+Windows Task Scheduler: create a task that runs as the Windows user who ran `auth.py`, with 'Start in' set to the Power BI data directory. Action program: `cmd.exe`. Arguments:
 
 ```
 /c ""C:\Python313\python.exe" "C:\tools\xero-trial-balance-export\export_tb.py" --tenant "Org Name" --out tb-latest.csv --token-file "%USERPROFILE%\xero\token.json" >> "C:\logs\xero-export.log" 2>&1"
 ```
 
-Task Scheduler records the exit code as the task's "Last Run Result", so a `1` or `2` there means read the log. The `>>` redirection is what captures the one-line error messages; without it a failed scheduled run leaves nothing to read.
+Task Scheduler records the exit code as the task's 'Last Run Result', so a `1` or `2` there means read the log. The `>>` redirection is what captures the one-line error messages; without it a failed scheduled run leaves nothing to read.
 
 ## The refresh-token gotcha
 
@@ -181,13 +181,13 @@ NFC normalisation gives composed and decomposed spellings the same filename.
 
 Different names can therefore collapse to the same segment:
 
-- "Acme (Holdings) Pty Ltd" and "Acme Holdings Pty Ltd" both become
+- 'Acme (Holdings) Pty Ltd' and 'Acme Holdings Pty Ltd' both become
   `acme-holdings-pty-ltd`.
-- "ACME Pty Ltd" and "Acme Pty Ltd" both become `acme-pty-ltd`.
+- 'ACME Pty Ltd' and 'Acme Pty Ltd' both become `acme-pty-ltd`.
 - Names differing only in Chinese characters can both become `pty-ltd`.
 
 The exporter also collapses unsafe character runs in the tenant ID to `-`,
-takes the first eight characters and trims leading and trailing `-` from that
+takes the first 8 characters and trims leading and trailing `-` from that
 suffix. It appends the suffix to every default name to distinguish organisations
 whose names collide, keeping the filename to one path segment. If the organisation
 name leaves no usable characters, the suffix forms the whole tenant segment.

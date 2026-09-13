@@ -109,7 +109,7 @@ def _materially_changed_current_csv(content: bytes) -> bytes:
 
 
 def test_reordered_header_is_refused_even_though_the_names_all_match(tmp_path: Path) -> None:
-    # The column names are the canonical ten; only the order differs, so a
+    # The column names are the canonical 10; only the order differs, so a
     # sorted or set comparison would accept this file and read every Debit
     # value as a Credit.
     path = _tb(tmp_path, ("AccountCode,Debit,Credit,", "AccountCode,Credit,Debit,"))
@@ -479,7 +479,7 @@ def test_a_comparison_across_the_1_july_ytd_reset_is_refused(tmp_path: Path, mon
 
 
 def test_a_year_on_year_comparison_of_the_same_date_is_still_allowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # 31 May 2027 against 31 May 2026 is two different financial years, but
+    # 31 May 2027 against 31 May 2026 is 2 different financial years, but
     # both are the same point in their own year, so the YTD figures compare.
     root = _sandbox(tmp_path, monkeypatch)
     _redate(root, CURRENT_MANIFEST, "2027-05-31")

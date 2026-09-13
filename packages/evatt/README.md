@@ -19,8 +19,8 @@ model receiving the identifiers.
 Entity placeholders are stable across documents, because they come from the
 map: `CLIENT_01` means the same client in every file redacted against it.
 Structured placeholders are not. They are numbered per document, so `TFN_01` in
-one workpaper and `TFN_01` in the next are two different tax file numbers.
-Putting two redacted documents in front of one model is putting two meanings of
+one workpaper and `TFN_01` in the next are 2 different tax file numbers.
+Putting 2 redacted documents in front of one model is putting 2 meanings of
 `TFN_01` in front of it.
 
 **The key never leaves the local machine.** The entity map is a gitignored file
@@ -71,7 +71,7 @@ entities.json
 *.triage.md
 ```
 
-The first two are the map itself, under whichever of the two names you use. The
+The first 2 are the map itself, under whichever of the two names you use. The
 `*.tmp` rule covers the temporary `save` writes beside the map before renaming
 it over the top, which is named `<map>.tmp.<random>.tmp` and holds the same real
 values as the map; a hard kill can leave one behind. The last is the triage
@@ -124,7 +124,7 @@ Detection is regular expressions and check digits. It has no idea what a
 document is about, and the trade-offs below all favour over-detection, because
 an extra placeholder costs a triage decision while a miss leaks.
 
-- **`BSB` fires on any hyphenated three-three digit pair.** There is no check
+- **`BSB` fires on any hyphenated 3-three digit pair.** There is no check
   digit for a BSB, so the hyphen is the only evidence there is. An Australian
   general ledger account code written `410-100` is therefore replaced with a
   BSB placeholder, and a real workpaper contains a great many of them. The
@@ -137,8 +137,8 @@ an extra placeholder costs a triage decision while a miss leaks.
   It cannot catch a detection bug: what the detector could not see going in it
   cannot see coming out. A clean `verify` says the output agrees with the
   detector, not that the output is clean.
-- **Unmapped names can escape the residual sweep.** It looks for two or
-  three capitalised Latin-1 tokens and filters statutory vocabulary. Lower-case
+- **Unmapped names can escape the residual sweep.** It looks for 2 or
+  3 capitalised Latin-1 tokens and filters statutory vocabulary. Lower-case
   names, single names, other scripts and names containing statutory words can
   pass unnoticed. Dates and addresses also have limited format coverage.
   Seed known values in the map and inspect the whole output before sending.
@@ -163,7 +163,7 @@ an extra placeholder costs a triage decision while a miss leaks.
   POSIX file mode, so there the temporary is readable by whoever can read the
   directory rather than by its owner alone.
 - **A labelled identifier is admitted on the label alone**, with no check
-  digit, because something wrote "TFN" next to those digits and a typo in a
+  digit, because something wrote 'TFN' next to those digits and a typo in a
   real tax file number is still a real tax file number. Only a bare digit run
   has to pass a check digit to be replaced.
 - **The triage file carries whole source lines** as context, taken from the
@@ -192,7 +192,7 @@ deleting the highest entry would allow its placeholder to be reissued.
 
 ## Documents
 
-- `DATA-FLOW.md`, the zero-network boundary and the three passes.
+- `DATA-FLOW.md`, the zero-network boundary and the 3 passes.
 - `DISCLAIMER.md`, what this package does not decide.
 - `CONTRIBUTING.md`, the checks, the fixture rule and the claim rule.
 - `SECURITY.md`, the security boundary and how to report a vulnerability.

@@ -42,7 +42,7 @@ Sources:
    contract must decide whether the customer key is the display name (default)
    or the account number (customised), and reject the wrong variant rather
    than guessing.
-4. MYOB names two reports as not exportable at all (Card List [Detail],
+4. MYOB names 2 reports as not exportable at all (Card List [Detail],
    Employee Employment Details). Neither is our target, but the fact confirms
    report-level quirks are real in this product.
 5. Separately from reports, the Import and export data assistant exports
@@ -70,7 +70,7 @@ below.
 | Shape change | Fail closed with a named error, never best-effort | Repo boundary |
 | Formula injection | Guard `=`, `+`, `-`, `@` per CONTRIBUTING rules | CONTRIBUTING.md |
 
-Every cell marked "to observe" is unresolved. Filling them from anything other
+Every cell marked 'to observe' is unresolved. Filling them from anything other
 than a real export is prohibited.
 
 ## Acceptance required before a parser ships
@@ -85,7 +85,7 @@ than a real export is prohibited.
    altered digest-style tamper rejection, malformed workbook rejection.
 4. Native Excel acceptance run before release, matching the Xero contracts.
 5. This document updated to v1.0 with the observed values replacing every
-   "to observe" entry, and `docs/close-input-contract-roadmap.md` moved out of
+   'to observe' entry, and `docs/close-input-contract-roadmap.md` moved out of
    the MYOB evidence gate.
 
 ## Boundaries

@@ -10,7 +10,7 @@ This project is not affiliated with, sponsored by, endorsed by, or approved by:
 - any state or territory revenue office
 - Chartered Accountants Australia and New Zealand
 
-Outputs are intermediate data-minimisation and variance-review artefacts. They do not replace a human accountant's examination, professional judgment, or statutory reconciliation.
+Outputs are intermediate data-minimisation and variance-review artefacts. They do not replace a human accountant's examination, professional judgement, or statutory reconciliation.
 
 Do not publish private client financial records, live Xero tenant data, TFNs, bank details, or sensitive personal information in issues, pull requests, examples, tests, or repository content. All sample data and fixtures in this repository are fabricated.
 

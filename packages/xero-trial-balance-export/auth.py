@@ -54,7 +54,7 @@ CALLBACK_TIMEOUT = 300
 # silent: rfile.readline() blocks inside handle_request and the wall-clock
 # deadline never gets looked at again. Browsers open speculative connections
 # and abandon them, which is enough to trigger it. A redirect from the
-# browser on loopback arrives in one packet, so two seconds is generous.
+# browser on loopback arrives in one packet, so 2 seconds is generous.
 CALLBACK_READ_TIMEOUT = 2
 
 # Total budget for one accepted connection, whatever it does inside it. The
@@ -286,7 +286,7 @@ def main() -> None:
         auth=(client_id, client_secret),
         timeout=30,
     )
-    # The two everyday identity answers here must read as instructions, not
+    # The 2 everyday identity answers here must read as instructions, not
     # as an HTTPError traceback - the same rule the refresh path in
     # xero_client.py applies. invalid_grant is an authorisation code already
     # spent or expired; 401 is a mistyped XERO_CLIENT_SECRET (OAuth2

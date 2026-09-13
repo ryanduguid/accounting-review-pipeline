@@ -55,7 +55,7 @@ Business (Pro), Excel report export. Product decision, export-mode constraints,
 contract skeleton v0.1 and the observation checklist live in
 [myob-business-aged-receivables-discovery.md](myob-business-aged-receivables-discovery.md).
 No parser exists; the gate stays closed until a real observation fills the
-"to observe" entries.
+'to observe' entries.
 
 ## Boundaries that remain in force
 

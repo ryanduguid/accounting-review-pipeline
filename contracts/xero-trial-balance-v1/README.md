@@ -1,6 +1,6 @@
 # Xero trial balance CSV contract v1
 
-This directory is the data-only authority for the exporter-owned `xero-tb-csv.v1` corpus. The three fixture CSVs and `expected_results.json` were copied byte for byte from `packages/xero-trial-balance-export/evaluation/xero_tb_integrity/` at exporter source commit `2a0966e89e5f8daa587be8466f988d9adc16003a`. The corpus was already present at the exporter provenance commit `f87b5e4e224b930b3f6d9c9c43e365a9d4ea98d4` that the ledger-review gate vendored; consolidation changes the ownership location, not bytes or outcomes.
+This directory is the data-only authority for the exporter-owned `xero-tb-csv.v1` corpus. The 3 fixture CSVs and `expected_results.json` were copied byte for byte from `packages/xero-trial-balance-export/evaluation/xero_tb_integrity/` at exporter source commit `2a0966e89e5f8daa587be8466f988d9adc16003a`. The corpus was already present at the exporter provenance commit `f87b5e4e224b930b3f6d9c9c43e365a9d4ea98d4` that the ledger-review gate vendored; consolidation changes the ownership location, not bytes or outcomes.
 
 The ordered header is exactly:
 

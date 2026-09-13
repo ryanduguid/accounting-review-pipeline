@@ -2,7 +2,7 @@
 
 Source lives here as importable text, never only inside a binary workbook. GitHub can render, diff and review text; it can't see inside an `.xlsm`.
 
-The VBE exports three text formats and reads all three back: `.bas` for a standard module, `.cls` for a class module, `.frm` for a form. Today this folder holds two `.bas` modules, but the tooling covers all three so a class or form dropped in here is checked from the moment it lands. The `.frx` companion a form export also writes is binary by design and is left alone.
+The VBE exports 3 text formats and reads all 3 back: `.bas` for a standard module, `.cls` for a class module, `.frm` for a form. Today this folder holds 2 `.bas` modules, but the tooling covers all 3 so a class or form dropped in here is checked from the moment it lands. The `.frx` companion a form export also writes is binary by design and is left alone.
 
 ## Import
 
@@ -24,7 +24,7 @@ Both modules are self-contained: no library references to add (`modReconCompare`
 | Module | What it does |
 |---|---|
 | `modWorkpaperFormat` | Standard workpaper header block, reviewer sign-off line, accounting number format, freeze panes |
-| `modReconCompare` | Keyed two-way reconciliation between two (key, amount) ranges with tolerance; subledger vs GL pattern. It replaces only a prior result sheet that it marked itself; a user-created sheet named `Recon Result` is left untouched and the macro stops with instructions |
+| `modReconCompare` | Keyed 2-way reconciliation between two (key, amount) ranges with tolerance; subledger versus GL pattern. It replaces only a prior result sheet that it marked itself; a user-created sheet named `Recon Result` is left untouched and the macro stops with instructions |
 
 ## Contributing your own
 

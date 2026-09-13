@@ -34,11 +34,11 @@ before the reference lookups cleared benchmark-table filters. The corrected
 measures passed all 13 on 8 September 2026. Full sample model
 refresh also succeeded in Power BI Desktop.
 
-All four pages rendered after the model change. The final benchmark page displayed
+All 4 pages rendered after the model change. The final benchmark page displayed
 the revised card label, the selection prompt and both FinancialYear and TradingName
 filter cards. A completed selection through the Desktop UI was not verified;
 the native DAX cases verify entity and year filter contexts directly.
 
 This check requires Windows and Power BI Desktop and is separate from the
 repository's structural checks. It does not verify that sample benchmark values
-are current ATO figures or replace inspection of all four report pages.
+are current ATO figures or replace inspection of all 4 report pages.

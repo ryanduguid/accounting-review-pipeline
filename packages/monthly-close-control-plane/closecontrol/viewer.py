@@ -6,7 +6,7 @@ never writes, renames or deletes a file, never opens a network connection, and
 never changes what the engine computed. A tampered, partial or mismatched
 artefact set fails closed with a named error instead of being displayed.
 
-Every check here re-reads what ``report.write_review_pack`` emitted. The two
+Every check here re-reads what ``report.write_review_pack`` emitted. The 2
 renderers are independent witnesses of one engine run: if their contents stop
 agreeing, the pack is no longer trustworthy evidence and the reviewer must hear
 that from this command rather than infer it from a plausible-looking sheet.
@@ -29,7 +29,7 @@ _SUMMARY_NAME = "close-summary.md"
 _CSV_NAME = "exceptions.csv"
 _QUERY_CSV_NAME = "client-queries.csv"
 
-# The three files every pack has carried since the viewer existed. A pack
+# The 3 files every pack has carried since the viewer existed. A pack
 # written before the client-query register was added is archived evidence a
 # firm may still have to display, so it must keep opening: the register is an
 # extension to the pack, not a new requirement placed on old ones.
@@ -126,7 +126,7 @@ _SOURCE_EVIDENCE_LINE = re.compile(r"`([a-z_0-9]+)`: `([0-9a-f]{64})`")
 def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Reject a JSON object that states any member twice.
 
-    A duplicated member is not valid evidence of anything: the two positions
+    A duplicated member is not valid evidence of anything: the 2 positions
     disagree about the pack, and standard json parsing would silently keep the
     last one, hiding the disagreement this command exists to surface.
     """
@@ -320,7 +320,7 @@ def _verify_json_schema(document: dict[str, object]) -> None:
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:
     """Collect the summary's digest lines, rejecting a contradicted label.
 
-    As with a duplicated JSON member, keeping the last of two disagreeing
+    As with a duplicated JSON member, keeping the last of 2 disagreeing
     digest lines for one source hides the disagreement: a falsified line
     paired with a duplicate carrying the true digest would then agree with
     the JSON pack and display. The whole document is scanned, so a forged
@@ -390,7 +390,7 @@ def _verify_rows_match(
 # source-derived value it renders is prefixed by something: a table cell by
 # '| ', a one-line reviewer comment by '- Comment: ', a quoted comment line by
 # '  > '. Searching the document instead would count a client's own figure as a
-# second count line and refuse a pack whose four artefacts agree.
+# second count line and refuse a pack whose 4 artefacts agree.
 _QUERY_COUNT_LINE = re.compile(r"^- Client queries drafted: (\d+)\.\r?$", re.MULTILINE)
 
 _CLIENT_QUERY_HEADING = "## Client queries"
@@ -408,7 +408,7 @@ _MD_SECTION_HEADING = re.compile(r"^#{1,2}\s")
 # Asking whether the document's heading structure is the writer's, rather than
 # whether some line spells "Client queries" the way this file expects, is what
 # ends an argument that cannot otherwise be won. CommonMark renders a heading
-# from ATX hashes at six levels with an optional closing run, from a Setext
+# from ATX hashes at 6 levels with an optional closing run, from a Setext
 # underline with no hashes at all, and from inline content that may carry
 # emphasis, code spans or character references: '## Client queries ##',
 # 'Client queries' over a rule, and '## Client &#113;ueries' all display as the
@@ -445,7 +445,7 @@ _SETEXT_UNDERLINE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 # Neither can come from source data. Every value the writer renders is prefixed
 # by something, so no line it produces begins with a backtick, a tilde or a
 # '<'. Refusing them outright is therefore free, and it closes the whole class
-# rather than the two spellings: what is being asked is not "is this a fence"
+# rather than the 2 spellings: what is being asked is not "is this a fence"
 # but "did the writer write anything of this shape", and the answer is no.
 _RENDER_ALTERING_BLOCK = re.compile(r"^ {0,3}(?:`{3,}|~{3,}|<)")
 
@@ -547,7 +547,7 @@ def _client_query_section_lines(summary_text: str) -> list[str]:
     backslashes, asterisks and backticks but not its hashes, and a one-line
     reviewer comment is rendered inline, so under a substring search an account
     named '## Client queries' or a comment quoting the phrase would count as a
-    second section and refuse a pack whose four artefacts were written together
+    second section and refuse a pack whose 4 artefacts were written together
     and agree.
 
     _verify_summary_headings has already proved the document's headings are the
@@ -634,7 +634,7 @@ def _verify_summary_states_the_register(
 
     Every line of the section is rebuilt from the JSON and compared, rather than
     the section being searched for landmarks. A search leaves whatever it does
-    not look for unchecked, and two of those matter: the delimiter row, without
+    not look for unchecked, and 2 of those matter: the delimiter row, without
     which the register stops rendering as a table at all, and any line inserted
     between the ones the writer wrote, which puts a sentence in front of a
     preparer that no run produced. Neither disturbs a landmark.
@@ -708,12 +708,12 @@ def _verify_summary_holds_no_register(summary_text: str) -> None:
     Deleting client-queries.csv and the JSON member from a current pack leaves
     a summary still carrying the heading, the count and the table. Reading that
     as an older pack would display a sheet saying the register never existed
-    beside a file that lists it, so the absence has to hold across all three
+    beside a file that lists it, so the absence has to hold across all 3
     artefacts or the pack is refused.
 
     The heading is covered by _verify_summary_headings, which the caller runs
     with register=False for such a pack: an older summary's headings are the
-    writer's five, and a client-query heading in any syntax is a sixth. What is
+    writer's 5, and a client-query heading in any syntax is a sixth. What is
     left here is the table and the count line, matched on a whole line, because
     a genuinely old pack whose account or reviewer comment quotes one of those
     phrases is still an old pack and refusing it would take archived evidence
@@ -860,7 +860,7 @@ def verify_pack(pack_dir: Path) -> tuple[
     _verify_json_schema(document)
 
     # Both halves of the register or neither. A pack holding one without the
-    # other was assembled from two runs, or edited, and is not evidence of
+    # other was assembled from 2 runs, or edited, and is not evidence of
     # either format.
     has_file = _QUERY_CSV_NAME in payloads
     has_member = "client_queries" in document

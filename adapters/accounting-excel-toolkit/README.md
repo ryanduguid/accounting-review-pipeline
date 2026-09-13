@@ -41,17 +41,17 @@ Power BI is the same from step 3 onward: **Get Data**, **Blank Query**, then **A
 
 | Function | Category | What it does |
 |---|---|---|
-| [`Xero.TrialBalance`](powerquery/Xero.TrialBalance.pq) | Xero | Parse a Xero TB CSV: skips metadata rows, picks the right Debit/Credit pair (plain pair = period movement, YTD pair = as-at balances; default returns as-at, `useYTD = false` for movement), drops Total row, splits account code as text (alphanumeric up to 10 chars with at least one digit, leading zeros survive). Handles two observed CSV layouts, a combined account cell (`Business Bank Account (090)`) and separate `Account Code` / `Account Name` columns, plus the Excel export saved as CSV (`Account Code`, `Account`, `Account Type`, `Debit - Year to date`, `Credit - Year to date` and a comparative column named for the prior date), whose labels are mapped onto the separate-column names before the pair is chosen |
+| [`Xero.TrialBalance`](powerquery/Xero.TrialBalance.pq) | Xero | Parse a Xero TB CSV: skips metadata rows, picks the right Debit/Credit pair (plain pair = period movement, YTD pair = as-at balances; default returns as-at, `useYTD = false` for movement), drops Total row, splits account code as text (alphanumeric up to 10 chars with at least one digit, leading zeros survive). Handles 2 observed CSV layouts, a combined account cell (`Business Bank Account (090)`) and separate `Account Code` / `Account Name` columns, plus the Excel export saved as CSV (`Account Code`, `Account`, `Account Type`, `Debit - Year to date`, `Credit - Year to date` and a comparative column named for the prior date), whose labels are mapped onto the separate-column names before the pair is chosen |
 | [`Xero.AgedReceivables`](powerquery/Xero.AgedReceivables.pq) | Xero | Parse a Xero Aged Receivables Summary CSV: skips metadata rows, finds the header by name (`Contact` or `Customer`, returned as `Contact`), drops the summary Total row, the trailing `Percentage of total` row and any section row (every amount cell blank) together with its `Total <section>` subtotal, keeps the contact key as text, and types every ageing bucket and the Total under a pinned en-AU culture (a blank cell is a genuine zero; any other cell that will not parse errors and names the column and the value). Buckets and Total come back as Xero exported them, so the bucket-to-total tie-out stays the caller's |
 | [`Xero.AgedPayables`](powerquery/Xero.AgedPayables.pq) | Xero | The same contract on the payables side: header by name (`Contact`, `Supplier` or `Vendor`, returned as `Supplier`), summary Total, `Percentage of total`, section and section-subtotal rows dropped (the observed export groups suppliers under `Aged Payables` and closes it with `Total Aged Payables`), supplier key forced to text, ageing buckets and Total typed under en-AU with the same blank-is-zero and refuse-to-guess rules, and returned as exported |
 | [`PaydaySuper.Report`](powerquery/PaydaySuper.Report.pq) | Close inputs | Load the fixed 18-column `payday-super-checker` report contract by header name. It keeps IDs as text, retains the producer's raw `verdict`, caveats, notes and unassessable range, types producer amounts without recalculating them, and returns the terminal provenance separately as metadata |
 | [`Fx.PromoteHeaderAt`](powerquery/Fx.PromoteHeaderAt.pq) | Generic | Find-and-promote the real header row in any ledger export that buries it below title rows; errors clearly when the format changed |
-| [`Fx.AUFinancialYear`](powerquery/Fx.AUFinancialYear.pq) | AU helpers | FY label, start, end for any date (1 July to 30 June); timezone-stamped values are read in AEST (+10), so an instant in the last two hours of 30 June in Perth (last 30 minutes in Adelaide/Darwin) lands in FY+1 unless you switch the zone first |
+| [`Fx.AUFinancialYear`](powerquery/Fx.AUFinancialYear.pq) | AU helpers | FY label, start, end for any date (1 July to 30 June); timezone-stamped values are read in AEST (+10), so an instant in the last 2 hours of 30 June in Perth (last 30 minutes in Adelaide/Darwin) lands in FY+1 unless you switch the zone first |
 | [`Fx.ABNIsValid`](powerquery/Fx.ABNIsValid.pq) | AU helpers | ABN checksum validation (ATO weighting algorithm); checksum ≠ registered, so check ABN Lookup for status |
 
-Test against [`samples/sample-xero-trial-balance.csv`](samples/sample-xero-trial-balance.csv) (combined layout), [`samples/sample-xero-trial-balance-columns.csv`](samples/sample-xero-trial-balance-columns.csv) (separate-column layout) and [`samples/sample-xero-trial-balance-excel-export.csv`](samples/sample-xero-trial-balance-excel-export.csv) (the Excel export saved as CSV). The first two are fabricated, balanced TBs carrying the same accounts and amounts in both shapes, plus both the period-movement and YTD (as-at) pairs so the pair selection gets exercised. The third carries the same accounts and as-at balances under the Excel export's labels with a comparative column and no period pair. The Excel export saved as CSV loads as the as-at pair, and `useYTD = false` refuses it. All three include a code-less `Rent (Sydney)` account: it must load with a null `AccountCode` and its full name intact.
+Test against [`samples/sample-xero-trial-balance.csv`](samples/sample-xero-trial-balance.csv) (combined layout), [`samples/sample-xero-trial-balance-columns.csv`](samples/sample-xero-trial-balance-columns.csv) (separate-column layout) and [`samples/sample-xero-trial-balance-excel-export.csv`](samples/sample-xero-trial-balance-excel-export.csv) (the Excel export saved as CSV). The first 2 are fabricated, balanced TBs carrying the same accounts and amounts in both shapes, plus both the period-movement and YTD (as-at) pairs so the pair selection gets exercised. The third carries the same accounts and as-at balances under the Excel export's labels with a comparative column and no period pair. The Excel export saved as CSV loads as the as-at pair, and `useYTD = false` refuses it. All 3 include a code-less `Rent (Sydney)` account: it must load with a null `AccountCode` and its full name intact.
 
-The separate `Account Code` / `Account Name` column shape was observed in Xero's interactive Trial Balance CSV export on 20 August 2026. The Excel export labels were observed on Xero's Demo Company (AU) on 5 September 2026. The checked-in CSVs are fabricated fixtures, and their static and native acceptance checks establish parser behaviour for these three shapes only, not an official or stable Xero interactive-export schema. If Xero changes the interactive report or export UI, validate the parser with a fresh non-client export kept outside the repository before relying on it.
+The separate `Account Code` / `Account Name` column shape was observed in Xero's interactive Trial Balance CSV export on 20 August 2026. The Excel export labels were observed on Xero's Demo Company (AU) on 5 September 2026. The checked-in CSVs are fabricated fixtures, and their static and native acceptance checks establish parser behaviour for these 3 shapes only, not an official or stable Xero interactive-export schema. If Xero changes the interactive report or export UI, validate the parser with a fresh non-client export kept outside the repository before relying on it.
 
 ### Observed Xero export shapes (Demo Company (AU), 5 September 2026)
 
@@ -59,7 +59,7 @@ Facts read from the Excel exports of the Trial Balance and both aged summaries, 
 
 - Rows 1 to 3 are the report name, the organisation and the date line (`As at 30 June 2026` or `For the period ...`); row 4 is blank and row 5 is the header. A report with a subtitle (`Ageing by due date`) puts it in row 4 and the header in row 6.
 - Every `Total` and subtotal row is a live `SUM` formula whose cached value is `0`. Excel recalculates it on open, and the parsers recompute rather than trust it, but pandas, openpyxl in data-only mode and any other reader that takes the cached value sees zero for every total. Save the file from Excel before handing it to such a reader, or drop the total rows, which these parsers already do.
-- Account codes are text cells (`090` keeps its leading zero). Amounts are numbers stored to four decimal places; a nil debit or credit is an empty cell, not `0`. The trial-balance comparative column holds signed balances, debit positive.
+- Account codes are text cells (`090` keeps its leading zero). Amounts are numbers stored to 4 decimal places; a nil debit or credit is an empty cell, not `0`. The trial-balance comparative column holds signed balances, debit positive.
 - Zero ageing buckets export as `0`, not blank. The aged summaries end with `Total`, a blank row and `Percentage of total`; the payables summary also wraps its suppliers in an `Aged Payables` section row (amount cells blank) closed by `Total Aged Payables`.
 - On 13 September 2026, the Trial Balance and both aged-summary export menus offered Excel, PDF and Google Sheets, with no CSV option. Export Excel, recalculate in Excel, then save the required worksheet as CSV UTF-8. Keep the original workbook and record this conversion; renaming an `.xlsx` file does not convert it.
 
@@ -84,14 +84,14 @@ or deduplicate repeated contact names to force agreement. Any difference in the
 expense-claim section remains a separate exception.
 
 During the 13 September 2026 demo investigation, the expense-claim detail
-repeated the same two invoice IDs four times each. Their individual amounts
-matched the two postings in the control-account detail. This explains the
+repeated the same 2 invoice IDs 4 times each. Their individual amounts
+matched the 2 postings in the control-account detail. This explains the
 observed report difference, but does not authorise deduplication of names or
 equal amounts in other exports. The summary CSV carries no stable invoice IDs.
 
 These interactive reports do not supply the stable `AccountID` or both movement
 and YTD pairs required by `xero-tb-csv.v1`. The adapter output is not the canonical
-ten-column input for Monthly Close or Workpaper Review Gate. Use the existing
+10-column input for Monthly Close or Workpaper Review Gate. Use the existing
 API exporter for that contract; renaming headers or copying YTD into movement
 would invent missing evidence.
 
@@ -105,13 +105,13 @@ Number.Abs(Value.Subtract(
 )) < Currency.From("0.005")
 ```
 
-The aged-summary and Payday Super adapters use `Currency.Type` (four decimal places). Payday Super refuses amounts with more fractional digits rather than rounding producer evidence.
+The aged-summary and Payday Super adapters use `Currency.Type` (4 decimal places). Payday Super refuses amounts with more fractional digits rather than rounding producer evidence.
 
 `PaydaySuper.Report` accepts the named, 18-column CSV producer contract from `payday-super-checker`; additional producer columns are ignored, but a renamed, missing or duplicate contract header raises an error. [`samples/sample-payday-super-report.csv`](samples/sample-payday-super-report.csv) is a wholly fabricated Payday Super report. It includes a leading-zero ID and a formula-like ID already escaped with an apostrophe so both remain text through the adapter.
 
 The full-width terminal provenance record has `employee_id = NOTE`, provenance in `notes`, and blank values in every other contract field. The function removes only that shape from the returned table and retains its `notes` value in table metadata as `PaydaySuperProvenance` (for example, `Value.Metadata(PaydaySuper_Report(path))[PaydaySuperProvenance]`). A contribution whose literal employee identifier is `NOTE` remains data when its contribution fields are populated. Ordinary table loads reject an absent, duplicate, non-terminal or empty-provenance record, a report with no contribution rows, and a CSV ending inside a quoted field without requiring the caller to inspect metadata. This includes malformed quoting in an otherwise ignored extra producer column. Every CSV record must contain the same number of fields as the header: a present empty trailing field is valid, while an absent field is malformed. The adapter does not convert `UNKNOWN` into exposure, derive a replacement verdict or recompute any amount: the raw `verdict` and every producer caveat, note and amount remain authoritative for professional review.
 
-For the contracts that remain deliberately unimplemented, see [the close-input contract roadmap](docs/close-input-contract-roadmap.md). It separates the contracts that have shipped, this producer contract and the two Xero aged summary parsers above, from the MYOB-specific parsers still behind an evidence gate.
+For the contracts that remain deliberately unimplemented, see [the close-input contract roadmap](docs/close-input-contract-roadmap.md). It separates the contracts that have shipped, this producer contract and the 2 Xero aged summary parsers above, from the MYOB-specific parsers still behind an evidence gate.
 
 ## VBA modules
 
@@ -120,7 +120,7 @@ Importable `.bas` source in [`vba/`](vba/). See [`vba/README.md`](vba/README.md)
 | Module | Platform | What it does |
 |---|---|---|
 | [`modWorkpaperFormat`](vba/modWorkpaperFormat.bas) | Windows and Mac Excel | Workpaper header block, reviewer sign-off line, accounting number format, freeze panes |
-| [`modReconCompare`](vba/modReconCompare.bas) | Windows Excel only | Keyed two-way recon between (key, amount) ranges with tolerance; duplicate keys summed; subledger vs GL pattern |
+| [`modReconCompare`](vba/modReconCompare.bas) | Windows Excel only | Keyed 2-way recon between (key, amount) ranges with tolerance; duplicate keys summed; subledger versus GL pattern |
 
 `modReconCompare` late-binds `Scripting.Dictionary`, which only exists in the Windows scripting runtime. Mac Excel has no `Scripting.Dictionary` and no reference can supply it, so the module raises a clear error on Mac instead of failing mid-run. `modWorkpaperFormat` uses no `CreateObject` call and runs on both platforms.
 
@@ -143,7 +143,7 @@ Three layers check this repository, and each covers different ground:
 
 1. **Source as text.** M in `.pq` files, VBA in `.bas` files. Nothing lives only inside a binary workbook.
 2. **Exports are hostile input.** Parsers find the header row instead of assuming row counts, force account codes to text, and fail loudly when the format changed.
-3. **No client data, ever.** Fixtures are fabricated and follow the `samples/sample-*.csv` naming convention. The `.gitignore` allowlists only the six reviewed fixture filenames, so a real export dropped into `samples/` stays blocked. Real exports stay outside any repo.
+3. **No client data, ever.** Fixtures are fabricated and follow the `samples/sample-*.csv` naming convention. The `.gitignore` allowlists only the 6 reviewed fixture filenames, so a real export dropped into `samples/` stays blocked. Real exports stay outside any repo.
 
 ## Roadmap
 

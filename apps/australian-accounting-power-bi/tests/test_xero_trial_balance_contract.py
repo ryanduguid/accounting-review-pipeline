@@ -23,7 +23,7 @@ class XeroTrialBalanceContractTests(unittest.TestCase):
     """The reference application imports the exporter's canonical CSV shape.
 
     These checks read the root data-only contract with the standard library
-    only: the pinned bytes, the exact ten-column header, one report date and
+    only: the pinned bytes, the exact 10-column header, one report date and
     one tenant per file, a stable non-empty AccountID on every row, a text
     AccountCode that keeps its leading zero, and decimal balance columns.
     """
