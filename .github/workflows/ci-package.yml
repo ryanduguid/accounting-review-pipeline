@@ -107,7 +107,8 @@ jobs:
 
   test:
     needs: changes
-    if: needs.changes.outputs.run == 'true'
+    # Expand the matrix even for unchanged components so branch protection
+    # receives each required test name. Skip the work at step level instead.
     permissions:
       contents: read
     strategy:
@@ -121,12 +122,15 @@ jobs:
         working-directory: ${{ inputs.package_dir }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.run == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.changes.outputs.run == 'true'
         with:
           python-version: ${{ matrix.python }}
       - name: install the locked toolchain
+        if: needs.changes.outputs.run == 'true'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: ${{ env.UV_VERSION }}
@@ -137,6 +141,7 @@ jobs:
       # leaves every leg green. --cov takes its source from the component's
       # [tool.coverage.run] configuration.
       - name: run tests with branch coverage
+        if: needs.changes.outputs.run == 'true'
         run: >-
           uv run --locked --extra dev pytest
           --cov --cov-branch --cov-report=term-missing --cov-report=xml
