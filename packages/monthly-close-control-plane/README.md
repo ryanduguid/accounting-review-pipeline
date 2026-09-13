@@ -49,7 +49,8 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
-For transaction-level clearing-account matching, see the
+The [architecture note](docs/architecture.md) sets out the control boundary and
+the review-pack pipeline. For transaction-level clearing-account matching, see the
 [three-month reconciliation example](docs/clearing-reconciliation.md).
 The new `reconcile` command suggests matches, records reviewed allocations and
 carries outstanding items forward. It is an unreleased source addition and uses a
