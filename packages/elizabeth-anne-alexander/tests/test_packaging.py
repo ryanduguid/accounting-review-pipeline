@@ -54,7 +54,7 @@ def test_release_workflow_keeps_the_pinned_reusable_policy_caller() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/"
-        "release-python.yml@fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
+        "release-python.yml@171aa487dbc0a8f437ed84407f0d506f814548c1"
     ) in workflow
     assert "version-parser: python-literal" in workflow
     assert "version-file: elizabeth_anne_alexander/version.py" in workflow
@@ -88,7 +88,7 @@ def test_the_ci_test_step_does_not_repeat_the_quiet_flag_from_addopts() -> None:
         assert sum(line.count("-q") for line in addopts) + arguments.count("-q") <= 1, step
 
 
-def test_citation_tracks_the_published_compatibility_release() -> None:
+def test_citation_tracks_the_unreleased_candidate() -> None:
     citation = {}
     for line in (REPO / "CITATION.cff").read_text(encoding="utf-8").splitlines():
         if not line.startswith((" ", "-")) and ": " in line:
@@ -104,8 +104,8 @@ def test_citation_tracks_the_published_compatibility_release() -> None:
     ]
 
     assert package.metadata["Name"] == "elizabeth-anne-alexander"
-    assert package.version == __version__ == citation["version"] == "0.2.2"
-    assert citation["date-released"] == "2026-09-03"
+    assert package.version == __version__ == citation["version"] == "0.2.3"
+    assert "date-released" not in citation
     assert citation["url"] == citation["repository-code"] == PACKAGE_URL
     assert len(console_scripts) == 1
     assert console_scripts[0].value == "elizabeth_anne_alexander.cli:main"
@@ -122,7 +122,7 @@ def test_current_metadata_and_public_links_use_the_monorepo() -> None:
 
     assert urls["Homepage"] == PACKAGE_URL
     assert urls["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/elizabeth-anne-alexander/v0.2.2/"
+        f"{REPOSITORY_URL}/tree/elizabeth-anne-alexander/v0.2.3/"
         "packages/elizabeth-anne-alexander"
     )
     assert urls["Repository"] == f"{REPOSITORY_URL}.git"
@@ -135,14 +135,14 @@ def test_current_metadata_and_public_links_use_the_monorepo() -> None:
     assert (
         "| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution "
         "`elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command "
-        "`elizabeth-anne-alexander` | 0.2.2 |"
+        "`elizabeth-anne-alexander` | 0.2.3 |"
     ) in root_readme
 
 
 def test_current_release_guidance_binds_the_exact_namespaced_identity() -> None:
     guidance = (REPO / "RELEASING.md").read_text(encoding="utf-8")
 
-    assert "tag=elizabeth-anne-alexander/v0.2.2" in guidance
+    assert "tag=elizabeth-anne-alexander/v0.2.3" in guidance
     assert 'version="${tag#elizabeth-anne-alexander/v}"' in guidance
     assert "repo=ryanduguid/accounting-review-pipeline" in guidance
     assert guidance.count("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91") == 2

@@ -30,3 +30,8 @@ What this release does not do:
 Nothing is published to PyPI. `release-evatt.yml` deliberately carries no
 publish job while the disclosure policy this package enforces is unsigned;
 `RELEASING.md` records what to add when that changes.
+
+Review corrections included in this candidate:
+
+- Suppress matched values in verification output and inspect the actual map repository after removing inherited Git location variables.
+- Correct unsupported BSB and anonymity claims.

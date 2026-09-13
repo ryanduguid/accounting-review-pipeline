@@ -272,7 +272,7 @@ class EvaluationPackTest(unittest.TestCase):
         self.assertIn("fabricated", readme.casefold())
         self.assertNotIn("case study", readme.casefold())
 
-    def test_v017_release_metadata_points_to_the_canonical_monorepo(self):
+    def test_current_release_metadata_points_to_the_canonical_monorepo(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         version = re.search(r'(?m)^version = "([^"]+)"$', pyproject).group(1)
         citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
@@ -285,23 +285,25 @@ class EvaluationPackTest(unittest.TestCase):
         root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
         canonical = "https://github.com/ryanduguid/accounting-review-pipeline"
 
-        self.assertEqual(version, "0.1.7")
-        self.assertTrue(notes.startswith("# v0.1.7\n"))
-        self.assertIn("version: 0.1.7", citation)
+        self.assertEqual(version, "0.1.8")
+        self.assertTrue(notes.startswith("# v0.1.8\n"))
+        self.assertIn("version: 0.1.8", citation)
         self.assertIn(
             f'repository-code: "{canonical}/tree/main/'
             'packages/xero-trial-balance-export"',
             citation,
         )
         self.assertIn(f"{canonical}/actions/workflows/ci.yml", readme)
+        # The README citation identifies the last published release.
         self.assertIn("xero-trial-balance-export/v0.1.7", readme)
+        self.assertIn("releases/tag/xero-trial-balance-export%2Fv0.1.7", readme)
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "
             "| distribution `xero-trial-balance-export`, commands `export-tb` and "
-            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.7 |",
+            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.8 |",
             root_readme,
         )
-        self.assertIn("tag=xero-trial-balance-export/v0.1.7", releasing)
+        self.assertIn("tag=xero-trial-balance-export/v0.1.8", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
         self.assertIn("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91", releasing)
         self.assertNotIn("isLatest", releasing)

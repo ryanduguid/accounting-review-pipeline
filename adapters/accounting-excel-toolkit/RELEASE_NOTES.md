@@ -1,3 +1,9 @@
+# v0.1.6
+
+- Require all six ageing bucket headers and retain fixed-decimal currency columns.
+- Reject excess decimal scale and embedded amount errors in Payday imports.
+- Limit fixture exceptions to the six reviewed files.
+
 # v0.1.5
 
 The `v0.1.1`, `v0.1.3` and `v0.1.4` tags are retained as unreleased failed-preflight tags. All three workflows stopped before any build or publication step (v0.1.3's release.yml pinned release-policy to a SHA orphaned by a history rewrite; v0.1.4's VERSION file was not bumped alongside RELEASE_NOTES.md), so none has a release or assets, and GitHub's tag-protection rule blocks deleting or moving any of them.
