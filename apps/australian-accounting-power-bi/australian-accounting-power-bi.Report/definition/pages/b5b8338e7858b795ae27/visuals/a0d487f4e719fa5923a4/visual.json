@@ -234,7 +234,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Key Expense & Margin Ratios vs ATO Industry Benchmarks'"
+                "Value": "'Expense and margin ratios vs fabricated sample benchmarks'"
                 }
               }
             }

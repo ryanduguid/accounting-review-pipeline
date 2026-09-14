@@ -47,7 +47,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Client GP Margin vs ATO Benchmark'"
+                "Value": "'Client GP margin vs fabricated sample benchmark'"
                 }
               }
             }

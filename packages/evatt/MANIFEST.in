@@ -4,4 +4,6 @@ include DISCLAIMER.md
 include DATA-FLOW.md
 include SECURITY.md
 include CONTRIBUTING.md
+include .gitignore
+include uv.lock
 recursive-include evatt/samples *.md *.json
