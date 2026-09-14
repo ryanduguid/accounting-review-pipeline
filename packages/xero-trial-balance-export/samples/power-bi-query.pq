@@ -32,8 +32,8 @@ let
 
     // Read several columns wider than the contract, on purpose.
     //
-    // Csv.Document normalises to whatever column count it is given: it drops
-    // fields beyond that count and pads shorter rows. Asking for exactly 10
+    // Csv.Document normally drops fields beyond the requested column count
+    // and pads shorter rows. Asking for exactly 10 without ExtraValues.Error
     // would therefore reshape a malformed file into the expected shape before
     // any check could see it, and an 11-column export would sail through the
     // header comparison below. Reading wider leaves the evidence intact: in a
@@ -47,10 +47,11 @@ let
     // loaded as if it were well formed. ProbeMargin below is how many columns
     // past the contract are read and checked.
     //
-    // ponytail: a file wider than 10 + ProbeMargin columns whose extra fields
-    // all sit past that ceiling would still read as well formed. Raise
-    // ProbeMargin if a wider malformed export is ever seen; counting the
-    // delimiters per line instead would need quote-aware parsing in M.
+    // ExtraValues.Error rejects rows beyond the probe width, including rows
+    // whose first surplus value follows several empty fields. The parser
+    // handles quoted commas and line breaks with its default QuoteStyle.Csv.
+    // Pass ExtraValues.Error as the fourth argument: Excel 16.0 build 20430
+    // ignores it in the options record.
     //
     // What "no value" looks like is not the same in every host. Power BI
     // Desktop pads a short record with null; Excel 16.0's engine pads it with
@@ -67,15 +68,15 @@ let
         {List.Count(ExpectedColumns) + 1 .. List.Count(ExpectedColumns) + ProbeMargin},
         (index) => "Column" & Text.From(index)
     ),
-    Probe = Csv.Document(
+    // Force parsing before removing overflow columns, so projection cannot
+    // discard the parser's excess-field error.
+    Probe = Table.Buffer(Csv.Document(
         File.Contents(SourcePath),
-        [
-            Delimiter = ",",
-            Columns = List.Count(ExpectedColumns) + ProbeMargin,
-            Encoding = 65001,
-            QuoteStyle = QuoteStyle.Csv
-        ]
-    ),
+        List.Count(ExpectedColumns) + ProbeMargin,
+        ",",
+        ExtraValues.Error,
+        65001
+    )),
     IsAbsent = (value as any) as logical => value = null or value = "",
     Present = (values as list) as list => List.Select(values, (value) => not IsAbsent(value)),
     Overflow = List.Combine(

@@ -105,9 +105,14 @@ class PowerBiSampleTests(unittest.TestCase):
         column was not enough: a row whose surplus data sat past an empty
         eleventh field read as well formed."""
         code = _code_only()
-        self.assertIn("Columns = List.Count(ExpectedColumns) + ProbeMargin", code)
+        self.assertRegex(
+            code,
+            r'Csv\.Document\(\s*File\.Contents\(SourcePath\),\s*'
+            r'List\.Count\(ExpectedColumns\) \+ ProbeMargin,\s*",",\s*ExtraValues\.Error,\s*65001\s*\)',
+        )
         self.assertGreater(_probe_margin(), 1)
         self.assertNotIn("Columns = List.Count(ExpectedColumns),", code)
+        self.assertIn("Probe = Table.Buffer(Csv.Document(", code)
 
     def test_each_malformed_shape_has_its_own_refusal(self) -> None:
         code = _code_only()
@@ -157,6 +162,8 @@ class PowerBiSampleTests(unittest.TestCase):
             """Csv.Document with Columns = expected + margin, as each host pads."""
             overflow: list[object] = []
             for record in records:
+                if len(record) > expected + margin:
+                    raise ValueError("More fields than the parser's column count")
                 widened = list(record[: expected + margin])
                 widened += [padding] * (expected + margin - len(widened))
                 overflow.extend(widened[expected:])
@@ -201,6 +208,11 @@ class PowerBiSampleTests(unittest.TestCase):
         # columns in every row.
         null_only = [v for v in probe(sample, "") if v is not None]
         self.assertEqual(len(null_only), len(sample) * margin)
+
+        beyond_probe = [row + [""] * margin + ["surplus"] for row in sample]
+        for padding in (None, ""):
+            with self.assertRaises(ValueError):
+                probe(beyond_probe, padding)
 
     def test_the_source_path_is_an_unusable_placeholder(self) -> None:
         """A path the reader must replace, not one that quietly half-works."""
