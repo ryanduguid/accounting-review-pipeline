@@ -4,10 +4,10 @@
 | --- | --- | --- |
 | `evatt` | `evatt` | `evatt` |
 
-evatt has never been released from this repository: no `evatt/v*` tag has
-been published and the distribution does not exist on PyPI, so the names above
-are the identifiers a release would use, and the way to run it today is
-`uv run --locked evatt ...` from `packages/evatt/` in a checkout.
+The `evatt/v0.1.0` tag carries an immutable release with a wheel, a source
+distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`. The
+distribution is not on PyPI, by design: install it from the release assets, or
+run `uv run --locked evatt ...` from `packages/evatt/` in a checkout.
 
 ## Scope and assurance boundary
 

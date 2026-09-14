@@ -31,6 +31,13 @@ def _declared_columns() -> list[str]:
     return re.findall(r'"([^"]+)"', block.group(1))
 
 
+def _probe_margin() -> int:
+    """How many columns past the contract the query reads and checks."""
+    match = re.search(r"ProbeMargin = (\d+)", _code_only())
+    assert match is not None, "the query must declare ProbeMargin"
+    return int(match.group(1))
+
+
 def _assigned_types() -> dict[str, str]:
     """Every {"Column", type} pair in the Table.TransformColumnTypes step."""
     block = re.search(r"Table\.TransformColumnTypes\s*\(\s*[^,]+,\s*\{((?:[^{}]|\{[^{}]*\})*)\}", _code_only())
@@ -93,10 +100,13 @@ class PowerBiSampleTests(unittest.TestCase):
         """Csv.Document normalises to the column count it is handed, dropping
         extra fields and padding short rows. Asking for exactly 10 would
         reshape a malformed file into the expected shape before the header
-        check could see it, so the query reads one column wider and treats
-        anything in that column as proof the file is too wide."""
+        check could see it, so the query reads several columns wider and treats
+        anything past the contract as proof the file is too wide. One extra
+        column was not enough: a row whose surplus data sat past an empty
+        eleventh field read as well formed."""
         code = _code_only()
-        self.assertIn("Columns = List.Count(ExpectedColumns) + 1", code)
+        self.assertIn("Columns = List.Count(ExpectedColumns) + ProbeMargin", code)
+        self.assertGreater(_probe_margin(), 1)
         self.assertNotIn("Columns = List.Count(ExpectedColumns),", code)
 
     def test_each_malformed_shape_has_its_own_refusal(self) -> None:
@@ -128,7 +138,7 @@ class PowerBiSampleTests(unittest.TestCase):
         """
         code = _code_only()
         self.assertIn('IsAbsent = (value as any) as logical => value = null or value = ""', code)
-        self.assertIn("Overflow = Present(Table.Column(Probe, OverflowColumn))", code)
+        self.assertIn("List.Transform(OverflowColumns, (name) => Present(Table.Column(Probe, name)))", code)
         self.assertNotIn("List.RemoveNulls", code)
         self.assertNotIn("List.Contains(Record.FieldValues(_), null)", code)
 
@@ -136,19 +146,20 @@ class PowerBiSampleTests(unittest.TestCase):
         """Port the query's width rule and run both host paddings through it.
 
         The M cannot be evaluated here, so the rule is reimplemented from the
-        query's own ExpectedColumns count and applied to records parsed from
-        the committed sample and from a fabricated 11-column file. Native
+        query's own ExpectedColumns count and ProbeMargin and applied to records
+        parsed from the committed sample and from fabricated wide files. Native
         Power Query confirmation is a separate, native check.
         """
         expected = len(_declared_columns())
+        margin = _probe_margin()
 
         def probe(records: list[list[str]], padding: object) -> list[object]:
-            """Csv.Document with Columns = expected + 1, as each host pads."""
-            overflow = []
+            """Csv.Document with Columns = expected + margin, as each host pads."""
+            overflow: list[object] = []
             for record in records:
-                widened = list(record[: expected + 1])
-                widened += [padding] * (expected + 1 - len(widened))
-                overflow.append(widened[expected])
+                widened = list(record[: expected + margin])
+                widened += [padding] * (expected + margin - len(widened))
+                overflow.extend(widened[expected:])
             return overflow
 
         def is_absent(value: object) -> bool:
@@ -167,11 +178,29 @@ class PowerBiSampleTests(unittest.TestCase):
             present = [v for v in probe(wide, padding) if not is_absent(v)]
             self.assertEqual(len(present), len(sample), "an 11-column file must still be refused")
 
-        # The defect itself: removing nulls alone kept every empty-text pad, so
+        # The F445 case: the eleventh field is empty and the twelfth carries
+        # data. Reading one extra column saw only the empty eleventh and loaded
+        # the file as if it were well formed.
+        skipped = [row + ["", "surplus"] for row in sample]
+        for padding in (None, ""):
+            present = [v for v in probe(skipped, padding) if not is_absent(v)]
+            self.assertEqual(
+                len(present),
+                len(sample),
+                "a file whose surplus data sits past an empty eleventh field must be refused",
+            )
+        narrow_probe = [row[: expected + 1][expected] for row in skipped]
+        self.assertEqual(
+            [v for v in narrow_probe if not is_absent(v)],
+            [],
+            "this is the case a single overflow column cannot see",
+        )
+
+        # The earlier defect: removing nulls alone kept every empty-text pad, so
         # under Excel's engine the committed sample looked wider than ten
         # columns in every row.
         null_only = [v for v in probe(sample, "") if v is not None]
-        self.assertEqual(len(null_only), len(sample))
+        self.assertEqual(len(null_only), len(sample) * margin)
 
     def test_the_source_path_is_an_unusable_placeholder(self) -> None:
         """A path the reader must replace, not one that quietly half-works."""
