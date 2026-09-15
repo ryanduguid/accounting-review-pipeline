@@ -628,7 +628,23 @@ def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...
         | {row.account_code for row in rows if row.account_code}
         | {row.account_id for row in rows}
     )
-    if any(leaf in forbidden for leaf in _leaf_strings(model)):
+    # A finding's `section` is source text the model is meant to carry: it is in
+    # MODEL_PROJECTION and no README control names it. Comparing it against the
+    # forbidden account names meant an account called "Revenue" inside section
+    # "Revenue", an ordinary trial balance, raised a disclosure error naming a
+    # disclosure that had not happened, and the pack could not be evaluated at all.
+    # The amount strings stay in the sweep: test_exact_account_id_leaf_still_trips
+    # pins that an account id appearing as a delta fails closed.
+    derived = {"section"}
+    scanned = list(_leaf_strings({k: v for k, v in model.items() if k != "findings"}))
+    for finding in model.get("findings", []):
+        scanned.extend(
+            leaf
+            for key, value in finding.items()
+            if key not in derived
+            for leaf in _leaf_strings(value)
+        )
+    if any(leaf in forbidden for leaf in scanned):
         raise GatewayError("Internal disclosure assertion failed: model result contains raw source display data.")
     serialised = json.dumps(model, sort_keys=True)
     if '"account_code"' in serialised or '"account_name"' in serialised or '"tenant"' in serialised:

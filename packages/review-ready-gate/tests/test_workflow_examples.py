@@ -93,7 +93,7 @@ def test_release_notes_heading_matches_release_policy_tag() -> None:
 def test_readme_development_uses_the_locked_uv_entrypoint() -> None:
     development = (ROOT / "README.md").read_text(encoding="utf-8").split("## Development", 1)[1]
     block = development.split("```bash", 1)[1].split("```", 1)[0]
-    assert "uv run pytest" in block
+    assert "uv run --locked --extra dev pytest" in block
     assert "uv lock --check" in block
     assert "python -m pytest" not in block
 

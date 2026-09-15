@@ -46,7 +46,7 @@
 let
     TrialBalance = (FilePath as text, optional useYTD as nullable logical) as table =>
         let
-            fileBinary = File.Contents(FilePath),
+            fileBinary = Binary.Buffer(File.Contents(FilePath)),
             // Locate the header line and measure its width BEFORE parsing,
             // so the one-field title row can't collapse the column count.
             // The header is the line whose FIRST FIELD is exactly "Account"
@@ -170,7 +170,13 @@ let
                         ),
             Raw = Csv.Document(
                 fileBinary,
-                [Delimiter = ",", Columns = columnCount, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+                [
+                    Delimiter = ",",
+                    Columns = columnCount,
+                    Encoding = 65001,
+                    QuoteStyle = QuoteStyle.Csv,
+                    ExtraValues = ExtraValues.Error
+                ]
             ),
             Indexed = Table.AddIndexColumn(Raw, "__idx", 0, 1, Int64.Type),
             // same header test as the raw-lines pass above (first cell

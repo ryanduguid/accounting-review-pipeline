@@ -257,7 +257,7 @@ Use the locked toolchain. `python -m pytest` is not what CI runs.
 ```bash
 uv lock --check
 uv sync --locked --all-extras
-uv run pytest
+uv run --locked --extra dev pytest
 uv run ruff check reviewready tests
 uv run mypy reviewready
 uv build

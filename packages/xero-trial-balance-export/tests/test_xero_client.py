@@ -1106,7 +1106,12 @@ class ResolveTokenFileTest(unittest.TestCase):
 
     def test_default_is_per_user_state_not_site_packages(self):
         env = {k: v for k, v in os.environ.items() if k != "XERO_TOKEN_FILE"}
-        with mock.patch.dict(os.environ, env, clear=True):
+        # The legacy module-adjacent branch is checked first, and a developer who has
+        # run auth.py from the package directory has that file on disk, gitignored.
+        # Neutralise it so this exercises only the fallback it names.
+        absent = os.path.join(tempfile.gettempdir(), "no-such-legacy", "token.json")
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch("token_store.LEGACY_MODULE_TOKEN_FILE", absent):
             resolved = xero_client.resolve_token_file()
         self.assertEqual(resolved, xero_client.DEFAULT_TOKEN_FILE)
         self.assertNotEqual(

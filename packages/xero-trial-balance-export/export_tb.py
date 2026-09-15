@@ -1138,6 +1138,13 @@ def main() -> None:
     # The strict zip in flatten_report only catches a cell-COUNT change; a
     # retitled column (count unchanged) would slip through and silently zero
     # every value via record.get(). Guard the titles themselves.
+    # A duplicate title survives the set comparison below, and flatten_report's
+    # record[title] = value lets the later cell replace the earlier one, so the
+    # export can carry the wrong account name in a balanced file.
+    if len(column_titles) != len(set(column_titles)):
+        sys.exit(
+            "Unexpected report columns - duplicate titles found. Has the API shape changed?"
+        )
     missing = {"Account", "Debit", "Credit", "YTD Debit", "YTD Credit"} - set(column_titles)
     if missing:
         sys.exit(f"Unexpected report columns - missing {sorted(missing)}. Has the API shape changed?")

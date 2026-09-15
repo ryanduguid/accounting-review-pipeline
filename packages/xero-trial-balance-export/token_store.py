@@ -63,7 +63,15 @@ def safe_token_path(path: str) -> str:
     )
 
 
-DEFAULT_TOKEN_FILE = safe_token_path(_state_home_token_file())
+# The resolved default state directory is an allowed root in its own right. Without
+# it, a home whose .local or AppData component is a symlink or a junction resolves
+# outside realpath(home) and this line raises SystemExit while the module is being
+# imported, before any --token-file or XERO_TOKEN_FILE override can be read.
+DEFAULT_TOKEN_FILE = os.path.realpath(
+    os.path.abspath(os.path.expanduser(_state_home_token_file()))
+)
+if os.path.basename(DEFAULT_TOKEN_FILE) != "token.json":
+    raise SystemExit("error: token cache path must be named token.json")
 
 
 def resolve_token_file(cli_value: str | None = None) -> str:

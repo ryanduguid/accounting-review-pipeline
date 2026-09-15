@@ -91,7 +91,7 @@ below.
 | Currency | AUD assumed; no conversion ever | Repo boundary |
 | Date semantics | As-at report date recorded from the workbook if present | To observe |
 | Shape change | Fail closed with a named error, never best-effort | Repo boundary |
-| Formula injection | Guard `=`, `+`, `-`, `@` per CONTRIBUTING rules | CONTRIBUTING.md |
+| Formula injection | Guard `=` always; guard `+`, `-`, `@` only when the remainder is not a plain code | CONTRIBUTING.md |
 
 Every cell marked 'to observe' is unresolved. Filling them from anything other
 than a real export is prohibited.

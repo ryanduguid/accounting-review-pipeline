@@ -28,7 +28,7 @@ REPOSITORY_NAME = "accounting-review-pipeline"
 PACKAGE_NAME = "monthly-close-control-plane"
 REPOSITORY_URL = f"https://github.com/ryanduguid/{REPOSITORY_NAME}"
 PACKAGE_URL = f"{REPOSITORY_URL}/tree/main/packages/monthly-close-control-plane"
-RELEASE_ASSET_SHA256 = "8afed7249f031a862ce052c3f27c793d6c91dd0dafbff1bd95f20f90ed20d94d"
+RELEASE_ASSET_SHA256 = "8f6ad9542668954510eb9f7ad5ec01307bd21f0549b70e42f03ab3d551ed9afe"
 
 # The committed example must point at a release that actually exists, so this
 # tracks the last *published* tag rather than pyproject.toml's version (which
@@ -38,7 +38,7 @@ RELEASE_ASSET_SHA256 = "8afed7249f031a862ce052c3f27c793d6c91dd0dafbff1bd95f20f90
 # (`sha256sum` against the downloaded release asset, not a locally-built guess:
 # the wheel embeds SOURCE_DATE_EPOCH from the tag commit, so a local build
 # before the tag exists cannot reproduce the real bytes).
-EXAMPLE_PINNED_VERSION = "0.1.3"
+EXAMPLE_PINNED_VERSION = "0.1.4"
 
 EXPECTED_EXTERNAL_PINS = {
     "actions/checkout": (

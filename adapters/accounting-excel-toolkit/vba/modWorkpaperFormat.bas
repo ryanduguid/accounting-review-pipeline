@@ -29,7 +29,12 @@ Public Sub ApplyWorkpaperHeader( _
     ' first, so a repeat call exits with the sheet untouched. The check
     ' reads the cell value only - no metadata APIs, so it behaves the
     ' same on every Excel host.
-    If Left$(CStr(ws.Range("A3").Value), 21) = "For the period ended " Then Exit Sub
+    ' A3 can already hold #N/A or #REF! on an existing workpaper, and CStr on a
+    ' Variant/Error raises run-time error 13, which aborted the sub and wrote no
+    ' header at all. An error value is simply not a header, so the insert proceeds.
+    If Not IsError(ws.Range("A3").Value) Then
+        If Left$(CStr(ws.Range("A3").Value), 21) = "For the period ended " Then Exit Sub
+    End If
 
     ' A live cut/copy marquee turns Insert into a paste - the clipboard
     ' block would land in rows 1:5 instead of blank rows

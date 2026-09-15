@@ -81,10 +81,16 @@ expression Source_Dim_Entity = ```
 	        {"Currency", type text},
 	        {"ConsolidationWeight", type number}
 	    })
+	    InvalidABNs = Table.SelectRows(TypedTable, each not Fx_ValidateABN([ABN]))
 	in
-	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
-	    else error Error.Record("Source_Dim_Entity", "Invalid source values",
-	        "Correct the source CSV before refreshing the model.")
+	    if not Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
+	        error Error.Record("Source_Dim_Entity", "Invalid source values",
+	            "Correct the source CSV before refreshing the model.")
+	    else if not Table.IsEmpty(InvalidABNs) then
+	        error Error.Record("Source_Dim_Entity", "Invalid ABN",
+	            "EntityID " & Text.From(InvalidABNs{0}[EntityID]) & " carries an ABN that fails "
+	            & "the ATO modulus-89 checksum. Correct the source CSV before refreshing.")
+	    else TypedTable
 	```
 
 expression Source_Fact_ATOBenchmark = ```
@@ -160,10 +166,22 @@ expression Source_Fact_GeneralLedger = ```
 	        {"IntercompanyEntityID", type text},
 	        {"IsIntercompany", type logical}
 	    })
+	    ByJournal = Table.Group(TypedTable, {"JournalID"}, {
+	        {"TotalDebit", each List.Sum([Debit]), Currency.Type},
+	        {"TotalCredit", each List.Sum([Credit]), Currency.Type}
+	    }),
+	    Unbalanced = Table.SelectRows(ByJournal, each [TotalDebit] <> [TotalCredit])
 	in
-	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
-	    else error Error.Record("Source_Fact_GeneralLedger", "Invalid source values",
-	        "Correct the source CSV before refreshing the model.")
+	    if not Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
+	        error Error.Record("Source_Fact_GeneralLedger", "Invalid source values",
+	            "Correct the source CSV before refreshing the model.")
+	    else if not Table.IsEmpty(Unbalanced) then
+	        error Error.Record("Source_Fact_GeneralLedger", "Unbalanced journal",
+	            "JournalID " & Text.From(Unbalanced{0}[JournalID]) & " has debits of "
+	            & Text.From(Unbalanced{0}[TotalDebit]) & " against credits of "
+	            & Text.From(Unbalanced{0}[TotalCredit]) & ". Grouped by JournalID only, so a "
+	            & "cross-entity journal that balances overall is not refused.")
+	    else TypedTable
 	```
 
 expression Source_Fact_PayrollSuper = ```

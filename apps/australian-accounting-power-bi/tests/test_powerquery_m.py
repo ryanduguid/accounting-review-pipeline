@@ -172,3 +172,25 @@ class TestPowerQueryM(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRefreshGuardsBeyondConversionErrors(unittest.TestCase):
+    """Table.SelectRowsWithErrors sees conversion errors only. An invalid ABN is still
+    valid text, and a validly typed ledger can still hold an unbalanced journal, so
+    both loaded into the model and into the financial-statement measures."""
+
+    def test_entity_import_applies_the_abn_checksum(self) -> None:
+        content = named_expressions()["Source_Dim_Entity"]
+
+        self.assertIn("Fx_ValidateABN([ABN])", content)
+        self.assertIn('error Error.Record("Source_Dim_Entity", "Invalid ABN"', content)
+
+    def test_general_ledger_import_refuses_an_unbalanced_journal(self) -> None:
+        content = named_expressions()["Source_Fact_GeneralLedger"]
+
+        self.assertIn('Table.Group(TypedTable, {"JournalID"}', content)
+        self.assertIn("[TotalDebit] <> [TotalCredit]", content)
+        self.assertIn('error Error.Record("Source_Fact_GeneralLedger", "Unbalanced journal"', content)
+        # Grouped by JournalID alone: adding EntityID would impose a per-entity balance
+        # and refuse a cross-entity journal that balances overall.
+        self.assertNotIn('{"JournalID", "EntityID"}', content)

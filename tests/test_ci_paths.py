@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import re
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,14 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC is not None and SPEC.loader is not None
 select_paths = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(select_paths)
+
+
+def configured_ci_paths(workflow: str) -> list[str]:
+    """The CI_PATHS block the named workflow passes to select_paths."""
+    text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
+    match = re.search(r"(?m)^(\s+)CI_PATHS: \|\n((?:\1  .*\n)+)", text)
+    assert match is not None, f"{workflow} declares no CI_PATHS block"
+    return [line.strip() for line in match.group(2).splitlines() if line.strip()]
 
 
 class SelectionTests(unittest.TestCase):
@@ -100,7 +109,11 @@ class SelectionTests(unittest.TestCase):
                 self.assertTrue(select_paths.matches(paths, [prefix]))
 
     def test_shared_paths_run_and_unrelated_paths_skip(self) -> None:
-        patterns = [".github/**", "uv.lock", "contracts/xero-trial-balance-v1/**"]
+        # The workflow's own CI_PATHS, not a copy of it: a local list stayed green
+        # when the workflow dropped a pattern, and CI then skipped those checks.
+        patterns = configured_ci_paths("joined-conformance.yml")
+        for required in (".github/**", "uv.lock", "contracts/xero-trial-balance-v1/**"):
+            self.assertIn(required, patterns)
         for path in (
             ".github/ci/select_paths.py",
             "uv.lock",
