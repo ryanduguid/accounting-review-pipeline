@@ -19,6 +19,7 @@ from .loader import (
     SourceSnapshot,
     load_canonical_tb,
     load_mapping,
+    load_mapping_policy,
     load_reviewer_acknowledgement,
     load_subledger,
 )
@@ -291,6 +292,32 @@ def _mapping_exceptions(rows: list[TrialBalanceRow], mapping: dict[str, str]) ->
     return result
 
 
+def _mapping_compatibility_exceptions(
+    rows: list[TrialBalanceRow], mapping: dict[str, str], policy: dict[str, set[str]]
+) -> list[ExceptionItem]:
+    result = []
+    for row in sorted(rows, key=lambda item: item.key):
+        group = mapping.get(row.account_id)
+        if group is None:  # The missing-mapping control already identifies this account.
+            continue
+        permitted = policy.get(group, set())
+        if row.section in permitted:
+            continue
+        rule = (
+            f"Permitted Section values: {', '.join(repr(value) for value in sorted(permitted))}."
+            if permitted else "The supplied policy declares no permitted Section for this group."
+        )
+        result.append(_exception(
+            "mapping_compatibility", "REVIEW", row, current_value=row.ytd_net,
+            reason=f"Source Section {row.section!r} is not permitted for supplied ReviewGroup "
+                   f"{group!r}. {rule}",
+            reviewer_action="Compare the source chart of accounts, supplied mapping and mapping "
+                            "policy. Retain evidence for the reporting treatment before changing "
+                            "either file; this exception does not reclassify the account.",
+        ))
+    return result
+
+
 def _subledger_exceptions(
     current_by_key: dict[tuple[str, str], TrialBalanceRow],
     subledger: dict[tuple[str, str], Decimal],
@@ -348,6 +375,7 @@ def review_close(
     current_path: Path,
     prior_path: Path,
     mapping_path: Path | None = None,
+    mapping_policy_path: Path | None = None,
     subledger_path: Path | None = None,
     acknowledgement_path: Path | None = None,
     absolute_threshold: Decimal = Decimal("1000"),
@@ -355,6 +383,8 @@ def review_close(
     reconciliation_tolerance: Decimal = Decimal("0.01"),
 ) -> CloseReviewPack:
     """Create a deterministic review pack without mutating any accounting system."""
+    if mapping_policy_path is not None and mapping_path is None:
+        raise SchemaError("A mapping policy requires a supplied account mapping.")
     for name, value in {
         "absolute_threshold": absolute_threshold,
         "percentage_threshold": percentage_threshold,
@@ -376,6 +406,13 @@ def review_close(
         else None
     )
     mapping = load_mapping(mapping_source)
+    mapping_policy_source = (
+        SourceSnapshot.capture(mapping_policy_path, label="Mapping policy")
+        if mapping_policy_path is not None else None
+    )
+    mapping_policy = (
+        load_mapping_policy(mapping_policy_source) if mapping_policy_source is not None else None
+    )
     subledger_source = (
         SourceSnapshot.capture(subledger_path, label="Subledger file")
         if subledger_path is not None
@@ -419,6 +456,8 @@ def review_close(
         # every account would be an exception against an empty mapping.
         if mapping_path is not None:
             exceptions += _mapping_exceptions(current_rows, mapping)
+        if mapping_policy is not None:
+            exceptions += _mapping_compatibility_exceptions(current_rows, mapping, mapping_policy)
         exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
 
     # The mapping's ReviewGroup travels with every exception that names an
@@ -438,6 +477,8 @@ def review_close(
     }
     if mapping_source is not None:
         source_hashes["account_mapping"] = mapping_source.sha256
+    if mapping_policy_source is not None:
+        source_hashes["mapping_policy"] = mapping_policy_source.sha256
     if subledger_source is not None:
         source_hashes["subledger"] = subledger_source.sha256
     if acknowledgement_source is not None:
