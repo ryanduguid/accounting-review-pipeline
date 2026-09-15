@@ -78,3 +78,17 @@ OAuth, HTTP, credentials or tokens. Keep client data and generated workpapers ou
 checkout.
 
 For a potential security vulnerability follow `SECURITY.md`.
+
+## Required CI results
+
+Branch protection should require `pipeline-gates`, `conformance-gates` and
+`standard-library-gates`, plus one `<component directory> / gates` result per
+Python component. Each result fails if an expected job fails, is cancelled or
+does not run. Unchanged components skip their matrix jobs; the final result
+accepts that only after successful path selection. File moves select both the
+source and destination components.
+
+Run `python -m unittest tests.test_ci_paths -v` for selector changes. The joined
+and standard-library workflows run this regression suite before selecting work.
+Keep existing required contexts until the replacement checks have reported on
+a reviewed revision, then migrate branch protection in the same maintenance window.

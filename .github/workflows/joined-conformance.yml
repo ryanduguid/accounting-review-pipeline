@@ -11,45 +11,8 @@ name: Joined Xero Trial Balance Conformance
 on:
   push:
     branches: [main]
-    paths:
-      - "contracts/xero-trial-balance-v1/**"
-      - "tests/test_xero_trial_balance_contract.py"
-      - "tests/test_shared_blocks.py"
-      - "packages/xero-trial-balance-export/**"
-      - "packages/review-ready-gate/**"
-      - "packages/monthly-close-control-plane/**"
-      - "packages/elizabeth-anne-alexander/**"
-      - "adapters/accounting-excel-toolkit/**"
-      - "apps/australian-accounting-power-bi/**"
-      - ".github/**"
-      - "AGENTS.md"
-      - "CONTRIBUTING.md"
-      - "IMPORTS.md"
-      - "README.md"
-      - "SECURITY.md"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "justfile"
   pull_request:
-    paths:
-      - "contracts/xero-trial-balance-v1/**"
-      - "tests/test_xero_trial_balance_contract.py"
-      - "tests/test_shared_blocks.py"
-      - "packages/xero-trial-balance-export/**"
-      - "packages/review-ready-gate/**"
-      - "packages/monthly-close-control-plane/**"
-      - "packages/elizabeth-anne-alexander/**"
-      - "adapters/accounting-excel-toolkit/**"
-      - "apps/australian-accounting-power-bi/**"
-      - ".github/**"
-      - "AGENTS.md"
-      - "CONTRIBUTING.md"
-      - "IMPORTS.md"
-      - "README.md"
-      - "SECURITY.md"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "justfile"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -59,7 +22,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify path selection
+        run: python -m unittest tests.test_ci_paths -v
+      - name: Select affected checks
+        id: select
+        env:
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD: ${{ github.sha }}
+          CI_PATHS: |
+            contracts/xero-trial-balance-v1/**
+            tests/test_xero_trial_balance_contract.py
+            tests/test_shared_blocks.py
+            packages/xero-trial-balance-export/**
+            packages/review-ready-gate/**
+            packages/monthly-close-control-plane/**
+            packages/elizabeth-anne-alexander/**
+            adapters/accounting-excel-toolkit/**
+            apps/australian-accounting-power-bi/**
+            .github/**
+            AGENTS.md
+            CONTRIBUTING.md
+            IMPORTS.md
+            README.md
+            SECURITY.md
+            pyproject.toml
+            uv.lock
+            justfile
+            tests/test_ci_paths.py
+        run: python .github/ci/select_paths.py >> "$GITHUB_OUTPUT"
+
   verify:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
@@ -78,3 +82,27 @@ jobs:
         run: python -B -m unittest tests.test_xero_trial_balance_contract -v
       - name: Check the duplicated review-package blocks have not drifted
         run: python -B -m unittest tests.test_shared_blocks -v
+
+  conformance-gates:
+    needs: [changes, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Require the selected checks to complete
+        shell: python
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          changes = results.pop("changes")
+          selected = changes.get("outputs", {}).get("run")
+          if changes["result"] != "success" or selected not in {"true", "false"}:
+              raise SystemExit("Change selection did not complete")
+          expected = "success" if selected == "true" else "skipped"
+          failed = [name for name, value in results.items() if value["result"] != expected]
+          if failed:
+              raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
