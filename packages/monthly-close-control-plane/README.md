@@ -174,6 +174,32 @@ one. On success the sheet ends with the SHA-256 of
 each artefact's exact bytes, so the displayed evidence can itself be archived.
 Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
+## Mapping compatibility policy
+
+The development source adds optional `--mapping-policy` to `review` and
+`workbench`. It requires `--mapping` and accepts a local UTF-8 CSV with exactly
+`Section,ReviewGroup` columns, in either order. Each row permits one source
+section for one review group. A group may allow several sections. Blank fields,
+duplicate pairs, an empty policy and malformed rows fail with exit code 1.
+
+For example, `Assets,Receivables` allows accounts whose source `Section` is
+`Assets` to use the supplied `ReviewGroup` of `Receivables`. Matching trims outer
+whitespace and preserves case. The policy contains the firm's explicit choices;
+the tool does not infer allowed pairs from account names or balances.
+
+An incompatible mapped account, or a mapped group with no policy entry, raises
+a `REVIEW` exception under `mapping_compatibility`. The exception records the
+original section and group and the permitted sections. It leaves the account
+and mapping unchanged. Unmapped accounts remain covered by `account_mapping`.
+The policy applies to current-period accounts and is reviewed by the firm, so
+these exceptions do not draft client questions.
+
+Add `--mapping-policy examples/mapping_policy.csv` to the quick demo to use the
+fabricated policy that matches `examples/account_mapping.csv`. Keep real policy
+files outside the checkout. The pack's `source_sha256.mapping_policy` records
+the exact bytes read by the control. Runs without this option retain their
+existing behaviour. This feature is unreleased.
+
 ## Worked example
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
