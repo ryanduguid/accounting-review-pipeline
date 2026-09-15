@@ -34,6 +34,7 @@ CANONICAL_COLUMNS = (
     "YTDCredit",
 )
 MAPPING_COLUMNS = ("AccountID", "ReviewGroup")
+MAPPING_POLICY_COLUMNS = ("Section", "ReviewGroup")
 SUBLEDGER_COLUMNS = ("Tenant", "AccountID", "SubledgerBalance")
 _ACCOUNTING_NUMBER = re.compile(r"^[-+]?\$?(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?$")
 
@@ -212,6 +213,28 @@ def load_mapping(path: Path | SourceSnapshot | None) -> dict[str, str]:
             raise DuplicateKeyError(f"{path}: duplicate AccountID {account_id!r}.")
         mapping[account_id] = review_group
     return mapping
+
+
+def load_mapping_policy(path: Path | SourceSnapshot) -> dict[str, set[str]]:
+    """Read explicit permitted sections for each review group, without inferred rules."""
+    snapshot = _snapshot(path, label="Mapping policy")
+    policy: dict[str, set[str]] = {}
+    for row_number, values in _read_csv_rows(
+        snapshot, MAPPING_POLICY_COLUMNS, label="Mapping policy"
+    ):
+        section = _text(values["Section"], field="Section", row_number=row_number,
+                        path=snapshot.path)
+        group = _text(values["ReviewGroup"], field="ReviewGroup", row_number=row_number,
+                      path=snapshot.path)
+        permitted = policy.setdefault(group, set())
+        if section in permitted:
+            raise DuplicateKeyError(
+                f"{snapshot.path}: row {row_number} repeats Section={section!r}, ReviewGroup={group!r}."
+            )
+        permitted.add(section)
+    if not policy:
+        raise SchemaError(f"{snapshot.path}: mapping policy has no permitted pairs.")
+    return policy
 
 
 def load_subledger(path: Path | SourceSnapshot | None) -> dict[tuple[str, str], Decimal]:

@@ -25,6 +25,10 @@ from .models import ClientQuery, ExceptionItem
 # which _classify treats as firm-resolved: a new control raises no client
 # question until somebody decides it should.
 FIRM_RESOLVED_CONTROLS = {
+    "mapping_compatibility": (
+        "The firm reviews the supplied account mapping against its reporting policy "
+        "and retains the supporting chart-of-accounts evidence."
+    ),
     "trial_balance_integrity": (
         "The supplied trial balance does not balance. The firm corrects or "
         "re-exports it; the client cannot answer for an export they did not make."

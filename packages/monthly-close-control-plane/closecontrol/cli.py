@@ -35,6 +35,8 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--current", required=True, type=Path, help="current-period canonical trial-balance CSV")
     command.add_argument("--prior", required=True, type=Path, help="prior-period canonical trial-balance CSV")
     command.add_argument("--mapping", type=Path, help="optional AccountID,ReviewGroup mapping CSV")
+    command.add_argument("--mapping-policy", type=Path,
+                         help="optional permitted Section,ReviewGroup pairs CSV; requires --mapping")
     command.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
     command.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
     command.add_argument("--output", required=True, type=Path, help="directory for the generated review pack")
@@ -127,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         ("--current", args.current),
         ("--prior", args.prior),
         ("--mapping", args.mapping),
+        ("--mapping-policy", args.mapping_policy),
         ("--subledger", args.subledger),
         ("--review-note", args.review_note),
     ):
@@ -142,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             current_path=args.current,
             prior_path=args.prior,
             mapping_path=args.mapping,
+            mapping_policy_path=args.mapping_policy,
             subledger_path=args.subledger,
             acknowledgement_path=args.review_note,
             absolute_threshold=args.absolute_threshold,
