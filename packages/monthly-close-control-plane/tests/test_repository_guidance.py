@@ -129,10 +129,16 @@ def _scalar_ci_commands() -> list[str]:
     return list(dict.fromkeys(commands))
 
 
-def _multiline_ci_gates() -> list[str]:
+def _multiline_package_gates() -> list[str]:
+    root = yaml.compose(_ci_text())
+    assert isinstance(root, MappingNode)
+    jobs = next(value for key, value in root.value if key.value == "jobs")
+    assert isinstance(jobs, MappingNode)
+    package = next(value for key, value in jobs.value if key.value == "package")
+    # The root's final-result job is not part of this component's wheel smoke.
     return [
         command
-        for multiline, command in _workflow_run_gates(_ci_text())
+        for multiline, command in _workflow_run_gates(yaml.serialize(package))
         if multiline
     ]
 
@@ -368,7 +374,7 @@ def test_agents_keeps_installed_wheel_smoke_outside_checkout() -> None:
     guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     smoke = _section(guidance, "Package smoke outside the checkout")
 
-    assert len(_multiline_ci_gates()) == 1
+    assert len(_multiline_package_gates()) == 1
     assert _guidance_smoke_contract(_fenced_commands(smoke)) == _ci_smoke_contract()
     assert _normalise(_without_fenced_commands(smoke)) == _normalise(
         """\

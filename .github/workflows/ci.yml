@@ -157,3 +157,23 @@ jobs:
         working-directory: packages/monthly-close-control-plane
       - run: uv run --locked --extra dev mypy closecontrol
         working-directory: packages/monthly-close-control-plane
+
+  pipeline-gates:
+    needs: [component, test, dependency-audit, package, lint]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Require the selected checks to complete
+        shell: python
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          expected = "success"
+          failed = [name for name, value in results.items() if value["result"] != expected]
+          if failed:
+              raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
