@@ -133,7 +133,15 @@ def main(argv: list[str] | None = None) -> int:
         ("--subledger", args.subledger),
         ("--review-note", args.review_note),
     ):
-        if source is not None and source.resolve() in destinations:
+        if source is None:
+            continue
+        try:
+            resolved_source = source.resolve()
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(f"close-control: output error: cannot resolve {flag} {source}: {exc}",
+                  file=sys.stderr)
+            return 1
+        if resolved_source in destinations:
             print(
                 f"close-control: output error: {flag} {source} is inside --output and "
                 f"shares a generated pack file name; the run would destroy it.",

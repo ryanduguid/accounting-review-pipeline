@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 from closecontrol.cli import main
@@ -171,3 +172,32 @@ def test_cli_refuses_policy_output_collision_without_touching_it(tmp_path):
                  "--mapping", str(tmp_path / "missing-mapping.csv"),
                  "--mapping-policy", str(policy), "--output", str(tmp_path)]) == 1
     assert policy.read_text(encoding="utf-8") == content
+
+
+@pytest.mark.parametrize("command", ["review", "workbench"])
+@pytest.mark.parametrize("error", [OSError, RuntimeError, ValueError])
+def test_cli_handles_policy_path_resolution_failure(tmp_path, monkeypatch, capsys, command, error):
+    inputs = _inputs(tmp_path)
+    before = {key: path.read_bytes() for key, path in inputs.items()}
+    output = tmp_path / "pack"
+    resolve = Path.resolve
+
+    def fail_policy_path(path, *args, **kwargs):
+        if path == inputs["mapping_policy_path"]:
+            raise error("synthetic resolution failure")
+        return resolve(path, *args, **kwargs)
+
+    def unexpected_read(*args, **kwargs):
+        pytest.fail("Read a source after path resolution failed")
+
+    monkeypatch.setattr(Path, "resolve", fail_policy_path)
+    monkeypatch.setattr(SourceSnapshot, "capture", unexpected_read)
+    assert main([command, "--current", str(inputs["current_path"]),
+                 "--prior", str(inputs["prior_path"]), "--mapping", str(inputs["mapping_path"]),
+                 "--mapping-policy", str(inputs["mapping_policy_path"]),
+                 "--output", str(output)]) == 1
+    message = capsys.readouterr().err
+    assert "--mapping-policy" in message and "synthetic resolution failure" in message
+    assert "Traceback" not in message
+    assert not output.exists()
+    assert {key: path.read_bytes() for key, path in inputs.items()} == before
