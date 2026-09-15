@@ -98,6 +98,7 @@ transfer, rather than as a second figure inferred from the trial balance.
 | Valid complete schedule, confirmed matching currency, each account and total within tolerance | Control result `PASS`; other controls still determine the overall pack state. |
 | Any account or aggregate absolute difference exceeds tolerance | `REVIEW`, even when the aggregate difference is zero. |
 | Incomplete schedule, missing or mismatched currency confirmation, mismatched snapshot/date/entity, or unsupported account continuity | `BLOCKED`; do not calculate a passing substitute. |
+| Combined control status | Include the equity result in the existing `_overall_status` aggregation: `BLOCKED > REVIEW > PASS`. Any equity or other control result of `REVIEW` or `BLOCKED` prevents overall `PASS` and exit `0`. |
 | Malformed JSON, unknown fields, duplicate identifiers, missing required fields, invalid dates or monetary strings | Input error, exit `1`, and no partial replacement of an existing pack. |
 
 Reuse `--reconciliation-tolerance`, including its existing finite, non-negative
@@ -140,8 +141,10 @@ change a result or confer accounting approval.
    equal AUD and USD inputs. Reject stale input digests and mismatched entities
    or dates. Require reviewable evidence for a year-end transfer instead of assuming
    a P&L reset is a movement.
-5. Show that an absent schedule preserves existing output; a supplied incomplete
-   schedule cannot disappear from the pack or yield a passing result.
+5. Show that an absent schedule preserves existing output. With all other controls
+   passing, equity `REVIEW` must make the pack `REVIEW` and equity `BLOCKED` must
+   make it `BLOCKED`, both with exit `2`. A supplied incomplete schedule cannot
+   disappear from the pack or yield a passing result.
 6. Verify all 4 pack files across the 3 output formats, viewer tamper detection,
    safe source text rendering,
    source snapshot integrity, and preservation of the old pack on a failed write.
