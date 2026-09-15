@@ -81,12 +81,12 @@ jobs:
             pull_request)
               # HEAD is the synthetic merge of the proposal into its base, so its
               # first parent is the base tip and the diff is exactly the proposal.
-              changed=$(git diff --name-only HEAD^1 HEAD)
+              changed=$(git diff --name-only --no-renames HEAD^1 HEAD)
               ;;
             push)
               if [ -n "${PUSH_BEFORE}" ] && ! printf '%s' "${PUSH_BEFORE}" | grep -Eq '^0+$' \
                 && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
-                changed=$(git diff --name-only "${PUSH_BEFORE}" HEAD)
+                changed=$(git diff --name-only --no-renames "${PUSH_BEFORE}" HEAD)
               else
                 echo "::notice::No reachable base for this push; running every gate."
                 changed="${PACKAGE_DIR}/"
@@ -107,8 +107,7 @@ jobs:
 
   test:
     needs: changes
-    # Expand the matrix even for unchanged components so branch protection
-    # receives each required test name. Skip the work at step level instead.
+    if: needs.changes.outputs.run == 'true'
     permissions:
       contents: read
     strategy:
@@ -122,15 +121,12 @@ jobs:
         working-directory: ${{ inputs.package_dir }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.run == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: needs.changes.outputs.run == 'true'
         with:
           python-version: ${{ matrix.python }}
       - name: install the locked toolchain
-        if: needs.changes.outputs.run == 'true'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: ${{ env.UV_VERSION }}
@@ -141,7 +137,6 @@ jobs:
       # leaves every leg green. --cov takes its source from the component's
       # [tool.coverage.run] configuration.
       - name: run tests with branch coverage
-        if: needs.changes.outputs.run == 'true'
         run: >-
           uv run --locked --extra dev pytest
           --cov --cov-branch --cov-report=term-missing --cov-report=xml
@@ -284,3 +279,27 @@ jobs:
           python -m venv "${locked}/venv"
           "${locked}/venv/bin/python" -m pip install --require-hashes -r requirements.lock
           "${locked}/venv/bin/python" -m unittest discover -s tests -v
+
+  gates:
+    needs: [changes, test, lint, dependency-audit, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Require the selected checks to complete
+        shell: python
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          changes = results.pop("changes")
+          selected = changes.get("outputs", {}).get("run")
+          if changes["result"] != "success" or selected not in {"true", "false"}:
+              raise SystemExit("Change selection did not complete")
+          expected = "success" if selected == "true" else "skipped"
+          failed = [name for name, value in results.items() if value["result"] != expected]
+          if failed:
+              raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
