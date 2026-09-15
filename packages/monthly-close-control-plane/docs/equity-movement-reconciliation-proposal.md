@@ -22,15 +22,18 @@ include a current-earnings account, and adding it again would double count it.
 
 ## Proposed input
 
-Add an optional `--equity-schedule PATH` argument to `review` and `workbench`.
-It would read one local JSON document containing:
+Add an optional `--equity-schedule PATH` argument to `review` and `workbench`,
+with a separate `--equity-currency CODE` run declaration confirmed against the
+source reporting currency of both trial balances. Record the supporting reference
+with `--equity-currency-evidence REFERENCE`.
+The schedule argument would read one local JSON document containing:
 
 | Field | Contract |
 | --- | --- |
 | `schema_version` | Integer `1`; reject unsupported versions and unknown fields. |
 | `tenant` | Exact match to the single entity in both trial balances. |
 | `opening_date`, `closing_date` | ISO dates matching the prior and current report dates; closing must follow opening. |
-| `currency` | One declared currency for all inputs. No FX conversion. |
+| `currency` | Must match the separately confirmed trial-balance currency supplied for the run. Missing or mismatched currency produces `BLOCKED`. No FX conversion. |
 | `basis` | Fixed value `ledger_equity`. |
 | `prior_source_sha256`, `current_source_sha256` | Digests matching the exact trial-balance byte snapshots used in the run. |
 | `equity_account_ids` | Non-empty, unique list of stable account IDs present in both trial balances. Do not infer accounts from their names or review-group labels. |
@@ -48,8 +51,14 @@ Prepare this schedule from separate supporting records. A schedule generated as
 the difference between the same two trial balances cannot test that difference.
 Evidence references are local review labels, not commands or URLs to fetch. The
 tool would not authenticate those records or prove that the preparer's completeness
-statement is true. The ten-column trial-balance format does not carry currency, so
-currency consistency remains a declared input limitation, visible in the result.
+statement is true. The ten-column trial-balance format does not carry currency.
+The preparer must confirm the reporting currency from source report metadata or
+separate supporting evidence for both snapshots and record that reference with
+the run declaration. Do not derive the run currency from the schedule itself.
+Absent confirmation, absent evidence or a currency mismatch must produce
+`BLOCKED`, even if the amounts reconcile. Include the run currency and its
+evidence reference in the result. The tool can check agreement between these
+inputs, but cannot authenticate the source evidence.
 
 Account additions, removals, section changes and transfers requiring a changed
 equity account set should produce `BLOCKED` in this first version. Supporting those
@@ -86,13 +95,15 @@ transfer, rather than as a second figure inferred from the trial balance.
 | Condition | Proposed behaviour |
 | --- | --- |
 | No schedule argument | Preserve existing output and exit behaviour. Do not imply that this optional control ran. |
-| Valid complete schedule, each account within tolerance | Control result `PASS`; other controls still determine the overall pack state. |
-| Any account difference exceeds tolerance | `REVIEW`, even when the aggregate difference is zero. |
-| Incomplete schedule, mismatched snapshot/date/entity, or unsupported account continuity | `BLOCKED`; do not calculate a passing substitute. |
+| Valid complete schedule, confirmed matching currency, each account and total within tolerance | Control result `PASS`; other controls still determine the overall pack state. |
+| Any account or aggregate absolute difference exceeds tolerance | `REVIEW`, even when the aggregate difference is zero. |
+| Incomplete schedule, missing or mismatched currency confirmation, mismatched snapshot/date/entity, or unsupported account continuity | `BLOCKED`; do not calculate a passing substitute. |
 | Malformed JSON, unknown fields, duplicate identifiers, missing required fields, invalid dates or monetary strings | Input error, exit `1`, and no partial replacement of an existing pack. |
 
 Reuse `--reconciliation-tolerance`, including its existing finite, non-negative
-validation. Equality at the tolerance passes; a greater difference requires review.
+validation. Require `abs(unexplained) <= tolerance` for every account and for the
+aggregate. A positive or negative difference outside that bound requires `REVIEW`;
+equality at either bound passes.
 Preserve exit `0` only for overall `PASS`, exit `2` for `REVIEW` or `BLOCKED`, and
 exit `1` for malformed input or failed output. A reviewer acknowledgement must not
 change a result or confer accounting approval.
@@ -104,7 +115,8 @@ change a result or confer accounting approval.
 - Add the account reconciliation in `closecontrol/engine.py` and its evidence
   model in `closecontrol/models.py`. Keep it separate from variance thresholds.
 - Extend the shared review arguments in `closecontrol/cli.py` for explicit
-  schedule selection. Preserve behaviour when the option is absent. The
+  schedule selection and a separate currency declaration with its source evidence
+  reference. Preserve behaviour when the schedule option is absent. The
   quarantined `openaccountants-au` entry point is outside this change.
 - Update `closecontrol/report.py` and `closecontrol/viewer.py` together so the JSON,
   Markdown and CSV outputs expose and cross-check the new evidence, including
@@ -120,11 +132,14 @@ change a result or confer accounting approval.
 
 1. Reproduce the worked example with independent decimal arithmetic.
 2. Cover a matching schedule, a loss transfer, a debit equity balance, explicit
-   zero movements, sub-cent values, and differences at and just beyond tolerance.
+   zero movements, sub-cent values, and positive and negative differences at and
+   just beyond tolerance for both individual accounts and the aggregate.
 3. Detect equal and opposite differences across accounts, duplicate movements,
    excluded account IDs, wrong signs, non-finite numbers and incomplete evidence.
-4. Reject stale input digests and mismatched entities or dates. Require reviewable
-   evidence for a year-end transfer instead of assuming a P&L reset is a movement.
+4. Block missing or mismatched currency confirmation, including numerically
+   equal AUD and USD inputs. Reject stale input digests and mismatched entities
+   or dates. Require reviewable evidence for a year-end transfer instead of assuming
+   a P&L reset is a movement.
 5. Show that an absent schedule preserves existing output; a supplied incomplete
    schedule cannot disappear from the pack or yield a passing result.
 6. Verify all 4 pack files across the 3 output formats, viewer tamper detection,
