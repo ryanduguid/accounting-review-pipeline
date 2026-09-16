@@ -29,7 +29,7 @@ VENDOR='claude|anthropic|codex|openai|cursor|copilot|chatgpt|gemini|devin|codeiu
 DOMAIN='claude\.ai|claude\.com|anthropic\.com|openai\.com|chatgpt\.com|cursor\.(com|sh)|codeium\.com|windsurf\.com|cognition\.ai|devin\.ai|nousresearch\.com|qodo\.ai|openhands\.dev|all-hands\.dev'
 
 # Vendor words that are not plausible human names, so they can be matched alone.
-SOLE='claude|anthropic|openai|chatgpt|copilot|codex|cursor|codeium|windsurf|antigravity|qodo|openhands|nousresearch'
+SOLE='claude|anthropic|openai|chatgpt|copilot|codex|cursor|codeium|windsurf|antigravity|aider|qodo|openhands|nousresearch'
 
 status=0
 
@@ -52,9 +52,9 @@ check_identity() {
 	email=${rest%%>*}
 
 	hit=''
-	if printf '%s' "$email" | grep -Eqi "^($DOMAIN)\$|@($DOMAIN)\$"; then
-		hit="vendor email domain"
-	elif ai_name "$name"; then
+	# Domain names are not identities: human contributors may use vendor-hosted
+	# addresses. Identity checks are based on names and GitHub accounts instead.
+	if ai_name "$name"; then
 		hit="vendor name"
 	else
 		# GitHub noreply addresses carry the account name: 123+claude[bot]@...
@@ -75,18 +75,27 @@ check_identity author "$(git var GIT_AUTHOR_IDENT)"
 check_identity committer "$(git var GIT_COMMITTER_IDENT)"
 
 # --- message ---------------------------------------------------------------
-# Comment lines are stripped by git after this hook, so drop them here too, and
-# skip fenced code blocks so a quoted example is not read as a credit.
+# Scan comments too: cleanup modes and core.commentChar can preserve them.
+# Skip fenced code blocks so a quoted example is not read as a credit.
 awk -v vendor="$VENDOR" -v domain="$DOMAIN" -v hook="$hook" '
 	function flag(why) {
 		printf "%s: %s line %d: %s\n", hook, why, NR, $0 > "/dev/stderr"
 		bad = 1
 	}
-	/^#/ { next }
 	{
 		line = tolower($0)
-		if (line ~ /^[ \t]*(```|~~~)/) { fence = !fence; next }
-		if (fence) next
+		# Match the closing fence to the opening character and length; an
+		# information string is only valid on an opening fence.
+		if (fence_char != "") {
+			marker = (fence_char == "`") ? "```" : "~~~"
+			if (line ~ ("^[ \\t]*" marker "(" marker ")*($|[ \\t]*)") && length(line) >= fence_len) {
+				close = substr(line, match(line, marker))
+				if (length(close) >= fence_len) { fence_char = ""; fence_len = 0; next }
+			}
+			next
+		}
+		if (line ~ /^[ \t]*```([^`]*)$/) { fence_char = "`"; fence_len = 3; next }
+		if (line ~ /^[ \t]*~~~([^~]*)$/) { fence_char = "~"; fence_len = 3; next }
 
 		if (line ~ ("^[ \t]*co-?authored-by:.*(" vendor ")"))
 			flag("co-author trailer")
@@ -96,10 +105,8 @@ awk -v vendor="$VENDOR" -v domain="$DOMAIN" -v hook="$hook" '
 			flag("session trailer")
 		else if (line ~ ("^[ \t]*_?[^a-z0-9]*\xf0\x9f\xa4\x96.*(" vendor ")"))
 			flag("robot emoji credit")
-		else if (line ~ ("^[ \t]*_?(generated|written|created|produced|assisted) (with|by) .*(" vendor ")"))
+		else if (line ~ ("^[ \t]*_?(generated|addressed|authored|written|created|produced|reviewed|fixed|resolved|implemented|assisted|handled) (with|by) .*(" vendor ")"))
 			flag("generated-with footer")
-		else if (line ~ ("^[ \t]*[_<(]*https?://([a-z0-9.-]+\\.)?(" domain ")"))
-			flag("bare vendor url")
 	}
 	END { exit bad ? 1 : 0 }
 ' "$msg_file" || status=1
