@@ -67,6 +67,7 @@ COMMENT_CHAR=$(git config --get core.commentChar 2>/dev/null || true) \
 	"$PY" - <<'PY'
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 
@@ -126,7 +127,16 @@ def comment_markers():
     `auto` names no single character, so every character Git may pick is
     treated as a marker: that scans more lines, never fewer.
     """
-    configured = (os.environ.get("COMMENT_STRING") or os.environ.get("COMMENT_CHAR") or "").strip()
+    comment_string = os.environ.get("COMMENT_STRING", "").strip()
+    comment_char = os.environ.get("COMMENT_CHAR", "").strip()
+    try:
+        version = subprocess.check_output(["git", "version"], text=True).split()[2]
+        major, minor = (int(part) for part in version.split(".", 2)[:2])
+    except (OSError, ValueError, IndexError):
+        major, minor = 0, 0
+    # commentString was added in Git 2.45; older Git uses commentChar.
+    configured = (comment_string if (major, minor) >= (2, 45) else comment_char)
+    configured = configured or (comment_char if (major, minor) >= (2, 45) else comment_string)
     if not configured:
         return ("#",)
     if configured.casefold() == "auto":
@@ -202,7 +212,8 @@ for number, line in enumerate(lines, 1):
 
     for text, at in candidates:
         hit = None
-        for reading in readings(comparable(text)):
+        for reading in readings(text):
+            reading = comparable(reading)
             for name, rx in RX:
                 if rx.match(reading):
                     hit = "line %d: %s (%s)" % (at, text.strip()[:120], name)
