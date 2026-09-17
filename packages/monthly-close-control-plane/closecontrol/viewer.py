@@ -895,9 +895,20 @@ def _expected_acknowledgement_lines(acknowledgement: object) -> list[str]:
 
 
 _CALCULATION_EVIDENCE_TABLE_HEADER = (
-    "| Calculation | Status | Period | Figures | Relied on |"
+    "| Calculation | Status | Period | Figures | Relied on | Entry digest |"
 )
-_CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- |"
+_CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- | --- |"
+_CALCULATION_EVIDENCE_REQUIRED = re.compile(r"^Required: (none|`[a-z0-9]+(?:-[a-z0-9]+)*`(?:; `[a-z0-9]+(?:-[a-z0-9]+)*`)*)$")
+
+# Mirrored from report._CALCULATION_EVIDENCE_EFFECT. The block's effect text is
+# reviewer-facing and lives only in the JSON, so it is compared against this
+# fixed text rather than accepted as whatever the file says.
+_CALCULATION_EVIDENCE_EFFECT = (
+    "Evidence read from files. This pack made no calculation and contacted no "
+    "service. A figure here supports review; it does not approve anything. "
+    "`usable` is true only where the file hangs together, carries a figure and "
+    "covers this close's period; read the exceptions for why one is false."
+)
 
 # Mirrored from report._CALCULATION_EVIDENCE_PREAMBLE and the line it writes
 # when a calculation was required and no file supplied one, for the same
@@ -925,7 +936,22 @@ _EVIDENCE_ITEM_MEMBERS = frozenset({
 _EVIDENCE_BLOCK_MEMBERS = frozenset({"required", "supplied", "effect"})
 
 
-def _evidence_summary_rows(summary_text: str) -> dict[str, tuple[str, str, str, str]]:
+def _entry_digest_mirror(entry: dict[str, object]) -> str:
+    """Mirror report._entry_digest: SHA-256 of the entry's canonical JSON.
+
+    Reimplemented rather than imported for the reason _md_cell_mirror is: the
+    viewer is an independent witness, and a writer that changes how it
+    digests an entry has to be reflected here deliberately.
+    """
+    return hashlib.sha256(
+        json.dumps(entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                   allow_nan=False).encode("utf-8")
+    ).hexdigest()
+
+
+def _evidence_summary_rows(
+    summary_text: str,
+) -> tuple[list[str], dict[str, tuple[str, str, str, str, str]]]:
     """The calculation-evidence section, read as a whole and line by line.
 
     Read from the summary's own section, so the JSON pack has a second
@@ -954,8 +980,25 @@ def _evidence_summary_rows(summary_text: str) -> dict[str, tuple[str, str, str, 
         )
     body = body[:-1]
 
+    if len(body) < 2 or body[1] != "":
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence section's required line is missing "
+            "or not where the writer puts it"
+        )
+    required_match = _CALCULATION_EVIDENCE_REQUIRED.match(body[0])
+    if required_match is None:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence required line is malformed: {body[0]!r}"
+        )
+    required_text = required_match.group(1)
+    required = (
+        [] if required_text == "none"
+        else [name.strip("`") for name in required_text.split("; ")]
+    )
+    body = body[2:]
+
     if body == [_NO_CALCULATION_EVIDENCE]:
-        return {}
+        return required, {}
     if not body or body[0] != _CALCULATION_EVIDENCE_TABLE_HEADER:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: the calculation-evidence table header is missing or altered"
@@ -965,7 +1008,7 @@ def _evidence_summary_rows(summary_text: str) -> dict[str, tuple[str, str, str, 
             f"{_SUMMARY_NAME}: the calculation-evidence table delimiter is missing or altered"
         )
 
-    rows: dict[str, tuple[str, str, str, str]] = {}
+    rows: dict[str, tuple[str, str, str, str, str]] = {}
     for line in body[2:]:
         if not line.startswith("| ") or not line.endswith(" |"):
             raise ControlInputError(
@@ -973,22 +1016,27 @@ def _evidence_summary_rows(summary_text: str) -> dict[str, tuple[str, str, str, 
                 f"never emits: {line!r}"
             )
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != 5:
+        if len(cells) != 6:
             raise ControlInputError(
                 f"{_SUMMARY_NAME}: a calculation-evidence row holds {len(cells)} cells, "
-                "not 5"
+                "not 6"
             )
         label = cells[0]
         if label in rows:
             raise ControlInputError(
                 f"{_SUMMARY_NAME}: calculation {label!r} appears twice in the table"
             )
-        rows[label] = (cells[1], cells[2], cells[3], cells[4])
+        if not re.fullmatch(r"[0-9a-f]{64}", cells[5]):
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: calculation {label!r} carries an entry digest that is "
+                "not a lowercase SHA-256"
+            )
+        rows[label] = (cells[1], cells[2], cells[3], cells[4], cells[5])
     if not rows:
         raise ControlInputError(
             f"{_SUMMARY_NAME}: the calculation-evidence table has a header and no rows"
         )
-    return rows
+    return required, rows
 
 
 def _verify_calculation_evidence(
@@ -1010,6 +1058,18 @@ def _verify_calculation_evidence(
             raise ControlInputError(
                 f"{_SUMMARY_NAME}: a calculation-evidence table is present while "
                 f"{_JSON_NAME} carries no calculation_evidence member"
+            )
+        # The witnessed source list is the one thing that survives removing
+        # the block and its section together. A pack that read an evidence
+        # file and no longer says what it found is half removed, not absent.
+        orphaned = sorted(
+            key for key in json_hashes if str(key).startswith("calculation_evidence:")
+        )
+        if orphaned:
+            raise ControlInputError(
+                f"{_JSON_NAME}: source_sha256 records calculation evidence "
+                f"({', '.join(orphaned)}) while the pack carries no calculation_evidence "
+                "member; the evidence is half removed, not absent"
             )
         return
     if not isinstance(block, dict):
@@ -1033,8 +1093,17 @@ def _verify_calculation_evidence(
             f"{_JSON_NAME}: calculation_evidence.required must be a list of strings"
         )
 
-    summary_rows = _evidence_summary_rows(summary_text)
-    json_rows: dict[str, tuple[str, str, str, str]] = {}
+    if block["effect"] != _CALCULATION_EVIDENCE_EFFECT:
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence.effect is not the text the writer emits"
+        )
+    summary_required, summary_rows = _evidence_summary_rows(summary_text)
+    if list(required) != summary_required:
+        raise ControlInputError(
+            f"calculation evidence disagrees: {_JSON_NAME} requires {required!r}, "
+            f"{_SUMMARY_NAME} states {summary_required!r}"
+        )
+    json_rows: dict[str, tuple[str, str, str, str, str]] = {}
     for item in supplied:
         if not isinstance(item, dict):
             raise ControlInputError(
@@ -1080,6 +1149,8 @@ def _verify_calculation_evidence(
             _md_cell_mirror(str(item["period"]) or _ABSENT),
             _md_cell_mirror(figures or _ABSENT),
             "yes" if usable else "no",
+            # Every member, printed or not, is inside this digest.
+            _entry_digest_mirror(item),
         )
 
     if not supplied and summary_rows:
@@ -1363,6 +1434,30 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     assert isinstance(source_hashes, dict)
     for label, digest in sorted(source_hashes.items()):
         lines.append(f"- {label}: {digest}")
+    evidence_block = document.get("calculation_evidence")
+    if evidence_block is not None:
+        assert isinstance(evidence_block, dict)
+        lines += ["", "Calculation evidence", ""]
+        required_names = evidence_block["required"]
+        assert isinstance(required_names, list)
+        lines.append(f"- Required: {', '.join(required_names) or 'none'}")
+        supplied_items = evidence_block["supplied"]
+        assert isinstance(supplied_items, list)
+        if not supplied_items:
+            lines.append("- Supplied: none. The exceptions say which calculation is missing.")
+        for entry in supplied_items:
+            assert isinstance(entry, dict)
+            values = entry["values"]
+            assert isinstance(values, dict)
+            figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
+            lines.append(
+                f"- {entry['label']}: {entry['status']}, period {entry['period'] or 'n/a'}, "
+                f"{figures or 'no figure'}, relied on: {'yes' if entry['usable'] else 'no'}"
+            )
+        lines.append(
+            "- A figure here supports review. It approves nothing, and the "
+            "calculation-evidence exceptions say why one is not relied on."
+        )
     lines += ["", "Exceptions", ""]
     if not exceptions:
         lines.append("No exceptions were raised. A human must still decide whether the close is appropriate.")

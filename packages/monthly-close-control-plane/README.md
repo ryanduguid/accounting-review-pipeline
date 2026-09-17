@@ -154,10 +154,13 @@ conflicting status line, or a missing client-query boundary statement); and an
 `exceptions.csv` or `client-queries.csv` whose header, row count or any cell
 disagrees with the JSON member it projects, honouring the writer's
 formula-injection guard exactly; and a `calculation_evidence` block whose
-members, provenance digest, figures or relied-on flags disagree with the
-summary's own calculation-evidence table. Every member a reviewer acts on is
-witnessed by a second artefact, this one included, so editing a figure in the
-JSON alone is refused rather than displayed. A data row holding more or fewer cells than
+members, required list, effect text, provenance digest, figures, relied-on
+flags or per-entry digest disagree with the summary's own calculation-evidence
+section. The summary row carries a SHA-256 of each entry's canonical JSON, so
+every member of the entry is witnessed, the printed ones and the advisory notes
+and rate tables alike, and editing any of them in the JSON alone is refused
+rather than displayed. Removing the block and its section together is refused
+too, because `source_sha256` still names the evidence file. A data row holding more or fewer cells than
 the header declares fails closed as well: a surplus cell would otherwise sit
 outside every named column, unguarded against formula prefixes and compared
 with nothing.
@@ -416,9 +419,11 @@ rate tables it names, its advisory notes, its normalised figures and whether
 the pack may rely on it. `usable` is true only where the file hangs together,
 carries a figure and covers this close's period, so it cannot say yes while an
 exception in the same pack says otherwise. `close-summary.md` gains a
-`## Calculation evidence` section stating the same label, status, period,
-figures and relied-on flag, which is what lets `view` prove the JSON was not
-edited after the pack was written. A pack built without the control carries
+`## Calculation evidence` section stating the required list and, per
+calculation, the same label, status, period, figures and relied-on flag plus a
+digest of the whole JSON entry, which is what lets `view` prove the JSON was
+not edited after the pack was written. The review sheet `view` renders shows
+the section it verified. A pack built without the control carries
 neither the block nor the section and is byte-identical to one produced before
 the control existed. The file's SHA-256 also joins `source_sha256` under
 `calculation_evidence:<label>`, so the pack records the bytes rather than a

@@ -1222,7 +1222,76 @@ def evidence_pack_dir(tmp_path: Path) -> Path:
 
 def test_a_pack_carrying_evidence_verifies_and_displays(evidence_pack_dir: Path) -> None:
     sheet, _digests = render_review_sheet(evidence_pack_dir)
-    assert "Calculation evidence" in sheet or "coal-lsl-levy" in sheet
+    # The sheet shows the section it verified, not just the source digest.
+    assert "\nCalculation evidence\n" in sheet
+    assert "- Required: coal-lsl-levy" in sheet
+    assert "- coal-lsl-levy: COMPUTED, period " in sheet
+    assert "levy 192.38" in sheet
+    assert "relied on: yes" in sheet
+
+
+@pytest.mark.parametrize("member,value", [
+    ("advisory_notes", ["Cleared for lodgement by the calculator."]),
+    ("synthetic_input", False),
+    ("calculation_sha256", "0" * 64),
+    ("rate_tables", ["urn:sbrm:rate:coal-lsl-levy:1999-07:levy-rate"]),
+    ("provider", "Australian Taxation Office"),
+    ("engine", "something-else"),
+    ("schema", "other/9"),
+    ("calculator", "urn:other"),
+])
+def test_every_member_of_an_evidence_entry_is_witnessed(
+    evidence_pack_dir: Path, member: str, value: object,
+) -> None:
+    """The members the table does not print were witnessed by nothing.
+
+    The engine blocks a computed figure with no advisory and reviews one that
+    names no rate table, so a viewer that let those be rewritten was letting
+    the record of why a figure was blocked be rewritten. Each entry's digest
+    now sits in the summary row, and it covers every member.
+    """
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0][member] = value
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_the_evidence_effect_text_is_the_writers(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["effect"] = "This figure may be lodged as it stands."
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="effect is not the text the writer emits"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_the_required_list_is_witnessed(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["required"] = []
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="requires"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_removing_the_block_and_its_section_together_is_refused(
+    evidence_pack_dir: Path,
+) -> None:
+    """The witnessed source list still names the evidence file.
+
+    A pack that read an evidence file and no longer says what it found has
+    had the evidence half removed. The required calculation, its figures and
+    its relied-on flag would otherwise vanish with no refusal.
+    """
+    document = _read_json(evidence_pack_dir)
+    del document["calculation_evidence"]
+    _rewrite_json(evidence_pack_dir, document)
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    start = text.index("## Calculation evidence")
+    end = text.index("## Exceptions")
+    summary.write_text(text[:start] + text[end:], encoding="utf-8")
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(evidence_pack_dir)
 
 
 def test_an_edited_figure_no_longer_passes_verification(evidence_pack_dir: Path) -> None:
@@ -1314,7 +1383,7 @@ def test_a_row_appended_to_the_evidence_table_is_refused(evidence_pack_dir: Path
     text = summary.read_text(encoding="utf-8")
     lines = text.splitlines()
     index = next(i for i, line in enumerate(lines) if line.startswith("| coal-lsl-levy |"))
-    lines.insert(index + 1, "| made-up | COMPUTED | 2026-07 | levy 1.00 | yes |")
+    lines.insert(index + 1, "| made-up | COMPUTED | 2026-07 | levy 1.00 | yes | " + "0" * 64 + " |")
     summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
         render_review_sheet(evidence_pack_dir)

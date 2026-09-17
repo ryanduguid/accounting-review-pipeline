@@ -325,8 +325,15 @@ def test_the_written_pack_carries_the_evidence_and_still_verifies(tmp_path):
     outputs = write_review_pack(pack, destination)
     payload = json.loads(Path(outputs["json"]).read_text(encoding="utf-8"))
     assert payload["calculation_evidence"]["supplied"][0]["label"] == "coal-lsl-levy"
+    # "still verifies" means the viewer accepts the pack, so ask it. The
+    # earlier assertion checked that the word "close" appeared in the
+    # summary, which any summary satisfies.
+    from closecontrol.viewer import render_review_sheet
+
+    sheet, _digests = render_review_sheet(destination)
+    assert "- coal-lsl-levy: COMPUTED" in sheet
     summary = Path(outputs["summary"]).read_text(encoding="utf-8")
-    assert "close" in summary.lower()
+    assert "| coal-lsl-levy | COMPUTED |" in summary
 
 
 # -- regressions from the 18 September 2026 review -------------------------

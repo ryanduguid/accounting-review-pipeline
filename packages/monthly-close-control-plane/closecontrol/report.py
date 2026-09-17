@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -118,30 +119,10 @@ def _as_json(pack: CloseReviewPack) -> dict:
         calculation_evidence = {
             "required": list(pack.required_calculations),
             "supplied": [
-                {
-                    "label": item.label,
-                    "schema": item.schema,
-                    "provider": item.provider,
-                    "calculator": item.calculator,
-                    "period": item.period,
-                    "status": item.status,
-                    "engine": item.engine,
-                    "calculation_sha256": item.calculation_sha256,
-                    "file_sha256": item.sha256,
-                    "synthetic_input": item.synthetic_input,
-                    "rate_tables": list(item.rate_tables),
-                    "advisory_notes": list(item.advisory_notes),
-                    "values": {name: _money(value) for name, value in sorted(item.values.items())},
-                    "usable": item.label in pack.relied_on,
-                }
+                _evidence_entry(pack, item)
                 for item in sorted(pack.calculation_evidence, key=lambda entry: entry.label)
             ],
-            "effect": (
-                "Evidence read from files. This pack made no calculation and contacted no "
-                "service. A figure here supports review; it does not approve anything. "
-                "`usable` is true only where the file hangs together, carries a figure and "
-                "covers this close's period; read the exceptions for why one is false."
-            ),
+            "effect": _CALCULATION_EVIDENCE_EFFECT,
         }
 
     payload: dict[str, object] = {
@@ -238,6 +219,48 @@ def _md_note_lines(comment: str) -> list[str]:
 # accounts and invites somebody to send it as it stands.
 _CALCULATION_EVIDENCE_HEADING = "## Calculation evidence"
 
+_CALCULATION_EVIDENCE_EFFECT = (
+    "Evidence read from files. This pack made no calculation and contacted no "
+    "service. A figure here supports review; it does not approve anything. "
+    "`usable` is true only where the file hangs together, carries a figure and "
+    "covers this close's period; read the exceptions for why one is false."
+)
+
+
+def _evidence_entry(pack: CloseReviewPack, item) -> dict[str, object]:  # noqa: ANN001
+    """One supplied calculation as the JSON pack records it.
+
+    Built in one place so the summary can digest exactly the dict the JSON
+    carries. The digest is what witnesses the members the summary table does
+    not print, such as the advisory notes and the rate tables: the engine
+    blocks on those, so a viewer that let them be rewritten was letting the
+    record of why a figure was blocked be rewritten too.
+    """
+    return {
+        "label": item.label,
+        "schema": item.schema,
+        "provider": item.provider,
+        "calculator": item.calculator,
+        "period": item.period,
+        "status": item.status,
+        "engine": item.engine,
+        "calculation_sha256": item.calculation_sha256,
+        "file_sha256": item.sha256,
+        "synthetic_input": item.synthetic_input,
+        "rate_tables": list(item.rate_tables),
+        "advisory_notes": list(item.advisory_notes),
+        "values": {name: _money(value) for name, value in sorted(item.values.items())},
+        "usable": item.label in pack.relied_on,
+    }
+
+
+def _entry_digest(entry: dict[str, object]) -> str:
+    """SHA-256 of the entry's canonical JSON. The viewer recomputes this."""
+    return hashlib.sha256(
+        json.dumps(entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                   allow_nan=False).encode("utf-8")
+    ).hexdigest()
+
 # The figures a reviewer acts on live in the JSON pack. Repeating them here
 # is what lets `close-control view` prove the JSON was not edited after the
 # pack was written: every other consequential member is witnessed by a second
@@ -248,9 +271,9 @@ _CALCULATION_EVIDENCE_PREAMBLE = [
     "",
 ]
 _CALCULATION_EVIDENCE_TABLE_HEADER = (
-    "| Calculation | Status | Period | Figures | Relied on |"
+    "| Calculation | Status | Period | Figures | Relied on | Entry digest |"
 )
-_CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- |"
+_CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- | --- |"
 _NO_CALCULATION_EVIDENCE = (
     "A calculation was required for this close and no evidence file was supplied "
     "for it. The exceptions below say which."
@@ -295,6 +318,8 @@ def _as_markdown(pack: CloseReviewPack) -> str:
     if pack.calculation_evidence or pack.required_calculations:
         lines += ["", _CALCULATION_EVIDENCE_HEADING, ""]
         lines += _CALCULATION_EVIDENCE_PREAMBLE
+        required = "; ".join(f"`{name}`" for name in pack.required_calculations) or "none"
+        lines += [f"Required: {required}", ""]
         if not pack.calculation_evidence:
             lines.append(_NO_CALCULATION_EVIDENCE)
         else:
@@ -312,7 +337,8 @@ def _as_markdown(pack: CloseReviewPack) -> str:
                 lines.append(
                     f"| {_md_cell(evidence.label)} | {_md_cell(evidence.status)} "
                     f"| {_md_cell(evidence.period or _ABSENT)} | {_md_cell(figures)} "
-                    f"| {'yes' if evidence.label in pack.relied_on else 'no'} |"
+                    f"| {'yes' if evidence.label in pack.relied_on else 'no'} "
+                    f"| {_entry_digest(_evidence_entry(pack, evidence))} |"
                 )
     lines += ["", "## Exceptions", ""]
     if not pack.exceptions:
