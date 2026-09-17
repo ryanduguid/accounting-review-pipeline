@@ -153,7 +153,14 @@ digests or review-boundary statement disagree with the JSON (including a second,
 conflicting status line, or a missing client-query boundary statement); and an
 `exceptions.csv` or `client-queries.csv` whose header, row count or any cell
 disagrees with the JSON member it projects, honouring the writer's
-formula-injection guard exactly. A data row holding more or fewer cells than
+formula-injection guard exactly; and a `calculation_evidence` block whose
+members, required list, effect text, provenance digest, figures, relied-on
+flags or per-entry digest disagree with the summary's own calculation-evidence
+section. The summary row carries a SHA-256 of each entry's canonical JSON, so
+every member of the entry is witnessed, the printed ones and the advisory notes
+and rate tables alike, and editing any of them in the JSON alone is refused
+rather than displayed. Removing the block and its section together is refused
+too, because `source_sha256` still names the evidence file. A data row holding more or fewer cells than
 the header declares fails closed as well: a surplus cell would otherwise sit
 outside every named column, unguarded against formula prefixes and compared
 with nothing.
@@ -356,6 +363,71 @@ Tenant,AccountID,SubledgerBalance
 ```
 
 `SubledgerBalance` must use the same signed convention as `YTDDebit - YTDCredit`: debit balances positive; credit balances negative. Each supplied subledger row is compared only with the matching current TB account. A missing GL account, or a difference beyond `--reconciliation-tolerance`, requires review.
+
+## Calculation evidence, optional
+
+A close sometimes depends on a figure a calculator produced: a payroll levy, a
+minimum yearly repayment, a category taxable value. This tool does not make
+that call. Something else does, writes an evidence file, and you hand the file
+to the close.
+
+```bash
+close-control review   --current examples/current_trial_balance.csv   --prior examples/prior_trial_balance.csv   --calculation-evidence examples/calculation-evidence-coal-lsl-levy.json   --require-calculation coal-lsl-levy   --output outputs/demo
+```
+
+The control is off unless you use one of those two flags, and a pack produced
+without them carries exactly the fields it always did: the
+`calculation_evidence` key appears only when the control ran.
+
+`--require-calculation` is the important half. It names a calculation this
+close needs. If no evidence file carries that label, the pack raises an
+exception rather than passing quietly, because a close that silently omits a
+figure it was configured to carry is the failure worth preventing.
+
+**Nothing here touches a network.** The file is read from disk, and this
+package has no HTTP client, no credentials and no calculator. The evidence file
+is treated as untrusted input: it is size-bounded, its money must be decimal
+strings, its text is rejected if it carries a control character, a zero-width or
+directional mark, an embedding, override or isolate, and everything rendered
+into the pack is escaped like any other untrusted cell. A label is a slug, so
+it cannot carry any of that either.
+
+### What is checked, and what each failure earns
+
+| Check | Status |
+| --- | --- |
+| The file is unreadable, or its `calculation_sha256` does not match its own calculation block | `BLOCKED` |
+| The producer recorded a validation finding, or a computed figure carries no manifest, advisory or figure | `BLOCKED` |
+| A `--require-calculation` label has no evidence file | `REVIEW` |
+| The evidence records a refusal, an outage or a contract failure rather than a figure | `REVIEW` |
+| The evidence period does not cover the current report date, or cannot be read as a period | `REVIEW` |
+| A computed figure names no rate table | `REVIEW` |
+
+No new status exists and none of these can become `PASS`. An acknowledgement
+does not clear them, the same way it clears nothing else.
+
+A refusal recorded in an evidence file stays a refusal. It never becomes a nil
+amount: `examples/calculation-evidence-refused.json` is a fabricated example of
+one, and the pack reports that no figure was produced.
+
+### What the pack records
+
+`close-review-pack.json` gains a `calculation_evidence` block listing what was
+required and what was supplied: each file's label, provider, calculator,
+period, status, engine, its own digest and the digest of the bytes read, the
+rate tables it names, its advisory notes, its normalised figures and whether
+the pack may rely on it. `usable` is true only where the file hangs together,
+carries a figure and covers this close's period, so it cannot say yes while an
+exception in the same pack says otherwise. `close-summary.md` gains a
+`## Calculation evidence` section stating the required list and, per
+calculation, the same label, status, period, figures and relied-on flag plus a
+digest of the whole JSON entry, which is what lets `view` prove the JSON was
+not edited after the pack was written. The review sheet `view` renders shows
+the section it verified. A pack built without the control carries
+neither the block nor the section and is byte-identical to one produced before
+the control existed. The file's SHA-256 also joins `source_sha256` under
+`calculation_evidence:<label>`, so the pack records the bytes rather than a
+path a later reader cannot check.
 
 ## Human acknowledgement
 

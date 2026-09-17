@@ -1,0 +1,73 @@
+{
+  "schema": "lodgeit-calculation-evidence/1",
+  "calculation_sha256": "aa8ed76799267b04bd43b69e982fd5ba3fc081cb53ceda589c5b3cf5e00fae3c",
+  "calculation": {
+    "schema": "lodgeit-calculation-evidence/1",
+    "label": "coal-lsl-levy-unresolved",
+    "synthetic_input": true,
+    "provider": {
+      "name": "duguid-coal-lsl-levy-service",
+      "contract_snapshot": "coal-lsl-levy-request/1",
+      "contract_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "call": {
+      "calculator": "urn:sbrm:calc:coal-lsl-levy",
+      "period": "urn:sbrm:period:coal-lsl-levy:2026-07",
+      "status": "UPSTREAM_REFUSED",
+      "http_status": 400
+    },
+    "input": {
+      "reporting_month": "2026-07",
+      "branch": "base_rate",
+      "employee": {
+        "eligible_employee": "unknown"
+      },
+      "pay": {
+        "base_rate_of_pay": "6000.00",
+        "salary_sacrificed": "0.00",
+        "overtime_and_penalty_rates": "3000.00",
+        "allowances": "500.00",
+        "allowances_exclude_expense_reimbursements": true,
+        "bonuses": []
+      }
+    },
+    "input_json": null,
+    "upstream": {
+      "response": {
+        "refusal_class": "insufficient_facts",
+        "reason": "employee.eligible_employee is \"unknown\". Eligibility is a coverage decision this calculator does not make."
+      },
+      "manifest": null,
+      "advisory": null,
+      "refusal_class": "insufficient_facts"
+    },
+    "normalised": {
+      "values": {},
+      "note": "Parsed from the response's own decimal strings. The response above is unaltered."
+    },
+    "validation": {
+      "findings": [
+        "provider refused: insufficient_facts"
+      ],
+      "accepted": false
+    },
+    "engine": {
+      "name": "coal-lsl-levy",
+      "version": "0.1.0"
+    },
+    "local_result": null,
+    "notes": [
+      "Fabricated figures for the Varrock Ventures example close."
+    ],
+    "boundary": [
+      "Calculated on supplied facts. Not advice, not a lodgement and not a review sign-off.",
+      "A digest proves the bytes are the bytes. It proves nothing about whether the figure is right."
+    ]
+  },
+  "observation": {
+    "captured_at": "2026-08-01T04:12:09+00:00",
+    "elapsed_ms": 318,
+    "base_url": "https://example.invalid",
+    "note": "Observation metadata is excluded from calculation_sha256 on purpose: it changes between two identical calls."
+  }
+}
