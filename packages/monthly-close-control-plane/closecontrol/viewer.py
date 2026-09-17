@@ -425,10 +425,13 @@ _MD_SECTION_HEADING = re.compile(r"^#{1,2}\s")
 # never finished, and each round of it leaves whatever was not enumerated as a
 # region no check reads. Recognising a heading, on the other hand, needs no
 # knowledge of what it says.
+_CALCULATION_EVIDENCE_HEADING = "## Calculation evidence"
+
 _SUMMARY_HEADINGS = (
     "# Monthly Close Review Pack",
     "## Scope",
     "## Source evidence",
+    _CALCULATION_EVIDENCE_HEADING,
     "## Exceptions",
     _CLIENT_QUERY_HEADING,
     "## Human acknowledgement",
@@ -475,7 +478,7 @@ def _heading_lines(summary_text: str) -> list[str]:
     return headings
 
 
-def _verify_summary_headings(summary_text: str, *, register: bool) -> None:
+def _verify_summary_headings(summary_text: str, *, register: bool, evidence: bool) -> None:
     """Prove the summary's headings are the writer's, exactly and in order.
 
     A forged section needs a heading, or a reviewer scrolling past it reads a
@@ -498,14 +501,24 @@ def _verify_summary_headings(summary_text: str, *, register: bool) -> None:
     expected = [
         heading
         for heading in _SUMMARY_HEADINGS
-        if register or heading != _CLIENT_QUERY_HEADING
+        if (register or heading != _CLIENT_QUERY_HEADING)
+        and (evidence or heading != _CALCULATION_EVIDENCE_HEADING)
     ]
     found = _heading_lines(summary_text)
     if found == expected:
         return
-    if not register and found == list(_SUMMARY_HEADINGS):
+    with_register = [
+        heading
+        for heading in _SUMMARY_HEADINGS
+        if evidence or heading != _CALCULATION_EVIDENCE_HEADING
+    ]
+    if not register and found == with_register:
         # The one shape worth naming for itself: a current pack whose register
-        # files were removed while its summary kept the section.
+        # files were removed while its summary kept the section. Compared
+        # against the headings this pack should otherwise have, not against
+        # every heading the writer can emit: a pack with no calculation
+        # evidence has no such section either, and matching the full list
+        # would lose this message the moment an optional section was added.
         raise ControlInputError(
             f"{_SUMMARY_NAME}: holds a client-query section while the pack "
             "carries no client-query register; the register is half removed, "
@@ -881,6 +894,145 @@ def _expected_acknowledgement_lines(acknowledgement: object) -> list[str]:
     ]
 
 
+_CALCULATION_EVIDENCE_TABLE_HEADER = (
+    "| Calculation | Status | Period | Figures | Relied on |"
+)
+
+#: The members report._as_json writes for one supplied calculation. Fixed, so
+#: an added or renamed field is refused rather than displayed as though the
+#: writer had put it there.
+_EVIDENCE_ITEM_MEMBERS = frozenset({
+    "label", "schema", "provider", "calculator", "period", "status", "engine",
+    "calculation_sha256", "file_sha256", "synthetic_input", "rate_tables",
+    "advisory_notes", "values", "usable",
+})
+_EVIDENCE_BLOCK_MEMBERS = frozenset({"required", "supplied", "effect"})
+
+
+def _evidence_summary_rows(summary_text: str) -> dict[str, tuple[str, str, str, str]]:
+    """The calculation-evidence table as the summary states it.
+
+    Read from the summary's own section, so the JSON pack has a second
+    artefact to agree with. Without this the block's figures and its
+    `usable` flag were the only copy in the pack, and editing them left every
+    other check passing.
+    """
+    rows: dict[str, tuple[str, str, str, str]] = {}
+    body = _section_lines(summary_text, _CALCULATION_EVIDENCE_HEADING)
+    for line in body:
+        stripped = line.strip()
+        if not stripped.startswith("|") or stripped == _CALCULATION_EVIDENCE_TABLE_HEADER:
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) != 5 or set(cells[0]) <= {"-", ":"}:
+            continue
+        label = cells[0]
+        if label in rows and rows[label] != tuple(cells[1:]):
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: calculation {label!r} appears twice with different figures"
+            )
+        rows[label] = (cells[1], cells[2], cells[3], cells[4])
+    return rows
+
+
+def _verify_calculation_evidence(
+    block: object,
+    summary_text: str,
+    json_hashes: dict[str, object],
+) -> None:
+    """Check the evidence block's shape, and that the summary says the same.
+
+    Every other member a reviewer acts on is witnessed by a second artefact.
+    This one carried the figures and the relied-on flag in the JSON alone, so
+    editing a figure there left the pack verifying and the review sheet
+    displaying the edited number.
+    """
+    if block is None:
+        if _CALCULATION_EVIDENCE_TABLE_HEADER in {
+            line.strip() for line in summary_text.splitlines()
+        }:
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: a calculation-evidence table is present while "
+                f"{_JSON_NAME} carries no calculation_evidence member"
+            )
+        return
+    if not isinstance(block, dict):
+        raise ControlInputError(f"{_JSON_NAME}: calculation_evidence must be an object")
+    unknown = sorted(set(block) - _EVIDENCE_BLOCK_MEMBERS)
+    if unknown:
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence has unknown member(s): {', '.join(unknown)}"
+        )
+    missing = sorted(_EVIDENCE_BLOCK_MEMBERS - set(block))
+    if missing:
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence is missing member(s): {', '.join(missing)}"
+        )
+    supplied = block["supplied"]
+    if not isinstance(supplied, list):
+        raise ControlInputError(f"{_JSON_NAME}: calculation_evidence.supplied must be a list")
+    required = block["required"]
+    if not isinstance(required, list) or not all(isinstance(name, str) for name in required):
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence.required must be a list of strings"
+        )
+
+    summary_rows = _evidence_summary_rows(summary_text)
+    json_rows: dict[str, tuple[str, str, str, str]] = {}
+    for item in supplied:
+        if not isinstance(item, dict):
+            raise ControlInputError(
+                f"{_JSON_NAME}: calculation_evidence.supplied holds a non-object entry"
+            )
+        item_unknown = sorted(set(item) - _EVIDENCE_ITEM_MEMBERS)
+        item_missing = sorted(_EVIDENCE_ITEM_MEMBERS - set(item))
+        if item_unknown or item_missing:
+            raise ControlInputError(
+                f"{_JSON_NAME}: a calculation_evidence entry has the wrong members "
+                f"(unknown: {', '.join(item_unknown) or 'none'}; "
+                f"missing: {', '.join(item_missing) or 'none'})"
+            )
+        label = item["label"]
+        values = item["values"]
+        usable = item["usable"]
+        if not isinstance(label, str) or not isinstance(usable, bool):
+            raise ControlInputError(
+                f"{_JSON_NAME}: a calculation_evidence entry has a non-string label or a "
+                "non-boolean usable flag"
+            )
+        if not isinstance(values, dict) or not all(
+            isinstance(name, str) and isinstance(amount, str) for name, amount in values.items()
+        ):
+            raise ControlInputError(
+                f"{_JSON_NAME}: calculation_evidence[{label!r}].values must map names to "
+                "decimal strings"
+            )
+        # The digest the pack quotes for this file has to be the one the
+        # witnessed source list carries, or the provenance names another file.
+        witnessed = json_hashes.get(f"calculation_evidence:{label}")
+        if witnessed != item["file_sha256"]:
+            raise ControlInputError(
+                f"{_JSON_NAME}: calculation_evidence[{label!r}] quotes file digest "
+                f"{item['file_sha256']!r}, which is not the digest source_sha256 records"
+            )
+        figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
+        # Mirrored through the same escaping the writer applies, so the
+        # comparison is against what the summary renders rather than against
+        # what the JSON happens to spell.
+        json_rows[_md_cell_mirror(label)] = (
+            _md_cell_mirror(str(item["status"])),
+            _md_cell_mirror(str(item["period"]) or _ABSENT),
+            _md_cell_mirror(figures or _ABSENT),
+            "yes" if usable else "no",
+        )
+
+    if json_rows != summary_rows:
+        raise ControlInputError(
+            f"calculation evidence disagrees: {_JSON_NAME} and {_SUMMARY_NAME} state "
+            "different calculations, figures or relied-on flags"
+        )
+
+
 def _verify_summary_holds_no_register(summary_text: str) -> None:
     """A pack without the register must not have a summary that shows one.
 
@@ -921,7 +1073,12 @@ def _verify_cross_file_agreement(
     # Before anything is read out of the summary, prove its sections are the
     # writer's. Every later check reads one region of this document; this is
     # what says there is no other region pretending to be one.
-    _verify_summary_headings(summary_text, register=query_rows is not None)
+    evidence_block = document.get("calculation_evidence")
+    _verify_summary_headings(
+        summary_text,
+        register=query_rows is not None,
+        evidence=evidence_block is not None,
+    )
 
     status = document["overall_status"]
     assert isinstance(status, str)
@@ -951,6 +1108,8 @@ def _verify_cross_file_agreement(
             f"source evidence disagrees: {_SUMMARY_NAME} and {_JSON_NAME} "
             f"list different source digests"
         )
+
+    _verify_calculation_evidence(evidence_block, summary_text, json_hashes)
 
     exceptions = document["exceptions"]
     assert isinstance(exceptions, list)

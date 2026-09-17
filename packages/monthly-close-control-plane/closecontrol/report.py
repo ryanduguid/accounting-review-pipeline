@@ -236,6 +236,25 @@ def _md_note_lines(comment: str) -> list[str]:
 # Stated wherever the queries are rendered. A query list that reads as finished
 # correspondence is the one way this file could do harm: it names the client's
 # accounts and invites somebody to send it as it stands.
+_CALCULATION_EVIDENCE_HEADING = "## Calculation evidence"
+
+# The figures a reviewer acts on live in the JSON pack. Repeating them here
+# is what lets `close-control view` prove the JSON was not edited after the
+# pack was written: every other consequential member is witnessed by a second
+# artefact, and this one was not.
+_CALCULATION_EVIDENCE_PREAMBLE = [
+    "Read from files supplied to this run. This pack made no calculation and "
+    "contacted no service. A figure here supports review and approves nothing.",
+    "",
+]
+_CALCULATION_EVIDENCE_TABLE_HEADER = (
+    "| Calculation | Status | Period | Figures | Relied on |"
+)
+_NO_CALCULATION_EVIDENCE = (
+    "A calculation was required for this close and no evidence file was supplied "
+    "for it. The exceptions below say which."
+)
+
 _CLIENT_QUERY_PREAMBLE = [
     "These are draft questions for the preparer, derived from the exceptions above. "
     "Nothing has been sent to anyone. Read and edit them before they reach a client, "
@@ -272,6 +291,28 @@ def _as_markdown(pack: CloseReviewPack) -> str:
     ]
     for name, digest in sorted(pack.source_hashes.items()):
         lines.append(f"- `{name}`: `{digest}`")
+    if pack.calculation_evidence or pack.required_calculations:
+        lines += ["", _CALCULATION_EVIDENCE_HEADING, ""]
+        lines += _CALCULATION_EVIDENCE_PREAMBLE
+        if not pack.calculation_evidence:
+            lines.append(_NO_CALCULATION_EVIDENCE)
+        else:
+            lines += [
+                _CALCULATION_EVIDENCE_TABLE_HEADER,
+                "| --- | --- | --- | --- | --- |",
+            ]
+            # A distinct name from the exceptions loop below: they iterate
+            # different types and sharing one name makes the reader, and the
+            # type checker, take the first binding for both.
+            for evidence in sorted(pack.calculation_evidence, key=lambda entry: entry.label):
+                figures = "; ".join(
+                    f"{name} {_money(value)}" for name, value in sorted(evidence.values.items())
+                ) or _ABSENT
+                lines.append(
+                    f"| {_md_cell(evidence.label)} | {_md_cell(evidence.status)} "
+                    f"| {_md_cell(evidence.period or _ABSENT)} | {_md_cell(figures)} "
+                    f"| {'yes' if evidence.label in pack.relied_on else 'no'} |"
+                )
     lines += ["", "## Exceptions", ""]
     if not pack.exceptions:
         lines.append("No exceptions were raised. A human must still decide whether the close is appropriate.")

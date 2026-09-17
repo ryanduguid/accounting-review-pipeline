@@ -428,3 +428,54 @@ def test_a_label_must_be_a_slug(tmp_path):
         record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
         with pytest.raises(SchemaError):
             module.load(write(tmp_path, record, "label.json"))
+
+
+# -- malformed shapes a reader must report, never crash on -----------------
+
+
+@pytest.mark.parametrize("path,value,expected", [
+    ("upstream.manifest", {"rate_table_uris": 1}, "manifest.rate_table_uris is int"),
+    ("upstream.advisory", {"notes": 1}, "advisory.notes is int"),
+    ("validation", {"findings": 1, "accepted": True}, "validation.findings is int"),
+])
+def test_a_scalar_where_an_array_belongs_is_a_schema_error(tmp_path, path, value, expected):
+    """A truthy scalar raised TypeError straight out of the iteration.
+
+    Nothing above catches that, so a malformed file reached the caller as a
+    traceback instead of as the unreadable-evidence state this control has.
+    """
+    record = build_record(**{path: value})
+    with pytest.raises(SchemaError, match=expected):
+        module.load(write(tmp_path, record))
+
+
+def test_a_non_text_advisory_note_is_a_finding_not_a_silent_drop(tmp_path):
+    # {"notes": [123]} satisfied the presence check above and then yielded no
+    # advisory text at all, so the file read as though it carried a boundary
+    # statement while carrying none.
+    record = build_record(**{"upstream.advisory": {"notes": [123]}})
+    evidence = module.load(write(tmp_path, record))
+    assert evidence.advisory_notes == ()
+    assert any("not text" in finding for finding in evidence.findings)
+    assert evidence.usable is False
+
+
+def test_a_malformed_manifest_entry_is_a_finding(tmp_path):
+    record = build_record(**{"upstream.manifest": {"rate_table_uris": ["urn:not-an-object"]}})
+    evidence = module.load(write(tmp_path, record))
+    assert evidence.rate_tables == ()
+    assert any("not an object" in finding for finding in evidence.findings)
+    assert evidence.usable is False
+
+
+def test_a_manifest_entry_without_a_uri_is_a_finding(tmp_path):
+    record = build_record(**{"upstream.manifest": {"rate_table_uris": [{"sha256": "c" * 64}]}})
+    evidence = module.load(write(tmp_path, record))
+    assert any("carries no uri string" in finding for finding in evidence.findings)
+
+
+def test_a_non_text_validation_finding_is_itself_a_finding(tmp_path):
+    record = build_record(**{"validation": {"findings": [123], "accepted": False}})
+    evidence = module.load(write(tmp_path, record))
+    assert any("not text" in finding for finding in evidence.findings)
+    assert evidence.usable is False

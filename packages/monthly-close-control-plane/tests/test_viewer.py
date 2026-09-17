@@ -1201,3 +1201,89 @@ def test_an_unedited_acknowledged_pack_still_verifies(tmp_path: Path) -> None:
     sheet, digests = render_review_sheet(output)
     assert "Overall status: REVIEW" in sheet
     assert len(digests) == 4
+
+
+# -- the calculation-evidence block is witnessed, not just carried ----------
+
+
+@pytest.fixture
+def evidence_pack_dir(tmp_path: Path) -> Path:
+    """A real pack built with a real evidence file, by the real writer."""
+    output = tmp_path / "evidence-pack"
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        calculation_evidence_paths=(EXAMPLES / "calculation-evidence-coal-lsl-levy.json",),
+        required_calculations=("coal-lsl-levy",),
+    )
+    write_review_pack(pack, output)
+    return output
+
+
+def test_a_pack_carrying_evidence_verifies_and_displays(evidence_pack_dir: Path) -> None:
+    sheet, _digests = render_review_sheet(evidence_pack_dir)
+    assert "Calculation evidence" in sheet or "coal-lsl-levy" in sheet
+
+
+def test_an_edited_figure_no_longer_passes_verification(evidence_pack_dir: Path) -> None:
+    """The figure a reviewer acts on has to agree with a second artefact.
+
+    It lived only in the JSON pack, so changing a levy of 192.38 to 999999.99
+    left every other check passing and the review sheet displaying the edited
+    number.
+    """
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0]["values"]["levy"] = "999999.99"
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_flipped_relied_on_flag_no_longer_passes_verification(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    item = document["calculation_evidence"]["supplied"][0]
+    item["usable"] = not item["usable"]
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_swapped_provenance_digest_is_refused(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0]["file_sha256"] = "d" * 64
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="not the digest source_sha256 records"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_an_added_member_in_an_evidence_entry_is_refused(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0]["approved_by"] = "someone"
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="wrong members"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_removed_evidence_block_leaves_no_orphan_summary_table(
+    evidence_pack_dir: Path,
+) -> None:
+    """Deleting the JSON member while the summary still shows the table.
+
+    The same shape the client-query register refuses: a section half removed
+    is not a section absent.
+    """
+    document = _read_json(evidence_pack_dir)
+    del document["calculation_evidence"]
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_pack_without_evidence_is_unchanged_by_the_new_section(pack_dir: Path) -> None:
+    # A pack built without the optional control carries no block and no
+    # section, and still verifies.
+    document = _read_json(pack_dir)
+    assert "calculation_evidence" not in document
+    summary = (pack_dir / "close-summary.md").read_text(encoding="utf-8")
+    assert "## Calculation evidence" not in summary
+    render_review_sheet(pack_dir)

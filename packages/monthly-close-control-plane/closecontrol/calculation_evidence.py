@@ -66,7 +66,15 @@ class CalculationEvidence:
 
     @property
     def usable(self) -> bool:
-        """True when this file may support a close-review conclusion."""
+        """True when the file itself holds together and carries a computed figure.
+
+        This is the file's own condition and nothing else. Whether the figure
+        covers the period under review is a question about the close, not
+        about the file, and `engine.CloseReviewPack.relied_on` asks both
+        before anything is relied on. The pack's `usable` key is written from
+        `relied_on` for that reason; read that, not this, when the question is
+        whether a reviewer may use the figure.
+        """
         return not self.findings and self.status in COMPUTED_STATUSES
 
 
@@ -145,6 +153,21 @@ def _block(record: dict, name: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _array(value: object, field: str, path: Path) -> list:
+    """One array, or an empty one. A scalar is an error, never an iteration.
+
+    `for entry in block.get(name, []) or []` reads an absent member safely and
+    raises TypeError on a truthy scalar such as `"notes": 1`. Nothing above
+    catches that, so it left this command as a traceback rather than as the
+    unreadable-evidence state the control already has.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise SchemaError(f"{path}: {field} is {type(value).__name__}, not an array.")
+    return value
+
+
 def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     """Read and validate one evidence file. Raises on anything unreadable."""
     snapshot = path if isinstance(path, SourceSnapshot) else SourceSnapshot.capture(
@@ -220,16 +243,41 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
                 "the evidence records a computed figure with no advisory, so the calculator's "
                 "own boundary statement is missing"
             )
+    # An entry of the wrong type is a finding, not something to step over.
+    # Dropping it silently let a manifest of one malformed row look like a
+    # manifest naming nothing, and an advisory of [123] satisfy the presence
+    # check above while producing no boundary statement at all.
     rate_tables: list[str] = []
     if isinstance(manifest, dict):
-        for entry in manifest.get("rate_table_uris", []) or []:
-            if isinstance(entry, dict) and isinstance(entry.get("uri"), str):
-                rate_tables.append(_text(entry["uri"], "manifest.rate_table_uris[].uri", source))
+        entries = _array(manifest.get("rate_table_uris"), "manifest.rate_table_uris", source)
+        for index, entry in enumerate(entries):
+            where = f"manifest.rate_table_uris[{index}]"
+            if not isinstance(entry, dict):
+                findings.append(
+                    f"the manifest entry at {where} is {type(entry).__name__}, not an object, "
+                    "so nothing there names a rate table"
+                )
+                continue
+            uri = entry.get("uri")
+            if not isinstance(uri, str):
+                findings.append(
+                    f"the manifest entry at {where} carries no uri string, so nothing there "
+                    "names a rate table"
+                )
+                continue
+            rate_tables.append(_text(uri, f"{where}.uri", source))
     notes: list[str] = []
     if isinstance(advisory, dict):
-        for note in advisory.get("notes", []) or []:
-            if isinstance(note, str):
-                notes.append(_text(note, "advisory.notes[]", source, limit=600))
+        entries = _array(advisory.get("notes"), "advisory.notes", source)
+        for index, note in enumerate(entries):
+            if not isinstance(note, str):
+                findings.append(
+                    f"the advisory note at advisory.notes[{index}] is "
+                    f"{type(note).__name__}, not text, so the calculator's boundary statement "
+                    "is not readable"
+                )
+                continue
+            notes.append(_text(note, f"advisory.notes[{index}]", source, limit=600))
 
     values: dict[str, Decimal] = {}
     raw_values = _block(normalised, "values")
@@ -245,12 +293,19 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
 
     validation = _block(calculation, "validation")
     if validation:
-        for finding in validation.get("findings", []) or []:
-            if isinstance(finding, str):
+        entries = _array(validation.get("findings"), "validation.findings", source)
+        for index, finding in enumerate(entries):
+            where = f"validation.findings[{index}]"
+            if not isinstance(finding, str):
                 findings.append(
-                    "the producer recorded a validation finding: "
-                    + _text(finding, "validation.findings[]", source, limit=600)
+                    f"the producer recorded a validation finding at {where} that is "
+                    f"{type(finding).__name__}, not text, so what it found cannot be read"
                 )
+                continue
+            findings.append(
+                "the producer recorded a validation finding: "
+                + _text(finding, where, source, limit=600)
+            )
 
     return CalculationEvidence(
         label=label,
