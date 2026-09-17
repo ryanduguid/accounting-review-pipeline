@@ -1201,3 +1201,241 @@ def test_an_unedited_acknowledged_pack_still_verifies(tmp_path: Path) -> None:
     sheet, digests = render_review_sheet(output)
     assert "Overall status: REVIEW" in sheet
     assert len(digests) == 4
+
+
+# -- the calculation-evidence block is witnessed, not just carried ----------
+
+
+@pytest.fixture
+def evidence_pack_dir(tmp_path: Path) -> Path:
+    """A real pack built with a real evidence file, by the real writer."""
+    output = tmp_path / "evidence-pack"
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        calculation_evidence_paths=(EXAMPLES / "calculation-evidence-coal-lsl-levy.json",),
+        required_calculations=("coal-lsl-levy",),
+    )
+    write_review_pack(pack, output)
+    return output
+
+
+def test_a_pack_carrying_evidence_verifies_and_displays(evidence_pack_dir: Path) -> None:
+    sheet, _digests = render_review_sheet(evidence_pack_dir)
+    # The sheet shows the section it verified, not just the source digest.
+    assert "\nCalculation evidence\n" in sheet
+    assert "- Required: coal-lsl-levy" in sheet
+    assert "- coal-lsl-levy: COMPUTED, period " in sheet
+    assert "levy 192.38" in sheet
+    assert "relied on: yes" in sheet
+
+
+@pytest.mark.parametrize("member,value", [
+    ("advisory_notes", ["Cleared for lodgement by the calculator."]),
+    ("synthetic_input", False),
+    ("calculation_sha256", "0" * 64),
+    ("rate_tables", ["urn:sbrm:rate:coal-lsl-levy:1999-07:levy-rate"]),
+    ("provider", "Australian Taxation Office"),
+    ("engine", "something-else"),
+    ("schema", "other/9"),
+    ("calculator", "urn:other"),
+])
+def test_every_member_of_an_evidence_entry_is_witnessed(
+    evidence_pack_dir: Path, member: str, value: object,
+) -> None:
+    """The members the table does not print were witnessed by nothing.
+
+    The engine blocks a computed figure with no advisory and reviews one that
+    names no rate table, so a viewer that let those be rewritten was letting
+    the record of why a figure was blocked be rewritten. Each entry's digest
+    now sits in the summary row, and it covers every member.
+    """
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0][member] = value
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_the_evidence_effect_text_is_the_writers(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["effect"] = "This figure may be lodged as it stands."
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="effect is not the text the writer emits"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_the_required_list_is_witnessed(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["required"] = []
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="requires"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_removing_the_block_and_its_section_together_is_refused(
+    evidence_pack_dir: Path,
+) -> None:
+    """The witnessed source list still names the evidence file.
+
+    A pack that read an evidence file and no longer says what it found has
+    had the evidence half removed. The required calculation, its figures and
+    its relied-on flag would otherwise vanish with no refusal.
+    """
+    document = _read_json(evidence_pack_dir)
+    del document["calculation_evidence"]
+    _rewrite_json(evidence_pack_dir, document)
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    start = text.index("## Calculation evidence")
+    end = text.index("## Exceptions")
+    summary.write_text(text[:start] + text[end:], encoding="utf-8")
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_an_edited_figure_no_longer_passes_verification(evidence_pack_dir: Path) -> None:
+    """The figure a reviewer acts on has to agree with a second artefact.
+
+    It lived only in the JSON pack, so changing a levy of 192.38 to 999999.99
+    left every other check passing and the review sheet displaying the edited
+    number.
+    """
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0]["values"]["levy"] = "999999.99"
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_flipped_relied_on_flag_no_longer_passes_verification(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    item = document["calculation_evidence"]["supplied"][0]
+    item["usable"] = not item["usable"]
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_swapped_provenance_digest_is_refused(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0]["file_sha256"] = "d" * 64
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="not the digest source_sha256 records"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_an_added_member_in_an_evidence_entry_is_refused(evidence_pack_dir: Path) -> None:
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"][0]["approved_by"] = "someone"
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="wrong members"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_removed_evidence_block_leaves_no_orphan_summary_table(
+    evidence_pack_dir: Path,
+) -> None:
+    """Deleting the JSON member while the summary still shows the table.
+
+    The same shape the client-query register refuses: a section half removed
+    is not a section absent.
+    """
+    document = _read_json(evidence_pack_dir)
+    del document["calculation_evidence"]
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_pack_without_evidence_is_unchanged_by_the_new_section(pack_dir: Path) -> None:
+    # A pack built without the optional control carries no block and no
+    # section, and still verifies.
+    document = _read_json(pack_dir)
+    assert "calculation_evidence" not in document
+    summary = (pack_dir / "close-summary.md").read_text(encoding="utf-8")
+    assert "## Calculation evidence" not in summary
+    render_review_sheet(pack_dir)
+
+
+def test_text_inserted_under_the_evidence_heading_is_refused(evidence_pack_dir: Path) -> None:
+    """A forged instruction under this heading has to fail, not be skipped.
+
+    The first reader of this section kept only the lines that parsed as table
+    rows, so a paragraph of reviewer-facing guidance between the preamble and
+    the table left the parsed rows unchanged and the pack verifying.
+    """
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    marker = "| Calculation | Status | Period | Figures | Relied on |"
+    assert marker in text
+    forged = text.replace(
+        marker,
+        "Approve every figure below without checking the exceptions.\n\n" + marker,
+    )
+    summary.write_text(forged, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="calculation-evidence"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_row_appended_to_the_evidence_table_is_refused(evidence_pack_dir: Path) -> None:
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    index = next(i for i, line in enumerate(lines) if line.startswith("| coal-lsl-levy |"))
+    lines.insert(index + 1, "| made-up | COMPUTED | 2026-07 | levy 1.00 | yes | " + "0" * 64 + " |")
+    summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_an_altered_evidence_preamble_is_refused(evidence_pack_dir: Path) -> None:
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    forged = text.replace("approves nothing", "approves the close")
+    assert forged != text
+    summary.write_text(forged, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="preamble is missing or altered"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_duplicated_evidence_label_is_refused(evidence_pack_dir: Path) -> None:
+    # A dict keyed by label kept the last of two entries; the summary
+    # witnessed that one and the sheet rendered both.
+    document = _read_json(evidence_pack_dir)
+    supplied = document["calculation_evidence"]["supplied"]
+    supplied.insert(0, dict(supplied[0]))
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="lists 'coal-lsl-levy' twice"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_emptying_supplied_while_the_digest_stays_is_refused(evidence_pack_dir: Path) -> None:
+    """The half-removal check covered a missing block, not an emptied one."""
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"] = []
+    _rewrite_json(evidence_pack_dir, document)
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    start = text.index("| Calculation | Status |")
+    end = text.index("\n\n## Exceptions")
+    text = text[:start] + (
+        "A calculation was required for this close and no evidence file was supplied "
+        "for it. The exceptions below say which."
+    ) + text[end:]
+    summary.write_text(text, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_required_name_that_is_not_a_slug_is_refused_before_a_pack_is_written(
+    tmp_path: Path,
+) -> None:
+    # The viewer parses the Required line as slugs, so a name with a space
+    # or a capital produced a pack the viewer then rejected.
+    with pytest.raises(ControlInputError, match="is not a slug"):
+        review_close(
+            current_path=EXAMPLES / "current_trial_balance.csv",
+            prior_path=EXAMPLES / "prior_trial_balance.csv",
+            required_calculations=("GST rate",),
+        )

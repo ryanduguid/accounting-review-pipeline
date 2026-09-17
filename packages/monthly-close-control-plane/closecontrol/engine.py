@@ -14,7 +14,8 @@ from decimal import (
 from pathlib import Path
 from typing import Iterable
 
-from .errors import DateMismatchError, NumericGateError, SchemaError
+from .calculation_evidence import _LABEL, CalculationEvidence, covers_period, load_all
+from .errors import ControlInputError, DateMismatchError, NumericGateError, SchemaError
 from .loader import (
     SourceSnapshot,
     load_canonical_tb,
@@ -40,6 +41,16 @@ class CloseReviewPack:
     reconciliation_tolerance: Decimal
     exceptions: tuple[ExceptionItem, ...]
     acknowledgement: ReviewerAcknowledgement | None
+    # Optional, and empty unless --calculation-evidence was supplied. A pack
+    # built without the feature carries the same fields it always did.
+    calculation_evidence: tuple[CalculationEvidence, ...] = ()
+    required_calculations: tuple[str, ...] = ()
+    # The labels the pack may actually rely on: the file hangs together, it
+    # carries a figure, and its period covers this close. The evidence record's
+    # own `usable` knows nothing about the report date, so publishing that
+    # alone marked a wrong-month figure as relied upon while an exception about
+    # it sat in the same pack.
+    relied_on: frozenset[str] = frozenset()
 
     @property
     def client_queries(self) -> tuple[ClientQuery, ...]:
@@ -362,6 +373,131 @@ def _subledger_exceptions(
     return result
 
 
+def _calculation_evidence_exceptions(
+    evidence: list[CalculationEvidence],
+    unreadable: list[str],
+    required: tuple[str, ...],
+    report_date: date,
+) -> list[ExceptionItem]:
+    """Controls over supplied calculation evidence. Reads files, calls nothing.
+
+    Four ways evidence fails, and the state each earns:
+
+    - unreadable, or its digest does not match its own content: BLOCKED. The
+      file says it is one thing and is another, and nothing downstream can tell
+      which half to believe.
+    - a required calculation is absent: REVIEW. The configuration says this
+      close needs that figure, and it is not here.
+    - the calculation did not produce a figure, because the calculator refused
+      or was unavailable: REVIEW. A refusal is a result, and it is not a number.
+    - its period does not cover the pack's report date, or cannot be read:
+      REVIEW. A figure for the wrong month is not evidence about this one.
+
+    None of these states is new, and none of them can become PASS. An
+    acknowledgement does not clear them either; that has always been true here.
+    """
+    result: list[ExceptionItem] = []
+    for message in unreadable:
+        result.append(
+            _exception(
+                "calculation_evidence", "BLOCKED", None,
+                reason=f"A supplied calculation-evidence file could not be read: {message}",
+                reviewer_action=(
+                    "Obtain a readable evidence file, or run this close without it and record "
+                    "why the calculation is absent."
+                ),
+            )
+        )
+    by_label = {item.label: item for item in evidence}
+    for name in required:
+        if name not in by_label:
+            result.append(
+                _exception(
+                    "calculation_evidence", "REVIEW", None,
+                    reason=(
+                        f"Calculation {name!r} is configured as required for this close and no "
+                        "evidence for it was supplied."
+                    ),
+                    reviewer_action=(
+                        "Produce the calculation and supply its evidence file, or remove the "
+                        "requirement deliberately. It cannot be left out silently."
+                    ),
+                )
+            )
+    for item in evidence:
+        for finding in item.findings:
+            result.append(
+                _exception(
+                    "calculation_evidence", "BLOCKED", None,
+                    reason=f"Calculation evidence {item.label!r}: {finding}",
+                    reviewer_action=(
+                        "Do not rely on this figure. Re-produce the evidence from the "
+                        "calculator that owns it."
+                    ),
+                )
+            )
+        if item.status not in ("COMPUTED",):
+            result.append(
+                _exception(
+                    "calculation_evidence", "REVIEW", None,
+                    reason=(
+                        f"Calculation evidence {item.label!r} records status {item.status}, so "
+                        "no figure was produced."
+                    ),
+                    reviewer_action=(
+                        "Read the recorded reason. A refusal, an outage or a contract failure "
+                        "is a result in itself and must not be treated as a nil amount."
+                    ),
+                )
+            )
+            continue
+        covered = covers_period(item, report_date)
+        if covered is None:
+            result.append(
+                _exception(
+                    "calculation_evidence", "REVIEW", None,
+                    reason=(
+                        f"Calculation evidence {item.label!r} carries period {item.period!r}, "
+                        "which this pipeline cannot read as a period covering "
+                        f"{report_date.isoformat()}."
+                    ),
+                    reviewer_action=(
+                        "Confirm by hand which period the figure covers before relying on it."
+                    ),
+                )
+            )
+        elif not covered:
+            result.append(
+                _exception(
+                    "calculation_evidence", "REVIEW", None,
+                    reason=(
+                        f"Calculation evidence {item.label!r} covers period {item.period!r}, "
+                        f"which does not include the current report date "
+                        f"{report_date.isoformat()}."
+                    ),
+                    reviewer_action=(
+                        "Obtain evidence for the period under review, or record why an earlier "
+                        "period's figure is the right one."
+                    ),
+                )
+            )
+        if not item.rate_tables and item.values:
+            result.append(
+                _exception(
+                    "calculation_evidence", "REVIEW", None,
+                    reason=(
+                        f"Calculation evidence {item.label!r} names no rate table, so the "
+                        "figure's statutory inputs cannot be traced from the pack."
+                    ),
+                    reviewer_action=(
+                        "Confirm the figure derives from the supplied inputs alone. If it "
+                        "consumed a rate, obtain evidence that names it."
+                    ),
+                )
+            )
+    return result
+
+
 def _overall_status(exceptions: list[ExceptionItem]) -> Status:
     if any(item.status == "BLOCKED" for item in exceptions):
         return "BLOCKED"
@@ -378,6 +514,8 @@ def review_close(
     mapping_policy_path: Path | None = None,
     subledger_path: Path | None = None,
     acknowledgement_path: Path | None = None,
+    calculation_evidence_paths: list[Path] | None = None,
+    required_calculations: tuple[str, ...] = (),
     absolute_threshold: Decimal = Decimal("1000"),
     percentage_threshold: Decimal = Decimal("0.10"),
     reconciliation_tolerance: Decimal = Decimal("0.01"),
@@ -425,6 +563,9 @@ def review_close(
         else None
     )
     acknowledgement = load_reviewer_acknowledgement(acknowledgement_source)
+    # Opt-in: with no paths and no requirement, nothing below runs and the pack
+    # is the same one this package produced before the feature existed.
+    evidence, unreadable_evidence = load_all(calculation_evidence_paths)
 
     current_tenant = current_rows[0].tenant
     prior_tenant = prior_rows[0].tenant
@@ -459,6 +600,21 @@ def review_close(
         if mapping_policy is not None:
             exceptions += _mapping_compatibility_exceptions(current_rows, mapping, mapping_policy)
         exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
+        for name in required_calculations:
+            # The same rule the evidence loader applies to a label, and the
+            # rule the viewer's Required line is parsed by. A name that passes
+            # here is a name the pack can be verified with; one that does not
+            # is refused before a pack is written that the viewer would reject.
+            if not isinstance(name, str) or not _LABEL.fullmatch(name):
+                raise ControlInputError(
+                    f"--require-calculation {name!r} is not a slug. A required calculation "
+                    "is named the way its evidence file labels it: lower-case letters, "
+                    "digits and single hyphens."
+                )
+        if evidence or unreadable_evidence or required_calculations:
+            exceptions += _calculation_evidence_exceptions(
+                evidence, unreadable_evidence, required_calculations, current_date,
+            )
 
     # The mapping's ReviewGroup travels with every exception that names an
     # account it covers, so a reviewer can filter exceptions.csv or the JSON
@@ -483,6 +639,10 @@ def review_close(
         source_hashes["subledger"] = subledger_source.sha256
     if acknowledgement_source is not None:
         source_hashes["review_note"] = acknowledgement_source.sha256
+    for item in evidence:
+        # One hash per evidence file, keyed by its label, so the pack records
+        # the exact bytes it read rather than a path a reader cannot check.
+        source_hashes[f"calculation_evidence:{item.label}"] = item.sha256
 
     ordered = tuple(sorted(exceptions, key=lambda item: (item.status != "BLOCKED", item.control, item.tenant, item.account_id, item.reason)))
     # Force the register once here. client_queries is a property, so an
@@ -501,4 +661,10 @@ def review_close(
         reconciliation_tolerance=reconciliation_tolerance,
         exceptions=ordered,
         acknowledgement=acknowledgement,
+        calculation_evidence=tuple(evidence),
+        required_calculations=tuple(required_calculations),
+        relied_on=frozenset(
+            item.label for item in evidence
+            if item.usable and covers_period(item, current_date) is True
+        ),
     )
