@@ -419,7 +419,8 @@ def _calculation_evidence_exceptions(
                 )
             )
     for item in evidence:
-        for finding in item.findings:
+        # Findings explain an expected refusal/outage; those outcomes remain REVIEW.
+        for finding in (item.findings if item.status == "COMPUTED" else ()):
             result.append(
                 _exception(
                     "calculation_evidence", "BLOCKED", None,
