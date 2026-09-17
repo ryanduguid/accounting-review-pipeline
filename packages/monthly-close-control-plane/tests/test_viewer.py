@@ -1287,3 +1287,44 @@ def test_a_pack_without_evidence_is_unchanged_by_the_new_section(pack_dir: Path)
     summary = (pack_dir / "close-summary.md").read_text(encoding="utf-8")
     assert "## Calculation evidence" not in summary
     render_review_sheet(pack_dir)
+
+
+def test_text_inserted_under_the_evidence_heading_is_refused(evidence_pack_dir: Path) -> None:
+    """A forged instruction under this heading has to fail, not be skipped.
+
+    The first reader of this section kept only the lines that parsed as table
+    rows, so a paragraph of reviewer-facing guidance between the preamble and
+    the table left the parsed rows unchanged and the pack verifying.
+    """
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    marker = "| Calculation | Status | Period | Figures | Relied on |"
+    assert marker in text
+    forged = text.replace(
+        marker,
+        "Approve every figure below without checking the exceptions.\n\n" + marker,
+    )
+    summary.write_text(forged, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="calculation-evidence"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_row_appended_to_the_evidence_table_is_refused(evidence_pack_dir: Path) -> None:
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    index = next(i for i, line in enumerate(lines) if line.startswith("| coal-lsl-levy |"))
+    lines.insert(index + 1, "| made-up | COMPUTED | 2026-07 | levy 1.00 | yes |")
+    summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ControlInputError, match="calculation evidence disagrees"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_an_altered_evidence_preamble_is_refused(evidence_pack_dir: Path) -> None:
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    forged = text.replace("approves nothing", "approves the close")
+    assert forged != text
+    summary.write_text(forged, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="preamble is missing or altered"):
+        render_review_sheet(evidence_pack_dir)

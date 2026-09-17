@@ -250,6 +250,7 @@ _CALCULATION_EVIDENCE_PREAMBLE = [
 _CALCULATION_EVIDENCE_TABLE_HEADER = (
     "| Calculation | Status | Period | Figures | Relied on |"
 )
+_CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- |"
 _NO_CALCULATION_EVIDENCE = (
     "A calculation was required for this close and no evidence file was supplied "
     "for it. The exceptions below say which."
@@ -299,7 +300,7 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         else:
             lines += [
                 _CALCULATION_EVIDENCE_TABLE_HEADER,
-                "| --- | --- | --- | --- | --- |",
+                _CALCULATION_EVIDENCE_TABLE_DELIMITER,
             ]
             # A distinct name from the exceptions loop below: they iterate
             # different types and sharing one name makes the reader, and the

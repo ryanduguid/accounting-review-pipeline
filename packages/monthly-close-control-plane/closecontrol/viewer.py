@@ -897,6 +897,22 @@ def _expected_acknowledgement_lines(acknowledgement: object) -> list[str]:
 _CALCULATION_EVIDENCE_TABLE_HEADER = (
     "| Calculation | Status | Period | Figures | Relied on |"
 )
+_CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- |"
+
+# Mirrored from report._CALCULATION_EVIDENCE_PREAMBLE and the line it writes
+# when a calculation was required and no file supplied one, for the same
+# reason _CLIENT_QUERY_PREAMBLE is mirrored: the viewer stays an independent
+# witness, so a renderer that changes its wording has to be reflected here
+# deliberately rather than agreeing with whatever the writer now produces.
+_CALCULATION_EVIDENCE_PREAMBLE = (
+    "Read from files supplied to this run. This pack made no calculation and "
+    "contacted no service. A figure here supports review and approves nothing.",
+    "",
+)
+_NO_CALCULATION_EVIDENCE = (
+    "A calculation was required for this close and no evidence file was supplied "
+    "for it. The exceptions below say which."
+)
 
 #: The members report._as_json writes for one supplied calculation. Fixed, so
 #: an added or renamed field is refused rather than displayed as though the
@@ -910,28 +926,68 @@ _EVIDENCE_BLOCK_MEMBERS = frozenset({"required", "supplied", "effect"})
 
 
 def _evidence_summary_rows(summary_text: str) -> dict[str, tuple[str, str, str, str]]:
-    """The calculation-evidence table as the summary states it.
+    """The calculation-evidence section, read as a whole and line by line.
 
     Read from the summary's own section, so the JSON pack has a second
-    artefact to agree with. Without this the block's figures and its
-    `usable` flag were the only copy in the pack, and editing them left every
-    other check passing.
+    artefact to agree with. Without it the block's figures and its `usable`
+    flag were the only copy in the pack, and editing them left every other
+    check passing.
+
+    Every line is accounted for, not just the ones that parse as table rows.
+    Skipping the rest would let a paragraph of reviewer-facing instructions sit
+    under this heading and still verify, which is the forgery the whole-section
+    comparison exists to refuse: the writer emits a fixed preamble, then either
+    one fixed sentence or a header, a delimiter and one row per calculation,
+    and nothing else belongs between them.
     """
+    section = _section_lines(summary_text, _CALCULATION_EVIDENCE_HEADING)
+    lead = ["", *_CALCULATION_EVIDENCE_PREAMBLE]
+    if section[: len(lead)] != lead:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence preamble is missing or altered"
+        )
+    body = section[len(lead) :]
+    if not body or body[-1] != "":
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence section does not end where the "
+            "writer ends it"
+        )
+    body = body[:-1]
+
+    if body == [_NO_CALCULATION_EVIDENCE]:
+        return {}
+    if not body or body[0] != _CALCULATION_EVIDENCE_TABLE_HEADER:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence table header is missing or altered"
+        )
+    if len(body) < 2 or body[1] != _CALCULATION_EVIDENCE_TABLE_DELIMITER:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence table delimiter is missing or altered"
+        )
+
     rows: dict[str, tuple[str, str, str, str]] = {}
-    body = _section_lines(summary_text, _CALCULATION_EVIDENCE_HEADING)
-    for line in body:
-        stripped = line.strip()
-        if not stripped.startswith("|") or stripped == _CALCULATION_EVIDENCE_TABLE_HEADER:
-            continue
-        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-        if len(cells) != 5 or set(cells[0]) <= {"-", ":"}:
-            continue
-        label = cells[0]
-        if label in rows and rows[label] != tuple(cells[1:]):
+    for line in body[2:]:
+        if not line.startswith("| ") or not line.endswith(" |"):
             raise ControlInputError(
-                f"{_SUMMARY_NAME}: calculation {label!r} appears twice with different figures"
+                f"{_SUMMARY_NAME}: the calculation-evidence section holds a line the writer "
+                f"never emits: {line!r}"
+            )
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 5:
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: a calculation-evidence row holds {len(cells)} cells, "
+                "not 5"
+            )
+        label = cells[0]
+        if label in rows:
+            raise ControlInputError(
+                f"{_SUMMARY_NAME}: calculation {label!r} appears twice in the table"
             )
         rows[label] = (cells[1], cells[2], cells[3], cells[4])
+    if not rows:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: the calculation-evidence table has a header and no rows"
+        )
     return rows
 
 
@@ -1026,6 +1082,11 @@ def _verify_calculation_evidence(
             "yes" if usable else "no",
         )
 
+    if not supplied and summary_rows:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: holds a calculation-evidence table while {_JSON_NAME} "
+            "records no supplied evidence"
+        )
     if json_rows != summary_rows:
         raise ControlInputError(
             f"calculation evidence disagrees: {_JSON_NAME} and {_SUMMARY_NAME} state "
