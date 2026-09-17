@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -69,17 +70,50 @@ class CalculationEvidence:
         return not self.findings and self.status in COMPUTED_STATUSES
 
 
+def _is_hidden(character: str) -> bool:
+    """True for a character that can change how surrounding text reads.
+
+    C0 controls, the zero-width and directional marks at U+200B to U+200F, the
+    embedding and override controls at U+202A to U+202E, the Arabic letter mark
+    at U+061C, and the isolates at U+2066 to U+2069. The isolates were the gap:
+    U+2066 and U+2069 reorder a reviewer's own words on screen exactly as the
+    overrides do, and reached the pack unescaped.
+    """
+    point = ord(character)
+    return (
+        point < 0x20
+        or point == 0x7F
+        or point == 0x061C
+        or 0x200B <= point <= 0x200F
+        or 0x202A <= point <= 0x202E
+        or 0x2066 <= point <= 0x2069
+    )
+
+
 def _text(value: object, field: str, path: Path, *, limit: int = 400) -> str:
     if not isinstance(value, str):
         raise SchemaError(f"{path}: {field} must be a string.")
     if len(value) > limit:
         raise SchemaError(f"{path}: {field} is longer than {limit} characters.")
-    # The same character classes the CSV loaders refuse. A Cf character in a
-    # provider's advisory would reorder a reviewer's own words on screen.
-    if any(ord(character) < 0x20 or 0x200B <= ord(character) <= 0x200F
-           or 0x202A <= ord(character) <= 0x202E for character in value):
+    if any(_is_hidden(character) for character in value):
         raise SchemaError(f"{path}: {field} contains a control or formatting character.")
     return value
+
+
+#: A label names a required calculation, keys a source digest in the pack and
+#: is rendered into the summary, so it is a slug and nothing else. The viewer's
+#: source-evidence pattern accepts exactly this class.
+_LABEL = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+
+
+def _label(value: object, path: Path) -> str:
+    text = _text(value, "label", path, limit=120)
+    if not _LABEL.fullmatch(text):
+        raise SchemaError(
+            f"{path}: label {text!r} is not a slug. A label names a required calculation and "
+            "keys a digest in the pack, so it is lower-case letters, digits and single hyphens."
+        )
+    return text
 
 
 def _canonical(payload: object) -> bytes:
@@ -123,6 +157,15 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
         record = json.loads(snapshot.text(label="Calculation-evidence file", encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise SchemaError(f"{source}: evidence is not valid JSON.") from exc
+    except RecursionError as exc:
+        # A file well under the byte ceiling can still nest thousands of arrays
+        # deep. That is an unreadable evidence file, which this control already
+        # has a state for, not a crash for the caller to see.
+        raise SchemaError(f"{source}: evidence is nested too deeply to read.") from exc
+    except ValueError as exc:
+        # Covers the integer-digit limit, among others. Anything json raises
+        # that is not a decode error still means the file could not be read.
+        raise SchemaError(f"{source}: evidence could not be read ({exc}).") from exc
     if not isinstance(record, dict):
         raise SchemaError(f"{source}: evidence must be a JSON object.")
 
@@ -155,7 +198,7 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     engine = _block(calculation, "engine")
     normalised = _block(calculation, "normalised")
 
-    label = _text(calculation.get("label", source.stem), "label", source, limit=120)
+    label = _label(calculation.get("label", source.stem), source)
     status = _text(call.get("status", "UNKNOWN"), "call.status", source, limit=60)
     calculator = _text(call.get("calculator") or "", "call.calculator", source, limit=200)
     period = _text(call.get("period") or "", "call.period", source, limit=200)
@@ -193,6 +236,12 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     for name, amount in sorted(raw_values.items()):
         key = _text(name, "normalised.values key", source, limit=80)
         values[key] = _decimal(amount, f"normalised.values.{key}", source)
+
+    if status in COMPUTED_STATUSES and not values:
+        findings.append(
+            "the evidence records a computed figure and carries no normalised value, so there "
+            "is no figure in it. A label alone does not satisfy a required calculation."
+        )
 
     validation = _block(calculation, "validation")
     if validation:
@@ -238,10 +287,16 @@ def covers_period(evidence: CalculationEvidence, report_date: date) -> bool | No
         return tail == report_date.strftime("%Y-%m")
     if len(tail) == 6 and tail.startswith("fy") and tail[2:].isdigit():
         ending = int(tail[2:])
-        if "fbt" in evidence.period:
-            start, end = date(ending - 1, 4, 1), date(ending, 3, 31)
-        else:
-            start, end = date(ending - 1, 7, 1), date(ending, 6, 30)
+        try:
+            if "fbt" in evidence.period:
+                start, end = date(ending - 1, 4, 1), date(ending, 3, 31)
+            else:
+                start, end = date(ending - 1, 7, 1), date(ending, 6, 30)
+        except ValueError:
+            # `fy0000` and the like. A year the calendar has no room for is a
+            # period this pipeline cannot read, which is the same answer as any
+            # other unreadable period rather than an error out of the engine.
+            return None
         return start <= report_date <= end
     return None
 

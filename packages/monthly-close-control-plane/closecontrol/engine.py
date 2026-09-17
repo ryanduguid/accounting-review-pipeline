@@ -45,6 +45,12 @@ class CloseReviewPack:
     # built without the feature carries the same fields it always did.
     calculation_evidence: tuple[CalculationEvidence, ...] = ()
     required_calculations: tuple[str, ...] = ()
+    # The labels the pack may actually rely on: the file hangs together, it
+    # carries a figure, and its period covers this close. The evidence record's
+    # own `usable` knows nothing about the report date, so publishing that
+    # alone marked a wrong-month figure as relied upon while an exception about
+    # it sat in the same pack.
+    relied_on: frozenset[str] = frozenset()
 
     @property
     def client_queries(self) -> tuple[ClientQuery, ...]:
@@ -646,4 +652,8 @@ def review_close(
         acknowledgement=acknowledgement,
         calculation_evidence=tuple(evidence),
         required_calculations=tuple(required_calculations),
+        relied_on=frozenset(
+            item.label for item in evidence
+            if item.usable and covers_period(item, current_date) is True
+        ),
     )

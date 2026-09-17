@@ -55,7 +55,12 @@ _JSON_MEMBERS = frozenset(
 # Present in a pack carrying the client-query register, absent in one written
 # before it existed. Half a register is not a pack in either format, so
 # verify_pack requires this member and client-queries.csv to arrive together.
-_OPTIONAL_JSON_MEMBERS = frozenset({"client_queries"})
+#
+# `calculation_evidence` joins it: the control is opt-in, so the member is
+# there when it ran and absent when it did not, and both shapes are a pack the
+# writer produced. Leaving it out here made every pack the control produced
+# unopenable by `close-control view`.
+_OPTIONAL_JSON_MEMBERS = frozenset({"client_queries", "calculation_evidence"})
 
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
 
@@ -120,7 +125,11 @@ _CLIENT_QUERY_SENTENCE = (
 
 _STATUS_LINE = re.compile(r"\*\*Overall status: (PASS|REVIEW|BLOCKED)\*\*")
 
-_SOURCE_EVIDENCE_LINE = re.compile(r"`([a-z_0-9]+)`: `([0-9a-f]{64})`")
+# Calculation-evidence sources are keyed `calculation_evidence:<label>`, and
+# a label is a slug, so the colon and hyphen belong in the label class. The
+# class stays closed: `calculation_evidence.py` refuses a label outside it,
+# so no caller-supplied text can widen what this pattern accepts.
+_SOURCE_EVIDENCE_LINE = re.compile(r"`([a-z_0-9:-]+)`: `([0-9a-f]{64})`")
 
 
 def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:

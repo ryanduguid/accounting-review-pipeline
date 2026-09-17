@@ -327,3 +327,104 @@ def test_the_written_pack_carries_the_evidence_and_still_verifies(tmp_path):
     assert payload["calculation_evidence"]["supplied"][0]["label"] == "coal-lsl-levy"
     summary = Path(outputs["summary"]).read_text(encoding="utf-8")
     assert "close" in summary.lower()
+
+
+# -- regressions from the 18 September 2026 review -------------------------
+
+
+def test_a_pack_carrying_evidence_can_still_be_opened(tmp_path):
+    """The viewer verifies the pack's members, and it did not know this one.
+
+    Every pack the control produced was unopenable by `close-control view`.
+    """
+    from closecontrol.viewer import render_review_sheet
+
+    path = write(tmp_path, build_record())
+    pack = run(tmp_path, calculation_evidence_paths=[path],
+               required_calculations=("coal-lsl-levy",))
+    outputs = write_review_pack(pack, tmp_path / "out")
+    sheet, _ = render_review_sheet(Path(outputs["json"]).parent)
+    assert "coal-lsl-levy" in sheet or "calculation" in sheet.lower()
+
+
+def test_a_computed_file_with_no_figure_does_not_satisfy_a_requirement(tmp_path):
+    """A label alone used to pass the pack with exit 0 and usable true."""
+    record = build_record()
+    record["calculation"]["normalised"]["values"] = {}
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    pack = run(tmp_path, calculation_evidence_paths=[write(tmp_path, record)],
+               required_calculations=("coal-lsl-levy",))
+    assert any("no normalised value" in item.reason for item in pack.exceptions
+               if item.control == "calculation_evidence")
+    assert pack.status in ("REVIEW", "BLOCKED")
+    from closecontrol.report import _as_json
+
+    assert _as_json(pack)["calculation_evidence"]["supplied"][0]["usable"] is False
+
+
+def test_a_normalised_block_that_is_not_an_object_carries_no_figure(tmp_path):
+    record = build_record()
+    record["calculation"]["normalised"] = ["not", "an", "object"]
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    pack = run(tmp_path, calculation_evidence_paths=[write(tmp_path, record)],
+               required_calculations=("coal-lsl-levy",))
+    assert any("no normalised value" in item.reason for item in pack.exceptions
+               if item.control == "calculation_evidence")
+
+
+def test_a_wrong_period_is_not_published_as_relied_upon(tmp_path):
+    """The pack said usable true while raising a REVIEW exception about it."""
+    from closecontrol.report import _as_json
+
+    record = build_record()
+    record["calculation"]["call"]["period"] = "urn:sbrm:period:coal-lsl-levy:2019-01"
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    pack = run(tmp_path, calculation_evidence_paths=[write(tmp_path, record)])
+    assert _as_json(pack)["calculation_evidence"]["supplied"][0]["usable"] is False
+    assert any("does not include the current report date" in item.reason
+               for item in pack.exceptions if item.control == "calculation_evidence")
+
+
+def test_a_deeply_nested_file_is_unreadable_not_a_crash(tmp_path):
+    path = tmp_path / "deep.json"
+    path.write_text("[" * 40000 + "]" * 40000, encoding="utf-8")
+    loaded, unreadable = module.load_all([path])
+    assert loaded == []
+    assert any("nested too deeply" in item for item in unreadable)
+
+
+def test_a_huge_integer_is_unreadable_not_a_crash(tmp_path):
+    path = tmp_path / "huge.json"
+    path.write_text('{"schema": "x", "n": ' + "9" * 5000 + "}", encoding="utf-8")
+    loaded, unreadable = module.load_all([path])
+    assert loaded == []
+    assert unreadable and "could not be read" in unreadable[0]
+
+
+def test_a_year_the_calendar_has_no_room_for_is_unreadable(tmp_path):
+    record = build_record()
+    record["calculation"]["call"]["period"] = "urn:sbrm:period:div7a:fy0000"
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    evidence = module.load(write(tmp_path, record))
+    assert module.covers_period(evidence, date(2026, 7, 31)) is None
+    pack = run(tmp_path, calculation_evidence_paths=[write(tmp_path, record, "fy0000.json")])
+    assert any("cannot read as a period" in item.reason for item in pack.exceptions
+               if item.control == "calculation_evidence")
+
+
+@pytest.mark.parametrize("hidden", ["⁦", "⁩", "؜", "‮", "​"])
+def test_every_directional_character_class_is_refused(tmp_path, hidden):
+    record = build_record()
+    record["calculation"]["upstream"]["advisory"]["notes"] = [f"levy is {hidden}192.38 payable"]
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    with pytest.raises(SchemaError, match="control or formatting character"):
+        module.load(write(tmp_path, record))
+
+
+def test_a_label_must_be_a_slug(tmp_path):
+    for bad in ("coal⁦lsl", "Coal-LSL", "coal lsl", "coal_lsl", "-coal", "coal--lsl"):
+        record = build_record()
+        record["calculation"]["label"] = bad
+        record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+        with pytest.raises(SchemaError):
+            module.load(write(tmp_path, record, "label.json"))

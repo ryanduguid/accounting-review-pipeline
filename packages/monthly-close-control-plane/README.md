@@ -380,16 +380,17 @@ figure it was configured to carry is the failure worth preventing.
 **Nothing here touches a network.** The file is read from disk, and this
 package has no HTTP client, no credentials and no calculator. The evidence file
 is treated as untrusted input: it is size-bounded, its money must be decimal
-strings, its text is rejected if it carries control or bidirectional formatting
-characters, and everything rendered into the pack is escaped like any other
-untrusted cell.
+strings, its text is rejected if it carries a control character, a zero-width or
+directional mark, an embedding, override or isolate, and everything rendered
+into the pack is escaped like any other untrusted cell. A label is a slug, so
+it cannot carry any of that either.
 
 ### What is checked, and what each failure earns
 
 | Check | Status |
 | --- | --- |
 | The file is unreadable, or its `calculation_sha256` does not match its own calculation block | `BLOCKED` |
-| The producer recorded a validation finding, or a computed figure carries no manifest or advisory | `BLOCKED` |
+| The producer recorded a validation finding, or a computed figure carries no manifest, advisory or figure | `BLOCKED` |
 | A `--require-calculation` label has no evidence file | `REVIEW` |
 | The evidence records a refusal, an outage or a contract failure rather than a figure | `REVIEW` |
 | The evidence period does not cover the current report date, or cannot be read as a period | `REVIEW` |
@@ -408,7 +409,9 @@ one, and the pack reports that no figure was produced.
 required and what was supplied: each file's label, provider, calculator,
 period, status, engine, its own digest and the digest of the bytes read, the
 rate tables it names, its advisory notes, its normalised figures and whether
-the pack may rely on it. The file's SHA-256 also joins `source_sha256` under
+the pack may rely on it. `usable` is true only where the file hangs together,
+carries a figure and covers this close's period, so it cannot say yes while an
+exception in the same pack says otherwise. The file's SHA-256 also joins `source_sha256` under
 `calculation_evidence:<label>`, so the pack records the bytes rather than a
 path a later reader cannot check.
 

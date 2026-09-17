@@ -132,13 +132,15 @@ def _as_json(pack: CloseReviewPack) -> dict:
                     "rate_tables": list(item.rate_tables),
                     "advisory_notes": list(item.advisory_notes),
                     "values": {name: _money(value) for name, value in sorted(item.values.items())},
-                    "usable": item.usable,
+                    "usable": item.label in pack.relied_on,
                 }
                 for item in sorted(pack.calculation_evidence, key=lambda entry: entry.label)
             ],
             "effect": (
                 "Evidence read from files. This pack made no calculation and contacted no "
-                "service. A figure here supports review; it does not approve anything."
+                "service. A figure here supports review; it does not approve anything. "
+                "`usable` is true only where the file hangs together, carries a figure and "
+                "covers this close's period; read the exceptions for why one is false."
             ),
         }
 
