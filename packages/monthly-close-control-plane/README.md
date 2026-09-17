@@ -357,6 +357,61 @@ Tenant,AccountID,SubledgerBalance
 
 `SubledgerBalance` must use the same signed convention as `YTDDebit - YTDCredit`: debit balances positive; credit balances negative. Each supplied subledger row is compared only with the matching current TB account. A missing GL account, or a difference beyond `--reconciliation-tolerance`, requires review.
 
+## Calculation evidence, optional
+
+A close sometimes depends on a figure a calculator produced: a payroll levy, a
+minimum yearly repayment, a category taxable value. This tool does not make
+that call. Something else does, writes an evidence file, and you hand the file
+to the close.
+
+```bash
+close-control review   --current examples/current_trial_balance.csv   --prior examples/prior_trial_balance.csv   --calculation-evidence examples/calculation-evidence-coal-lsl-levy.json   --require-calculation coal-lsl-levy   --output outputs/demo
+```
+
+The control is off unless you use one of those two flags, and a pack produced
+without them carries exactly the fields it always did: the
+`calculation_evidence` key appears only when the control ran.
+
+`--require-calculation` is the important half. It names a calculation this
+close needs. If no evidence file carries that label, the pack raises an
+exception rather than passing quietly, because a close that silently omits a
+figure it was configured to carry is the failure worth preventing.
+
+**Nothing here touches a network.** The file is read from disk, and this
+package has no HTTP client, no credentials and no calculator. The evidence file
+is treated as untrusted input: it is size-bounded, its money must be decimal
+strings, its text is rejected if it carries control or bidirectional formatting
+characters, and everything rendered into the pack is escaped like any other
+untrusted cell.
+
+### What is checked, and what each failure earns
+
+| Check | Status |
+| --- | --- |
+| The file is unreadable, or its `calculation_sha256` does not match its own calculation block | `BLOCKED` |
+| The producer recorded a validation finding, or a computed figure carries no manifest or advisory | `BLOCKED` |
+| A `--require-calculation` label has no evidence file | `REVIEW` |
+| The evidence records a refusal, an outage or a contract failure rather than a figure | `REVIEW` |
+| The evidence period does not cover the current report date, or cannot be read as a period | `REVIEW` |
+| A computed figure names no rate table | `REVIEW` |
+
+No new status exists and none of these can become `PASS`. An acknowledgement
+does not clear them, the same way it clears nothing else.
+
+A refusal recorded in an evidence file stays a refusal. It never becomes a nil
+amount: `examples/calculation-evidence-refused.json` is a fabricated example of
+one, and the pack reports that no figure was produced.
+
+### What the pack records
+
+`close-review-pack.json` gains a `calculation_evidence` block listing what was
+required and what was supplied: each file's label, provider, calculator,
+period, status, engine, its own digest and the digest of the bytes read, the
+rate tables it names, its advisory notes, its normalised figures and whether
+the pack may rely on it. The file's SHA-256 also joins `source_sha256` under
+`calculation_evidence:<label>`, so the pack records the bytes rather than a
+path a later reader cannot check.
+
 ## Human acknowledgement
 
 If a reviewer wants the pack to record that it was read, supply a separate JSON file:

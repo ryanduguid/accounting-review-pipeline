@@ -110,7 +110,39 @@ def _as_json(pack: CloseReviewPack) -> dict:
             "comment": pack.acknowledgement.comment,
             "effect": "Acknowledgement is evidence of human review only; it does not approve or close a period.",
         }
-    return {
+    # Only a pack that was given evidence carries the block, so a pack built
+    # without the optional control is byte-identical to one produced before it
+    # existed. test_calculation_evidence.py holds that.
+    calculation_evidence = None
+    if pack.calculation_evidence or pack.required_calculations:
+        calculation_evidence = {
+            "required": list(pack.required_calculations),
+            "supplied": [
+                {
+                    "label": item.label,
+                    "schema": item.schema,
+                    "provider": item.provider,
+                    "calculator": item.calculator,
+                    "period": item.period,
+                    "status": item.status,
+                    "engine": item.engine,
+                    "calculation_sha256": item.calculation_sha256,
+                    "file_sha256": item.sha256,
+                    "synthetic_input": item.synthetic_input,
+                    "rate_tables": list(item.rate_tables),
+                    "advisory_notes": list(item.advisory_notes),
+                    "values": {name: _money(value) for name, value in sorted(item.values.items())},
+                    "usable": item.usable,
+                }
+                for item in sorted(pack.calculation_evidence, key=lambda entry: entry.label)
+            ],
+            "effect": (
+                "Evidence read from files. This pack made no calculation and contacted no "
+                "service. A figure here supports review; it does not approve anything."
+            ),
+        }
+
+    payload: dict[str, object] = {
         "acknowledgement": acknowledgement,
         "client_queries": [_query_dict(query) for query in pack.client_queries],
         "current_report_dates": list(pack.current_report_dates),
@@ -124,6 +156,11 @@ def _as_json(pack: CloseReviewPack) -> dict:
             "reconciliation_tolerance": _money(pack.reconciliation_tolerance),
         },
     }
+    # The key appears only when the optional control ran. A null key would
+    # still be a schema change for every consumer that reads a pack today.
+    if calculation_evidence is not None:
+        payload["calculation_evidence"] = calculation_evidence
+    return payload
 
 
 # A missing tenant, account or difference is shown as text rather than as an em
