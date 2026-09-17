@@ -18,6 +18,12 @@ accounting and human-review boundaries:
   arithmetic, never binary floating point. Preserve fail-closed schema and integrity gates.
 - Do not add network or live Xero access, credential or token handling, journal, payment
   or report mutation, approval or sign-off authority, period locking, or tax lodgement.
+- `calculation_evidence.py` reads evidence files from disk and must stay that way. It has
+  no HTTP client and no calculator, and it never makes the call the evidence describes.
+  Treat an evidence file as untrusted input. A required calculation with no evidence, a
+  tampered file, a recorded refusal and a period mismatch each map onto an existing state
+  and can never become `PASS`; do not add a status, and do not let an acknowledgement
+  clear one.
 - For release work, read [RELEASING.md](RELEASING.md) together with the root
   instructions. The active caller is
   [release-monthly-close-control-plane.yml](../../.github/workflows/release-monthly-close-control-plane.yml),

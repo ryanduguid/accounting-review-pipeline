@@ -39,6 +39,14 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
                          help="optional permitted Section,ReviewGroup pairs CSV; requires --mapping")
     command.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
     command.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
+    # Opt-in, and read from disk. This tool makes no calculation and contacts
+    # no service; something else produced the file.
+    command.add_argument("--calculation-evidence", type=Path, action="append", default=None,
+                         metavar="PATH",
+                         help="optional calculation-evidence JSON file; repeat for more than one")
+    command.add_argument("--require-calculation", action="append", default=None, metavar="LABEL",
+                         help="a calculation this close needs; its absence is an exception, "
+                              "never a silent omission. Repeat for more than one")
     command.add_argument("--output", required=True, type=Path, help="directory for the generated review pack")
     command.add_argument("--absolute-threshold", type=_non_negative_decimal, default=Decimal("1000"), help="minimum absolute YTD variance for review")
     command.add_argument("--percentage-threshold", type=_non_negative_decimal, default=Decimal("0.10"), help="minimum proportional YTD variance for review, e.g. 0.10")
@@ -132,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         ("--mapping-policy", args.mapping_policy),
         ("--subledger", args.subledger),
         ("--review-note", args.review_note),
+        *(("--calculation-evidence", path) for path in (args.calculation_evidence or ())),
     ):
         if source is None:
             continue
@@ -156,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
             mapping_policy_path=args.mapping_policy,
             subledger_path=args.subledger,
             acknowledgement_path=args.review_note,
+            calculation_evidence_paths=args.calculation_evidence,
+            required_calculations=tuple(args.require_calculation or ()),
             absolute_threshold=args.absolute_threshold,
             percentage_threshold=args.percentage_threshold,
             reconciliation_tolerance=args.reconciliation_tolerance,
