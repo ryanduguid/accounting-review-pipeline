@@ -97,8 +97,10 @@ the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7f
 5 September 2026 and then `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`, and left the earlier
 commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
-produced no release. Every root release caller pins the current twin, `fcf25e5`, so the
-reusable workflows remain reachable.
+produced no release. Every root release caller now pins `171aa48`, a later policy commit
+that descends from that twin, so the reusable workflows remain reachable;
+`tests/test_release_pins.py` holds the README and the release recipes to whatever the
+callers pin today.
 
 ## Import records
 
@@ -116,8 +118,9 @@ table above.
 Only the root `.github/workflows/` directory is active. The movement-only change replaced
 the anchor's root-default `release.yml` (tag pattern `v*`, pin
 `2fe690d8dbb90c9b680c43822b7819f6aa1408ff`) with 5 namespaced callers pinned to the
-independently approved and squash-landed Release Policy commit, now
-`fcf25e532e9eb60056ae6e5c819cf3125c4f4b91` after the rewrites recorded above.
+independently approved and squash-landed Release Policy commit,
+`fcf25e532e9eb60056ae6e5c819cf3125c4f4b91` after the rewrites recorded above; the callers
+have since been repointed to `171aa487dbc0a8f437ed84407f0d506f814548c1`.
 One tag publishes one component; the reusable workflow's identity gate refuses a release
 whose directory leaf, `tag-prefix` and normalised distribution name or `artifact-stem`
 disagree.

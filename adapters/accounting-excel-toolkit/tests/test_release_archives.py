@@ -44,7 +44,7 @@ class ReleaseArchiveTests(unittest.TestCase):
             '--source-digest "$release_commit"',
             '--source-ref "refs/tags/$tag"',
             "--signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml",
-            "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91",
+            '--signer-digest "$policy_sha"',
         ):
             self.assertIn(required, loop.group(2))
 

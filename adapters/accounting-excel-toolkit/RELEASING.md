@@ -49,6 +49,10 @@ tag=accounting-excel-toolkit/v0.1.6
 repo=ryanduguid/accounting-review-pipeline
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
+policy_sha="$(gh api -H "Accept: application/vnd.github.raw+json" \
+  "repos/$repo/contents/.github/workflows/release-accounting-excel-toolkit.yml?ref=$release_commit" \
+  | sed -n 's#.*release-policy/\.github/workflows/[a-z-]*\.yml@\([0-9a-f]\{40\}\).*#\1#p')"
+test -n "$policy_sha"
 release_dir="$(mktemp -d)"
 gh release download "$tag" -R "$repo" --dir "$release_dir"
 cd "$release_dir"
@@ -58,7 +62,7 @@ for file in *; do
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
+    --signer-digest "$policy_sha"
 done
 for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-toolkit-${tag##*/v}.tar.gz"; do
   gh attestation verify "$archive" -R "$repo" \
@@ -66,7 +70,7 @@ for archive in "accounting-excel-toolkit-${tag##*/v}.zip" "accounting-excel-tool
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
     --signer-workflow ryanduguid/release-policy/.github/workflows/publish-archives.yml \
-    --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
+    --signer-digest "$policy_sha"
 done
 ```
 
