@@ -161,9 +161,8 @@ def test_release_attestation_commands_bind_the_exact_signing_identity() -> None:
             "--signer-workflow "
             "ryanduguid/release-policy/.github/workflows/release-python.yml"
         ) == 1
-        assert command.count(
-            "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
-        ) == 1
+        assert command.count('--signer-digest "$policy_sha"') == 1
+        assert "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91" not in command
 
     predicate_counts = [
         command.count("--predicate-type https://spdx.dev/Document/v2.3")

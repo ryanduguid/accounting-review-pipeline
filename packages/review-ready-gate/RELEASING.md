@@ -73,6 +73,10 @@ version="${tag#review-ready-gate/v}"
 wheel="review_ready_gate-${version}-py3-none-any.whl"
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
+policy_sha="$(gh api -H "Accept: application/vnd.github.raw+json" \
+  "repos/$repo/contents/.github/workflows/release-review-ready-gate.yml?ref=$release_commit" \
+  | sed -n 's#.*release-policy/\.github/workflows/[a-z-]*\.yml@\([0-9a-f]\{40\}\).*#\1#p')"
+test -n "$policy_sha"
 gh release download "$tag" -R "$repo" --dir "release-$tag"
 cd "release-$tag"
 sha256sum --check SHA256SUMS
@@ -80,13 +84,13 @@ gh attestation verify "$wheel" -R "$repo" \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
+  --signer-digest "$policy_sha"
 gh attestation verify "$wheel" -R "$repo" \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --source-digest "$release_commit" \
   --source-ref "refs/tags/$tag" \
   --signer-workflow ryanduguid/release-policy/.github/workflows/release-python.yml \
-  --signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91
+  --signer-digest "$policy_sha"
 gh release view "$tag" -R "$repo" --json isImmutable
 gh release verify "$tag" -R "$repo"
 gh release verify-asset "$tag" "$wheel" -R "$repo"

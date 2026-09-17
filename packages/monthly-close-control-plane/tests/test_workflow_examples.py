@@ -481,9 +481,9 @@ def test_release_guidance_uses_the_namespaced_current_tag() -> None:
     assert "tag=monthly-close-control-plane/v0.1.4" in guidance
     assert 'version="${tag#monthly-close-control-plane/v}"' in guidance
     assert "tag=v0.1.3" not in guidance
-    assert guidance.count(
-        "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91"
-    ) == 2
+    assert guidance.count('--signer-digest "$policy_sha"') == 2
+    assert "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91" not in guidance
+    assert "?ref=$release_commit" in guidance
 
 
 def test_strict_loader_keeps_on_as_text_and_rejects_duplicate_keys() -> None:

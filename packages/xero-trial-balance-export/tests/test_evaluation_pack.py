@@ -305,7 +305,9 @@ class EvaluationPackTest(unittest.TestCase):
         )
         self.assertIn("tag=xero-trial-balance-export/v0.1.8", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
-        self.assertIn("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91", releasing)
+        self.assertIn('--signer-digest "$policy_sha"', releasing)
+        self.assertNotIn("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91", releasing)
+        self.assertIn("?ref=$release_commit", releasing)
         self.assertNotIn("isLatest", releasing)
         self.assertIn("requirements-test.txt", releasing)
         self.assertEqual(
