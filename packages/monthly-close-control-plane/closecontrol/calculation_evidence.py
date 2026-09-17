@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -76,8 +77,7 @@ def _text(value: object, field: str, path: Path, *, limit: int = 400) -> str:
         raise SchemaError(f"{path}: {field} is longer than {limit} characters.")
     # The same character classes the CSV loaders refuse. A Cf character in a
     # provider's advisory would reorder a reviewer's own words on screen.
-    if any(ord(character) < 0x20 or 0x200B <= ord(character) <= 0x200F
-           or 0x202A <= ord(character) <= 0x202E for character in value):
+    if any(unicodedata.category(character) in {"Cc", "Cf", "Cs"} for character in value):
         raise SchemaError(f"{path}: {field} contains a control or formatting character.")
     return value
 
@@ -113,9 +113,17 @@ def _block(record: dict, name: str) -> dict:
 
 def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     """Read and validate one evidence file. Raises on anything unreadable."""
-    snapshot = path if isinstance(path, SourceSnapshot) else SourceSnapshot.capture(
-        path, label="Calculation-evidence file",
-    )
+    if isinstance(path, SourceSnapshot):
+        snapshot = path
+    else:
+        try:
+            with path.open("rb") as handle:
+                content = handle.read(MAX_EVIDENCE_BYTES + 1)
+        except FileNotFoundError as exc:
+            raise ControlInputError(f"Calculation-evidence file does not exist: {path}.") from exc
+        except OSError as exc:
+            raise ControlInputError(f"Calculation-evidence file could not be read: {path} ({exc}).") from exc
+        snapshot = SourceSnapshot(path=path, content=content, sha256=hashlib.sha256(content).hexdigest())
     source = snapshot.path
     if len(snapshot.content) > MAX_EVIDENCE_BYTES:
         raise SchemaError(f"{source}: evidence file exceeds {MAX_EVIDENCE_BYTES} bytes.")
@@ -179,29 +187,42 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
             )
     rate_tables: list[str] = []
     if isinstance(manifest, dict):
-        for entry in manifest.get("rate_table_uris", []) or []:
-            if isinstance(entry, dict) and isinstance(entry.get("uri"), str):
-                rate_tables.append(_text(entry["uri"], "manifest.rate_table_uris[].uri", source))
+        entries = manifest.get("rate_table_uris", [])
+        if not isinstance(entries, list):
+            raise SchemaError(f"{source}: manifest.rate_table_uris must be a list.")
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("uri"), str):
+                raise SchemaError(f"{source}: manifest.rate_table_uris[] must contain URI objects.")
+            rate_tables.append(_text(entry["uri"], "manifest.rate_table_uris[].uri", source))
     notes: list[str] = []
     if isinstance(advisory, dict):
-        for note in advisory.get("notes", []) or []:
-            if isinstance(note, str):
-                notes.append(_text(note, "advisory.notes[]", source, limit=600))
+        raw_notes = advisory.get("notes", [])
+        if not isinstance(raw_notes, list) or not raw_notes or not all(isinstance(note, str) for note in raw_notes):
+            if status in COMPUTED_STATUSES:
+                findings.append("the computed evidence advisory notes must be a non-empty list of strings")
+        else:
+            notes = [_text(note, "advisory.notes[]", source, limit=600) for note in raw_notes]
 
     values: dict[str, Decimal] = {}
-    raw_values = _block(normalised, "values")
+    raw_values = normalised.get("values") if isinstance(normalised, dict) else None
+    if not isinstance(raw_values, dict) or not raw_values:
+        if status in COMPUTED_STATUSES:
+            findings.append("the computed evidence contains no normalised values")
+        raw_values = {}
     for name, amount in sorted(raw_values.items()):
         key = _text(name, "normalised.values key", source, limit=80)
         values[key] = _decimal(amount, f"normalised.values.{key}", source)
 
     validation = _block(calculation, "validation")
     if validation:
-        for finding in validation.get("findings", []) or []:
-            if isinstance(finding, str):
-                findings.append(
-                    "the producer recorded a validation finding: "
-                    + _text(finding, "validation.findings[]", source, limit=600)
-                )
+        raw_findings = validation.get("findings", [])
+        if not isinstance(raw_findings, list) or not all(isinstance(finding, str) for finding in raw_findings):
+            raise SchemaError(f"{source}: validation.findings must be a list of strings.")
+        for finding in raw_findings:
+            findings.append(
+                "the producer recorded a validation finding: "
+                + _text(finding, "validation.findings[]", source, limit=600)
+            )
 
     return CalculationEvidence(
         label=label,
