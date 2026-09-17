@@ -1120,6 +1120,12 @@ def _verify_calculation_evidence(
         label = item["label"]
         values = item["values"]
         usable = item["usable"]
+        if isinstance(label, str) and _md_cell_mirror(label) in json_rows:
+            # A dict keyed by label kept the last of two entries and the
+            # summary witnessed only that one, while the sheet rendered both.
+            raise ControlInputError(
+                f"{_JSON_NAME}: calculation_evidence.supplied lists {label!r} twice"
+            )
         if not isinstance(label, str) or not isinstance(usable, bool):
             raise ControlInputError(
                 f"{_JSON_NAME}: a calculation_evidence entry has a non-string label or a "
@@ -1157,6 +1163,21 @@ def _verify_calculation_evidence(
         raise ControlInputError(
             f"{_SUMMARY_NAME}: holds a calculation-evidence table while {_JSON_NAME} "
             "records no supplied evidence"
+        )
+    # The writer records one source digest per evidence file it read, keyed
+    # by that file's label, and one supplied entry per file. The two sets are
+    # the same set or the pack was edited: an entry deleted while its digest
+    # stayed, or a digest added for a file no entry describes.
+    witnessed_labels = sorted(
+        str(key)[len("calculation_evidence:"):]
+        for key in json_hashes if str(key).startswith("calculation_evidence:")
+    )
+    supplied_labels = sorted(str(item["label"]) for item in supplied)
+    if witnessed_labels != supplied_labels:
+        raise ControlInputError(
+            f"{_JSON_NAME}: source_sha256 witnesses calculation evidence for "
+            f"{witnessed_labels!r} while calculation_evidence.supplied describes "
+            f"{supplied_labels!r}; the evidence is half removed, not absent"
         )
     if json_rows != summary_rows:
         raise ControlInputError(

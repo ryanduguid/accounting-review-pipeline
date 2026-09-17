@@ -486,3 +486,13 @@ def test_a_non_text_validation_finding_is_itself_a_finding(tmp_path):
     evidence = module.load(write(tmp_path, record))
     assert any("not text" in finding for finding in evidence.findings)
     assert evidence.usable is False
+
+
+@pytest.mark.parametrize("character", ["\u0085", "\u2028", "\u2029"])
+def test_a_line_separator_in_evidence_text_is_hidden(tmp_path, character):
+    # str.splitlines() breaks at each of these, so a status carrying one was
+    # written into a summary row as one line and read back as two, and the
+    # writer's own pack failed to verify.
+    record = build_record(**{"call.status": f"COMPUTED{character}"})
+    with pytest.raises(SchemaError, match="control or formatting character"):
+        module.load(write(tmp_path, record))

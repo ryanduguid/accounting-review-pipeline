@@ -14,8 +14,8 @@ from decimal import (
 from pathlib import Path
 from typing import Iterable
 
-from .calculation_evidence import CalculationEvidence, covers_period, load_all
-from .errors import DateMismatchError, NumericGateError, SchemaError
+from .calculation_evidence import _LABEL, CalculationEvidence, covers_period, load_all
+from .errors import ControlInputError, DateMismatchError, NumericGateError, SchemaError
 from .loader import (
     SourceSnapshot,
     load_canonical_tb,
@@ -600,6 +600,17 @@ def review_close(
         if mapping_policy is not None:
             exceptions += _mapping_compatibility_exceptions(current_rows, mapping, mapping_policy)
         exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
+        for name in required_calculations:
+            # The same rule the evidence loader applies to a label, and the
+            # rule the viewer's Required line is parsed by. A name that passes
+            # here is a name the pack can be verified with; one that does not
+            # is refused before a pack is written that the viewer would reject.
+            if not isinstance(name, str) or not _LABEL.fullmatch(name):
+                raise ControlInputError(
+                    f"--require-calculation {name!r} is not a slug. A required calculation "
+                    "is named the way its evidence file labels it: lower-case letters, "
+                    "digits and single hyphens."
+                )
         if evidence or unreadable_evidence or required_calculations:
             exceptions += _calculation_evidence_exceptions(
                 evidence, unreadable_evidence, required_calculations, current_date,

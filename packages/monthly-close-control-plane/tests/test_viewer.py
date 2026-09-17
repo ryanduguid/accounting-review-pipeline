@@ -1397,3 +1397,45 @@ def test_an_altered_evidence_preamble_is_refused(evidence_pack_dir: Path) -> Non
     summary.write_text(forged, encoding="utf-8")
     with pytest.raises(ControlInputError, match="preamble is missing or altered"):
         render_review_sheet(evidence_pack_dir)
+
+
+def test_a_duplicated_evidence_label_is_refused(evidence_pack_dir: Path) -> None:
+    # A dict keyed by label kept the last of two entries; the summary
+    # witnessed that one and the sheet rendered both.
+    document = _read_json(evidence_pack_dir)
+    supplied = document["calculation_evidence"]["supplied"]
+    supplied.insert(0, dict(supplied[0]))
+    _rewrite_json(evidence_pack_dir, document)
+    with pytest.raises(ControlInputError, match="lists 'coal-lsl-levy' twice"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_emptying_supplied_while_the_digest_stays_is_refused(evidence_pack_dir: Path) -> None:
+    """The half-removal check covered a missing block, not an emptied one."""
+    document = _read_json(evidence_pack_dir)
+    document["calculation_evidence"]["supplied"] = []
+    _rewrite_json(evidence_pack_dir, document)
+    summary = evidence_pack_dir / "close-summary.md"
+    text = summary.read_text(encoding="utf-8")
+    start = text.index("| Calculation | Status |")
+    end = text.index("\n\n## Exceptions")
+    text = text[:start] + (
+        "A calculation was required for this close and no evidence file was supplied "
+        "for it. The exceptions below say which."
+    ) + text[end:]
+    summary.write_text(text, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="half removed, not absent"):
+        render_review_sheet(evidence_pack_dir)
+
+
+def test_a_required_name_that_is_not_a_slug_is_refused_before_a_pack_is_written(
+    tmp_path: Path,
+) -> None:
+    # The viewer parses the Required line as slugs, so a name with a space
+    # or a capital produced a pack the viewer then rejected.
+    with pytest.raises(ControlInputError, match="is not a slug"):
+        review_close(
+            current_path=EXAMPLES / "current_trial_balance.csv",
+            prior_path=EXAMPLES / "prior_trial_balance.csv",
+            required_calculations=("GST rate",),
+        )

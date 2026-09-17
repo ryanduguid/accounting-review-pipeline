@@ -88,6 +88,12 @@ def _is_hidden(character: str) -> bool:
     overrides do, and reached the pack unescaped.
     """
     point = ord(character)
+    if point in (0x85, 0x2028, 0x2029):
+        # NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR: str.splitlines() breaks
+        # a line at each, so a status or figure name carrying one is written
+        # into a summary row as one line and read back as two. The writer's
+        # own pack then fails to verify.
+        return True
     return (
         point < 0x20
         or point == 0x7F
