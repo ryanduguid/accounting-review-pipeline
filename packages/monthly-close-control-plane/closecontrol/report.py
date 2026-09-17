@@ -132,7 +132,11 @@ def _as_json(pack: CloseReviewPack) -> dict:
                     "rate_tables": list(item.rate_tables),
                     "advisory_notes": list(item.advisory_notes),
                     "values": {name: _money(value) for name, value in sorted(item.values.items())},
-                    "usable": item.usable,
+                    "usable": item.usable and not any(
+                        item.label in exception.reason
+                        for exception in pack.exceptions
+                        if exception.control == "calculation_evidence"
+                    ),
                 }
                 for item in sorted(pack.calculation_evidence, key=lambda entry: entry.label)
             ],
