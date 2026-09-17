@@ -55,7 +55,7 @@ _JSON_MEMBERS = frozenset(
 # Present in a pack carrying the client-query register, absent in one written
 # before it existed. Half a register is not a pack in either format, so
 # verify_pack requires this member and client-queries.csv to arrive together.
-_OPTIONAL_JSON_MEMBERS = frozenset({"client_queries"})
+_OPTIONAL_JSON_MEMBERS = frozenset({"client_queries", "calculation_evidence"})
 
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
 
