@@ -145,7 +145,9 @@ def test_current_release_guidance_binds_the_exact_namespaced_identity() -> None:
     assert "tag=elizabeth-anne-alexander/v0.2.3" in guidance
     assert 'version="${tag#elizabeth-anne-alexander/v}"' in guidance
     assert "repo=ryanduguid/accounting-review-pipeline" in guidance
-    assert guidance.count("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91") == 2
+    assert guidance.count('--signer-digest "$policy_sha"') == 2
+    assert "--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91" not in guidance
+    assert "?ref=$release_commit" in guidance
     assert "Workflow filename | `release-elizabeth-anne-alexander.yml`" in guidance
     assert "Environment name | `pypi-elizabeth-anne-alexander`" in guidance
     assert "tag=v0.2.2" not in guidance
