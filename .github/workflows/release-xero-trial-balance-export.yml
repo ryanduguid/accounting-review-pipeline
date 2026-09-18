@@ -27,6 +27,7 @@ jobs:
     uses: ryanduguid/release-policy/.github/workflows/release-python.yml@2adf9e19b7c73970a1dd6703afb3f9c27b7972d7
     with:
       required-checks: |
+        .github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner
         .github/workflows/ci.yml: packages/xero-trial-balance-export / build
         .github/workflows/ci.yml: packages/xero-trial-balance-export / dependency-audit
         .github/workflows/ci.yml: packages/xero-trial-balance-export / lint
