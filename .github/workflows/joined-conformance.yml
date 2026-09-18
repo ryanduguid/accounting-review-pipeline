@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify path selection
-        run: python -m unittest tests.test_ci_paths tests.test_release_pins -v
+        run: python -m unittest tests.test_ci_paths tests.test_release_pins tests.test_release_checks -v
       - name: Select affected checks
         id: select
         env:

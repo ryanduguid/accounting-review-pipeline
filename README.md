@@ -143,7 +143,7 @@ component READMEs.
 
 Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`171aa487dbc0a8f437ed84407f0d506f814548c1`: `monthly-close-control-plane/v*`,
+`2adf9e19b7c73970a1dd6703afb3f9c27b7972d7`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*`,
 `accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
@@ -163,3 +163,13 @@ runtime package. `tests/test_xero_trial_balance_contract.py` and the
 implementations against it.
 
 </details>
+
+## Release checks
+
+The release caller names the component checks that must have succeeded for the
+exact release commit on `main`. It advances the policy SHA, `required-checks`
+and `actions: read` together. Skipped, missing, cancelled or failed checks block
+publication, including component tests skipped by a path filter. An aggregate
+gates job cannot replace those checks. Before tagging, choose a main-branch
+commit with successful component CI; a successful run for an older commit is
+not evidence for the release. Tags and publication still require explicit approval.
