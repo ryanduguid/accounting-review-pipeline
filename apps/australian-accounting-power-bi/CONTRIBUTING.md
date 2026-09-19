@@ -19,7 +19,8 @@ Work from `apps/australian-accounting-power-bi/` in [Accounting Review Pipeline]
 2. Run automated test suites:
    ```bash
    python -B -m unittest discover -s tests -v
-   npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report
+   npm ci --ignore-scripts
+   npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report
    ```
 3. Submit a pull request adhering to Conventional Commits format (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
 

@@ -74,7 +74,7 @@ Run every check from the owning component directory with its documented commands
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates and Windows clean-wheel smoke |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
-| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report` |
+| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
 | evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which

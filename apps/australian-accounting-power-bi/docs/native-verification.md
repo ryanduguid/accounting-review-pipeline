@@ -34,7 +34,8 @@ All checks passed from the component directory:
 
 ```text
 python -B -m unittest discover -s tests -v
-npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report
+npm ci --ignore-scripts
+npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report
 python -m ruff check .
 python -m mypy
 ```
