@@ -1,7 +1,9 @@
 # evatt: decisions and open items
 
-Written 10 September 2026, at the end of the implementation of
-`docs/superpowers/plans/2026-09-09-evatt.md`. The working ledger it came from was
+Written 10 September 2026, at the end of the evatt implementation. The plan that
+drove it was removed once the work shipped, and git history keeps it (last at
+`docs/superpowers/plans/2026-09-09-evatt.md` in commit bc4cf75). The working
+ledger it came from was
 scratch and has been deleted; git history is the record of the code, and this file
 is the record of the judgement calls made along the way.
 
