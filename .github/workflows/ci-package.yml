@@ -14,14 +14,16 @@ name: ci-package
 # configuration (ruff.toml or [tool.ruff], [tool.mypy], [tool.coverage.run]),
 # so a flat-module component and a packaged one run the same commands.
 #
-# The workflow filters itself. The `changes` job compares the pushed or
+# The workflow filters itself on pull requests. The `changes` job compares the
 # proposed commits against their base and only runs the gates when the
 # component directory, the shared trial-balance contract or a shared root file
 # changed, so a change to one component runs that component alone while the
 # caller stays free of path filters (a required check that is suppressed by a
 # path filter never reports). Root policy files, the root workspace files and
 # .github changes run every component, because the root uv.lock is what
-# `uv run --locked` validates from inside every component directory.
+# `uv run --locked` validates from inside every component directory. A push to
+# main runs every component's gates: release-policy reads the push run of the
+# exact main commit being tagged, and a skipped check is not release evidence.
 
 on:
   workflow_call:
@@ -69,7 +71,6 @@ jobs:
         env:
           PACKAGE_DIR: ${{ inputs.package_dir }}
           EVENT_NAME: ${{ github.event_name }}
-          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           # Everything outside the component directory that still changes what
@@ -83,17 +84,13 @@ jobs:
               # first parent is the base tip and the diff is exactly the proposal.
               changed=$(git diff --name-only --no-renames HEAD^1 HEAD)
               ;;
-            push)
-              if [ -n "${PUSH_BEFORE}" ] && ! printf '%s' "${PUSH_BEFORE}" | grep -Eq '^0+$' \
-                && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
-                changed=$(git diff --name-only --no-renames "${PUSH_BEFORE}" HEAD)
-              else
-                echo "::notice::No reachable base for this push; running every gate."
-                changed="${PACKAGE_DIR}/"
-              fi
-              ;;
             *)
-              echo "::notice::${EVENT_NAME} has no diff to filter on; running every gate."
+              # A push to main is the run the release gate reads. release-policy
+              # accepts only successful component checks from the push run of
+              # the exact main commit being tagged, and a check skipped by a
+              # path filter is not evidence, so a push runs every gate. Other
+              # events have no diff to filter on.
+              echo "::notice::${EVENT_NAME} runs every gate."
               changed="${PACKAGE_DIR}/"
               ;;
           esac

@@ -84,9 +84,11 @@ For a potential security vulnerability follow `SECURITY.md`.
 Branch protection should require `pipeline-gates`, `conformance-gates` and
 `standard-library-gates`, plus one `<component directory> / gates` result per
 Python component. Each result fails if an expected job fails, is cancelled or
-does not run. Unchanged components skip their matrix jobs; the final result
-accepts that only after successful path selection. File moves select both the
-source and destination components.
+does not run. On a pull request, unchanged components skip their matrix jobs and
+the final result accepts that only after successful path selection. A push to
+`main` runs every job, so the release commit carries the component evidence the
+release gate requires. File moves select both the source and destination
+components.
 
 Run `python -m unittest tests.test_ci_paths -v` for selector changes. The joined
 and standard-library workflows run this regression suite before selecting work.

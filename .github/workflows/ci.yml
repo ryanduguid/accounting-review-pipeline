@@ -6,9 +6,10 @@ name: tests
 # filter. They run the same gates as ci-package.yml: `test` measures branch
 # coverage and `dependency-audit` runs pip-audit against the locked
 # environment. The `component` matrix calls the reusable ci-package.yml once per
-# other Python distribution; each call filters itself to its component
-# directory, the shared contract and the root files, so a change to one
-# component runs that component alone. The Excel adapter and the Power BI
+# other Python distribution; on a pull request each call filters itself to its
+# component directory, the shared contract and the root files, so a change to
+# one component runs that component alone, and a push to main runs every
+# component so the release gate finds its checks. The Excel adapter and the Power BI
 # application have no pyproject.toml and are not workspace members; their
 # standard-library suites run in standard-library-components.yml.
 
