@@ -263,6 +263,17 @@ def _verify_json_schema(document: dict[str, object]) -> None:
     for index, item in enumerate(exceptions):
         if not isinstance(item, dict):
             raise ControlInputError(f"{_JSON_NAME}: exceptions[{index}] must be an object")
+        # The exceptions CSV projects exactly these fields, so a member
+        # outside them is one no other file witnesses: it survives every
+        # cross-file comparison and leaves an edited pack verifying. The
+        # top-level members and client_queries items are held to their exact
+        # sets for the same reason.
+        if set(item) != set(_CSV_FIELDS):
+            raise ControlInputError(
+                f"{_JSON_NAME}: exceptions[{index}] does not hold the "
+                f"fields the writer emits: holds {sorted(item)!r}, "
+                f"expected {sorted(_CSV_FIELDS)!r}"
+            )
         if item.get("status") not in _STATUSES:
             raise ControlInputError(
                 f"{_JSON_NAME}: exceptions[{index}].status is not a pack status"
@@ -318,6 +329,15 @@ def _verify_json_schema(document: dict[str, object]) -> None:
         if not isinstance(acknowledgement, dict):
             raise ControlInputError(
                 f"{_JSON_NAME}: acknowledgement must be null or an object"
+            )
+        # An extra or renamed member is one no other file witnesses, so an
+        # edited acknowledgement could verify. The writer emits exactly
+        # _ACKNOWLEDGEMENT_KEYS.
+        if set(acknowledgement) != set(_ACKNOWLEDGEMENT_KEYS):
+            raise ControlInputError(
+                f"{_JSON_NAME}: acknowledgement does not hold the fields "
+                f"the writer emits: holds {sorted(acknowledgement)!r}, "
+                f"expected {sorted(_ACKNOWLEDGEMENT_KEYS)!r}"
             )
         for key in _ACKNOWLEDGEMENT_KEYS:
             if not isinstance(acknowledgement.get(key), str):
