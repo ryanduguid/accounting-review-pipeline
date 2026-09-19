@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import unicodedata
 from pathlib import Path
 
 from . import entities as entities_module
@@ -307,9 +308,10 @@ def main(argv: list[str] | None = None) -> int:
 
     found = verify_module.findings(text, entity_map)
     if found:
+        location_text = unicodedata.normalize("NFC", text.replace("\r\n", "\n"))
         for finding in found:
-            match = value_pattern(finding.value).search(text)
-            location = f"line {text.count(chr(10), 0, match.start()) + 1}" if match else "detected in input"
+            match = value_pattern(finding.value).search(location_text)
+            location = f"line {location_text.count(chr(10), 0, match.start()) + 1}" if match else "detected in input"
             print(f"{finding.kind}: {location}")
         print(f"{len(found)} finding(s); this file is not ready to send")
         return 2
