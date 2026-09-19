@@ -27,7 +27,14 @@ from typing import Any, cast
 from .engine import ReadinessPack, _overall
 from .errors import GateInputError
 from .models import Finding, ReviewerAcknowledgement, SourceEvidence
-from .report import _ABSENT, PACK_FILE_NAMES, REVIEW_BOUNDARY, _as_markdown, _md_cell
+from .report import (
+    _ABSENT,
+    ACKNOWLEDGEMENT_EFFECT,
+    PACK_FILE_NAMES,
+    REVIEW_BOUNDARY,
+    _as_markdown,
+    _md_cell,
+)
 
 _JSON_NAME = "readiness-pack.json"
 _SUMMARY_NAME = "readiness-summary.md"
@@ -163,7 +170,7 @@ def _verify_json_schema(document: dict[str, object]) -> None:
             f"{', '.join(_STATUSES)}; got {status!r}"
         )
     engagement = document["engagement_type"]
-    if engagement not in _ENGAGEMENTS:
+    if not isinstance(engagement, str) or engagement not in _ENGAGEMENTS:
         raise GateInputError(
             f"{_JSON_NAME}: engagement_type must be one of "
             f"{', '.join(sorted(_ENGAGEMENTS))}; got {engagement!r}"
@@ -217,6 +224,12 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 raise GateInputError(
                     f"{_JSON_NAME}: acknowledgement.{key} must be a string"
                 )
+        # The writer fixes this sentence; a pack that says anything else about
+        # what an acknowledgement does is not the pack the writer produced.
+        if acknowledgement["effect"] != ACKNOWLEDGEMENT_EFFECT:
+            raise GateInputError(
+                f"{_JSON_NAME}: acknowledgement.effect disagrees with the written contract"
+            )
 
     findings = document["findings"]
     if not isinstance(findings, list):
