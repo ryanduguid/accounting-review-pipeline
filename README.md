@@ -7,9 +7,10 @@ They are joined by local files and commands, not by a shared runtime, and each k
 its own distribution name, version, licence and command.
 
 They produce exception reports and review packs for an accountant to work through.
-Every component reads local files and refuses rather than guessing: a trial balance
+Close-control components read local files and refuse rather than guessing: a trial balance
 that does not tie is not exported, and an incomplete pack does not reach manager
-review. None of them approves a close, locks a period or lodges anything.
+review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
+before writing its CSV (see packages/xero-trial-balance-export/README.md).
 
 **Start here:** [review-pack contract](#review-pack-contract) ·
 [status meanings](#status-contract) ·
