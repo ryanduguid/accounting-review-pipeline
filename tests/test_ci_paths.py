@@ -117,7 +117,8 @@ class SelectionTests(unittest.TestCase):
         comparisons = [
             line for line in workflow.splitlines() if "changed=$(git diff" in line
         ]
-        self.assertEqual(len(comparisons), 2)
+        # Only the pull_request branch diffs; a push runs every gate.
+        self.assertEqual(len(comparisons), 1)
         self.assertTrue(all("--no-renames" in line for line in comparisons))
 
 
