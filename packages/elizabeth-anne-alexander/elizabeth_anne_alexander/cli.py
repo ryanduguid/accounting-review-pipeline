@@ -52,6 +52,12 @@ def _refuse_input_collision(out: Path, inputs: tuple[Path, ...]) -> None:
     not. Path containment answers where a write may land, not whether the
     chosen file is expendable, and a validate-review run once overwrote its own
     decision record with the summary that said the record was valid.
+
+    The check and the later write are two steps against a local filesystem, so
+    a process that swaps a link in between them is outside what this guard
+    promises. The component is a synthetic-only demonstration on one operator's
+    machine; a race-proof write would need directory handles that Windows does
+    not offer and is not a corner this guard claims to cover.
     """
     for protected in inputs:
         try:
