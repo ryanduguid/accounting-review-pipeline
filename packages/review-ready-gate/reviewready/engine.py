@@ -194,6 +194,7 @@ def _review_pack(
             )
 
     _apply_trial_balance_controls(loaded, findings)
+    _apply_period_binding(loaded, findings)
     _apply_open_item_controls(loaded, findings)
     _apply_bas_tieout(loaded, findings, tieout_tolerance)
     _apply_bank_rec(loaded, findings, tieout_tolerance)
@@ -314,6 +315,35 @@ def _apply_trial_balance_controls(loaded: dict[str, object], findings: list[Find
                         reviewer_action="Return the pack. The prior file must be an earlier period.",
                     )
                 )
+
+
+def _apply_period_binding(loaded: dict[str, object], findings: list[Finding]) -> None:
+    """Bind the current trial balance to the period the self-review declares.
+
+    The loader already proves every trial-balance row shares one ReportDate, so
+    the first row speaks for the file. Without this check a prior-quarter export
+    copied into the pack reviewed as READY for the declared period.
+    """
+    self_review = loaded.get("self_review")
+    current = loaded.get("trial_balance")
+    if not isinstance(self_review, SelfReview):
+        return
+    if not (isinstance(current, list) and current and isinstance(current[0], TrialBalanceRow)):
+        return
+    report_date = current[0].report_date
+    if report_date != self_review.period_end:
+        findings.append(
+            Finding(
+                code=FINDING_PERIOD_ORDER,
+                status="BLOCKED",
+                slot="trial_balance",
+                reason=(
+                    f"Trial balance ReportDate {report_date.isoformat()} is not the "
+                    f"declared period_end {self_review.period_end.isoformat()}."
+                ),
+                reviewer_action="Return the pack. The trial balance must be the export for the period the self-review declares.",
+            )
+        )
 
 
 def _apply_open_item_controls(loaded: dict[str, object], findings: list[Finding]) -> None:
