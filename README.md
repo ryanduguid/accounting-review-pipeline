@@ -11,6 +11,7 @@ Close-control components read local files and refuse rather than guessing: a tri
 that does not tie is not exported, and an incomplete pack does not reach manager
 review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
 before writing its CSV (see packages/xero-trial-balance-export/README.md).
+None of them approves a close, locks a period or lodges anything.
 
 **Start here:** [review-pack contract](#review-pack-contract) ·
 [status meanings](#status-contract) ·
