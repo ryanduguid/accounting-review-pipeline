@@ -119,10 +119,11 @@ Run the test suite locally:
 python -B -m unittest discover -s tests -v
 ```
 
-With Node.js 24 available, run Microsoft's pinned PBIR validator:
+With Node.js 24 available, run Microsoft's PBIR validator from the reviewed, lockfile-pinned dependency tree beside the report:
 
 ```bash
-npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4 validate australian-accounting-power-bi.Report
+npm ci --ignore-scripts
+npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report
 ```
 
 The test suite verifies:

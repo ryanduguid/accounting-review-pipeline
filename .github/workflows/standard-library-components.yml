@@ -125,10 +125,14 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
+      - name: Install the pinned PBIR validator
+        if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.12'
+        run: npm ci --ignore-scripts
+
       - name: Validate the report with Microsoft's PBIR authoring CLI
         if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.12'
         run: >-
-          npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4
+          npx --no-install powerbi-report-author
           validate australian-accounting-power-bi.Report
 
   standard-library-gates:

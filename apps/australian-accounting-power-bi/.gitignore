@@ -17,6 +17,9 @@ htmlcov/
 dist/
 build/
 
+# Node toolchain installed from package-lock.json
+node_modules/
+
 # OS and Editor artifacts
 .DS_Store
 Thumbs.db
