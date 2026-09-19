@@ -626,10 +626,24 @@ def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...
         raise GatewayError("Internal disclosure assertion failed: model result contains a prohibited source field.")
 
 
+def review_input_paths(*, evidence_path: Path, receipt_path: Path, decision_path: Path) -> tuple[Path, Path, Path, Path]:
+    """Resolve the 4 files validate_review reads: evidence, receipt, decision and the model result beside the receipt.
+
+    One resolution shared with the CLI, so the output guard compares against the
+    paths the validator actually opens rather than against the raw command-line
+    strings. The model result is optional at validation time but is still an
+    input when present, so it is protected like the other 3.
+    """
+    evidence = path_within(evidence_path, build_root(), label="reviewer evidence")
+    receipt = path_within(receipt_path, build_root(), label="receipt")
+    decision = _resolve_decision(decision_path)
+    return evidence, receipt, decision, receipt.with_name("model-result.json")
+
+
 def validate_review(*, evidence_path: Path, receipt_path: Path, decision_path: Path) -> dict[str, Any]:
-    evidence_path = path_within(evidence_path, build_root(), label="reviewer evidence")
-    receipt_path = path_within(receipt_path, build_root(), label="receipt")
-    decision_path = _resolve_decision(decision_path)
+    evidence_path, receipt_path, decision_path, model_path = review_input_paths(
+        evidence_path=evidence_path, receipt_path=receipt_path, decision_path=decision_path
+    )
     evidence = load_json_exact(evidence_path, {"schema_version", "run_id", "mode", "items", "total_findings", "truncated"}, label="reviewer evidence")
     receipt = load_json_exact(receipt_path, {"schema_version", "run_id", "mode", "policy_sha256", "request_sha256", "source_digests", "result_sha256", "evidence_sha256", "code_version"}, label="receipt")
     decision = load_json_exact(decision_path, {"schema_version", "run_id", "reviewer_ref", "reviewed_at", "decisions"}, label="human decision")
@@ -646,7 +660,6 @@ def validate_review(*, evidence_path: Path, receipt_path: Path, decision_path: P
     # The receipt seals the model result too, so check it whenever the file is
     # there. It is not required: the evidence/model split exists so a reviewer
     # can hold the evidence and receipt without the model result.
-    model_path = receipt_path.with_name("model-result.json")
     if model_path.is_file():
         model = load_json_object(model_path, label="model result")
         if "sha256:" + sha256_bytes(canonical_json(model)) != receipt["result_sha256"]:
