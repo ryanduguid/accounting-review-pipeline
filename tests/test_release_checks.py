@@ -113,6 +113,21 @@ class ReleaseChecksTests(unittest.TestCase):
                     self.assertTrue((ROOT / path).is_file(), path)
                     self.assertFalse(name.endswith(" / gates"), name)
 
+    def test_push_runs_are_not_path_filtered(self) -> None:
+        # The policy reads the push run of the exact main commit, and a check
+        # skipped by a path filter blocks the release, so the selecting
+        # workflows must not diff a push against github.event.before.
+        workflows = ROOT / ".github" / "workflows"
+        for filename in (
+            "ci.yml",
+            "ci-package.yml",
+            "joined-conformance.yml",
+            "standard-library-components.yml",
+        ):
+            with self.subTest(workflow=filename):
+                text = (workflows / filename).read_text(encoding="utf-8")
+                self.assertNotIn("github.event.before", text)
+
 
 if __name__ == "__main__":
     unittest.main()
