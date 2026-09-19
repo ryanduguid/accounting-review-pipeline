@@ -175,6 +175,26 @@ def test_non_string_finding_field_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
+def test_added_finding_member_fails_closed(pack_dir: Path) -> None:
+    document = _read_json(pack_dir)
+    document["findings"][0]["injected"] = "fabricated"
+    _rewrite_json(pack_dir, document)
+    with pytest.raises(
+        GateInputError, match=r"findings\[0\] does not hold the fields the writer emits"
+    ):
+        render_review_sheet(pack_dir)
+
+
+def test_missing_finding_member_fails_closed(pack_dir: Path) -> None:
+    document = _read_json(pack_dir)
+    del document["findings"][0]["reviewer_action"]
+    _rewrite_json(pack_dir, document)
+    with pytest.raises(
+        GateInputError, match=r"findings\[0\] does not hold the fields the writer emits"
+    ):
+        render_review_sheet(pack_dir)
+
+
 def test_altered_digest_in_summary_fails_closed(pack_dir: Path) -> None:
     summary = pack_dir / "readiness-summary.md"
     summary.write_text(

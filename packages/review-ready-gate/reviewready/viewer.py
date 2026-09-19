@@ -224,6 +224,17 @@ def _verify_json_schema(document: dict[str, object]) -> None:
     for index, item in enumerate(findings):
         if not isinstance(item, dict):
             raise GateInputError(f"{_JSON_NAME}: findings[{index}] must be an object")
+        # The findings CSV projects exactly these fields, so a member outside
+        # them is one no other file witnesses: it survives every cross-file
+        # comparison and leaves an edited pack verifying. The top-level
+        # members and the acknowledgement are held to their exact sets for
+        # the same reason.
+        if set(item) != set(_CSV_FIELDS):
+            raise GateInputError(
+                f"{_JSON_NAME}: findings[{index}] does not hold the "
+                f"fields the writer emits: holds {sorted(item)!r}, "
+                f"expected {sorted(_CSV_FIELDS)!r}"
+            )
         if item.get("status") not in _FINDING_STATUSES:
             raise GateInputError(
                 f"{_JSON_NAME}: findings[{index}].status is not a finding status"

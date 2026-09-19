@@ -872,6 +872,38 @@ def test_non_string_exception_field_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
+def test_added_exception_member_fails_closed(pack_dir: Path) -> None:
+    document = _read_json(pack_dir)
+    document["exceptions"][0]["injected"] = "fabricated"
+    _rewrite_json(pack_dir, document)
+    with pytest.raises(
+        ControlInputError, match=r"exceptions\[0\] does not hold the fields the writer emits"
+    ):
+        render_review_sheet(pack_dir)
+
+
+def test_missing_exception_member_fails_closed(pack_dir: Path) -> None:
+    document = _read_json(pack_dir)
+    del document["exceptions"][0]["reviewer_action"]
+    _rewrite_json(pack_dir, document)
+    with pytest.raises(
+        ControlInputError, match=r"exceptions\[0\] does not hold the fields the writer emits"
+    ):
+        render_review_sheet(pack_dir)
+
+
+def test_added_acknowledgement_member_fails_closed(tmp_path: Path) -> None:
+    output = tmp_path / "acknowledged-pack"
+    write_review_pack(_pack(with_acknowledgement=True), output)
+    document = _read_json(output)
+    document["acknowledgement"]["injected"] = "fabricated"
+    _rewrite_json(output, document)
+    with pytest.raises(
+        ControlInputError, match="acknowledgement does not hold the fields the writer emits"
+    ):
+        render_review_sheet(output)
+
+
 # --- tampered markdown -----------------------------------------------------
 
 
