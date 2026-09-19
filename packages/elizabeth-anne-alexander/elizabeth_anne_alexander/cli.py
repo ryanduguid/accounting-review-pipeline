@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import TextIO
 
 from .errors import GatewayError
 from .gateway import evaluate, review_input_paths, validate_review
-from .persist import write_evaluation
+from .persist import write_evaluation, write_validation
 from .util import build_root, path_within
 
 
@@ -87,11 +86,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         validation = validate_review(evidence_path=args.evidence, receipt_path=args.receipt, decision_path=args.decision)
         if out is not None:
-            try:
-                out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            except OSError as exc:
-                raise GatewayError(f"validation output cannot be written to {out}: {exc}.") from exc
+            write_validation(
+                validation,
+                out,
+                review_input_paths(evidence_path=args.evidence, receipt_path=args.receipt, decision_path=args.decision),
+            )
         _emit(f"elizabeth-anne-alexander: {validation['status']}; {validation['decision_count']} decision(s); {validation['undecided_count']} undecided finding(s)", sys.stdout)
         return 0
     except GatewayError as exc:
