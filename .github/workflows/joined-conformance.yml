@@ -37,7 +37,10 @@ jobs:
       - name: Select affected checks
         id: select
         env:
-          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          # Only a pull request filters by path. A push to main leaves CI_BASE
+          # empty so select_paths.py runs every check: release-policy reads the
+          # push run of the exact main commit and a skipped check is not evidence.
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           CI_HEAD: ${{ github.sha }}
           CI_PATHS: |
             contracts/xero-trial-balance-v1/**

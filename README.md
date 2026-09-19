@@ -183,10 +183,11 @@ implementations against it.
 
 ## Release checks
 
-The release caller names the component checks that must have succeeded for the
-exact release commit on `main`. It advances the policy SHA, `required-checks`
-and `actions: read` together. Skipped, missing, cancelled or failed checks block
-publication, including component tests skipped by a path filter. An aggregate
-gates job cannot replace those checks. Before tagging, choose a main-branch
-commit with successful component CI; a successful run for an older commit is
-not evidence for the release. Tags and publication still require explicit approval.
+The release caller names the component checks that must have succeeded in the
+push run for the exact release commit on `main`. It advances the policy SHA,
+`required-checks` and `actions: read` together. Skipped, missing, cancelled or
+failed checks block publication, and an aggregate gates job cannot replace them,
+so every push to `main` runs every component's gates; only pull requests filter
+by path. Tag the current `main` commit once its run is green; a successful run
+for an older commit is not evidence for the release. Tags and publication still
+require explicit approval.

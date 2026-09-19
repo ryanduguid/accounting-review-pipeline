@@ -36,7 +36,10 @@ jobs:
       - name: Select affected checks
         id: select
         env:
-          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          # Only a pull request filters by path. A push to main leaves CI_BASE
+          # empty so select_paths.py runs every check: release-policy reads the
+          # push run of the exact main commit and a skipped check is not evidence.
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           CI_HEAD: ${{ github.sha }}
           CI_PATHS: |
             adapters/accounting-excel-toolkit/**
@@ -125,10 +128,14 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
+      - name: Install the pinned PBIR validator
+        if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.12'
+        run: npm ci --ignore-scripts
+
       - name: Validate the report with Microsoft's PBIR authoring CLI
         if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.12'
         run: >-
-          npx --yes @microsoft/powerbi-report-authoring-cli@0.1.4
+          npx --no-install powerbi-report-author
           validate australian-accounting-power-bi.Report
 
   standard-library-gates:

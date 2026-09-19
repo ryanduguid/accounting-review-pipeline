@@ -1,0 +1,8 @@
+{
+  "name": "australian-accounting-power-bi-tools",
+  "private": true,
+  "description": "Pinned toolchain for the PBIR structural validation CI runs against australian-accounting-power-bi.Report. Not a published package; kept beside the report so the validator's dependency tree is reviewed and lockfile-pinned rather than resolved at run time by npx.",
+  "dependencies": {
+    "@microsoft/powerbi-report-authoring-cli": "0.1.4"
+  }
+}
