@@ -520,3 +520,45 @@ def test_the_written_pack_still_verifies(pack_dir: Path) -> None:
     sheet, digests = render_review_sheet(pack_dir)
     assert "**Overall status: NOT_READY**" in sheet
     assert len(digests) == 3
+
+
+@pytest.fixture()
+def acknowledged_pack(tmp_path: Path) -> Path:
+    """A real engine run over the ready BAS pack with the example review note."""
+    output = tmp_path / "acknowledged-pack"
+    write_review_pack(
+        review_pack(
+            profile="bas",
+            pack_dir=EXAMPLES / "bas-ready",
+            acknowledgement_path=EXAMPLES / "review_note.json",
+        ),
+        output,
+    )
+    return output
+
+
+@pytest.mark.parametrize("effect", ["This acknowledgement approves the file.", ""])
+def test_altered_acknowledgement_effect_fails_closed(acknowledged_pack: Path, effect: str) -> None:
+    document = _read_json(acknowledged_pack)
+    assert document["acknowledgement"] is not None
+    document["acknowledgement"]["effect"] = effect
+    _rewrite_json(acknowledged_pack, document)
+    with pytest.raises(GateInputError, match="acknowledgement.effect disagrees"):
+        verify_pack(acknowledged_pack)
+    assert main(["view", "--pack-dir", str(acknowledged_pack)]) == 1
+
+
+def test_written_acknowledged_pack_verifies(acknowledged_pack: Path) -> None:
+    document = verify_pack(acknowledged_pack)[0]
+    acknowledgement = document["acknowledgement"]
+    assert isinstance(acknowledgement, dict)
+    assert acknowledgement["reviewer_initials"] == "RD"
+    assert main(["view", "--pack-dir", str(acknowledged_pack)]) == 0
+
+
+def test_list_engagement_type_fails_closed(pack_dir: Path) -> None:
+    document = _read_json(pack_dir)
+    document["engagement_type"] = []
+    _rewrite_json(pack_dir, document)
+    with pytest.raises(GateInputError, match="engagement_type must be one of"):
+        render_review_sheet(pack_dir)
