@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import sys
 from pathlib import Path
 
@@ -120,3 +121,66 @@ def test_a_validation_output_path_that_is_a_directory_is_blocked_not_a_traceback
         "--decision", "samples/decisions/sample-review-decision.json",
         "--out", "build/validation.json",
     ]) == 2
+
+
+def _run_evaluation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.chdir(tmp_path)
+    assert main([*EVALUATE, "--out", "build/demo"]) == 0
+    run = tmp_path / "build" / "demo"
+    decision = run / "decision.json"
+    sample = Path(__file__).resolve().parents[1] / "elizabeth_anne_alexander" / "samples" / "decisions" / "sample-review-decision.json"
+    decision.write_bytes(sample.read_bytes())
+    return run
+
+
+def _validate(run: Path, out: Path) -> int:
+    return main([
+        "validate-review",
+        "--evidence", str(run / "reviewer-evidence.json"),
+        "--receipt", str(run / "receipt.json"),
+        "--decision", str(run / "decision.json"),
+        "--out", str(out),
+    ])
+
+
+@pytest.mark.parametrize("name", ["reviewer-evidence.json", "receipt.json", "decision.json", "model-result.json"])
+def test_a_validation_output_that_names_an_input_is_blocked_and_the_input_survives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], name: str
+) -> None:
+    """The summary that said the decision was valid used to overwrite the decision."""
+    run = _run_evaluation(tmp_path, monkeypatch)
+    before = {path.name: path.read_bytes() for path in run.iterdir()}
+
+    assert _validate(run, run / name) == 2
+
+    assert {path.name: path.read_bytes() for path in run.iterdir()} == before
+    assert "must not overwrite a review input" in capsys.readouterr().err
+    # The untouched pack still validates to a distinct output.
+    assert _validate(run, tmp_path / "build" / "validation.json") == 0
+    assert (tmp_path / "build" / "validation.json").is_file()
+
+
+def test_a_hard_link_to_an_input_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _run_evaluation(tmp_path, monkeypatch)
+    alias = tmp_path / "build" / "alias.json"
+    try:
+        os.link(run / "decision.json", alias)
+    except (OSError, NotImplementedError) as exc:  # pragma: no cover - filesystem without hard links
+        pytest.skip(f"hard links unavailable: {exc}")
+    before = (run / "decision.json").read_bytes()
+
+    assert _validate(run, alias) == 2
+    assert (run / "decision.json").read_bytes() == before
+
+
+def test_a_symbolic_link_to_an_input_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    run = _run_evaluation(tmp_path, monkeypatch)
+    alias = tmp_path / "build" / "alias.json"
+    try:
+        os.symlink(run / "receipt.json", alias)
+    except (OSError, NotImplementedError) as exc:  # pragma: no cover - no symlink privilege
+        pytest.skip(f"symbolic links unavailable: {exc}")
+    before = (run / "receipt.json").read_bytes()
+
+    assert _validate(run, alias) == 2
+    assert (run / "receipt.json").read_bytes() == before
