@@ -1,5 +1,24 @@
 # Accounting Review Pipeline: Xero month-end close controls
 
+Seven independently versioned components that carry an Australian month end from a
+Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
+close controls, a workpaper readiness gate, an Excel toolkit and a Power BI project.
+They are joined by local files and commands, not by a shared runtime, and each keeps
+its own distribution name, version, licence and command.
+
+They produce exception reports and review packs for an accountant to work through.
+Close-control components read local files and refuse rather than guessing: a trial balance
+that does not tie is not exported, and an incomplete pack does not reach manager
+review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
+before writing its CSV (see packages/xero-trial-balance-export/README.md).
+None of them approves a close, locks a period or lodges anything.
+
+**Start here:** [review-pack contract](#review-pack-contract) ·
+[status meanings](#status-contract) ·
+[Monthly Close Controls](packages/monthly-close-control-plane/README.md) ·
+[Workpaper Review Gate](packages/review-ready-gate/README.md) ·
+[Xero trial balance export](packages/xero-trial-balance-export/README.md)
+
 Synthetic examples. Review aid, not professional advice; a human decides whether the close is acceptable.
 
 **Input:** the supplied current and prior trial balances, account mapping and subledger. The creditors reconciliation differs by $250.
