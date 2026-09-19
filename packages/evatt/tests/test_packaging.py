@@ -70,3 +70,9 @@ def test_sample_map_uses_only_marked_synthetic_names() -> None:
 
 def test_the_real_map_is_not_committed() -> None:
     assert not (ROOT / "entities.json").exists()
+
+
+def test_the_sdist_manifest_does_not_ship_the_repository_gitignore() -> None:
+    """README and DATA-FLOW promise the rules ship in neither artefact."""
+    manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert "include .gitignore" not in manifest

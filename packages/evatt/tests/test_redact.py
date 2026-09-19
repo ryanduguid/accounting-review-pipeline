@@ -744,3 +744,37 @@ def test_a_mapped_value_is_still_matched_only_as_a_whole_word() -> None:
     text, counts = redact("Sample Holdings Pty Ltdx and xSample Holdings Pty Ltd stayed")
     assert "CLIENT_01" not in text
     assert counts.get("client", 0) == 0
+
+
+COMPOSED_PERSON = Entity("Jos\u00e9 N\u00fa\u00f1ez", "PERSON_03", "person", "2026-09-20")
+
+
+@pytest.mark.parametrize("map_form", ["NFC", "NFD"])
+@pytest.mark.parametrize("text_form", ["NFC", "NFD"])
+def test_a_canonically_equivalent_known_name_is_redacted_and_reported(map_form, text_form) -> None:
+    """A composed map against a decomposed document passed the name through clean.
+
+    Redact returned the input unchanged with an empty manifest and verify
+    called the leaked file clean, because each side kept its own code points.
+    Every pairing now redacts, counts one person and verifies as a mention.
+    """
+    import unicodedata
+
+    entity = Entity(unicodedata.normalize(map_form, COMPOSED_PERSON.value), "PERSON_03", "person", "2026-09-20")
+    text = unicodedata.normalize(text_form, "Prepared for Jos\u00e9 N\u00fa\u00f1ez on time")
+    redacted, counts = redact(text, (entity,))
+    assert "PERSON_03" in redacted
+    for form in ("NFC", "NFD"):
+        assert unicodedata.normalize(form, COMPOSED_PERSON.value) not in redacted
+    assert counts["person"] == 1
+    found = verify_module.findings(text, (entity,))
+    assert [(f.kind, f.value) for f in found] == [("person", entity.value)]
+    assert verify_module.findings(redacted, (entity,)) == ()
+
+
+def test_the_sanitised_text_is_composed() -> None:
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFD", "caf\u00e9 receipts")
+    redacted, _counts = redact(decomposed)
+    assert redacted == "caf\u00e9 receipts"
