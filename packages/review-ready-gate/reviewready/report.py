@@ -16,6 +16,11 @@ REVIEW_BOUNDARY = (
     "or replace professional judgement."
 )
 
+ACKNOWLEDGEMENT_EFFECT = (
+    "Acknowledgement is evidence of human review only; it does not "
+    "change readiness or approve a file."
+)
+
 PACK_FILE_NAMES = ("readiness-pack.json", "readiness-summary.md", "findings.csv")
 
 
@@ -81,10 +86,7 @@ def _as_json(pack: ReadinessPack) -> dict:
             "reviewer_initials": pack.acknowledgement.reviewer_initials,
             "reviewed_on": pack.acknowledgement.reviewed_on.isoformat(),
             "comment": pack.acknowledgement.comment,
-            "effect": (
-                "Acknowledgement is evidence of human review only; it does not "
-                "change readiness or approve a file."
-            ),
+            "effect": ACKNOWLEDGEMENT_EFFECT,
         }
     return {
         "acknowledgement": acknowledgement,
