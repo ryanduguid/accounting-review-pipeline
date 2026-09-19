@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from reviewready.cli import main
 from reviewready.engine import review_pack
 from reviewready.models import (
@@ -169,3 +170,48 @@ def test_unreadable_pack_directory_returns_input_error(tmp_path: Path, monkeypat
     monkeypatch.setattr(Path, "iterdir", iterdir)
     assert main(["gate", "--profile", "bas", "--pack", str(dest), "--output", str(tmp_path / "out")]) == 1
     assert "input error" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("example", "profile", "fixture_date"),
+    [
+        ("bas-ready", "bas", "2026-03-31"),
+        ("month-end-ready", "month_end", "2026-06-30"),
+        ("year-end-ready", "year_end", "2026-06-30"),
+    ],
+)
+@pytest.mark.parametrize("wrong_date", ["2025-12-31", "2026-12-31"])
+def test_trial_balance_off_declared_period_is_blocked(
+    tmp_path: Path, example: str, profile: str, fixture_date: str, wrong_date: str
+) -> None:
+    dest = copy_example_pack(example, tmp_path / "pack")
+    tb = dest / "trial_balance.csv"
+    tb.write_text(tb.read_text(encoding="utf-8").replace(fixture_date, wrong_date), encoding="utf-8")
+    pack = review_pack(profile=profile, pack_dir=dest)
+    assert pack.status == "BLOCKED"
+    binding = [
+        item for item in pack.findings
+        if item.code == FINDING_PERIOD_ORDER and item.slot == "trial_balance"
+    ]
+    assert len(binding) == 1
+    assert wrong_date in binding[0].reason and fixture_date in binding[0].reason
+
+
+def test_declared_period_off_trial_balance_is_blocked(tmp_path: Path) -> None:
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    payload = json.loads((dest / "self_review.json").read_text(encoding="utf-8"))
+    payload["period_end"] = "2026-06-30"
+    payload["prepared_on"] = "2026-07-10"
+    (dest / "self_review.json").write_text(json.dumps(payload), encoding="utf-8")
+    pack = review_pack(profile="bas", pack_dir=dest)
+    assert pack.status == "BLOCKED"
+    assert pack.period_end == "2026-06-30"
+    assert any(
+        item.code == FINDING_PERIOD_ORDER and item.slot == "trial_balance"
+        for item in pack.findings
+    )
+
+
+def test_matching_trial_balance_date_stays_ready() -> None:
+    for example, profile in (("bas-ready", "bas"), ("month-end-ready", "month_end"), ("year-end-ready", "year_end")):
+        assert review_pack(profile=profile, pack_dir=EXAMPLES / example).status == "READY"
