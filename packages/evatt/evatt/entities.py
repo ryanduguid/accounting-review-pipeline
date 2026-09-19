@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import subprocess
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -100,7 +101,12 @@ def _fold(value: str) -> str:
     accepts. The dotted and dotless i are folded first, because casefold alone
     keeps them apart while the matcher does not, and it is the matcher that
     decides which entries claim which occurrences.
+
+    Composed to NFC first, as ``patterns.value_pattern`` composes the value it
+    matches with, so a map cannot hold one name twice as two canonically
+    equivalent spellings and ``assign`` returns the existing entity for either.
     """
+    value = unicodedata.normalize("NFC", value)
     return " ".join(value.split()).translate(_EXTRA_IGNORECASE_FOLDS).casefold()
 
 
@@ -159,7 +165,7 @@ def _check_fields(
         if previous == value:
             raise EvattError(f"duplicate entity value {value!r}")
         raise EvattError(
-            f"entity value {value!r} is {previous!r} again once case and whitespace "
+            f"entity value {value!r} is {previous!r} again once case, whitespace and composition "
             "are folded; pass two matches them as one value, so they cannot hold "
             "two placeholders"
         )

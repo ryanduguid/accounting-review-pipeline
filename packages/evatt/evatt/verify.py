@@ -16,6 +16,7 @@ called clean here.
 """
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -100,8 +101,10 @@ def findings(text: str, entities: Sequence[Entity]) -> tuple[Finding, ...]:
     passed clean in the CRLF copy. Normalising also settles the cosmetic half,
     a name reported as "Jane\\r\\nRoe" against the LF copy's "Jane\\nRoe", which
     is what stops the two copies giving different findings for the same file.
+    Composition to NFC follows the same rule, so a decomposed spelling of a
+    mapped name is reported here exactly as ``redact`` would replace it.
     """
-    text = text.replace("\r\n", "\n")
+    text = unicodedata.normalize("NFC", text.replace("\r\n", "\n"))
     found = [Finding(kind, value) for _start, _end, kind, value in structured_spans(text)]
     for entity in entities:
         if _mentions(text, entity.value):
