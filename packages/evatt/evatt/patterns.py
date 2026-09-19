@@ -48,6 +48,7 @@ Four deliberate divergences from the origin:
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Callable
 
 # The token class carries the Latin-1 accented letters as well as A-Z. Without
@@ -108,10 +109,21 @@ PHONE = re.compile(
 # ``\s*`` able to reach the same space, which is what ``_SEP + _SEP`` would
 # have given, is the quadratic form under another name: every way of splitting
 # the space run between them is a separate path to try.
+#
+# _MARKUP admits the emphasis or code delimiter markdown puts between a label
+# and its digits: "**TFN**: 123 456 783", "**TFN:** 123 456 783", "TFN:
+# **123 456 783**" and "TFN: `123 456 783`" each passed through unchanged and
+# verified clean, because every one of them depends on the label alone and
+# the delimiter broke the label's reach. The run is 1 or 2 delimiter
+# characters, mandatory inside its optional group, so the ``\s*`` behind it
+# sits behind a non-whitespace token like every other one in _GAP and the
+# linear scan is kept. "|" joins _SEP for the same reason: "| TFN | 123 456
+# 783 |" is how a table row writes a label beside its value.
 _WORD = r"(?:number|no|card(?:holder)?)\b\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
-_SEP = r"(?:[.:#,(\u2013-]\s*)?"
-_GAP = r"\s*%s%s%s" % (_QUALIFIER, _SEP, _QUALIFIER)
+_SEP = r"(?:[.:#,(|\u2013-]\s*)?"
+_MARKUP = r"(?:[*_`]{1,2}\s*)?"
+_GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
 TFN_LABELLED = re.compile(
     r"\b(?:tax file number|TFN)\b%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
     re.I,
@@ -243,7 +255,14 @@ def value_pattern(value: str) -> re.Pattern[str]:
 
     The word boundaries stay ``(?<!\\w)`` and ``(?!\\w)``, unchanged, so a value
     is still matched as a whole word and never inside a longer one.
+
+    The value is composed to NFC first, because ``redact`` and ``verify``
+    compose the document the same way. A map seeded with "José" as one code
+    point and a document that spells it as "e" plus a combining acute are one
+    name; while each side kept its own form the known name passed through
+    unchanged and verified clean.
     """
+    value = unicodedata.normalize("NFC", value)
     body = r"\s+".join(re.escape(part) for part in value.split())
     return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.IGNORECASE)
 

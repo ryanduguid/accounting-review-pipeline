@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import bisect
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from typing import Sequence
@@ -321,8 +322,16 @@ def redact(
     detection, not byte fidelity. Line numbers in a ``Halt`` are unchanged,
     because collapsing CRLF removes no break. Giving a document its original
     endings back is the CLI's job, and ``cli._read`` and ``cli._write`` own it.
+
+    The text is composed to NFC for the same reason. A document that spells
+    "Núñez" with combining marks against a map that holds it composed passed
+    the known name through unchanged, and the residual sweep could not see it
+    either: NAME's Latin-1 token class has no room for a combining mark.
+    Composing here, where ``value_pattern`` and ``entities._fold`` also
+    compose, is what makes the three agree. The sanitised text is therefore
+    NFC whatever the input was.
     """
-    text = text.replace("\r\n", "\n")
+    text = unicodedata.normalize("NFC", text.replace("\r\n", "\n"))
     redacted, structured_counts = _replace_structured(text)
     redacted, entity_counts = _replace_entities(redacted, entities)
     unknowns = _input_placeholders(text, redacted) + residual(redacted)

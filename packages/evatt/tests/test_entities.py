@@ -362,7 +362,7 @@ ENTITY = entities.Entity
 REJECTED = [
     # A second spelling of one value, which pass 2 matches as the first one.
     ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
-      ENTITY("JANE  ROE", "PERSON_02", "person", "2026-09-09")), "once case and whitespace"),
+      ENTITY("JANE  ROE", "PERSON_02", "person", "2026-09-09")), "once case, whitespace and composition"),
     ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
       ENTITY("Jane Roe", "PERSON_02", "person", "2026-09-09")), "duplicate entity value"),
     ((ENTITY("Jane Roe", "PERSON_01", "person", "2026-09-09"),
@@ -572,7 +572,7 @@ def test_load_rejects_two_values_that_fold_onto_one_another(tmp_path) -> None:
                  "kind": "person", "added": "2026-09-09"},
             ],
         }
-        with pytest.raises(EvattError, match="once case and whitespace are folded"):
+        with pytest.raises(EvattError, match="once case, whitespace and composition are folded"):
             entities.load(write_map(tmp_path, document))
 
 
@@ -595,7 +595,7 @@ def test_load_rejects_two_spellings_the_matcher_cannot_tell_apart(tmp_path) -> N
                  "kind": "client", "added": "2026-09-09"},
             ],
         }
-        with pytest.raises(EvattError, match="once case and whitespace are folded"):
+        with pytest.raises(EvattError, match="once case, whitespace and composition are folded"):
             entities.load(write_map(tmp_path, document))
 
 
@@ -691,3 +691,25 @@ def test_git_guard_ignores_inherited_repository_selection(tmp_path, monkeypatch)
     monkeypatch.setenv("GIT_DIR", str(foreign / ".git"))
     monkeypatch.setenv("GIT_WORK_TREE", str(foreign))
     entities.require_gitignored(target)
+
+
+def test_load_rejects_two_canonically_equivalent_values(tmp_path) -> None:
+    """A composed and a decomposed spelling of one name are one value."""
+    import unicodedata
+
+    composed = "Jos\u00e9 N\u00fa\u00f1ez"
+    document = {"schema_version": 1, "entries": [
+        {"value": composed, "placeholder": "PERSON_01", "kind": "person", "added": "2026-09-20"},
+        {"value": unicodedata.normalize("NFD", composed), "placeholder": "PERSON_02",
+         "kind": "person", "added": "2026-09-20"}]}
+    with pytest.raises(EvattError, match="once case, whitespace and composition are folded"):
+        entities.load(write_map(tmp_path, document))
+
+
+def test_assign_returns_the_existing_entity_for_a_decomposed_spelling() -> None:
+    import unicodedata
+
+    composed = "Jos\u00e9 N\u00fa\u00f1ez"
+    existing = entities.Entity(composed, "PERSON_01", "person", "2026-09-20")
+    assigned = entities.assign((existing,), unicodedata.normalize("NFD", composed), "person", "2026-09-20")
+    assert assigned is existing

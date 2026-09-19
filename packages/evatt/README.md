@@ -177,6 +177,12 @@ an extra placeholder costs a triage decision while a miss leaks.
   back with the ending its source carried. Restoration uses the map's spelling
   and whitespace, so case variants and wrapped names do not round trip byte
   for byte. A file that mixes endings is normalised to its dominant one.
+- **Input is composed to Unicode NFC for detection**, and the sanitised file
+  is written composed. A name the map holds as one code point and a document
+  spells with a combining mark are one name to both `redact` and `verify`.
+- **Markdown between a label and its digits does not break the label.**
+  `**TFN**: 123 456 783`, `TFN: **123 456 783**`, `` TFN: `123 456 783` `` and a
+  table cell `| TFN | 123 456 783 |` are all labelled identifiers.
 
 Contextual re-identification is not addressed by any of this. Read the
 document before you send it.
