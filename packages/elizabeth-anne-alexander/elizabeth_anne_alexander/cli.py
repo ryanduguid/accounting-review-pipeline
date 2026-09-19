@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from .errors import GatewayError
-from .gateway import evaluate, validate_review
+from .gateway import evaluate, review_input_paths, validate_review
 from .persist import write_evaluation
 from .util import build_root, path_within
 
@@ -44,6 +44,24 @@ def _emit(text: str, stream: TextIO) -> None:
         print(text.encode(encoding, "backslashreplace").decode(encoding, "replace"), file=stream)
 
 
+def _refuse_input_collision(out: Path, inputs: tuple[Path, ...]) -> None:
+    """Refuse a validation output that names one of the files validate_review just read.
+
+    Both sides are resolved, so a symbolic link to an input compares equal by
+    path; samefile covers a hard link, whose path differs while the file does
+    not. Path containment answers where a write may land, not whether the
+    chosen file is expendable, and a validate-review run once overwrote its own
+    decision record with the summary that said the record was valid.
+    """
+    for protected in inputs:
+        try:
+            same = out == protected or (out.exists() and protected.exists() and out.samefile(protected))
+        except OSError as exc:
+            raise GatewayError(f"validation output cannot be checked against {protected}: {exc}.") from exc
+        if same:
+            raise GatewayError(f"validation output must not overwrite a review input: {protected}.")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -54,9 +72,15 @@ def main(argv: list[str] | None = None) -> int:
             for name, path in outputs.items():
                 _emit(f"  {name}: {path}", sys.stdout)
             return 0
-        validation = validate_review(evidence_path=args.evidence, receipt_path=args.receipt, decision_path=args.decision)
+        out = None
         if args.out:
             out = path_within(args.out, build_root(), label="validation output", require_exists=False)
+            _refuse_input_collision(
+                out,
+                review_input_paths(evidence_path=args.evidence, receipt_path=args.receipt, decision_path=args.decision),
+            )
+        validation = validate_review(evidence_path=args.evidence, receipt_path=args.receipt, decision_path=args.decision)
+        if out is not None:
             try:
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
