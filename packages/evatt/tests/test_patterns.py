@@ -632,3 +632,42 @@ def test_the_placeholder_prefixes_stay_in_union_with_both_tables() -> None:
     for prefix in minted:
         assert patterns.PLACEHOLDER_CI.fullmatch(f"{prefix.lower()}_01"), prefix
         assert not patterns.PLACEHOLDER.fullmatch(f"{prefix.lower()}_01"), prefix
+
+
+def test_markdown_between_a_label_and_its_digits_is_still_labelled() -> None:
+    """Every vector fails its check digit, so only the label can carry it.
+
+    A bold label, a bold value, an inline-code value and a table cell each
+    passed through unchanged and verified clean while _GAP admitted only
+    whitespace, qualifier words and punctuation between the label and the
+    digits. The delimiter is markdown, and markdown is the input format.
+    """
+    for label, kind, value in (
+        ("TFN", "tfn", "123 456 783"),
+        ("TFN", "tfn", "12 345 678"),
+        ("ABN", "abn", "51 824 753 557"),
+        ("ACN", "acn", "123 456 781"),
+        ("Medicare", "medicare", "2123 45671 1"),
+    ):
+        for text in (
+            f"**{label}**: {value}",
+            f"**{label}:** {value}",
+            f"{label}: **{value}**",
+            f"{label}: `{value}`",
+            f"| {label} | {value} |",
+            f"| **{label}** | `{value}` |",
+        ):
+            spans = patterns.structured_spans(text)
+            assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
+        assert patterns.structured_spans(value) == [], value
+
+
+def test_value_pattern_matches_across_canonical_equivalence() -> None:
+    """NFC map, NFD document and the reverse are one name to the matcher."""
+    import unicodedata
+
+    composed = "Jos\u00e9 N\u00fa\u00f1ez"
+    decomposed = unicodedata.normalize("NFD", composed)
+    assert composed != decomposed
+    assert patterns.value_pattern(composed).search(unicodedata.normalize("NFC", decomposed))
+    assert patterns.value_pattern(decomposed).pattern == patterns.value_pattern(composed).pattern
