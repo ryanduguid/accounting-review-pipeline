@@ -629,9 +629,9 @@ def manifest_path_for(out_path: str) -> str:
 def discard_manifest(out_path: str) -> None:
     """Remove a manifest left by an earlier run to the same path.
 
-    The CSV at out_path has just been replaced, so any manifest already
-    beside it describes a file that no longer exists. A run that writes no
-    manifest, or fails to write one, must not leave the old one standing.
+    The CSV at out_path is about to be replaced, so any manifest already
+    beside it must be removed first. A run that writes no manifest, or fails
+    to write one, must not leave the old one standing.
     """
     manifest_path = manifest_path_for(out_path)
     try:
@@ -640,9 +640,9 @@ def discard_manifest(out_path: str) -> None:
         return
     except OSError as exc:
         sys.exit(
-            f"error: wrote {out_path} but could not remove the earlier manifest "
-            f"{manifest_path} ({exc}); it describes a previous export, so delete "
-            "it by hand. The export is complete."
+            f"error: could not remove the earlier manifest {manifest_path} "
+            f"before replacing {out_path} ({exc}); the previous export was "
+            "left unchanged, so delete the manifest by hand before retrying."
         )
 
 
@@ -817,8 +817,10 @@ def main() -> None:
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
     check_balanced(totals)
-    digest = write_csv(out_rows, out_path)
+    # Remove stale provenance before replacing the CSV. If this fails,
+    # discard_manifest aborts and the previous CSV/manifest pair remains intact.
     discard_manifest(out_path)
+    digest = write_csv(out_rows, out_path)
 
     total_debit, _, total_ytd_debit, _ = totals
     print(f"Wrote {len(out_rows)} accounts to {out_path}")
