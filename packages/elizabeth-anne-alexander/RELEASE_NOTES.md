@@ -1,3 +1,11 @@
+# v0.2.4
+
+- `validate` writes its output on Windows: where Python has no `dir_fd` support, a path-based fallback with the same protected-input check runs instead of failing every run as `blocked:`.
+- Refuse a validation output that names a review input.
+- Sum trial-balance totals exactly or refuse the file, and set the decimal context at the gate entry points.
+- A `windows-latest` CI job runs the suite alongside the Linux jobs.
+- Close the documentation findings from the September fact check.
+
 # v0.2.3
 
 - Include the data-flow, disclaimer and release notes in the source distribution so its shipped documentation tests can run.
