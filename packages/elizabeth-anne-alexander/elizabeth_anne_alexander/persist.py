@@ -76,6 +76,10 @@ def _write_validation_dir_fd(payload: dict[str, Any], output: Path, protected: t
             for input_path in protected:
                 try:
                     input_stat = input_path.stat()
+                except FileNotFoundError:
+                    # The model result is optional at validation time; a file that
+                    # is not there cannot be the destination.
+                    continue
                 except OSError as exc:
                     raise GatewayError(f"validation output cannot be checked against {input_path}: {exc}.") from exc
                 if (destination_stat.st_dev, destination_stat.st_ino) == (input_stat.st_dev, input_stat.st_ino):
@@ -131,6 +135,10 @@ def _write_validation_by_path(payload: dict[str, Any], output: Path, protected: 
             for input_path in protected:
                 try:
                     input_stat = input_path.stat()
+                except FileNotFoundError:
+                    # The model result is optional at validation time; a file that
+                    # is not there cannot be the destination.
+                    continue
                 except OSError as exc:
                     raise GatewayError(f"validation output cannot be checked against {input_path}: {exc}.") from exc
                 if (destination_stat.st_dev, destination_stat.st_ino) == (input_stat.st_dev, input_stat.st_ino):
