@@ -1,6 +1,8 @@
 import argparse
 import ast
+import hashlib
 import io
+import json
 import os
 import re
 import sys
@@ -8,6 +10,7 @@ import tempfile
 import unicodedata
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest import mock
@@ -140,6 +143,8 @@ class _ExportCase(unittest.TestCase):
         section="Assets",
         header=HEADER,
         payload=_UNSET,
+        extra_args=(),
+        work_dir=None,
     ):
         """Return (SystemExit or None, stdout, csv bytes or None).
 
@@ -150,12 +155,12 @@ class _ExportCase(unittest.TestCase):
         payload= replaces the whole stubbed Xero response, for the guards that
         fire before a report can be built out of accounts at all.
         """
-        work_dir = tempfile.mkdtemp()
+        work_dir = work_dir or tempfile.mkdtemp()
         self.work_dir = work_dir
         out_path = None if out is None else os.path.join(work_dir, out)
         if payload is _UNSET:
             payload = _report(accounts, section=section, header=header)
-        argv = ["export_tb.py", "--date", date]
+        argv = ["export_tb.py", "--date", date, *extra_args]
         if out is not None:
             argv += ["--out", out]
         env = {
@@ -185,6 +190,124 @@ class _ExportCase(unittest.TestCase):
             with open(out_path, "rb") as fh:
                 data = fh.read()
         return raised, buffer.getvalue(), data
+
+
+class ManifestTest(_ExportCase):
+    BALANCED = [
+        ("Business Bank Account (090)", "1200.00", "", "15234.50", ""),
+        ("Trade Debtors (610)", "", "1200.00", "", "15234.50"),
+    ]
+
+    def manifest(self, name="tb.csv.manifest.json"):
+        path = os.path.join(self.work_dir, name)
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        return path, raw
+
+    def test_the_manifest_names_the_export_and_digests_the_bytes_on_disk(self):
+        raised, stdout, data = self.run_export(self.BALANCED)
+        self.assertIsNone(raised)
+        path, raw = self.manifest()
+        self.assertIn(f"Wrote manifest {path}", stdout)
+        self.assertTrue(raw.endswith(b"\n"))
+        self.assertNotIn(b"\r", raw)
+        manifest = json.loads(raw)
+        self.assertEqual(
+            set(manifest), {"schema_version", "mode", "source_system", "entity_ref", "report", "export"}
+        )
+        self.assertEqual(manifest["schema_version"], "xero-source-manifest.v1")
+        self.assertEqual(manifest["mode"], "live")
+        self.assertEqual(manifest["source_system"], "xero-trial-balance-export")
+        self.assertEqual(
+            manifest["entity_ref"],
+            {"tenant_id": "tenant-guid", "tenant_name": "Catherby Fisheries Pty Ltd"},
+        )
+        self.assertEqual(
+            manifest["report"], {"name": "Trial Balance", "as_at": "2026-06-30", "basis": "accrual"}
+        )
+        export = manifest["export"]
+        self.assertEqual(export["schema"], "xero-tb-csv.v1")
+        self.assertEqual(export["csv"], "tb.csv")
+        self.assertEqual(export["sha256"], hashlib.sha256(data).hexdigest())
+        generated_at = datetime.fromisoformat(export["generated_at"])
+        self.assertEqual(generated_at.utcoffset(), timedelta(0))
+
+    def test_a_cash_basis_run_records_cash(self):
+        raised, _, _ = self.run_export(self.BALANCED, extra_args=["--payments-only"])
+        self.assertIsNone(raised)
+        _, raw = self.manifest()
+        self.assertEqual(json.loads(raw)["report"]["basis"], "cash")
+
+    def test_no_manifest_suppresses_the_file_and_the_line(self):
+        raised, stdout, data = self.run_export(self.BALANCED, extra_args=["--no-manifest"])
+        self.assertIsNone(raised)
+        self.assertIsNotNone(data)
+        self.assertNotIn("manifest", stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.work_dir, "tb.csv.manifest.json")))
+
+    def test_a_no_manifest_rerun_removes_the_earlier_manifest(self):
+        raised, _, _ = self.run_export(self.BALANCED)
+        self.assertIsNone(raised)
+        manifest_path = os.path.join(self.work_dir, "tb.csv.manifest.json")
+        self.assertTrue(os.path.exists(manifest_path))
+        raised, _, data = self.run_export(
+            self.BALANCED, extra_args=["--no-manifest"], work_dir=self.work_dir
+        )
+        self.assertIsNone(raised)
+        self.assertIsNotNone(data)
+        self.assertFalse(os.path.exists(manifest_path))
+
+    def test_a_rerun_describes_the_new_export_not_the_old_one(self):
+        raised, _, _ = self.run_export(self.BALANCED, tenant_name="Old Tenant Pty Ltd")
+        self.assertIsNone(raised)
+        raised, _, data = self.run_export(
+            self.BALANCED, tenant_name="New Tenant Pty Ltd", work_dir=self.work_dir
+        )
+        self.assertIsNone(raised)
+        _, raw = self.manifest()
+        manifest = json.loads(raw)
+        self.assertEqual(manifest["entity_ref"]["tenant_name"], "New Tenant Pty Ltd")
+        self.assertEqual(manifest["export"]["sha256"], hashlib.sha256(data).hexdigest())
+
+    def test_an_earlier_manifest_that_cannot_be_removed_is_named(self):
+        raised, _, _ = self.run_export(self.BALANCED)
+        self.assertIsNone(raised)
+        with mock.patch.object(export_tb.os, "remove", side_effect=PermissionError(13, "Access is denied")):
+            raised, _, data = self.run_export(self.BALANCED, work_dir=self.work_dir)
+        self.assertIsNotNone(data)
+        self.assertIn("describes a previous export", str(raised))
+        self.assertIn("The export is complete", str(raised))
+
+    def test_an_unbalanced_report_writes_neither_file(self):
+        raised, _, data = self.run_export(
+            [("Business Bank Account (090)", "1200.00", "", "15234.50", "")]
+        )
+        self.assertIsNotNone(raised)
+        self.assertIsNone(data)
+        self.assertFalse(os.path.exists(os.path.join(self.work_dir, "tb.csv.manifest.json")))
+
+    def test_manifest_write_failures_name_the_completed_export(self):
+        real_mkstemp = tempfile.mkstemp
+        temp_files = []
+
+        def second_mkstemp_fails(**kwargs):
+            # The CSV's temp file is the first call; the manifest's is the second.
+            temp_files.append(kwargs)
+            if len(temp_files) == 2:
+                raise OSError("disk full")
+            return real_mkstemp(**kwargs)
+
+        with mock.patch.object(export_tb.tempfile, "mkstemp", side_effect=second_mkstemp_fails):
+            raised, _, data = self.run_export(self.BALANCED)
+        self.assertIsNotNone(data)
+        self.assertIn("the export is complete", str(raised))
+        self.assertIn(hashlib.sha256(data).hexdigest(), str(raised))
+
+        with mock.patch.object(export_tb, "durable_replace", wraps=export_tb.durable_replace) as replace:
+            self.run_export(self.BALANCED)
+        _, manifest_call = replace.call_args_list
+        self.assertIn("the export is complete", manifest_call.kwargs["fsync_error"](OSError("flush")))
+        self.assertIn("the export is complete", manifest_call.kwargs["replace_error"](OSError("locked")))
 
 
 class CsvOutputTest(_ExportCase):
@@ -664,7 +787,10 @@ class DefaultFilenameExportTest(_ExportCase):
         self.assertIsNone(raised)
         self.assertEqual(
             sorted(os.listdir(self.work_dir)),
-            ["ng-taonga-ltd-abcdef12-tb-2026-06-30-accrual.csv"],
+            [
+                "ng-taonga-ltd-abcdef12-tb-2026-06-30-accrual.csv",
+                "ng-taonga-ltd-abcdef12-tb-2026-06-30-accrual.csv.manifest.json",
+            ],
         )
         self.assertIn("ng-taonga-ltd-abcdef12-tb-2026-06-30-accrual.csv", out)
 
@@ -683,7 +809,7 @@ class DefaultFilenameExportTest(_ExportCase):
         )
         self.assertIsNone(raised)
         entries = sorted(os.listdir(self.work_dir))
-        self.assertEqual(entries, ["pty-ltd-aa-bb-cc-tb-2026-06-30-accrual.csv"])
+        self.assertEqual(entries, ["pty-ltd-aa-bb-cc-tb-2026-06-30-accrual.csv", "pty-ltd-aa-bb-cc-tb-2026-06-30-accrual.csv.manifest.json"])
         self.assertFalse(
             [e for e in entries if os.path.isdir(os.path.join(self.work_dir, e))],
             "the default filename created a directory tree",
@@ -708,7 +834,7 @@ class NestedOutputDirectoryTest(_ExportCase):
         self.assertIsNone(raised)
         self.assertIsNotNone(data, "the export did not reach the nested path")
         self.assertIn(b"Cash", data)
-        self.assertEqual(os.listdir(os.path.join(self.work_dir, "exports")), ["tb.csv"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.work_dir, "exports"))), ["tb.csv", "tb.csv.manifest.json"])
 
 
 class UnwritableOutputDirectoryTest(_ExportCase):
@@ -795,7 +921,9 @@ class OutputReplaceLockTest(_ExportCase):
             raised, _, data = self.run_export(self.BALANCED)
 
         self.assertIsNone(raised)
-        self.assertEqual(len(calls), 3)
+        # Two refused replaces and the third that lands the CSV, then the
+        # manifest's own replace, which is never refused here.
+        self.assertEqual(len(calls), 4)
         self.assertIsNotNone(data)
         self.assertEqual(
             [c.args[0] for c in sleep.call_args_list],

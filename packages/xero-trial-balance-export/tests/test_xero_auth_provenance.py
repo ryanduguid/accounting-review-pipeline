@@ -19,7 +19,7 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Starter, Core and Plus tiers and the 2-uncertified-app cap, read from Xero's
 # own limits page on 13 September 2026. The scope, refresh and reviewer
 # paragraphs are unchanged.
-README_SHA256 = "89B7FF2E9DF50984847C7C67F3F53323C04F7AD6A2FD14F2D59E8A5307626B8B"
+README_SHA256 = "5CA6B9416772838315DA442A1E0AB08F18DA1DD5DB328C3003C49F0D600D2C93"
 # Re-pinned for a Style Manual prose pass: 2 comments changed the number word
 # "two" to the numeral "2". SCOPES, every statement and the OAuth claims are
 # unchanged, and the executable AST digest below is unchanged with it.
