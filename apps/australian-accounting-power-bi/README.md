@@ -48,7 +48,7 @@ See [docs/data-model.md](docs/data-model.md) for table grain, schema description
 1. **Executive Financial Performance**: Group P&L matrix gross of intercompany, with revenue, gross margin, EBITDA, and net asset cards, and a cumulative working capital trend. Page 2 carries the consolidation calculation group, so use it for figures net of intercompany.
 2. **Multi-Entity Consolidation & Eliminations**: Entity-level matrix views with automated intra-group elimination columns and intercompany loan audit trails.
 3. **ATO Benchmark & Practice Diagnostic**: Industry and turnover-band comparisons, gross margin and cost ratios, and a gross profit comparison against the sample range.
-4. **Payday Super & STP Compliance Monitor**: 7-business-day timeline tracker, clearing-house transit risk analyser, and estimated Super Guarantee Charge (SGC) exposure calculators.
+4. **Payday Super and STP timing and exposure view** (the report page is named `4. Payday Super & STP Compliance Monitor`): 7-business-day timeline tracker, clearing-house transit risk analyser, and estimated Super Guarantee Charge (SGC) exposure calculators. It shows timing and modelled exposure from the data loaded; it is not a compliance determination, and it does not decide whether an employer has met its Super Guarantee obligations.
 
 ---
 

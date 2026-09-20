@@ -1364,3 +1364,87 @@ def test_a_symlink_swapped_after_the_check_cannot_redirect_the_pack(
     assert not list(checkout.glob("july"))
     for path in outputs.values():
         assert safe in path.parents
+
+
+def test_the_pack_records_the_controls_that_did_not_run(tmp_path: Path) -> None:
+    """A control with no input reached no verdict, so the pack has to say so.
+
+    The mapping, subledger and calculation-evidence controls each run only when
+    their input is supplied. Omitting them silently left REVIEW or PASS reading
+    as though all 3 had been applied, and a reviewer cannot ask for a
+    reconciliation nobody told them was skipped.
+    """
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+    )
+    assert pack.controls_not_run == (
+        "account_mapping",
+        "subledger",
+        "calculation_evidence",
+    )
+    assert pack.status == "REVIEW"
+
+    output = tmp_path / "pack"
+    assert main([
+        "review",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--output", str(output),
+    ]) == 2
+    summary = (output / "close-summary.md").read_text(encoding="utf-8")
+    assert (
+        "- Controls not run: account_mapping, subledger, calculation_evidence."
+        in summary
+    )
+    document = json.loads((output / "close-review-pack.json").read_text(encoding="utf-8"))
+    assert document["controls_not_run"] == [
+        "account_mapping",
+        "subledger",
+        "calculation_evidence",
+    ]
+    assert document["overall_status"] == "REVIEW"
+    # The 4 artefacts still verify against each other with the bullet in them.
+    assert main(["view", "--pack-dir", str(output)]) == 0
+
+
+def test_a_supplied_input_takes_its_control_off_the_list(tmp_path: Path) -> None:
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        mapping_path=EXAMPLES / "account_mapping.csv",
+        subledger_path=EXAMPLES / "subledger_balances.csv",
+    )
+    assert pack.controls_not_run == ("calculation_evidence",)
+
+    output = tmp_path / "pack"
+    assert main([
+        "review",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--mapping", str(EXAMPLES / "account_mapping.csv"),
+        "--subledger", str(EXAMPLES / "subledger_balances.csv"),
+        "--output", str(output),
+    ]) == 2
+    summary = (output / "close-summary.md").read_text(encoding="utf-8")
+    assert "- Controls not run: calculation_evidence." in summary
+    assert main(["view", "--pack-dir", str(output)]) == 0
+
+
+def test_a_header_only_subledger_has_not_run_the_control(tmp_path: Path) -> None:
+    """A subledger file with no rows reconciles nothing.
+
+    The list was gated on the path, so supplying an empty file said the
+    reconciliation control had run while it had compared no account at all.
+    """
+    empty = tmp_path / "subledger_balances.csv"
+    empty.write_text("Tenant,AccountID,SubledgerBalance\n", encoding="utf-8")
+    pack = review_close(
+        current_path=EXAMPLES / "current_trial_balance.csv",
+        prior_path=EXAMPLES / "prior_trial_balance.csv",
+        subledger_path=empty,
+    )
+    assert "subledger" in pack.controls_not_run
+    # The digest is still recorded: the file was read, and saying so is how a
+    # reviewer knows which bytes were empty.
+    assert "subledger" in pack.source_hashes

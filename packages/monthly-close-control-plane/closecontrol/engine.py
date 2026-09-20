@@ -45,6 +45,10 @@ class CloseReviewPack:
     # built without the feature carries the same fields it always did.
     calculation_evidence: tuple[CalculationEvidence, ...] = ()
     required_calculations: tuple[str, ...] = ()
+    # The optional controls this run had no input for, in a fixed order. A pack
+    # that omitted a control said nothing about it, so PASS read as though every
+    # control had been applied. Empty means all 3 ran.
+    controls_not_run: tuple[str, ...] = ()
     # The labels the pack may actually rely on: the file hangs together, it
     # carries a figure, and its period covers this close. The evidence record's
     # own `usable` knows nothing about the report date, so publishing that
@@ -644,6 +648,26 @@ def review_close(
         # the exact bytes it read rather than a path a reader cannot check.
         source_hashes[f"calculation_evidence:{item.label}"] = item.sha256
 
+    # Named in the same order every run, and derived from what each control
+    # actually had to work with, so the list cannot claim a control ran when it
+    # did not. A required calculation with no evidence is already an exception,
+    # which is why the evidence control counts as run whenever one was required.
+    # The subledger control is gated on rows rather than on a path, because a
+    # header-only file reconciles nothing: _subledger_exceptions iterates the
+    # rows, so an empty one compares no account and the control has not run.
+    controls_not_run = tuple(
+        name
+        for name, ran in (
+            ("account_mapping", mapping_path is not None),
+            ("subledger", bool(subledger)),
+            (
+                "calculation_evidence",
+                bool(evidence or unreadable_evidence or required_calculations),
+            ),
+        )
+        if not ran
+    )
+
     ordered = tuple(sorted(exceptions, key=lambda item: (item.status != "BLOCKED", item.control, item.tenant, item.account_id, item.reason)))
     # Force the register once here. client_queries is a property, so an
     # identifier collision would otherwise first be raised inside the pack
@@ -663,6 +687,7 @@ def review_close(
         acknowledgement=acknowledgement,
         calculation_evidence=tuple(evidence),
         required_calculations=tuple(required_calculations),
+        controls_not_run=controls_not_run,
         relied_on=frozenset(
             item.label for item in evidence
             if item.usable and covers_period(item, current_date) is True

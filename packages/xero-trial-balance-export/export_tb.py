@@ -25,6 +25,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import unicodedata
@@ -394,6 +395,197 @@ def output_path(value: str | None, default_filename: str, *, root: str | None = 
     raise ValueError("--out must be a relative path beneath the current working directory")
 
 
+CHECKOUT_MARKER = ".git"
+
+
+def _enclosing_checkout(directory: str) -> str | None:
+    """The Git working tree that holds ``directory``, or None if there is none.
+
+    ``os.lstat`` rather than ``os.path.exists``: exists() decides for itself
+    which failures mean "no", and from Python 3.14 it answers False for every
+    OSError, so an unreadable ``.git`` would read as an absent one and the guard
+    would approve an export inside the checkout it could not see. It also does
+    not follow the entry, so a ``.git`` symlink counts as the checkout it names.
+
+    A candidate this process cannot inspect raises instead of answering, because
+    a directory it cannot read is not one it can show to be outside a checkout.
+    """
+    candidate = directory
+    while True:
+        try:
+            os.lstat(os.path.join(candidate, CHECKOUT_MARKER))
+        except (FileNotFoundError, NotADirectoryError):
+            pass  # Genuinely not there, or a path component that cannot hold one.
+        except OSError as exc:
+            raise ValueError(
+                f"{candidate} cannot be examined for a {CHECKOUT_MARKER} entry ({exc}), "
+                "so this run cannot show the export would land outside version control."
+            ) from exc
+        else:
+            return candidate
+        parent = os.path.dirname(candidate)
+        if parent == candidate:
+            return None
+        candidate = parent
+
+
+def _git_ignores(checkout: str, path: str) -> bool:
+    """Does git ignore this one path inside this checkout?
+
+    ``git check-ignore`` is the only thing that answers for the whole ignore
+    stack: every ``.gitignore`` in the tree, ``.git/info/exclude`` and the
+    user's global excludes. One path per call, because ``--quiet`` exits 0 when
+    *any* of the paths it is given is ignored, which would pass a manifest that
+    is not ignored alongside a CSV that is. A tracked file is never reported as
+    ignored, and that is the answer this guard wants: a file git already follows
+    is the case it exists to refuse.
+    """
+    # A repository-relative path with forward slashes: git reads a pathspec, and
+    # a Windows absolute path spells its separators the one way a pathspec does
+    # not.
+    relative = os.path.relpath(path, checkout).replace(os.sep, "/")
+    try:
+        completed = subprocess.run(
+            ["git", "check-ignore", "--quiet", "--", relative],
+            cwd=checkout,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(
+            f"git could not be run to ask whether {checkout} ignores {path} ({exc}), so "
+            "this run cannot show the export would stay out of a commit."
+        ) from exc
+    if completed.returncode in (0, 1):
+        return completed.returncode == 0
+    raise ValueError(
+        f"git check-ignore exited {completed.returncode} in {checkout}, so this run "
+        f"cannot show whether a commit there would carry {os.path.basename(path)}."
+    )
+
+
+# A default filename takes the organisation's name, so it is not known until a
+# tenant is chosen. This stands in for one while the guard runs early, and its
+# shape is the shape default_output_filename produces.
+PROBE_EXPORT_NAME = "probe-tb-2000-01-01-accrual.csv"
+
+
+def _write_targets(out_path: str, *, with_manifest: bool) -> list[str]:
+    """Every path a run against out_path can leave in the output directory.
+
+    The export and its manifest are only the files a successful run keeps.
+    ``write_csv`` stages the payload as ``tmp*.csv.tmp`` beside the destination
+    and ``durable_replace`` deliberately keeps that file when the replace fails,
+    ``write_manifest`` stages ``tmp*.manifest.json.tmp`` the same way, and
+    ``set_aside_manifest`` parks an earlier manifest as ``<manifest>.previous``.
+    Each of those carries the same client detail as the file it belongs to, and a
+    checkout that ignores ``*.csv`` and ``*.manifest.json`` ignores none of them:
+    a failed run left a client-named ``tmp*.csv.tmp`` among tracked files.
+
+    The temporary names are a stand-in: mkstemp chooses the random part, so what
+    is being asked is whether the directory ignores that shape of name at all.
+    """
+    out_dir = os.path.dirname(out_path) or "."
+    targets = [out_path, os.path.join(out_dir, "probe.csv.tmp")]
+    if with_manifest:
+        manifest = manifest_path_for(out_path)
+        targets += [
+            manifest,
+            manifest + ".previous",
+            os.path.join(out_dir, "probe.manifest.json.tmp"),
+        ]
+    return targets
+
+
+def require_directory_outside_checkout(out_dir: str, *, with_manifest: bool) -> None:
+    """Run the guard on a directory, before a tenant is known.
+
+    The default filename needs the organisation's name, so it cannot be checked
+    until the report call has already happened: credentials read, a refresh token
+    spent, a client's report fetched. That is too late to tell an operator the
+    destination was never usable. A representative default-shaped name answers
+    the question a directory can answer on its own, and the real filename is
+    checked again once it exists.
+    """
+    require_output_outside_checkout(
+        os.path.join(os.path.realpath(out_dir), PROBE_EXPORT_NAME),
+        with_manifest=with_manifest,
+        representative=True,
+    )
+
+
+def require_output_outside_checkout(
+    out_path: str, *, with_manifest: bool, representative: bool = False
+) -> None:
+    """Refuse an export inside a version-control checkout unless git ignores it.
+
+    The CSV holds a client's account balances and the manifest names the tenant
+    id and the organisation in clear, so a file written among tracked files is
+    one ``git add -A`` away from a history every clone copies, and on a public
+    remote from everyone. The review packages in this pipeline refuse an output
+    inside a checkout outright. This command cannot: its destination is the
+    process working directory, and a scheduled job is deliberately started in
+    one. So a path git already ignores is allowed, and every other path inside a
+    working tree is refused.
+
+    Every path a run can leave behind is checked, not only the 2 files a
+    successful one keeps: ``*.csv`` being ignored says nothing about
+    ``*.manifest.json``, and neither says anything about the staged
+    ``*.csv.tmp``, the staged ``*.manifest.json.tmp`` or a parked
+    ``*.manifest.json.previous``. ``_write_targets`` lists them. An ignored
+    output directory covers all of them at once and needs no special case,
+    because git reports every path inside it as ignored.
+
+    The guard fails closed: a directory it cannot read, a git it cannot run and
+    a check-ignore that will not answer are each a refusal, because none of them
+    shows the export landing somewhere a commit will not pick up.
+    """
+    resolved = os.path.realpath(out_path)
+    checkout = _enclosing_checkout(os.path.dirname(resolved))
+    if checkout is None:
+        return
+    unignored = [
+        os.path.basename(path)
+        for path in _write_targets(resolved, with_manifest=with_manifest)
+        if not _git_ignores(checkout, path)
+    ]
+    if not unignored:
+        return
+    stand_in = (
+        " The names are stand-ins: a default filename takes the organisation's name, "
+        "and the staged files take a random one."
+        if representative
+        else " The staged and parked names are stand-ins, because mkstemp chooses "
+        "their random part."
+    )
+    raise ValueError(
+        f"a run here would write {', '.join(unignored)} inside the version-control "
+        f"checkout at {checkout}, and git ignores none of those."
+        + stand_in
+        + " An export holds a client's balances and its manifest names the "
+        "organisation, so write it outside the checkout, or ignore the output "
+        "directory there first."
+    )
+
+
+def _tenant_ids(connections: list[dict]) -> str:
+    """The tenant ids of these connections, comma-separated.
+
+    An organisation name is a client's name, and these messages are the ones an
+    operator copies into a ticket, a chat or a scheduler log. A tenantId names
+    the same organisation to Xero and to ``--tenant``, and tells a reader
+    without access to that Xero app nothing at all.
+    """
+    return ", ".join(str(connection["tenantId"]) for connection in connections)
+
+
+def _ambiguous(tenant_arg: str, matches: list[dict]) -> str:
+    return (
+        f'"{tenant_arg}" matches more than one organisation '
+        f"({len(matches)}; tenant ids: {_tenant_ids(matches)}) - narrow it."
+    )
+
+
 def select_tenant(connections: list[dict], tenant_arg: str | None) -> dict:
     """Resolve exactly one organisation to export, or exit naming the choices.
 
@@ -408,23 +600,21 @@ def select_tenant(connections: list[dict], tenant_arg: str | None) -> dict:
         if len(id_matches) == 1:
             return id_matches[0]
         if len(id_matches) > 1:
-            names = ", ".join(c["tenantName"] for c in id_matches)
-            sys.exit(
-                f'"{tenant_arg}" matches more than one organisation ({names}) - narrow it.'
-            )
+            sys.exit(_ambiguous(tenant_arg, id_matches))
         matches = [c for c in connections if needle in c["tenantName"].lower()]
         if not matches:
-            names = ", ".join(c["tenantName"] for c in connections)
-            sys.exit(f'No tenant matching "{tenant_arg}". Connected: {names}')
-        if len(matches) > 1:
-            names = ", ".join(c["tenantName"] for c in matches)
             sys.exit(
-                f'"{tenant_arg}" matches more than one organisation ({names}) - narrow it.'
+                f'No tenant matching "{tenant_arg}". {len(connections)} organisation(s) '
+                f"connected; tenant ids: {_tenant_ids(connections)}."
             )
+        if len(matches) > 1:
+            sys.exit(_ambiguous(tenant_arg, matches))
         return matches[0]
     if len(connections) > 1:
-        names = ", ".join(c["tenantName"] for c in connections)
-        sys.exit(f"More than one organisation connected ({names}) - pick one with --tenant.")
+        sys.exit(
+            f"More than one organisation connected ({len(connections)}; tenant ids: "
+            f"{_tenant_ids(connections)}) - pick one with --tenant."
+        )
     return connections[0]
 
 
@@ -493,12 +683,22 @@ def build_rows(
     return out_rows, (total_debit, total_credit, total_ytd_debit, total_ytd_credit)
 
 
-def check_balanced(totals: tuple[Decimal, Decimal, Decimal, Decimal]) -> None:
+def check_balanced(
+    totals: tuple[Decimal, Decimal, Decimal, Decimal],
+    *,
+    account_count: int | None = None,
+) -> None:
     """Exit without writing unless both column pairs balance exactly.
 
     Both pairs must balance: the movement columns AND the YTD as-at
     balances (the pair the README tells users to slice). Either one out
     means the report is truncated or misparsed.
+
+    ``account_count`` is how many account rows the totals were taken over. The
+    warning names it instead of the totals themselves, so the line says how big
+    the report was without stating a client's balances. A caller that does not
+    have the count, such as the evaluation runner totalling a fixture, omits it
+    and the warning leaves the phrase out.
 
     The comparison is exact. The old round(diff, 2) existed to absorb float
     noise, and it also swallowed real differences under half a cent; with
@@ -522,10 +722,13 @@ def check_balanced(totals: tuple[Decimal, Decimal, Decimal, Decimal]) -> None:
                     "exactly, so the balance check cannot be trusted.".format(label)
                 )
         if diff != 0:
-            print(
-                f"WARNING: {label} debits {debits:,.2f} != credits "
-                f"{credits:,.2f} (diff {format_amount(diff)})"
-            )
+            # The 2 totals are the client's own balances, and this line goes to
+            # a console, a Task Scheduler log and whatever captures them. The
+            # difference and the number of accounts it was taken over are what
+            # an operator acts on; printing the totals only said whose ledger
+            # this was.
+            scope = "" if account_count is None else f" across {account_count} accounts"
+            print(f"WARNING: {label} debits != credits{scope} (diff {format_amount(diff)})")
             unbalanced = True
     if unbalanced:
         print("Nothing written - report likely truncated or misparsed.")
@@ -768,6 +971,15 @@ def main() -> None:
     )
     parser.add_argument("--payments-only", action="store_true", help="Cash-basis report")
     parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help=(
+            "Do not print the organisation name, the export totals or the written "
+            "filenames, which carry the organisation name by default. The output "
+            "directory, the account count and every warning still print."
+        ),
+    )
+    parser.add_argument(
         "--no-manifest",
         action="store_true",
         help="Do not write the <out>.manifest.json that records the tenant, basis and SHA-256 of the export",
@@ -783,14 +995,25 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Reject unsafe explicit destinations before looking up credentials or
-    # calling Xero. The default filename needs tenant metadata and is resolved
-    # later; for a supplied value the fallback is never used.
-    if args.out is not None:
-        try:
-            output_path(args.out, "unused.csv")
-        except ValueError as exc:
-            parser.error(str(exc))
+    # Reject an unusable destination before looking up credentials or calling
+    # Xero, whether or not --out was given. For a supplied value the real names
+    # are known now and the default fallback is never used. Without one the
+    # filename needs the tenant, so the working directory is checked against a
+    # representative default-shaped name here and the real name is checked again
+    # once it exists. Leaving the whole check until then meant an operator heard
+    # about a destination that was never usable only after a refresh token had
+    # been spent and a client's report fetched.
+    try:
+        if args.out is not None:
+            require_output_outside_checkout(
+                output_path(args.out, "unused.csv"), with_manifest=not args.no_manifest
+            )
+        else:
+            require_directory_outside_checkout(
+                os.getcwd(), with_manifest=not args.no_manifest
+            )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     load_dotenv()
     # Re-resolve after load_dotenv: a XERO_TOKEN_FILE set in .env is not in
@@ -811,7 +1034,8 @@ def main() -> None:
     if not connections:
         sys.exit("No Xero organisations authorised for this app - run auth.py again.")
     tenant = select_tenant(connections, args.tenant)
-    print(f"Tenant: {tenant['tenantName']}")
+    if not args.quiet:
+        print(f"Tenant: {tenant['tenantName']}")
 
     params = {"date": args.date}
     if args.payments_only:
@@ -840,6 +1064,7 @@ def main() -> None:
     basis = "cash" if args.payments_only else "accrual"
     try:
         out_path = output_path(args.out, default_output_filename(tenant, args.date, basis))
+        require_output_outside_checkout(out_path, with_manifest=not args.no_manifest)
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -847,7 +1072,7 @@ def main() -> None:
     # a scheduled Power BI refresh reads the path, not the exit code, so an
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
-    check_balanced(totals)
+    check_balanced(totals, account_count=len(out_rows))
     aside = set_aside_manifest(out_path)
     try:
         digest = write_csv(out_rows, out_path)
@@ -859,10 +1084,23 @@ def main() -> None:
         discard_manifest(aside)
 
     total_debit, _, total_ytd_debit, _ = totals
-    print(f"Wrote {len(out_rows)} accounts to {out_path}")
-    print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
+    # The default filename embeds the organisation name, so printing the path
+    # under --quiet put back the name the flag exists to withhold. The directory
+    # is what a scheduled job needs to know; the filename is in that directory.
+    if args.quiet:
+        print(
+            f"Wrote {len(out_rows)} accounts to "
+            f"{os.path.dirname(out_path) or '.'} (filename withheld under --quiet)"
+        )
+    else:
+        print(f"Wrote {len(out_rows)} accounts to {out_path}")
+        print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
     if not args.no_manifest:
-        print(f"Wrote manifest {write_manifest(out_path, digest, tenant, args.date, basis)}")
+        manifest_path = write_manifest(out_path, digest, tenant, args.date, basis)
+        if args.quiet:
+            print("Wrote manifest beside the export (filename withheld under --quiet)")
+        else:
+            print(f"Wrote manifest {manifest_path}")
 
 
 def run() -> None:

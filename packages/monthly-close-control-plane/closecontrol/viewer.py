@@ -60,7 +60,9 @@ _JSON_MEMBERS = frozenset(
 # there when it ran and absent when it did not, and both shapes are a pack the
 # writer produced. Leaving it out here made every pack the control produced
 # unopenable by `close-control view`.
-_OPTIONAL_JSON_MEMBERS = frozenset({"client_queries", "calculation_evidence"})
+_OPTIONAL_JSON_MEMBERS = frozenset(
+    {"client_queries", "calculation_evidence", "controls_not_run"}
+)
 
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
 
@@ -827,6 +829,13 @@ def _expected_scope_lines(document: dict[str, object], *, register: bool) -> lis
         queries = document["client_queries"]
         assert isinstance(queries, list)
         lines.append(f"- Client queries drafted: {len(queries)}.")
+    # A pack written before the control-coverage line existed carries neither
+    # the member nor the bullet, the same way the register is handled above.
+    if "controls_not_run" in document:
+        lines.append(
+            f"- Controls not run: "
+            f"{', '.join(_require_string_list(document, 'controls_not_run')) or 'none'}."
+        )
     return lines
 
 

@@ -88,7 +88,7 @@ def _as_json(pack: ReadinessPack) -> dict:
             "comment": pack.acknowledgement.comment,
             "effect": ACKNOWLEDGEMENT_EFFECT,
         }
-    return {
+    document: dict[str, object] = {
         "acknowledgement": acknowledgement,
         "engagement_type": pack.engagement_type,
         "findings": [_finding_dict(item) for item in pack.findings],
@@ -102,12 +102,32 @@ def _as_json(pack: ReadinessPack) -> dict:
         },
         "thresholds": {"tieout_tolerance": _money(pack.tieout_tolerance)},
     }
+    # The member appears only when the pack states its control coverage. A null
+    # would be a schema change for every consumer reading a pack today, and an
+    # empty list would claim every control ran.
+    if pack.controls_not_run is not None:
+        document["controls_not_run"] = [
+            {
+                "slot": control.slot,
+                "filename": control.filename,
+                "reason": control.reason,
+            }
+            for control in pack.controls_not_run
+        ]
+    return document
 
 
 _ABSENT = "n/a"
 
 
 def _as_markdown(pack: ReadinessPack) -> str:
+    # A pack that states no control coverage renders as it was written, with no
+    # bullet and no section. Only the writer's own packs state it.
+    coverage = (
+        []
+        if pack.controls_not_run is None
+        else [f"- Controls not run: {len(pack.controls_not_run)}."]
+    )
     blocked = sum(finding.status == "BLOCKED" for finding in pack.findings)
     not_ready = sum(finding.status == "NOT_READY" for finding in pack.findings)
     repeats = sum(finding.repeat for finding in pack.findings)
@@ -125,6 +145,7 @@ def _as_markdown(pack: ReadinessPack) -> str:
         f"- Preparer initials: {_md_cell(pack.preparer_initials) if pack.preparer_initials else _ABSENT}",
         f"- Tie-out tolerance: ${_money(pack.tieout_tolerance)}",
         f"- Findings: {len(pack.findings)} total; {blocked} blocked; {not_ready} not ready; {repeats} repeats.",
+        *coverage,
         "",
         "## Source evidence",
         "",
@@ -134,6 +155,17 @@ def _as_markdown(pack: ReadinessPack) -> str:
     else:
         for evidence in pack.source_evidence:
             lines.append(f"- `{evidence.slot}` (`{evidence.filename}`): `{evidence.sha256}`")
+    if pack.controls_not_run is not None:
+        lines += ["", "## Controls not run", ""]
+        if not pack.controls_not_run:
+            lines.append("Every control this engagement profile configures ran.")
+        else:
+            lines.append(
+                "The status above says nothing about these controls. They had no usable "
+                "input, so they reached no verdict:"
+            )
+            for control in pack.controls_not_run:
+                lines.append(f"- `{control.slot}` (`{control.filename}`): {control.reason}")
     lines += ["", "## Findings", ""]
     if not pack.findings:
         lines.append(

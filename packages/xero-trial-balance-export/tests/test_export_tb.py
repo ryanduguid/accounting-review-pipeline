@@ -5,6 +5,8 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unicodedata
@@ -1479,10 +1481,19 @@ class TenantSelectionTest(unittest.TestCase):
     ]
 
     def test_an_ambiguous_substring_stops_before_the_report_is_fetched(self):
+        """And names the tenant ids, not the organisations.
+
+        The refusal is the line an operator copies into a ticket or a chat, so
+        naming both organisations disclosed 2 client names to whoever reads it.
+        A tenantId selects the same organisation through --tenant and means
+        nothing to a reader without access to the Xero app.
+        """
         message, api_get = self._run(self.TWO, ["--tenant", "Acme"])
-        self.assertIn("matches more than one organisation", message)
-        self.assertIn("Acme Trading Pty Ltd", message)
-        self.assertIn("Acme Holdings Pty Ltd", message)
+        self.assertIn(
+            "matches more than one organisation (2; tenant ids: aaaa, bbbb)", message
+        )
+        self.assertNotIn("Acme Trading Pty Ltd", message)
+        self.assertNotIn("Acme Holdings Pty Ltd", message)
         api_get.assert_not_called()
 
     def test_a_unique_substring_still_selects_its_org(self):
@@ -1516,13 +1527,19 @@ class TenantSelectionTest(unittest.TestCase):
 
     def test_two_orgs_and_no_tenant_flag_stops_before_the_report(self):
         message, api_get = self._run(self.TWO, [])
-        self.assertIn("More than one organisation connected", message)
+        self.assertIn(
+            "More than one organisation connected (2; tenant ids: aaaa, bbbb)", message
+        )
+        self.assertNotIn("Acme Trading Pty Ltd", message)
+        self.assertNotIn("Acme Holdings Pty Ltd", message)
         api_get.assert_not_called()
 
-    def test_a_substring_matching_nothing_names_the_connected_orgs(self):
+    def test_a_substring_matching_nothing_names_the_connected_ids(self):
         message, api_get = self._run(self.TWO, ["--tenant", "Beta"])
         self.assertIn('No tenant matching "Beta"', message)
-        self.assertIn("Acme Trading Pty Ltd", message)
+        self.assertIn("2 organisation(s) connected; tenant ids: aaaa, bbbb", message)
+        self.assertNotIn("Acme Trading Pty Ltd", message)
+        self.assertNotIn("Acme Holdings Pty Ltd", message)
         api_get.assert_not_called()
 
     def test_an_exact_tenant_id_wins_over_a_name_substring(self):
@@ -1537,6 +1554,19 @@ class TenantSelectionTest(unittest.TestCase):
         self.assertEqual(chosen["tenantName"], "Acme Trading Pty Ltd")
         chosen = export_tb.select_tenant(connections, "holdings")
         self.assertEqual(chosen["tenantId"], "Holdings")
+
+    def test_an_ambiguous_tenant_id_match_also_names_ids_only(self):
+        """2 connections can share a tenantId spelling only if Xero sends one
+        twice, and the refusal for it went through the same name list."""
+        connections = [
+            {"tenantId": "aaaa", "tenantName": "Acme Trading Pty Ltd"},
+            {"tenantId": "AAAA", "tenantName": "Acme Holdings Pty Ltd"},
+        ]
+        with self.assertRaises(SystemExit) as ctx:
+            export_tb.select_tenant(connections, "aaaa")
+        message = str(ctx.exception)
+        self.assertIn("(2; tenant ids: aaaa, AAAA)", message)
+        self.assertNotIn("Pty Ltd", message)
 
     def test_duplicate_display_names_are_selectable_by_tenant_id(self):
         connections = [
@@ -1853,3 +1883,248 @@ class ConnectionControlCharactersTest(unittest.TestCase):
                     with self.assertRaises(SystemExit):
                         validated_connections([row])
         self.assertEqual(len(validated_connections([{"tenantId": "id", "tenantName": "Fabricated\u00a0tenant"}])), 1)
+
+
+class UnbalancedWarningTest(_ExportCase):
+    """The warning states the shape of the problem, not the client's totals.
+
+    It goes to a console, a Task Scheduler log and whatever captures them, and
+    it is the line an operator copies into a ticket. The difference and the
+    number of accounts it was taken over are what anyone acts on; the debit and
+    credit totals were the ledger itself.
+    """
+
+    def test_the_warning_names_a_count_and_not_the_totals(self):
+        raised, out, data = self.run_export(
+            [
+                ("Business Bank Account (090)", "1200.00", "", "1200.00", ""),
+                ("Trade Debtors (610)", "", "1100.00", "", "1100.00"),
+            ]
+        )
+        self.assertIsInstance(raised, SystemExit)
+        self.assertEqual(raised.code, 1)
+        self.assertIn("WARNING: movement debits != credits across 2 accounts", out)
+        self.assertIn("diff 100.0", out)
+        self.assertNotIn("1,200.00", out)
+        self.assertNotIn("1,100.00", out)
+        self.assertIsNone(data, "an unbalanced report must not reach disk")
+
+    def test_a_caller_with_no_count_still_gets_the_condition(self):
+        """The evaluation runner totals a fixture and has no row count to pass."""
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            with self.assertRaises(SystemExit):
+                export_tb.check_balanced(
+                    (Decimal("10.00"), Decimal("9.00"), Decimal("10.00"), Decimal("9.00"))
+                )
+        out = buffer.getvalue()
+        self.assertIn("WARNING: movement debits != credits (diff 1.0", out)
+        self.assertNotIn("accounts", out)
+
+
+class QuietOutputTest(_ExportCase):
+    """--quiet drops the 2 lines that carry client detail, and nothing else."""
+
+    BALANCED = [
+        ("Business Bank Account (090)", "1200.00", "", "15234.50", ""),
+        ("Trade Debtors (610)", "", "1200.00", "", "15234.50"),
+    ]
+
+    def test_quiet_suppresses_the_tenant_and_totals_lines(self):
+        raised, out, data = self.run_export(self.BALANCED, extra_args=("--quiet",))
+        self.assertIsNone(raised)
+        self.assertNotIn("Tenant:", out)
+        self.assertNotIn("Catherby Fisheries", out)
+        self.assertNotIn("Balance check OK", out)
+        self.assertNotIn("15,234.50", out)
+        # The path, the count and the manifest line still print: a scheduled job
+        # needs to know what it wrote.
+        self.assertIn("Wrote 2 accounts to", out)
+        self.assertIn("Wrote manifest", out)
+        self.assertNotIn("tb.csv", out, "the filename is withheld, not just the name")
+        self.assertIsNotNone(data, "--quiet must not change what is written")
+
+    def test_quiet_withholds_the_default_filename_too(self):
+        """The default filename embeds the organisation name, so printing the
+        path put back the name --quiet exists to withhold."""
+        raised, out, _data = self.run_export(self.BALANCED, out=None, extra_args=("--quiet",))
+        self.assertIsNone(raised)
+        self.assertNotIn("catherby", out.casefold())
+        self.assertIn("filename withheld under --quiet", out)
+        written = [name for name in os.listdir(self.work_dir) if name.endswith(".csv")]
+        self.assertEqual(len(written), 1, written)
+        self.assertIn("catherby", written[0])
+
+    def test_the_default_output_is_unchanged(self):
+        raised, out, data = self.run_export(self.BALANCED)
+        self.assertIsNone(raised)
+        self.assertIn("Tenant: Catherby Fisheries Pty Ltd", out)
+        self.assertIn("Balance check OK: movement debits = credits = 1,200.00", out)
+        self.assertIsNotNone(data)
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not on PATH")
+class CheckoutGuardTest(_ExportCase):
+    """An export or manifest inside a checkout is refused unless git ignores it.
+
+    A CSV of a client's balances and a manifest naming the organisation are one
+    `git add -A` from a history every clone copies. The review packages in this
+    pipeline refuse any output inside a checkout outright; this command cannot,
+    because its destination is the working directory a scheduled job is started
+    in, so a path git already ignores is the one exception.
+    """
+
+    BALANCED = [
+        ("Business Bank Account (090)", "1200.00", "", "15234.50", ""),
+        ("Trade Debtors (610)", "", "1200.00", "", "15234.50"),
+    ]
+
+    def setUp(self):
+        # The machine's own global or system excludes must not decide the answer:
+        # a developer who ignores *.csv everywhere would otherwise see this suite
+        # allow what it exists to refuse.
+        patcher = mock.patch.dict(
+            os.environ,
+            {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _repo(self, ignore=None):
+        repo = os.path.realpath(tempfile.mkdtemp())
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+        if ignore is not None:
+            with open(os.path.join(repo, ".gitignore"), "w", encoding="utf-8") as fh:
+                fh.write(ignore)
+        return repo
+
+    def test_an_export_inside_a_checkout_is_refused(self):
+        repo = self._repo()
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            raised, out, data = self.run_export(self.BALANCED, work_dir=repo)
+        self.assertIsInstance(raised, SystemExit)
+        self.assertEqual(raised.code, 2)
+        self.assertIn("version-control checkout", stderr.getvalue())
+        self.assertIsNone(data, "an export inside a checkout must not reach disk")
+        self.assertNotIn("Wrote", out)
+
+    def test_an_ignored_directory_inside_a_checkout_is_allowed(self):
+        repo = self._repo(ignore="exports/\n")
+        raised, out, data = self.run_export(
+            self.BALANCED, out="exports/tb.csv", work_dir=repo
+        )
+        self.assertIsNone(raised)
+        self.assertIn("Wrote 2 accounts to", out)
+        self.assertIsNotNone(data)
+
+    def test_an_ignored_csv_beside_an_unignored_manifest_is_refused(self):
+        """The manifest is the file that names the organisation, so both count."""
+        repo = self._repo(ignore="*.csv\n")
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            raised, _out, data = self.run_export(self.BALANCED, work_dir=repo)
+        self.assertIsInstance(raised, SystemExit)
+        self.assertEqual(raised.code, 2)
+        self.assertIn("tb.csv.manifest.json", stderr.getvalue())
+        self.assertIsNone(data)
+
+    def test_ignoring_the_csv_and_the_manifest_is_not_enough(self):
+        """The reviewer's scenario, and this repository's own root .gitignore.
+
+        write_csv stages the payload as tmp*.csv.tmp beside the destination and
+        durable_replace keeps that file when the replace fails; write_manifest
+        stages tmp*.manifest.json.tmp the same way, and set_aside_manifest parks
+        an earlier manifest as <manifest>.previous. Ignoring *.csv and
+        *.manifest.json ignores none of those, so a failed run left a
+        client-named tmp*.csv.tmp among tracked files.
+        """
+        repo = self._repo(ignore="*.csv\n*.manifest.json\n")
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            raised, _out, data = self.run_export(self.BALANCED, work_dir=repo)
+        self.assertIsInstance(raised, SystemExit)
+        self.assertEqual(raised.code, 2)
+        message = stderr.getvalue()
+        for named in ("probe.csv.tmp", "tb.csv.manifest.json.previous", "probe.manifest.json.tmp"):
+            self.assertIn(named, message)
+        self.assertIsNone(data)
+
+    def test_a_no_manifest_run_still_needs_its_staged_name_ignored(self):
+        repo = self._repo(ignore="*.csv\n")
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            raised, _out, data = self.run_export(
+                self.BALANCED, work_dir=repo, extra_args=("--no-manifest",)
+            )
+        self.assertIsInstance(raised, SystemExit)
+        self.assertEqual(raised.code, 2)
+        self.assertIn("probe.csv.tmp", stderr.getvalue())
+        self.assertIsNone(data)
+
+    def test_every_written_shape_ignored_is_allowed(self):
+        repo = self._repo(ignore="*.csv\n*.csv.tmp\n")
+        raised, out, data = self.run_export(
+            self.BALANCED, work_dir=repo, extra_args=("--no-manifest",)
+        )
+        self.assertIsNone(raised)
+        self.assertIn("Wrote 2 accounts to", out)
+        self.assertIsNotNone(data)
+
+    def test_a_default_filename_is_checked_before_credentials_are_read(self):
+        """Without --out the filename needs the tenant, so the directory is
+        checked against a representative name first.
+
+        Leaving the whole check until the real filename existed meant the
+        refusal arrived after the credential read, the connections call and the
+        report fetch, with a single-use refresh token already spent.
+        """
+        repo = self._repo()
+        argv = ["export_tb.py", "--date", "2026-06-30"]
+        previous_dir = os.getcwd()
+        os.chdir(repo)
+        try:
+            with mock.patch.object(export_tb, "load_dotenv") as load_dotenv, \
+                    mock.patch.object(export_tb, "get_connections") as get_connections, \
+                    mock.patch.dict(
+                        os.environ,
+                        {"XERO_CLIENT_ID": "", "XERO_CLIENT_SECRET": ""},
+                    ), \
+                    mock.patch.object(sys, "argv", argv), \
+                    patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                with self.assertRaises(SystemExit) as ctx:
+                    export_tb.main()
+        finally:
+            os.chdir(previous_dir)
+        self.assertEqual(ctx.exception.code, 2)
+        message = stderr.getvalue()
+        self.assertIn("version-control checkout", message)
+        self.assertIn("stand-ins", message)
+        self.assertNotIn("Set XERO_CLIENT_ID", message)
+        load_dotenv.assert_not_called()
+        get_connections.assert_not_called()
+        self.assertEqual(os.listdir(repo), [".git"], "the refusal wrote nothing")
+
+    def test_a_default_filename_runs_where_every_shape_is_ignored(self):
+        repo = self._repo(
+            ignore="*.csv\n*.csv.tmp\n*.manifest.json\n"
+            "*.manifest.json.previous\n*.manifest.json.tmp\n"
+        )
+        raised, out, _data = self.run_export(self.BALANCED, out=None, work_dir=repo)
+        self.assertIsNone(raised)
+        written = [name for name in os.listdir(repo) if name.endswith(".csv")]
+        self.assertEqual(len(written), 1, written)
+        self.assertIn("Wrote 2 accounts to", out)
+
+    def test_a_directory_that_is_not_a_checkout_is_allowed(self):
+        with tempfile.TemporaryDirectory() as plain:
+            target = os.path.join(os.path.realpath(plain), "tb.csv")
+            self.assertIsNone(
+                export_tb.require_output_outside_checkout(target, with_manifest=True)
+            )
+
+    def test_a_git_that_cannot_answer_is_a_refusal(self):
+        """Fail closed: an unanswerable check is not evidence that a commit is safe."""
+        repo = self._repo()
+        target = os.path.join(repo, "tb.csv")
+        with mock.patch.object(
+            export_tb.subprocess, "run", side_effect=FileNotFoundError("git")
+        ):
+            with self.assertRaisesRegex(ValueError, "git could not be run"):
+                export_tb.require_output_outside_checkout(target, with_manifest=False)
