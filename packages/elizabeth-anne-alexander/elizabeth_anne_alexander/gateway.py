@@ -436,7 +436,16 @@ def _variance_findings(
     section: str,
     operation: dict[str, Any],
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """Compare every account seen in either period, so one-sided accounts cannot hide."""
+    """Compare every account seen in either period, so one-sided accounts cannot hide.
+
+    ``account_ref`` is an unkeyed, truncated SHA-256 digest of
+    ``entity_ref:account_id``. It is stable, so one account keeps one reference
+    across runs, and that stability is all it offers: holding the artefacts is
+    enough to confirm a guessed ``account_id`` by computing the same digest. A
+    Xero account GUID is too large a space to enumerate that way. A short account
+    code such as ``200`` is not, so where ``account_id`` is a code rather than a
+    GUID the reference names its account to anyone who reads the pack.
+    """
     absolute = _decimal(operation["minimum_absolute_delta"], field="minimum_absolute_delta")
     minimum_percent = _decimal(operation["minimum_percent_delta"], field="minimum_percent_delta") / Decimal("100")
     current_by_id = {row.account_id: row for row in current_rows}

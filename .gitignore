@@ -35,6 +35,11 @@ packages/monthly-close-control-plane/schemas/client-queries.csv
 !.env.example
 *.token
 *.tokens
+# The exporter's token cache. safe_token_path permits the process working
+# directory, so a run started from the checkout writes these here, and neither
+# name ends in .token.
+token.json
+token.json.lock
 *.pem
 __pycache__/
 .pytest_cache/

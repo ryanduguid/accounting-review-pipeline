@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 from pathlib import Path
 
 import pytest
+from elizabeth_anne_alexander import persist
 from elizabeth_anne_alexander.cli import main
+from elizabeth_anne_alexander.errors import GatewayError
 
 EVALUATE = [
     "evaluate",
@@ -158,6 +161,40 @@ def test_a_validation_output_that_names_an_input_is_blocked_and_the_input_surviv
     # The untouched pack still validates to a distinct output.
     assert _validate(run, tmp_path / "build" / "validation.json") == 0
     assert (tmp_path / "build" / "validation.json").is_file()
+
+
+def test_validate_review_writes_its_output_on_the_platform_it_runs_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The staged write has to work where it runs; Windows has no directory descriptors."""
+    run = _run_evaluation(tmp_path, monkeypatch)
+    out = tmp_path / "build" / "validation.json"
+
+    assert _validate(run, out) == 0
+
+    assert json.loads(out.read_text(encoding="utf-8"))["status"]
+    # A staging file left behind would mean the replace never happened.
+    assert [path.name for path in out.parent.iterdir() if path.name.endswith(".partial")] == []
+
+
+def test_the_by_path_staged_write_still_refuses_a_destination_that_aliases_an_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fallback the descriptor-less platforms take keeps the same refusal."""
+    monkeypatch.setattr(persist, "_supports_dir_fd", lambda: False)
+    protected = tmp_path / "receipt.json"
+    protected.write_text("{}\n", encoding="utf-8")
+    alias = tmp_path / "validation.json"
+    try:
+        os.link(protected, alias)
+    except (OSError, NotImplementedError) as exc:  # pragma: no cover - filesystem without hard links
+        pytest.skip(f"hard links unavailable: {exc}")
+
+    with pytest.raises(GatewayError, match="must not overwrite a review input"):
+        persist.write_validation({"status": "DECISION_RECORDED"}, alias, (protected,))
+
+    assert protected.read_text(encoding="utf-8") == "{}\n"
+    assert [path.name for path in tmp_path.iterdir() if path.name.endswith(".partial")] == []
 
 
 def test_a_hard_link_to_an_input_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

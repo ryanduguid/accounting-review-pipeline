@@ -30,3 +30,13 @@ flowchart LR
 who can replace the artefacts can replace the receipt. It detects mismatched
 local files, but it does not prove authorship, source system, origin, time, or
 immutability.
+
+## 5. Account reference limitation
+
+`account_ref` is an unkeyed, truncated SHA-256 digest of
+`<entity_ref>:<account_id>`, and it is stable so one account keeps one reference
+across runs. Stability is all it offers. There is no key, so anyone holding the
+artefacts can confirm a guessed `account_id` by computing the same digest. A Xero
+account GUID is too large a space to enumerate that way. A short account code
+such as `200` is not, so a pack whose `account_id` values are codes rather than
+GUIDs names its accounts to whoever reads it.

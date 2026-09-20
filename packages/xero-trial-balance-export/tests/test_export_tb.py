@@ -155,7 +155,9 @@ class _ExportCase(unittest.TestCase):
         payload= replaces the whole stubbed Xero response, for the guards that
         fire before a report can be built out of accounts at all.
         """
-        work_dir = work_dir or tempfile.mkdtemp()
+        # realpath, because the exporter prints resolved paths and a Windows
+        # runner hands out its temp directory in 8.3 short form (RUNNER~1).
+        work_dir = os.path.realpath(work_dir or tempfile.mkdtemp())
         self.work_dir = work_dir
         out_path = None if out is None else os.path.join(work_dir, out)
         if payload is _UNSET:
