@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement to this repository
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include client data, credentials, tokens, or personalised tax, BAS, legal or financial-product questions."
+  - type: checkboxes
+    id: data-boundary
+    attributes:
+      label: Data boundary
+      options:
+        - label: I confirm this request contains no sensitive or client data and uses fabricated examples.
+          required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: I confirm this is a software feature request for this repository, not an engagement request.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and proposed solution
+    validations: {required: true}
