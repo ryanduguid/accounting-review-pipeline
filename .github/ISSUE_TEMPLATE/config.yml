@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Report a security vulnerability
-    url: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/SECURITY.md
-    about: Do not open a public issue. Follow SECURITY.md and use private vulnerability reporting.
-  - name: Tax or accounting advice
-    url: https://www.ato.gov.au/
-    about: These components are not tax, accounting, legal or financial advice. For a real tax position, go to the ATO or to an engaged adviser.
