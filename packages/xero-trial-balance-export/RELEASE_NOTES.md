@@ -2,7 +2,8 @@
 
 - Write `<out>.manifest.json` beside the CSV once it is on disk: tenant id and name, as-at
   date, basis, the CSV filename, the SHA-256 of the bytes written and a UTC `generated_at`.
-  A manifest an earlier run left at the same path is removed first; `--no-manifest`
+  A manifest an earlier run left at the same path is set aside before the write,
+  removed once the new CSV is on disk and restored if the write fails; `--no-manifest`
   suppresses the file.
 - Render the export in memory and write it whole, so the digest is of the payload itself.
 
