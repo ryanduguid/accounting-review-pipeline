@@ -269,14 +269,19 @@ class ManifestTest(_ExportCase):
         self.assertEqual(manifest["entity_ref"]["tenant_name"], "New Tenant Pty Ltd")
         self.assertEqual(manifest["export"]["sha256"], hashlib.sha256(data).hexdigest())
 
-    def test_an_earlier_manifest_that_cannot_be_removed_is_named(self):
-        raised, _, _ = self.run_export(self.BALANCED)
+    def test_an_earlier_manifest_that_cannot_be_removed_stops_the_run_before_the_csv(self):
+        raised, _, first = self.run_export(self.BALANCED, tenant_name="Old Tenant Pty Ltd")
         self.assertIsNone(raised)
+        _, old_manifest = self.manifest()
         with mock.patch.object(export_tb.os, "remove", side_effect=PermissionError(13, "Access is denied")):
-            raised, _, data = self.run_export(self.BALANCED, work_dir=self.work_dir)
-        self.assertIsNotNone(data)
-        self.assertIn("describes a previous export", str(raised))
-        self.assertIn("The export is complete", str(raised))
+            raised, _, data = self.run_export(
+                self.BALANCED, tenant_name="New Tenant Pty Ltd", work_dir=self.work_dir
+            )
+        self.assertIn("could not be removed", str(raised))
+        self.assertIn("nothing was written", str(raised))
+        # The earlier CSV and its manifest still describe each other.
+        self.assertEqual(data, first)
+        self.assertEqual(self.manifest()[1], old_manifest)
 
     def test_an_unbalanced_report_writes_neither_file(self):
         raised, _, data = self.run_export(
