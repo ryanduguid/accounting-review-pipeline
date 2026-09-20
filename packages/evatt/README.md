@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | `evatt` | `evatt` | `evatt` |
 
-The `evatt/v0.1.0` tag carries an immutable release with a wheel, a source
+The `evatt/v0.1.1` tag carries an immutable release with a wheel, a source
 distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`. The
 distribution is not on PyPI, by design: install it from the release assets, or
 run `uv run --locked evatt ...` from `packages/evatt/` in a checkout.

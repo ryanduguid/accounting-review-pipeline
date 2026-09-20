@@ -104,7 +104,7 @@ def test_citation_tracks_the_unreleased_candidate() -> None:
     ]
 
     assert package.metadata["Name"] == "elizabeth-anne-alexander"
-    assert package.version == __version__ == citation["version"] == "0.2.3"
+    assert package.version == __version__ == citation["version"] == "0.2.4"
     assert "date-released" not in citation
     assert citation["url"] == citation["repository-code"] == PACKAGE_URL
     assert len(console_scripts) == 1
@@ -122,7 +122,7 @@ def test_current_metadata_and_public_links_use_the_monorepo() -> None:
 
     assert urls["Homepage"] == PACKAGE_URL
     assert urls["Documentation"] == (
-        f"{REPOSITORY_URL}/tree/elizabeth-anne-alexander/v0.2.3/"
+        f"{REPOSITORY_URL}/tree/elizabeth-anne-alexander/v0.2.4/"
         "packages/elizabeth-anne-alexander"
     )
     assert urls["Repository"] == f"{REPOSITORY_URL}.git"
@@ -135,14 +135,14 @@ def test_current_metadata_and_public_links_use_the_monorepo() -> None:
     assert (
         "| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution "
         "`elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command "
-        "`elizabeth-anne-alexander` | 0.2.3 |"
+        "`elizabeth-anne-alexander` | 0.2.4 |"
     ) in root_readme
 
 
 def test_current_release_guidance_binds_the_exact_namespaced_identity() -> None:
     guidance = (REPO / "RELEASING.md").read_text(encoding="utf-8")
 
-    assert "tag=elizabeth-anne-alexander/v0.2.3" in guidance
+    assert "tag=elizabeth-anne-alexander/v0.2.4" in guidance
     assert 'version="${tag#elizabeth-anne-alexander/v}"' in guidance
     assert "repo=ryanduguid/accounting-review-pipeline" in guidance
     assert guidance.count('--signer-digest "$policy_sha"') == 2

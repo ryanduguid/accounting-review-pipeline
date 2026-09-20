@@ -6,7 +6,7 @@
 - **Python import**: `evatt`
 - **CLI command**: `evatt`, with the subcommands `redact`, `restore` and `verify`
 - **Domain**: Local pseudonymisation of Australian client data in markdown, so a document can be handed to an external model without the identifiers in it.
-- **Release state**: Released from this repository as `evatt/v0.1.0`, with a wheel, a source distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`. The distribution is not on PyPI, and `release-evatt.yml` carries no `pypi` job by design. It installs from the release assets or runs from a checkout.
+- **Release state**: Released from this repository as `evatt/v0.1.1`, with a wheel, a source distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`. The distribution is not on PyPI, and `release-evatt.yml` carries no `pypi` job by design. It installs from the release assets or runs from a checkout.
 
 ## Core modules
 - `evatt.patterns`: Detection patterns and check digits for TFN, ABN, ACN, BSB and Medicare numbers, plus names, emails, phone numbers and the statutory vocabulary the residual sweep filters.
