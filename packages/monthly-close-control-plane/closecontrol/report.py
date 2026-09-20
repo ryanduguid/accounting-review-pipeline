@@ -102,6 +102,13 @@ def _csv_safe(value: str) -> str:
     return value
 
 
+# viewer._ACKNOWLEDGEMENT_EFFECT mirrors this; the viewer refuses a pack whose
+# member differs, because the sheet never prints it.
+_ACKNOWLEDGEMENT_EFFECT = (
+    "Acknowledgement is evidence of human review only; it does not approve or close a period."
+)
+
+
 def _as_json(pack: CloseReviewPack) -> dict:
     acknowledgement = None
     if pack.acknowledgement is not None:
@@ -109,7 +116,7 @@ def _as_json(pack: CloseReviewPack) -> dict:
             "reviewer_initials": pack.acknowledgement.reviewer_initials,
             "reviewed_on": pack.acknowledgement.reviewed_on.isoformat(),
             "comment": pack.acknowledgement.comment,
-            "effect": "Acknowledgement is evidence of human review only; it does not approve or close a period.",
+            "effect": _ACKNOWLEDGEMENT_EFFECT,
         }
     # Only a pack that was given evidence carries the block, so a pack built
     # without the optional control is byte-identical to one produced before it

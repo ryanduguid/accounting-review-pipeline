@@ -173,6 +173,18 @@ def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
         row_type = top.get("RowType")
         if row_type == "Header":
             column_titles = cell_values(top, "top level")
+            # A repeated title collapses 2 columns onto one record key and
+            # the later cell silently wins, so a header carrying Debit twice
+            # exported whichever amount came last with no warning. There is
+            # no right answer to pick; refuse before a row is read.
+            repeated = sorted({t for t in column_titles if column_titles.count(t) > 1})
+            if repeated:
+                raise SystemExit(
+                    "error: report header repeats the column title(s) "
+                    f"{', '.join(_shown(t) for t in repeated)}, so the cells "
+                    "under them cannot be told apart. The API shape may have "
+                    "changed, or this is not a trial balance report."
+                )
         elif row_type == "Section":
             section = top.get("Title", "")
             where = f'section "{_shown(section)}"'
