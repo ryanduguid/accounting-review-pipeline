@@ -144,6 +144,7 @@ class _ExportCase(unittest.TestCase):
         header=HEADER,
         payload=_UNSET,
         extra_args=(),
+        work_dir=None,
     ):
         """Return (SystemExit or None, stdout, csv bytes or None).
 
@@ -154,7 +155,7 @@ class _ExportCase(unittest.TestCase):
         payload= replaces the whole stubbed Xero response, for the guards that
         fire before a report can be built out of accounts at all.
         """
-        work_dir = tempfile.mkdtemp()
+        work_dir = work_dir or tempfile.mkdtemp()
         self.work_dir = work_dir
         out_path = None if out is None else os.path.join(work_dir, out)
         if payload is _UNSET:
@@ -243,6 +244,39 @@ class ManifestTest(_ExportCase):
         self.assertIsNotNone(data)
         self.assertNotIn("manifest", stdout)
         self.assertFalse(os.path.exists(os.path.join(self.work_dir, "tb.csv.manifest.json")))
+
+    def test_a_no_manifest_rerun_removes_the_earlier_manifest(self):
+        raised, _, _ = self.run_export(self.BALANCED)
+        self.assertIsNone(raised)
+        manifest_path = os.path.join(self.work_dir, "tb.csv.manifest.json")
+        self.assertTrue(os.path.exists(manifest_path))
+        raised, _, data = self.run_export(
+            self.BALANCED, extra_args=["--no-manifest"], work_dir=self.work_dir
+        )
+        self.assertIsNone(raised)
+        self.assertIsNotNone(data)
+        self.assertFalse(os.path.exists(manifest_path))
+
+    def test_a_rerun_describes_the_new_export_not_the_old_one(self):
+        raised, _, _ = self.run_export(self.BALANCED, tenant_name="Old Tenant Pty Ltd")
+        self.assertIsNone(raised)
+        raised, _, data = self.run_export(
+            self.BALANCED, tenant_name="New Tenant Pty Ltd", work_dir=self.work_dir
+        )
+        self.assertIsNone(raised)
+        _, raw = self.manifest()
+        manifest = json.loads(raw)
+        self.assertEqual(manifest["entity_ref"]["tenant_name"], "New Tenant Pty Ltd")
+        self.assertEqual(manifest["export"]["sha256"], hashlib.sha256(data).hexdigest())
+
+    def test_an_earlier_manifest_that_cannot_be_removed_is_named(self):
+        raised, _, _ = self.run_export(self.BALANCED)
+        self.assertIsNone(raised)
+        with mock.patch.object(export_tb.os, "remove", side_effect=PermissionError(13, "Access is denied")):
+            raised, _, data = self.run_export(self.BALANCED, work_dir=self.work_dir)
+        self.assertIsNotNone(data)
+        self.assertIn("describes a previous export", str(raised))
+        self.assertIn("The export is complete", str(raised))
 
     def test_an_unbalanced_report_writes_neither_file(self):
         raised, _, data = self.run_export(

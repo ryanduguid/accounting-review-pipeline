@@ -21,6 +21,7 @@ no file and exits non-zero.
 import argparse
 import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -531,8 +532,12 @@ def check_balanced(totals: tuple[Decimal, Decimal, Decimal, Decimal]) -> None:
         sys.exit(1)
 
 
-def write_csv(out_rows: list[dict], out_path: str) -> None:
+def write_csv(out_rows: list[dict], out_path: str) -> str:
     """Write the finished export atomically, through durable_replace.
+
+    Returns the SHA-256 of the bytes written, taken from the payload itself
+    so the manifest describes exactly this run's file even if another
+    process replaces the destination afterwards.
 
     Atomic write (temp file + replace), mirroring save_tokens(): a crash
     or disk-full mid-write must never leave a truncated CSV at the path a
@@ -543,6 +548,16 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
     of deleting it.
     """
     fieldnames = list(CANONICAL_COLUMNS)
+
+    # Render in memory first: the digest is of these bytes, and the file on
+    # disk is then written whole from them.
+    rendered = io.StringIO(newline="")
+    writer = csv.DictWriter(rendered, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(out_rows)
+    # utf-8-sig: the BOM is what makes Excel's double-click open decode
+    # non-ASCII names correctly; Power BI and pandas strip it anyway.
+    payload = rendered.getvalue().encode("utf-8-sig")
 
     out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     # output_path accepts a nested relative --out ("exports/tb.csv") whose
@@ -566,9 +581,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
         )
 
     def write_rows(fh) -> None:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(out_rows)
+        fh.write(payload)
 
     def fsync_error(exc: OSError) -> str:
         return (
@@ -598,13 +611,12 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
         fd,
         tmp_path,
         out_path,
-        # utf-8-sig: the BOM is what makes Excel's double-click open decode
-        # non-ASCII names correctly; Power BI and pandas strip it anyway.
-        lambda f: os.fdopen(f, "w", newline="", encoding="utf-8-sig"),
+        lambda f: os.fdopen(f, "wb"),
         write_rows,
         fsync_error=fsync_error,
         replace_error=replace_error,
     )
+    return hashlib.sha256(payload).hexdigest()
 
 
 MANIFEST_SCHEMA = "xero-source-manifest.v1"
@@ -614,23 +626,41 @@ def manifest_path_for(out_path: str) -> str:
     return out_path + ".manifest.json"
 
 
-def write_manifest(out_path: str, tenant: dict, report_date: str, basis: str) -> str:
-    """Record beside the CSV what it is and the digest of the bytes on disk.
+def discard_manifest(out_path: str) -> None:
+    """Remove a manifest left by an earlier run to the same path.
+
+    The CSV at out_path has just been replaced, so any manifest already
+    beside it describes a file that no longer exists. A run that writes no
+    manifest, or fails to write one, must not leave the old one standing.
+    """
+    manifest_path = manifest_path_for(out_path)
+    try:
+        os.remove(manifest_path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        sys.exit(
+            f"error: wrote {out_path} but could not remove the earlier manifest "
+            f"{manifest_path} ({exc}); it describes a previous export, so delete "
+            "it by hand. The export is complete."
+        )
+
+
+def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, basis: str) -> str:
+    """Record beside the CSV what it is and the digest of the bytes written.
 
     The 10-column export carries no tenant id, basis or currency, so two
     exports that differ only in basis are indistinguishable once renamed,
     and the digest that binds a CSV to a downstream review receipt had to
     be typed by hand. The manifest names the tenant, the as-at date and the
-    basis the run used, and the SHA-256 of the file as written, so a later
-    reader can prove it is looking at this export. It states only what the
-    exporter knows: the report carries no currency, so none is claimed.
+    basis the run used, and the SHA-256 of the payload write_csv wrote, so
+    a later reader can prove it is looking at this export. It states only
+    what the exporter knows: the report carries no currency, so none is
+    claimed.
 
     Written after the CSV through the same durable path, so a manifest
-    never describes a CSV that is not there. Its digest is taken from the
-    file on disk rather than from memory for the same reason.
+    never describes a CSV that is not there.
     """
-    with open(out_path, "rb") as fh:
-        digest = hashlib.sha256(fh.read()).hexdigest()
     manifest = {
         "schema_version": MANIFEST_SCHEMA,
         "mode": "live",
@@ -787,13 +817,14 @@ def main() -> None:
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
     check_balanced(totals)
-    write_csv(out_rows, out_path)
+    digest = write_csv(out_rows, out_path)
+    discard_manifest(out_path)
 
     total_debit, _, total_ytd_debit, _ = totals
     print(f"Wrote {len(out_rows)} accounts to {out_path}")
     print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
     if not args.no_manifest:
-        print(f"Wrote manifest {write_manifest(out_path, tenant, args.date, basis)}")
+        print(f"Wrote manifest {write_manifest(out_path, digest, tenant, args.date, basis)}")
 
 
 def run() -> None:
