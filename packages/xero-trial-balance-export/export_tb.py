@@ -498,20 +498,15 @@ def _write_targets(out_path: str, *, with_manifest: bool) -> list[str]:
 
 
 def require_directory_outside_checkout(out_dir: str, *, with_manifest: bool) -> None:
-    """Run the guard on a directory, before a tenant is known.
-
-    The default filename needs the organisation's name, so it cannot be checked
-    until the report call has already happened: credentials read, a refresh token
-    spent, a client's report fetched. That is too late to tell an operator the
-    destination was never usable. A representative default-shaped name answers
-    the question a directory can answer on its own, and the real filename is
-    checked again once it exists.
-    """
-    require_output_outside_checkout(
-        os.path.join(os.path.realpath(out_dir), PROBE_EXPORT_NAME),
-        with_manifest=with_manifest,
-        representative=True,
-    )
+    """Require the destination directory itself to be ignored in a checkout."""
+    resolved = os.path.realpath(out_dir)
+    checkout = _enclosing_checkout(resolved)
+    if checkout is not None and not _git_ignores(checkout, resolved):
+        raise ValueError(
+            f"the output directory {resolved} is inside the version-control checkout "
+            f"at {checkout} and is not ignored; write outside the checkout or ignore "
+            "the output directory before exporting."
+        )
 
 
 def require_output_outside_checkout(
@@ -735,7 +730,7 @@ def check_balanced(
         sys.exit(1)
 
 
-def write_csv(out_rows: list[dict], out_path: str) -> str:
+def write_csv(out_rows: list[dict], out_path: str, *, quiet: bool = False) -> str:
     """Write the finished export atomically, through durable_replace.
 
     Returns the SHA-256 of the bytes written, taken from the payload itself
@@ -787,6 +782,8 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
         fh.write(payload)
 
     def fsync_error(exc: OSError) -> str:
+        if quiet:
+            return f"error: could not flush the balanced export to disk ({exc}); the report was fetched already."
         return (
             f"error: wrote the balanced export to {tmp_path} but could "
             f"not flush it to disk ({exc}). The file is complete and "
@@ -796,6 +793,8 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
         )
 
     def replace_error(last_error: OSError | None) -> str:
+        if quiet:
+            return f"error: could not move the balanced export into place after {REPLACE_ATTEMPTS} attempts ({last_error}); the report was fetched already."
         return (
             f"error: wrote the balanced export to {tmp_path} but could not move "
             f"it onto {out_path} after {REPLACE_ATTEMPTS} attempts "
@@ -829,7 +828,7 @@ def manifest_path_for(out_path: str) -> str:
     return out_path + ".manifest.json"
 
 
-def set_aside_manifest(out_path: str) -> str | None:
+def set_aside_manifest(out_path: str, *, quiet: bool = False) -> str | None:
     """Move a manifest left by an earlier run out of the way before the CSV moves.
 
     Once the CSV at out_path is replaced, a manifest already beside it would
@@ -847,6 +846,8 @@ def set_aside_manifest(out_path: str) -> str | None:
     try:
         os.replace(manifest_path, aside)
     except OSError as exc:
+        if quiet:
+            sys.exit(f"error: could not set aside the earlier manifest ({exc}); nothing was written.")
         sys.exit(
             f"error: a manifest from an earlier export, {manifest_path}, could not be "
             f"set aside ({exc}), so nothing was written and the fetched report is not "
@@ -880,7 +881,7 @@ def discard_manifest(aside: str) -> None:
         )
 
 
-def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, basis: str) -> str:
+def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, basis: str, *, quiet: bool = False) -> str:
     """Record beside the CSV what it is and the digest of the bytes written.
 
     The 10-column export carries no tenant id, basis or currency, so two
@@ -1073,9 +1074,9 @@ def main() -> None:
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
     check_balanced(totals, account_count=len(out_rows))
-    aside = set_aside_manifest(out_path)
+    aside = set_aside_manifest(out_path, quiet=args.quiet)
     try:
-        digest = write_csv(out_rows, out_path)
+        digest = write_csv(out_rows, out_path, quiet=args.quiet)
     except BaseException:
         if aside is not None:
             restore_manifest(aside, out_path)
@@ -1096,7 +1097,7 @@ def main() -> None:
         print(f"Wrote {len(out_rows)} accounts to {out_path}")
         print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
     if not args.no_manifest:
-        manifest_path = write_manifest(out_path, digest, tenant, args.date, basis)
+        manifest_path = write_manifest(out_path, digest, tenant, args.date, basis, quiet=args.quiet)
         if args.quiet:
             print("Wrote manifest beside the export (filename withheld under --quiet)")
         else:
