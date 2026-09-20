@@ -17,7 +17,7 @@ members = [
 
 [manifest.dependency-groups]
 dev = [
-    { name = "build", specifier = ">=1.2" },
+    { name = "build", specifier = ">=1.6.1" },
     { name = "coverage", specifier = "==7.16.0" },
     { name = "mypy", specifier = "==2.3.1" },
     { name = "pytest", specifier = "==9.1.1" },
@@ -437,7 +437,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.6.1" },
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
@@ -462,7 +462,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.6.1" },
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
@@ -661,7 +661,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.6.1" },
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
@@ -921,7 +921,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.6.1" },
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
@@ -1048,7 +1048,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.6.1" },
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
