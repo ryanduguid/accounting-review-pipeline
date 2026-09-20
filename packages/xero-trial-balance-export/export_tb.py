@@ -20,12 +20,14 @@ no file and exits non-zero.
 
 import argparse
 import csv
+import hashlib
+import json
 import os
 import re
 import sys
 import tempfile
 import unicodedata
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, Inexact, InvalidOperation, localcontext
 
 import requests
@@ -605,6 +607,83 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
     )
 
 
+MANIFEST_SCHEMA = "xero-source-manifest.v1"
+
+
+def manifest_path_for(out_path: str) -> str:
+    return out_path + ".manifest.json"
+
+
+def write_manifest(out_path: str, tenant: dict, report_date: str, basis: str) -> str:
+    """Record beside the CSV what it is and the digest of the bytes on disk.
+
+    The 10-column export carries no tenant id, basis or currency, so two
+    exports that differ only in basis are indistinguishable once renamed,
+    and the digest that binds a CSV to a downstream review receipt had to
+    be typed by hand. The manifest names the tenant, the as-at date and the
+    basis the run used, and the SHA-256 of the file as written, so a later
+    reader can prove it is looking at this export. It states only what the
+    exporter knows: the report carries no currency, so none is claimed.
+
+    Written after the CSV through the same durable path, so a manifest
+    never describes a CSV that is not there. Its digest is taken from the
+    file on disk rather than from memory for the same reason.
+    """
+    with open(out_path, "rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest()
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA,
+        "mode": "live",
+        "source_system": "xero-trial-balance-export",
+        "entity_ref": {"tenant_id": tenant["tenantId"], "tenant_name": tenant["tenantName"]},
+        "report": {"name": "Trial Balance", "as_at": report_date, "basis": basis},
+        "export": {
+            "schema": "xero-tb-csv.v1",
+            "csv": os.path.basename(out_path),
+            "sha256": digest,
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        },
+    }
+    manifest_path = manifest_path_for(out_path)
+    out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".manifest.json.tmp")
+    except OSError as exc:
+        sys.exit(
+            f"error: wrote {out_path} but cannot write a temporary manifest in {out_dir} "
+            f"({exc}); the export is complete and its SHA-256 is {digest}."
+        )
+
+    def write_payload(fh) -> None:
+        json.dump(manifest, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+
+    def fsync_error(exc: OSError) -> str:
+        return (
+            f"error: wrote {out_path} and its manifest to {tmp_path} but could not "
+            f"flush the manifest to disk ({exc}). Rename {tmp_path} over "
+            f"{manifest_path} once the disk is writable; the export is complete."
+        )
+
+    def replace_error(last_error: OSError | None) -> str:
+        return (
+            f"error: wrote {out_path} and its manifest to {tmp_path} but could not "
+            f"move it onto {manifest_path} after {REPLACE_ATTEMPTS} attempts "
+            f"({last_error}). Rename {tmp_path} over it; the export is complete."
+        )
+
+    durable_replace(
+        fd,
+        tmp_path,
+        manifest_path,
+        lambda f: os.fdopen(f, "w", newline="\n", encoding="utf-8"),
+        write_payload,
+        fsync_error=fsync_error,
+        replace_error=replace_error,
+    )
+    return manifest_path
+
+
 def main() -> None:
     # Non-console stdout on Windows is cp1252, not UTF-8 (PEP 528). A macron
     # or CJK character in an org name must not abort a redirected or piped run
@@ -627,6 +706,11 @@ def main() -> None:
         help="Output CSV path relative to the current working directory",
     )
     parser.add_argument("--payments-only", action="store_true", help="Cash-basis report")
+    parser.add_argument(
+        "--no-manifest",
+        action="store_true",
+        help="Do not write the <out>.manifest.json that records the tenant, basis and SHA-256 of the export",
+    )
     parser.add_argument(
         "--token-file",
         default=None,
@@ -708,6 +792,8 @@ def main() -> None:
     total_debit, _, total_ytd_debit, _ = totals
     print(f"Wrote {len(out_rows)} accounts to {out_path}")
     print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
+    if not args.no_manifest:
+        print(f"Wrote manifest {write_manifest(out_path, tenant, args.date, basis)}")
 
 
 def run() -> None:
