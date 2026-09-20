@@ -1,3 +1,7 @@
+# Unreleased
+
+- `validate` replaces an existing output when the optional `model-result.json` is absent; the protected-input check now skips an input that does not exist instead of refusing the write.
+
 # v0.2.4
 
 - `validate` writes its output on Windows: where Python has no `dir_fd` support, a path-based fallback with the same protected-input check runs instead of failing every run as `blocked:`.

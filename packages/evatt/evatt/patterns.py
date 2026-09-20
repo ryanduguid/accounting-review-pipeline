@@ -114,15 +114,17 @@ PHONE = re.compile(
 # and its digits: "**TFN**: 123 456 783", "**TFN:** 123 456 783", "TFN:
 # **123 456 783**" and "TFN: `123 456 783`" each passed through unchanged and
 # verified clean, because every one of them depends on the label alone and
-# the delimiter broke the label's reach. The run is 1 or 2 delimiter
+# the delimiter broke the label's reach. The run is 1 to 3 delimiter
 # characters, mandatory inside its optional group, so the ``\s*`` behind it
 # sits behind a non-whitespace token like every other one in _GAP and the
-# linear scan is kept. "|" joins _SEP for the same reason: "| TFN | 123 456
+# linear scan is kept. Three covers the nested forms "***TFN***: 123 456 783",
+# "TFN: ***123 456 783***" and "TFN: **`123 456 783`**", which a run of 2 let
+# through the same way. "|" joins _SEP for the same reason: "| TFN | 123 456
 # 783 |" is how a table row writes a label beside its value.
 _WORD = r"(?:number|no|card(?:holder)?)\b\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
 _SEP = r"(?:[.:#,(|\u2013-]\s*)?"
-_MARKUP = r"(?:[*_`]{1,2}\s*)?"
+_MARKUP = r"(?:[*_`]{1,3}\s*)?"
 _GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
 TFN_LABELLED = re.compile(
     r"\b(?:tax file number|TFN)\b%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,

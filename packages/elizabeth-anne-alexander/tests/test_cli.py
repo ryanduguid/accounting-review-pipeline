@@ -163,6 +163,26 @@ def test_a_validation_output_that_names_an_input_is_blocked_and_the_input_surviv
     assert (tmp_path / "build" / "validation.json").is_file()
 
 
+@pytest.mark.parametrize("writer", ["platform", "by_path"])
+def test_an_existing_summary_is_replaced_when_the_optional_model_result_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer: str
+) -> None:
+    """The input guard stat-ed the optional model result and turned its absence into a refusal."""
+    if writer == "by_path":
+        monkeypatch.setattr(persist, "_supports_dir_fd", lambda: False)
+    run = _run_evaluation(tmp_path, monkeypatch)
+    (run / "model-result.json").unlink()
+    out = tmp_path / "build" / "validation.json"
+
+    assert _validate(run, out) == 0
+    first = out.read_bytes()
+    assert _validate(run, out) == 0
+
+    assert out.read_bytes() == first
+    # A destination that is an input is still refused without the model result.
+    assert _validate(run, run / "receipt.json") == 2
+
+
 def test_validate_review_writes_its_output_on_the_platform_it_runs_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
