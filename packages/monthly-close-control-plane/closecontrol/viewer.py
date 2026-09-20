@@ -68,8 +68,14 @@ _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_t
 
 # The members report._as_json writes inside an acknowledgement, all of them
 # strings. The sheet prints initials, reviewed_on and comment verbatim and
-# states its own effect line, so effect is shape-checked here, not displayed.
+# states its own effect line, so effect is never displayed: it is compared
+# against the writer's fixed text instead.
 _ACKNOWLEDGEMENT_KEYS = ("reviewer_initials", "reviewed_on", "comment", "effect")
+
+# Mirrored from report._ACKNOWLEDGEMENT_EFFECT.
+_ACKNOWLEDGEMENT_EFFECT = (
+    "Acknowledgement is evidence of human review only; it does not approve or close a period."
+)
 
 _STATUSES = ("PASS", "REVIEW", "BLOCKED")
 
@@ -346,6 +352,13 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 raise ControlInputError(
                     f"{_JSON_NAME}: acknowledgement.{key} must be a string"
                 )
+        # The sheet states the effect itself, so the JSON member is never
+        # displayed and a shape check alone let a false or blank statement
+        # verify. It is fixed writer text, not reviewer prose: compare it.
+        if acknowledgement["effect"] != _ACKNOWLEDGEMENT_EFFECT:
+            raise ControlInputError(
+                f"{_JSON_NAME}: acknowledgement.effect is not the text the writer emits"
+            )
 
 
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:

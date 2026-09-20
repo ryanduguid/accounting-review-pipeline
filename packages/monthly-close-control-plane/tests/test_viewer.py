@@ -904,6 +904,28 @@ def test_added_acknowledgement_member_fails_closed(tmp_path: Path) -> None:
         render_review_sheet(output)
 
 
+@pytest.mark.parametrize(
+    "effect",
+    ["Acknowledgement approves this close and locks the period.", ""],
+    ids=["false-approval", "blank"],
+)
+def test_the_acknowledgement_effect_text_is_the_writers(tmp_path: Path, effect: str) -> None:
+    """The sheet states the effect itself, so the JSON member is never shown.
+
+    A shape check alone let a false approval statement or an empty string
+    verify while the printed sheet still said the right thing.
+    """
+    output = tmp_path / "acknowledged-pack"
+    write_review_pack(_pack(with_acknowledgement=True), output)
+    document = _read_json(output)
+    document["acknowledgement"]["effect"] = effect
+    _rewrite_json(output, document)
+    with pytest.raises(
+        ControlInputError, match="acknowledgement.effect is not the text the writer emits"
+    ):
+        render_review_sheet(output)
+
+
 # --- tampered markdown -----------------------------------------------------
 
 
