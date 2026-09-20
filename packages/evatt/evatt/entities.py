@@ -405,6 +405,9 @@ def _git(subcommand: list[str], target: Path) -> int:
     resolves a bare program name through the application directory and that
     working directory before PATH. A git planted beside the map could otherwise
     answer the only question standing between the plaintext map and a commit.
+    shutil.which returns a relative path when PATH holds a relative entry such
+    as ".", and the child would resolve that against the map's directory too,
+    so the result is made absolute against this process's directory first.
     """
     executable = shutil.which("git")
     if executable is None:
@@ -412,6 +415,7 @@ def _git(subcommand: list[str], target: Path) -> int:
             f"cannot ask git about {target.name} in {target.parent}: git is not on PATH; "
             "put git on PATH and re-run once the repository is idle"
         )
+    executable = os.path.abspath(executable)
     environment = os.environ.copy()
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):

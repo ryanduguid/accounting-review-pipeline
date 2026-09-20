@@ -97,7 +97,15 @@ def _write_validation_dir_fd(payload: dict[str, Any], output: Path, protected: t
 
 
 def _write_validation_by_path(payload: dict[str, Any], output: Path, protected: tuple[Path, ...]) -> None:
-    """Stage, check and replace by path, for a platform without directory descriptors."""
+    """Stage, check and replace by path, for a platform without directory descriptors.
+
+    ponytail: this branch cannot pin the destination directory the way the
+    dir_fd branch does. Between the protected-input check and os.replace a
+    concurrent swap of output.parent for another directory or a junction can
+    redirect the write; Windows offers no dir_fd to close that window from
+    Python. The check still refuses a destination that names a review input at
+    the moment it is inspected, and the staging file is never reused.
+    """
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
         # mkstemp creates the staging file exclusively under a name no other

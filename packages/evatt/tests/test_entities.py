@@ -540,6 +540,27 @@ def test_require_gitignored_runs_git_by_absolute_path(tmp_path, monkeypatch) -> 
     assert all(os.path.isabs(program) for program in programs)
 
 
+def test_require_gitignored_makes_a_relative_which_result_absolute(tmp_path, monkeypatch) -> None:
+    """A relative PATH entry makes shutil.which return a relative path.
+
+    Run from the map's directory, that path would resolve beside the map, so
+    the guard pins it to this process's directory before the child starts.
+    """
+    programs: list[str] = []
+
+    def record(argv, **kwargs):
+        programs.append(argv[0])
+        return subprocess.CompletedProcess(args=argv, returncode=1)
+
+    monkeypatch.setattr(entities.shutil, "which", lambda name: os.path.join("bin", "git"))
+    monkeypatch.setattr(entities.subprocess, "run", record)
+    with pytest.raises(EvattError):
+        entities.require_gitignored(tmp_path / "entities.json")
+
+    assert programs == [os.path.abspath(os.path.join("bin", "git"))] * 2
+    assert all(os.path.isabs(program) for program in programs)
+
+
 def test_require_gitignored_fails_closed_when_git_is_not_on_path(tmp_path, monkeypatch) -> None:
     def absent(name):
         return None
