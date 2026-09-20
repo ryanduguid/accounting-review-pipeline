@@ -71,7 +71,7 @@ Run every check from the owning component directory with its documented commands
 |---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | the shared component gates below (mypy and coverage scoped to `xero_client.py export_tb.py auth.py token_store.py` by its `pyproject.toml`), plus `python -m pip install --require-hashes -r requirements.lock` and `python -m unittest discover -s tests -v` from that hash-locked environment |
 | Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
-| Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates and Windows clean-wheel smoke |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates, which are the `test`, `dependency-audit`, `package` and `lint` jobs `ci.yml` keeps for this component; the clean-wheel smoke in the same file is a manual Windows recipe no workflow runs |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
@@ -91,7 +91,10 @@ uv run --locked --extra dev --python 3.12 python -m build
 ```
 
 The tests run on Python 3.10, 3.12 and 3.13, and the build gate installs the wheel into a
-clean virtual environment and imports the component's package from it. Each call filters
+clean virtual environment and imports the component's package from it. Every gate above
+runs on Linux; `ci.yml`'s `windows` job adds the same pytest command on `windows-latest` for
+the exporter, Monthly Close Controls and the Xero Ledger Review Gate, the 3 components with
+platform-specific behaviour. Each call filters
 itself to its component directory, the shared contract and the root files, so a change to
 one component runs that component alone. Monthly Close Controls keeps its own `test`,
 `package` and `lint` jobs in `ci.yml` because they are the anchor required checks on
