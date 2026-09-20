@@ -2043,8 +2043,9 @@ class CheckoutGuardTest(_ExportCase):
         self.assertIsInstance(raised, SystemExit)
         self.assertEqual(raised.code, 2)
         message = stderr.getvalue()
-        for named in ("probe.csv.tmp", "tb.csv.manifest.json.previous", "probe.manifest.json.tmp"):
-            self.assertIn(named, message)
+        self.assertIn("tb.csv.manifest.json.previous", message)
+        for shape in (r"tmp[a-z0-9_]{8}\.csv\.tmp", r"tmp[a-z0-9_]{8}\.manifest\.json\.tmp"):
+            self.assertRegex(message, shape)
         self.assertIsNone(data)
 
     def test_a_no_manifest_run_still_needs_its_staged_name_ignored(self):
@@ -2055,7 +2056,7 @@ class CheckoutGuardTest(_ExportCase):
             )
         self.assertIsInstance(raised, SystemExit)
         self.assertEqual(raised.code, 2)
-        self.assertIn("probe.csv.tmp", stderr.getvalue())
+        self.assertRegex(stderr.getvalue(), r"tmp[a-z0-9_]{8}\.csv\.tmp")
         self.assertIsNone(data)
 
     def test_every_written_shape_ignored_is_allowed(self):
@@ -2112,6 +2113,23 @@ class CheckoutGuardTest(_ExportCase):
         self.assertEqual(len(written), 1, written)
         self.assertIn("Wrote 2 accounts to", out)
 
+    def test_an_exact_name_ignore_of_one_probe_is_not_enough(self):
+        """The staged names are chosen by mkstemp, so the probe is shaped, not spelt.
+
+        A fixed probe name could be ignored by name while the randomly named file
+        the run actually stages stayed tracked. Two probes that differ only in
+        that random middle can both be ignored only by a rule covering the shape.
+        """
+        repo = self._repo(ignore="*.csv\nprobe.csv.tmp\n")
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            raised, _out, data = self.run_export(
+                self.BALANCED, work_dir=repo, extra_args=("--no-manifest",)
+            )
+        self.assertIsInstance(raised, SystemExit)
+        self.assertEqual(raised.code, 2)
+        self.assertRegex(stderr.getvalue(), r"tmp[a-z0-9_]{8}\.csv\.tmp")
+        self.assertIsNone(data)
+
     def test_a_directory_that_is_not_a_checkout_is_allowed(self):
         with tempfile.TemporaryDirectory() as plain:
             target = os.path.join(os.path.realpath(plain), "tb.csv")
@@ -2128,3 +2146,45 @@ class CheckoutGuardTest(_ExportCase):
         ):
             with self.assertRaisesRegex(ValueError, "git could not be run"):
                 export_tb.require_output_outside_checkout(target, with_manifest=False)
+
+
+class QuietFailureMessageTest(_ExportCase):
+    """A failure message must not put back the name --quiet withheld.
+
+    The success lines were fixed first, but set_aside_manifest, write_csv and
+    write_manifest build their own messages and each interpolated the
+    tenant-derived path. Those land in the same scheduler log.
+    """
+
+    BALANCED = [
+        ("Business Bank Account (090)", "1200.00", "", "15234.50", ""),
+        ("Trade Debtors (610)", "", "1200.00", "", "15234.50"),
+    ]
+
+    def _run_with_a_failed_manifest(self, extra_args):
+        """Let the CSV land, then refuse the manifest's temporary file."""
+        real_mkstemp = tempfile.mkstemp
+
+        def refuse_the_manifest(*args, **kwargs):
+            if str(kwargs.get("suffix", "")).endswith(".manifest.json.tmp"):
+                raise OSError("no space left on device")
+            return real_mkstemp(*args, **kwargs)
+
+        with mock.patch.object(export_tb.tempfile, "mkstemp", refuse_the_manifest):
+            return self.run_export(self.BALANCED, out=None, extra_args=extra_args)
+
+    def test_quiet_withholds_the_filename_from_a_write_failure(self):
+        raised, out, _data = self._run_with_a_failed_manifest(("--quiet",))
+        self.assertIsInstance(raised, SystemExit)
+        message = str(raised.code)
+        self.assertIn("cannot write a temporary manifest", message)
+        self.assertNotIn("catherby", message.casefold())
+        self.assertNotIn("catherby", out.casefold())
+        self.assertIn("filename withheld under --quiet", message)
+
+    def test_the_default_still_names_the_file_it_wrote(self):
+        raised, _out, _data = self._run_with_a_failed_manifest(())
+        self.assertIsInstance(raised, SystemExit)
+        message = str(raised.code)
+        self.assertIn("catherby", message.casefold())
+        self.assertNotIn("filename withheld", message)

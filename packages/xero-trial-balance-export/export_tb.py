@@ -24,6 +24,7 @@ import hashlib
 import io
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -38,6 +39,30 @@ import xero_client
 from xero_client import REPLACE_ATTEMPTS, api_get, durable_replace, get_connections, load_dotenv
 
 REPORT_URL = "https://api.xero.com/api.xro/2.0/Reports/TrialBalance"
+
+# Set from --quiet by main(), the way main() sets xero_client.TOKEN_FILE. Every
+# message that names a written file goes through shown_path, so the flag reaches
+# the failure paths as well as the success lines: the default filename embeds the
+# organisation name, and a failure message lands in exactly the log --quiet
+# exists to keep that name out of.
+QUIET = False
+
+_WITHHELD = "<filename withheld under --quiet>"
+
+
+def shown_path(path: str) -> str:
+    """The path as a message may print it.
+
+    Under ``--quiet`` the directory is kept and the filename is replaced. The
+    directory is what an operator needs to find the file, and it is chosen by
+    whoever scheduled the job rather than derived from the organisation. The
+    staged ``tmp*`` names are printed in full even then: mkstemp chose them, they
+    name no organisation, and a recovery instruction that withheld them could not
+    be followed.
+    """
+    if not QUIET:
+        return path
+    return os.path.join(os.path.dirname(path) or ".", _WITHHELD)
 
 # The exported header, in order. This module owns it: every other file that
 # needs the tuple imports it from here rather than restating it.
@@ -464,10 +489,28 @@ def _git_ignores(checkout: str, path: str) -> bool:
     )
 
 
-# A default filename takes the organisation's name, so it is not known until a
-# tenant is chosen. This stands in for one while the guard runs early, and its
-# shape is the shape default_output_filename produces.
-PROBE_EXPORT_NAME = "probe-tb-2000-01-01-accrual.csv"
+# mkstemp's own alphabet, and the prefix it puts in front of it. A probe that
+# spelled a fixed name would let an exact-name ignore rule approve the probe
+# while the randomly named file the run actually stages stayed tracked.
+_MKSTEMP_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789_"
+
+
+def _staged_name(suffix: str) -> str:
+    """A name shaped like the one ``tempfile.mkstemp`` will choose."""
+    middle = "".join(random.choices(_MKSTEMP_ALPHABET, k=8))
+    return "tmp" + middle + suffix
+
+
+def _probe_export_name() -> str:
+    """A name shaped like the one ``default_output_filename`` will choose.
+
+    Same reasoning as ``_staged_name``: the real destination is derived from the
+    organisation and the report date, so a fixed stand-in could be ignored by
+    name while the real filename was not covered at all.
+    """
+    stem = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=12))
+    discriminator = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=8))
+    return f"{stem}-{discriminator}-tb-2000-01-01-accrual.csv"
 
 
 def _write_targets(out_path: str, *, with_manifest: bool) -> list[str]:
@@ -486,13 +529,16 @@ def _write_targets(out_path: str, *, with_manifest: bool) -> list[str]:
     is being asked is whether the directory ignores that shape of name at all.
     """
     out_dir = os.path.dirname(out_path) or "."
-    targets = [out_path, os.path.join(out_dir, "probe.csv.tmp")]
+    # Two of each staged shape, because one name can be ignored by name while
+    # the shape is not: 2 that differ only in mkstemp's random middle can only
+    # both be ignored by a rule that covers the shape.
+    targets = [out_path]
+    targets += [os.path.join(out_dir, _staged_name(".csv.tmp")) for _ in range(2)]
     if with_manifest:
         manifest = manifest_path_for(out_path)
+        targets += [manifest, manifest + ".previous"]
         targets += [
-            manifest,
-            manifest + ".previous",
-            os.path.join(out_dir, "probe.manifest.json.tmp"),
+            os.path.join(out_dir, _staged_name(".manifest.json.tmp")) for _ in range(2)
         ]
     return targets
 
@@ -507,11 +553,15 @@ def require_directory_outside_checkout(out_dir: str, *, with_manifest: bool) -> 
     the question a directory can answer on its own, and the real filename is
     checked again once it exists.
     """
-    require_output_outside_checkout(
-        os.path.join(os.path.realpath(out_dir), PROBE_EXPORT_NAME),
-        with_manifest=with_manifest,
-        representative=True,
-    )
+    root = os.path.realpath(out_dir)
+    # Two representative filenames, for the reason _write_targets stages 2 of
+    # each temporary name.
+    for _ in range(2):
+        require_output_outside_checkout(
+            os.path.join(root, _probe_export_name()),
+            with_manifest=with_manifest,
+            representative=True,
+        )
 
 
 def require_output_outside_checkout(
@@ -790,7 +840,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
         return (
             f"error: wrote the balanced export to {tmp_path} but could "
             f"not flush it to disk ({exc}). The file is complete and "
-            f"balance-checked: rename {tmp_path} over {out_path} once "
+            f"balance-checked: rename {tmp_path} over {shown_path(out_path)} once "
             "the disk is writable - the report has been fetched "
             "already and re-running spends another refresh token."
         )
@@ -798,8 +848,8 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
     def replace_error(last_error: OSError | None) -> str:
         return (
             f"error: wrote the balanced export to {tmp_path} but could not move "
-            f"it onto {out_path} after {REPLACE_ATTEMPTS} attempts "
-            f"({last_error}). Close whatever holds {out_path} open (Excel or "
+            f"it onto {shown_path(out_path)} after {REPLACE_ATTEMPTS} attempts "
+            f"({last_error}). Close whatever holds {shown_path(out_path)} open (Excel or "
             f"Power BI Desktop keep a lock on it), then rename {tmp_path} over "
             "it - the report has been fetched already and re-running spends "
             "another refresh token."
@@ -848,7 +898,7 @@ def set_aside_manifest(out_path: str) -> str | None:
         os.replace(manifest_path, aside)
     except OSError as exc:
         sys.exit(
-            f"error: a manifest from an earlier export, {manifest_path}, could not be "
+            f"error: a manifest from an earlier export, {shown_path(manifest_path)}, could not be "
             f"set aside ({exc}), so nothing was written and the fetched report is not "
             "kept. Delete it by hand and run again."
         )
@@ -862,8 +912,8 @@ def restore_manifest(aside: str, out_path: str) -> None:
         os.replace(aside, manifest_path)
     except OSError as exc:
         print(
-            f"warning: the earlier manifest is at {aside} and could not be restored to "
-            f"{manifest_path} ({exc}); rename it back by hand. The earlier CSV is unchanged.",
+            f"warning: the earlier manifest is at {shown_path(aside)} and could not be restored to "
+            f"{shown_path(manifest_path)} ({exc}); rename it back by hand. The earlier CSV is unchanged.",
             file=sys.stderr,
         )
 
@@ -874,7 +924,7 @@ def discard_manifest(aside: str) -> None:
         os.remove(aside)
     except OSError as exc:
         print(
-            f"warning: the earlier manifest set aside at {aside} could not be removed "
+            f"warning: the earlier manifest set aside at {shown_path(aside)} could not be removed "
             f"({exc}); delete it by hand. It describes a previous export.",
             file=sys.stderr,
         )
@@ -914,7 +964,7 @@ def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, b
         fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".manifest.json.tmp")
     except OSError as exc:
         sys.exit(
-            f"error: wrote {out_path} but cannot write a temporary manifest in {out_dir} "
+            f"error: wrote {shown_path(out_path)} but cannot write a temporary manifest in {out_dir} "
             f"({exc}); the export is complete and its SHA-256 is {digest}."
         )
 
@@ -924,15 +974,15 @@ def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, b
 
     def fsync_error(exc: OSError) -> str:
         return (
-            f"error: wrote {out_path} and its manifest to {tmp_path} but could not "
+            f"error: wrote {shown_path(out_path)} and its manifest to {tmp_path} but could not "
             f"flush the manifest to disk ({exc}). Rename {tmp_path} over "
-            f"{manifest_path} once the disk is writable; the export is complete."
+            f"{shown_path(manifest_path)} once the disk is writable; the export is complete."
         )
 
     def replace_error(last_error: OSError | None) -> str:
         return (
-            f"error: wrote {out_path} and its manifest to {tmp_path} but could not "
-            f"move it onto {manifest_path} after {REPLACE_ATTEMPTS} attempts "
+            f"error: wrote {shown_path(out_path)} and its manifest to {tmp_path} but could not "
+            f"move it onto {shown_path(manifest_path)} after {REPLACE_ATTEMPTS} attempts "
             f"({last_error}). Rename {tmp_path} over it; the export is complete."
         )
 
@@ -994,6 +1044,11 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    # Module state, like xero_client.TOKEN_FILE below: the write and manifest
+    # helpers build their own messages, and threading a flag through all of them
+    # and their error closures would say the same thing 5 times over.
+    global QUIET
+    QUIET = bool(args.quiet)
 
     # Reject an unusable destination before looking up credentials or calling
     # Xero, whether or not --out was given. For a supplied value the real names

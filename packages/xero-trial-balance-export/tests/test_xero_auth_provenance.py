@@ -20,7 +20,7 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # parked name, and the exit-code list names the guard's refusal. The scope,
 # refresh and reviewer paragraphs, the OAuth claims and the release citation are
 # unchanged.
-README_SHA256 = "7A04C0B7B38B0E6D71B53E969502DC02E3D4D1CE91BD1BBFF99B019D2C1774DC"
+README_SHA256 = "5473448B35B8C8A6A18A6AF7292C284AD1341DD868EA72750239E3B0043D79F0"
 # Re-pinned for a Style Manual prose pass: 2 comments changed the number word
 # "two" to the numeral "2". SCOPES, every statement and the OAuth claims are
 # unchanged, and the executable AST digest below is unchanged with it.

@@ -1479,6 +1479,13 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     if queries_in_scope is not None:
         assert isinstance(queries_in_scope, list)
         lines.append(f"- Client queries drafted: {len(queries_in_scope)}.")
+    # The pack records which controls had no input and _expected_scope_lines
+    # verifies the summary's line, but the displayed sheet rebuilds this section
+    # itself: without this, `view` showed a status and no sign that a control had
+    # been skipped, which is the one thing the record exists to surface.
+    if "controls_not_run" in document:
+        skipped = _require_string_list(document, "controls_not_run")
+        lines.append(f"- Controls not run: {', '.join(skipped) or 'none'}.")
     lines += ["", "Source evidence", ""]
     source_hashes = document["source_sha256"]
     assert isinstance(source_hashes, dict)

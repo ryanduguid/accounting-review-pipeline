@@ -19,6 +19,7 @@ from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
 from closecontrol.pipeline_cli import main as quarantined_main
 from closecontrol.report import CHECKOUT_MARKERS, _same_directory, write_review_pack
+from closecontrol.viewer import render_review_sheet
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
@@ -1448,3 +1449,19 @@ def test_a_header_only_subledger_has_not_run_the_control(tmp_path: Path) -> None
     # The digest is still recorded: the file was read, and saying so is how a
     # reviewer knows which bytes were empty.
     assert "subledger" in pack.source_hashes
+
+
+def test_the_review_sheet_shows_the_controls_that_did_not_run(tmp_path: Path) -> None:
+    """`view` rebuilds the scope section itself, so the line has to be there too."""
+    output = tmp_path / "pack"
+    assert main([
+        "review",
+        "--current", str(EXAMPLES / "current_trial_balance.csv"),
+        "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+        "--output", str(output),
+    ]) == 2
+    sheet, _digests = render_review_sheet(output)
+    assert (
+        "- Controls not run: account_mapping, subledger, calculation_evidence."
+        in sheet
+    )
