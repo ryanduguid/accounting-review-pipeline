@@ -69,6 +69,8 @@ Every export runs a balance check before anything touches disk. Both pairs must 
 
 The CSV is written as UTF-8 with a BOM (`utf-8-sig`): Excel's double-click open needs the BOM to decode non-ASCII account names correctly, and Power BI and pandas strip it automatically.
 
+A manifest is written beside the CSV as `<out>.manifest.json` once the CSV is on disk. It records what the file is, which the 10 columns do not: the tenant id and name, the as-at date, the basis (`accrual` or `cash`), the CSV filename and the SHA-256 of the bytes as written, plus a UTC `generated_at`. Two exports that differ only in basis stay distinguishable after a rename, and a downstream review that binds to the export's digest can read it rather than type it. The manifest states only what the exporter knows, so it carries no currency. `--no-manifest` suppresses it. The ledger-review boundary in this repository still accepts only its synthetic-mode sample manifests; this live manifest is lineage for the operator, not yet an input to that gateway.
+
 ## Power BI
 
 1. Get Data → Text/CSV → point at the export. Columns arrive typed and tidy; `Section` and `AccountCode` are ready for slicers and drill-downs.

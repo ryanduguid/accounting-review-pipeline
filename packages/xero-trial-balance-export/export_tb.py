@@ -20,12 +20,15 @@ no file and exits non-zero.
 
 import argparse
 import csv
+import hashlib
+import io
+import json
 import os
 import re
 import sys
 import tempfile
 import unicodedata
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, Inexact, InvalidOperation, localcontext
 
 import requests
@@ -529,8 +532,12 @@ def check_balanced(totals: tuple[Decimal, Decimal, Decimal, Decimal]) -> None:
         sys.exit(1)
 
 
-def write_csv(out_rows: list[dict], out_path: str) -> None:
+def write_csv(out_rows: list[dict], out_path: str) -> str:
     """Write the finished export atomically, through durable_replace.
+
+    Returns the SHA-256 of the bytes written, taken from the payload itself
+    so the manifest describes exactly this run's file even if another
+    process replaces the destination afterwards.
 
     Atomic write (temp file + replace), mirroring save_tokens(): a crash
     or disk-full mid-write must never leave a truncated CSV at the path a
@@ -541,6 +548,16 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
     of deleting it.
     """
     fieldnames = list(CANONICAL_COLUMNS)
+
+    # Render in memory first: the digest is of these bytes, and the file on
+    # disk is then written whole from them.
+    rendered = io.StringIO(newline="")
+    writer = csv.DictWriter(rendered, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(out_rows)
+    # utf-8-sig: the BOM is what makes Excel's double-click open decode
+    # non-ASCII names correctly; Power BI and pandas strip it anyway.
+    payload = rendered.getvalue().encode("utf-8-sig")
 
     out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     # output_path accepts a nested relative --out ("exports/tb.csv") whose
@@ -564,9 +581,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
         )
 
     def write_rows(fh) -> None:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(out_rows)
+        fh.write(payload)
 
     def fsync_error(exc: OSError) -> str:
         return (
@@ -596,13 +611,107 @@ def write_csv(out_rows: list[dict], out_path: str) -> None:
         fd,
         tmp_path,
         out_path,
-        # utf-8-sig: the BOM is what makes Excel's double-click open decode
-        # non-ASCII names correctly; Power BI and pandas strip it anyway.
-        lambda f: os.fdopen(f, "w", newline="", encoding="utf-8-sig"),
+        lambda f: os.fdopen(f, "wb"),
         write_rows,
         fsync_error=fsync_error,
         replace_error=replace_error,
     )
+    return hashlib.sha256(payload).hexdigest()
+
+
+MANIFEST_SCHEMA = "xero-source-manifest.v1"
+
+
+def manifest_path_for(out_path: str) -> str:
+    return out_path + ".manifest.json"
+
+
+def discard_manifest(out_path: str) -> None:
+    """Remove a manifest left by an earlier run to the same path.
+
+    The CSV at out_path has just been replaced, so any manifest already
+    beside it describes a file that no longer exists. A run that writes no
+    manifest, or fails to write one, must not leave the old one standing.
+    """
+    manifest_path = manifest_path_for(out_path)
+    try:
+        os.remove(manifest_path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        sys.exit(
+            f"error: wrote {out_path} but could not remove the earlier manifest "
+            f"{manifest_path} ({exc}); it describes a previous export, so delete "
+            "it by hand. The export is complete."
+        )
+
+
+def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, basis: str) -> str:
+    """Record beside the CSV what it is and the digest of the bytes written.
+
+    The 10-column export carries no tenant id, basis or currency, so two
+    exports that differ only in basis are indistinguishable once renamed,
+    and the digest that binds a CSV to a downstream review receipt had to
+    be typed by hand. The manifest names the tenant, the as-at date and the
+    basis the run used, and the SHA-256 of the payload write_csv wrote, so
+    a later reader can prove it is looking at this export. It states only
+    what the exporter knows: the report carries no currency, so none is
+    claimed.
+
+    Written after the CSV through the same durable path, so a manifest
+    never describes a CSV that is not there.
+    """
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA,
+        "mode": "live",
+        "source_system": "xero-trial-balance-export",
+        "entity_ref": {"tenant_id": tenant["tenantId"], "tenant_name": tenant["tenantName"]},
+        "report": {"name": "Trial Balance", "as_at": report_date, "basis": basis},
+        "export": {
+            "schema": "xero-tb-csv.v1",
+            "csv": os.path.basename(out_path),
+            "sha256": digest,
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        },
+    }
+    manifest_path = manifest_path_for(out_path)
+    out_dir = os.path.dirname(os.path.abspath(out_path)) or "."
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".manifest.json.tmp")
+    except OSError as exc:
+        sys.exit(
+            f"error: wrote {out_path} but cannot write a temporary manifest in {out_dir} "
+            f"({exc}); the export is complete and its SHA-256 is {digest}."
+        )
+
+    def write_payload(fh) -> None:
+        json.dump(manifest, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+
+    def fsync_error(exc: OSError) -> str:
+        return (
+            f"error: wrote {out_path} and its manifest to {tmp_path} but could not "
+            f"flush the manifest to disk ({exc}). Rename {tmp_path} over "
+            f"{manifest_path} once the disk is writable; the export is complete."
+        )
+
+    def replace_error(last_error: OSError | None) -> str:
+        return (
+            f"error: wrote {out_path} and its manifest to {tmp_path} but could not "
+            f"move it onto {manifest_path} after {REPLACE_ATTEMPTS} attempts "
+            f"({last_error}). Rename {tmp_path} over it; the export is complete."
+        )
+
+    durable_replace(
+        fd,
+        tmp_path,
+        manifest_path,
+        lambda f: os.fdopen(f, "w", newline="\n", encoding="utf-8"),
+        write_payload,
+        fsync_error=fsync_error,
+        replace_error=replace_error,
+    )
+    return manifest_path
 
 
 def main() -> None:
@@ -627,6 +736,11 @@ def main() -> None:
         help="Output CSV path relative to the current working directory",
     )
     parser.add_argument("--payments-only", action="store_true", help="Cash-basis report")
+    parser.add_argument(
+        "--no-manifest",
+        action="store_true",
+        help="Do not write the <out>.manifest.json that records the tenant, basis and SHA-256 of the export",
+    )
     parser.add_argument(
         "--token-file",
         default=None,
@@ -703,11 +817,14 @@ def main() -> None:
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
     check_balanced(totals)
-    write_csv(out_rows, out_path)
+    digest = write_csv(out_rows, out_path)
+    discard_manifest(out_path)
 
     total_debit, _, total_ytd_debit, _ = totals
     print(f"Wrote {len(out_rows)} accounts to {out_path}")
     print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
+    if not args.no_manifest:
+        print(f"Wrote manifest {write_manifest(out_path, digest, tenant, args.date, basis)}")
 
 
 def run() -> None:
