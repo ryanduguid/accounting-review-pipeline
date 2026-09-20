@@ -800,7 +800,7 @@ class NestedOutputDirectoryTest(_ExportCase):
         self.assertIsNone(raised)
         self.assertIsNotNone(data, "the export did not reach the nested path")
         self.assertIn(b"Cash", data)
-        self.assertEqual(os.listdir(os.path.join(self.work_dir, "exports")), ["tb.csv", "tb.csv.manifest.json"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.work_dir, "exports"))), ["tb.csv", "tb.csv.manifest.json"])
 
 
 class UnwritableOutputDirectoryTest(_ExportCase):
