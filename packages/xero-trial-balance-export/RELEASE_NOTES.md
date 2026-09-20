@@ -1,3 +1,11 @@
+# v0.1.9
+
+- Write `<out>.manifest.json` beside the CSV once it is on disk: tenant id and name, as-at
+  date, basis, the CSV filename, the SHA-256 of the bytes written and a UTC `generated_at`.
+  A manifest an earlier run left at the same path is removed first; `--no-manifest`
+  suppresses the file.
+- Render the export in memory and write it whole, so the digest is of the payload itself.
+
 # v0.1.8
 
 - Apply both bounded retry policies when an HTTP 401 is followed by an HTTP 429.
