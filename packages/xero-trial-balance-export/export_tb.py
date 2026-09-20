@@ -626,23 +626,54 @@ def manifest_path_for(out_path: str) -> str:
     return out_path + ".manifest.json"
 
 
-def discard_manifest(out_path: str) -> None:
-    """Remove a manifest left by an earlier run to the same path.
+def set_aside_manifest(out_path: str) -> str | None:
+    """Move a manifest left by an earlier run out of the way before the CSV moves.
 
-    The CSV at out_path has just been replaced, so any manifest already
-    beside it describes a file that no longer exists. A run that writes no
-    manifest, or fails to write one, must not leave the old one standing.
+    Once the CSV at out_path is replaced, a manifest already beside it would
+    describe a file that no longer exists; and if the CSV write fails, the
+    earlier CSV stays and must keep its manifest. So the old manifest is set
+    aside first, discarded once the new CSV is on disk and restored if the
+    write fails. A manifest that cannot be moved stops the run before anything
+    is written, because a wrong manifest is not recoverable and a lost fetch is.
+    Returns the set-aside path, or None when there was no earlier manifest.
     """
     manifest_path = manifest_path_for(out_path)
+    if not os.path.lexists(manifest_path):
+        return None
+    aside = manifest_path + ".previous"
     try:
-        os.remove(manifest_path)
-    except FileNotFoundError:
-        return
+        os.replace(manifest_path, aside)
     except OSError as exc:
         sys.exit(
-            f"error: wrote {out_path} but could not remove the earlier manifest "
-            f"{manifest_path} ({exc}); it describes a previous export, so delete "
-            "it by hand. The export is complete."
+            f"error: a manifest from an earlier export, {manifest_path}, could not be "
+            f"set aside ({exc}), so nothing was written and the fetched report is not "
+            "kept. Delete it by hand and run again."
+        )
+    return aside
+
+
+def restore_manifest(aside: str, out_path: str) -> None:
+    """Put the earlier manifest back beside the CSV it still describes."""
+    manifest_path = manifest_path_for(out_path)
+    try:
+        os.replace(aside, manifest_path)
+    except OSError as exc:
+        print(
+            f"warning: the earlier manifest is at {aside} and could not be restored to "
+            f"{manifest_path} ({exc}); rename it back by hand. The earlier CSV is unchanged.",
+            file=sys.stderr,
+        )
+
+
+def discard_manifest(aside: str) -> None:
+    """Drop the set-aside manifest now that the new CSV is on disk."""
+    try:
+        os.remove(aside)
+    except OSError as exc:
+        print(
+            f"warning: the earlier manifest set aside at {aside} could not be removed "
+            f"({exc}); delete it by hand. It describes a previous export.",
+            file=sys.stderr,
         )
 
 
@@ -817,8 +848,15 @@ def main() -> None:
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
     check_balanced(totals)
-    digest = write_csv(out_rows, out_path)
-    discard_manifest(out_path)
+    aside = set_aside_manifest(out_path)
+    try:
+        digest = write_csv(out_rows, out_path)
+    except BaseException:
+        if aside is not None:
+            restore_manifest(aside, out_path)
+        raise
+    if aside is not None:
+        discard_manifest(aside)
 
     total_debit, _, total_ytd_debit, _ = totals
     print(f"Wrote {len(out_rows)} accounts to {out_path}")
