@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a defect in one component of this repository
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: "Never post client files, workpapers, credentials, tokens, screenshots of client data, or personalised tax, BAS, legal or financial-product questions."
+  - type: checkboxes
+    id: data-boundary
+    attributes:
+      label: Data boundary
+      options:
+        - label: I confirm this report contains no sensitive or client data and uses fabricated inputs.
+          required: true
+  - type: input
+    id: component
+    attributes:
+      label: Component directory and version
+    validations: {required: true}
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Fabricated reproduction and command
+    validations: {required: true}
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed result and exit code
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations: {required: true}
+  - type: input
+    id: environment
+    attributes:
+      label: Version and environment
+      description: OS, Python version, and other relevant details.
+    validations: {required: true}
