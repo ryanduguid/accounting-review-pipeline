@@ -10,4 +10,4 @@ Pseudonymisation reduces what a recipient receives. It is not a compliance deter
 
 Report a suspected vulnerability privately through [GitHub's advisory form](https://github.com/ryanduguid/accounting-review-pipeline/security/advisories/new), or by email to ryan@duguid.com.au. Do not open a public issue for one.
 
-Include the identifier, entity or path you believe survives redaction, or the guard you believe is bypassed, and the artefacts that reproduce it. Fabricated data only, as everywhere else in this repository.
+Include the identifier, entity or path you believe survives redaction, or the guard you believe is bypassed, and the artefacts that reproduce it. Fabricated data only, as everywhere else in this repository. Never attach a real entity map, client file, workpaper, token or screenshot of client data: a report that needs one of those to make sense is one to describe in words instead.

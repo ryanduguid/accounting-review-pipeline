@@ -14,12 +14,13 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned for the Xero platform-limit correction: the fixed 25-organisation
-# limit and App Partner certification requirement were replaced by the current
-# Starter, Core and Plus tiers and the 2-uncertified-app cap, read from Xero's
-# own limits page on 13 September 2026. The scope, refresh and reviewer
-# paragraphs are unchanged.
-README_SHA256 = "5CA6B9416772838315DA442A1E0AB08F18DA1DD5DB328C3003C49F0D600D2C93"
+# Re-pinned for the safe-output pass: the Use section gained `--quiet` (which now
+# withholds the written filenames too), the redacted unbalanced-report warning,
+# the tenant-id refusal wording and the checkout guard over every staged and
+# parked name, and the exit-code list names the guard's refusal. The scope,
+# refresh and reviewer paragraphs, the OAuth claims and the release citation are
+# unchanged.
+README_SHA256 = "5473448B35B8C8A6A18A6AF7292C284AD1341DD868EA72750239E3B0043D79F0"
 # Re-pinned for a Style Manual prose pass: 2 comments changed the number word
 # "two" to the numeral "2". SCOPES, every statement and the OAuth claims are
 # unchanged, and the executable AST digest below is unchanged with it.

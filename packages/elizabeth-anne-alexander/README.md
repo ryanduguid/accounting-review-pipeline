@@ -102,6 +102,25 @@ elizabeth-anne-alexander validate-review \
 
 ---
 
+## Exit codes
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | `evaluate` wrote its 3 artefacts (`REVIEW_READY`), or `validate-review` validated the pack it was given. Both `DECISION_RECORDED` and `PARTIAL_DECISION_RECORDED` exit `0`. |
+| `2` | The gateway refused, printing one `blocked:` line on stderr. Every `GatewayError` lands here, including malformed, tampered or out-of-bounds input, and so does argparse's own refusal of a missing or unknown flag. |
+
+`PARTIAL_DECISION_RECORDED` is exit `0` deliberately: the pack was validated and
+some findings are still undecided. Read the status, not the exit code, to decide
+whether a human still has work to do.
+
+These are not the exit codes the rest of this repository uses. Every other
+component reserves `1` for malformed input and `2` for a non-passing status; this
+command has no `1` at all, so a file that will not parse and a gate that refused
+a well-formed file exit the same way, and a caller scripting several components
+cannot tell an operator error from a refusal without reading the message. The
+codes are a released contract, so they are documented here rather than changed;
+`RELEASE_NOTES.md` records the divergence as an open item for the owner.
+
 ## Control boundary
 
 - The canonical source contract has exactly 10 columns: `ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit`.

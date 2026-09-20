@@ -11,6 +11,19 @@
 outputs/
 review-notes/
 
+# evatt writes its entity map in the directory it is run from, and the map holds
+# the real names the redacted document no longer shows.
+entities.json
+*.entities.json
+# The triage worklist quotes the redacted line under every candidate it wants
+# classified, so it is about a real document too.
+*.triage.md
+# The exporter's manifest records tenant_id and tenant_name in clear beside the
+# export it describes.
+*.manifest.json
+# The ledger-review gate's fabricated sample manifests are re-included explicitly.
+!packages/elizabeth-anne-alexander/elizabeth_anne_alexander/samples/manifests/*.manifest.json
+
 # close-control now refuses an --output directory inside a checkout, so it can
 # no longer write a monthly-close pack here at all. These stay as the second
 # line: they still catch a pack copied in by hand, a pack from an older release,

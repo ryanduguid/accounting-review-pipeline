@@ -1,5 +1,11 @@
 # Unreleased
 
+- Document the actual exit codes in the README: `0` for `DECISION_RECORDED` and
+  `PARTIAL_DECISION_RECORDED`, `2` for every `GatewayError` including malformed input.
+- Known item, for the owner to decide: those codes diverge from the repository convention of
+  `1` for malformed input and `2` for a non-passing status, and this command has no `1`, so a
+  parse failure and a refusal are indistinguishable by exit code. The codes are unchanged.
+
 - `validate` replaces an existing output when the optional `model-result.json` is absent; the protected-input check now skips an input that does not exist instead of refusing the write.
 
 # v0.2.4

@@ -364,6 +364,14 @@ Tenant,AccountID,SubledgerBalance
 
 `SubledgerBalance` must use the same signed convention as `YTDDebit - YTDCredit`: debit balances positive; credit balances negative. Each supplied subledger row is compared only with the matching current TB account. A missing GL account, or a difference beyond `--reconciliation-tolerance`, requires review.
 
+Each of these controls runs only when its input is supplied, and so does the
+calculation-evidence control. The pack therefore names the ones that did not run:
+the summary's scope block carries a `Controls not run` line, and
+`close-review-pack.json` carries the same names under `controls_not_run`. A
+`PASS` or `REVIEW` covers the controls that ran and says nothing about the rest,
+which is the difference between a mapping that found no exception and a mapping
+nobody supplied.
+
 ## Calculation evidence, optional
 
 A close sometimes depends on a figure a calculator produced: a payroll levy, a

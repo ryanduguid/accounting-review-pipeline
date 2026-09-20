@@ -215,3 +215,107 @@ def test_declared_period_off_trial_balance_is_blocked(tmp_path: Path) -> None:
 def test_matching_trial_balance_date_stays_ready() -> None:
     for example, profile in (("bas-ready", "bas"), ("month-end-ready", "month_end"), ("year-end-ready", "year_end")):
         assert review_pack(profile=profile, pack_dir=EXAMPLES / example).status == "READY"
+
+
+def test_empty_optional_artefact_is_a_finding_and_a_control_that_did_not_run(
+    tmp_path: Path,
+) -> None:
+    """A zero-byte file used to record a digest and raise nothing.
+
+    The pack then proved it had read an empty bank reconciliation and still
+    reported READY. An empty file is not evidence, so it is named twice: as a
+    finding about the file, and as the control it stopped from running.
+    """
+    dest = copy_example_pack("month-end-ready", tmp_path / "pack")
+    (dest / "bank_rec.csv").write_bytes(b"")
+    pack = review_pack(profile="month_end", pack_dir=dest)
+    assert pack.status == "NOT_READY"
+    assert any(
+        item.code == FINDING_EMPTY_ARTEFACT and item.slot == "bank_rec"
+        for item in pack.findings
+    )
+    assert [control.slot for control in pack.controls_not_run] == [
+        "bank_rec",
+        "prior_findings",
+    ]
+    assert any("empty" in control.reason for control in pack.controls_not_run)
+    # The digest is still recorded: the file was read, and saying so is how a
+    # reviewer knows which bytes the finding is about.
+    assert any(item.slot == "bank_rec" for item in pack.source_evidence)
+
+
+def test_a_ready_month_end_pack_names_the_controls_that_did_not_run(
+    tmp_path: Path,
+) -> None:
+    """bank_rec is optional, so a month_end pack with no bank reconciliation in
+    it is READY. The pack and the summary now say which controls that covers."""
+    dest = copy_example_pack("month-end-ready", tmp_path / "pack")
+    (dest / "bank_rec.csv").unlink()
+    pack = review_pack(profile="month_end", pack_dir=dest)
+    assert pack.status == "READY"
+    assert pack.findings == ()
+    assert [
+        (control.slot, control.filename, control.reason)
+        for control in pack.controls_not_run
+    ] == [
+        ("bank_rec", "bank_rec.csv", "no file was supplied"),
+        ("prior_findings", "prior_findings.csv", "no file was supplied"),
+    ]
+
+    output = tmp_path / "out"
+    assert main([
+        "gate", "--profile", "month_end", "--pack", str(dest), "--output", str(output)
+    ]) == 0
+    summary = (output / "readiness-summary.md").read_text(encoding="utf-8")
+    assert "- Controls not run: 2." in summary
+    assert "## Controls not run" in summary
+    assert "- `bank_rec` (`bank_rec.csv`): no file was supplied" in summary
+    document = json.loads((output / "readiness-pack.json").read_text(encoding="utf-8"))
+    assert document["overall_status"] == "READY"
+    assert document["controls_not_run"][0] == {
+        "slot": "bank_rec",
+        "filename": "bank_rec.csv",
+        "reason": "no file was supplied",
+    }
+    # The 3 artefacts still verify against each other with the new section in them.
+    assert main(["view", "--pack-dir", str(output)]) == 0
+
+
+def test_a_pack_with_every_control_run_says_so(tmp_path: Path) -> None:
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    (dest / "prior_findings.csv").write_text(
+        "FindingCode,Slot,Status\n", encoding="utf-8"
+    )
+    pack = review_pack(profile="bas", pack_dir=dest)
+    assert pack.status == "READY"
+    assert pack.controls_not_run == ()
+    output = tmp_path / "out"
+    assert main([
+        "gate", "--profile", "bas", "--pack", str(dest), "--output", str(output)
+    ]) == 0
+    summary = (output / "readiness-summary.md").read_text(encoding="utf-8")
+    assert "- Controls not run: 0." in summary
+    assert "Every control this engagement profile configures ran." in summary
+
+
+def test_a_pack_written_without_control_coverage_still_verifies(tmp_path: Path) -> None:
+    """Packs released up to v0.1.7 carry no controls_not_run member at all.
+
+    `view` only reads, so requiring the member would have failed every pack
+    already written. A pack that states no coverage renders with no bullet and no
+    section, exactly as its writer produced it.
+    """
+    from dataclasses import replace
+
+    from reviewready.report import write_review_pack
+
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    pack = review_pack(profile="bas", pack_dir=dest)
+    output = tmp_path / "out"
+    write_review_pack(replace(pack, controls_not_run=None), output)
+
+    document = json.loads((output / "readiness-pack.json").read_text(encoding="utf-8"))
+    assert "controls_not_run" not in document
+    summary = (output / "readiness-summary.md").read_text(encoding="utf-8")
+    assert "Controls not run" not in summary
+    assert main(["view", "--pack-dir", str(output)]) == 0
