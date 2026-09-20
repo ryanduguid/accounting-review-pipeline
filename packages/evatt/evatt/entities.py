@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import unicodedata
 from dataclasses import dataclass
@@ -397,14 +398,27 @@ def assign(entities: Sequence[Entity], value: str, kind: str, added: str) -> Ent
 
 
 def _git(subcommand: list[str], target: Path) -> int:
-    """Run one local, offline git query about *target* and return its exit code."""
+    """Run one local, offline git query about *target* and return its exit code.
+
+    git is resolved to an absolute path first, because the query runs with
+    *target*'s directory as the working directory and Windows CreateProcess
+    resolves a bare program name through the application directory and that
+    working directory before PATH. A git planted beside the map could otherwise
+    answer the only question standing between the plaintext map and a commit.
+    """
+    executable = shutil.which("git")
+    if executable is None:
+        raise EvattError(
+            f"cannot ask git about {target.name} in {target.parent}: git is not on PATH; "
+            "put git on PATH and re-run once the repository is idle"
+        )
     environment = os.environ.copy()
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
         environment.pop(name, None)
     try:
         return subprocess.run(
-            ["git", *subcommand, "--", target.name],
+            [executable, *subcommand, "--", target.name],
             cwd=target.parent, env=environment, capture_output=True, timeout=30, check=False
         ).returncode
     except (OSError, subprocess.TimeoutExpired) as error:
