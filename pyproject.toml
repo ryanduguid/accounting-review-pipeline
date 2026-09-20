@@ -33,3 +33,35 @@ dev = [
   "PyYAML>=6.0.3,<7",
   'tomli>=2.0; python_version < "3.11"',
 ]
+
+[tool.pytest.ini_options]
+# Component suites reuse test-module names and import local test helpers.
+addopts = "--import-mode=importlib"
+pythonpath = [
+  ".",
+  "packages/review-ready-gate",
+  "packages/monthly-close-control-plane/tests",
+  "packages/xero-trial-balance-export",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Root checks use the core rules; components retain their own rule sets.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "packages/monthly-close-control-plane/closecontrol",
+  "packages/evatt/evatt",
+  "packages/review-ready-gate/reviewready",
+  "packages/elizabeth-anne-alexander/elizabeth_anne_alexander",
+  "packages/xero-trial-balance-export/xero_client.py",
+  "packages/xero-trial-balance-export/export_tb.py",
+  "packages/xero-trial-balance-export/auth.py",
+  "packages/xero-trial-balance-export/token_store.py",
+]
+ignore_missing_imports = true
+pretty = true

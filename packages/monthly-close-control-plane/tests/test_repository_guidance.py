@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePosixPath
+from unittest.mock import patch
 
 import yaml
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
@@ -127,12 +128,31 @@ def _workflow_run_gates(workflow: str) -> list[tuple[bool, str]]:
 
 
 def _scalar_ci_commands() -> list[str]:
+    root = yaml.compose(_ci_text())
+    assert isinstance(root, MappingNode)
+    jobs = next(value for key, value in root.value if key.value == "jobs")
+    assert isinstance(jobs, MappingNode)
     commands = [
         command
-        for multiline, command in _workflow_run_gates(_ci_text())
+        for key, job in jobs.value
+        if key.value in {"test", "dependency-audit", "package", "lint"}
+        for multiline, command in _workflow_run_gates(yaml.serialize(job))
         if not multiline
     ]
     return list(dict.fromkeys(commands))
+
+
+def test_scalar_ci_commands_ignore_unrelated_jobs() -> None:
+    workflow = _ci_text()
+    expected = _scalar_ci_commands()
+    workflow += """
+  unrelated:
+    runs-on: windows-latest
+    steps:
+      - run: python -m unittest discover
+"""
+    with patch.dict(globals(), {"_ci_text": lambda: workflow}):
+        assert _scalar_ci_commands() == expected
 
 
 def _multiline_package_gates() -> list[str]:
