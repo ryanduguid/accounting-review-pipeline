@@ -412,6 +412,10 @@ def _git(subcommand: list[str], target: Path) -> int:
             f"cannot ask git about {target.name} in {target.parent}: git is not on PATH; "
             "put git on PATH and re-run once the repository is idle"
         )
+    # ``which`` may return a relative pathname when PATH contains a relative
+    # directory. Resolve it before changing cwd so CreateProcess cannot
+    # reinterpret it relative to the map directory.
+    executable = str(Path(executable).resolve(strict=True))
     environment = os.environ.copy()
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
