@@ -26,7 +26,9 @@ import os
 import re
 import sys
 import tempfile
+import time
 import unicodedata
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from decimal import Decimal, Inexact, InvalidOperation, localcontext
 
@@ -614,6 +616,26 @@ def manifest_path_for(out_path: str) -> str:
     return out_path + ".manifest.json"
 
 
+@contextmanager
+def output_lock(out_path: str):
+    """Serialize replacement of a CSV and its sidecar across processes."""
+    lock_path = out_path + ".lock"
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            break
+        except FileExistsError:
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            os.unlink(lock_path)
+        except FileNotFoundError:
+            pass
+
+
 def write_manifest(out_path: str, tenant: dict, report_date: str, basis: str) -> str:
     """Record beside the CSV what it is and the digest of the bytes on disk.
 
@@ -629,8 +651,11 @@ def write_manifest(out_path: str, tenant: dict, report_date: str, basis: str) ->
     never describes a CSV that is not there. Its digest is taken from the
     file on disk rather than from memory for the same reason.
     """
-    with open(out_path, "rb") as fh:
-        digest = hashlib.sha256(fh.read()).hexdigest()
+    try:
+        with open(out_path, "rb") as fh:
+            digest = hashlib.sha256(fh.read()).hexdigest()
+    except OSError as exc:
+        sys.exit(f"error: wrote {out_path} but cannot read it to create a manifest ({exc}); the export is complete.")
     manifest = {
         "schema_version": MANIFEST_SCHEMA,
         "mode": "live",
@@ -787,13 +812,27 @@ def main() -> None:
     # unbalanced export must never reach disk.
     out_rows, totals = build_rows(rows, tenant, args.date)
     check_balanced(totals)
-    write_csv(out_rows, out_path)
+    with output_lock(out_path):
+        write_csv(out_rows, out_path)
+        # A CSV replacement invalidates any sidecar, including when this run
+        # suppresses manifests or a later manifest operation fails.
+        manifest_path = manifest_path_for(out_path)
+        try:
+            os.unlink(manifest_path)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            sys.exit(f"error: wrote {out_path} but cannot remove its old manifest ({exc}); the export is complete.")
 
-    total_debit, _, total_ytd_debit, _ = totals
-    print(f"Wrote {len(out_rows)} accounts to {out_path}")
-    print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
-    if not args.no_manifest:
-        print(f"Wrote manifest {write_manifest(out_path, tenant, args.date, basis)}")
+        total_debit, _, total_ytd_debit, _ = totals
+        print(f"Wrote {len(out_rows)} accounts to {out_path}")
+        print(f"Balance check OK: movement debits = credits = {total_debit:,.2f}; YTD = {total_ytd_debit:,.2f}")
+        if not args.no_manifest:
+            try:
+                manifest = write_manifest(out_path, tenant, args.date, basis)
+            except OSError as exc:
+                sys.exit(f"error: wrote {out_path} but could not write its manifest ({exc}); the export is complete.")
+            print(f"Wrote manifest {manifest}")
 
 
 def run() -> None:
