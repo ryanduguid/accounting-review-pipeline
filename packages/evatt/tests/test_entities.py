@@ -517,6 +517,59 @@ def test_require_gitignored_gives_every_git_call_a_timeout(tmp_path, monkeypatch
     assert all(isinstance(t, (int, float)) and t > 0 for t in timeouts)
 
 
+@git_required
+def test_require_gitignored_runs_git_by_absolute_path(tmp_path, monkeypatch) -> None:
+    """The guard runs with the map's own directory as the working directory.
+
+    Windows CreateProcess resolves a bare program name through the application
+    directory and that working directory before PATH, so a git planted beside
+    the entity map could answer the only question standing between the plaintext
+    map and a commit.
+    """
+    programs: list[str] = []
+
+    def record(argv, **kwargs):
+        programs.append(argv[0])
+        return subprocess.CompletedProcess(args=argv, returncode=1)
+
+    monkeypatch.setattr(entities.subprocess, "run", record)
+    with pytest.raises(EvattError):
+        entities.require_gitignored(tmp_path / "entities.json")
+
+    assert programs == [shutil.which("git"), shutil.which("git")]
+    assert all(os.path.isabs(program) for program in programs)
+
+
+def test_require_gitignored_makes_a_relative_which_result_absolute(tmp_path, monkeypatch) -> None:
+    """A relative PATH entry makes shutil.which return a relative path.
+
+    Run from the map's directory, that path would resolve beside the map, so
+    the guard pins it to this process's directory before the child starts.
+    """
+    programs: list[str] = []
+
+    def record(argv, **kwargs):
+        programs.append(argv[0])
+        return subprocess.CompletedProcess(args=argv, returncode=1)
+
+    monkeypatch.setattr(entities.shutil, "which", lambda name: os.path.join("bin", "git"))
+    monkeypatch.setattr(entities.subprocess, "run", record)
+    with pytest.raises(EvattError):
+        entities.require_gitignored(tmp_path / "entities.json")
+
+    assert programs == [os.path.abspath(os.path.join("bin", "git"))] * 2
+    assert all(os.path.isabs(program) for program in programs)
+
+
+def test_require_gitignored_fails_closed_when_git_is_not_on_path(tmp_path, monkeypatch) -> None:
+    def absent(name):
+        return None
+
+    monkeypatch.setattr(entities.shutil, "which", absent)
+    with pytest.raises(EvattError, match="git is not on PATH"):
+        entities.require_gitignored(tmp_path / "entities.json")
+
+
 def test_require_gitignored_fails_closed_on_an_unexpected_exit_code(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(entities, "_git", lambda subcommand, target: 3)
     with pytest.raises(EvattError):

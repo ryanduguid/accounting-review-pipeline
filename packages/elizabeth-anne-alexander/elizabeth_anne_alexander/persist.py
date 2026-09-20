@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,34 @@ def _replace(source: Path, destination: Path) -> None:
     os.replace(source, destination)
 
 
+def _supports_dir_fd() -> bool:
+    """Whether the staged write can name its files relative to an open directory.
+
+    Windows supports neither half: ``os.supports_dir_fd`` is empty and
+    ``os.open`` on a directory raises ``PermissionError``, so the descriptor
+    path blocked every validate run there instead of protecting it.
+    """
+    return os.open in os.supports_dir_fd and hasattr(os, "O_DIRECTORY")
+
+
 def write_validation(payload: dict[str, Any], output: Path, protected: tuple[Path, ...]) -> None:
-    """Write validation output without following a changed destination pathname."""
+    """Write validation output without following a changed destination pathname.
+
+    Two implementations, because the platforms differ in what they can promise.
+    Where directory descriptors exist, the parent is opened once and the staging
+    file, the destination check and the replace are all named relative to it, so
+    renaming the parent afterwards cannot redirect the write. Windows has no
+    directory descriptors, so there every step works by path. Both refuse a
+    destination that is a second name for a review input by comparing
+    ``(st_dev, st_ino)``, which ``os.stat`` fills in on Windows as well.
+    """
+    if _supports_dir_fd():
+        _write_validation_dir_fd(payload, output, protected)
+    else:
+        _write_validation_by_path(payload, output, protected)
+
+
+def _write_validation_dir_fd(payload: dict[str, Any], output: Path, protected: tuple[Path, ...]) -> None:
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
         directory_fd = os.open(output.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
@@ -67,6 +94,58 @@ def write_validation(payload: dict[str, Any], output: Path, protected: tuple[Pat
             except OSError:
                 pass
         os.close(directory_fd)
+
+
+def _write_validation_by_path(payload: dict[str, Any], output: Path, protected: tuple[Path, ...]) -> None:
+    """Stage, check and replace by path, for a platform without directory descriptors.
+
+    ponytail: this branch cannot pin the destination directory the way the
+    dir_fd branch does. Between the protected-input check and os.replace a
+    concurrent swap of output.parent for another directory or a junction can
+    redirect the write; Windows offers no dir_fd to close that window from
+    Python. The check still refuses a destination that names a review input at
+    the moment it is inspected, and the staging file is never reused.
+    """
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        # mkstemp creates the staging file exclusively under a name no other
+        # process holds, in the destination directory so the replace stays on
+        # one filesystem.
+        temporary_fd, temporary_name = tempfile.mkstemp(dir=output.parent, prefix=f".{output.name}.", suffix=".partial")
+    except OSError as exc:
+        raise GatewayError(f"validation output cannot be written to {output}: {exc}.") from exc
+
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(temporary_fd, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
+        destination_stat = None
+        try:
+            destination_stat = os.stat(output, follow_symlinks=True)
+        except FileNotFoundError:
+            pass
+        if destination_stat is not None:
+            for input_path in protected:
+                try:
+                    input_stat = input_path.stat()
+                except OSError as exc:
+                    raise GatewayError(f"validation output cannot be checked against {input_path}: {exc}.") from exc
+                if (destination_stat.st_dev, destination_stat.st_ino) == (input_stat.st_dev, input_stat.st_ino):
+                    raise GatewayError(f"validation output must not overwrite a review input: {input_path}.")
+        os.replace(temporary, output)
+    except GatewayError:
+        raise
+    except OSError as exc:
+        raise GatewayError(f"validation output cannot be written to {output}: {exc}.") from exc
+    finally:
+        # Nothing to remove once the replace has moved the staging file.
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
 
 
 def write_evaluation(model: dict[str, Any], evidence: dict[str, Any], receipt: dict[str, Any], output_dir: Path) -> dict[str, Path]:
