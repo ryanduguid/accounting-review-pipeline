@@ -656,6 +656,10 @@ def test_markdown_between_a_label_and_its_digits_is_still_labelled() -> None:
             f"{label}: `{value}`",
             f"| {label} | {value} |",
             f"| **{label}** | `{value}` |",
+            # Nested delimiters: bold italic on either side and bold around code.
+            f"***{label}***: {value}",
+            f"{label}: ***{value}***",
+            f"{label}: **`{value}`**",
         ):
             spans = patterns.structured_spans(text)
             assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text

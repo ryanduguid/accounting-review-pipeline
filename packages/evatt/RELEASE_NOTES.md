@@ -1,3 +1,7 @@
+# Unreleased
+
+- Admit up to 3 markdown delimiter characters between a label and its digits, so `***TFN***: 123 456 783`, `TFN: ***123 456 783***` and `TFN: **`123 456 783`**` are redacted like their simpler forms.
+
 # v0.1.1
 
 - Compose input to NFC before scanning, and admit markdown between a label and its digits so a bolded or linked identifier is still caught.
