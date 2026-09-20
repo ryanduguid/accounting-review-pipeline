@@ -133,6 +133,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"review-ready: output error: {exc}", file=sys.stderr)
         return 1
     print(f"review-ready: {pack.status}; {len(pack.findings)} finding(s)")
+    if pack.controls_not_run:
+        # Printed before the READY line, because it is what qualifies it: a
+        # control with no input reached no verdict, and READY covers only the
+        # controls that ran.
+        print(
+            f"review-ready: {len(pack.controls_not_run)} control(s) did not run: "
+            + ", ".join(control.slot for control in pack.controls_not_run)
+        )
     if pack.status == "READY" and not pack.findings:
         print("review-ready: pack may enter manager review. A human still decides.")
     for name, path in outputs.items():

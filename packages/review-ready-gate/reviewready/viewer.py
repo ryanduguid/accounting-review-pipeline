@@ -26,7 +26,7 @@ from typing import Any, cast
 
 from .engine import ReadinessPack, _overall
 from .errors import GateInputError
-from .models import Finding, ReviewerAcknowledgement, SourceEvidence
+from .models import ControlNotRun, Finding, ReviewerAcknowledgement, SourceEvidence
 from .report import (
     _ABSENT,
     ACKNOWLEDGEMENT_EFFECT,
@@ -57,6 +57,11 @@ _JSON_MEMBERS = frozenset(
     }
 )
 
+# Members a pack may carry but need not. A pack written before control coverage
+# was recorded has no such member, and requiring it would fail every pack
+# released up to v0.1.7 on `view`, which only reads.
+_OPTIONAL_JSON_MEMBERS = frozenset({"controls_not_run"})
+
 _ENGAGEMENTS = frozenset({"bas", "month_end", "year_end"})
 _STATUSES = ("READY", "NOT_READY", "BLOCKED")
 _FINDING_STATUSES = frozenset({"NOT_READY", "BLOCKED"})
@@ -78,6 +83,7 @@ _ACK_MEMBERS = frozenset(
     {"reviewer_initials", "reviewed_on", "comment", "effect"}
 )
 _SOURCE_MEMBERS = frozenset({"filename", "sha256"})
+_CONTROL_MEMBERS = frozenset({"slot", "filename", "reason"})
 
 _STATUS_LINE = re.compile(r"\*\*Overall status: (READY|NOT_READY|BLOCKED)\*\*")
 _SOURCE_EVIDENCE_LINE = re.compile(
@@ -133,7 +139,7 @@ def _parse_json(payload: bytes) -> dict[str, object]:
     if not isinstance(document, dict):
         raise GateInputError(f"{_JSON_NAME}: top level must be a JSON object")
     members = set(document)
-    unknown = sorted(members - _JSON_MEMBERS)
+    unknown = sorted(members - _JSON_MEMBERS - _OPTIONAL_JSON_MEMBERS)
     if unknown:
         raise GateInputError(
             f"{_JSON_NAME}: unknown top-level member(s): {', '.join(unknown)}"
@@ -252,6 +258,24 @@ def _verify_json_schema(document: dict[str, object]) -> None:
             raise GateInputError(
                 f"{_JSON_NAME}: findings[{index}].status is not a finding status"
             )
+
+    # The summary renders one line per entry, so an added member here would be
+    # one no other file witnesses, as with the findings above.
+    controls = document.get("controls_not_run", [])
+    if not isinstance(controls, list):
+        raise GateInputError(f"{_JSON_NAME}: controls_not_run must be a list")
+    for index, control in enumerate(controls):
+        if not isinstance(control, dict) or set(control) != _CONTROL_MEMBERS:
+            raise GateInputError(
+                f"{_JSON_NAME}: controls_not_run[{index}] does not hold the fields "
+                f"the writer emits: expected {sorted(_CONTROL_MEMBERS)!r}"
+            )
+        for key in sorted(_CONTROL_MEMBERS):
+            if not isinstance(control[key], str) or not control[key]:
+                raise GateInputError(
+                    f"{_JSON_NAME}: controls_not_run[{index}].{key} must be a "
+                    "non-empty string"
+                )
 
 
 def _summary_source_evidence(summary_text: str) -> dict[str, tuple[str, str]]:
@@ -577,6 +601,10 @@ def _canonical_pack(document: dict[str, object], summary_text: str) -> Readiness
                               for slot, filename, digest in _SOURCE_EVIDENCE_LINE.findall(summary_text)),
         tieout_tolerance=_parse_threshold(data["thresholds"]["tieout_tolerance"], "tieout_tolerance"),
         acknowledgement=acknowledgement,
+        controls_not_run=None if "controls_not_run" not in data else tuple(
+            ControlNotRun(control["slot"], control["filename"], control["reason"])
+            for control in data["controls_not_run"]
+        ),
     )
 
 

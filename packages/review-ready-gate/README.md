@@ -141,6 +141,15 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 
 Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`.
 
+A `READY` status means no configured control tripped, and only the controls that
+ran can trip. Every optional slot with no usable input is therefore listed under
+'Controls not run' in the pack JSON and the summary, and counted in the summary's
+scope block: a `month_end` pack with no `bank_rec.csv` in it is `READY` with the
+bank reconciliation control not run, which is a different claim from `READY` with
+every control run. An optional file that exists but holds no bytes is a finding
+as well, because an empty file is not evidence; its digest is still recorded, so a
+reviewer can see which bytes the finding is about.
+
 Filenames inside the pack directory are fixed. Header-only CSV schemas live under `schemas/`, together with the JSON Schema for `self_review.json`.
 
 ### Self-review

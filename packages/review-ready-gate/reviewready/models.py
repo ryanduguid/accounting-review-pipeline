@@ -118,6 +118,21 @@ class ReviewerAcknowledgement:
 
 
 @dataclass(frozen=True)
+class ControlNotRun:
+    """One optional control that had no input, so it reached no verdict.
+
+    A READY status means no configured control tripped. It never meant that
+    every control ran, and a pack that did not say which ones were skipped let
+    a reviewer read silence as a pass. `reason` distinguishes a slot with no
+    file at all from one holding an empty file, which is also a finding.
+    """
+
+    slot: str
+    filename: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class SourceEvidence:
     slot: str
     filename: str

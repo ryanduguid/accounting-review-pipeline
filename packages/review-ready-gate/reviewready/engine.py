@@ -30,6 +30,7 @@ from .models import (
     FINDING_TIEOUT_UNSUPPORTED,
     ActivityLabel,
     BankRecRow,
+    ControlNotRun,
     Finding,
     GstControlRow,
     OpenItem,
@@ -53,6 +54,12 @@ class ReadinessPack:
     source_evidence: tuple[SourceEvidence, ...]
     tieout_tolerance: Decimal
     acknowledgement: ReviewerAcknowledgement | None
+    # The optional slots that had no usable input. An empty tuple means every
+    # control this profile configures ran. None means the pack makes no statement
+    # about coverage at all, which is what a pack written before this existed
+    # says: the viewer reads one back that way, and it must render as it was
+    # written rather than gaining a section its summary never had.
+    controls_not_run: tuple[ControlNotRun, ...] | None = None
 
 
 def _missing(slot: str) -> Finding:
@@ -65,12 +72,21 @@ def _missing(slot: str) -> Finding:
     )
 
 
-def _empty(slot: str) -> Finding:
+def _empty(slot: str, *, required: bool) -> Finding:
+    """An empty file is not evidence, whether or not the slot was required.
+
+    An optional slot used to record the digest of its zero-byte file and raise
+    nothing, so a pack reached READY carrying a bank_rec.csv with no bytes in it
+    and a digest that proved the emptiness. Naming it costs a preparer one
+    deletion and tells a reviewer that the file is not what it looks like.
+    """
+    scope = "Required" if required else "Optional"
+    ran = "" if required else " Its control did not run."
     return Finding(
         code=FINDING_EMPTY_ARTEFACT,
         status="NOT_READY",
         slot=slot,
-        reason=f"Required artefact {slot} exists but contains no bytes.",
+        reason=f"{scope} artefact {slot} exists but contains no bytes.{ran}",
         reviewer_action="Return the pack to the preparer. An empty file is not a completed artefact.",
     )
 
@@ -157,12 +173,21 @@ def _review_pack(
     evidence: list[SourceEvidence] = []
     snapshots: dict[str, SourceSnapshot] = {}
     loaded: dict[str, object] = {}
+    # Every optional slot with no usable input, in profile order. A missing
+    # required artefact is already a finding and stops the pack; an optional one
+    # silently removed a control, and month_end's bank_rec is optional, so a pack
+    # with no bank reconciliation in it reached READY saying nothing about that.
+    controls_not_run: list[ControlNotRun] = []
 
     for slot in slots:
         path = pack_dir / slot.filename
         if not path.exists():
             if slot.required:
                 findings.append(_missing(slot.name))
+            else:
+                controls_not_run.append(
+                    ControlNotRun(slot.name, slot.filename, "no file was supplied")
+                )
             continue
         snapshot = SourceSnapshot.capture(path, label=f"{slot.name} file")
         snapshots[slot.name] = snapshot
@@ -170,8 +195,11 @@ def _review_pack(
             SourceEvidence(slot=slot.name, filename=slot.filename, sha256=snapshot.sha256)
         )
         if len(snapshot.content) == 0:
-            if slot.required:
-                findings.append(_empty(slot.name))
+            findings.append(_empty(slot.name, required=slot.required))
+            if not slot.required:
+                controls_not_run.append(
+                    ControlNotRun(slot.name, slot.filename, "the file supplied is empty")
+                )
             continue
         loaded[slot.name] = _load_slot(slot, snapshot, profile)
 
@@ -226,6 +254,7 @@ def _review_pack(
         source_evidence=tuple(evidence),
         tieout_tolerance=tieout_tolerance,
         acknowledgement=acknowledgement,
+        controls_not_run=tuple(controls_not_run),
     )
 
 

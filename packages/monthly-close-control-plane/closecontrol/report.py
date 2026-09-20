@@ -128,6 +128,7 @@ def _as_json(pack: CloseReviewPack) -> dict:
     payload: dict[str, object] = {
         "acknowledgement": acknowledgement,
         "client_queries": [_query_dict(query) for query in pack.client_queries],
+        "controls_not_run": list(pack.controls_not_run),
         "current_report_dates": list(pack.current_report_dates),
         "exceptions": [_exception_dict(item) for item in pack.exceptions],
         "overall_status": pack.status,
@@ -309,6 +310,7 @@ def _as_markdown(pack: CloseReviewPack) -> str:
         f"- Reconciliation tolerance: ${_money(pack.reconciliation_tolerance)}",
         f"- Exceptions: {len(pack.exceptions)} total; {blocked} blocked; {review} requiring review.",
         f"- Client queries drafted: {len(pack.client_queries)}.",
+        f"- Controls not run: {', '.join(pack.controls_not_run) or 'none'}.",
         "",
         "## Source evidence",
         "",
