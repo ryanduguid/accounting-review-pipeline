@@ -1406,6 +1406,36 @@ class ColumnTitleGuardTest(_ExportCase):
         self.assertNotIn("WARNING", out)
         self.assertIsNone(data)
 
+    def test_a_repeated_column_title_stops_the_export_before_a_row_is_read(self):
+        """Two Debit columns used to collapse onto one key, later cell winning.
+
+        Every required title is still present, so the missing-column guard
+        never fired, and the export carried whichever amount came last with
+        no warning. Equal duplicates are refused too: the schema is ambiguous
+        whatever the cells hold.
+        """
+        for debit_a, debit_b in (("100.00", "900.00"), ("100.00", "100.00")):
+            with self.subTest(debits=(debit_a, debit_b)):
+                # Every expected column plus a second Debit, so only the
+                # duplicate is wrong. Credits match the LATER debit: that is
+                # the pair the collapse used to export as balanced.
+                payload = _report(
+                    [
+                        ("Cash (090)", debit_a, "", "100.00", ""),
+                        ("Equity (960)", "", debit_b, "", "100.00"),
+                    ]
+                )
+                report = payload["Reports"][0]
+                header, cash, equity, summary = [report["Rows"][0], *report["Rows"][1]["Rows"]]
+                for row, extra in ((header, "Debit"), (cash, debit_b), (equity, ""), (summary, "0")):
+                    row["Cells"].append({"Value": extra})
+                raised, out, data = self.run_export([], payload=payload)
+                self.assertIsInstance(raised, SystemExit)
+                message = str(raised.code)
+                self.assertIn("repeats the column title(s) Debit", message)
+                self.assertNotIn("WARNING", out)
+                self.assertIsNone(data)
+
 
 class AccountCodeTest(unittest.TestCase):
     """"Business Bank Account (090)" splits; "Rent (Sydney)" must not, or it

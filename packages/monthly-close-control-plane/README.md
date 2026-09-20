@@ -148,7 +148,10 @@ close-control view --pack-dir C:\\close-data\\review-pack
 Before displaying anything it fails closed on: a missing artefact; JSON that is
 not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated
 top-level members; a threshold or source digest that no longer parses as the
-writer rendered it; a `close-summary.md` whose overall status, source-evidence
+writer rendered it; an acknowledgement whose members are not the writer's or
+whose fixed effect statement differs from the writer's text (the sheet states
+that effect itself, so the JSON member is compared, never displayed); a
+`close-summary.md` whose overall status, source-evidence
 digests or review-boundary statement disagree with the JSON (including a second,
 conflicting status line, or a missing client-query boundary statement); and an
 `exceptions.csv` or `client-queries.csv` whose header, row count or any cell

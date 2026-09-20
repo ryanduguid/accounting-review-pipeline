@@ -660,6 +660,12 @@ def test_markdown_between_a_label_and_its_digits_is_still_labelled() -> None:
             f"***{label}***: {value}",
             f"{label}: ***{value}***",
             f"{label}: **`{value}`**",
+            # Emphasis and code stacked on the same side, in both orders.
+            # A flat 3-character run passed these through with the value intact.
+            f"{label}: ***`{value}`***",
+            f"{label}: `***{value}***`",
+            f"**`{label}`**: {value}",
+            f"`**{label}**`: ***`{value}`***",
         ):
             spans = patterns.structured_spans(text)
             assert [(k, t) for _s, _e, k, t in spans] == [(kind, value)], text
