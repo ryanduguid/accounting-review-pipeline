@@ -1,3 +1,10 @@
+# v0.1.1
+
+- Compose input to NFC before scanning, and admit markdown between a label and its digits so a bolded or linked identifier is still caught.
+- Resolve `git` to an absolute path before the entity-map guard spawns it, so a same-named executable on the search path cannot answer the git-ignore check.
+- Package the archive inputs, label the illustrative report timings and widen the trial-balance overflow probe.
+- Remove the shipped plan and design documents from the package.
+
 # v0.1.0
 
 First release of `evatt` from `packages/evatt` in the Accounting Review

@@ -1,3 +1,11 @@
+# v0.1.7
+
+- Bind the trial balance to the declared period and check the acknowledgement effect the pack records, not the one the preparer asserts.
+- Hold pack items to the writer's exact member set.
+- Sum trial-balance totals exactly or refuse the file, and set the decimal context at every gate entry point.
+- Close the viewer, parser, Power BI and documentation findings from the September fact check.
+- Require the component's own checks to pass before a release is published.
+
 # v0.1.6
 
 - Return NOT_READY for exception tie-outs and report unreadable inputs as input errors.
