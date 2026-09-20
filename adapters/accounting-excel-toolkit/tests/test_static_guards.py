@@ -456,7 +456,7 @@ class NativeExcelAcceptanceSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(
             prefix="sir alexander fitzgerald "
         ) as temporary_name:
-            temporary_root = Path(temporary_name)
+            temporary_root = Path(temporary_name).resolve()
 
             # Only the script exists under this default repository root.  The
             # missing powerquery directory stops execution before the GUID

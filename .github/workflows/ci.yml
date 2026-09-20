@@ -9,9 +9,9 @@ name: tests
 # other Python distribution; on a pull request each call filters itself to its
 # component directory, the shared contract and the root files, so a change to
 # one component runs that component alone, and a push to main runs every
-# component so the release gate finds its checks. The `windows` job is the only
-# non-Linux leg: it runs 3 components' suites on windows-latest, because that is
-# where their platform-specific code lives. The Excel adapter and the Power BI
+# component so the release gate finds its checks. The `windows` job runs 3
+# components' suites with coverage; `windows-workspace` checks the full suite
+# from the root on Windows. The Excel adapter and the Power BI
 # application have no pyproject.toml and are not workspace members; their
 # standard-library suites run in standard-library-components.yml.
 
@@ -197,8 +197,51 @@ jobs:
         run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: ${{ matrix.package_dir }}
 
+  windows-workspace:
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: install the locked toolchain
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - name: check the workspace and standalone component locks
+        shell: python
+        run: |
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import tempfile
+
+          subprocess.run(["uv", "lock", "--check"], check=True)
+          for component in sorted(Path("packages").iterdir()):
+              if not (component / "pyproject.toml").is_file():
+                  continue
+              subprocess.run(["uv", "lock", "--check"], cwd=component, check=True)
+              # Inside a workspace member, uv checks the root lock. Check each
+              # standalone lock outside the workspace as ci-package.yml does.
+              with tempfile.TemporaryDirectory() as standalone:
+                  for name in ("pyproject.toml", "uv.lock"):
+                      shutil.copyfile(component / name, Path(standalone) / name)
+                  subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
+      - name: lint the workspace
+        run: uv run --locked --group dev ruff check .
+      - name: type-check the workspace
+        run: uv run --locked --group dev mypy
+      - name: run the full suite
+        run: uv run --locked --group dev pytest
+
   pipeline-gates:
-    needs: [component, test, dependency-audit, package, lint, windows]
+    needs: [component, test, dependency-audit, package, lint, windows, windows-workspace]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
