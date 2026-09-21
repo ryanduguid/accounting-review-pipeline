@@ -30,6 +30,9 @@ def _verified(pack_path: Path, tb_path: Path) -> tuple[dict[str, Any], dict[str,
     for item in document["exceptions"]:
         if item["tenant"] and item["tenant"] != tenant:
             raise ControlInputError("Pack finding names another tenant.")
+    for item in document.get("client_queries", []):
+        if not item.get("tenant") or item["tenant"] != tenant:
+            raise ControlInputError("Pack query names another tenant.")
     return document, hashes, tenant, frozenset(row.account_id for row in rows)
 
 
