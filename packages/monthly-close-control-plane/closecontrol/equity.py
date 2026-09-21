@@ -260,6 +260,59 @@ def validate_result(value: Any, sources: dict, exceptions: list) -> dict[str, An
             raise ControlInputError("Malformed equity movement evidence.")
         if any(not isinstance(item, str) for item in row.values()):
             raise ControlInputError("Equity movement fields must be strings.")
+    tolerance = _amount(value["tolerance"], "tolerance")
+    if value["status"] == "BLOCKED":
+        if value["accounts"] or value["total"] is not None or not value["issues"]:
+            raise ControlInputError("Blocked equity evidence must omit calculated balances.")
+    else:
+        if not value["accounts"] or value["total"] is None or value["issues"] or not value["complete"]:
+            raise ControlInputError("Calculated equity evidence requires complete accounts and totals.")
+        try:
+            with localcontext(Context(prec=28)) as context:
+                context.traps[Inexact] = True
+                totals = {key: Decimal(0) for key in _NUMBERS}
+                accounts: set[str] = set()
+                movements: set[str] = set()
+                needs_review = False
+                for row in value["movements"]:
+                    identifier = _text(row["movement_id"], "movement ID")
+                    if identifier in movements:
+                        raise ControlInputError("Duplicate equity movement evidence.")
+                    movements.add(identifier)
+                    debit, credit = _amount(row["debit"], "debit"), _amount(row["credit"], "credit")
+                    if (debit > 0) == (credit > 0):
+                        raise ControlInputError("Equity movement must have exactly one positive side.")
+                for row in value["accounts"]:
+                    identifier = _text(row["account_id"], "account ID")
+                    if identifier in accounts:
+                        raise ControlInputError("Duplicate equity account evidence.")
+                    accounts.add(identifier)
+                    numbers = {}
+                    for key in _NUMBERS:
+                        raw = row[key]
+                        numbers[key] = -_amount(raw[1:], key) if raw.startswith("-") else _amount(raw, key)
+                    linked = [item for item in value["movements"] if item["account_id"] == identifier]
+                    movement = sum((Decimal(item["credit"]) - Decimal(item["debit"]) for item in linked), Decimal(0))
+                    if (row["movement_ids"] != [item["movement_id"] for item in linked]
+                            or numbers["movement"] != movement
+                            or numbers["expected_close"] != numbers["opening"] + movement
+                            or numbers["unexplained"] != numbers["actual_close"] - numbers["expected_close"]):
+                        raise ControlInputError("Equity account arithmetic or movement links disagree.")
+                    needs_review |= abs(numbers["unexplained"]) > tolerance
+                    for key in _NUMBERS:
+                        totals[key] += numbers[key]
+                if any(row["account_id"] not in accounts for row in value["movements"]):
+                    raise ControlInputError("Equity movement references an unknown account.")
+                for key, total in totals.items():
+                    raw = value["total"][key]
+                    actual = -_amount(raw[1:], key) if raw.startswith("-") else _amount(raw, key)
+                    if actual != total:
+                        raise ControlInputError("Equity totals disagree with the account evidence.")
+                needs_review |= abs(totals["unexplained"]) > tolerance
+                if value["status"] != ("REVIEW" if needs_review else "PASS"):
+                    raise ControlInputError("Equity status disagrees with its arithmetic.")
+        except (Inexact, InvalidOperation) as exc:
+            raise ControlInputError("Equity evidence exceeds supported exact decimal precision.") from exc
     statuses = {row["status"] for row in exceptions if row["control"] == "equity_reconciliation"}
     expected = "BLOCKED" if "BLOCKED" in statuses else "REVIEW" if "REVIEW" in statuses else "PASS"
     if value["status"] != expected:

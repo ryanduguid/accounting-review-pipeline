@@ -139,3 +139,21 @@ def test_invalid_timeout_fails_before_creating_output(tmp_path):
     with pytest.raises(ValueError, match="timeout"):
         MODULE["run_workflows"](output=tmp_path / "results", fpa=tmp_path, timeout=0)
     assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize("destination", ["output", "environment"])
+def test_linked_wip_sources_are_protected(tmp_path, destination):
+    accounting, fpa, target = (tmp_path / name for name in ("accounting", "fpa", "external-wip"))
+    (accounting / "packages").mkdir(parents=True)
+    for project in (fpa, target):
+        project.mkdir()
+        (project / "pyproject.toml").write_text("[project]")
+    try:
+        (accounting / "packages/the-wip-tally").symlink_to(target, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Directory links unavailable: {exc}")
+    output = target / "output" if destination == "output" else tmp_path / "output"
+    env = target / "env" if destination == "environment" else None
+    with pytest.raises(ValueError, match="outside"):
+        PREPARE(output, fpa, accounting, None, env, "job-cash")
+    assert not output.exists()

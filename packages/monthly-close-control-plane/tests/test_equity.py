@@ -272,3 +272,28 @@ def test_cli_status_and_malformed_input_preserve_existing_pack(tmp_path, capsys)
     assert {path: path.read_bytes() for path in before} == before
     assert "input error" in capsys.readouterr().err
 
+
+
+@pytest.mark.parametrize("mutation", ["not_money", "nonfinite", "account", "total", "movement", "duplicate", "status"])
+def test_matching_json_and_markdown_cannot_hide_invalid_arithmetic(tmp_path, mutation):
+    inputs, _ = _inputs(tmp_path)
+    pack = review_close(**inputs)
+    result = pack.equity_reconciliation
+    if mutation == "not_money":
+        result["accounts"][0]["opening"] = "unknown"
+    elif mutation == "nonfinite":
+        result["total"]["opening"] = "NaN"
+    elif mutation == "account":
+        result["accounts"][0]["expected_close"] = "130001"
+    elif mutation == "total":
+        result["total"]["actual_close"] = "129751"
+    elif mutation == "movement":
+        result["movements"][0]["credit"] = "25001"
+    elif mutation == "duplicate":
+        result["accounts"].append(dict(result["accounts"][0]))
+    else:
+        result["tolerance"] = "999999"
+    output = tmp_path / "pack"
+    write_review_pack(pack, output)
+    with pytest.raises(ControlInputError):
+        verify_pack(output)
