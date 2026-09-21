@@ -70,6 +70,32 @@ def test_redact_writes_output_and_manifest(tmp_path) -> None:
     assert "values" not in manifest
 
 
+@pytest.mark.parametrize('label,kind,value', [
+    ('TFN', 'tfn', '123 456 783'),
+    ('ABN', 'abn', '51 824 753 557'),
+    ('ACN', 'acn', '123 456 781'),
+    ('Medicare', 'medicare', '2123 45671 1'),
+])
+@pytest.mark.parametrize('width', [1, 4])
+def test_padded_code_identifiers_have_real_cli_counts(tmp_path, label, kind, value, width):
+    root = workspace(tmp_path)
+    fence = '`' * width
+    text = f'{label}: {fence} ***{value}*** {fence}\r\n'
+    source, output, entity_map = root / 'in.md', root / 'out.md', root / 'entities.json'
+    source.write_bytes(text.encode('utf-8'))
+    original_map = entity_map.read_bytes()
+    args = ['--in', str(source), '--map', str(entity_map)]
+
+    assert main(['verify', *args]) == 2
+    assert main(['redact', *args, '--out', str(output)]) == 0
+    assert output.read_bytes() == text.replace(value, f'{kind.upper()}_01').encode('utf-8')
+    manifest = json.loads((root / 'out.md.manifest.json').read_text(encoding='utf-8'))
+    assert manifest['counts'] == {kind: 1}
+    assert main(['verify', '--in', str(output), '--map', str(entity_map)]) == 0
+    assert source.read_bytes() == text.encode('utf-8')
+    assert entity_map.read_bytes() == original_map
+
+
 def test_redact_halts_writes_triage_and_no_output(tmp_path) -> None:
     root = workspace(tmp_path)
     shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
