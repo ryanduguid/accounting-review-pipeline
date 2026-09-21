@@ -243,23 +243,54 @@ def validate_result(value: Any, sources: dict, exceptions: list) -> dict[str, An
             raise ControlInputError("Equity result fields must be strings.")
     if sources.get("equity_schedule") != value["schedule_sha256"]:
         raise ControlInputError("Equity schedule provenance disagrees with the pack.")
-    for row in value["accounts"]:
-        if not isinstance(row, dict) or set(row) != {"account_id", "movement_ids", *_NUMBERS}:
-            raise ControlInputError("Malformed equity account evidence.")
-        if not isinstance(row["account_id"], str) or not isinstance(row["movement_ids"], list):
-            raise ControlInputError("Malformed equity account identity.")
-        if any(not isinstance(row[key], str) for key in _NUMBERS):
-            raise ControlInputError("Equity account amounts must be decimal strings.")
-    if value["total"] is not None and (
-        not isinstance(value["total"], dict) or set(value["total"]) != set(_NUMBERS)
-        or any(not isinstance(item, str) for item in value["total"].values())
-    ):
-        raise ControlInputError("Malformed equity total evidence.")
+    def result_amount(value: Any, label: str) -> Decimal:
+        if (not isinstance(value, str) or len(value) > 64
+                or re.fullmatch(r"-?\d+(?:\.\d+)?", value, flags=re.ASCII) is None):
+            raise ControlInputError(f"Equity {label} must be a decimal string.")
+        return Decimal(value)
+
+    movements: dict[str, dict[str, Any]] = {}
     for row in value["movements"]:
         if not isinstance(row, dict) or set(row) != _MOVEMENT_FIELDS:
             raise ControlInputError("Malformed equity movement evidence.")
         if any(not isinstance(item, str) for item in row.values()):
             raise ControlInputError("Equity movement fields must be strings.")
+        if row["movement_id"] in movements:
+            raise ControlInputError("Duplicate equity movement ID.")
+        movements[row["movement_id"]] = row
+        _amount(row["debit"], "debit"); _amount(row["credit"], "credit")
+    account_values = []
+    for row in value["accounts"]:
+        if not isinstance(row, dict) or set(row) != {"account_id", "movement_ids", *_NUMBERS}:
+            raise ControlInputError("Malformed equity account evidence.")
+        if not isinstance(row["account_id"], str) or not isinstance(row["movement_ids"], list):
+            raise ControlInputError("Malformed equity account identity.")
+        if any(not isinstance(item, str) for item in row["movement_ids"]):
+            raise ControlInputError("Malformed equity movement references.")
+        if len(set(row["movement_ids"])) != len(row["movement_ids"]):
+            raise ControlInputError("Duplicate equity movement reference.")
+        if any(item not in movements for item in row["movement_ids"]):
+            raise ControlInputError("Equity account references an unknown movement.")
+        amounts = {key: result_amount(row[key], key) for key in _NUMBERS}
+        movement = sum((Decimal(movements[item]["credit"]) - Decimal(movements[item]["debit"])
+                        for item in row["movement_ids"]), Decimal(0))
+        if amounts["movement"] != movement or amounts["expected_close"] != amounts["opening"] + movement \
+                or amounts["unexplained"] != amounts["actual_close"] - amounts["expected_close"]:
+            raise ControlInputError("Equity account arithmetic is inconsistent.")
+        account_values.append(amounts)
+    if value["total"] is None:
+        if value["status"] != "BLOCKED" or value["accounts"]:
+            raise ControlInputError("Malformed equity total evidence.")
+    elif not isinstance(value["total"], dict) or set(value["total"]) != set(_NUMBERS):
+        raise ControlInputError("Malformed equity total evidence.")
+    if value["total"] is None:
+        totals = None
+    else:
+        totals = {key: result_amount(value["total"][key], f"total {key}") for key in _NUMBERS}
+    if totals is not None:
+        for key in _NUMBERS:
+            if totals[key] != sum((row[key] for row in account_values), Decimal(0)):
+                raise ControlInputError("Equity totals are inconsistent with account evidence.")
     statuses = {row["status"] for row in exceptions if row["control"] == "equity_reconciliation"}
     expected = "BLOCKED" if "BLOCKED" in statuses else "REVIEW" if "REVIEW" in statuses else "PASS"
     if value["status"] != expected:
