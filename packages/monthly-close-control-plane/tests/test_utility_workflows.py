@@ -45,7 +45,7 @@ def test_fresh_environments_cannot_overlap_outputs(tmp_path, layout):
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="The cross-repository driver requires Python 3.11")
 def test_provenance_uses_workspace_lock_and_tracks_uncommitted_source(tmp_path):
-    subprocess.run(["rtk", "proxy", "git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
     (tmp_path / "pyproject.toml").write_text('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
     (tmp_path / "uv.lock").write_text("workspace resolution")
     child = tmp_path / "packages/component"
