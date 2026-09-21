@@ -49,6 +49,15 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
+Source additions: [compare successive verified close packs](docs/close-comparison.md)
+and [reconcile ledger equity movements](docs/equity-reconciliation.md).
+The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
+migration snapshots and inter-entity balances from supplied canonical records.
+These commands and options are not established by the published 0.1.4 package.
+
+The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
+forecasts, WIP and grant workpapers through each repository's locked environment.
+
 The [architecture note](docs/architecture.md) sets out the control boundary and
 the review-pack pipeline. For transaction-level clearing-account matching, see the
 [3-month reconciliation example](docs/clearing-reconciliation.md).

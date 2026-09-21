@@ -10,6 +10,7 @@ from decimal import ROUND_HALF_EVEN, Context, localcontext
 from pathlib import Path
 
 from .engine import CloseReviewPack
+from .equity import summary_lines as equity_summary_lines
 from .errors import ControlInputError
 from .models import ClientQuery, ExceptionItem
 
@@ -151,6 +152,8 @@ def _as_json(pack: CloseReviewPack) -> dict:
     # still be a schema change for every consumer that reads a pack today.
     if calculation_evidence is not None:
         payload["calculation_evidence"] = calculation_evidence
+    if pack.equity_reconciliation is not None:
+        payload["equity_reconciliation"] = pack.equity_reconciliation
     return payload
 
 
@@ -349,6 +352,9 @@ def _as_markdown(pack: CloseReviewPack) -> str:
                     f"| {'yes' if evidence.label in pack.relied_on else 'no'} "
                     f"| {_entry_digest(_evidence_entry(pack, evidence))} |"
                 )
+    if pack.equity_reconciliation is not None:
+        lines += ["", "## Equity reconciliation", ""]
+        lines += equity_summary_lines(pack.equity_reconciliation)
     lines += ["", "## Exceptions", ""]
     if not pack.exceptions:
         lines.append("No exceptions were raised. A human must still decide whether the close is appropriate.")

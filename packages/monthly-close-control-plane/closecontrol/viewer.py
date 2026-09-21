@@ -22,6 +22,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .equity import summary_lines as equity_summary_lines
+from .equity import validate_result as validate_equity_result
 from .errors import ControlInputError
 
 _JSON_NAME = "close-review-pack.json"
@@ -61,7 +63,7 @@ _JSON_MEMBERS = frozenset(
 # writer produced. Leaving it out here made every pack the control produced
 # unopenable by `close-control view`.
 _OPTIONAL_JSON_MEMBERS = frozenset(
-    {"client_queries", "calculation_evidence", "controls_not_run"}
+    {"client_queries", "calculation_evidence", "controls_not_run", "equity_reconciliation"}
 )
 
 _THRESHOLD_KEYS = ("absolute_variance", "percentage_variance", "reconciliation_tolerance")
@@ -467,6 +469,7 @@ _SUMMARY_HEADINGS = (
     "## Scope",
     "## Source evidence",
     _CALCULATION_EVIDENCE_HEADING,
+    "## Equity reconciliation",
     "## Exceptions",
     _CLIENT_QUERY_HEADING,
     "## Human acknowledgement",
@@ -513,7 +516,8 @@ def _heading_lines(summary_text: str) -> list[str]:
     return headings
 
 
-def _verify_summary_headings(summary_text: str, *, register: bool, evidence: bool) -> None:
+def _verify_summary_headings(summary_text: str, *, register: bool, evidence: bool,
+                            equity: bool = False) -> None:
     """Prove the summary's headings are the writer's, exactly and in order.
 
     A forged section needs a heading, or a reviewer scrolling past it reads a
@@ -538,6 +542,7 @@ def _verify_summary_headings(summary_text: str, *, register: bool, evidence: boo
         for heading in _SUMMARY_HEADINGS
         if (register or heading != _CLIENT_QUERY_HEADING)
         and (evidence or heading != _CALCULATION_EVIDENCE_HEADING)
+        and (equity or heading != "## Equity reconciliation")
     ]
     found = _heading_lines(summary_text)
     if found == expected:
@@ -545,7 +550,8 @@ def _verify_summary_headings(summary_text: str, *, register: bool, evidence: boo
     with_register = [
         heading
         for heading in _SUMMARY_HEADINGS
-        if evidence or heading != _CALCULATION_EVIDENCE_HEADING
+        if (evidence or heading != _CALCULATION_EVIDENCE_HEADING)
+        and (equity or heading != "## Equity reconciliation")
     ]
     if not register and found == with_register:
         # The one shape worth naming for itself: a current pack whose register
@@ -1273,6 +1279,7 @@ def _verify_cross_file_agreement(
         summary_text,
         register=query_rows is not None,
         evidence=evidence_block is not None,
+        equity="equity_reconciliation" in document,
     )
 
     status = document["overall_status"]
@@ -1308,6 +1315,18 @@ def _verify_cross_file_agreement(
 
     exceptions = document["exceptions"]
     assert isinstance(exceptions, list)
+
+    if "equity_reconciliation" in document:
+        equity_result = validate_equity_result(document["equity_reconciliation"], json_hashes,
+                                               exceptions)
+        if ([equity_result["opening_date"]] != document["prior_report_dates"]
+                or [equity_result["closing_date"]] != document["current_report_dates"]):
+            if equity_result["status"] != "BLOCKED":
+                raise ControlInputError("Equity dates disagree with the pack.")
+        _verify_rebuilt_section(summary_text, "## Equity reconciliation",
+                                equity_summary_lines(equity_result), trailing_blank=True)
+    elif "equity_schedule" in json_hashes:
+        raise ControlInputError("Equity schedule source has no reconciliation evidence.")
 
     _verify_rows_match(
         csv_name=_CSV_NAME,
@@ -1528,6 +1547,10 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             "- A figure here supports review. It approves nothing, and the "
             "calculation-evidence exceptions say why one is not relied on."
         )
+    equity_block = document.get("equity_reconciliation")
+    if equity_block is not None:
+        assert isinstance(equity_block, dict)
+        lines += ["", "Equity reconciliation", "", *equity_summary_lines(equity_block)]
     lines += ["", "Exceptions", ""]
     if not exceptions:
         lines.append("No exceptions were raised. A human must still decide whether the close is appropriate.")

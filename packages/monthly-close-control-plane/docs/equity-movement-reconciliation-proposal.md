@@ -1,7 +1,8 @@
 # Equity-movement reconciliation proposal
 
-Status: scoped for a future implementation. No control or command in this document
-has been implemented. The existing close-control behaviour is unchanged.
+Status: implemented in the source checkout on 21 September 2026, not released.
+This document retains the design rationale. The current input, output and
+verification contract is in [Equity reconciliation](equity-reconciliation.md).
 
 ## Purpose and boundary
 

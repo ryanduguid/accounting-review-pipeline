@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .comparison import compare_packs
 from .engine import review_close
 from .errors import ControlInputError
 from .reconciliation import reconcile
@@ -17,6 +19,7 @@ from .report import (
     require_output_outside_repository,
     write_review_pack,
 )
+from .schedules import review_schedule
 from .viewer import render_review_sheet
 
 
@@ -39,6 +42,9 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
                          help="optional permitted Section,ReviewGroup pairs CSV; requires --mapping")
     command.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
     command.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
+    command.add_argument("--equity-schedule", type=Path, help="independent ledger-equity movement JSON")
+    command.add_argument("--equity-currency", help="independently confirmed trial-balance currency")
+    command.add_argument("--equity-currency-evidence", help="reference confirming both TB currencies")
     # Opt-in, and read from disk. This tool makes no calculation and contacts
     # no service; something else produced the file.
     command.add_argument("--calculation-evidence", type=Path, action="append", default=None,
@@ -69,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
     clearing.add_argument("--opening-items", type=Path, help="previous period's carry-forward.json")
     clearing.add_argument("--decisions", type=Path, help="reviewed Group,TransactionID,Decision,Note CSV")
     clearing.add_argument("--output", required=True, type=Path, help="new directory outside version control")
+    comparison = commands.add_parser("compare", help="compare verified close packs without changing them")
+    for flag in ("previous-pack", "current-pack", "previous-tb", "current-tb"):
+        comparison.add_argument(f"--{flag}", required=True, type=Path)
+    comparison.add_argument("--responses", type=Path, help="optional responses bound to the current pack")
+    schedule = commands.add_parser("schedule", help="review a canonical expense, migration or inter-entity schedule")
+    schedule.add_argument("--kind", required=True, choices=("expenses", "migration", "interentity"))
+    schedule.add_argument("--input", required=True, type=Path)
     return parser
 
 
@@ -84,8 +97,26 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command not in {"review", "workbench", "view", "reconcile"}:  # pragma: no cover - argparse validates command choices.
+    if args.command not in {"review", "workbench", "view", "reconcile", "compare", "schedule"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
+    if args.command == "schedule":
+        try:
+            result = review_schedule(args.input, kind=args.kind)
+        except (ControlInputError, ValueError, OSError) as exc:
+            print(f"close-control schedule: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["status"] == "PASS" else 2
+    if args.command == "compare":
+        try:
+            result = compare_packs(previous_pack=args.previous_pack, current_pack=args.current_pack,
+                                   previous_tb=args.previous_tb, current_tb=args.current_tb,
+                                   responses=args.responses)
+        except (ControlInputError, ValueError, OSError) as exc:
+            print(f"close-control compare: verification failed: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
     if args.command == "reconcile":
         try:
             destination = require_output_outside_repository(args.output)
@@ -140,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         ("--mapping-policy", args.mapping_policy),
         ("--subledger", args.subledger),
         ("--review-note", args.review_note),
+        ("--equity-schedule", args.equity_schedule),
         *(("--calculation-evidence", path) for path in (args.calculation_evidence or ())),
     ):
         if source is None:
@@ -165,6 +197,9 @@ def main(argv: list[str] | None = None) -> int:
             mapping_policy_path=args.mapping_policy,
             subledger_path=args.subledger,
             acknowledgement_path=args.review_note,
+            equity_schedule_path=args.equity_schedule,
+            equity_currency=args.equity_currency,
+            equity_currency_evidence=args.equity_currency_evidence,
             calculation_evidence_paths=args.calculation_evidence,
             required_calculations=tuple(args.require_calculation or ()),
             absolute_threshold=args.absolute_threshold,
