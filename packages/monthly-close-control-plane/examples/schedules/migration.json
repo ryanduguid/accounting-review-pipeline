@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "currency": "AUD",
+  "cutoff": "2026-09-30",
+  "tenant": "Fabricated Services",
+  "mapping": [
+    {
+      "mapping_id": "M1",
+      "source_account": "090",
+      "target_account": "BANK",
+      "weight": "1"
+    }
+  ],
+  "before": [
+    {
+      "row_id": "I1",
+      "item_id": "I1",
+      "account": "090",
+      "amount": "100.00",
+      "reference": "I1",
+      "tax_code": "GST"
+    },
+    {
+      "row_id": "I2",
+      "item_id": "I2",
+      "account": "090",
+      "amount": "100.00",
+      "reference": "I2",
+      "tax_code": "GST"
+    }
+  ],
+  "after": [
+    {
+      "row_id": "I1",
+      "item_id": "I1",
+      "account": "BANK",
+      "amount": "100.00",
+      "reference": "I1",
+      "tax_code": "GST"
+    },
+    {
+      "row_id": "duplicate",
+      "item_id": "I1",
+      "account": "BANK",
+      "amount": "100.00",
+      "reference": "I1",
+      "tax_code": "GST"
+    }
+  ]
+}

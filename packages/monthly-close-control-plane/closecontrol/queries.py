@@ -114,6 +114,11 @@ def _classify(item: ExceptionItem) -> tuple[str, str, str] | None:
     """
     if item.control in FIRM_RESOLVED_CONTROLS:
         return None
+    if item.control == "equity_reconciliation":
+        if item.status == "BLOCKED" or not item.account_id:
+            return None
+        return ("difference", "Which supporting movement explains this equity difference?",
+                "The dated contribution, withdrawal or evidenced transfer records for this account.")
     if item.control == "period_comparison":
         return _ACCOUNT_ABSENT if item.current_value is None else _ACCOUNT_NEW
     if item.control == "subledger_reconciliation":
