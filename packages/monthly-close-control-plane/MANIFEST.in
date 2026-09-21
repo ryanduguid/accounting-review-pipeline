@@ -12,6 +12,7 @@ recursive-include docs *.md
 recursive-include examples *.csv *.json
 include examples/clearing_demo.py
 include examples/utility_workflows.py
+include examples/equity_demo.py
 include examples/close-loop.md
 # close-loop.md links this driver. A link in the archive that opens nothing is
 # the defect; every file a shipped document points at ships with it.
