@@ -12,6 +12,19 @@ MODULE = runpy.run_path(str(ROOT / "examples/utility_workflows.py"))
 PREPARE = MODULE["prepare"]
 
 
+def test_missing_companion_entrypoint_fails_before_creating_outputs(tmp_path):
+    accounting = tmp_path / "accounting"
+    wip = accounting / "packages/the-wip-tally"
+    fpa = tmp_path / "fpa"
+    for project in (wip, fpa):
+        project.mkdir(parents=True)
+        (project / "pyproject.toml").write_text("[project]")
+    output, environments = tmp_path / "output", tmp_path / "environments"
+    with pytest.raises(ValueError, match="job_to_cash.py.*#236"):
+        PREPARE(output, fpa, accounting, None, environments, "job-cash")
+    assert not output.exists() and not environments.exists()
+
+
 def test_existing_output_is_not_overwritten(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]")
     output = tmp_path / "existing"

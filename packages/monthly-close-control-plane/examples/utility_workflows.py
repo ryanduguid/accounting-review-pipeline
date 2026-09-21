@@ -115,6 +115,8 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
             raise ValueError("Fresh environments must be outside source checkouts")
     if shutil.which("uv") is None:
         raise ValueError("Install uv before running the locked workflow")
+    if "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
+        raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
     return {"projects": projects, "output": output, "environment_root": environment_root}
 
 

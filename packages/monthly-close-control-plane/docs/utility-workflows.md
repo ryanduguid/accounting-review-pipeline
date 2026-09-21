@@ -2,6 +2,14 @@
 
 Use the current Git source checkouts for Accounting Review Pipeline, au-fpa-pack, australian-accounting and grant-acquittal-workpapers. The new commands are not established by older published packages. Install Python 3.11 or later, Git and uv. The driver uses Python 3.11 for each command; uv supplies it and dependencies if absent. Initial setup may download public dependencies. The calculations use local fabricated inputs.
 
+Until the companion changes are integrated, use the source branches from
+[au-fpa-pack #103](https://github.com/ryanduguid/au-fpa-pack/pull/103) and
+[australian-accounting #236](https://github.com/ryanduguid/australian-accounting/pull/236).
+The grant route also needs the reviewed grant-acquittal-workpapers source.
+The driver refuses a WIP checkout without `examples/job_to_cash.py` before
+creating outputs or environments. Default-branch checkouts alone do not yet
+provide the joined examples.
+
 Within a uv workspace, `uv run --project` uses the workspace root lockfile. Close control therefore uses Accounting Review Pipeline's root `uv.lock`. A project outside a workspace uses its own lockfile. The manifest records the resolved lock path, scope and digest for each owner. Separate environment directories do not establish standalone component-lock compatibility; that requires a separate extracted-source or release check.
 
 From a directory containing those 4 checkout folders:
