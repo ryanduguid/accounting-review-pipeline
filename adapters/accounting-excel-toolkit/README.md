@@ -16,7 +16,7 @@
 
 [![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
 
-Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
+Source-archive adapter `accounting-excel-toolkit` (Power Query, VBA, and an offline Python converter); no Python package distribution. The Account Transactions converter requires stable source-line IDs and emits no invented identity when that evidence is unavailable.
 
 The `accounting-excel-toolkit/v0.1.6` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
 
