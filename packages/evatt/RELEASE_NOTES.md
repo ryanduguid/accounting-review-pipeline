@@ -1,5 +1,6 @@
 # Unreleased
 
+- Detect labelled identifiers in padded code spans containing literal emphasis markers. Preserve the surrounding markup, line endings and replacement counts.
 - Detect labelled identifiers across complete emphasis and inline-code delimiter runs, including four or more backticks and mixed nested markup. Preserve digit spans, replacement counts and bounded scan growth.
 
 # v0.1.1
