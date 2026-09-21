@@ -110,25 +110,18 @@ PHONE = re.compile(
 # have given, is the quadratic form under another name: every way of splitting
 # the space run between them is a separate path to try.
 #
-# _MARKUP admits the emphasis or code delimiter markdown puts between a label
-# and its digits: "**TFN**: 123 456 783", "**TFN:** 123 456 783", "TFN:
-# **123 456 783**" and "TFN: `123 456 783`" each passed through unchanged and
-# verified clean, because every one of them depends on the label alone and
-# the delimiter broke the label's reach. Markdown nests at most 2 kinds of
-# delimiter at one point: an emphasis run of 1 to 3 "*" or "_" (italic, bold,
-# bold italic) and a code fence of 1 to 3 backticks, in either order. _MARKUP
-# is that structure, not a count: a flat run of up to 3 characters covered
-# "***TFN***: 123 456 783" and "TFN: **`123 456 783`**" but let
-# "TFN: ***`123 456 783`***" through, and raising the count would have chased
-# the next combination. Each alternative starts with a mandatory
-# non-whitespace character inside the optional group, so the ``\s*`` behind
-# it sits behind a token like every other one in _GAP and the linear scan is
-# kept. "|" joins _SEP for the same reason: "| TFN | 123 456 783 |" is how a
-# table row writes a label beside its value.
+# A label may be separated from its digits by emphasis or code delimiters.
+# Consume each contiguous delimiter run in full. Code spans allow any backtick
+# count; a fixed count silently leaves longer labelled identifiers untouched.
+# The final lookahead prevents the two optional _MARKUP groups in _GAP from
+# partitioning one run during backtracking. Whitespace remains behind a
+# mandatory delimiter, preserving the bounded scan used by the label patterns.
+# Mixed or unmatched delimiter runs are conservatively treated as formatting:
+# the label still identifies the candidate, even when the markup is malformed.
 _WORD = r"(?:number|no|card(?:holder)?)\b\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
 _SEP = r"(?:[.:#,(|\u2013-]\s*)?"
-_MARKUP = r"(?:(?:[*_]{1,3}`{0,3}|`{1,3}[*_]{0,3})\s*)?"
+_MARKUP = r"(?:[*_`]+(?![*_`])\s*)?"
 _GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
 TFN_LABELLED = re.compile(
     r"\b(?:tax file number|TFN)\b%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
