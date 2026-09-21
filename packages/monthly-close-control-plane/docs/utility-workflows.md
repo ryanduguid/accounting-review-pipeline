@@ -2,13 +2,23 @@
 
 Use the current Git source checkouts for Accounting Review Pipeline, au-fpa-pack, australian-accounting and grant-acquittal-workpapers. The new commands are not established by older published packages. Install Python 3.11 or later, Git and uv. The driver uses Python 3.11 for each command; uv supplies it and dependencies if absent. Initial setup may download public dependencies. The calculations use local fabricated inputs.
 
-Until the companion changes are integrated, use the source branches from
-[au-fpa-pack #103](https://github.com/ryanduguid/au-fpa-pack/pull/103) and
-[australian-accounting #236](https://github.com/ryanduguid/australian-accounting/pull/236).
-The grant route also needs the reviewed grant-acquittal-workpapers source.
-The driver refuses a WIP checkout without `examples/job_to_cash.py` before
-creating outputs or environments. Default-branch checkouts alone do not yet
-provide the joined examples.
+The joined examples are available on all four repositories' `main` branches.
+The grant route needs access to the private grant-acquittal-workpapers checkout.
+The driver refuses an older WIP checkout without `examples/job_to_cash.py`
+before creating outputs or environments.
+
+For one-command setup, run this from the grant-acquittal-workpapers checkout:
+
+```powershell
+python setup_utility.py --workspace ../accounting-utility-demo
+```
+
+The setup command needs Python 3.11 or later, Git and uv on PATH. It clones the
+three public companions at `main`, creates isolated environments and runs every
+joined example. The workspace must be new and outside existing Git checkouts.
+Existing checkouts are not updated. Results and their provenance manifest go
+under `accounting-utility-demo/results`; a failed run leaves its workspace for
+diagnosis. Retry with a new workspace path.
 
 Within a uv workspace, `uv run --project` uses the workspace root lockfile. Close control therefore uses Accounting Review Pipeline's root `uv.lock`. A project outside a workspace uses its own lockfile. The manifest records the resolved lock path, scope and digest for each owner. Separate environment directories do not establish standalone component-lock compatibility; that requires a separate extracted-source or release check.
 
@@ -35,4 +45,13 @@ A successful run writes `manifest.json` with the 19 workflow commands, 4 runtime
 
 Each command has a 300-second timeout, adjustable with `--timeout` up to 3,600 seconds. A timeout or interruption stops the command process tree. Launch errors, unexpected exits and timeouts retain `failed-calls.json` with completed steps, timings, source evidence and the failed command's output. No success manifest is written for that run. Review diagnostics locally before sharing them. The driver does not resume a partial run; correct the cause and choose a new output directory.
 
-Review results retain their accounting limits; a successful integration does not approve a close, a grant acquittal or a funding decision. The source tests run through existing component CI commands. Full sibling integration is this explicit local recipe; hosted cross-repository CI has not been added or claimed. Timings are measurements for comparison, not a claim of improved performance.
+The grant repository's `Joined accounting examples` workflow runs the same setup
+command on Linux and Windows for its PRs, pushes to `main`, manual runs and a
+daily schedule. It uses the current grant checkout and the public companions'
+latest `main` revisions. The manifest records the actual revisions. Companion
+changes are caught by the next scheduled run, not by a check on their own PRs.
+The daily schedule starts once the workflow is merged to the default branch.
+Fabricated results and failure diagnostics stay in private workflow artefacts
+for seven days; no extra cross-repository secret is required.
+
+Review results retain their accounting limits; a successful integration does not approve a close, a grant acquittal or a funding decision. Component tests continue to run through their existing CI commands. Timings are measurements for comparison, not a claim of improved performance.
