@@ -1,0 +1,11 @@
+Account Transactions,,,,,,,,
+Fabricated Services,,,,,,,,
+For the period 1 September 2026 to 30 September 2026,,,,,,,,
+,,,,,,,,
+Date,Source,Description,Reference,Debit,Credit,Running Balance,Gross,GST
+,,,,,,,,
+Clearing,,,,,,,,
+Opening Balance,,,,0,0,0,0,0
+01/09/2026,Receive Money,Receipt,REC-1,110.00,0,110.00,110.00,10.00
+03/09/2026,Spend Money,Settlement,SET-1,0,100.00,10.00,100.00,0
+Total Clearing,,,,110.00,100.00,10.00,210.00,10.00

@@ -35,6 +35,7 @@ exports/
 !samples/sample-xero-trial-balance-columns.csv
 !samples/sample-xero-trial-balance-excel-export.csv
 !samples/sample-xero-trial-balance.csv
+!samples/xero-account-transactions.csv
 
 # Python bytecode from tools/ and tests/
 __pycache__/
