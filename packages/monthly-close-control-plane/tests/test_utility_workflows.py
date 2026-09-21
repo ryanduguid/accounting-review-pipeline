@@ -45,7 +45,7 @@ def test_fresh_environments_cannot_overlap_outputs(tmp_path, layout):
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="The cross-repository driver requires Python 3.11")
 def test_provenance_uses_workspace_lock_and_tracks_uncommitted_source(tmp_path):
-    subprocess.run(["rtk", "proxy", "git", "init", str(tmp_path)], check=True, capture_output=True)
+    MODULE["git_output"](tmp_path, "init")
     (tmp_path / "pyproject.toml").write_text('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
     (tmp_path / "uv.lock").write_text("workspace resolution")
     child = tmp_path / "packages/component"
@@ -66,6 +66,20 @@ def test_provenance_uses_workspace_lock_and_tracks_uncommitted_source(tmp_path):
 def test_command_timeout_stops_a_process(tmp_path):
     with pytest.raises(subprocess.TimeoutExpired):
         MODULE["captured"]([sys.executable, "-c", "import time; time.sleep(30)"], cwd=tmp_path, timeout=0.1)
+
+
+def test_git_evidence_does_not_require_optional_rtk(tmp_path, monkeypatch):
+    scope = MODULE["git_output"].__globals__
+    commands = []
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: None)
+
+    def completed(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "fixture revision", "")
+
+    monkeypatch.setitem(scope, "captured", completed)
+    assert MODULE["git_output"](tmp_path, "rev-parse", "HEAD") == "fixture revision"
+    assert commands == [["git", "rev-parse", "HEAD"]]
 
 
 @pytest.mark.parametrize("failure", ["exit", "timeout", "launch"])
