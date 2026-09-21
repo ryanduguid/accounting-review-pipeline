@@ -28,6 +28,10 @@ Every function here solves a problem the Australian ledger-export formats create
 
 ## Power Query functions
 
+For the observed Xero Account Transactions layout, use the
+[CSV inspection and canonical conversion guide](docs/account-transactions-import.md).
+It states the stable-ID evidence needed before conversion.
+
 One `.pq` file per function. To load one into Excel:
 
 1. Open the `.pq` file in any text editor (Notepad works) and copy all of it.
