@@ -1,6 +1,6 @@
 # Unreleased
 
-- Admit markdown's nested delimiters between a label and its digits as a structure, an emphasis run of up to 3 characters beside a code fence of up to 3 backticks in either order, so `***TFN***: 123 456 783`, `TFN: ***123 456 783***`, `` TFN: **`123 456 783`** `` and `` TFN: ***`123 456 783`*** `` are redacted like their simpler forms.
+- Detect labelled identifiers across complete emphasis and inline-code delimiter runs, including four or more backticks and mixed nested markup. Preserve digit spans, replacement counts and bounded scan growth.
 
 # v0.1.1
 
