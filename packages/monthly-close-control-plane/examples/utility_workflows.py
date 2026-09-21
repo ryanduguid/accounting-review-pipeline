@@ -90,7 +90,7 @@ def project_evidence(project):
 def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | None, environment_root: Path | None, workflow: str) -> dict:
     projects = {"close": COMPONENT, "fpa": fpa.resolve()}
     if accounting is not None:
-        projects["wip"] = accounting.resolve() / "packages/the-wip-tally"
+        projects["wip"] = (accounting.resolve() / "packages/the-wip-tally").resolve()
     if grants is not None:
         projects["grants"] = grants.resolve()
     required = {"all": {"wip", "grants"}, "job-cash": {"wip"}, "grant-cash": {"grants"}}.get(workflow, set())
@@ -100,7 +100,13 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
         if not (project / "pyproject.toml").is_file():
             raise ValueError(f"Missing project manifest: {project}")
     output = output.resolve()
-    roots = [COMPONENT.parents[1], fpa.resolve(), *([accounting.resolve()] if accounting else []), *([grants.resolve()] if grants else [])]
+    roots = set()
+    for project in projects.values():
+        roots.add(project)
+        try:
+            roots.add(Path(git_output(project, "rev-parse", "--show-toplevel").strip()).resolve())
+        except (ValueError, OSError):
+            pass
     if any(output == root or root in output.parents for root in roots):
         raise ValueError("Output must be outside all source checkouts")
     if output.exists():
