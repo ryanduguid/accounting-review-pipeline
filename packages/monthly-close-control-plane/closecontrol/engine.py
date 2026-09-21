@@ -12,9 +12,10 @@ from decimal import (
     localcontext,
 )
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from .calculation_evidence import _LABEL, CalculationEvidence, covers_period, load_all
+from .equity import reconcile_equity
 from .errors import ControlInputError, DateMismatchError, NumericGateError, SchemaError
 from .loader import (
     SourceSnapshot,
@@ -55,6 +56,7 @@ class CloseReviewPack:
     # alone marked a wrong-month figure as relied upon while an exception about
     # it sat in the same pack.
     relied_on: frozenset[str] = frozenset()
+    equity_reconciliation: dict[str, Any] | None = None
 
     @property
     def client_queries(self) -> tuple[ClientQuery, ...]:
@@ -518,6 +520,9 @@ def review_close(
     mapping_policy_path: Path | None = None,
     subledger_path: Path | None = None,
     acknowledgement_path: Path | None = None,
+    equity_schedule_path: Path | None = None,
+    equity_currency: str | None = None,
+    equity_currency_evidence: str | None = None,
     calculation_evidence_paths: list[Path] | None = None,
     required_calculations: tuple[str, ...] = (),
     absolute_threshold: Decimal = Decimal("1000"),
@@ -527,6 +532,8 @@ def review_close(
     """Create a deterministic review pack without mutating any accounting system."""
     if mapping_policy_path is not None and mapping_path is None:
         raise SchemaError("A mapping policy requires a supplied account mapping.")
+    if equity_schedule_path is None and (equity_currency or equity_currency_evidence):
+        raise SchemaError("Equity currency declarations require an equity schedule.")
     for name, value in {
         "absolute_threshold": absolute_threshold,
         "percentage_threshold": percentage_threshold,
@@ -620,6 +627,17 @@ def review_close(
                 evidence, unreadable_evidence, required_calculations, current_date,
             )
 
+    equity_result = None
+    equity_source = None
+    if equity_schedule_path is not None:
+        equity_source = SourceSnapshot.capture(equity_schedule_path, label="Equity schedule")
+        equity_result, equity_findings = reconcile_equity(
+            equity_source, prior=prior_rows, current=current_rows,
+            prior_sha256=prior_source.sha256, current_sha256=current_source.sha256,
+            currency=equity_currency, currency_evidence=equity_currency_evidence,
+            tolerance=reconciliation_tolerance)
+        exceptions += equity_findings
+
     # The mapping's ReviewGroup travels with every exception that names an
     # account it covers, so a reviewer can filter exceptions.csv or the JSON
     # pack by reporting group. The column stays blank when no mapping was
@@ -643,6 +661,8 @@ def review_close(
         source_hashes["subledger"] = subledger_source.sha256
     if acknowledgement_source is not None:
         source_hashes["review_note"] = acknowledgement_source.sha256
+    if equity_source is not None:
+        source_hashes["equity_schedule"] = equity_source.sha256
     for item in evidence:
         # One hash per evidence file, keyed by its label, so the pack records
         # the exact bytes it read rather than a path a reader cannot check.
@@ -685,6 +705,7 @@ def review_close(
         reconciliation_tolerance=reconciliation_tolerance,
         exceptions=ordered,
         acknowledgement=acknowledgement,
+        equity_reconciliation=equity_result,
         calculation_evidence=tuple(evidence),
         required_calculations=tuple(required_calculations),
         controls_not_run=controls_not_run,

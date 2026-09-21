@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "currency": "AUD",
+  "cutoff": "2026-09-30",
+  "tenant": "Fabricated Services",
+  "invoices": [
+    {
+      "invoice_id": "I1",
+      "supplier": "Demo supplier",
+      "reference": "INV-1",
+      "amount": "100.00",
+      "evidence": "receipt-I1"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "C1",
+      "invoice_id": "I1",
+      "employee": "Employee A",
+      "amount": "100.00",
+      "approved": true
+    }
+  ],
+  "payments": [
+    {
+      "payment_id": "P1",
+      "claim_id": "C1",
+      "amount": "60.00",
+      "date": "2026-09-20",
+      "reference": "PAY-1"
+    },
+    {
+      "payment_id": "P2",
+      "claim_id": "C1",
+      "amount": "60.00",
+      "date": "2026-09-25",
+      "reference": "PAY-2"
+    }
+  ],
+  "ledger_balance": "-20.00"
+}
