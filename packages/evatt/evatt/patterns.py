@@ -111,17 +111,17 @@ PHONE = re.compile(
 # the space run between them is a separate path to try.
 #
 # A label may be separated from its digits by emphasis or code delimiters.
-# Consume each contiguous delimiter run in full. Code spans allow any backtick
-# count; a fixed count silently leaves longer labelled identifiers untouched.
+# Consume delimiters and their padding in one run. Code spans allow any backtick
+# count and can pad literal emphasis markers with spaces or line breaks.
 # The final lookahead prevents the two optional _MARKUP groups in _GAP from
-# partitioning one run during backtracking. Whitespace remains behind a
-# mandatory delimiter, preserving the bounded scan used by the label patterns.
+# partitioning one run during backtracking. A mandatory first delimiter and a
+# single character class avoid nested whitespace matching and keep scans bounded.
 # Mixed or unmatched delimiter runs are conservatively treated as formatting:
 # the label still identifies the candidate, even when the markup is malformed.
 _WORD = r"(?:number|no|card(?:holder)?)\b\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
 _SEP = r"(?:[.:#,(|\u2013-]\s*)?"
-_MARKUP = r"(?:[*_`]+(?![*_`])\s*)?"
+_MARKUP = r"(?:[*_`][*_`\s]*(?![*_`\s]))?"
 _GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
 TFN_LABELLED = re.compile(
     r"\b(?:tax file number|TFN)\b%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
