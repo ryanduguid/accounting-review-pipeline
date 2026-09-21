@@ -7,12 +7,22 @@ import hashlib
 import io
 import json
 import re
+import unicodedata
 from datetime import datetime
 from decimal import Decimal, localcontext
 from pathlib import Path
 
 HEADER = ["Date", "Source", "Description", "Reference", "Debit", "Credit", "Running Balance", "Gross", "GST"]
 OUTPUT = ["Tenant", "AccountID", "Currency", "TransactionID", "Date", "Reference", "Description", "Debit", "Credit"]
+MAX_DETAIL_ROWS = 100_000
+
+
+def _valid_text(value, *, field, allow_empty=False):
+    if not isinstance(value, str) or (not value and not allow_empty):
+        raise ValueError(f"{field} must be non-empty text.")
+    if any(unicodedata.category(character) in {"Cc", "Cf", "Cs"} for character in value):
+        raise ValueError(f"{field} contains a control or formatting character.")
+    return value
 
 
 def amount(text):
@@ -45,6 +55,7 @@ def inspect_export(content, *, tenant, account_name):
     selected = False
     sections = 0
     complete = False
+    opening_seen = False
     detail = []
     debit = credit = Decimal(0)
     with localcontext() as context:
@@ -61,10 +72,13 @@ def inspect_export(content, *, tenant, account_name):
             if not selected:
                 continue
             if row[0] == "Opening Balance":
-                if detail:
-                    raise ValueError("Opening balance appeared after transaction detail.")
+                if detail or opening_seen:
+                    raise ValueError("Expected exactly one opening balance before transaction detail.")
+                opening_seen = True
                 continue
             if row[0] == "Total " + account_name:
+                if not opening_seen:
+                    raise ValueError("Selected account section is missing its opening balance.")
                 if amount(row[4]) != debit or amount(row[5]) != credit:
                     raise ValueError("Account subtotal does not equal independently summed detail.")
                 selected = False
@@ -82,6 +96,8 @@ def inspect_export(content, *, tenant, account_name):
                 raise ValueError(f"Row {index}: exactly one debit or credit must be positive.")
             debit += dr
             credit += cr
+            if len(detail) >= MAX_DETAIL_ROWS:
+                raise ValueError(f"Selected detail exceeds the {MAX_DETAIL_ROWS:,}-row clearing limit.")
             detail.append({"source_row": index, "Date": posted.isoformat(), "Source": row[1],
                            "Reference": row[3], "Description": row[2], "Debit": str(dr), "Credit": str(cr)})
     if sections != 1 or not complete or selected:
@@ -93,6 +109,9 @@ def inspect_export(content, *, tenant, account_name):
 
 def convert(content, mapping, *, tenant, account_name, account_id, currency):
     result = inspect_export(content, tenant=tenant, account_name=account_name)
+    _valid_text(tenant, field="Tenant")
+    _valid_text(account_id, field="AccountID")
+    _valid_text(currency, field="Currency")
     if not re.fullmatch("[A-Z]{3}", currency) or not account_id.strip():
         raise ValueError("Supply a 3-letter currency and explicit account ID.")
     if not isinstance(mapping, dict) or set(mapping) != {"source_sha256", "lines"} or mapping["source_sha256"] != result["source_sha256"]:
@@ -105,9 +124,14 @@ def convert(content, mapping, *, tenant, account_name, account_id, currency):
         raise ValueError("Mapping requires stable source-line IDs in the clearing schema.")
     if len(set(ids)) != len(ids):
         raise ValueError("Mapped source-line IDs must be unique.")
-    return [{**{key: row[key] for key in ("Date", "Reference", "Description", "Debit", "Credit")},
-             "Tenant": tenant, "AccountID": account_id, "Currency": currency,
-             "TransactionID": lines[str(row["source_row"])]} for row in result["detail"]]
+    output = []
+    for row in result["detail"]:
+        _valid_text(row["Reference"], field="Reference", allow_empty=True)
+        _valid_text(row["Description"], field="Description", allow_empty=True)
+        output.append({**{key: row[key] for key in ("Date", "Reference", "Description", "Debit", "Credit")},
+                       "Tenant": tenant, "AccountID": account_id, "Currency": currency,
+                       "TransactionID": lines[str(row["source_row"])]})
+    return output
 
 
 def main(argv=None):
