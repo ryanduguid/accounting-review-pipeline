@@ -65,4 +65,3 @@ Focused regression coverage: tests/test_equity.py. It covers matching and nil
 movements, loss transfers, debit balances, sub-cent tolerances, offsetting errors,
 incomplete evidence, changed identity and currency, malformed input, tampered
 output, inert source text and preservation of an old pack on input failure.
-
