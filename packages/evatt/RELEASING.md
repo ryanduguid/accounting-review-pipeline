@@ -67,7 +67,7 @@ the first tag that would use them.
     ```
 
 6. Create the annotated component tag on current remote `main`, for example
-   `git tag -a evatt/v0.1.1 -m "evatt v0.1.1"` (or `-s` when signing is
+   `git tag -a evatt/v0.1.2 -m "evatt v0.1.2"` (or `-s` when signing is
    configured), then push only that tag.
 
 The workflow runs the locked tests, builds the wheel and source distribution
@@ -78,7 +78,7 @@ existing release is never overwritten.
 ## Verifying a release
 
 ```bash
-tag=evatt/v0.1.1
+tag=evatt/v0.1.2
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#evatt/v}"
 wheel="evatt-${version}-py3-none-any.whl"
