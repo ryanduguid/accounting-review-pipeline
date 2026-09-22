@@ -577,7 +577,11 @@ def require_directory_outside_checkout(out_dir: str, *, with_manifest: bool) -> 
 
 
 def require_output_outside_checkout(
-    out_path: str, *, with_manifest: bool, representative: bool = False
+    out_path: str,
+    *,
+    with_manifest: bool,
+    representative: bool = False,
+    quiet: bool = False,
 ) -> None:
     """Refuse an export inside a version-control checkout unless git ignores it.
 
@@ -613,6 +617,19 @@ def require_output_outside_checkout(
     ]
     if not unignored:
         return
+    if quiet:
+        # Keep staged names actionable, but do not echo client-derived names in
+        # an error message.  The checkout path and temporary names still tell
+        # an operator where to fix the configuration and what to recover.
+        csv_name = os.path.basename(resolved)
+        manifest_name = os.path.basename(manifest_path_for(resolved))
+        parked_name = manifest_name + ".previous"
+        unignored = [
+            "<client-named CSV>" if name == csv_name else
+            "<client-named manifest>" if name == manifest_name else
+            "<client-named parked manifest>" if name == parked_name else name
+            for name in unignored
+        ]
     stand_in = (
         " The names are stand-ins: a default filename takes the organisation's name, "
         "and the staged files take a random one."
@@ -1131,7 +1148,9 @@ def main() -> None:
     basis = "cash" if args.payments_only else "accrual"
     try:
         out_path = output_path(args.out, default_output_filename(tenant, args.date, basis))
-        require_output_outside_checkout(out_path, with_manifest=not args.no_manifest)
+        require_output_outside_checkout(
+            out_path, with_manifest=not args.no_manifest, quiet=args.quiet
+        )
     except ValueError as exc:
         parser.error(str(exc))
 

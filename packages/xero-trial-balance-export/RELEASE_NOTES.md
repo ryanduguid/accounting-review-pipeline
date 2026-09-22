@@ -4,12 +4,13 @@
   whichever cell came last. A header carrying `Debit` twice named 2 columns
   one record key, so the later amount silently won; the run now exits with the
   repeated titles named, before a row is read.
-- Print no amounts with the unbalanced WARNING, and name tenant ids and counts
-  rather than tenant names when a tenant selection is refused.
+- The unbalanced WARNING omits debit and credit totals but retains the
+  calculated imbalance difference and account count; tenant-selection refusals
+  name tenant ids and counts rather than tenant names.
 - Add `--quiet`, which withholds the tenant line, the totals and the
-  client-named default filename from every message, including the failure
-  paths. The containing directory is still shown, and the staged `tmp*` names
-  are printed in full so a recovery instruction can be followed.
+  client-named default filename from every message, including checkout-guard
+  failures. The containing directory is still shown, and the staged `tmp*`
+  names are printed in full so a recovery instruction can be followed.
 - Refuse to write inside a git working tree unless the CSV, its manifest, the
   `.previous` file and the staged `.tmp` names are all ignored. The check runs
   before any credential is read.
