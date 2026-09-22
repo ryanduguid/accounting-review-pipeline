@@ -195,7 +195,7 @@ Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
 ## Mapping compatibility policy
 
-The development source adds optional `--mapping-policy` to `review` and
+Version 0.1.5 adds optional `--mapping-policy` to `review` and
 `workbench`. It requires `--mapping` and accepts a local UTF-8 CSV with exactly
 `Section,ReviewGroup` columns, in either order. Each row permits one source
 section for one review group. A group may allow several sections. Blank fields,
