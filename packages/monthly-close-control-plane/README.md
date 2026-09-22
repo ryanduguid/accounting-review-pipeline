@@ -195,8 +195,8 @@ Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
 ## Mapping compatibility policy
 
-The development source adds optional `--mapping-policy` to `review` and
-`workbench`. It requires `--mapping` and accepts a local UTF-8 CSV with exactly
+Release 0.1.5 adds optional `--mapping-policy` to `review` and `workbench`.
+It requires `--mapping` and accepts a local UTF-8 CSV with exactly
 `Section,ReviewGroup` columns, in either order. Each row permits one source
 section for one review group. A group may allow several sections. Blank fields,
 duplicate pairs, an empty policy and malformed rows fail with exit code 1.
@@ -217,7 +217,7 @@ Add `--mapping-policy examples/mapping_policy.csv` to the quick demo to use the
 fabricated policy that matches `examples/account_mapping.csv`. Keep real policy
 files outside the checkout. The pack's `source_sha256.mapping_policy` records
 the exact bytes read by the control. Runs without this option retain their
-existing behaviour. This feature is unreleased.
+existing behaviour. This feature is available in release 0.1.5.
 
 ## Worked example
 

@@ -428,6 +428,11 @@ def test_repository_versions_and_yaml_dev_dependency_agree() -> None:
     assert "PyYAML>=6.0.3,<7" in project["project"]["optional-dependencies"]["dev"]
     assert yaml_version == yaml.__version__ == "6.0.3"
 
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"Release {project_version} adds optional `--mapping-policy`" in readme
+    assert f"This feature is available in release {project_version}." in readme
+    assert "This feature is unreleased." not in readme
+
 
 def test_repository_identity_is_distinct_from_package_identity() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
