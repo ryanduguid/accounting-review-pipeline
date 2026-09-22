@@ -1,6 +1,6 @@
 # Equity-movement reconciliation proposal
 
-Status: implemented in the source checkout on 21 September 2026, not released.
+Status: implemented on 21 September 2026 and released in 0.1.5.
 This document retains the design rationale. The current input, output and
 verification contract is in [Equity reconciliation](equity-reconciliation.md).
 
