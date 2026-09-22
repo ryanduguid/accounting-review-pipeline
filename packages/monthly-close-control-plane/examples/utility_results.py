@@ -14,6 +14,10 @@ COUNTS = {"close-forecast": {"fpa": 2, "close": 2}, "quarter": {"fpa": 1, "close
 GRANT_FINDINGS = {("MISSING_SOURCE_EVIDENCE", "L3"), ("OUTSIDE_AGREEMENT_PERIOD", "A3"),
                   ("MISSING_ALLOCATION_EVIDENCE", "A4"), ("UNAPPROVED_ALLOCATION", "A4"),
                   ("UNALLOCATED_SOURCE", "L4")}
+WIP_CASH = {
+    "job-base": tuple("-434500" for _ in range(13)),
+    "job-extra-cost": tuple("-544500" for _ in range(13)),
+}
 
 
 def require(condition, message):
@@ -72,10 +76,11 @@ def validate(output: Path, workflow: str, calls: list, projects: dict) -> list[s
                         "Quarter comparisons must retain REVIEW")
         lines.append("Quarter cash: AUD 20,000 / 22,000 / 24,500 / 29,500.")
     if "job-cash" in routes:
-        for name, expected_cash in (("job-base", "-434500"), ("job-extra-cost", "-544500")):
+        for name, expected_cash in WIP_CASH.items():
             weeks = read(output, f"{name}/project-cash.json")["weeks"]
             require([w["week"] for w in weeks] == list(range(1, 14)), "WIP cash needs thirteen ordered weeks")
-            require(Decimal(weeks[-1]["ending_cash"]) == Decimal(expected_cash), "WIP cash differs from the fixture")
+            require([Decimal(w["ending_cash"]) for w in weeks] == list(map(Decimal, expected_cash)),
+                    "WIP cash differs from the fixture")
         lines.append("Project cash at week 13: AUD -434,500 baseline; AUD -544,500 with extra completion costs.")
     if "grant-cash" in routes:
         cash = read(output, "grant-cash.json")
