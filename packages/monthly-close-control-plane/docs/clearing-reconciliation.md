@@ -2,8 +2,7 @@
 
 `close-control reconcile` suggests transaction matches, records a reviewer's
 allocations and carries outstanding items into the next period. It works locally
-with one account and one currency. This command is an unreleased source addition;
-the existing published package version does not establish its availability.
+with one account and one currency. This command ships from 0.1.5.
 
 ## Run the worked example
 
