@@ -2038,6 +2038,40 @@ class CheckoutGuardTest(_ExportCase):
         self.assertIsNone(data, "an export inside a checkout must not reach disk")
         self.assertNotIn("Wrote", out)
 
+    def test_the_checkout_refusal_withholds_filenames_under_quiet(self):
+        """--quiet keeps a client-derived filename out of this refusal too.
+
+        The post-fetch call names the real destination, and a default filename
+        takes the organisation's name, so printing the basenames here put the
+        client's name in exactly the log --quiet exists to keep it out of. The
+        count and the checkout path stay, because those are what an operator
+        acts on.
+        """
+        repo = self._repo()
+        target = os.path.join(repo, "Ridgeway Holdings Pty Ltd-2026-06-30.csv")
+        previous = export_tb.QUIET
+        export_tb.QUIET = True
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                export_tb.require_output_outside_checkout(target, with_manifest=True)
+        finally:
+            export_tb.QUIET = previous
+        message = str(ctx.exception)
+        self.assertNotIn("Ridgeway", message)
+        self.assertIn("withheld under --quiet", message)
+        self.assertIn("version-control checkout", message)
+        self.assertIn(repo, message)
+        self.assertNotIn("stand-ins", message, "no names are shown, so the note is noise")
+
+    def test_the_checkout_refusal_names_the_files_without_quiet(self):
+        repo = self._repo()
+        target = os.path.join(repo, "Ridgeway Holdings Pty Ltd-2026-06-30.csv")
+        with self.assertRaises(ValueError) as ctx:
+            export_tb.require_output_outside_checkout(target, with_manifest=True)
+        message = str(ctx.exception)
+        self.assertIn("Ridgeway Holdings Pty Ltd-2026-06-30.csv", message)
+        self.assertNotIn("withheld under --quiet", message)
+
     def test_an_ignored_directory_inside_a_checkout_is_allowed(self):
         repo = self._repo(ignore="exports/\n")
         raised, out, data = self.run_export(
