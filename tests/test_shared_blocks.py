@@ -48,6 +48,7 @@ IDENTICAL = {
     ),
     "loader.py": (
         "_ACCOUNTING_NUMBER",
+        "_EXTENDED_ISO_DATE",
         "_require_columns",
         "_text",
     ),
@@ -63,6 +64,8 @@ SAME_LOGIC = {
     ),
     "loader.py": (
         "SourceSnapshot",
+        "parse_money",
+        "parse_iso_date",
         "_read_csv_rows",
         "_has_control_or_format_character",
     ),
@@ -164,6 +167,23 @@ class SharedBlockTests(unittest.TestCase):
             for name in SAME_LOGIC[filename]:
                 with self.subTest(file=filename, name=name):
                     self.assertEqual(_executable(here[name]), _executable(there[name]))
+
+    def test_loader_bodies_match_after_the_deliberate_input_adapters(self) -> None:
+        # Close control accepts paths or snapshots; review readiness accepts
+        # snapshots for trial balances and paths for review notes. Pin all
+        # validation after those intentionally different capture adapters.
+        left, right = PAIRS["loader.py"]
+        for name, start_type in (("load_canonical_tb", ast.AnnAssign),
+                                 ("load_reviewer_acknowledgement", ast.Try)):
+            bodies = []
+            for path in (left, right):
+                node = ast.parse(_definitions(path)[name]).body[0]
+                start = next(i for i, statement in enumerate(node.body)
+                             if isinstance(statement, start_type))
+                body = "\n".join(ast.unparse(statement) for statement in node.body[start:])
+                bodies.append(_executable(body).replace("CANONICAL_TB_COLUMNS", "CANONICAL_COLUMNS"))
+            with self.subTest(name=name):
+                self.assertEqual(*bodies)
 
     def test_the_staged_write_rollback_is_identical(self) -> None:
         left, right = PAIRS["report.py"]

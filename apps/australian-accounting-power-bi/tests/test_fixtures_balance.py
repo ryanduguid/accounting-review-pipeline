@@ -10,7 +10,9 @@ import importlib.util
 import io
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = BASE_DIR / "samples"
@@ -26,6 +28,18 @@ FIXTURE_FILES = [
 
 
 class TestFixturesBalance(unittest.TestCase):
+    def test_balance_oracle_rejects_a_cent_below_float_precision(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "sample-general-ledger.csv").write_text(
+                "JournalID,Debit,Credit,Amount\n"
+                "JNL1,10000000000000000.01,10000000000000000.00,0.01\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(globals(), SAMPLES_DIR=root):
+                with self.assertRaisesRegex(AssertionError, "unbalanced"):
+                    self.test_general_ledger_journals_strictly_balanced()
+
     def test_sample_files_exist(self) -> None:
         for fname in FIXTURE_FILES:
             fpath = SAMPLES_DIR / fname
@@ -45,9 +59,9 @@ class TestFixturesBalance(unittest.TestCase):
         self.assertGreater(len(journals), 0, "GL fixture must contain journals")
 
         for jid, lines in journals.items():
-            total_debit = round(sum(float(line["Debit"]) for line in lines), 2)
-            total_credit = round(sum(float(line["Credit"]) for line in lines), 2)
-            net_amount = round(sum(float(line["Amount"]) for line in lines), 2)
+            total_debit = sum((Decimal(line["Debit"]) for line in lines), Decimal(0))
+            total_credit = sum((Decimal(line["Credit"]) for line in lines), Decimal(0))
+            net_amount = sum((Decimal(line["Amount"]) for line in lines), Decimal(0))
 
             self.assertEqual(
                 total_debit,
@@ -56,7 +70,7 @@ class TestFixturesBalance(unittest.TestCase):
             )
             self.assertEqual(
                 net_amount,
-                0.0,
+                Decimal(0),
                 f"Journal {jid} net amount is non-zero: {net_amount}",
             )
 
@@ -77,19 +91,19 @@ class TestFixturesBalance(unittest.TestCase):
     def test_intercompany_transactions_match_across_group(self) -> None:
         """Intercompany transactions must balance to zero when aggregated across the group."""
         gl_path = SAMPLES_DIR / "sample-general-ledger.csv"
-        ic_amounts: list[float] = []
+        ic_amounts: list[Decimal] = []
 
         with open(gl_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if row["IsIntercompany"] == "TRUE":
-                    ic_amounts.append(float(row["Amount"]))
+                    ic_amounts.append(Decimal(row["Amount"]))
 
         self.assertGreater(len(ic_amounts), 0, "GL fixture must contain intercompany entries")
-        total_ic_net = round(sum(ic_amounts), 2)
+        total_ic_net = sum(ic_amounts, Decimal(0))
         self.assertEqual(
             total_ic_net,
-            0.0,
+            Decimal(0),
             f"Intercompany aggregate net movement does not eliminate to zero: {total_ic_net}",
         )
 
