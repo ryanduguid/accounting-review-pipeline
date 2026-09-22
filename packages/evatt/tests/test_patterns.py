@@ -154,6 +154,19 @@ def test_labelled_abn_acn_and_medicare_are_reported_without_a_check_digit() -> N
         assert patterns.structured_spans(value) == [], value
 
 
+def test_labelled_identifiers_accept_attached_and_punctuation_separators() -> None:
+    for label, kind, digits in (
+        ("TFN", "tfn", "123456783"),
+        ("ABN", "abn", "51824753557"),
+        ("ACN", "acn", "123456781"),
+        ("Medicare", "medicare", "2123456711"),
+    ):
+        for separator in ("", ";", "/", "=", "; ", "/ ", "= "):
+            spans = patterns.structured_spans(label + separator + digits)
+            assert [(kind_, value) for _, _, kind_, value in spans] == [(kind, digits)]
+        assert patterns.structured_spans("PREFIX" + label + digits) == []
+
+
 def test_a_label_wins_the_tie_against_a_bare_run_over_the_same_digits() -> None:
     """000000019 satisfies both the TFN and the ACN check.
 

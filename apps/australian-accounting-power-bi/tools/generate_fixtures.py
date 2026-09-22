@@ -13,6 +13,7 @@ from __future__ import annotations
 import calendar
 import csv
 import datetime
+from decimal import Decimal
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -95,18 +96,18 @@ NATIONAL_HOLIDAYS = {
 # GIC is reset every quarter, so an accrual that crosses a quarter boundary must use each
 # day's own rate rather than one rate for the whole period.
 GIC_PUBLISHED_RATES = {
-    (2026, 3): 0.1143,  # July-September 2026, the first quarter of the Payday Super regime
+    (2026, 3): Decimal("0.1143"),  # July-September 2026, the first quarter of the Payday Super regime
 }
 
 # Quarters the ATO has not yet published are modelled by carrying the last published rate
 # forward. This is a stated assumption, not published data. Move a rate into
 # GIC_PUBLISHED_RATES as the ATO releases it.
-GIC_PROJECTED_RATE = 0.1143
+GIC_PROJECTED_RATE = Decimal("0.1143")
 
 # Administrative uplift for a qualifying earnings day: 60% of individual final SG shortfalls
 # plus individual notional earnings (SGAA 1992 s 19B). Reducible by 20 percentage points for a
 # clean assessment history and further on voluntary disclosure; no reduction is modelled here.
-ADMIN_UPLIFT_RATE = 0.60
+ADMIN_UPLIFT_RATE = Decimal("0.60")
 
 
 def gic_days_in_year(year: int) -> int:
@@ -119,7 +120,7 @@ def gic_quarter(day: datetime.date) -> tuple[int, int]:
     return (day.year, (day.month - 1) // 3 + 1)
 
 
-def gic_annual_rate(day: datetime.date) -> float:
+def gic_annual_rate(day: datetime.date) -> Decimal:
     """Annual GIC rate applying on day: published where the ATO has released it, else projected."""
     return GIC_PUBLISHED_RATES.get(gic_quarter(day), GIC_PROJECTED_RATE)
 
@@ -130,8 +131,8 @@ def gic_rate_is_published(day: datetime.date) -> bool:
 
 
 def notional_earnings(
-    base_shortfall: float, due_date: datetime.date, fund_received_date: datetime.date
-) -> float:
+    base_shortfall: Decimal, due_date: datetime.date, fund_received_date: datetime.date
+) -> Decimal:
     """Individual notional earnings on the base shortfall (SGAA 1992 s 19A).
 
     Compounds daily from the day after the due day up to and including the day the fund
@@ -140,7 +141,7 @@ def notional_earnings(
     flattened onto a single rate.
     """
     if fund_received_date <= due_date:
-        return 0.0
+        return Decimal("0.0")
     balance = base_shortfall
     day = due_date + datetime.timedelta(days=1)
     while day <= fund_received_date:
@@ -280,7 +281,7 @@ def generate_fixtures():
     gl_rows = []
     journal_id = 1000
 
-    def add_balanced_journal(date_str: str, entity_id: str, desc: str, debits: list[tuple[str, float]], credits: list[tuple[str, float]], ic_entity: str = ""):
+    def add_balanced_journal(date_str: str, entity_id: str, desc: str, debits: list[tuple[str, Decimal]], credits: list[tuple[str, Decimal]], ic_entity: str = ""):
         nonlocal journal_id
         journal_id += 1
         d_sum = round(sum(amt for _, amt in debits), 2)
@@ -320,13 +321,13 @@ def generate_fixtures():
 
     # Opening balances at 1 July 2024 (balanced per entity)
     # ENT001
-    add_balanced_journal("2024-07-01", "ENT001", "Opening Balance FY25", [("100", 350000.0), ("110", 120000.0), ("200", 80000.0)], [("300", 90000.0), ("500", 100000.0), ("510", 360000.0)])
+    add_balanced_journal("2024-07-01", "ENT001", "Opening Balance FY25", [("100", Decimal("350000.0")), ("110", Decimal("120000.0")), ("200", Decimal("80000.0"))], [("300", Decimal("90000.0")), ("500", Decimal("100000.0")), ("510", Decimal("360000.0"))])
     # ENT002
-    add_balanced_journal("2024-07-01", "ENT002", "Opening Balance FY25", [("100", 180000.0), ("110", 95000.0), ("120", 150000.0), ("200", 65000.0)], [("300", 110000.0), ("500", 50000.0), ("510", 330000.0)])
+    add_balanced_journal("2024-07-01", "ENT002", "Opening Balance FY25", [("100", Decimal("180000.0")), ("110", Decimal("95000.0")), ("120", Decimal("150000.0")), ("200", Decimal("65000.0"))], [("300", Decimal("110000.0")), ("500", Decimal("50000.0")), ("510", Decimal("330000.0"))])
     # ENT003
-    add_balanced_journal("2024-07-01", "ENT003", "Opening Balance FY25", [("100", 95000.0), ("110", 140000.0), ("200", 450000.0)], [("210", 90000.0), ("300", 75000.0), ("400", 250000.0), ("500", 50000.0), ("510", 220000.0)])
+    add_balanced_journal("2024-07-01", "ENT003", "Opening Balance FY25", [("100", Decimal("95000.0")), ("110", Decimal("140000.0")), ("200", Decimal("450000.0"))], [("210", Decimal("90000.0")), ("300", Decimal("75000.0")), ("400", Decimal("250000.0")), ("500", Decimal("50000.0")), ("510", Decimal("220000.0"))])
     # ENT004
-    add_balanced_journal("2024-07-01", "ENT004", "Opening Balance FY25", [("100", 60000.0), ("250", 1800000.0)], [("400", 900000.0), ("500", 100.0), ("510", 959900.0)])
+    add_balanced_journal("2024-07-01", "ENT004", "Opening Balance FY25", [("100", Decimal("60000.0")), ("250", Decimal("1800000.0"))], [("400", Decimal("900000.0")), ("500", Decimal("100.0")), ("510", Decimal("959900.0"))])
 
     # Monthly operational cycles for 36 months (Jul 2024 to Jun 2027)
     for m_idx in range(36):
@@ -337,49 +338,49 @@ def generate_fixtures():
         d_end = datetime.date(year, month, 28).strftime("%Y-%m-%d")
 
         # Growth factor over 3 years
-        factor = 1.0 + (m_idx * 0.015)
+        factor = Decimal("1.0") + (m_idx * Decimal("0.015"))
 
         # ENT001 (Varrock Ventures - Advisory)
-        rev_ent1 = round(160000.0 * factor, 2)
-        sal_ent1 = round(75000.0 * factor, 2)
-        sup_ent1 = round(sal_ent1 * 0.12, 2)
+        rev_ent1 = round(Decimal("160000.0") * factor, 2)
+        sal_ent1 = round(Decimal("75000.0") * factor, 2)
+        sup_ent1 = round(sal_ent1 * Decimal("0.12"), 2)
         add_balanced_journal(d_mid, "ENT001", f"Advisory Billings - M{m_idx+1}", [("110", rev_ent1)], [("610", rev_ent1)])
         add_balanced_journal(d_end, "ENT001", f"Monthly Payroll - M{m_idx+1}", [("800", sal_ent1), ("805", sup_ent1)], [("100", sal_ent1), ("330", sup_ent1)])
-        add_balanced_journal(d_end, "ENT001", f"Operating Costs & Rent - M{m_idx+1}", [("820", 12000.0), ("830", 3500.0)], [("100", 15500.0)])
+        add_balanced_journal(d_end, "ENT001", f"Operating Costs & Rent - M{m_idx+1}", [("820", Decimal("12000.0")), ("830", Decimal("3500.0"))], [("100", Decimal("15500.0"))])
 
         # ENT002 (Draynor Produce - Fresh Foods)
-        rev_ent2 = round(280000.0 * factor, 2)
-        cogs_ent2 = round(rev_ent2 * 0.58, 2)
-        sal_ent2 = round(45000.0 * factor, 2)
-        sup_ent2 = round(sal_ent2 * 0.12, 2)
+        rev_ent2 = round(Decimal("280000.0") * factor, 2)
+        cogs_ent2 = round(rev_ent2 * Decimal("0.58"), 2)
+        sal_ent2 = round(Decimal("45000.0") * factor, 2)
+        sup_ent2 = round(sal_ent2 * Decimal("0.12"), 2)
         add_balanced_journal(d_mid, "ENT002", f"Food Retailing Sales - M{m_idx+1}", [("100", rev_ent2)], [("600", rev_ent2)])
         add_balanced_journal(d_mid, "ENT002", f"Produce Inventory Purchase - M{m_idx+1}", [("700", cogs_ent2)], [("100", cogs_ent2)])
         add_balanced_journal(d_end, "ENT002", f"Monthly Payroll - M{m_idx+1}", [("800", sal_ent2), ("805", sup_ent2)], [("100", sal_ent2), ("330", sup_ent2)])
-        add_balanced_journal(d_end, "ENT002", f"Store Operating Costs - M{m_idx+1}", [("820", 8500.0), ("810", 4200.0)], [("100", 12700.0)])
+        add_balanced_journal(d_end, "ENT002", f"Store Operating Costs - M{m_idx+1}", [("820", Decimal("8500.0")), ("810", Decimal("4200.0"))], [("100", Decimal("12700.0"))])
 
         # ENT003 (Falador Freight - Logistics)
-        rev_ent3 = round(190000.0 * factor, 2)
-        fuel_ent3 = round(rev_ent3 * 0.28, 2)
-        sal_ent3 = round(60000.0 * factor, 2)
-        sup_ent3 = round(sal_ent3 * 0.12, 2)
+        rev_ent3 = round(Decimal("190000.0") * factor, 2)
+        fuel_ent3 = round(rev_ent3 * Decimal("0.28"), 2)
+        sal_ent3 = round(Decimal("60000.0") * factor, 2)
+        sup_ent3 = round(sal_ent3 * Decimal("0.12"), 2)
         add_balanced_journal(d_mid, "ENT003", f"Freight Service Revenue - M{m_idx+1}", [("110", rev_ent3)], [("600", rev_ent3)])
-        add_balanced_journal(d_mid, "ENT003", f"Fleet Fuel & Maintenance - M{m_idx+1}", [("710", fuel_ent3), ("810", 6500.0)], [("100", fuel_ent3 + 6500.0)])
+        add_balanced_journal(d_mid, "ENT003", f"Fleet Fuel & Maintenance - M{m_idx+1}", [("710", fuel_ent3), ("810", Decimal("6500.0"))], [("100", fuel_ent3 + Decimal("6500.0"))])
         add_balanced_journal(d_end, "ENT003", f"Driver Payroll - M{m_idx+1}", [("800", sal_ent3), ("805", sup_ent3)], [("100", sal_ent3), ("330", sup_ent3)])
-        add_balanced_journal(d_end, "ENT003", f"Vehicle Depreciation - M{m_idx+1}", [("890", 4500.0)], [("210", 4500.0)])
+        add_balanced_journal(d_end, "ENT003", f"Vehicle Depreciation - M{m_idx+1}", [("890", Decimal("4500.0"))], [("210", Decimal("4500.0"))])
 
         # ENT004 (Ardougne Holdings Trust - Property)
-        add_balanced_journal(d_mid, "ENT004", f"Property Rent Collection - M{m_idx+1}", [("100", 25000.0)], [("620", 25000.0)])
-        add_balanced_journal(d_end, "ENT004", f"Bank Facility Interest - M{m_idx+1}", [("895", 5200.0)], [("100", 5200.0)])
+        add_balanced_journal(d_mid, "ENT004", f"Property Rent Collection - M{m_idx+1}", [("100", Decimal("25000.0"))], [("620", Decimal("25000.0"))])
+        add_balanced_journal(d_end, "ENT004", f"Bank Facility Interest - M{m_idx+1}", [("895", Decimal("5200.0"))], [("100", Decimal("5200.0"))])
 
         # --- INTERCOMPANY TRANSACTIONS (Strictly matched pairs for elimination) ---
         # 1. ENT001 charges ENT002 and ENT003 Management Fees ($10,000 and $6,000)
-        add_balanced_journal(d_end, "ENT001", "Intercompany Management Fees Charged", [("180", 16000.0)], [("650", 16000.0)], ic_entity="GROUP")
-        add_balanced_journal(d_end, "ENT002", "Intercompany Management Fee Incurred", [("880", 10000.0)], [("380", 10000.0)], ic_entity="ENT001")
-        add_balanced_journal(d_end, "ENT003", "Intercompany Management Fee Incurred", [("880", 6000.0)], [("380", 6000.0)], ic_entity="ENT001")
+        add_balanced_journal(d_end, "ENT001", "Intercompany Management Fees Charged", [("180", Decimal("16000.0"))], [("650", Decimal("16000.0"))], ic_entity="GROUP")
+        add_balanced_journal(d_end, "ENT002", "Intercompany Management Fee Incurred", [("880", Decimal("10000.0"))], [("380", Decimal("10000.0"))], ic_entity="ENT001")
+        add_balanced_journal(d_end, "ENT003", "Intercompany Management Fee Incurred", [("880", Decimal("6000.0"))], [("380", Decimal("6000.0"))], ic_entity="ENT001")
 
         # 2. ENT003 provides internal freight logistics to ENT002 ($8,500)
-        add_balanced_journal(d_end, "ENT003", "Internal Logistics Billed to Draynor", [("180", 8500.0)], [("600", 8500.0)], ic_entity="ENT002")
-        add_balanced_journal(d_end, "ENT002", "Intercompany Freight Costs", [("750", 8500.0)], [("380", 8500.0)], ic_entity="ENT003")
+        add_balanced_journal(d_end, "ENT003", "Internal Logistics Billed to Draynor", [("180", Decimal("8500.0"))], [("600", Decimal("8500.0"))], ic_entity="ENT002")
+        add_balanced_journal(d_end, "ENT002", "Intercompany Freight Costs", [("750", Decimal("8500.0"))], [("380", Decimal("8500.0"))], ic_entity="ENT003")
 
     with open(SAMPLES_DIR / "sample-general-ledger.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(gl_rows[0].keys()), lineterminator="\n")
@@ -418,12 +419,12 @@ def generate_fixtures():
     # Covering transition on 1 July 2026. 7 business days deadline from payday.
     payroll_rows = []
     employees = [
-        {"EmployeeID": "EMP101", "EntityID": "ENT001", "Name": "A. Vance", "SalaryAnnual": 145000.0, "Frequency": "Fortnightly", "FundUSI": "19323234999001", "FundName": "AustralianSuper"},
-        {"EmployeeID": "EMP102", "EntityID": "ENT001", "Name": "B. Sterling", "SalaryAnnual": 115000.0, "Frequency": "Fortnightly", "FundUSI": "16457520308001", "FundName": "ART Super"},
-        {"EmployeeID": "EMP201", "EntityID": "ENT002", "Name": "C. Miller", "SalaryAnnual": 68000.0, "Frequency": "Weekly", "FundUSI": "19323234999001", "FundName": "AustralianSuper"},
-        {"EmployeeID": "EMP202", "EntityID": "ENT002", "Name": "D. Chen", "SalaryAnnual": 72000.0, "Frequency": "Weekly", "FundUSI": "60905115063001", "FundName": "Hostplus"},
-        {"EmployeeID": "EMP301", "EntityID": "ENT003", "Name": "E. Kowalski", "SalaryAnnual": 92000.0, "Frequency": "Fortnightly", "FundUSI": "16457520308001", "FundName": "ART Super"},
-        {"EmployeeID": "EMP302", "EntityID": "ENT003", "Name": "F. O'Connor", "SalaryAnnual": 88000.0, "Frequency": "Fortnightly", "FundUSI": "19323234999001", "FundName": "AustralianSuper"},
+        {"EmployeeID": "EMP101", "EntityID": "ENT001", "Name": "A. Vance", "SalaryAnnual": Decimal("145000.0"), "Frequency": "Fortnightly", "FundUSI": "19323234999001", "FundName": "AustralianSuper"},
+        {"EmployeeID": "EMP102", "EntityID": "ENT001", "Name": "B. Sterling", "SalaryAnnual": Decimal("115000.0"), "Frequency": "Fortnightly", "FundUSI": "16457520308001", "FundName": "ART Super"},
+        {"EmployeeID": "EMP201", "EntityID": "ENT002", "Name": "C. Miller", "SalaryAnnual": Decimal("68000.0"), "Frequency": "Weekly", "FundUSI": "19323234999001", "FundName": "AustralianSuper"},
+        {"EmployeeID": "EMP202", "EntityID": "ENT002", "Name": "D. Chen", "SalaryAnnual": Decimal("72000.0"), "Frequency": "Weekly", "FundUSI": "60905115063001", "FundName": "Hostplus"},
+        {"EmployeeID": "EMP301", "EntityID": "ENT003", "Name": "E. Kowalski", "SalaryAnnual": Decimal("92000.0"), "Frequency": "Fortnightly", "FundUSI": "16457520308001", "FundName": "ART Super"},
+        {"EmployeeID": "EMP302", "EntityID": "ENT003", "Name": "F. O'Connor", "SalaryAnnual": Decimal("88000.0"), "Frequency": "Fortnightly", "FundUSI": "19323234999001", "FundName": "AustralianSuper"},
     ]
 
     # Generate payroll events from 1 Jan 2026 to 30 June 2027 (covers pre-transition and live Payday Super)
@@ -445,7 +446,7 @@ def generate_fixtures():
 
             # Qualifying earnings (Code Q) and Super liability (Code L at 12.0%)
             qualifying_earnings = gross_per_period
-            super_liability = round(qualifying_earnings * 0.12, 2)
+            super_liability = round(qualifying_earnings * Decimal("0.12"), 2)
 
             # Clearing house transit simulation:
             # Most are paid 2 days after payday, received by fund 4 business days later (On Time)
@@ -465,7 +466,7 @@ def generate_fixtures():
                 # earnings and the uplift on them. The test is strictly received > due: a
                 # contribution that arrived by the due day was never a shortfall to offset, and
                 # must not be allowed to zero a genuine one.
-                final_shortfall = 0.0 if fund_received_date > due_date else super_liability
+                final_shortfall = Decimal("0.0") if fund_received_date > due_date else super_liability
                 # Administrative uplift (s 19B) on final shortfalls plus notional earnings;
                 # choice loading (s 20A) is nil because every fabricated employee has a
                 # nominated fund.
@@ -474,8 +475,8 @@ def generate_fixtures():
             else:
                 fund_received_date = add_business_days(pay_date, 4)
                 status = "ON_TIME"
-                nominal_interest = 0.0
-                sgc_shortfall = 0.0
+                nominal_interest = Decimal("0.0")
+                sgc_shortfall = Decimal("0.0")
 
             payroll_rows.append({
                 "EventID": f"STP{event_id}",
