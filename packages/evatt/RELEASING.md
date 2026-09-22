@@ -78,7 +78,7 @@ existing release is never overwritten.
 ## Verifying a release
 
 ```bash
-tag=evatt/v0.1.1
+tag=evatt/v0.1.2
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#evatt/v}"
 wheel="evatt-${version}-py3-none-any.whl"
