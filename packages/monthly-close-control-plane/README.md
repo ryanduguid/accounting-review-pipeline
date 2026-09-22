@@ -61,9 +61,9 @@ forecasts, WIP and grant workpapers through each repository's locked environment
 The [architecture note](docs/architecture.md) sets out the control boundary and
 the review-pack pipeline. For transaction-level clearing-account matching, see the
 [3-month reconciliation example](docs/clearing-reconciliation.md).
-The new `reconcile` command suggests matches, records reviewed allocations and
-carries outstanding items forward. It is an unreleased source addition and uses a
-separate mapped transaction schema; a trial-balance export is insufficient.
+The `reconcile` command suggests matches, records reviewed allocations and
+carries outstanding items forward. It ships from 0.1.5 and uses a separate
+mapped transaction schema; a trial-balance export is insufficient.
 
 The repository contains fabricated data only. Do not commit client trial balances, workpapers, exports, or credentials.
 
@@ -217,7 +217,7 @@ Add `--mapping-policy examples/mapping_policy.csv` to the quick demo to use the
 fabricated policy that matches `examples/account_mapping.csv`. Keep real policy
 files outside the checkout. The pack's `source_sha256.mapping_policy` records
 the exact bytes read by the control. Runs without this option retain their
-existing behaviour. This feature is unreleased.
+existing behaviour. This option ships from 0.1.5.
 
 ## Worked example
 
