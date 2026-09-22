@@ -154,17 +154,32 @@ def parse_money(value: str | None, *, field: str, row_number: int, path: Path) -
     return result
 
 
+_EXTENDED_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def parse_iso_date(value: str, *, field: str, path: Path, row_number: int | None = None) -> date:
+    try:
+        # date.fromisoformat also accepts basic-format and ISO-week strings from
+        # 3.11 on. Require extended calendar dates so the same pack gates
+        # identically on every supported version.
+        if not _EXTENDED_ISO_DATE.fullmatch(value):
+            raise ValueError(f"{value!r} is not an extended-format ISO date")
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        where = f" row {row_number}" if row_number is not None else ""
+        raise SchemaError(f"{path}:{where} {field} must be an ISO date.".replace(": ", ":")) from exc
+
+
 def load_canonical_tb(path: Path | SourceSnapshot) -> list[TrialBalanceRow]:
     snapshot = _snapshot(path, label="Trial-balance file")
     path = snapshot.path
     rows: list[TrialBalanceRow] = []
     seen: set[tuple[str, str]] = set()
     for row_number, values in _read_csv_rows(snapshot, CANONICAL_COLUMNS, label="Trial-balance file"):
-        raw_date = _text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path)
-        try:
-            report_date = date.fromisoformat(raw_date)
-        except ValueError as exc:
-            raise SchemaError(f"{path}: row {row_number} has an invalid ISO ReportDate.") from exc
+        report_date = parse_iso_date(
+            _text(values["ReportDate"], field="ReportDate", row_number=row_number, path=path),
+            field="ReportDate", path=path, row_number=row_number,
+        )
         row = TrialBalanceRow(
             report_date=report_date,
             tenant=_text(values["Tenant"], field="Tenant", row_number=row_number, path=path),
@@ -289,8 +304,5 @@ def load_reviewer_acknowledgement(
         )
     if not isinstance(reviewed_on, str):
         raise SchemaError(f"{path}: reviewed_on must be an ISO date string.")
-    try:
-        reviewed_date = date.fromisoformat(reviewed_on)
-    except ValueError as exc:
-        raise SchemaError(f"{path}: reviewed_on must be an ISO date.") from exc
+    reviewed_date = parse_iso_date(reviewed_on, field="reviewed_on", path=path)
     return ReviewerAcknowledgement(initials.strip(), reviewed_date, comment.strip())

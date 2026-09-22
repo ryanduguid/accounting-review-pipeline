@@ -12,9 +12,9 @@ Four traps in the copied material must not be undone:
 * Name tokens accept U+2019, the curly apostrophe Register text actually uses.
 * ``is_statutory`` checks all-caps candidates case-insensitively, because an
   all-caps token never matches the capitalised word list.
-* The TFN label separator is ``\\s*(?:[.:#\\u2013-]\\s*)?``. Written as the
-  equivalent ``\\s*[.:#\\u2013-]?\\s*`` it backtracks quadratically on long
-  space runs.
+* Label punctuation and its following whitespace share one optional group.
+  Making the punctuation optional inside that group creates adjacent
+  whitespace matches and quadratic backtracking on long space runs.
 * Every phone alternative pins its digit count between ``(?<!\\d)`` and
   ``(?!\\d)`` so statutory references, years and grouped amounts stay out.
 
@@ -96,8 +96,8 @@ PHONE = re.compile(
 # them the moment the check digit fails. That is under-detection of an
 # identifier something wrote a label next to.
 #
-# _SEP keeps the ``(?:[.:#,(\u2013-]\s*)?`` form: the equivalent
-# ``[.:#,(\u2013-]?\s*`` backtracks quadratically on long space runs. "#" earns
+# _SEP keeps the ``(?:[.:#,(|;/=\u2013-]\s*)?`` form: the equivalent
+# ``[.:#,(|;/=\u2013-]?\s*`` backtracks quadratically on long space runs. "#" earns
 # its place beside "." and ":" because a transcribed card writes "Medicare card
 # # 2123456701"; "," and "(" earn theirs because "Medicare card, 2123456711"
 # and "TFN (123456783)" are ordinary workpaper punctuation and both returned
@@ -120,25 +120,25 @@ PHONE = re.compile(
 # the label still identifies the candidate, even when the markup is malformed.
 _WORD = r"(?:number|no|card(?:holder)?)\b\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
-_SEP = r"(?:[.:#,(|\u2013-]\s*)?"
+_SEP = r"(?:[.:#,(|;/=\u2013-]\s*)?"
 _MARKUP = r"(?:[*_`][*_`\s]*(?![*_`\s]))?"
 _GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
 TFN_LABELLED = re.compile(
-    r"\b(?:tax file number|TFN)\b%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
+    r"\b(?:tax file number|TFN)(?![^\W\d])%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 # The trailing dot of the spaced-out form is optional: "A.B.N 51 824 753 556"
 # is written as often as "A.B.N.", and the label is the evidence either way.
 ABN_LABELLED = re.compile(
-    r"(?:\bABN\b|\bA\.B\.N\.?)%s(\d(?:[\s-]?\d){10})(?![\s-]?\d)" % _GAP,
+    r"(?:\bABN(?![^\W\d])|\bA\.B\.N\.?)%s(\d(?:[\s-]?\d){10})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 ACN_LABELLED = re.compile(
-    r"(?:\bACN\b|\bA\.C\.N\.?)%s(\d(?:[\s-]?\d){8})(?![\s-]?\d)" % _GAP,
+    r"(?:\bACN(?![^\W\d])|\bA\.C\.N\.?)%s(\d(?:[\s-]?\d){8})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 MEDICARE_LABELLED = re.compile(
-    r"\bMedicare\b%s(\d(?:[\s-]?\d){9})(?![\s-]?\d)" % _GAP,
+    r"\bMedicare(?![^\W\d])%s(\d(?:[\s-]?\d){9})(?![\s-]?\d)" % _GAP,
     re.I,
 )
 # All 4 bare runs take the same one-character money guard, ``(?<![\d$])``,
