@@ -2038,6 +2038,80 @@ class CheckoutGuardTest(_ExportCase):
         self.assertIsNone(data, "an export inside a checkout must not reach disk")
         self.assertNotIn("Wrote", out)
 
+    def test_the_checkout_refusal_withholds_filenames_under_quiet(self):
+        """--quiet keeps a client-derived filename out of this refusal too.
+
+        The post-fetch call names the real destination, and a default filename
+        takes the organisation's name, so printing the basenames here put the
+        client's name in exactly the log --quiet exists to keep it out of. The
+        count and the checkout path stay, because those are what an operator
+        acts on.
+        """
+        repo = self._repo()
+        target = os.path.join(repo, "Ridgeway Holdings Pty Ltd-2026-06-30.csv")
+        previous = export_tb.QUIET
+        export_tb.QUIET = True
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                export_tb.require_output_outside_checkout(target, with_manifest=True)
+        finally:
+            export_tb.QUIET = previous
+        message = str(ctx.exception)
+        self.assertNotIn("Ridgeway", message)
+        self.assertIn("withheld under --quiet", message)
+        self.assertIn("version-control checkout", message)
+        self.assertIn(repo, message)
+        self.assertNotIn("stand-ins", message, "no names are shown, so the note is noise")
+
+    def test_a_git_failure_withholds_the_filename_under_quiet(self):
+        """The guard's own failures run before the refusal, so they leak too.
+
+        _git_ignores raises when git cannot be run and when check-ignore exits
+        unexpectedly, and both messages named the path. They run for the
+        post-fetch destination, so under --quiet they carried the client-derived
+        filename into the log the flag exists to keep it out of.
+        """
+        repo = self._repo()
+        target = os.path.join(repo, "Ridgeway Holdings Pty Ltd-2026-06-30.csv")
+        previous = export_tb.QUIET
+        export_tb.QUIET = True
+        try:
+            with mock.patch.object(
+                export_tb.subprocess, "run", side_effect=OSError("git missing")
+            ):
+                with self.assertRaises(ValueError) as unrunnable:
+                    export_tb._git_ignores(repo, target)
+            completed = subprocess.CompletedProcess([], 128, b"", b"")
+            with mock.patch.object(export_tb.subprocess, "run", return_value=completed):
+                with self.assertRaises(ValueError) as exited:
+                    export_tb._git_ignores(repo, target)
+        finally:
+            export_tb.QUIET = previous
+        for ctx in (unrunnable, exited):
+            message = str(ctx.exception)
+            self.assertNotIn("Ridgeway", message)
+            self.assertIn("withheld under --quiet", message)
+            self.assertIn(repo, message, "the checkout path stays, it names no client")
+
+    def test_a_git_failure_names_the_filename_without_quiet(self):
+        repo = self._repo()
+        target = os.path.join(repo, "Ridgeway Holdings Pty Ltd-2026-06-30.csv")
+        with mock.patch.object(
+            export_tb.subprocess, "run", side_effect=OSError("git missing")
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                export_tb._git_ignores(repo, target)
+        self.assertIn("Ridgeway Holdings Pty Ltd-2026-06-30.csv", str(ctx.exception))
+
+    def test_the_checkout_refusal_names_the_files_without_quiet(self):
+        repo = self._repo()
+        target = os.path.join(repo, "Ridgeway Holdings Pty Ltd-2026-06-30.csv")
+        with self.assertRaises(ValueError) as ctx:
+            export_tb.require_output_outside_checkout(target, with_manifest=True)
+        message = str(ctx.exception)
+        self.assertIn("Ridgeway Holdings Pty Ltd-2026-06-30.csv", message)
+        self.assertNotIn("withheld under --quiet", message)
+
     def test_an_ignored_directory_inside_a_checkout_is_allowed(self):
         repo = self._repo(ignore="exports/\n")
         raised, out, data = self.run_export(
