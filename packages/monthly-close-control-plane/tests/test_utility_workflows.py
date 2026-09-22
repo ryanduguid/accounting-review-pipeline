@@ -149,7 +149,7 @@ def test_empty_quarter_never_writes_a_success_manifest(tmp_path, monkeypatch):
     assert "Run failed" in (output / "summary.md").read_text()
 
 
-@pytest.mark.parametrize("failure", ["runtime", "handoff", "workpaper", "hash", "manifest"])
+@pytest.mark.parametrize("failure", ["runtime", "handoff", "workpaper", "hash", "manifest", "interrupt", "replace"])
 def test_output_and_finalisation_failures_retain_failure_summary(tmp_path, monkeypatch, failure):
     run = MODULE["run_workflows"]
     scope = run.__globals__
@@ -172,11 +172,12 @@ def test_output_and_finalisation_failures_retain_failure_summary(tmp_path, monke
         return subprocess.CompletedProcess(command, 2 if "review" in command else 0, "{}", "")
 
     monkeypatch.setitem(scope, "captured", completed)
-    if failure in {"hash", "manifest"}:
+    if failure in {"hash", "manifest", "interrupt", "replace"}:
         # Isolate finalisation faults after validation, without replacing filesystem behaviour elsewhere.
         monkeypatch.setitem(scope["RESULTS"], "validate", lambda *args: ["Verified fixture"])
         original_read = Path.read_bytes
         original_write = Path.write_text
+        original_replace = Path.replace
 
         def read(path):
             if failure == "hash" and path == output / "summary.md":
@@ -184,17 +185,26 @@ def test_output_and_finalisation_failures_retain_failure_summary(tmp_path, monke
             return original_read(path)
 
         def write(path, data, *args, **kwargs):
-            if failure == "manifest" and path == output / "manifest.json":
+            if failure in {"manifest", "interrupt"} and path == output / "manifest.json.tmp":
                 original_write(path, "partial manifest")
+                if failure == "interrupt":
+                    raise KeyboardInterrupt
                 raise OSError("fixture manifest write failure")
             return original_write(path, data, *args, **kwargs)
 
+        def replace(path, target):
+            if failure == "replace" and path == output / "manifest.json.tmp":
+                raise OSError("fixture manifest rename failure")
+            return original_replace(path, target)
+
         monkeypatch.setattr(Path, "read_bytes", read)
         monkeypatch.setattr(Path, "write_text", write)
+        monkeypatch.setattr(Path, "replace", replace)
     workflow = "close-forecast" if failure == "handoff" else "grant-cash"
     with pytest.raises(ValueError, match="Fixture result validation failed"):
         run(output=output, fpa=tmp_path, grants=tmp_path, workflow=workflow)
     assert not (output / "manifest.json").exists()
+    assert not (output / "manifest.json.tmp").exists()
     assert (output / "failed-results.json").is_file()
     summary = (output / "summary.md").read_text()
     assert "Run failed" in summary and "Fixture checks passed" not in summary

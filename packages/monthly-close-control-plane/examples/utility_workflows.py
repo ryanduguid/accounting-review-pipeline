@@ -227,10 +227,12 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
                     "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                        for path in sorted(output.rglob("*")) if path.is_file()},
                     "scope": "Fabricated local workflows. Engine review statuses remain unchanged. Fresh environments do not establish a hosted CI result."}
-        save("manifest.json", json.dumps(manifest, indent=2))
+        save("manifest.json.tmp", json.dumps(manifest, indent=2))
+        (output / "manifest.json.tmp").replace(output / "manifest.json")
         return manifest
-    except (ValueError, KeyError, TypeError, IndexError, OSError, ArithmeticError, subprocess.SubprocessError) as exc:
+    except (ValueError, KeyError, TypeError, IndexError, OSError, ArithmeticError, subprocess.SubprocessError, KeyboardInterrupt) as exc:
         (output / "manifest.json").unlink(missing_ok=True)
+        (output / "manifest.json.tmp").unlink(missing_ok=True)
         if not any((output / name).exists() for name in ("failed-calls.json", "source-changes.json")):
             RESULTS["summary"](output, calls, provenance, failure="Fixture result validation failed; see failed-results.json")
             (output / "failed-results.json").write_text(json.dumps({"error": str(exc), "calls": calls,
