@@ -490,14 +490,14 @@ def _git_ignores(checkout: str, path: str) -> bool:
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise ValueError(
-            f"git could not be run to ask whether {checkout} ignores {path} ({exc}), so "
-            "this run cannot show the export would stay out of a commit."
+            f"git could not be run to ask whether {checkout} ignores {shown_path(path)} "
+            f"({type(exc).__name__}), so this run cannot show the export would stay out of a commit."
         ) from exc
     if completed.returncode in (0, 1):
         return completed.returncode == 0
     raise ValueError(
         f"git check-ignore exited {completed.returncode} in {checkout}, so this run "
-        f"cannot show whether a commit there would carry {os.path.basename(path)}."
+        f"cannot show whether a commit there would carry {os.path.basename(shown_path(path))}."
     )
 
 
