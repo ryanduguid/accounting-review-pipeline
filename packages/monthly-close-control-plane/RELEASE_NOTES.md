@@ -1,3 +1,26 @@
+# v0.1.5
+
+- Compare the acknowledgement effect against the writer's fixed sentence, so a
+  rewritten or blank statement is refused rather than returned as agreed.
+- Hold pack items to the writer's exact member set.
+- Sum the four integrity totals with `Inexact` trapped. A file whose amounts
+  would round is refused as malformed input with exit 1 instead of compared
+  inexactly, so a $1.0000000000000000000000000001 debit no longer reads as
+  balanced against a $1.00 credit.
+- Read optional calculation evidence from disk and decide whether the close may
+  rely on it. The package still performs no calculation, holds no credentials
+  and contacts nothing; the evidence tests run with sockets blocked.
+- Check supplied account mappings against explicit section and reporting-group
+  pairs, retaining the review status and the original values.
+- Record the controls not run for mapping, for subledger when rows are
+  supplied, and for calculation evidence.
+- Add close comparison, equity movements and evidence schedules, with a
+  repository-owned driver for the close, forecast and provenance workflows.
+- Rebuild the viewer's Scope, Exceptions and Human acknowledgement sections
+  from the JSON, and settle a reconciliation suggestion's group label once so
+  `reconciliation.json`, `review.html` and `suggestions.csv` name the same
+  group.
+
 # v0.1.4
 
 - Include the disclaimer and documented examples in the source distribution.

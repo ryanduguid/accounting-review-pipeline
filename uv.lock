@@ -645,7 +645,7 @@ wheels = [
 
 [[package]]
 name = "monthly-close-control-plane"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "packages/monthly-close-control-plane" }
 
 [package.optional-dependencies]
