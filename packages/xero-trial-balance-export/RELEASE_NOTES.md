@@ -1,10 +1,11 @@
 # v0.1.11
 
-- Withhold the output filenames from the checkout refusal under `--quiet`. The
-  guard named every unignored basename, and the post-fetch call names the real
+- Withhold the output filenames from the checkout guard under `--quiet`. The
+  refusal named every unignored basename, and the two `git check-ignore`
+  failures named the path outright. The post-fetch call names the real
   destination, so a default filename put the organisation's name in the log the
   flag exists to keep it out of. The refusal now gives the count and the
-  checkout path, which are what an operator acts on.
+  checkout path, and both git failures route through `shown_path`.
 - Correct two v0.1.10 notes below. The unbalanced warning prints the difference,
   not no amounts, and `--quiet` did not reach the checkout refusal until this
   release. Neither correction changes what 0.1.10 does.

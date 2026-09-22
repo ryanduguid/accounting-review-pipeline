@@ -489,15 +489,19 @@ def _git_ignores(checkout: str, path: str) -> bool:
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as exc:
+        # shown_path, because this runs for the post-fetch destination too and a
+        # default filename takes the organisation's name.
         raise ValueError(
-            f"git could not be run to ask whether {checkout} ignores {path} ({exc}), so "
-            "this run cannot show the export would stay out of a commit."
+            f"git could not be run to ask whether {checkout} ignores "
+            f"{shown_path(path)} ({exc}), so this run cannot show the export "
+            "would stay out of a commit."
         ) from exc
     if completed.returncode in (0, 1):
         return completed.returncode == 0
     raise ValueError(
         f"git check-ignore exited {completed.returncode} in {checkout}, so this run "
-        f"cannot show whether a commit there would carry {os.path.basename(path)}."
+        f"cannot show whether a commit there would carry "
+        f"{os.path.basename(shown_path(path))}."
     )
 
 
