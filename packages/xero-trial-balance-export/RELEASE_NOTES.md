@@ -1,15 +1,31 @@
+# v0.1.11
+
+- Withhold the output filenames from the checkout guard under `--quiet`. The
+  refusal named every unignored basename, and the two `git check-ignore`
+  failures named the path outright. The post-fetch call names the real
+  destination, so a default filename put the organisation's name in the log the
+  flag exists to keep it out of. The refusal now gives the count and the
+  checkout path, and both git failures route through `shown_path`.
+- Correct two v0.1.10 notes below. The unbalanced warning prints the difference,
+  not no amounts, and `--quiet` did not reach the checkout refusal until this
+  release. Neither correction changes what 0.1.10 does.
+
 # v0.1.10
 
 - Refuse a report whose header repeats a column title instead of exporting
   whichever cell came last. A header carrying `Debit` twice named 2 columns
   one record key, so the later amount silently won; the run now exits with the
   repeated titles named, before a row is read.
-- Print no amounts with the unbalanced WARNING, and name tenant ids and counts
-  rather than tenant names when a tenant selection is refused.
+- Stop printing the client's debit and credit totals with the unbalanced
+  WARNING. It names the difference and, where the caller supplies it, the number
+  of accounts the totals were taken over. Tenant refusals name tenant ids and
+  counts rather than tenant names.
 - Add `--quiet`, which withholds the tenant line, the totals and the
-  client-named default filename from every message, including the failure
-  paths. The containing directory is still shown, and the staged `tmp*` names
-  are printed in full so a recovery instruction can be followed.
+  client-named default filename from the messages that pass through
+  `shown_path`, including its failure paths. The containing directory is still
+  shown, and the staged `tmp*` names are printed in full so a recovery
+  instruction can be followed. The checkout refusal is not covered until
+  v0.1.11.
 - Refuse to write inside a git working tree unless the CSV, its manifest, the
   `.previous` file and the staged `.tmp` names are all ignored. The check runs
   before any credential is read.

@@ -1030,7 +1030,7 @@ wheels = [
 
 [[package]]
 name = "xero-trial-balance-export"
-version = "0.1.10"
+version = "0.1.11"
 source = { editable = "packages/xero-trial-balance-export" }
 dependencies = [
     { name = "requests" },

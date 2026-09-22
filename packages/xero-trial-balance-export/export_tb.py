@@ -489,15 +489,19 @@ def _git_ignores(checkout: str, path: str) -> bool:
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as exc:
+        # shown_path, because this runs for the post-fetch destination too and a
+        # default filename takes the organisation's name.
         raise ValueError(
-            f"git could not be run to ask whether {checkout} ignores {path} ({exc}), so "
-            "this run cannot show the export would stay out of a commit."
+            f"git could not be run to ask whether {checkout} ignores "
+            f"{shown_path(path)} ({exc}), so this run cannot show the export "
+            "would stay out of a commit."
         ) from exc
     if completed.returncode in (0, 1):
         return completed.returncode == 0
     raise ValueError(
         f"git check-ignore exited {completed.returncode} in {checkout}, so this run "
-        f"cannot show whether a commit there would carry {os.path.basename(path)}."
+        f"cannot show whether a commit there would carry "
+        f"{os.path.basename(shown_path(path))}."
     )
 
 
@@ -613,15 +617,25 @@ def require_output_outside_checkout(
     ]
     if not unignored:
         return
-    stand_in = (
-        " The names are stand-ins: a default filename takes the organisation's name, "
-        "and the staged files take a random one."
-        if representative
-        else " The staged and parked names are stand-ins, because mkstemp chooses "
-        "their random part."
-    )
+    # The post-fetch call names the real destination, and a default filename
+    # takes the organisation's name, so under --quiet these basenames are the
+    # client-derived text the flag exists to keep out of a log. Withhold them
+    # here as every other message does; the count and the checkout path are what
+    # an operator acts on, and the guidance below does not depend on the names.
+    if QUIET:
+        written = f"{len(unignored)} output file names, withheld under --quiet,"
+        stand_in = ""
+    else:
+        written = ", ".join(unignored)
+        stand_in = (
+            " The names are stand-ins: a default filename takes the organisation's name, "
+            "and the staged files take a random one."
+            if representative
+            else " The staged and parked names are stand-ins, because mkstemp chooses "
+            "their random part."
+        )
     raise ValueError(
-        f"a run here would write {', '.join(unignored)} inside the version-control "
+        f"a run here would write {written} inside the version-control "
         f"checkout at {checkout}, and git ignores none of those."
         + stand_in
         + " An export holds a client's balances and its manifest names the "
