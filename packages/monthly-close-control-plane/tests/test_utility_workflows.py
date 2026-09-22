@@ -117,10 +117,12 @@ def test_failed_steps_preserve_diagnostics_and_stop(tmp_path, monkeypatch, failu
     assert len(record["calls"]) == 1
     assert record["stderr"]
     assert record["projects"]["fpa"]["revision"] == "fixture"
+    replay = json.loads((output / "replay.json").read_text())
+    assert replay["projects"] == record["projects"] and replay["workflow"] == "quarter"
     assert not (output / "manifest.json").exists()
 
 
-def test_success_records_runtime_timing_and_output_hashes(tmp_path, monkeypatch):
+def test_empty_quarter_never_writes_a_success_manifest(tmp_path, monkeypatch):
     run = MODULE["run_workflows"]
     scope = run.__globals__
     output = tmp_path / "results"
@@ -140,12 +142,12 @@ def test_success_records_runtime_timing_and_output_hashes(tmp_path, monkeypatch)
         return subprocess.CompletedProcess(command, 0, text, "")
 
     monkeypatch.setitem(scope, "captured", completed)
-    result = run(output=output, fpa=tmp_path, workflow="quarter")
-    assert result["schema_version"] == "utility-workflows.v2"
-    assert result["runtimes"]["fpa"]["python"] == "fixture"
-    assert result["projects"]["fpa"]["revision"] == "fixture"
-    assert all(row["elapsed_seconds"] >= 0 for row in result["calls"])
-    assert "quarter/quarter.json" in result["outputs_sha256"]
+    with pytest.raises(ValueError, match="Fixture result validation failed"):
+        run(output=output, fpa=tmp_path, workflow="quarter")
+    assert not (output / "manifest.json").exists()
+    assert "three monthly periods" in json.loads((output / "failed-results.json").read_text())["error"]
+    assert "Run failed" in (output / "summary.md").read_text()
+
 
 
 def test_invalid_timeout_fails_before_creating_output(tmp_path):

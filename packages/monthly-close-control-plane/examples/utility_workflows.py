@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import runpy
 import shutil
 import signal
 import subprocess
@@ -13,6 +14,7 @@ import time
 from pathlib import Path
 
 COMPONENT = Path(__file__).resolve().parents[1]
+RESULTS = runpy.run_path(str(Path(__file__).with_name("utility_results.py")))
 
 
 def captured(command, *, cwd, env=None, timeout=300):
@@ -128,9 +130,20 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
     projects, output, environment_root = (prepared[key] for key in ("projects", "output", "environment_root"))
     provenance = {owner: project_evidence(project) for owner, project in projects.items()}
     output.mkdir(parents=True)
+    (output / "replay.json").write_text(json.dumps({"schema_version": "utility-workflows.v2",
+        "workflow": workflow, "projects": provenance}, indent=2), encoding="utf-8")
     if environment_root is not None:
         environment_root.mkdir(parents=True)
     calls = []
+
+    def check_result(function, *arguments):
+        try:
+            return function(*arguments)
+        except (ValueError, KeyError, TypeError, OSError, ArithmeticError) as exc:
+            (output / "failed-results.json").write_text(json.dumps({"error": str(exc), "calls": calls,
+                "projects": provenance}, indent=2), encoding="utf-8")
+            RESULTS["summary"](output, calls, provenance, failure="Fixture result validation failed; see failed-results.json")
+            raise ValueError("Fixture result validation failed; see failed-results.json") from exc
 
     def execute(owner, arguments, expected=0, kind="workflow"):
         project = projects[owner]
@@ -156,6 +169,7 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         if failure or result.returncode != expected:
             record = {"calls": calls, "projects": provenance, "stdout": result.stdout, "stderr": result.stderr}
             (output / "failed-calls.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+            RESULTS["summary"](output, calls, provenance, failure=f"{owner} command {len(calls)}: {failure or result.returncode}; see failed-calls.json")
             raise ValueError(f"{owner} failed ({failure or result.returncode}); see {output / 'failed-calls.json'}")
         return result.stdout
 
@@ -187,7 +201,8 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
     if workflow in {"all", "quarter"}:
         quarter = output / "quarter"
         execute("fpa", ["examples/quarter-close/quarter.py", "--output", quarter])
-        periods = json.loads((quarter / "quarter.json").read_text())["periods"]
+        periods = check_result(lambda: json.loads((quarter / "quarter.json").read_text(encoding="utf-8"))["periods"])
+        check_result(RESULTS["quarter_periods"], periods)
         for index in range(1, len(periods)):
             current, prior = (quarter / periods[i]["cutoff"] for i in (index, index - 1))
             close_pack(current / "trial-balance.csv", prior / "trial-balance.csv", current / "subledger.csv", current / "close")
@@ -208,11 +223,14 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         workpaper = grant / "workpaper.json"
         digest = hashlib.sha256(workpaper.read_bytes()).hexdigest()
         save("grant-cash.json", execute("fpa", ["examples/restricted-cash/grant_cash.py", "--workpaper", workpaper, "--workpaper-sha256", digest]))
+    verified_lines = check_result(RESULTS["validate"], output, workflow, calls, projects)
     after = {owner: project_evidence(project) for owner, project in projects.items()}
     if after != provenance:
         (output / "source-changes.json").write_text(json.dumps({"before": provenance, "after": after}, indent=2), encoding="utf-8")
+        RESULTS["summary"](output, calls, provenance, failure="Source changed during execution; see source-changes.json")
         raise ValueError("Source changed during the run; review source-changes.json")
-    manifest = {"schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
+    RESULTS["summary"](output, calls, provenance, lines=verified_lines)
+    manifest = {"fixture_validation": "passed", "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
                 "projects": provenance, "runtimes": runtimes, "tools": {"driver_python": sys.version, "uv": uv_version.stdout.strip()},
                 "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                    for path in sorted(output.rglob("*")) if path.is_file()},
