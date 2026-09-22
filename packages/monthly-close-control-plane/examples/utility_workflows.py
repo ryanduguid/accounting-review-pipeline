@@ -139,7 +139,7 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
     def check_result(function, *arguments):
         try:
             return function(*arguments)
-        except (ValueError, KeyError, TypeError, OSError, ArithmeticError) as exc:
+        except (ValueError, KeyError, TypeError, OSError, ArithmeticError, json.JSONDecodeError) as exc:
             (output / "failed-results.json").write_text(json.dumps({"error": str(exc), "calls": calls,
                 "projects": provenance}, indent=2), encoding="utf-8")
             RESULTS["summary"](output, calls, provenance, failure="Fixture result validation failed; see failed-results.json")
@@ -184,8 +184,8 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         execute("close", arguments, 2)
         execute("close", ["-m", "closecontrol.cli", "view", "--pack-dir", target])
 
-    runtimes = {owner: json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime")) for owner in projects}
-    uv_version = captured(["uv", "--version"], cwd=COMPONENT, timeout=30)
+    runtimes = check_result(lambda: {owner: json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime")) for owner in projects})
+    uv_version = check_result(lambda: captured(["uv", "--version"], cwd=COMPONENT, timeout=30))
     if uv_version.returncode:
         raise ValueError("Unable to record uv version")
     if workflow in {"all", "close-forecast"}:
@@ -193,8 +193,8 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         execute("fpa", ["examples/lumbridge-services/models/generated/close_handoff.py", "--output", inputs])
         close_pack(inputs / "current.csv", inputs / "prior.csv", inputs / "subledger.csv", pack, inputs / "mapping.csv")
         execute("fpa", ["examples/lumbridge-services/models/generated/recurring.py", "--output", refresh])
-        handoff = json.loads((inputs / "handoff.json").read_text())
-        refreshed = json.loads((refresh / "review.json").read_text())
+        handoff, refreshed = check_result(lambda: (json.loads((inputs / "handoff.json").read_text(encoding="utf-8")),
+                                                    json.loads((refresh / "review.json").read_text(encoding="utf-8"))))
         for name in ("xero_bs.csv", "invoices.csv", "payments.csv"):
             if handoff["source_sha256"][name] != refreshed["source_sha256"][name]:
                 raise ValueError("Close and forecast sources differ")
@@ -224,18 +224,19 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         digest = hashlib.sha256(workpaper.read_bytes()).hexdigest()
         save("grant-cash.json", execute("fpa", ["examples/restricted-cash/grant_cash.py", "--workpaper", workpaper, "--workpaper-sha256", digest]))
     verified_lines = check_result(RESULTS["validate"], output, workflow, calls, projects)
-    after = {owner: project_evidence(project) for owner, project in projects.items()}
+    after = check_result(lambda: {owner: project_evidence(project) for owner, project in projects.items()})
     if after != provenance:
         (output / "source-changes.json").write_text(json.dumps({"before": provenance, "after": after}, indent=2), encoding="utf-8")
         RESULTS["summary"](output, calls, provenance, failure="Source changed during execution; see source-changes.json")
         raise ValueError("Source changed during the run; review source-changes.json")
-    RESULTS["summary"](output, calls, provenance, lines=verified_lines)
     manifest = {"fixture_validation": "passed", "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
                 "projects": provenance, "runtimes": runtimes, "tools": {"driver_python": sys.version, "uv": uv_version.stdout.strip()},
                 "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                    for path in sorted(output.rglob("*")) if path.is_file()},
                 "scope": "Fabricated local workflows. Engine review statuses remain unchanged. Fresh environments do not establish a hosted CI result."}
     save("manifest.json", json.dumps(manifest, indent=2))
+    # Publish the success claim only after every manifest operation succeeds.
+    RESULTS["summary"](output, calls, provenance, lines=verified_lines)
     return manifest
 
 
