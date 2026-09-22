@@ -20,7 +20,7 @@ Existing checkouts are not updated. Results and their provenance manifest go
 under `accounting-utility-demo/results`; a failed run leaves its workspace for
 diagnosis. Retry with a new workspace path.
 
-The companion setup also accepts `--replay-manifest path/to/manifest.json` to
+After updating the companion setup to a revision that supports replay, it accepts `--replay-manifest path/to/manifest.json` to
 fetch the recorded commits into a new workspace. It requires a complete
 `utility-workflows.v2` manifest from clean source checkouts. For a failed
 all-route run, use `results/replay.json`, which the runner saves before commands
@@ -62,7 +62,8 @@ assessing client accounts or configurable quarter inputs.
 
 A successful run records `fixture_validation: passed` and writes `summary.md`
 with coverage, cash results, retained review findings and source revisions.
-The grant workflow appends it to the private Actions job summary. Failed
+The companion grant workflow can append it to the private Actions job summary
+with its `--summary` setup option after that companion update is installed. Failed
 commands produce a failure summary; fixture validation errors retain
 `failed-results.json` and do not produce a success manifest. Neither summary
 publishes subprocess output. Review the retained diagnostics locally.

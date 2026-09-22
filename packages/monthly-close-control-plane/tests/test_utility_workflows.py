@@ -149,6 +149,57 @@ def test_empty_quarter_never_writes_a_success_manifest(tmp_path, monkeypatch):
     assert "Run failed" in (output / "summary.md").read_text()
 
 
+@pytest.mark.parametrize("failure", ["runtime", "handoff", "workpaper", "hash", "manifest"])
+def test_output_and_finalisation_failures_retain_failure_summary(tmp_path, monkeypatch, failure):
+    run = MODULE["run_workflows"]
+    scope = run.__globals__
+    output = tmp_path / "results"
+    projects = {name: tmp_path for name in ("fpa", "close", "grants")}
+    monkeypatch.setitem(scope, "prepare", lambda *args: {"projects": projects, "output": output, "environment_root": None})
+    monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "fixture"})
+
+    def completed(command, **kwargs):
+        if command[-1] == "--version":
+            return subprocess.CompletedProcess(command, 0, "uv fixture", "")
+        if "-c" in command:
+            return subprocess.CompletedProcess(command, 0, "invalid JSON" if failure == "runtime" else "{}", "")
+        if "grant_workpaper.py" in command:
+            if failure != "workpaper":
+                target = output / "grants"
+                target.mkdir()
+                (target / "workpaper.json").write_text("{}")
+            return subprocess.CompletedProcess(command, 2, "", "")
+        return subprocess.CompletedProcess(command, 2 if "review" in command else 0, "{}", "")
+
+    monkeypatch.setitem(scope, "captured", completed)
+    if failure in {"hash", "manifest"}:
+        # Isolate finalisation faults after validation, without replacing filesystem behaviour elsewhere.
+        monkeypatch.setitem(scope["RESULTS"], "validate", lambda *args: ["Verified fixture"])
+        original_read = Path.read_bytes
+        original_write = Path.write_text
+
+        def read(path):
+            if failure == "hash" and path == output / "summary.md":
+                raise OSError("fixture hash read failure")
+            return original_read(path)
+
+        def write(path, data, *args, **kwargs):
+            if failure == "manifest" and path == output / "manifest.json":
+                original_write(path, "partial manifest")
+                raise OSError("fixture manifest write failure")
+            return original_write(path, data, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_bytes", read)
+        monkeypatch.setattr(Path, "write_text", write)
+    workflow = "close-forecast" if failure == "handoff" else "grant-cash"
+    with pytest.raises(ValueError, match="Fixture result validation failed"):
+        run(output=output, fpa=tmp_path, grants=tmp_path, workflow=workflow)
+    assert not (output / "manifest.json").exists()
+    assert (output / "failed-results.json").is_file()
+    summary = (output / "summary.md").read_text()
+    assert "Run failed" in summary and "Fixture checks passed" not in summary
+
+
 
 def test_invalid_timeout_fails_before_creating_output(tmp_path):
     with pytest.raises(ValueError, match="timeout"):

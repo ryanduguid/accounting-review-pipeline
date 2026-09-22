@@ -75,7 +75,7 @@ def validate(output: Path, workflow: str, calls: list, projects: dict) -> list[s
         for name, expected_cash in (("job-base", "-434500"), ("job-extra-cost", "-544500")):
             weeks = read(output, f"{name}/project-cash.json")["weeks"]
             require([w["week"] for w in weeks] == list(range(1, 14)), "WIP cash needs thirteen ordered weeks")
-            require(Decimal(weeks[-1]["ending_cash"]) == Decimal(expected_cash), "WIP cash differs from the fixture")
+            require([Decimal(w["ending_cash"]) for w in weeks] == list(map(Decimal, ["-140000"] * 4 + ["5500"] * 6 + [expected_cash] * 3)), "WIP cash differs from the fixture")
         lines.append("Project cash at week 13: AUD -434,500 baseline; AUD -544,500 with extra completion costs.")
     if "grant-cash" in routes:
         cash = read(output, "grant-cash.json")

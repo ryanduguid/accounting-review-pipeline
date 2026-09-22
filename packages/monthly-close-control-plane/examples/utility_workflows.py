@@ -136,15 +136,6 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         environment_root.mkdir(parents=True)
     calls = []
 
-    def check_result(function, *arguments):
-        try:
-            return function(*arguments)
-        except (ValueError, KeyError, TypeError, OSError, ArithmeticError) as exc:
-            (output / "failed-results.json").write_text(json.dumps({"error": str(exc), "calls": calls,
-                "projects": provenance}, indent=2), encoding="utf-8")
-            RESULTS["summary"](output, calls, provenance, failure="Fixture result validation failed; see failed-results.json")
-            raise ValueError("Fixture result validation failed; see failed-results.json") from exc
-
     def execute(owner, arguments, expected=0, kind="workflow"):
         project = projects[owner]
         command = ["uv", "run", "--project", str(project), "--locked", "--python", "3.11", "python", *map(str, arguments)]
@@ -184,59 +175,69 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         execute("close", arguments, 2)
         execute("close", ["-m", "closecontrol.cli", "view", "--pack-dir", target])
 
-    runtimes = {owner: json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime")) for owner in projects}
-    uv_version = captured(["uv", "--version"], cwd=COMPONENT, timeout=30)
-    if uv_version.returncode:
-        raise ValueError("Unable to record uv version")
-    if workflow in {"all", "close-forecast"}:
-        inputs, pack, refresh = output / "lumbridge-inputs", output / "lumbridge-close", output / "lumbridge-refresh"
-        execute("fpa", ["examples/lumbridge-services/models/generated/close_handoff.py", "--output", inputs])
-        close_pack(inputs / "current.csv", inputs / "prior.csv", inputs / "subledger.csv", pack, inputs / "mapping.csv")
-        execute("fpa", ["examples/lumbridge-services/models/generated/recurring.py", "--output", refresh])
-        handoff = json.loads((inputs / "handoff.json").read_text())
-        refreshed = json.loads((refresh / "review.json").read_text())
-        for name in ("xero_bs.csv", "invoices.csv", "payments.csv"):
-            if handoff["source_sha256"][name] != refreshed["source_sha256"][name]:
-                raise ValueError("Close and forecast sources differ")
-    if workflow in {"all", "quarter"}:
-        quarter = output / "quarter"
-        execute("fpa", ["examples/quarter-close/quarter.py", "--output", quarter])
-        periods = check_result(lambda: json.loads((quarter / "quarter.json").read_text(encoding="utf-8"))["periods"])
-        check_result(RESULTS["quarter_periods"], periods)
-        for index in range(1, len(periods)):
-            current, prior = (quarter / periods[i]["cutoff"] for i in (index, index - 1))
-            close_pack(current / "trial-balance.csv", prior / "trial-balance.csv", current / "subledger.csv", current / "close")
-            if index > 1:
-                comparison = execute("close", ["-m", "closecontrol.cli", "compare", "--previous-pack", prior / "close",
-                    "--current-pack", current / "close", "--previous-tb", prior / "trial-balance.csv",
-                    "--current-tb", current / "trial-balance.csv"])
-                (current / "comparison.json").write_text(comparison, encoding="utf-8")
-    if workflow in {"all", "job-cash"}:
-        for label, extra in (("job-base", "0"), ("job-extra-cost", "100000")):
-            target = output / label
-            execute("wip", ["examples/job_to_cash.py", "--output", target, "--extra-cost-to-complete", extra])
-            forecast = execute("fpa", ["examples/job-to-cash/project_cash.py", "--pack", target])
-            (target / "project-cash.json").write_text(forecast, encoding="utf-8")
-    if workflow in {"all", "grant-cash"}:
-        grant = output / "grants"
-        execute("grants", ["grant_workpaper.py", "--input", "examples/two-grants", "--output", grant], 2)
-        workpaper = grant / "workpaper.json"
-        digest = hashlib.sha256(workpaper.read_bytes()).hexdigest()
-        save("grant-cash.json", execute("fpa", ["examples/restricted-cash/grant_cash.py", "--workpaper", workpaper, "--workpaper-sha256", digest]))
-    verified_lines = check_result(RESULTS["validate"], output, workflow, calls, projects)
-    after = {owner: project_evidence(project) for owner, project in projects.items()}
-    if after != provenance:
-        (output / "source-changes.json").write_text(json.dumps({"before": provenance, "after": after}, indent=2), encoding="utf-8")
-        RESULTS["summary"](output, calls, provenance, failure="Source changed during execution; see source-changes.json")
-        raise ValueError("Source changed during the run; review source-changes.json")
-    RESULTS["summary"](output, calls, provenance, lines=verified_lines)
-    manifest = {"fixture_validation": "passed", "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
-                "projects": provenance, "runtimes": runtimes, "tools": {"driver_python": sys.version, "uv": uv_version.stdout.strip()},
-                "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                                   for path in sorted(output.rglob("*")) if path.is_file()},
-                "scope": "Fabricated local workflows. Engine review statuses remain unchanged. Fresh environments do not establish a hosted CI result."}
-    save("manifest.json", json.dumps(manifest, indent=2))
-    return manifest
+    try:
+        runtimes = {owner: json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime")) for owner in projects}
+        uv_version = captured(["uv", "--version"], cwd=COMPONENT, timeout=30)
+        if uv_version.returncode:
+            raise ValueError("Unable to record uv version")
+        if workflow in {"all", "close-forecast"}:
+            inputs, pack, refresh = output / "lumbridge-inputs", output / "lumbridge-close", output / "lumbridge-refresh"
+            execute("fpa", ["examples/lumbridge-services/models/generated/close_handoff.py", "--output", inputs])
+            close_pack(inputs / "current.csv", inputs / "prior.csv", inputs / "subledger.csv", pack, inputs / "mapping.csv")
+            execute("fpa", ["examples/lumbridge-services/models/generated/recurring.py", "--output", refresh])
+            handoff = json.loads((inputs / "handoff.json").read_text())
+            refreshed = json.loads((refresh / "review.json").read_text())
+            for name in ("xero_bs.csv", "invoices.csv", "payments.csv"):
+                if handoff["source_sha256"][name] != refreshed["source_sha256"][name]:
+                    raise ValueError("Close and forecast sources differ")
+        if workflow in {"all", "quarter"}:
+            quarter = output / "quarter"
+            execute("fpa", ["examples/quarter-close/quarter.py", "--output", quarter])
+            periods = json.loads((quarter / "quarter.json").read_text(encoding="utf-8"))["periods"]
+            RESULTS["quarter_periods"](periods)
+            for index in range(1, len(periods)):
+                current, prior = (quarter / periods[i]["cutoff"] for i in (index, index - 1))
+                close_pack(current / "trial-balance.csv", prior / "trial-balance.csv", current / "subledger.csv", current / "close")
+                if index > 1:
+                    comparison = execute("close", ["-m", "closecontrol.cli", "compare", "--previous-pack", prior / "close",
+                        "--current-pack", current / "close", "--previous-tb", prior / "trial-balance.csv",
+                        "--current-tb", current / "trial-balance.csv"])
+                    (current / "comparison.json").write_text(comparison, encoding="utf-8")
+        if workflow in {"all", "job-cash"}:
+            for label, extra in (("job-base", "0"), ("job-extra-cost", "100000")):
+                target = output / label
+                execute("wip", ["examples/job_to_cash.py", "--output", target, "--extra-cost-to-complete", extra])
+                forecast = execute("fpa", ["examples/job-to-cash/project_cash.py", "--pack", target])
+                (target / "project-cash.json").write_text(forecast, encoding="utf-8")
+        if workflow in {"all", "grant-cash"}:
+            grant = output / "grants"
+            execute("grants", ["grant_workpaper.py", "--input", "examples/two-grants", "--output", grant], 2)
+            workpaper = grant / "workpaper.json"
+            digest = hashlib.sha256(workpaper.read_bytes()).hexdigest()
+            save("grant-cash.json", execute("fpa", ["examples/restricted-cash/grant_cash.py", "--workpaper", workpaper, "--workpaper-sha256", digest]))
+        verified_lines = RESULTS["validate"](output, workflow, calls, projects)
+        after = {owner: project_evidence(project) for owner, project in projects.items()}
+        if after != provenance:
+            (output / "source-changes.json").write_text(json.dumps({"before": provenance, "after": after}, indent=2), encoding="utf-8")
+            RESULTS["summary"](output, calls, provenance, failure="Source changed during execution; see source-changes.json")
+            raise ValueError("Source changed during the run; review source-changes.json")
+        RESULTS["summary"](output, calls, provenance, lines=verified_lines)
+        manifest = {"fixture_validation": "passed", "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
+                    "projects": provenance, "runtimes": runtimes, "tools": {"driver_python": sys.version, "uv": uv_version.stdout.strip()},
+                    "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                                       for path in sorted(output.rglob("*")) if path.is_file()},
+                    "scope": "Fabricated local workflows. Engine review statuses remain unchanged. Fresh environments do not establish a hosted CI result."}
+        save("manifest.json", json.dumps(manifest, indent=2))
+        return manifest
+    except (ValueError, KeyError, TypeError, IndexError, OSError, ArithmeticError, subprocess.SubprocessError) as exc:
+        (output / "manifest.json").unlink(missing_ok=True)
+        if not any((output / name).exists() for name in ("failed-calls.json", "source-changes.json")):
+            RESULTS["summary"](output, calls, provenance, failure="Fixture result validation failed; see failed-results.json")
+            (output / "failed-results.json").write_text(json.dumps({"error": str(exc), "calls": calls,
+                "projects": provenance}, indent=2), encoding="utf-8")
+            raise ValueError("Fixture result validation failed; see failed-results.json") from exc
+        raise
+
 
 
 if __name__ == "__main__":

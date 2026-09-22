@@ -25,7 +25,7 @@ def results(tmp_path):
             save(f"quarter/{date}/comparison.json", {"previous_period": MODULE["CUTOFFS"][index - 1],
                  "current_period": date, "previous_status": "REVIEW", "current_status": "REVIEW"})
     for label, cash in (("job-base", "-434500"), ("job-extra-cost", "-544500")):
-        save(f"{label}/project-cash.json", {"weeks": [{"week": i, "ending_cash": cash} for i in range(1, 14)]})
+        save(f"{label}/project-cash.json", {"weeks": [{"week": i, "ending_cash": value} for i, value in enumerate(["-140000"] * 4 + ["5500"] * 6 + [cash] * 3, 1)]})
     findings = [{"code": code, "reference": ref} for code, ref in sorted(MODULE["GRANT_FINDINGS"])]
     save("grants/workpaper.json", {"status": "REVIEW", "findings": findings})
     save("grant-cash.json", {"workpaper_status": "REVIEW", "source_findings": findings,
@@ -68,6 +68,8 @@ def test_complete_selected_routes_validate_and_render(results, workflow):
     ("lumbridge-refresh/review.json", lambda d: d["actuals"].update(ending_cash="0")),
     ("job-base/project-cash.json", lambda d: d["weeks"].pop()),
     ("job-extra-cost/project-cash.json", lambda d: d["weeks"][-1].update(ending_cash="-434500")),
+    ("job-base/project-cash.json", lambda d: d["weeks"][2].update(ending_cash="0")),
+    ("job-extra-cost/project-cash.json", lambda d: d["weeks"][7].update(ending_cash="0")),
     ("grant-cash.json", lambda d: d["forecast"].update(closing_cash="34801")),
     ("grant-cash.json", lambda d: d.update(workpaper_status="RECONCILED")),
     ("grant-cash.json", lambda d: d["source_findings"].pop()),
