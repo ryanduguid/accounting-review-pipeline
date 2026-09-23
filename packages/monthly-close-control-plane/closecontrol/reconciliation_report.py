@@ -21,6 +21,11 @@ def _csv(columns: tuple[str, ...], rows: list[list[str]]) -> str:
     return stream.getvalue()
 
 
+def _decision_csv_safe(value: str) -> str:
+    # Escape literal apostrophes too, so importing with --decisions-escaped is reversible.
+    return "'" + value if value.startswith("'") else _csv_safe(value)
+
+
 def render_html(pack: dict) -> str:
     def esc(value: object) -> str:
         return html.escape(str(value), quote=True)
@@ -72,7 +77,9 @@ li{{margin:10px 0}}@media print{{body{{margin:0;font-size:10pt}}table{{font-size
 <h2>Review groups</h2><ul>{decisions or '<li>No review groups supplied.</li>'}</ul>
 <h2>Continue the review</h2><p>Open suggestions.csv, set Decision to accept or reject and add the same note
 on every row of a group. Add manual groups using outstanding transaction IDs. Supply that CSV with
---decisions and rerun into a new output directory. Include your earlier decisions when revising this period.</p>
+--decisions with --decisions-escaped and rerun into a new output directory.
+Keep the CSV's leading apostrophes; double a literal leading apostrophe when adding a Group or Note.
+Include your earlier decisions when revising this period.</p>
 <p>Use carry-forward.json as --opening-items for the next period after reviewing this pack.
 The JSON preserves original text and dates; the spreadsheet export guards formula-like text.</p>
 </main></body></html>"""
@@ -87,7 +94,7 @@ def write_reconciliation(pack: dict, output: Path) -> Path:
                          for key in COLUMNS] + [str((end - date.fromisoformat(item["Date"])).days),
                          _csv_safe(pack["notes"].get(item["TransactionID"], ""))]
                         for item in pack["outstanding"]]
-    decision_rows = [[_csv_safe(group["group"]), key, group["decision"], _csv_safe(group["note"])]
+    decision_rows = [[_decision_csv_safe(group["group"]), key, group["decision"], _decision_csv_safe(group["note"])]
                      for group in pack["decisions"] for key in group["ids"]]
     # compute() settles a suggestion's label against the supplied review groups, so every
     # output writes the name the pack carries. Renaming here would only split the CSV
