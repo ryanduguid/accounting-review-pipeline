@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -81,27 +82,19 @@ class CalculationEvidence:
 def _is_hidden(character: str) -> bool:
     """True for a character that can change how surrounding text reads.
 
-    C0 controls, the zero-width and directional marks at U+200B to U+200F, the
-    embedding and override controls at U+202A to U+202E, the Arabic letter mark
-    at U+061C, and the isolates at U+2066 to U+2069. The isolates were the gap:
-    U+2066 and U+2069 reorder a reviewer's own words on screen exactly as the
-    overrides do, and reached the pack unescaped.
+    Every control (Cc), format (Cf) and surrogate (Cs) character, the set the
+    loader refuses in source files: the zero-width, directional, embedding,
+    override and isolate marks, and also the soft hyphen, word joiner, byte
+    order mark, interlinear annotation marks and C1 controls that a list of
+    ranges here used to miss, so they reached the pack unescaped.
     """
-    point = ord(character)
-    if point in (0x85, 0x2028, 0x2029):
-        # NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR: str.splitlines() breaks
-        # a line at each, so a status or figure name carrying one is written
-        # into a summary row as one line and read back as two. The writer's
-        # own pack then fails to verify.
+    if ord(character) in (0x2028, 0x2029):
+        # LINE SEPARATOR and PARAGRAPH SEPARATOR, like NEL among the controls:
+        # str.splitlines() breaks a line at each, so a status or figure name
+        # carrying one is written into a summary row as one line and read back
+        # as two. The writer's own pack then fails to verify.
         return True
-    return (
-        point < 0x20
-        or point == 0x7F
-        or point == 0x061C
-        or 0x200B <= point <= 0x200F
-        or 0x202A <= point <= 0x202E
-        or 0x2066 <= point <= 0x2069
-    )
+    return unicodedata.category(character) in {"Cc", "Cf", "Cs"}
 
 
 def _text(value: object, field: str, path: Path, *, limit: int = 400) -> str:

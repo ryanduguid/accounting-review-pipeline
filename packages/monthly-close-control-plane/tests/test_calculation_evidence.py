@@ -304,6 +304,18 @@ def test_a_computed_figure_with_no_rate_table_is_traceable_or_flagged(tmp_path):
                if item.control == "calculation_evidence")
 
 
+def test_a_figure_with_no_rate_table_is_not_published_as_relied_upon(tmp_path):
+    """The same shape as the wrong period: a REVIEW exception beside usable true."""
+    from closecontrol.report import _as_json
+
+    record = build_record()
+    record["calculation"]["upstream"]["manifest"]["rate_table_uris"] = []
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    pack = run(tmp_path, calculation_evidence_paths=[write(tmp_path, record)])
+    assert _as_json(pack)["calculation_evidence"]["supplied"][0]["usable"] is False
+    assert pack.relied_on == frozenset()
+
+
 def test_an_acknowledgement_does_not_clear_an_evidence_exception(tmp_path):
     note = tmp_path / "note.json"
     note.write_text(json.dumps({
@@ -486,6 +498,21 @@ def test_a_non_text_validation_finding_is_itself_a_finding(tmp_path):
     evidence = module.load(write(tmp_path, record))
     assert any("not text" in finding for finding in evidence.findings)
     assert evidence.usable is False
+
+
+@pytest.mark.parametrize("character", ["\u00ad", "\u2060", "\ufeff", "\ufff9", "\u0090"])
+def test_every_format_and_control_character_is_hidden(tmp_path, character):
+    # The loader refuses every Cc, Cf and Cs character in a source file; a list of
+    # ranges here missed these, and they reached close-summary.md unescaped.
+    record = build_record(**{"call.status": f"COMPUTED{character}"})
+    with pytest.raises(SchemaError, match="control or formatting character"):
+        module.load(write(tmp_path, record))
+
+
+def test_a_lone_surrogate_is_hidden():
+    # json.loads turns an escaped lone surrogate into one; the test fixture cannot
+    # write it, because it encodes the record as UTF-8 first.
+    assert module._is_hidden("\ud800")
 
 
 @pytest.mark.parametrize("character", ["\u0085", "\u2028", "\u2029"])
