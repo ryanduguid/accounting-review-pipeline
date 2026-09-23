@@ -63,8 +63,10 @@ SELECTEDMEASURE() - CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Dat
 VAR CurrentVal = SELECTEDMEASURE()
 VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
 RETURN
-    DIVIDE(CurrentVal - PriorVal, PriorVal, 0)
+    DIVIDE(CurrentVal - PriorVal, PriorVal)
 ```
+A missing or zero prior-year value produces a blank.
+
 *Format string definition*: `0.0%`
 
 ---
