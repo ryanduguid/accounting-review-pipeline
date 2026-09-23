@@ -74,6 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
         clearing.add_argument(f"--{flag}", required=True)
     clearing.add_argument("--opening-items", type=Path, help="previous period's carry-forward.json")
     clearing.add_argument("--decisions", type=Path, help="reviewed Group,TransactionID,Decision,Note CSV")
+    clearing.add_argument("--decisions-escaped", action="store_true",
+                          help="decode Group and Note escapes when reusing generated suggestions.csv")
     clearing.add_argument("--output", required=True, type=Path, help="new directory outside version control")
     comparison = commands.add_parser("compare", help="compare verified close packs without changing them")
     for flag in ("previous-pack", "current-pack", "previous-tb", "current-tb"):
@@ -126,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
                              currency=args.currency, period_start=args.period_start,
                              period_end=args.period_end, opening_balance=args.opening_balance,
                              closing_balance=args.closing_balance, opening_items=args.opening_items,
-                             decisions=args.decisions)
+                             decisions=args.decisions, decisions_escaped=args.decisions_escaped)
             review_path = write_reconciliation(reconciliation, destination)
         except (ControlInputError, OSError, ValueError, csv.Error) as exc:
             print(f"close-control reconcile: {exc}", file=sys.stderr)

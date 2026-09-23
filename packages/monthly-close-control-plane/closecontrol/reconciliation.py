@@ -87,7 +87,8 @@ def _opening(snapshot: SourceSnapshot, identity: dict[str, str], start: date
     return items, notes
 
 
-def _decisions(snapshot: SourceSnapshot | None, items: dict[str, dict[str, str]]) -> list[dict]:
+def _decisions(snapshot: SourceSnapshot | None, items: dict[str, dict[str, str]],
+               *, escaped: bool) -> list[dict]:
     if snapshot is None:
         return []
     groups: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -97,6 +98,11 @@ def _decisions(snapshot: SourceSnapshot | None, items: dict[str, dict[str, str]]
             raise ControlInputError("Every decisions row must contain all four fields.")
         record = {key: _text(values[key], field=key, path=snapshot.path, row_number=row,
                             allow_empty=key in {"Decision", "Note"}) for key in DECISION_COLUMNS}
+        if escaped:
+            for key in ("Group", "Note"):
+                value = record[key]
+                if value.startswith(("''", "'=", "'+", "'-", "'@")):
+                    record[key] = value[1:]
         if record["Decision"] not in {"", "accept", "reject"}:
             raise ControlInputError("Decision must be blank, accept or reject.")
         item_id = record["TransactionID"]
@@ -121,16 +127,19 @@ def _decisions(snapshot: SourceSnapshot | None, items: dict[str, dict[str, str]]
 
 def reconcile(transactions: Path, *, tenant: str, account_id: str, currency: str,
               period_start: str, period_end: str, opening_balance: str, closing_balance: str,
-              opening_items: Path | None = None, decisions: Path | None = None) -> dict:
+              opening_items: Path | None = None, decisions: Path | None = None,
+              decisions_escaped: bool = False) -> dict:
     # Input bounds and a private context keep sums exact even if the caller changes Decimal settings.
     with localcontext(Context(prec=40)):
         return _reconcile(transactions, tenant, account_id, currency, period_start, period_end,
-                          opening_balance, closing_balance, opening_items, decisions)
+                          opening_balance, closing_balance, opening_items, decisions, decisions_escaped)
 
 
 def _reconcile(transactions: Path, tenant: str, account_id: str, currency: str,
                period_start: str, period_end: str, opening_balance: str, closing_balance: str,
-               opening_items: Path | None, decisions: Path | None) -> dict:
+               opening_items: Path | None, decisions: Path | None, decisions_escaped: bool) -> dict:
+    if decisions_escaped and decisions is None:
+        raise ControlInputError("--decisions-escaped requires --decisions.")
     identity = {key: _text(value, field=key, path=Path("configuration"), row_number=0)
                 for key, value in zip(IDENTITY_COLUMNS, (tenant, account_id, currency))}
     if not re.fullmatch(r"[A-Z]{3}", identity["Currency"]):
@@ -160,7 +169,7 @@ def _reconcile(transactions: Path, tenant: str, account_id: str, currency: str,
     by_id = {item["TransactionID"]: item for item in ordered}
     if len(by_id) != len(ordered):
         raise ControlInputError("Repeated TransactionID within or across opening and current items.")
-    allocations = _decisions(snapshots.get("decisions"), by_id)
+    allocations = _decisions(snapshots.get("decisions"), by_id, escaped=decisions_escaped)
     accepted = {key for group in allocations if group["decision"] == "accept" for key in group["ids"]}
     grouped = {key for group in allocations for key in group["ids"]}
     for group in allocations:

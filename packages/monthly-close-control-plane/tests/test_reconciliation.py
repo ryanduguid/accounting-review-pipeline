@@ -359,6 +359,60 @@ def test_an_uncontested_suggestion_keeps_its_plain_label(tmp_path):
     assert {row["Group"] for row in rows if row["TransactionID"] in {"s1", "s2", "p2"}} == {"S1"}
 
 
+@pytest.mark.parametrize("text", [
+    "- Awaiting remittance", "=1+1", "+manual", "@manual", "'manual", "''manual",
+    "'- Awaiting remittance", "'=1+1", "'+manual", "'@manual", "'", 'Quoted, "café"',
+])
+@pytest.mark.parametrize("decision", ["", "accept", "reject"])
+def test_escaped_decisions_preserve_text_across_repeated_cli_runs(tmp_path, text, decision):
+    # Removing the import escape or failing to escape literal apostrophes loses text on a rerun.
+    source = tmp_path / "reviewed.csv"
+    with source.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["Group", "TransactionID", "Decision", "Note"])
+        writer.writerows([[text, key, decision, text] for key in ["s1", "s2", "p2"]])
+    expected = [{"group": text, "ids": ["s1", "s2", "p2"], "decision": decision, "note": text}]
+    for run in range(3):
+        code, output = run_pack(tmp_path, decisions=source, name=f"roundtrip-{run}",
+                                extra=["--decisions-escaped"] if run else [])
+        assert code == 2
+        pack = json.loads((output / "reconciliation.json").read_text(encoding="utf-8"))
+        assert pack["decisions"] == expected
+        assert pack["notes"] == {key: text for key in ["s1", "s2", "p2"]}
+        assert len(pack["outstanding"]) == (2 if decision == "accept" else 5)
+        assert pack["outstanding_total"] == "-75.00"
+        assert pack["suggestions"] == []
+        source = output / "suggestions.csv"
+        with source.open(encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        for row in rows:
+            for field in ("Group", "Note"):
+                assert not row[field].lstrip().startswith(("=", "+", "-", "@"))
+
+
+def test_escaped_group_names_do_not_merge_distinct_allocations(tmp_path):
+    source = decision_file(tmp_path, [
+        "-manual,p1,reject,Checked", "-manual,s3,reject,Checked",
+        "'-manual,s1,reject,Checked", "'-manual,s2,reject,Checked", "'-manual,p2,reject,Checked",
+    ])
+    _, first = run_pack(tmp_path, decisions=source)
+    code, second = run_pack(tmp_path, decisions=first / "suggestions.csv", name="again",
+                            extra=["--decisions-escaped"])
+    assert code == 2
+    pack = json.loads((second / "reconciliation.json").read_text())
+    assert pack["decisions"] == [
+        {"group": "'-manual", "ids": ["s1", "s2", "p2"], "decision": "reject", "note": "Checked"},
+        {"group": "-manual", "ids": ["p1", "s3"], "decision": "reject", "note": "Checked"},
+    ]
+
+
+def test_escaped_decisions_option_requires_a_file(tmp_path, capsys):
+    code, output = run_pack(tmp_path, extra=["--decisions-escaped"])
+    assert code == 1
+    assert not output.exists()
+    assert "--decisions-escaped requires --decisions" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("note", ["", "Awaiting remittance"])
 @pytest.mark.parametrize("reference", ["Shared", "Other"])
 def test_pending_groups_survive_reruns_without_clearing_or_duplicate_suggestions(tmp_path, note, reference):
