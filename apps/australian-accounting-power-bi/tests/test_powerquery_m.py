@@ -62,6 +62,41 @@ class TestPowerQueryM(unittest.TestCase):
                 self.assertGreaterEqual(let_count, 1, f"{name} missing 'let'")
                 self.assertEqual(let_count, in_count, f"{name} has unbalanced let/in blocks")
 
+    def test_let_bindings_are_separated_by_commas(self) -> None:
+        """A binding that follows another without a comma is an M syntax error.
+
+        Two such omissions in Source_Dim_Entity and Source_Fact_GeneralLedger would
+        have stopped every refresh, and the balanced let/in check could not see them.
+        A binding is a line at the indentation of the first binding after `let`.
+        """
+        binding = re.compile(r"^(?P<indent>[\t ]*)(?:[A-Za-z_]\w*|#\"[^\"]+\")\s*=(?!=)")
+        for name, content in named_expressions().items():
+            lines = content.splitlines()
+            for index, line in enumerate(lines):
+                if line.strip() != "let":
+                    continue
+                first = next((text for text in lines[index + 1:] if text.strip()), "")
+                match = binding.match(first)
+                if match is None:
+                    continue
+                indent = match.group("indent")
+                previous = None
+                for text in lines[index + 1:]:
+                    stripped = text.strip()
+                    if not stripped or stripped.startswith("//"):
+                        continue
+                    if text.startswith(indent) and not text.startswith(indent + " ") \
+                            and not text.startswith(indent + "\t"):
+                        if stripped == "in":
+                            break
+                        if binding.match(text) and previous is not None:
+                            with self.subTest(expression=name, binding=stripped[:40]):
+                                self.assertTrue(
+                                    previous.rstrip().endswith(","),
+                                    f"{name}: no comma before {stripped[:40]!r}",
+                                )
+                    previous = text
+
     def test_abn_validator_m_logic(self) -> None:
         """Verify the ABN expression uses the statutory weights and Modulus 89."""
         content = named_expressions()["Fx_ValidateABN"]

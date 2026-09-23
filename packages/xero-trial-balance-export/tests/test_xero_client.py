@@ -1083,6 +1083,18 @@ class ResolveTokenFileTest(unittest.TestCase):
     ``<cache>.lock`` sibling path stays beside the cache regardless of the
     process working directory."""
 
+    def test_a_linked_state_directory_is_an_allowed_root(self):
+        """Where AppData or .local is a symlink or a junction, the state directory
+        resolves outside the real home. The token session must still accept it."""
+        import token_store
+
+        outside = os.path.join(
+            os.path.abspath(os.sep), "linked-state", "xero-trial-balance-export", "token.json"
+        )
+        with mock.patch("token_store._state_home_token_file", return_value=outside):
+            self.assertEqual(token_store.safe_token_path(outside), os.path.realpath(outside))
+            self.assertEqual(xero_client.TokenSession(outside).token_file, os.path.realpath(outside))
+
     def test_cli_value_beats_env_var(self):
         with tempfile.TemporaryDirectory() as tmp:
             cli = os.path.join(tmp, "cli-cache", "token.json")

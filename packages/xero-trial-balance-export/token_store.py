@@ -28,10 +28,13 @@ def allowed_token_roots() -> tuple[str, ...]:
     """Directories the token cache may live under.
 
     Resolved on every call, not once at import, so a process that changes
-    its working directory is judged against the directory it is in now.
+    its working directory is judged against the directory it is in now. The
+    per-user state directory is a root in its own right: where .local or
+    AppData is a symlink or a junction, it resolves outside the real home.
     """
     return (
         os.path.realpath(os.path.abspath(os.path.expanduser("~"))),
+        os.path.realpath(os.path.dirname(_state_home_token_file())),
         os.path.realpath(os.path.abspath(os.getcwd())),
         os.path.realpath(os.path.abspath(tempfile.gettempdir())),
         os.path.realpath(os.path.abspath(os.path.dirname(__file__))),
@@ -63,15 +66,10 @@ def safe_token_path(path: str) -> str:
     )
 
 
-# The resolved default state directory is an allowed root in its own right. Without
-# it, a home whose .local or AppData component is a symlink or a junction resolves
-# outside realpath(home) and this line raises SystemExit while the module is being
-# imported, before any --token-file or XERO_TOKEN_FILE override can be read.
-DEFAULT_TOKEN_FILE = os.path.realpath(
-    os.path.abspath(os.path.expanduser(_state_home_token_file()))
-)
-if os.path.basename(DEFAULT_TOKEN_FILE) != "token.json":
-    raise SystemExit("error: token cache path must be named token.json")
+# Checked like any other path. The state directory is among the allowed roots, so a
+# home whose .local or AppData component is a symlink or a junction no longer makes
+# this raise SystemExit at import, before --token-file or XERO_TOKEN_FILE is read.
+DEFAULT_TOKEN_FILE = safe_token_path(_state_home_token_file())
 
 
 def resolve_token_file(cli_value: str | None = None) -> str:

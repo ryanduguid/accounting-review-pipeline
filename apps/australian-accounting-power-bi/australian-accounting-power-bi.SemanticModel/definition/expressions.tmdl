@@ -80,8 +80,10 @@ expression Source_Dim_Entity = ```
 	        {"ANZSIC_Code", type text},
 	        {"Currency", type text},
 	        {"ConsolidationWeight", type number}
-	    })
-	    InvalidABNs = Table.SelectRows(TypedTable, each not Fx_ValidateABN([ABN]))
+	    }),
+	    // ABN is an attribute, not a key: a blank one is left alone, a wrong one refused.
+	    InvalidABNs = Table.SelectRows(TypedTable, each
+	        [ABN] <> null and Text.Trim([ABN]) <> "" and not Fx_ValidateABN([ABN]))
 	in
 	    if not Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
 	        error Error.Record("Source_Dim_Entity", "Invalid source values",
@@ -165,7 +167,7 @@ expression Source_Fact_GeneralLedger = ```
 	        {"Description", type text},
 	        {"IntercompanyEntityID", type text},
 	        {"IsIntercompany", type logical}
-	    })
+	    }),
 	    ByJournal = Table.Group(TypedTable, {"JournalID"}, {
 	        {"TotalDebit", each List.Sum([Debit]), Currency.Type},
 	        {"TotalCredit", each List.Sum([Credit]), Currency.Type}
