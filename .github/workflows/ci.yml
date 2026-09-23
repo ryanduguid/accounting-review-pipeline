@@ -77,6 +77,8 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       # No -q here: the component's pytest addopts already sets it, and a second
       # one is -qq, which drops the "N passed" count from the log. --cov takes
       # its source from the component's [tool.coverage.run] configuration, the
@@ -104,6 +106,8 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - name: audit the locked project environment
         run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
         working-directory: packages/monthly-close-control-plane
@@ -125,6 +129,8 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - run: uv run --locked --extra dev --python 3.12 python -m build
         working-directory: packages/monthly-close-control-plane
       - name: Install and smoke-test the built wheel outside the checkout
@@ -156,6 +162,8 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - run: uv run --locked --extra dev ruff check closecontrol tests
         working-directory: packages/monthly-close-control-plane
       - run: uv run --locked --extra dev mypy closecontrol
@@ -193,6 +201,8 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - name: run tests with branch coverage
         run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: ${{ matrix.package_dir }}
@@ -214,6 +224,8 @@ jobs:
         with:
           version: "0.12.0"
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - name: check the workspace and standalone component locks
         shell: python
         run: |

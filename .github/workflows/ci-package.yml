@@ -128,6 +128,8 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       # No -q here: the packaged components already set it in their pytest
       # addopts, and a second one is -qq, which drops the "N passed" count from
       # the log. Without the count a test file that stops being collected
@@ -162,6 +164,8 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - name: the component's own lockfile resolves on its own
         # uv discovers the workspace root from inside a member, so a plain
         # `uv lock --check` here would validate the root lock. The component's
@@ -201,6 +205,8 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - name: audit the locked project environment
         run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
 
@@ -226,6 +232,8 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
       - name: build the distribution
         run: uv run --locked --extra dev --python 3.12 python -m build
       - name: install the wheel into a clean environment, import it and run the smoke
