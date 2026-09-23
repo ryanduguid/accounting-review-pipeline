@@ -46,7 +46,7 @@ table CalcGroup_TimeIntelligence
 				VAR CurrentVal = SELECTEDMEASURE()
 				VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
 				RETURN
-					DIVIDE(CurrentVal - PriorVal, PriorVal, 0)
+					DIVIDE(CurrentVal - PriorVal, PriorVal)
 			ordinal: 6
 			formatStringDefinition = "0.0%"
 

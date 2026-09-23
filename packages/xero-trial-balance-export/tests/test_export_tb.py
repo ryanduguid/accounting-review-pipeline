@@ -1898,10 +1898,6 @@ class AbsurdMagnitudeTest(unittest.TestCase):
                 self.assertIsInstance(export_tb.to_number(cell), Decimal)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ConnectionControlCharactersTest(unittest.TestCase):
     def test_c1_controls_are_refused_but_nonbreaking_space_is_allowed(self):
         from export_tb import validated_connections
@@ -2292,3 +2288,9 @@ class QuietFailureMessageTest(_ExportCase):
         message = str(raised.code)
         self.assertIn("catherby", message.casefold())
         self.assertNotIn("filename withheld", message)
+
+
+# Last, so unittest.main() sees every class above it: running this file directly
+# used to stop at the guard and skip whatever followed.
+if __name__ == "__main__":
+    unittest.main()

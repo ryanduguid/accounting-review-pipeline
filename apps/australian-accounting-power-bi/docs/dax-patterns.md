@@ -63,9 +63,11 @@ SELECTEDMEASURE() - CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Dat
 VAR CurrentVal = SELECTEDMEASURE()
 VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
 RETURN
-    DIVIDE(CurrentVal - PriorVal, PriorVal, 0)
+    DIVIDE(CurrentVal - PriorVal, PriorVal)
 ```
 *Format string definition*: `0.0%`
+
+With no prior value, or a prior value of zero, `DIVIDE` returns blank rather than 0 per cent: there is no year-on-year change to state, and 0 per cent would read as a flat year.
 
 ---
 

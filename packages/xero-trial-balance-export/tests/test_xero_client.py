@@ -1083,6 +1083,18 @@ class ResolveTokenFileTest(unittest.TestCase):
     ``<cache>.lock`` sibling path stays beside the cache regardless of the
     process working directory."""
 
+    def test_a_linked_state_directory_is_an_allowed_root(self):
+        """Where AppData or .local is a symlink or a junction, the state directory
+        resolves outside the real home. The token session must still accept it."""
+        import token_store
+
+        outside = os.path.join(
+            os.path.abspath(os.sep), "linked-state", "xero-trial-balance-export", "token.json"
+        )
+        with mock.patch("token_store._state_home_token_file", return_value=outside):
+            self.assertEqual(token_store.safe_token_path(outside), os.path.realpath(outside))
+            self.assertEqual(xero_client.TokenSession(outside).token_file, os.path.realpath(outside))
+
     def test_cli_value_beats_env_var(self):
         with tempfile.TemporaryDirectory() as tmp:
             cli = os.path.join(tmp, "cli-cache", "token.json")
@@ -1106,7 +1118,12 @@ class ResolveTokenFileTest(unittest.TestCase):
 
     def test_default_is_per_user_state_not_site_packages(self):
         env = {k: v for k, v in os.environ.items() if k != "XERO_TOKEN_FILE"}
-        with mock.patch.dict(os.environ, env, clear=True):
+        # The legacy module-adjacent branch is checked first, and a developer who has
+        # run auth.py from the package directory has that file on disk, gitignored.
+        # Neutralise it so this exercises only the fallback it names.
+        absent = os.path.join(tempfile.gettempdir(), "no-such-legacy", "token.json")
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch("token_store.LEGACY_MODULE_TOKEN_FILE", absent):
             resolved = xero_client.resolve_token_file()
         self.assertEqual(resolved, xero_client.DEFAULT_TOKEN_FILE)
         self.assertNotEqual(

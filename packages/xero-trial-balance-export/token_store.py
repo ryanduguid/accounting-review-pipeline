@@ -28,10 +28,13 @@ def allowed_token_roots() -> tuple[str, ...]:
     """Directories the token cache may live under.
 
     Resolved on every call, not once at import, so a process that changes
-    its working directory is judged against the directory it is in now.
+    its working directory is judged against the directory it is in now. The
+    per-user state directory is a root in its own right: where .local or
+    AppData is a symlink or a junction, it resolves outside the real home.
     """
     return (
         os.path.realpath(os.path.abspath(os.path.expanduser("~"))),
+        os.path.realpath(os.path.dirname(_state_home_token_file())),
         os.path.realpath(os.path.abspath(os.getcwd())),
         os.path.realpath(os.path.abspath(tempfile.gettempdir())),
         os.path.realpath(os.path.abspath(os.path.dirname(__file__))),
@@ -63,6 +66,9 @@ def safe_token_path(path: str) -> str:
     )
 
 
+# Checked like any other path. The state directory is among the allowed roots, so a
+# home whose .local or AppData component is a symlink or a junction no longer makes
+# this raise SystemExit at import, before --token-file or XERO_TOKEN_FILE is read.
 DEFAULT_TOKEN_FILE = safe_token_path(_state_home_token_file())
 
 

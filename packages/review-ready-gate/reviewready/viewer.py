@@ -577,10 +577,21 @@ def _read_csv_rows(payload: bytes) -> list[dict[str, str]]:
     return rows
 
 
+_ACK_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
 def _canonical_pack(document: dict[str, object], summary_text: str) -> ReadinessPack:
     """Rebuild the typed pack after schema and cross-file validation."""
     data = cast(dict[str, Any], document)
     ack = data["acknowledgement"]
+    # The extended form only, as loader.parse_iso_date requires: date.fromisoformat
+    # accepts "20260412" from Python 3.11 on, so the same pack verified on 3.11 and
+    # failed closed on 3.10, and the sheet showed a date the JSON did not state.
+    if ack is not None and not _ACK_DATE.fullmatch(str(ack["reviewed_on"])):
+        raise GateInputError(
+            f"{_JSON_NAME}: acknowledgement.reviewed_on must be an extended-format "
+            "ISO date, YYYY-MM-DD"
+        )
     try:
         acknowledgement = None if ack is None else ReviewerAcknowledgement(
             ack["reviewer_initials"], date.fromisoformat(ack["reviewed_on"]), ack["comment"]

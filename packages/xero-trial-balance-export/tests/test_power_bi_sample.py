@@ -119,7 +119,7 @@ class PowerBiSampleTests(unittest.TestCase):
         for reason in (
             "carries more than the ten columns",
             "does not have the ten columns",
-            "does not carry all ten fields",
+            "is missing a field export_tb.py always writes",
         ):
             self.assertIn(reason, code)
         self.assertEqual(code.count("error Error.Record("), 3)

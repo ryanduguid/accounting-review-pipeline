@@ -149,6 +149,42 @@ def _aged_record_widths(text, first_field):
     return header_width, body
 
 
+def _trial_balance_record_widths(text):
+    """The record-width rule Xero.TrialBalance.pq runs, ported: every record
+    from the header down carries the header's field count, or the export is
+    refused.
+
+    Csv.Document takes each record's width from Columns alone, so before this
+    check a short record was padded with nulls and parseAmount read the absent
+    figure as a genuine zero, while an extra field was dropped in silence.
+    Returns the header width and the records below it.
+    """
+    framed = _aged_records(text)
+    header = next(
+        (
+            entry
+            for entry in framed
+            if entry[1] and entry[1][0].strip() in ("Account", "Account Code")
+        ),
+        None,
+    )
+    if header is None:
+        raise TrialBalanceError("header row not found")
+    header_number, header_row = header
+    header_width = len(header_row)
+    body = []
+    for number, row in framed:
+        if number <= header_number:
+            continue
+        if len(row) != header_width:
+            raise TrialBalanceError(
+                f"CSV record {number} has {len(row)} fields;"
+                f" the header has {header_width}"
+            )
+        body.append(row)
+    return header_width, body
+
+
 class TrialBalanceError(Exception):
     """What the ported parser raises where the M raises. A distinct type, so
     a test can assert the refusal without assertRaises(AssertionError)
@@ -744,6 +780,48 @@ def _column_totals(path):
 
 
 class TrialBalanceFixtureTests(unittest.TestCase):
+    def test_trial_balance_refuses_a_record_the_header_width_does_not_match(self):
+        """The trial balance carried no width check while both aged adapters and
+        PaydaySuper.Report did, so a short record loaded with its absent figure
+        padded to a genuine zero and a surplus field was dropped in silence, and
+        the tie-out check downstream had no reason to look. Pinned as: the
+        header's field count is measured from the framed record, every record
+        below it has to match, and a present empty cell stays valid."""
+        fixture = (ROOT / "samples" / "sample-xero-trial-balance.csv").read_text(
+            encoding="utf-8-sig"
+        )
+        # Control: the fabricated export is unchanged and still frames cleanly.
+        width, body = _trial_balance_record_widths(fixture)
+        self.assertEqual(width, 6)
+        self.assertTrue(body)
+
+        row = "Accounts Receivable (610),Current Asset,1830.00,,42100.00,"
+        self.assertIn(row, fixture)
+        # A present blank amount is a genuine zero, not a missing field.
+        self.assertEqual(_trial_balance_record_widths(fixture)[0], 6)
+        # The audited cases: the final field removed, and a seventh field added.
+        for malformed in (row[: row.rindex(",")], row + ",extra"):
+            with self.assertRaises(TrialBalanceError):
+                _trial_balance_record_widths(fixture.replace(row, malformed))
+
+    def test_trial_balance_pins_the_record_width_guard(self):
+        source = (ROOT / "powerquery" / "Xero.TrialBalance.pq").read_text(encoding="utf-8")
+        # The width check runs on the framed records, so a quoted newline stays
+        # inside one record rather than becoming a short one.
+        self.assertIn("Lines.FromText(csvText, QuoteStyle.Csv, false)", source)
+        self.assertIn(
+            "recordWidth = (recordText as text, recordNumber as number) as number =>",
+            source,
+        )
+        self.assertIn('"Record width does not match the header"', source)
+        self.assertIn("ExtraValues.Error", source)
+        # Csv.Document is shaped to the checked header width, so the refusal
+        # cannot be stepped over.
+        self.assertLess(source.index("firstBadRecord ="), source.index("Raw = Csv.Document"))
+        self.assertIn("Columns = columnCount,", source)
+        # Text.Split on the header line counted a quoted comma as a separator.
+        self.assertNotIn('columnCount = List.Count(Text.Split(headerLine, ","))', source)
+
     def test_the_readme_promises_these_tests_quote_are_still_in_the_readme(self):
         """The docstrings below justify themselves by quoting the README.  A
         quote beats a line number - a one-line insert moves every number and

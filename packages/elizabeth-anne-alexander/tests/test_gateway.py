@@ -1304,3 +1304,36 @@ def test_malformed_resealed_evidence_is_refused(field, value, tmp_path, monkeypa
     paths = _resealed_run(tmp_path, evidence_edit=lambda evidence: evidence["items"][0].__setitem__(field, value))
     with pytest.raises(GatewayError):
         _validate(paths)
+
+
+def _row_named(name: str, *, section: str) -> BalanceRow:
+    return BalanceRow(
+        report_date=date(2026, 6, 30),
+        tenant="Unit Test Tenant",
+        section=section,
+        account_id="acct-1",
+        account_name=name,
+        account_code="9999",
+        debit=Decimal("0.00"),
+        credit=Decimal("0.00"),
+        ytd_debit=Decimal("0.00"),
+        ytd_credit=Decimal("0.00"),
+    )
+
+
+def test_an_account_named_for_its_own_section_is_not_a_disclosure() -> None:
+    """A trial balance whose account name equals its section is ordinary, and the
+    emitted `section` is source text the model is meant to carry: it is in
+    MODEL_PROJECTION and no README control names it. Comparing it against the
+    forbidden account names raised a disclosure error naming a disclosure that had
+    not happened, and the pack could not be evaluated at all."""
+    rows = (_row_named("Revenue", section="Revenue"),)
+
+    _assert_model_is_redacted({"findings": [{"section": "Revenue", "review_reason": "variance"}]}, rows)
+
+
+def test_the_section_exemption_does_not_reach_any_other_finding_field() -> None:
+    rows = (_row_named("Revenue", section="Revenue"),)
+
+    with pytest.raises(GatewayError, match="raw source display data"):
+        _assert_model_is_redacted({"findings": [{"review_reason": "Revenue"}]}, rows)

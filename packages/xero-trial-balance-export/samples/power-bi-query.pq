@@ -114,19 +114,24 @@ let
 
     // A truncated row is the other half of the same problem: Csv.Document
     // padded it to reach the column count, so the header check above cannot
-    // see it. The exporter writes every column on every row and never leaves
-    // one empty, so an absent field here means a damaged file. Absence is
-    // read through IsAbsent for the same host reason as the overflow column:
-    // a check for null alone misses every short row in Excel's engine.
-    // Wholly blank lines are ignored rather than rejected, since a trailing
-    // newline is not a defect.
+    // see it. Every column except AccountCode carries a value on every row;
+    // AccountCode is empty for an account whose name holds no parenthetical
+    // code, which export_tb writes and ParentheticalAccountExportTest pins as
+    // ",Rent (Sydney),,", so an absent value in any other column means a damaged
+    // file. Absence is read through IsAbsent for the same host reason as the
+    // overflow column: a check for null alone misses every short row in Excel's
+    // engine. Wholly blank lines are ignored rather than rejected, since a
+    // trailing newline is not a defect.
     Populated = Table.SelectRows(
         Checked,
         each not List.IsEmpty(Present(Record.FieldValues(_)))
     ),
+    RequiredColumns = List.RemoveItems(ExpectedColumns, {"AccountCode"}),
     Gaps = Table.SelectRows(
         Populated,
-        each List.Count(Present(Record.FieldValues(_))) <> List.Count(ExpectedColumns)
+        (row) =>
+            List.Count(Present(List.Transform(RequiredColumns, (name) => Record.Field(row, name))))
+                <> List.Count(RequiredColumns)
     ),
     Complete =
         if Table.IsEmpty(Gaps) then
@@ -134,7 +139,7 @@ let
         else
             error Error.Record(
                 "Incomplete trial balance row",
-                "A row does not carry all ten fields export_tb.py writes.",
+                "A row is missing a field export_tb.py always writes (every column but AccountCode).",
                 Text.From(Table.RowCount(Gaps)) & " row(s) are missing at least one field."
             ),
 

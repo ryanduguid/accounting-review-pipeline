@@ -241,6 +241,16 @@ def main() -> None:
 
     try:
         server = _CallbackServer((callback_host, callback_port), _CallbackHandler)
+    except PermissionError as exc:
+        # Not a busy port: a redirect URI with no port means port 80, which an
+        # unprivileged user cannot bind on most Unix-like systems.
+        sys.exit(
+            f"error: not permitted to listen on {callback_host}:{callback_port} for "
+            f"the OAuth callback ({exc}). Ports below 1024 usually need elevated "
+            "rights, and a redirect URI with no port uses 80. Point "
+            "XERO_REDIRECT_URI at a port such as 8400 and add the same URI to the "
+            "app at developer.xero.com."
+        )
     except OSError as exc:
         sys.exit(
             f"error: cannot listen on {callback_host}:{callback_port} for the "
