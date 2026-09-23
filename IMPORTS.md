@@ -4,8 +4,10 @@ Captured: 2026-09-02 (Australia/Sydney).
 
 This repository is assembled from freshly fetched default branches. 'Git tree' is the
 commit's `HEAD^{tree}` object. 'Tracked-tree SHA-256' is SHA-256 over the exact
-NUL-delimited bytes of `git ls-tree -r --full-tree -z HEAD`. Historical tags remain
-authoritative in the source repositories; none is copied here.
+NUL-delimited bytes of `git ls-tree -r --full-tree -z HEAD`. Historical tags remained
+authoritative in the source repositories; none is copied here. Those repositories were
+retired in September 2026, so their tags, releases and runs are no longer hosted and
+the links to them below no longer resolve.
 
 ## Path decision (owner decision D1)
 
@@ -163,9 +165,10 @@ policy files. Each granted `contents: read` only and referenced no secret. The r
 ledger workflows carried their source-defined clean-wheel demonstrations. Dependabot scopes
 Python updates to each component directory (`uv` for the 4 uv packages, `pip` for the
 exporter) and groups root GitHub Actions updates.
-The 4 per-package `uv` entries were removed on 23 September 2026: inside the workspace
-they rewrote the root lock rather than the package's own, so they never opened a pull
-request. The root `uv` entry refreshes the workspace lock.
+The 4 per-package `uv` entries were removed on 23 September 2026: a member-directory job
+resolves the whole workspace, so none opened a pull request after the root workspace was
+added on 7 September 2026, and all 4 failed on 20 September. The root `uv` entry refreshes
+the workspace lock and the member locks.
 
 Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml` and
 `elizabeth-anne-alexander.yml` were replaced by the reusable `ci-package.yml`, which

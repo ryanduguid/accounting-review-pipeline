@@ -1,12 +1,14 @@
 version: 2
 updates:
-  # The exporter is the one component outside the uv workspace, so its pip
-  # requirements get their own entry. The 4 uv components have none: inside a
-  # workspace member uv resolves from the root, so a member-directory update
-  # rewrites the root lock, never the member's own uv.lock, and every such
-  # job failed (the last on 20 September 2026) without opening a pull request.
-  # The member locks move with each release and ci-package.yml checks them
-  # from a copy outside the workspace.
+  # The exporter's pip requirement files get their own entry. The exporter is
+  # also a uv workspace member, so a bump here to one of the 5 exact check-tool
+  # pins must be matched in the root and the other members, as in #197. The
+  # other 4 uv components have no entry: a member-directory job resolves the
+  # whole workspace, so it cannot move one member's pin alone. Their jobs
+  # opened no pull request after the root workspace was added on 7 September
+  # 2026, and all 4 failed on 20 September. The root entry below moves the
+  # member floors and locks, and ci-package.yml checks each member lock from a
+  # copy outside the workspace.
   - package-ecosystem: "pip"
     directory: "/packages/xero-trial-balance-export"
     schedule:
@@ -26,8 +28,9 @@ updates:
   #
   # Dependabot's uv support reads the member pyproject.toml files as well as
   # the root one, so this entry sees every component's direct requirements.
-  # The 5 exact pins are ignored below, so a root run moves only the root
-  # uv.lock. One group keeps the root refresh to a single pull request a week.
+  # The 5 exact pins are ignored below. A root run also updates the member
+  # pyproject.toml floors and member uv.lock files it touches, as #196 did for
+  # build. One group keeps the root refresh to a single pull request a week.
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
