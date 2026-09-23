@@ -1,7 +1,8 @@
 # Releasing
 
-Standalone releases through `v0.1.1` remain in the
-[source repository](https://github.com/ryanduguid/workpaper-review-gate/releases). Maintained
+Standalone releases through `v0.1.1` were published from the `workpaper-review-gate`
+repository, which was retired in September 2026; `v0.1.1` remains on
+[PyPI](https://pypi.org/project/review-ready-gate/#history). Maintained
 releases starting with `review-ready-gate/v0.1.3` are published from the Accounting Review
 Pipeline repository. A separate changelog is intentionally not maintained.
 
