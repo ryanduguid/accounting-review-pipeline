@@ -35,6 +35,7 @@ def allowed_token_roots() -> tuple[str, ...]:
         os.path.realpath(os.path.abspath(os.getcwd())),
         os.path.realpath(os.path.abspath(tempfile.gettempdir())),
         os.path.realpath(os.path.abspath(os.path.dirname(__file__))),
+        os.path.realpath(os.path.dirname(_state_home_token_file())),
     )
 
 
