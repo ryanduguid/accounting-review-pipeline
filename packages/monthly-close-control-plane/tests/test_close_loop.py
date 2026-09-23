@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pytest
 from closecontrol.engine import review_close
 from closecontrol.loader import CANONICAL_COLUMNS
 
@@ -58,8 +57,9 @@ def test_gateway_same_fy_samples_review_without_year_reset() -> None:
     # Close-control's own Varrock June/July fixtures straddle 1 July and cannot
     # feed the gateway. This pin uses the gateway's May/June Demo Entity pair.
     inputs = _gateway_sample_inputs()
-    if inputs is None:
-        pytest.skip("co-located Elizabeth Anne Alexander package is missing")
+    # Not a skip: close-loop.md and close-loop.ps1 name these samples, so a suite
+    # that passes when they are gone holds nothing.
+    assert inputs is not None, "co-located Elizabeth Anne Alexander samples are missing"
 
     current_path = inputs / GATEWAY_SAMPLE_CURRENT
     prior_path = inputs / GATEWAY_SAMPLE_PRIOR

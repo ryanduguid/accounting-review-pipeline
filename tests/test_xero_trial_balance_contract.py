@@ -63,6 +63,10 @@ class CanonicalContractTest(unittest.TestCase):
         self.assertEqual((CONTRACT / "schema.csv").read_bytes(), (",".join(HEADER) + "\n").encode())
 
         scenarios = {item["fixture"]: item for item in contract["scenarios"]}
+        # The fixture directory too, or a new CSV joins the tree with no digest and
+        # no scenario, and never reaches the exporter or its consumers.
+        fixture_names = {path.name for path in (CONTRACT / "fixtures").glob("*.csv")}
+        self.assertEqual(fixture_names, set(FIXTURE_DIGESTS))
         self.assertEqual(set(scenarios), set(FIXTURE_DIGESTS))
         for name, digest in FIXTURE_DIGESTS.items():
             with self.subTest(name=name):

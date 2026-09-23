@@ -21,11 +21,12 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # refresh and reviewer paragraphs, the OAuth claims and the release citation are
 # unchanged.
 README_SHA256 = "5473448B35B8C8A6A18A6AF7292C284AD1341DD868EA72750239E3B0043D79F0"
-# Re-pinned for a Style Manual prose pass: 2 comments changed the number word
-# "two" to the numeral "2". SCOPES, every statement and the OAuth claims are
-# unchanged, and the executable AST digest below is unchanged with it.
-AUTH_SHA256 = "2DB72EB501C79A77224A93E0A6B0D3C30C4058B68EB240CE091296A03E13306F"
-AUTH_AST_SHA256 = "0D6DBEF431E626A5A15B594ACFE3D52EC6EB2A1D86275B41719BCF6B1344C487"
+# Re-pinned when main() began reporting a refused bind (PermissionError, as on
+# port 80 from a portless redirect URI) separately from a port another process
+# holds. Only that except branch and its message are new; SCOPES, the OAuth
+# endpoints, the token exchange and the callback checks are unchanged.
+AUTH_SHA256 = "266DCD6C723E373DBD3BD84528A6D7583FCA2650212CA0D6220BC27FF215A7A3"
+AUTH_AST_SHA256 = "1FD93B7EA512B96281ECC07FFF7A83F7B1867830E5A6DAEDB97B5C72F0D23F7A"
 
 SCOPES_URL = "https://developer.xero.com/documentation/guides/oauth2/scopes/"
 GRANULAR_FAQ_URL = "https://developer.xero.com/faq/granular-scopes"

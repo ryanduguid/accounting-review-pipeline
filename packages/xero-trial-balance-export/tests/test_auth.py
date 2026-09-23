@@ -59,6 +59,25 @@ class CallbackServerBindTest(unittest.TestCase):
     def test_address_reuse_is_off(self):
         self.assertFalse(auth._CallbackServer.allow_reuse_address)
 
+    def test_a_privileged_port_is_not_reported_as_a_busy_one(self):
+        """A portless redirect URI binds port 80; being refused it is not a port
+        another process holds, and the message must not send the user looking
+        for one."""
+        env = {
+            "XERO_CLIENT_ID": "fabricated-client",
+            "XERO_CLIENT_SECRET": "fabricated-secret",
+            "XERO_REDIRECT_URI": "http://localhost/callback",
+        }
+        refused = PermissionError(13, "Permission denied")
+        with mock.patch.object(auth, "load_dotenv", lambda *a, **k: None), \
+                mock.patch.dict(os.environ, env, clear=False), \
+                mock.patch.object(auth, "_CallbackServer", side_effect=refused), \
+                self.assertRaises(SystemExit) as raised:
+            auth.main()
+        message = str(raised.exception.code)
+        self.assertIn("not permitted to listen on localhost:80", message)
+        self.assertNotIn("Something else holds that port", message)
+
     def test_a_second_listener_on_the_same_port_is_refused(self):
         port = _free_port()
         first = auth._CallbackServer(("127.0.0.1", port), auth._CallbackHandler)

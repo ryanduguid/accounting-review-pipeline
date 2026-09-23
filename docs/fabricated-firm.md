@@ -119,7 +119,9 @@ checker stop for confirmation.
 
 One generator, one seed, one ledger. Every other file is derived from
 `general-ledger.csv` and the 2 registers, so agreement is by construction
-and a test proves it:
+and a test proves it. The exception is the 3 authored pack files named in
+rule 3: they are versioned generator inputs, not derived outputs, so they are
+checked for shape and cross-reference rather than by byte-for-byte regeneration.
 
 1. Each trial balance equals the ledger aggregated by entity and account:
    movement for the month, YTD from 1 July. Both pairs balance.
@@ -176,8 +178,10 @@ runs:
 6. WIP schedule. `wip-tally schedule contract-register.csv --as-at
    2026-09-30` produces the schedule whose totals tie to ENT005's trial
    balance; `wip-over-under-billing` reviews it against the ledger.
-7. Power BI. The 6 sample files are byte copies of the firm files with
-   the same headers; after the `Dim_Entity` width change in section 2 the
+7. Power BI. The 6 sample files carry the firm files' headers. Five are byte
+   copies; `sample-ato-benchmarks.csv` is published ATO benchmark data rather
+   than a firm file, so it has no contract-tree source and stands outside the
+   byte-copy and drift claims. After the `Dim_Entity` width change in section 2 the
    structural, balance and intercompany tests pass, the regeneration test
    becomes the drift test against the contract copies, and the report shows
    the 5 entities with eliminations.

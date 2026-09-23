@@ -709,8 +709,13 @@ def review_close(
         calculation_evidence=tuple(evidence),
         required_calculations=tuple(required_calculations),
         controls_not_run=controls_not_run,
+        # The same conditions the evidence controls raise exceptions for: a figure
+        # outside the period, or one whose statutory inputs name no rate table,
+        # stays under review rather than being published as relied on.
         relied_on=frozenset(
             item.label for item in evidence
-            if item.usable and covers_period(item, current_date) is True
+            if item.usable
+            and covers_period(item, current_date) is True
+            and (item.rate_tables or not item.values)
         ),
     )

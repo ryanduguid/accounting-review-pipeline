@@ -73,7 +73,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "evaluate":
             model, evidence, receipt = evaluate(context_path=args.context, request_path=args.request, policy_path=args.policy)
             outputs = write_evaluation(model, evidence, receipt, args.out)
-            _emit(f"elizabeth-anne-alexander: REVIEW_READY; {len(model['findings'])} bounded finding(s)", sys.stdout)
+            truncation = (
+                f"; TRUNCATED at max_results, {model['total_findings']} total finding(s)"
+                if model["truncated"] else ""
+            )
+            _emit(
+                f"elizabeth-anne-alexander: REVIEW_READY; "
+                f"{len(model['findings'])} bounded finding(s){truncation}",
+                sys.stdout,
+            )
             for name, path in outputs.items():
                 _emit(f"  {name}: {path}", sys.stdout)
             return 0
