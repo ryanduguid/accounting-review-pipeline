@@ -34,7 +34,7 @@ def test_release_uses_the_hardened_shared_policy_contract() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-        "2adf9e19b7c73970a1dd6703afb3f9c27b7972d7"
+        "87767ec809dc7f77bcd45808219adaf67841ae7b"
     ) in release_job
     assert "actions: read" in release_job
     assert "source-directory: packages/elizabeth-anne-alexander" in release_job
@@ -52,7 +52,8 @@ def test_pypi_uses_only_the_exact_attested_distribution() -> None:
     assert "needs: release" in pypi_job
     assert "name: pypi-elizabeth-anne-alexander" in pypi_job
     assert "id-token: write" in pypi_job
-    assert "name: dist-${{ needs.release.outputs.stem }}-${{ needs.release.outputs.version }}" in pypi_job
+    assert "artifact-ids: ${{ needs.release.outputs.dist-id }}" in pypi_job
+    assert "python policy/scripts/python_release.py verify-candidate" in pypi_job
     assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in pypi_job
     assert "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33" in pypi_job
     assert "python -m build" not in pypi_job

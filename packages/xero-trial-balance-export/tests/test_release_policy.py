@@ -24,7 +24,7 @@ class ReleasePolicyTests(unittest.TestCase):
         release_job = self.workflow().split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
         self.assertIn(
             "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-            "2adf9e19b7c73970a1dd6703afb3f9c27b7972d7",
+            "87767ec809dc7f77bcd45808219adaf67841ae7b",
             release_job,
         )
         self.assertIn("source-directory: packages/xero-trial-balance-export", release_job)
@@ -41,10 +41,8 @@ class ReleasePolicyTests(unittest.TestCase):
         self.assertIn("needs: release", pypi_job)
         self.assertIn("name: pypi-xero-trial-balance-export", pypi_job)
         self.assertIn("id-token: write", pypi_job)
-        self.assertIn(
-            "name: dist-${{ needs.release.outputs.stem }}-${{ needs.release.outputs.version }}",
-            pypi_job,
-        )
+        self.assertIn("artifact-ids: ${{ needs.release.outputs.dist-id }}", pypi_job)
+        self.assertIn("python policy/scripts/python_release.py verify-candidate", pypi_job)
         self.assertIn("pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33", pypi_job)
         self.assertNotIn("python -m build", pypi_job)
 
