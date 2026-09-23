@@ -83,8 +83,9 @@ In the decisions CSV:
 2. Add a manual group by giving 2 or more outstanding IDs a common Group label.
 3. Each ID may occur only once in the decisions file. Accepted groups must sum
    exactly to zero. A rejected group remains outstanding with its note.
-4. Run the command again with `--decisions path/to/reviewed-decisions.csv` and a
-   new output directory. Include all earlier decisions for the period when revising
+4. When reusing a generated suggestions file, run the command again with
+   `--decisions path/to/reviewed-decisions.csv --decisions-escaped` and a new
+   output directory. Include all earlier decisions for the period when revising
    it. Each run starts from its source files, with no hidden session state.
 
 The generated suggestions file includes accepted, rejected and pending groups,
@@ -92,10 +93,21 @@ plus new suggestions for items not already grouped. It can be the starting point
 for the next revision. Remove a pending group from the decisions file to make its
 items eligible for suggestions again. Carry-forward retains original outstanding
 items and non-empty notes; group membership belongs to the current period only.
-Review notes
-whose first character could start a spreadsheet formula are prefixed with an
-apostrophe in CSV output. JSON preserves original text. An Excel edit may change
-that text; inspect the saved CSV if exact note preservation matters.
+
+CSV exports prefix formula-like text with an apostrophe for spreadsheet safety.
+In `suggestions.csv`, Group and Note also double any literal leading apostrophe.
+Use `--decisions-escaped` to remove exactly one escape layer when reusing that
+file. For example, `- Awaiting remittance` is exported as `'- Awaiting remittance`
+and restored on import. Keep those prefixes when editing the CSV; double a
+literal leading apostrophe in any new Group or Note. Plain handwritten decision
+files use `--decisions` without the escape option, which preserves apostrophes
+as entered. Library callers use `decisions_escaped=True` for generated files.
+
+JSON always preserves original text. Older suggestions files did not distinguish
+literal apostrophes from formula guards; regenerate them from the original
+decisions before using this option. Spreadsheet applications may change CSV text
+when saving. Exact preservation requires retaining the encoded cell text in the
+saved CSV; an Excel editing round trip has not been verified.
 
 ## Outputs and balance checks
 
