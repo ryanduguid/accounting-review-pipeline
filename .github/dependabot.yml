@@ -1,15 +1,12 @@
 version: 2
 updates:
-  # Python dependency updates stay scoped to their component directory so one
-  # package never forces another package's lockfile to change.
-  - package-ecosystem: "uv"
-    directory: "/packages/monthly-close-control-plane"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
-
+  # The exporter is the one component outside the uv workspace, so its pip
+  # requirements get their own entry. The 4 uv components have none: inside a
+  # workspace member uv resolves from the root, so a member-directory update
+  # rewrites the root lock, never the member's own uv.lock, and every such
+  # job failed (the last on 20 September 2026) without opening a pull request.
+  # The member locks move with each release and ci-package.yml checks them
+  # from a copy outside the workspace.
   - package-ecosystem: "pip"
     directory: "/packages/xero-trial-balance-export"
     schedule:
@@ -22,43 +19,15 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: "uv"
-    directory: "/packages/review-ready-gate"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
-
-  - package-ecosystem: "uv"
-    directory: "/packages/elizabeth-anne-alexander"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
-
-  - package-ecosystem: "uv"
-    directory: "/packages/evatt"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
-
   # The root uv workspace lock. `uv run --locked` inside every component
   # directory validates this lock, not the component's, so it must move too.
   # The workspace declares no package of its own: its only direct requirements
   # are the shared `dev` group in the root pyproject.toml.
   #
   # Dependabot's uv support reads the member pyproject.toml files as well as
-  # the root one, so this entry sees the same direct requirements the 5
-  # component entries see. Every one of them is a loose floor that Dependabot
-  # leaves alone (a component bump changes only that component's uv.lock), and
-  # the 5 exact pins are ignored below, so a root run moves only the root
-  # uv.lock. The component entries keep moving the component locks; the 2
-  # are different files, not duplicates. One group keeps the root refresh to a
-  # single pull request a week.
+  # the root one, so this entry sees every component's direct requirements.
+  # The 5 exact pins are ignored below, so a root run moves only the root
+  # uv.lock. One group keeps the root refresh to a single pull request a week.
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
@@ -80,6 +49,16 @@ updates:
       - dependency-name: "pytest"
       - dependency-name: "pytest-cov"
       - dependency-name: "coverage"
+
+  # The Power BI app's pinned PBIR validator, reviewed through this lockfile
+  # rather than resolved by npx at run time.
+  - package-ecosystem: "npm"
+    directory: "/apps/australian-accounting-power-bi"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
 
   # Repository-level GitHub Actions updates for the root workflows, the only
   # ones in the repository.
