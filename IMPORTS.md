@@ -4,8 +4,10 @@ Captured: 2026-09-02 (Australia/Sydney).
 
 This repository is assembled from freshly fetched default branches. 'Git tree' is the
 commit's `HEAD^{tree}` object. 'Tracked-tree SHA-256' is SHA-256 over the exact
-NUL-delimited bytes of `git ls-tree -r --full-tree -z HEAD`. Historical tags remain
-authoritative in the source repositories; none is copied here.
+NUL-delimited bytes of `git ls-tree -r --full-tree -z HEAD`. Historical tags remained
+authoritative in the source repositories; none is copied here. Those repositories were
+retired in September 2026, so their tags, releases and runs are no longer hosted and
+the links to them below no longer resolve.
 
 ## Path decision (owner decision D1)
 

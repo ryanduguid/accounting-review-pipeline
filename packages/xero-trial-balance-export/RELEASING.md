@@ -3,17 +3,18 @@
 The Accounting Review Pipeline
 [releases](https://github.com/ryanduguid/accounting-review-pipeline/releases)
 are canonical from `xero-trial-balance-export/v0.1.6` onward. Releases through
-v0.1.4 remain in the
-[source repository](https://github.com/ryanduguid/xero-trial-balance-export/releases).
+v0.1.4 were published from the standalone `xero-trial-balance-export` repository,
+which was retired in September 2026; of those, only v0.1.4 is on
+[PyPI](https://pypi.org/project/xero-trial-balance-export/#history).
 A separate changelog is intentionally not maintained.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not create or upload release assets by hand.
 
 ## Protected v0.1.2 failed tag
 
-The annotated `v0.1.2` tag is protected and permanently records commit `bd4cd417b06fb9dba3d6b36fbedbe544b1e0fec7`. [Release workflow run 31832080223](https://github.com/ryanduguid/xero-trial-balance-export/actions/runs/31832080223) completed the tests, deterministic archives, checksums and both attestation steps, then failed safely at the immediate remote recheck because that GitHub CLI step did not receive `GH_TOKEN`. The publication step was skipped, and the authenticated release inventory confirmed that no v0.1.2 release or draft exists.
+The annotated `v0.1.2` tag in the standalone repository recorded commit `bd4cd417b06fb9dba3d6b36fbedbe544b1e0fec7`; the tag and its run went with that repository when it was retired. Release workflow run 31832080223 completed the tests, deterministic archives, checksums and both attestation steps, then failed safely at the immediate remote recheck because that GitHub CLI step did not receive `GH_TOKEN`. The publication step was skipped, and the authenticated release inventory confirmed that no v0.1.2 release or draft exists.
 
-Do not move, delete or reuse `v0.1.2`. The no-bypass tag ruleset prevents those operations; `v0.1.3` is the recovery version.
+Do not reuse `v0.1.2` as a version number; `v0.1.3` is the recovery version.
 
 ## Protected xero-trial-balance-export/v0.1.5 failed tag
 
@@ -41,20 +42,19 @@ Do not move, delete or reuse that tag. Version 0.1.6 adds the complete pinned
 test manifest required by the shared archive policy and is the recovery
 version.
 
-## Preserved squash-boundary releases
+## Historical squash-boundary releases
 
-Two published tags point at pull-request-side commits that preceded their
-squash merges to `main`. They are intentional historical exceptions outside
-current `main` ancestry:
+Two tags in the retired standalone repository pointed at pull-request-side
+commits that preceded their squash merges to `main`. They were intentional
+historical exceptions outside `main` ancestry:
 
 | Release | Tag object | Peeled commit |
 | --- | --- | --- |
 | `v0.1.1` | `aeee63b723fcf5276f9375769668c865b19ba8bb` | `d9b4cfd9ee8398c30dbe64b4ba2254aca900c006` |
 | `v0.1.3` | `e52022b2e81c1920619d66e77b388b44876c8337` | `8586a960b4fd08dd0cd68be28fcac811a20a2e0c` |
 
-Preserve those immutable tags exactly as published. Do not move, delete or
-recreate them to make the history appear linear. Every future release tag must
-point to a commit reachable from protected `main`.
+Those tags went with the retired repository, so the table is their record.
+Every future release tag must point to a commit reachable from protected `main`.
 
 Before tagging:
 

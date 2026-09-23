@@ -1,7 +1,8 @@
 # Releasing
 
-Standalone releases through `v0.2.1` remain in the
-[source repository](https://github.com/ryanduguid/xero-ledger-review-gate/releases).
+Standalone releases through `v0.2.1` were published from the `xero-ledger-review-gate`
+repository, which was retired in September 2026; `v0.2.1` remains on
+[PyPI](https://pypi.org/project/elizabeth-anne-alexander/#history).
 Maintained releases starting with `elizabeth-anne-alexander/v0.2.2` use the
 [Accounting Review Pipeline release history](https://github.com/ryanduguid/accounting-review-pipeline/releases).
 A separate changelog is intentionally not maintained. The failed standalone
@@ -45,7 +46,11 @@ The workflow runs the locked tests, builds the wheel and source distribution onc
 
 ## Historical v0.2.1 verification
 
-Verify the standalone rollback release with:
+The retired `xero-ledger-review-gate` repository no longer hosts this release, so
+the commands below no longer run; they record how it was verified. The v0.2.1
+files remain on [PyPI](https://pypi.org/project/elizabeth-anne-alexander/0.2.1/).
+
+The standalone rollback release was verified with:
 
 ```bash
 tag=v0.2.1
@@ -114,6 +119,9 @@ gh release verify-asset "$tag" "$wheel" -R "$repo"
 ```
 
 ## Historical v0.1.1 verification
+
+The retired repository no longer hosts this release and PyPI has no copy, so the
+commands below only record how it was verified.
 
 The immutable `v0.1.1` release predates the identity change. Its asset names remain `xero_ai_review_gateway-*`; verify those historical bytes against the renamed repository rather than relabelling them:
 

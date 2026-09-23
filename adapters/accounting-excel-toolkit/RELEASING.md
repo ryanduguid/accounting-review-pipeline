@@ -1,6 +1,6 @@
 # Releasing
 
-Use [Accounting Review Pipeline releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) for new component releases. Retain the [standalone release history](https://github.com/ryanduguid/accounting-excel-toolkit/releases), including immutable rollback release `v0.1.5`.
+Use [Accounting Review Pipeline releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) for new component releases. The standalone `accounting-excel-toolkit` repository, which was retired in September 2026, held the earlier releases, including the immutable rollback release `v0.1.5`; they are no longer hosted, so a rollback now needs a new release from this repository.
 
 The active caller is the root [release-accounting-excel-toolkit.yml](../../.github/workflows/release-accounting-excel-toolkit.yml). It selects only `adapters/accounting-excel-toolkit/` through a namespaced `accounting-excel-toolkit/v*` tag.
 
@@ -20,11 +20,13 @@ Before tagging:
 4. Confirm the component's `VERSION` and `RELEASE_NOTES.md` describe the separately approved version. Keep the notes heading as `# vMAJOR.MINOR.PATCH`; the root caller supplies the tag namespace.
 5. After separate release approval, create an annotated tag on the current remote `main` commit, for example `git tag -a accounting-excel-toolkit/v0.1.6 -m "accounting-excel-toolkit/v0.1.6"` (use `-s` instead of `-a` when a signing key is configured), then push only that tag.
 
-The standalone repository published `v0.1.0`, `v0.1.2` and `v0.1.5`. Its protected `v0.1.1`, `v0.1.3` and `v0.1.4` tags retain failed-preflight history with no releases or assets. [Pilot run 31822769922](https://github.com/ryanduguid/accounting-excel-toolkit/actions/runs/31822769922) records the `v0.1.1` Administration-read failure. Do not move or delete those tags. `VERSION` and `RELEASE_NOTES.md` describe `v0.1.6`, which still needs its own release approval; a later version needs its own version-and-notes change as well.
+The standalone repository published `v0.1.0`, `v0.1.2` and `v0.1.5`; its `v0.1.1`, `v0.1.3` and `v0.1.4` tags recorded failed preflights with no releases or assets, and pilot run 31822769922 recorded the `v0.1.1` Administration-read failure. Those tags and runs went with the repository. Do not reuse those version numbers. `VERSION` and `RELEASE_NOTES.md` describe `v0.1.6`, which still needs its own release approval; a later version needs its own version-and-notes change as well.
 
 The workflow reruns the regression suite, builds deterministic ZIP and tar.gz source archives, generates an SPDX 2.3 SBOM and `SHA256SUMS`, records GitHub provenance and SBOM attestations, then publishes a draft release only after every asset is uploaded. The archive helper fixes the timezone to UTC and Git text conversion to LF so the same tagged tree produces the same archive bytes on Linux and Windows. Existing releases are refused rather than overwritten.
 
-After publication, download the assets and verify them:
+The standalone repository verified historical release `v0.1.2` with the commands
+below. That repository has been retired, so they no longer run; they stay as the
+record of that release's consumer-owned signer identity:
 
 ```bash
 gh release download v0.1.2 -R ryanduguid/accounting-excel-toolkit --dir release-v0.1.2
@@ -37,8 +39,7 @@ gh release verify v0.1.2 -R ryanduguid/accounting-excel-toolkit
 gh release verify-asset v0.1.2 accounting-excel-toolkit-0.1.2.zip -R ryanduguid/accounting-excel-toolkit
 ```
 
-Those commands preserve the consumer-owned signer identity of historical
-release `v0.1.2`. Releases cut after the shared archive-policy migration use
+Releases cut after the shared archive-policy migration use
 the policy's internal publication workflow as the signer. For the next
 release, update `tag` if the intended version changes and verify that exact
 source and signer identity:
