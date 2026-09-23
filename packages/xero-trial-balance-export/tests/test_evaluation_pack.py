@@ -317,7 +317,7 @@ class EvaluationPackTest(unittest.TestCase):
                 "charset-normalizer==3.5.1",
                 "idna==3.19",
                 "requests==2.34.2",
-                "urllib3==2.7.0",
+                "urllib3==2.8.0",
             ],
         )
 
