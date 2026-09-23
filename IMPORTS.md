@@ -165,6 +165,9 @@ policy files. Each granted `contents: read` only and referenced no secret. The r
 ledger workflows carried their source-defined clean-wheel demonstrations. Dependabot scopes
 Python updates to each component directory (`uv` for the 4 uv packages, `pip` for the
 exporter) and groups root GitHub Actions updates.
+The 4 per-package `uv` entries were removed on 23 September 2026: inside the workspace
+they rewrote the root lock rather than the package's own, so they never opened a pull
+request. The root `uv` entry refreshes the workspace lock.
 
 Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml` and
 `elizabeth-anne-alexander.yml` were replaced by the reusable `ci-package.yml`, which
