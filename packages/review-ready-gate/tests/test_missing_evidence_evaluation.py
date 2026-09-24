@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -20,12 +19,14 @@ def _files(directory: Path) -> dict[str, bytes]:
 
 
 def test_contract_names_its_release_and_pending_review() -> None:
-    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    version = re.search(r'(?m)^version = "([^"]+)"$', pyproject).group(1)
+    # The fixtures postdate 0.1.7 and 0.1.7 gives different results, so the
+    # contract must not claim that release. Set the next release when it ships.
+    readme = (PACK / "README.md").read_text(encoding="utf-8")
     assert CONTRACT["schema_version"] == 1
-    assert CONTRACT["product_release"] == version
+    assert CONTRACT["product_release"] == "unreleased"
+    assert CONTRACT["published_release_differs"]["release"] == "0.1.7"
+    assert "Product release: unreleased." in readme
     assert CONTRACT["practitioner_review"] == "pending"
-    assert f"Product release `{version}`" in (PACK / "README.md").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=[item["id"] for item in SCENARIOS])

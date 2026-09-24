@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
-  "product_release": "0.1.7",
+  "product_release": "unreleased",
+  "published_release_differs": {
+    "release": "0.1.7",
+    "empty_bank_reconciliation": "READY with no finding",
+    "all_scenarios": "no controls not run are reported"
+  },
   "fixture_version": "1",
   "base_fixture": "examples/month-end-ready",
   "practitioner_review": "pending",
