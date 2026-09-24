@@ -87,10 +87,10 @@ uv run --locked --extra dev ruff check .
 uv run --locked --extra dev mypy
 uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
 uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
-uv run --locked --extra dev --python 3.12 python -m build
+uv run --locked --extra dev --python 3.14 python -m build
 ```
 
-The tests run on Python 3.10, 3.12 and 3.13, and the build gate installs the wheel into a
+The tests run on Python 3.10, 3.12, 3.13 and 3.14, and the build gate installs the wheel into a
 clean virtual environment and imports the component's package from it. Every gate above
 runs on Linux; `ci.yml`'s `windows` job adds the same pytest command on `windows-latest` for
 the exporter, Monthly Close Controls and the Xero Ledger Review Gate, the 3 components with
