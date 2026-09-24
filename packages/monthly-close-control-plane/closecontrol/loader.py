@@ -257,10 +257,17 @@ def load_mapping_policy(path: Path | SourceSnapshot) -> dict[str, set[str]]:
 def load_balance_policy(path: Path | SourceSnapshot) -> dict[str, tuple[str, bool]]:
     """Read the firm's expected balance side and movement per account, without inferred rules."""
     snapshot = _snapshot(path, label="Balance policy")
-    # No policy value needs quoting, and the CSV parser silently repairs a stray
-    # quote into a different AccountID that would then match no account.
-    if '"' in snapshot.text(label="Balance policy", encoding="utf-8-sig"):
-        raise SchemaError(f"{snapshot.path}: balance policy fields must not contain quote characters.")
+    # The lenient parser repairs a stray quote into a different AccountID that
+    # then matches no account. Strict parsing refuses a broken quoted field; a
+    # quote left in a parsed value comes from a stray or escaped quote, and is
+    # refused too. A correctly quoted AccountID such as "ACCT,1" still reads.
+    text = snapshot.text(label="Balance policy", encoding="utf-8-sig")
+    try:
+        rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
+    except csv.Error as exc:
+        raise SchemaError(f"{snapshot.path}: balance policy is not valid CSV: {exc}.") from exc
+    if any('"' in value for row in rows for value in row):
+        raise SchemaError(f"{snapshot.path}: balance policy values must not contain quote characters.")
     policy: dict[str, tuple[str, bool]] = {}
     for row_number, values in _read_csv_rows(snapshot, BALANCE_POLICY_COLUMNS, label="Balance policy"):
         account_id = _text(values["AccountID"], field="AccountID", row_number=row_number,

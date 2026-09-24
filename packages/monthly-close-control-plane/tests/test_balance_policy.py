@@ -80,6 +80,17 @@ def test_an_account_absent_from_the_trial_balance_has_no_movement(tmp_path: Path
     assert item.reason.endswith("and is absent from the current trial balance.")
 
 
+def test_a_quoted_account_id_with_a_comma_is_checked(tmp_path: Path) -> None:
+    pack = review_close(**_inputs(tmp_path, [
+        'Assets,"ACCT,1",Operating Bank,090,0.00,700.00,0.00,200.00',
+        "Assets,DR,Debtors,110,700.00,0.00,700.00,0.00",
+        "Equity,CAP,Share Capital,970,0.00,0.00,0.00,500.00",
+    ], '"ACCT,1",debit,no\n'))
+
+    (item,) = _policy_items(pack)
+    assert item.account_id == "ACCT,1"
+
+
 @pytest.mark.parametrize(
     ("policy", "error"),
     [
