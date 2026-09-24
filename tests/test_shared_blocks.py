@@ -33,6 +33,8 @@ REVIEWREADY = ROOT / "packages" / "review-ready-gate" / "reviewready"
 PAIRS = {
     "report.py": (CLOSECONTROL / "report.py", REVIEWREADY / "report.py"),
     "loader.py": (CLOSECONTROL / "loader.py", REVIEWREADY / "loader.py"),
+    "viewer.py": (CLOSECONTROL / "viewer.py", REVIEWREADY / "viewer.py"),
+    "cli.py": (CLOSECONTROL / "cli.py", REVIEWREADY / "cli.py"),
 }
 
 IDENTICAL = {
@@ -52,6 +54,8 @@ IDENTICAL = {
         "_require_columns",
         "_text",
     ),
+    "viewer.py": (),
+    "cli.py": ("_non_negative_decimal",),
 }
 
 SAME_LOGIC = {
@@ -69,6 +73,13 @@ SAME_LOGIC = {
         "_read_csv_rows",
         "_has_control_or_format_character",
     ),
+    # The pack JSON parser: strict UTF-8, duplicate keys refused, and
+    # unknown or missing top-level members rejected.
+    "viewer.py": (
+        "_no_duplicate_keys",
+        "_parse_json",
+    ),
+    "cli.py": (),
 }
 
 # Each package raises its own fail-closed error. That difference is deliberate
@@ -78,12 +89,20 @@ ERROR_CLASSES = ("ControlInputError", "GateInputError")
 
 def _definitions(path: Path) -> dict[str, str]:
     """Every top-level definition and simple assignment, by name, as written."""
-    text = path.read_text(encoding="utf-8")
+    return _definitions_in(path.read_text(encoding="utf-8"))
+
+
+def _definitions_in(text: str) -> dict[str, str]:
+    lines = text.splitlines(keepends=True)
     found: dict[str, str] = {}
     for node in ast.parse(text).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            name: str | None = node.name
-        elif (
+            # A decorator such as @dataclass(frozen=True) changes behaviour, so
+            # the compared source starts at the first decorator, not at `class`.
+            start = min([node.lineno, *(d.lineno for d in node.decorator_list)])
+            found[node.name] = "".join(lines[start - 1 : node.end_lineno])
+            continue
+        if (
             isinstance(node, ast.Assign)
             and len(node.targets) == 1
             and isinstance(node.targets[0], ast.Name)
@@ -146,6 +165,16 @@ def _rollback(path: Path) -> str:
 
 
 class SharedBlockTests(unittest.TestCase):
+    def test_a_decorator_is_part_of_the_compared_definition(self) -> None:
+        plain = "class Snapshot:\n    path: str\n"
+        decorated = "@dataclass(frozen=True)\n" + plain
+        self.assertNotEqual(
+            _definitions_in(plain)["Snapshot"], _definitions_in(decorated)["Snapshot"]
+        )
+        self.assertNotEqual(
+            _executable(_definitions_in(plain)["Snapshot"]),
+            _executable(_definitions_in(decorated)["Snapshot"]),
+        )
     def test_every_pinned_name_is_still_defined_in_both_packages(self) -> None:
         """A renamed or deleted helper must fail here, not quietly stop being compared."""
         for filename, (left, right) in PAIRS.items():
