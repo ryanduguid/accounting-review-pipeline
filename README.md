@@ -1,5 +1,9 @@
 # Accounting Review Pipeline: Xero month-end close controls
 
+[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
+
 Seven independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
 close controls, a workpaper readiness gate, an Excel toolkit and a Power BI project.
