@@ -51,6 +51,8 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 Source additions: [compare successive verified close packs](docs/close-comparison.md)
 and [reconcile ledger equity movements](docs/equity-reconciliation.md).
+[Variance drivers](docs/variance-drivers.md) rank the transactions behind each
+period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots and inter-entity balances from supplied canonical records.
 These commands and options are not established by the published 0.1.4 package.
