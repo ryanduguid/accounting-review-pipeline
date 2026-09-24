@@ -1,9 +1,10 @@
 name: devcontainer
 
-# Starts the image named in .devcontainer/devcontainer.json, runs its setup
-# command, then the README's fabricated close review, so a broken Codespaces
-# setup fails here instead of for a visitor. The push run on main also catches
-# drift in the image tag.
+# Builds the devcontainer with the Dev Containers CLI, which runs its lifecycle
+# commands with the same semantics as Codespaces, then runs the README's
+# fabricated close review inside it. A broken Codespaces setup fails here
+# instead of for a visitor. The push run on main also catches drift in the
+# image tag.
 
 on:
   workflow_dispatch:
@@ -22,72 +23,39 @@ concurrency:
   group: devcontainer-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  config:
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      image: ${{ steps.read.outputs.image }}
-      setup: ${{ steps.read.outputs.setup }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: .devcontainer
-      - id: read
-        name: Read the image and setup command
-        run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          import shlex
-          config = json.load(open(".devcontainer/devcontainer.json"))
-          def shell(command):
-              # A string runs through a shell; an array runs as argv, so quote it.
-              return command if isinstance(command, str) else shlex.join(command)
-          command = config["postCreateCommand"]
-          if isinstance(command, dict):
-              # An object's commands run in parallel; fail if any one fails.
-              starts = "".join(f'( {shell(part)} ) & pids="$pids $!"; ' for part in command.values())
-              setup = (f'pids=""; {starts}status=0; '
-                       'for pid in $pids; do wait "$pid" || status=1; done; exit "$status"')
-          else:
-              setup = shell(command)
-          print(f"image={config['image']}")
-          # JSON keeps a multi-line command on one output line.
-          print(f"setup={json.dumps(setup)}")
-          PY
+env:
+  DEVCONTAINER_CLI: "@devcontainers/cli@0.89.0"
 
+jobs:
   setup:
-    needs: config
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    container: ${{ needs.config.outputs.image }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Run the devcontainer setup command
-        env:
-          SETUP: ${{ fromJSON(needs.config.outputs.setup) }}
-        run: sh -c "$SETUP"
-      - name: Run the fabricated close review (expects REVIEW, exit 2)
-        working-directory: packages/monthly-close-control-plane
+      - name: Build the devcontainer and run its setup
+        run: npx --yes "$DEVCONTAINER_CLI" up --workspace-folder .
+      - name: Run the fabricated close review inside it (expects REVIEW, exit 2)
         run: |
           set +e
-          uv run --locked --extra dev close-control review \
-            --current examples/current_trial_balance.csv \
-            --prior examples/prior_trial_balance.csv \
-            --mapping examples/account_mapping.csv \
-            --subledger examples/subledger_balances.csv \
-            --absolute-threshold 10000 --percentage-threshold 0.10 \
-            --reconciliation-tolerance 0.01 \
-            --review-note examples/review_note.json \
-            --output "$RUNNER_TEMP/close-control-demo" > /dev/null
+          # shellcheck disable=SC2016 # the inner script expands inside the container
+          npx --yes "$DEVCONTAINER_CLI" exec --workspace-folder . sh -c '
+            cd packages/monthly-close-control-plane &&
+            uv run --locked --extra dev close-control review \
+              --current examples/current_trial_balance.csv \
+              --prior examples/prior_trial_balance.csv \
+              --mapping examples/account_mapping.csv \
+              --subledger examples/subledger_balances.csv \
+              --absolute-threshold 10000 --percentage-threshold 0.10 \
+              --reconciliation-tolerance 0.01 \
+              --review-note examples/review_note.json \
+              --output /tmp/close-control-demo > /dev/null
+            status=$?
+            test -f /tmp/close-control-demo/close-summary.md || exit 1
+            exit $status'
           status=$?
           set -e
           test "$status" -eq 2
-          test -f "$RUNNER_TEMP/close-control-demo/close-summary.md"
