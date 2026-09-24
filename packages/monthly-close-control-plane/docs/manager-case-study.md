@@ -22,7 +22,8 @@ The result is REVIEW, with 8 exceptions and none blocked. These 3 rows introduce
 
 ## Reproduce
 
-From `packages/monthly-close-control-plane`, with uv installed:
+Without a clone, follow the [reviewer quick start](reviewer-quick-start.md). From
+`packages/monthly-close-control-plane`, with uv installed:
 
 ```bash
 uv run --locked --extra dev close-control review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output ../../../close-control-demo
