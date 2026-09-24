@@ -29,6 +29,11 @@ FIRM_RESOLVED_CONTROLS = {
         "The firm reviews the supplied account mapping against its reporting policy "
         "and retains the supporting chart-of-accounts evidence."
     ),
+    "balance_policy": (
+        "The balance policy is the firm's own file. The firm traces an unexpected "
+        "side, a nil-account balance or a missing movement to the ledger first and "
+        "asks the client only once the ledger shows a cause they can answer."
+    ),
     "trial_balance_integrity": (
         "The supplied trial balance does not balance. The firm corrects or "
         "re-exports it; the client cannot answer for an export they did not make."

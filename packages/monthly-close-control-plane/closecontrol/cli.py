@@ -41,6 +41,8 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--mapping", type=Path, help="optional AccountID,ReviewGroup mapping CSV")
     command.add_argument("--mapping-policy", type=Path,
                          help="optional permitted Section,ReviewGroup pairs CSV; requires --mapping")
+    command.add_argument("--balance-policy", type=Path,
+                         help="optional AccountID,ExpectedBalance,ExpectMovement CSV")
     command.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
     command.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
     command.add_argument("--equity-schedule", type=Path, help="independent ledger-equity movement JSON")
@@ -194,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         ("--prior", args.prior),
         ("--mapping", args.mapping),
         ("--mapping-policy", args.mapping_policy),
+        ("--balance-policy", args.balance_policy),
         ("--subledger", args.subledger),
         ("--review-note", args.review_note),
         ("--equity-schedule", args.equity_schedule),
@@ -220,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
             prior_path=args.prior,
             mapping_path=args.mapping,
             mapping_policy_path=args.mapping_policy,
+            balance_policy_path=args.balance_policy,
             subledger_path=args.subledger,
             acknowledgement_path=args.review_note,
             equity_schedule_path=args.equity_schedule,

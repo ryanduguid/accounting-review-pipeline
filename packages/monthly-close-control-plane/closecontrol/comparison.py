@@ -50,7 +50,7 @@ def _scope_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[st
     # Older packs did not state omitted controls. Unknown coverage is not equal coverage.
     if "controls_not_run" not in previous or "controls_not_run" not in current:
         changes.append("control_coverage_unknown")
-    for label in ("account_mapping", "mapping_policy"):
+    for label in ("account_mapping", "mapping_policy", "balance_policy"):
         if previous["source_sha256"].get(label) != current["source_sha256"].get(label):
             changes.append(label)
     # A digest alone cannot prove that changed subledger files cover the same accounts.
