@@ -47,9 +47,13 @@ jobs:
               # A string runs through a shell; an array runs as argv, so quote it.
               return command if isinstance(command, str) else shlex.join(command)
           command = config["postCreateCommand"]
-          # Codespaces runs an object's commands in parallel; here they run in turn.
-          parts = command.values() if isinstance(command, dict) else [command]
-          setup = " && ".join(f"( {shell(part)} )" for part in parts)
+          if isinstance(command, dict):
+              # An object's commands run in parallel; fail if any one fails.
+              starts = "".join(f'( {shell(part)} ) & pids="$pids $!"; ' for part in command.values())
+              setup = (f'pids=""; {starts}status=0; '
+                       'for pid in $pids; do wait "$pid" || status=1; done; exit "$status"')
+          else:
+              setup = shell(command)
           print(f"image={config['image']}")
           # JSON keeps a multi-line command on one output line.
           print(f"setup={json.dumps(setup)}")
