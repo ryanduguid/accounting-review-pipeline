@@ -74,7 +74,7 @@ behaviour, not as a benchmark.
 Product release: unreleased. The results come from the source after release
 0.1.7 and first ship in the next release; fixture version `1`.
 
-Published 0.1.7 gives different results, checked on 25 September 2026 with
+Published 0.1.7 gives different results, checked on 25 September 2026 (AEST) with
 `uvx --from review-ready-gate==0.1.7`. It reports the empty bank
 reconciliation as `READY` with no finding, and it lists no controls not run
 in any scenario, so the `no_bank_reconciliation` pack reaches `READY` with

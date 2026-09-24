@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -14,18 +15,32 @@ CONTRACT = json.loads((PACK / "expected_results.json").read_text(encoding="utf-8
 SCENARIOS = CONTRACT["scenarios"]
 
 
+def _version(text: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in text.split("."))
+
+
 def _files(directory: Path) -> dict[str, bytes]:
     return {path.name: path.read_bytes() for path in directory.iterdir() if path.is_file()}
 
 
 def test_contract_names_its_release_and_pending_review() -> None:
     # The fixtures postdate 0.1.7 and 0.1.7 gives different results, so the
-    # contract must not claim that release. Set the next release when it ships.
+    # contract says "unreleased" until the version moves. The release that
+    # bumps pyproject must name itself here; later releases need no change.
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    version = re.search(r'(?m)^version = "([^"]+)"$', pyproject).group(1)
     readme = (PACK / "README.md").read_text(encoding="utf-8")
+    recorded = CONTRACT["product_release"]
     assert CONTRACT["schema_version"] == 1
-    assert CONTRACT["product_release"] == "unreleased"
     assert CONTRACT["published_release_differs"]["release"] == "0.1.7"
-    assert "Product release: unreleased." in readme
+    if version == "0.1.7":
+        assert recorded == "unreleased"
+        assert "Product release: unreleased." in readme
+    else:
+        assert recorded != "unreleased", "name the release that first ships these fixtures"
+        assert _version(recorded) > (0, 1, 7)
+        assert _version(recorded) <= _version(version)
+        assert f"Product release `{recorded}`" in readme
     assert CONTRACT["practitioner_review"] == "pending"
 
 
@@ -48,14 +63,17 @@ def test_fixture_differs_from_the_ready_example_only_as_declared(scenario: dict)
     change = scenario["change"]
     removed = set(change.get("removed", []))
     emptied = set(change.get("emptied", []))
-    edited = set(change.get("edited", []))
+    edited = change.get("edited", {})
     assert set(base) - set(pack) == removed
     assert set(pack) - set(base) == set()
     for name, content in pack.items():
         if name in emptied:
             assert content == b""
         elif name in edited:
-            assert content != base[name]
+            # The edit is declared exactly, so a second change to the file fails.
+            before, after = edited[name]["from"].encode(), edited[name]["to"].encode()
+            assert base[name].count(before) == 1
+            assert content == base[name].replace(before, after), name
         else:
             assert content == base[name], name
 

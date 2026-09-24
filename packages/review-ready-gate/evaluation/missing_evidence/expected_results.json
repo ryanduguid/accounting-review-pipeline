@@ -41,7 +41,7 @@
       "id": "wrong_period",
       "profile": "month_end",
       "fixture": "evaluation/missing_evidence/packs/wrong_period",
-      "change": {"edited": ["self_review.json"]},
+      "change": {"edited": {"self_review.json": {"from": "\"period_end\": \"2026-06-30\"", "to": "\"period_end\": \"2026-05-31\""}}},
       "expected_status": "BLOCKED",
       "expected_findings": ["PERIOD_ORDER"],
       "expected_controls_not_run": ["prior_findings"]
