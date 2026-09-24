@@ -23,6 +23,9 @@ def test_source_distribution_contains_manager_review_evidence(tmp_path: Path) ->
         "review_ready_gate-0.1.5/CITATION.cff",
         "review_ready_gate-0.1.5/evaluation/manager_review_gate/README.md",
         "review_ready_gate-0.1.5/evaluation/manager_review_gate/expected_results.json",
+        "review_ready_gate-0.1.5/evaluation/missing_evidence/expected_results.json",
+        "review_ready_gate-0.1.5/evaluation/missing_evidence/packs/empty_bank_reconciliation/bank_rec.csv",
+        "review_ready_gate-0.1.5/evaluation/missing_evidence/packs/wrong_period/self_review.json",
     }
     expected_suffixes = {
         member.removeprefix("review_ready_gate-0.1.5/")

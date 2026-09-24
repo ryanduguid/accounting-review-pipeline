@@ -16,4 +16,4 @@ include uv.lock
 recursive-include tests *.py
 recursive-include examples *.csv *.json *.yml *.md
 recursive-include schemas *.csv *.json
-recursive-include evaluation *.md *.json
+recursive-include evaluation *.md *.json *.csv

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "product_release": "0.1.7",
+  "fixture_version": "1",
+  "base_fixture": "examples/month-end-ready",
+  "practitioner_review": "pending",
+  "scenarios": [
+    {
+      "id": "absent_prior_trial_balance",
+      "profile": "month_end",
+      "fixture": "evaluation/missing_evidence/packs/absent_prior_trial_balance",
+      "change": {"removed": ["prior_trial_balance.csv"]},
+      "expected_status": "NOT_READY",
+      "expected_findings": ["MISSING_ARTEFACT"],
+      "expected_controls_not_run": ["prior_findings"]
+    },
+    {
+      "id": "no_bank_reconciliation",
+      "profile": "month_end",
+      "fixture": "evaluation/missing_evidence/packs/no_bank_reconciliation",
+      "change": {"removed": ["bank_rec.csv"]},
+      "expected_status": "READY",
+      "expected_findings": [],
+      "expected_controls_not_run": ["bank_rec", "prior_findings"]
+    },
+    {
+      "id": "empty_bank_reconciliation",
+      "profile": "month_end",
+      "fixture": "evaluation/missing_evidence/packs/empty_bank_reconciliation",
+      "change": {"emptied": ["bank_rec.csv"]},
+      "expected_status": "NOT_READY",
+      "expected_findings": ["EMPTY_ARTEFACT"],
+      "expected_controls_not_run": ["bank_rec", "prior_findings"]
+    },
+    {
+      "id": "wrong_period",
+      "profile": "month_end",
+      "fixture": "evaluation/missing_evidence/packs/wrong_period",
+      "change": {"edited": ["self_review.json"]},
+      "expected_status": "BLOCKED",
+      "expected_findings": ["PERIOD_ORDER"],
+      "expected_controls_not_run": ["prior_findings"]
+    }
+  ],
+  "edited_artefact": {
+    "id": "summary_edited_after_the_gate",
+    "profile": "month_end",
+    "fixture": "examples/month-end-ready",
+    "edit": {"file": "readiness-summary.md", "from": "Preparer initials: CD", "to": "Preparer initials: XY"},
+    "expected_view_exit": 1,
+    "expected_error": "preparer initials disagrees"
+  },
+  "human_decision": "READY means no configured gate tripped; it does not mean every control ran, and it is not approval. Read the controls not run before relying on the status. A human remains accountable for professional judgement and approval."
+}

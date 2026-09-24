@@ -7,6 +7,7 @@
 - **Domain**: Local, deterministic readiness gating for Australian public-practice workpaper packs (BAS, month-end, year-end).
 - **Control basis**: Required-artefact completeness, self-review assertions, open-item blocking, trial-balance integrity, GST 1A/1B tie-out, optional bank rec, year-end tie-out matrix, and prior-finding repeats.
 - **Manager evaluation**: [evaluation/manager_review_gate/README.md](evaluation/manager_review_gate/README.md)
+- **Missing evidence evaluation**: [evaluation/missing_evidence/README.md](evaluation/missing_evidence/README.md) (absent, empty, wrong-period and edited evidence; practitioner review pending)
 
 ## Core modules
 - `reviewready.engine`: Builds `READY`, `NOT_READY`, or `BLOCKED` packs without mutating an accounting system.
