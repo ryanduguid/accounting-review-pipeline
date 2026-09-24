@@ -33,6 +33,8 @@ REVIEWREADY = ROOT / "packages" / "review-ready-gate" / "reviewready"
 PAIRS = {
     "report.py": (CLOSECONTROL / "report.py", REVIEWREADY / "report.py"),
     "loader.py": (CLOSECONTROL / "loader.py", REVIEWREADY / "loader.py"),
+    "viewer.py": (CLOSECONTROL / "viewer.py", REVIEWREADY / "viewer.py"),
+    "cli.py": (CLOSECONTROL / "cli.py", REVIEWREADY / "cli.py"),
 }
 
 IDENTICAL = {
@@ -52,6 +54,8 @@ IDENTICAL = {
         "_require_columns",
         "_text",
     ),
+    "viewer.py": (),
+    "cli.py": ("_non_negative_decimal",),
 }
 
 SAME_LOGIC = {
@@ -69,6 +73,13 @@ SAME_LOGIC = {
         "_read_csv_rows",
         "_has_control_or_format_character",
     ),
+    # The pack JSON parser: strict UTF-8, duplicate keys refused, and
+    # unknown or missing top-level members rejected.
+    "viewer.py": (
+        "_no_duplicate_keys",
+        "_parse_json",
+    ),
+    "cli.py": (),
 }
 
 # Each package raises its own fail-closed error. That difference is deliberate
