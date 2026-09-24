@@ -406,7 +406,10 @@ def test_a_wrong_period_is_not_published_as_relied_upon(tmp_path):
 
 def test_a_deeply_nested_file_is_unreadable_not_a_crash(tmp_path):
     path = tmp_path / "deep.json"
-    path.write_text("[" * 40000 + "]" * 40000, encoding="utf-8")
+    # From Python 3.14 json's limit is the C stack rather than the recursion
+    # limit, and a Linux runner's 8 MB stack parses 40,000 levels. A million
+    # levels stays under MAX_EVIDENCE_BYTES and overflows on every interpreter.
+    path.write_text("[" * 1_000_000 + "]" * 1_000_000, encoding="utf-8")
     loaded, unreadable = module.load_all([path])
     assert loaded == []
     assert any("nested too deeply" in item for item in unreadable)
