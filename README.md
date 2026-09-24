@@ -3,6 +3,7 @@
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
 Seven independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
@@ -35,6 +36,10 @@ uv run --locked --extra dev close-control review --current examples/current_tria
 ```
 
 **Output:** `REVIEW`, 8 exceptions, exit 2. Open `../../../close-control-demo/close-summary.md`.
+
+To skip local setup, [open the repository in GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline).
+The devcontainer installs uv and runs `uv sync --locked`, so the command above runs as
+written. Codespaces usage counts against your own GitHub quota.
 
 | Finding | Evidence | Human decision |
 | --- | --- | --- |
