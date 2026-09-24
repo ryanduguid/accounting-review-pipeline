@@ -1,0 +1,65 @@
+name: reviewer-quick-start
+
+# Follows packages/monthly-close-control-plane/docs/reviewer-quick-start.md as a
+# reviewer would: the guide's own bash download block and uvx commands, run
+# against the published release in an empty directory outside the checkout.
+# Package tests stay offline, so the published path is checked here.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "packages/monthly-close-control-plane/docs/reviewer-quick-start.md"
+      - ".github/workflows/reviewer-quick-start.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reviewer-quick-start-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.0"
+  GUIDE: packages/monthly-close-control-plane/docs/reviewer-quick-start.md
+
+jobs:
+  guide:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Follow the guide in an empty directory
+        run: |
+          set -euo pipefail
+          guide="$PWD/$GUIDE"
+          work="$(mktemp -d)"
+          cd "$work"
+          # The fenced block after the "bash:" label is the download step.
+          awk '/^bash:$/{f=1; next} f && /^```bash$/{g=1; next} g && /^```$/{exit} g' "$guide" > download.sh
+          test -s download.sh
+          bash download.sh
+          review="$(grep '^uvx --from monthly-close-control-plane==0.1.5 close-control review ' "$guide")"
+          view="$(grep '^uvx --from monthly-close-control-plane==0.1.5 close-control view ' "$guide")"
+          # shellcheck disable=SC2016 # the backticks are literal Markdown
+          expected="$(grep -o 'It prints `[^`]*`' "$guide" | sed 's/^It prints `//; s/`$//')"
+          set +e
+          bash -c "$review" > review.out
+          status=$?
+          set -e
+          test "$status" -eq 2
+          test "$(head -n 1 review.out)" = "$expected"
+          bash -c "$view" > /dev/null
+          # An edited pack must fail verification.
+          sed -i '0,/REVIEW/s//PASS/' close-pack/close-summary.md
+          if bash -c "$view" > /dev/null 2> view.err; then exit 1; fi
+          grep -q 'verification failed' view.err

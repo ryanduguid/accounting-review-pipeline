@@ -49,6 +49,10 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
+No Python or clone needed: the [reviewer quick start](docs/reviewer-quick-start.md)
+runs the published 0.1.5 release on fabricated files with `uvx`, and shows how to
+keep the resulting pack with a job and check it later.
+
 Source additions: [compare successive verified close packs](docs/close-comparison.md)
 and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 [Variance drivers](docs/variance-drivers.md) rank the transactions behind each
