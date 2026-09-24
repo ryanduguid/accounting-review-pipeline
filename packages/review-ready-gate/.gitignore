@@ -2,6 +2,7 @@
 *.csv
 !examples/**/*.csv
 !schemas/*.csv
+!evaluation/missing_evidence/packs/*/*.csv
 outputs/
 
 # review-ready now refuses an --output directory inside a checkout, so it can

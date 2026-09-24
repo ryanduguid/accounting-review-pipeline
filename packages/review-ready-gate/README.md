@@ -73,6 +73,9 @@ Missing tie-outs, open questions in email, an unbalanced trial balance and unres
 The repository contains fabricated data only. Do not commit client workpapers.
 
 For the manager-facing, reproducible BAS evaluation, see the [manager review gate evaluation pack](evaluation/manager_review_gate/README.md).
+The [missing evidence evaluation](evaluation/missing_evidence/README.md) shows what the gate
+does when a month-end source is absent, empty, for the wrong period, or edited after the gate
+ran, including a balanced pack that reaches `READY` without its bank reconciliation.
 
 [`examples/`](examples/README.md) is the assault course: every move the tool has, run against
 fabricated data, with nothing at stake. Learn the flags here before pointing
