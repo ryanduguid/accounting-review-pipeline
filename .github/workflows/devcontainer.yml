@@ -1,11 +1,14 @@
 name: devcontainer
 
-# Runs the devcontainer's setup command inside its image, then the README's
-# fabricated close review, so a broken Codespaces setup fails here instead of
-# for a visitor.
+# Starts the image named in .devcontainer/devcontainer.json, runs its setup
+# command, then the README's fabricated close review, so a broken Codespaces
+# setup fails here instead of for a visitor. The push run on main also catches
+# drift in the image tag.
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - ".devcontainer/**"
@@ -20,20 +23,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  config:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.read.outputs.image }}
+      setup: ${{ steps.read.outputs.setup }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .devcontainer
+      - id: read
+        name: Read the image and setup command
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          config = json.load(open(".devcontainer/devcontainer.json"))
+          print(f"image={config['image']}")
+          print(f"setup={config['postCreateCommand']}")
+          PY
+
   setup:
+    needs: config
     permissions:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    container: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+    container: ${{ needs.config.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run the devcontainer setup command
-        run: |
-          command=$(python -c "import json; print(json.load(open('.devcontainer/devcontainer.json'))['postCreateCommand'])")
-          sh -c "$command"
+        env:
+          SETUP: ${{ needs.config.outputs.setup }}
+        run: sh -c "$SETUP"
       - name: Run the fabricated close review (expects REVIEW, exit 2)
         working-directory: packages/monthly-close-control-plane
         run: |
