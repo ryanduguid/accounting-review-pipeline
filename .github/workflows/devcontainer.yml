@@ -42,6 +42,12 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           config = json.load(open(".devcontainer/devcontainer.json"))
+          # ponytail: only the single-line string form is run here; an array or
+          # object postCreateCommand needs the devcontainer CLI instead.
+          for key in ("image", "postCreateCommand"):
+              value = config[key]
+              if not isinstance(value, str) or len(value.splitlines()) != 1:
+                  raise SystemExit(f"{key} must be a single-line string for this check")
           print(f"image={config['image']}")
           print(f"setup={config['postCreateCommand']}")
           PY
