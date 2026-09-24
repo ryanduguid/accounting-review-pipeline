@@ -16,4 +16,20 @@ include uv.lock
 recursive-include tests *.py
 recursive-include examples *.csv *.json *.yml *.md
 recursive-include schemas *.csv *.json
-recursive-include evaluation *.md *.json *.csv
+recursive-include evaluation *.md *.json
+# Fixture CSVs are named one by one: a recursive rule would also pack any
+# ignored CSV left in a working tree, such as a client export.
+include evaluation/missing_evidence/packs/absent_prior_trial_balance/bank_rec.csv
+include evaluation/missing_evidence/packs/absent_prior_trial_balance/open_items.csv
+include evaluation/missing_evidence/packs/absent_prior_trial_balance/trial_balance.csv
+include evaluation/missing_evidence/packs/no_bank_reconciliation/open_items.csv
+include evaluation/missing_evidence/packs/no_bank_reconciliation/prior_trial_balance.csv
+include evaluation/missing_evidence/packs/no_bank_reconciliation/trial_balance.csv
+include evaluation/missing_evidence/packs/empty_bank_reconciliation/bank_rec.csv
+include evaluation/missing_evidence/packs/empty_bank_reconciliation/open_items.csv
+include evaluation/missing_evidence/packs/empty_bank_reconciliation/prior_trial_balance.csv
+include evaluation/missing_evidence/packs/empty_bank_reconciliation/trial_balance.csv
+include evaluation/missing_evidence/packs/wrong_period/bank_rec.csv
+include evaluation/missing_evidence/packs/wrong_period/open_items.csv
+include evaluation/missing_evidence/packs/wrong_period/prior_trial_balance.csv
+include evaluation/missing_evidence/packs/wrong_period/trial_balance.csv

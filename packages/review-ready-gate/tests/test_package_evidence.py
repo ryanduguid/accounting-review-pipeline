@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tarfile
@@ -36,3 +37,16 @@ def test_source_distribution_contains_manager_review_evidence(tmp_path: Path) ->
 
     counts = {suffix: suffixes.count(suffix) for suffix in expected_suffixes}
     assert counts == {suffix: 1 for suffix in expected_suffixes}
+
+    # Only the declared fabricated fixtures may ship as evaluation CSVs.
+    contract = json.loads(
+        (ROOT / "evaluation" / "missing_evidence" / "expected_results.json").read_text(encoding="utf-8")
+    )
+    base = {path.name for path in (ROOT / contract["base_fixture"]).glob("*.csv")}
+    declared = {
+        f"{scenario['fixture']}/{name}"
+        for scenario in contract["scenarios"]
+        for name in base - set(scenario["change"].get("removed", []))
+    }
+    packaged = {s for s in suffixes if s.startswith("evaluation/") and s.lower().endswith(".csv")}
+    assert packaged == declared
