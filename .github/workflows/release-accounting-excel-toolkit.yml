@@ -30,6 +30,7 @@ jobs:
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.10)
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.12)
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.13)
+        .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
       artifact-stem: accounting-excel-toolkit

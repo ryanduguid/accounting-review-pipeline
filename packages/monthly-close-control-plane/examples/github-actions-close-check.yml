@@ -46,7 +46,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install close-control
         run: python -m pip install "monthly-close-control-plane @ https://github.com/ryanduguid/accounting-review-pipeline/releases/download/monthly-close-control-plane/v0.1.5/monthly_close_control_plane-0.1.5-py3-none-any.whl#sha256=8ebdb0b3c831eb4a1d274b8cd458be0835ce848ce2c036b0be2cd7f86897b2c2"

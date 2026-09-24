@@ -15,6 +15,7 @@ REQUIRED = {
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.10)",
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.12)",
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.13)",
+        ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python"
     ],
@@ -26,6 +27,7 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.10)",
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.12)",
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.13)",
+        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python"
     ],
@@ -37,6 +39,7 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/evatt / test (3.10)",
         ".github/workflows/ci.yml: packages/evatt / test (3.12)",
         ".github/workflows/ci.yml: packages/evatt / test (3.13)",
+        ".github/workflows/ci.yml: packages/evatt / test (3.14)",
         ".github/workflows/codeql.yml: Analyze Python"
     ],
     "release-monthly-close-control-plane.yml": [
@@ -48,6 +51,7 @@ REQUIRED = {
         ".github/workflows/ci.yml: test (3.11)",
         ".github/workflows/ci.yml: test (3.12)",
         ".github/workflows/ci.yml: test (3.13)",
+        ".github/workflows/ci.yml: test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python"
     ],
@@ -59,6 +63,7 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/review-ready-gate / test (3.10)",
         ".github/workflows/ci.yml: packages/review-ready-gate / test (3.12)",
         ".github/workflows/ci.yml: packages/review-ready-gate / test (3.13)",
+        ".github/workflows/ci.yml: packages/review-ready-gate / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python"
     ],
@@ -70,6 +75,7 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.10)",
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.12)",
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.13)",
+        ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python"
     ]
