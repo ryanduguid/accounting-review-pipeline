@@ -1,0 +1,53 @@
+name: devcontainer
+
+# Runs the devcontainer's setup command inside its image, then the README's
+# fabricated close review, so a broken Codespaces setup fails here instead of
+# for a visitor.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devcontainer.yml"
+      - "uv.lock"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run the devcontainer setup command
+        run: |
+          command=$(python -c "import json; print(json.load(open('.devcontainer/devcontainer.json'))['postCreateCommand'])")
+          sh -c "$command"
+      - name: Run the fabricated close review (expects REVIEW, exit 2)
+        working-directory: packages/monthly-close-control-plane
+        run: |
+          set +e
+          uv run --locked --extra dev close-control review \
+            --current examples/current_trial_balance.csv \
+            --prior examples/prior_trial_balance.csv \
+            --mapping examples/account_mapping.csv \
+            --subledger examples/subledger_balances.csv \
+            --absolute-threshold 10000 --percentage-threshold 0.10 \
+            --reconciliation-tolerance 0.01 \
+            --review-note examples/review_note.json \
+            --output "$RUNNER_TEMP/close-control-demo" > /dev/null
+          status=$?
+          set -e
+          test "$status" -eq 2
+          test -f "$RUNNER_TEMP/close-control-demo/close-summary.md"
