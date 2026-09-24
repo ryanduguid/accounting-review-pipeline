@@ -1,0 +1,61 @@
+name: devcontainer
+
+# Builds the devcontainer with the Dev Containers CLI, which runs its lifecycle
+# commands with the same semantics as Codespaces, then runs the README's
+# fabricated close review inside it. A broken Codespaces setup fails here
+# instead of for a visitor. The push run on main also catches drift in the
+# image tag.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devcontainer.yml"
+      - "uv.lock"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVCONTAINER_CLI: "@devcontainers/cli@0.89.0"
+
+jobs:
+  setup:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the devcontainer and run its setup
+        run: npx --yes "$DEVCONTAINER_CLI" up --workspace-folder .
+      - name: Run the fabricated close review inside it (expects REVIEW, exit 2)
+        run: |
+          set +e
+          # shellcheck disable=SC2016 # the inner script expands inside the container
+          npx --yes "$DEVCONTAINER_CLI" exec --workspace-folder . sh -c '
+            cd packages/monthly-close-control-plane &&
+            uv run --locked --extra dev close-control review \
+              --current examples/current_trial_balance.csv \
+              --prior examples/prior_trial_balance.csv \
+              --mapping examples/account_mapping.csv \
+              --subledger examples/subledger_balances.csv \
+              --absolute-threshold 10000 --percentage-threshold 0.10 \
+              --reconciliation-tolerance 0.01 \
+              --review-note examples/review_note.json \
+              --output /tmp/close-control-demo > /dev/null
+            status=$?
+            test -f /tmp/close-control-demo/close-summary.md || exit 1
+            exit $status'
+          status=$?
+          set -e
+          test "$status" -eq 2

@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .comparison import compare_packs
+from .drivers import variance_drivers, write_drivers
 from .engine import review_close
 from .errors import ControlInputError
 from .reconciliation import reconcile
@@ -40,6 +41,8 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--mapping", type=Path, help="optional AccountID,ReviewGroup mapping CSV")
     command.add_argument("--mapping-policy", type=Path,
                          help="optional permitted Section,ReviewGroup pairs CSV; requires --mapping")
+    command.add_argument("--balance-policy", type=Path,
+                         help="optional AccountID,ExpectedBalance,ExpectMovement CSV")
     command.add_argument("--subledger", type=Path, help="optional Tenant,AccountID,SubledgerBalance CSV")
     command.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
     command.add_argument("--equity-schedule", type=Path, help="independent ledger-equity movement JSON")
@@ -77,6 +80,14 @@ def build_parser() -> argparse.ArgumentParser:
     clearing.add_argument("--decisions-escaped", action="store_true",
                           help="decode Group and Note escapes when reusing generated suggestions.csv")
     clearing.add_argument("--output", required=True, type=Path, help="new directory outside version control")
+    drivers = commands.add_parser("drivers", help="rank the transactions behind each period variance in a verified pack")
+    drivers.add_argument("--pack-dir", required=True, type=Path, help="verified review pack directory")
+    drivers.add_argument("--transactions", required=True, type=Path,
+                         help="transaction CSV with the reconcile columns; see docs/variance-drivers.md")
+    drivers.add_argument("--currency", required=True,
+                         help="trial-balance currency; every transaction row must use it")
+    drivers.add_argument("--top", type=int, default=5, help="transactions listed per account (default 5)")
+    drivers.add_argument("--output", required=True, type=Path, help="new directory outside version control")
     comparison = commands.add_parser("compare", help="compare verified close packs without changing them")
     for flag in ("previous-pack", "current-pack", "previous-tb", "current-tb"):
         comparison.add_argument(f"--{flag}", required=True, type=Path)
@@ -99,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command not in {"review", "workbench", "view", "reconcile", "compare", "schedule"}:  # pragma: no cover - argparse validates command choices.
+    if args.command not in {"review", "workbench", "view", "reconcile", "drivers", "compare", "schedule"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
     if args.command == "schedule":
         try:
@@ -119,6 +130,20 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
+    if args.command == "drivers":
+        try:
+            drivers_result = variance_drivers(args.pack_dir, args.transactions, currency=args.currency, top=args.top)
+            drivers_path = write_drivers(drivers_result, args.output)
+        except (ControlInputError, OSError, ValueError, csv.Error) as exc:
+            print(f"close-control drivers: {exc}", file=sys.stderr)
+            return 1
+        unexplained = sum(1 for item in drivers_result["accounts"] if Decimal(item["unexplained"]) != 0)
+        print(f"close-control drivers: {drivers_result['status']}; {len(drivers_result['accounts'])} "
+              f"variance(s), {unexplained} not fully covered by the supplied transactions")
+        if drivers_result["financial_year_reset"]:
+            print("  The pack crosses a 30 June reset; profit-and-loss movements are not comparable.")
+        print(f"  CSV: {drivers_path}")
+        return 0 if drivers_result["status"] == "PASS" else 2
     if args.command == "reconcile":
         try:
             destination = require_output_outside_repository(args.output)
@@ -171,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         ("--prior", args.prior),
         ("--mapping", args.mapping),
         ("--mapping-policy", args.mapping_policy),
+        ("--balance-policy", args.balance_policy),
         ("--subledger", args.subledger),
         ("--review-note", args.review_note),
         ("--equity-schedule", args.equity_schedule),
@@ -197,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
             prior_path=args.prior,
             mapping_path=args.mapping,
             mapping_policy_path=args.mapping_policy,
+            balance_policy_path=args.balance_policy,
             subledger_path=args.subledger,
             acknowledgement_path=args.review_note,
             equity_schedule_path=args.equity_schedule,

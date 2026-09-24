@@ -49,11 +49,19 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
+No Python or clone needed: the [reviewer quick start](docs/reviewer-quick-start.md)
+runs the published 0.1.5 release on fabricated files with `uvx`, and shows how to
+keep the resulting pack with a job and check it later.
+
 Source additions: [compare successive verified close packs](docs/close-comparison.md)
 and [reconcile ledger equity movements](docs/equity-reconciliation.md).
+[Variance drivers](docs/variance-drivers.md) rank the transactions behind each
+period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots and inter-entity balances from supplied canonical records.
-These commands and options are not established by the published 0.1.4 package.
+Comparison, equity reconciliation and evidence schedules ship from 0.1.5.
+Variance drivers and the balance policy are in the development source only;
+the published 0.1.5 package does not include them.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
@@ -218,6 +226,39 @@ fabricated policy that matches `examples/account_mapping.csv`. Keep real policy
 files outside the checkout. The pack's `source_sha256.mapping_policy` records
 the exact bytes read by the control. Runs without this option retain their
 existing behaviour. This option ships from 0.1.5.
+
+## Balance policy
+
+The development source adds optional `--balance-policy` to `review` and
+`workbench`. It accepts a local UTF-8 CSV with exactly
+`AccountID,ExpectedBalance,ExpectMovement` columns. `ExpectedBalance` is
+`debit`, `credit`, `nil` or `any`; `ExpectMovement` is `yes` or `no`. Blank
+fields, other values, a repeated `AccountID`, an empty policy, a value holding
+a quote character and malformed rows fail with exit code 1. Quote an
+`AccountID` that contains a comma.
+
+Each listed account is compared with the current trial balance, and each of
+these raises a `REVIEW` exception under `balance_policy`:
+
+- a `YTDDebit - YTDCredit` balance on the other side from a declared `debit` or
+  `credit` (an overdrawn bank account, a debit balance in creditors);
+- any balance in an account declared `nil` (suspense, clearing, rounding);
+- no movement in the current period (`Debit` and `Credit` both nil) for an
+  account declared `ExpectMovement` `yes`, such as accruals, payroll
+  liabilities or GST. Xero leaves an account with no balance and no movement
+  out of the trial balance, so an absent account counts as nil with no movement.
+
+The policy is the firm's explicit list; the tool infers nothing from `Section`
+or account names. Declare a contra account, such as accumulated depreciation,
+with the side it really carries. Accounts the policy does not list are not
+checked. The exceptions are the firm's to trace, so they draft no client
+questions.
+
+Add `--balance-policy examples/balance_policy.csv` to the quick demo to use the
+fabricated policy; it raises one exception, for a payroll liability `210` that
+has no movement. Keep real policy files outside the checkout. The pack's
+`source_sha256.balance_policy` records the exact bytes read, and a run without
+the option lists `balance_policy` under `controls_not_run`.
 
 ## Worked example
 
