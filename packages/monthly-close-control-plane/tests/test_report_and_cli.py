@@ -1381,6 +1381,7 @@ def test_the_pack_records_the_controls_that_did_not_run(tmp_path: Path) -> None:
     )
     assert pack.controls_not_run == (
         "account_mapping",
+        "balance_policy",
         "subledger",
         "calculation_evidence",
     )
@@ -1395,12 +1396,13 @@ def test_the_pack_records_the_controls_that_did_not_run(tmp_path: Path) -> None:
     ]) == 2
     summary = (output / "close-summary.md").read_text(encoding="utf-8")
     assert (
-        "- Controls not run: account_mapping, subledger, calculation_evidence."
+        "- Controls not run: account_mapping, balance_policy, subledger, calculation_evidence."
         in summary
     )
     document = json.loads((output / "close-review-pack.json").read_text(encoding="utf-8"))
     assert document["controls_not_run"] == [
         "account_mapping",
+        "balance_policy",
         "subledger",
         "calculation_evidence",
     ]
@@ -1416,7 +1418,7 @@ def test_a_supplied_input_takes_its_control_off_the_list(tmp_path: Path) -> None
         mapping_path=EXAMPLES / "account_mapping.csv",
         subledger_path=EXAMPLES / "subledger_balances.csv",
     )
-    assert pack.controls_not_run == ("calculation_evidence",)
+    assert pack.controls_not_run == ("balance_policy", "calculation_evidence")
 
     output = tmp_path / "pack"
     assert main([
@@ -1428,7 +1430,7 @@ def test_a_supplied_input_takes_its_control_off_the_list(tmp_path: Path) -> None
         "--output", str(output),
     ]) == 2
     summary = (output / "close-summary.md").read_text(encoding="utf-8")
-    assert "- Controls not run: calculation_evidence." in summary
+    assert "- Controls not run: balance_policy, calculation_evidence." in summary
     assert main(["view", "--pack-dir", str(output)]) == 0
 
 
@@ -1462,6 +1464,6 @@ def test_the_review_sheet_shows_the_controls_that_did_not_run(tmp_path: Path) ->
     ]) == 2
     sheet, _digests = render_review_sheet(output)
     assert (
-        "- Controls not run: account_mapping, subledger, calculation_evidence."
+        "- Controls not run: account_mapping, balance_policy, subledger, calculation_evidence."
         in sheet
     )

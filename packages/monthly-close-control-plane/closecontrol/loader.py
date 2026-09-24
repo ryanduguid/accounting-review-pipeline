@@ -35,6 +35,8 @@ CANONICAL_COLUMNS = (
 )
 MAPPING_COLUMNS = ("AccountID", "ReviewGroup")
 MAPPING_POLICY_COLUMNS = ("Section", "ReviewGroup")
+BALANCE_POLICY_COLUMNS = ("AccountID", "ExpectedBalance", "ExpectMovement")
+EXPECTED_BALANCES = ("debit", "credit", "nil", "any")
 SUBLEDGER_COLUMNS = ("Tenant", "AccountID", "SubledgerBalance")
 _ACCOUNTING_NUMBER = re.compile(r"^[-+]?\$?(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?$")
 
@@ -249,6 +251,36 @@ def load_mapping_policy(path: Path | SourceSnapshot) -> dict[str, set[str]]:
         permitted.add(section)
     if not policy:
         raise SchemaError(f"{snapshot.path}: mapping policy has no permitted pairs.")
+    return policy
+
+
+def load_balance_policy(path: Path | SourceSnapshot) -> dict[str, tuple[str, bool]]:
+    """Read the firm's expected balance side and movement per account, without inferred rules."""
+    snapshot = _snapshot(path, label="Balance policy")
+    policy: dict[str, tuple[str, bool]] = {}
+    for row_number, values in _read_csv_rows(
+        snapshot, BALANCE_POLICY_COLUMNS, label="Balance policy"
+    ):
+        account_id = _text(values["AccountID"], field="AccountID", row_number=row_number,
+                           path=snapshot.path)
+        expected = _text(values["ExpectedBalance"], field="ExpectedBalance",
+                         row_number=row_number, path=snapshot.path)
+        movement = _text(values["ExpectMovement"], field="ExpectMovement",
+                         row_number=row_number, path=snapshot.path)
+        if expected not in EXPECTED_BALANCES:
+            raise SchemaError(
+                f"{snapshot.path}: row {row_number} ExpectedBalance {expected!r} is not one of "
+                f"{', '.join(EXPECTED_BALANCES)}."
+            )
+        if movement not in ("yes", "no"):
+            raise SchemaError(
+                f"{snapshot.path}: row {row_number} ExpectMovement {movement!r} is not yes or no."
+            )
+        if account_id in policy:
+            raise DuplicateKeyError(f"{snapshot.path}: duplicate AccountID {account_id!r}.")
+        policy[account_id] = (expected, movement == "yes")
+    if not policy:
+        raise SchemaError(f"{snapshot.path}: balance policy has no accounts.")
     return policy
 
 
