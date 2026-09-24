@@ -35,6 +35,7 @@ jobs:
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.10)
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.12)
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.13)
+        .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
       source-directory: packages/elizabeth-anne-alexander
