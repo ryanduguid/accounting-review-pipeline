@@ -295,8 +295,8 @@ class EvaluationPackTest(unittest.TestCase):
         )
         self.assertIn(f"{canonical}/actions/workflows/ci.yml", readme)
         # The README citation identifies the last published release.
-        self.assertIn("xero-trial-balance-export/v0.1.7", readme)
-        self.assertIn("releases/tag/xero-trial-balance-export%2Fv0.1.7", readme)
+        self.assertIn("xero-trial-balance-export/v0.1.11", readme)
+        self.assertIn("releases/tag/xero-trial-balance-export%2Fv0.1.11", readme)
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "
             "| distribution `xero-trial-balance-export`, commands `export-tb` and "
