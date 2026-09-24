@@ -41,15 +41,18 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import shlex
           config = json.load(open(".devcontainer/devcontainer.json"))
-          # ponytail: only the single-line string form is run here; an array or
-          # object postCreateCommand needs the devcontainer CLI instead.
-          for key in ("image", "postCreateCommand"):
-              value = config[key]
-              if not isinstance(value, str) or len(value.splitlines()) != 1:
-                  raise SystemExit(f"{key} must be a single-line string for this check")
+          def shell(command):
+              # A string runs through a shell; an array runs as argv, so quote it.
+              return command if isinstance(command, str) else shlex.join(command)
+          command = config["postCreateCommand"]
+          # Codespaces runs an object's commands in parallel; here they run in turn.
+          parts = command.values() if isinstance(command, dict) else [command]
+          setup = " && ".join(f"( {shell(part)} )" for part in parts)
           print(f"image={config['image']}")
-          print(f"setup={config['postCreateCommand']}")
+          # JSON keeps a multi-line command on one output line.
+          print(f"setup={json.dumps(setup)}")
           PY
 
   setup:
@@ -65,7 +68,7 @@ jobs:
           persist-credentials: false
       - name: Run the devcontainer setup command
         env:
-          SETUP: ${{ needs.config.outputs.setup }}
+          SETUP: ${{ fromJSON(needs.config.outputs.setup) }}
         run: sh -c "$SETUP"
       - name: Run the fabricated close review (expects REVIEW, exit 2)
         working-directory: packages/monthly-close-control-plane
