@@ -1,5 +1,5 @@
 // Xero.AgedReceivables
-// Parse a Xero Aged Receivables Summary CSV export into a typed, verified table.
+// Parse a Xero Aged Receivables Summary CSV export into a typed table.
 //
 // Accepts the standard Xero Aged Receivables Summary export shape.
 // The header row is detected by finding the row starting with "Contact" or "Customer".
