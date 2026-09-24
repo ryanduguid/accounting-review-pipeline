@@ -94,22 +94,27 @@ def _require_columns(
 
 
 def _read_csv_rows(
-    snapshot: SourceSnapshot, required: tuple[str, ...], *, label: str
+    snapshot: SourceSnapshot, required: tuple[str, ...], *, label: str, strict: bool = False
 ) -> Iterator[tuple[int, dict[str, str | None]]]:
     path = snapshot.path
     with io.StringIO(snapshot.text(label=label, encoding="utf-8-sig"), newline="") as source:
-        reader = csv.DictReader(source)
-        _require_columns(reader.fieldnames, required, path)
-        for values in reader:
-            # reader.line_num, not an enumerate counter. DictReader silently
-            # skips blank rows, so a counter drifts below the real file line
-            # from the first blank line onwards and every message after it
-            # names the wrong row; line_num reports the physical line, with
-            # the header as line 1.
-            row_number = reader.line_num
-            if None in values:
-                raise SchemaError(f"{path}: row {row_number} has more fields than its header.")
-            yield row_number, values
+        # strict turns an unterminated or stray quote into an error instead of
+        # text the lenient parser quietly repairs.
+        reader = csv.DictReader(source, strict=strict)
+        try:
+            _require_columns(reader.fieldnames, required, path)
+            for values in reader:
+                # reader.line_num, not an enumerate counter. DictReader silently
+                # skips blank rows, so a counter drifts below the real file line
+                # from the first blank line onwards and every message after it
+                # names the wrong row; line_num reports the physical line, with
+                # the header as line 1.
+                row_number = reader.line_num
+                if None in values:
+                    raise SchemaError(f"{path}: row {row_number} has more fields than its header.")
+                yield row_number, values
+        except csv.Error as exc:
+            raise SchemaError(f"{path}: line {reader.line_num} is not valid CSV: {exc}.") from exc
 
 
 def _has_control_or_format_character(text: str, *, allow_line_breaks: bool = False) -> bool:
@@ -259,7 +264,7 @@ def load_balance_policy(path: Path | SourceSnapshot) -> dict[str, tuple[str, boo
     snapshot = _snapshot(path, label="Balance policy")
     policy: dict[str, tuple[str, bool]] = {}
     for row_number, values in _read_csv_rows(
-        snapshot, BALANCE_POLICY_COLUMNS, label="Balance policy"
+        snapshot, BALANCE_POLICY_COLUMNS, label="Balance policy", strict=True
     ):
         account_id = _text(values["AccountID"], field="AccountID", row_number=row_number,
                            path=snapshot.path)

@@ -87,6 +87,7 @@ def test_an_account_absent_from_the_trial_balance_has_no_movement(tmp_path: Path
         ("BANK,debit,sometimes\n", SchemaError),
         ("BANK,debit,no\nBANK,credit,no\n", DuplicateKeyError),
         ("", SchemaError),
+        ('BANK,debit,"no\n', SchemaError),
     ],
 )
 def test_a_malformed_policy_is_refused(tmp_path: Path, policy: str, error: type[Exception]) -> None:
