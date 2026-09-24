@@ -19,6 +19,7 @@ from .equity import reconcile_equity
 from .errors import ControlInputError, DateMismatchError, NumericGateError, SchemaError
 from .loader import (
     SourceSnapshot,
+    load_balance_policy,
     load_canonical_tb,
     load_mapping,
     load_mapping_policy,
@@ -335,6 +336,44 @@ def _mapping_compatibility_exceptions(
     return result
 
 
+def _balance_policy_exceptions(
+    current_by_key: dict[tuple[str, str], TrialBalanceRow],
+    tenant: str,
+    policy: dict[str, tuple[str, bool]],
+) -> list[ExceptionItem]:
+    """Compare each listed account with the side and movement the firm expects.
+
+    The policy is the firm's own list, so a contra account such as accumulated
+    depreciation is declared with its real side; nothing is inferred from
+    Section or account names. Xero omits an account with no balance and no
+    movement, so an absent account reads as nil with no movement.
+    """
+    result: list[ExceptionItem] = []
+    for account_id, (expected, expect_movement) in sorted(policy.items()):
+        row = current_by_key.get((tenant, account_id))
+        balance = row.ytd_net if row is not None else ZERO
+        side = "debit" if balance > ZERO else "credit" if balance < ZERO else "nil"
+        found = []
+        if expected == "nil" and side != "nil":
+            found.append(f"The policy expects a nil balance; the account carries a {side} balance.")
+        elif expected in ("debit", "credit") and side not in (expected, "nil"):
+            found.append(f"The policy expects a {expected} balance; the account carries a {side} balance.")
+        if expect_movement and (row is None or (row.debit == ZERO and row.credit == ZERO)):
+            found.append(
+                "The policy expects movement every period; the account has none in the current period"
+                + (" and is absent from the current trial balance." if row is None else ".")
+            )
+        for reason in found:
+            item = _exception(
+                "balance_policy", "REVIEW", row, current_value=balance, reason=reason,
+                reviewer_action="Trace the balance or the missing entries to the ledger and "
+                                "retain the evidence. Correct the policy file only if the "
+                                "account's expected behaviour has changed.",
+            )
+            result.append(item if row is not None else replace(item, tenant=tenant, account_id=account_id))
+    return result
+
+
 def _subledger_exceptions(
     current_by_key: dict[tuple[str, str], TrialBalanceRow],
     subledger: dict[tuple[str, str], Decimal],
@@ -518,6 +557,7 @@ def review_close(
     prior_path: Path,
     mapping_path: Path | None = None,
     mapping_policy_path: Path | None = None,
+    balance_policy_path: Path | None = None,
     subledger_path: Path | None = None,
     acknowledgement_path: Path | None = None,
     equity_schedule_path: Path | None = None,
@@ -561,6 +601,13 @@ def review_close(
     )
     mapping_policy = (
         load_mapping_policy(mapping_policy_source) if mapping_policy_source is not None else None
+    )
+    balance_policy_source = (
+        SourceSnapshot.capture(balance_policy_path, label="Balance policy")
+        if balance_policy_path is not None else None
+    )
+    balance_policy = (
+        load_balance_policy(balance_policy_source) if balance_policy_source is not None else None
     )
     subledger_source = (
         SourceSnapshot.capture(subledger_path, label="Subledger file")
@@ -610,6 +657,8 @@ def review_close(
             exceptions += _mapping_exceptions(current_rows, mapping)
         if mapping_policy is not None:
             exceptions += _mapping_compatibility_exceptions(current_rows, mapping, mapping_policy)
+        if balance_policy is not None:
+            exceptions += _balance_policy_exceptions(current_by_key, current_tenant, balance_policy)
         exceptions += _subledger_exceptions(current_by_key, subledger, reconciliation_tolerance)
         for name in required_calculations:
             # The same rule the evidence loader applies to a label, and the
@@ -657,6 +706,8 @@ def review_close(
         source_hashes["account_mapping"] = mapping_source.sha256
     if mapping_policy_source is not None:
         source_hashes["mapping_policy"] = mapping_policy_source.sha256
+    if balance_policy_source is not None:
+        source_hashes["balance_policy"] = balance_policy_source.sha256
     if subledger_source is not None:
         source_hashes["subledger"] = subledger_source.sha256
     if acknowledgement_source is not None:
@@ -679,6 +730,7 @@ def review_close(
         name
         for name, ran in (
             ("account_mapping", mapping_path is not None),
+            ("balance_policy", balance_policy is not None),
             ("subledger", bool(subledger)),
             (
                 "calculation_evidence",

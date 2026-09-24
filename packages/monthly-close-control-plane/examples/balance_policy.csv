@@ -1,0 +1,8 @@
+AccountID,ExpectedBalance,ExpectMovement
+100,debit,yes
+110,debit,no
+200,credit,no
+210,credit,yes
+300,credit,yes
+880,nil,no
+900,credit,no
