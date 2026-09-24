@@ -59,7 +59,9 @@ and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots and inter-entity balances from supplied canonical records.
-These commands and options are not established by the published 0.1.4 package.
+Comparison, equity reconciliation and evidence schedules ship from 0.1.5.
+Variance drivers and the balance policy are in the development source only;
+the published 0.1.5 package does not include them.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
