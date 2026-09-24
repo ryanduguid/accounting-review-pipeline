@@ -1,5 +1,5 @@
 // Xero.AgedPayables
-// Parse a Xero Aged Payables Summary CSV export into a typed, verified table.
+// Parse a Xero Aged Payables Summary CSV export into a typed table.
 //
 // Accepts the standard Xero Aged Payables Summary export shape.
 // The header row is detected by finding the row starting with "Contact", "Supplier", or "Vendor".
