@@ -20,7 +20,7 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # parked name, and the exit-code list names the guard's refusal. The scope,
 # refresh and reviewer paragraphs, the OAuth claims and the release citation are
 # unchanged.
-README_SHA256 = "5473448B35B8C8A6A18A6AF7292C284AD1341DD868EA72750239E3B0043D79F0"
+README_SHA256 = "A4020CDD067AFDBAC70BECB21B221939CD0E1452483282BA9D269A6FDC0594B9"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth
