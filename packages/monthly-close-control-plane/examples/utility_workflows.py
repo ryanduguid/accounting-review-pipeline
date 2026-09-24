@@ -185,8 +185,8 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
             execute("fpa", ["examples/lumbridge-services/models/generated/close_handoff.py", "--output", inputs])
             close_pack(inputs / "current.csv", inputs / "prior.csv", inputs / "subledger.csv", pack, inputs / "mapping.csv")
             execute("fpa", ["examples/lumbridge-services/models/generated/recurring.py", "--output", refresh])
-            handoff = json.loads((inputs / "handoff.json").read_text())
-            refreshed = json.loads((refresh / "review.json").read_text())
+            handoff = json.loads((inputs / "handoff.json").read_text(encoding="utf-8"))
+            refreshed = json.loads((refresh / "review.json").read_text(encoding="utf-8"))
             for name in ("xero_bs.csv", "invoices.csv", "payments.csv"):
                 if handoff["source_sha256"][name] != refreshed["source_sha256"][name]:
                     raise ValueError("Close and forecast sources differ")
