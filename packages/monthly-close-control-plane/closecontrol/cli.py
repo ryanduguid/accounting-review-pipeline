@@ -82,6 +82,8 @@ def build_parser() -> argparse.ArgumentParser:
     drivers.add_argument("--pack-dir", required=True, type=Path, help="verified review pack directory")
     drivers.add_argument("--transactions", required=True, type=Path,
                          help="transaction CSV with the reconcile columns; see docs/variance-drivers.md")
+    drivers.add_argument("--currency", required=True,
+                         help="trial-balance currency; every transaction row must use it")
     drivers.add_argument("--top", type=int, default=5, help="transactions listed per account (default 5)")
     drivers.add_argument("--output", required=True, type=Path, help="new directory outside version control")
     comparison = commands.add_parser("compare", help="compare verified close packs without changing them")
@@ -128,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "drivers":
         try:
-            drivers_result = variance_drivers(args.pack_dir, args.transactions, top=args.top)
+            drivers_result = variance_drivers(args.pack_dir, args.transactions, currency=args.currency, top=args.top)
             drivers_path = write_drivers(drivers_result, args.output)
         except (ControlInputError, OSError, ValueError, csv.Error) as exc:
             print(f"close-control drivers: {exc}", file=sys.stderr)
@@ -136,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
         unexplained = sum(1 for item in drivers_result["accounts"] if Decimal(item["unexplained"]) != 0)
         print(f"close-control drivers: {drivers_result['status']}; {len(drivers_result['accounts'])} "
               f"variance(s), {unexplained} not fully covered by the supplied transactions")
+        if drivers_result["financial_year_reset"]:
+            print("  The pack crosses a 30 June reset; profit-and-loss movements are not comparable.")
         print(f"  CSV: {drivers_path}")
         return 0 if drivers_result["status"] == "PASS" else 2
     if args.command == "reconcile":

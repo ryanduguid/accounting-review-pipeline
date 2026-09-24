@@ -32,7 +32,7 @@ DRIVER_COLUMNS = (
 )
 
 
-def _transactions(snapshot: SourceSnapshot) -> dict[tuple[str, str], list[dict[str, Any]]]:
+def _transactions(snapshot: SourceSnapshot, currency: str) -> dict[tuple[str, str], list[dict[str, Any]]]:
     path = snapshot.path
     by_account: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     seen: set[tuple[str, str, str]] = set()
@@ -40,6 +40,12 @@ def _transactions(snapshot: SourceSnapshot) -> dict[tuple[str, str], list[dict[s
         item: dict[str, Any] = {key: _text(values[key], field=key, path=path, row_number=row,
                                           allow_empty=key in {"Reference", "Description"})
                                 for key in COLUMNS}
+        if item["Currency"] != currency:
+            # Amounts are compared with the trial balance, so they must be in its
+            # currency; nothing here converts or partitions by currency.
+            raise ControlInputError(
+                f"{path}: row {row} is in {item['Currency']!r}, not the declared --currency {currency!r}."
+            )
         key = (item["Tenant"], item["AccountID"], item["TransactionID"])
         if key in seen:
             raise DuplicateKeyError(f"{path}: row {row} repeats TransactionID {item['TransactionID']!r}.")
@@ -54,7 +60,7 @@ def _transactions(snapshot: SourceSnapshot) -> dict[tuple[str, str], list[dict[s
     return by_account
 
 
-def variance_drivers(pack_dir: Path, transactions: Path, *, top: int = 5) -> dict[str, Any]:
+def variance_drivers(pack_dir: Path, transactions: Path, *, currency: str, top: int = 5) -> dict[str, Any]:
     """Return the ranked drivers for every period_variance exception in the pack."""
     if top < 1:
         raise ControlInputError("--top must be at least 1.")
@@ -70,7 +76,7 @@ def variance_drivers(pack_dir: Path, transactions: Path, *, top: int = 5) -> dic
     accounts = []
     # Input bounds and a private context keep sums exact even if the caller changes Decimal settings.
     with localcontext(Context(prec=40)):
-        by_account = _transactions(snapshot)
+        by_account = _transactions(snapshot, currency)
         for finding in exceptions:
             if finding["control"] != "period_variance":
                 continue
@@ -88,8 +94,15 @@ def variance_drivers(pack_dir: Path, transactions: Path, *, top: int = 5) -> dic
                 "drivers": [{key: item[key] for key in ("TransactionID", "Date", "Reference", "Description")}
                             | {"Amount": f"{item['amount']:.2f}"} for item in ranked],
             })
+    # Across a 30 June reset, profit-and-loss YTD figures restart, so a YTD
+    # movement and the window's transactions are not comparable and a nil
+    # remainder proves nothing. The run cannot pass.
+    year_reset = any(item["control"] == "financial_year_reset" for item in exceptions)
+    covered = all(Decimal(item["unexplained"]) == 0 for item in accounts)
     return {
-        "status": "PASS" if all(Decimal(item["unexplained"]) == 0 for item in accounts) else "REVIEW",
+        "status": "PASS" if covered and not year_reset else "REVIEW",
+        "financial_year_reset": year_reset,
+        "currency": currency,
         "boundary": BOUNDARY,
         "window": {"after": prior.isoformat(), "through": current.isoformat()},
         "top": top,
