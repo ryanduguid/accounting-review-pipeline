@@ -225,8 +225,8 @@ The development source adds optional `--balance-policy` to `review` and
 `workbench`. It accepts a local UTF-8 CSV with exactly
 `AccountID,ExpectedBalance,ExpectMovement` columns. `ExpectedBalance` is
 `debit`, `credit`, `nil` or `any`; `ExpectMovement` is `yes` or `no`. Blank
-fields, other values, a repeated `AccountID`, an empty policy and malformed rows
-fail with exit code 1.
+fields, other values, a repeated `AccountID`, an empty policy, any quote
+character and malformed rows fail with exit code 1.
 
 Each listed account is compared with the current trial balance, and each of
 these raises a `REVIEW` exception under `balance_policy`:

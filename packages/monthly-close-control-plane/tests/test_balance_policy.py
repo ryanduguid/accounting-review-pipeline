@@ -88,6 +88,9 @@ def test_an_account_absent_from_the_trial_balance_has_no_movement(tmp_path: Path
         ("BANK,debit,no\nBANK,credit,no\n", DuplicateKeyError),
         ("", SchemaError),
         ('BANK,debit,"no\n', SchemaError),
+        # A stray quote would otherwise become part of the AccountID and match nothing.
+        ('BANK",debit,no\n', SchemaError),
+        ('"BANK"X,debit,no\n', SchemaError),
     ],
 )
 def test_a_malformed_policy_is_refused(tmp_path: Path, policy: str, error: type[Exception]) -> None:
