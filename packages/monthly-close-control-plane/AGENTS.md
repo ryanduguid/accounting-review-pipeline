@@ -45,7 +45,7 @@ matched semantically below without duplicating its shell body:
 ```bash
 uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
 uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
-uv run --locked --extra dev --python 3.12 python -m build
+uv run --locked --extra dev --python 3.14 python -m build
 uv run --locked --extra dev ruff check closecontrol tests
 uv run --locked --extra dev mypy closecontrol
 ```
@@ -66,7 +66,7 @@ $artifactDir = Join-Path ([System.IO.Path]::GetTempPath()) ("monthly-close-wheel
 $smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("monthly-close-wheel-smoke-" + [guid]::NewGuid().ToString("N"))
 try {
     New-Item -ItemType Directory -Path $artifactDir | Out-Null
-    uv run --locked --extra dev --python 3.12 python -m build --outdir "$artifactDir"
+    uv run --locked --extra dev --python 3.14 python -m build --outdir "$artifactDir"
     if ($LASTEXITCODE -ne 0) { throw "wheel build failed with exit $LASTEXITCODE" }
     $wheels = @(Get-ChildItem -LiteralPath $artifactDir -Filter "*.whl" -File)
     if ($wheels.Count -ne 1) { throw "expected exactly one built wheel" }

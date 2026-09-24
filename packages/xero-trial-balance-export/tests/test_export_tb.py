@@ -1649,6 +1649,11 @@ class StreamEncodingTest(unittest.TestCase):
 
     def test_both_streams_are_reconfigured_before_anything_is_printed(self):
         stdout, stderr = mock.Mock(), mock.Mock()
+        # From Python 3.14 argparse asks the stream whether to colour help text,
+        # and a bare Mock's fileno() is not an integer. Answer as a pipe does.
+        for stream in (stdout, stderr):
+            stream.fileno.side_effect = io.UnsupportedOperation
+            stream.isatty.return_value = False
         with mock.patch.object(sys, "stdout", stdout), \
                 mock.patch.object(sys, "stderr", stderr), \
                 mock.patch.object(sys, "argv", ["export_tb.py", "--out", "../outside.csv"]):
