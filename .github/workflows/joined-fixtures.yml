@@ -1,0 +1,79 @@
+name: Public joined accounting fixtures
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # The current repository uses the event revision, including the PR merge.
+      # Companion main branches test compatibility; the runner records each SHA.
+      - name: Check out accounting-review-pipeline
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: sources/accounting-review-pipeline
+          persist-credentials: false
+      - name: Check out au-fpa-pack
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ryanduguid/au-fpa-pack
+          ref: main
+          path: sources/au-fpa-pack
+          persist-credentials: false
+      - name: Check out australian-accounting
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ryanduguid/australian-accounting
+          ref: main
+          path: sources/australian-accounting
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: '0.12.0'
+          enable-cache: false
+      - name: Verify the public fixture workflows
+        shell: bash
+        run: |
+          fixture_status=0
+          for workflow in close-forecast quarter job-cash; do
+            python sources/accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py \
+              --workflow "$workflow" \
+              --fpa "$GITHUB_WORKSPACE/sources/au-fpa-pack" \
+              --accounting "$GITHUB_WORKSPACE/sources/australian-accounting" \
+              --output "$RUNNER_TEMP/public-fixtures/$workflow/results" \
+              --environment-root "$RUNNER_TEMP/public-fixtures/$workflow/environments" || fixture_status=1
+          done
+          exit "$fixture_status"
+      - name: Summarise fixture results
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          for workflow in close-forecast quarter job-cash; do
+            summary="$RUNNER_TEMP/public-fixtures/$workflow/results/summary.md"
+            if [ -f "$summary" ]; then
+              cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - name: Retain fabricated results and failure diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: public-accounting-fixtures
+          path: ${{ runner.temp }}/public-fixtures/*/results/
+          if-no-files-found: warn
+          retention-days: 7
