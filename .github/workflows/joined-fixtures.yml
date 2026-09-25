@@ -49,14 +49,16 @@ jobs:
       - name: Verify the public fixture workflows
         shell: bash
         run: |
+          fixture_status=0
           for workflow in close-forecast quarter job-cash; do
             python sources/accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py \
               --workflow "$workflow" \
               --fpa "$GITHUB_WORKSPACE/sources/au-fpa-pack" \
               --accounting "$GITHUB_WORKSPACE/sources/australian-accounting" \
               --output "$RUNNER_TEMP/public-fixtures/$workflow/results" \
-              --environment-root "$RUNNER_TEMP/public-fixtures/$workflow/environments"
+              --environment-root "$RUNNER_TEMP/public-fixtures/$workflow/environments" || fixture_status=1
           done
+          exit "$fixture_status"
       - name: Summarise fixture results
         if: ${{ !cancelled() }}
         shell: bash
