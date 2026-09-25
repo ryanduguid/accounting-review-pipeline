@@ -39,6 +39,10 @@ default:
 setup:
     uv sync
 
+# Reproduce the fictional close pack outside this checkout. REVIEW preserves exit 2.
+demo:
+    uv run --locked close-control review --current packages/monthly-close-control-plane/examples/current_trial_balance.csv --prior packages/monthly-close-control-plane/examples/prior_trial_balance.csv --mapping packages/monthly-close-control-plane/examples/account_mapping.csv --subledger packages/monthly-close-control-plane/examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note packages/monthly-close-control-plane/examples/review_note.json --output ../close-control-demo
+
 # Run every component's test suite, then the joined trial-balance conformance
 # test and the root check on the blocks the two review packages each copy.
 test: setup

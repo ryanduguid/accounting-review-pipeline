@@ -28,29 +28,32 @@ Synthetic examples. Review aid, not professional advice; a human decides whether
 
 **Input:** the supplied current and prior trial balances, account mapping and subledger. The creditors reconciliation differs by $250.
 
-From a clone, with [uv](https://docs.astral.sh/uv/) installed:
-
-```bash
-cd packages/monthly-close-control-plane
-uv run --locked --extra dev close-control review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output ../../../close-control-demo
-```
-
-**Output:** `REVIEW`, 8 exceptions, exit 2. Open `../../../close-control-demo/close-summary.md`.
-
-To skip local setup, [open the repository in GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline).
-The devcontainer installs uv and runs `uv sync --locked`, so the command above runs as
-written. Codespaces usage counts against your own GitHub quota.
+**Output:** `REVIEW`, 8 exceptions, exit 2. [Read the example in your browser](https://duguid.com.au/tools/monthly-close-controls/#worked-example) before installing anything.
 
 | Finding | Evidence | Human decision |
 | --- | --- | --- |
 | Creditors reconciliation | $250 difference | Trace and explain the difference before sign-off. |
 | Financial-year reset | 30 June compared with 31 July | Reconsider P&L YTD comparisons across the reset. |
 
-[Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Inspect all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example)
+### Reproduce the sample pack
+
+From the repository root, with [uv](https://docs.astral.sh/uv/) and [just](https://github.com/casey/just) installed, run:
+
+```bash
+just demo
+```
+
+This calls the existing `close-control review` command with the supplied fictional trial balances, mapping, subledger and review note. It writes `../close-control-demo/`, outside the checkout, and replaces any files with the same output names. Keep this directory for the fictional demo. Open `../close-control-demo/close-summary.md` to read the findings.
+
+The CLI and `just demo` both exit 2 because the sample needs review. The recipe is reported as unsuccessful, but the generated `REVIEW` pack is the expected result. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
+
+The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) installs uv and runs `uv sync --locked`; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota.
+
+[Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Workpaper Review Gate](packages/review-ready-gate/README.md)
 
 Every invented entity the components share, and the proposal to consolidate them into one fabricated firm, is recorded in [docs/fabricated-firm.md](docs/fabricated-firm.md).
 
-<details open>
+<details>
 <summary>Setup, component identities, file contracts and reference</summary>
 
 This repository brings together Monthly Close Controls and its related tools. Its canonical GitHub repository
