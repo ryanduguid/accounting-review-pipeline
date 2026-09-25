@@ -90,13 +90,35 @@ def is_account_code(value: str) -> bool:
     )
 
 
+def validate_report_identity(report: dict, requested_date: str) -> None:
+    """Check the report kind and its as-at title before accepting any rows."""
+    if any(report.get(key) != "TrialBalance" for key in ("ReportID", "ReportType")):
+        sys.exit("error: returned report is not identified as a Trial Balance.")
+    titles = report.get("ReportTitles")
+    if not isinstance(titles, list) or not all(isinstance(title, str) for title in titles):
+        sys.exit("error: Trial Balance ReportTitles must be a list of text titles.")
+    as_at = [title for title in titles if title.startswith("As at ")]
+    match = re.fullmatch(r"As at ([0-9]{1,2}) ([A-Za-z]+) ([0-9]{4})", as_at[0]) if len(as_at) == 1 else None
+    months = ("January", "February", "March", "April", "May", "June", "July",
+              "August", "September", "October", "November", "December")
+    try:
+        if match is None:
+            raise ValueError
+        actual = date(int(match[3]), months.index(match[2]) + 1, int(match[1]))
+    except ValueError:
+        sys.exit("error: Trial Balance needs one valid 'As at D Month YYYY' title.")
+    # Xero's ReportDate can differ from the reporting period in ReportTitles.
+    if actual.isoformat() != requested_date:
+        sys.exit("error: Trial Balance as-at title does not match the requested date.")
+
+
 def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
     """Walk the nested Rows structure into flat account rows.
 
     Xero reports arrive as: Rows[] where RowType is Header (column titles),
     Section (Title + nested Rows), or Row/SummaryRow. Cell order follows the
-    Header titles. SummaryRow (section totals) is skipped. Totals are
-    recomputed, not trusted.
+    Header titles. Recomputed amounts must agree with supplied section or
+    grand totals. Summaries are never exported as account rows.
 
     Every nested list is checked before it is walked, and so is every scalar
     taken out of one. main() proves the Reports envelope is a list of
@@ -110,6 +132,7 @@ def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
     """
     column_titles: list[str] = []
     flat: list[dict] = []
+    controls: list[tuple[list[dict], list[dict]]] = []
 
     def object_list(container: dict, key: str, where: str) -> list[dict]:
         """The nested list of objects the report format promises, or an exit."""
@@ -155,6 +178,17 @@ def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
             for c in object_list(row, "Cells", where)
         ]
 
+    def row_record(row: dict, where: str) -> dict:
+        values = cell_values(row, where)
+        try:
+            return dict(zip(column_titles, values, strict=True))
+        except ValueError:
+            raise SystemExit(
+                f"error: report {where} has a row of {len(values)} cells under "
+                f"{len(column_titles)} header columns. The API shape may have "
+                "changed, or this is not a trial balance report."
+            ) from None
+
     def account_id(row: dict, where: str) -> str:
         # Every data cell carries Attributes: [{"Value": "<account guid>",
         # "Id": "account"}], the stable join key; codes and names change.
@@ -188,30 +222,33 @@ def flatten_report(report: dict) -> tuple[list[str], list[dict]]:
         elif row_type == "Section":
             section = top.get("Title", "")
             where = f'section "{_shown(section)}"'
+            section_rows: list[dict] = []
+            summaries: list[dict] = []
             for row in object_list(top, "Rows", where):
-                if row.get("RowType") != "Row":
-                    continue  # skip SummaryRow
-                values = cell_values(row, where)
-                record = {}
-                # strict: a row/header length mismatch means the API shape
-                # changed. Fail loudly instead of exporting silent zeros.
-                # The bare ValueError read as a crash: it landed after the
-                # tenant name had gone to stdout, so it is reported here the
-                # way every other API-shape guard in this file reports.
-                try:
-                    for title, value in zip(column_titles, values, strict=True):
-                        record[title] = value
-                except ValueError:
-                    raise SystemExit(
-                        f'error: report section "{_shown(section)}" has a row of '
-                        f"{len(values)} cells under {len(column_titles)} header "
-                        "columns. The API shape may have changed, or this is not "
-                        "a trial balance report."
-                    ) from None
+                if row.get("RowType") not in ("Row", "SummaryRow"):
+                    continue
+                record = row_record(row, where)
+                if row.get("RowType") == "SummaryRow":
+                    summaries.append(record)
+                    continue
                 # synthetic keys set last so they win any header collision
                 record["Section"] = section
                 record["AccountID"] = account_id(row, where)
                 flat.append(record)
+                section_rows.append(record)
+            # The documented grand total is an untitled, summary-only section.
+            controls.append((flat if not section and not section_rows else section_rows, summaries))
+        elif row_type == "SummaryRow":
+            controls.append((flat, [row_record(top, "grand total")]))
+
+    for records, summaries in controls:
+        if summaries:
+            totals = (Decimal(0), Decimal(0), Decimal(0), Decimal(0))
+            for record in records:
+                totals = add_totals(totals, row_amounts(record))
+            for summary in summaries:
+                if row_amounts(summary) != totals:
+                    sys.exit("error: Trial Balance summary contradicts the account rows. Nothing written.")
 
     return column_titles, flat
 
@@ -694,6 +731,30 @@ def select_tenant(connections: list[dict], tenant_arg: str | None) -> dict:
     return connections[0]
 
 
+def row_amounts(record: dict) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    return (to_number(record.get("Debit")), to_number(record.get("Credit")),
+            to_number(record.get("YTD Debit")), to_number(record.get("YTD Credit")))
+
+
+def add_totals(
+    totals: tuple[Decimal, Decimal, Decimal, Decimal],
+    amounts: tuple[Decimal, Decimal, Decimal, Decimal],
+) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    """Add movement and YTD amounts without silently rounding a final cent."""
+    with localcontext() as exact:
+        exact.prec = 60
+        exact.traps[Inexact] = True
+        try:
+            return (totals[0] + amounts[0], totals[1] + amounts[1],
+                    totals[2] + amounts[2], totals[3] + amounts[3])
+        except Inexact:
+            sys.exit(
+                "Nothing written - a reported amount needs more precision "
+                "than the balance check can carry exactly, so the totals "
+                "cannot be trusted. Check the report for a malformed cell."
+            )
+
+
 def build_rows(
     rows: list[dict], tenant: dict, report_date: str
 ) -> tuple[list[dict], tuple[Decimal, Decimal, Decimal, Decimal]]:
@@ -703,9 +764,13 @@ def build_rows(
     the shape check_balanced reads.
     """
     out_rows = []
-    total_debit = total_credit = Decimal("0")
-    total_ytd_debit = total_ytd_credit = Decimal("0")
+    totals = (Decimal(0), Decimal(0), Decimal(0), Decimal(0))
+    account_ids: set[str] = set()
     for record in rows:
+        identifier = record.get("AccountID", "").strip().casefold()
+        if not identifier or identifier in account_ids:
+            sys.exit("error: Trial Balance has a missing or repeated account ID. Nothing written.")
+        account_ids.add(identifier)
         account_raw = record.get("Account", "")
         match = ACCOUNT_PATTERN.match(account_raw)
         if match and is_account_code(match.group("code")):
@@ -713,33 +778,9 @@ def build_rows(
         else:
             name, code = account_raw, ""
 
-        debit = to_number(record.get("Debit"))
-        credit = to_number(record.get("Credit"))
-        ytd_debit = to_number(record.get("YTD Debit"))
-        ytd_credit = to_number(record.get("YTD Credit"))
-        # Decimal construction is exact but arithmetic rounds at the context
-        # precision (28 by default), so a default-context total could silently
-        # drop a final cent and pass a report that does not balance.
-        #
-        # A digit count cannot close that on its own: to_number bounds the
-        # exponent, not the significant digits, so no fixed precision is
-        # provably enough. Trapping Inexact makes silent rounding impossible
-        # instead of merely unlikely, and a report that would need more
-        # precision is refused rather than printing "Balance check OK".
-        with localcontext() as exact:
-            exact.prec = 60
-            exact.traps[Inexact] = True
-            try:
-                total_debit += debit
-                total_credit += credit
-                total_ytd_debit += ytd_debit
-                total_ytd_credit += ytd_credit
-            except Inexact:
-                sys.exit(
-                    "Nothing written - a reported amount needs more precision "
-                    "than the balance check can carry exactly, so the totals "
-                    "cannot be trusted. Check the report for a malformed cell."
-                )
+        amounts = row_amounts(record)
+        debit, credit, ytd_debit, ytd_credit = amounts
+        totals = add_totals(totals, amounts)
 
         out_rows.append(
             {
@@ -756,7 +797,7 @@ def build_rows(
             }
         )
 
-    return out_rows, (total_debit, total_credit, total_ytd_debit, total_ytd_credit)
+    return out_rows, totals
 
 
 def check_balanced(
@@ -1130,6 +1171,9 @@ def main() -> None:
         sys.exit("Empty Reports payload - check the date parameter and API scopes.")
     if not isinstance(reports, list) or not isinstance(reports[0], dict):
         sys.exit("error: Xero Trial Balance response has an unexpected Reports shape.")
+    if len(reports) != 1:
+        sys.exit("error: Xero Trial Balance response must contain exactly one report.")
+    validate_report_identity(reports[0], args.date)
 
     column_titles, rows = flatten_report(reports[0])
     if not rows:

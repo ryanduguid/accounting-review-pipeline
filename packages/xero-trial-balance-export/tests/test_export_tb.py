@@ -1,5 +1,6 @@
 import argparse
 import ast
+import copy
 import hashlib
 import io
 import json
@@ -112,15 +113,9 @@ def _report(accounts, section="Assets", header=HEADER):
                 ],
             }
         )
-    data_rows.append(
-        {
-            "RowType": "SummaryRow",
-            "Cells": [{"Value": "Total"}, {"Value": "0"}, {"Value": "0"},
-                      {"Value": "0"}, {"Value": "0"}],
-        }
-    )
     rows.append({"RowType": "Section", "Title": section, "Rows": data_rows})
-    return {"Reports": [{"Rows": rows}]}
+    return {"Reports": [{"ReportID": "TrialBalance", "ReportType": "TrialBalance",
+                         "ReportTitles": ["Trial Balance", "As at 30 June 2026"], "Rows": rows}]}
 
 
 _UNSET = object()  # "no payload override", so None stays a testable payload
@@ -1375,11 +1370,8 @@ class RawPayloadGuardTest(_ExportCase):
                 self.assertIsNone(data)
 
     def test_a_header_only_report_writes_no_csv(self):
-        payload = {
-            "Reports": [
-                {"Rows": [{"RowType": "Header", "Cells": [{"Value": t} for t in HEADER]}]}
-            ]
-        }
+        payload = _report([])
+        payload["Reports"][0]["Rows"] = payload["Reports"][0]["Rows"][:1]
         raised, out, data = self.run_export([], payload=payload)
         self.assertIsInstance(raised, SystemExit)
         self.assertIn("no account rows", str(raised.code))
@@ -1426,8 +1418,8 @@ class ColumnTitleGuardTest(_ExportCase):
                     ]
                 )
                 report = payload["Reports"][0]
-                header, cash, equity, summary = [report["Rows"][0], *report["Rows"][1]["Rows"]]
-                for row, extra in ((header, "Debit"), (cash, debit_b), (equity, ""), (summary, "0")):
+                header, cash, equity = [report["Rows"][0], *report["Rows"][1]["Rows"]]
+                for row, extra in ((header, "Debit"), (cash, debit_b), (equity, "")):
                     row["Cells"].append({"Value": extra})
                 raised, out, data = self.run_export([], payload=payload)
                 self.assertIsInstance(raised, SystemExit)
@@ -2293,6 +2285,137 @@ class QuietFailureMessageTest(_ExportCase):
         message = str(raised.code)
         self.assertIn("catherby", message.casefold())
         self.assertNotIn("filename withheld", message)
+
+
+def reported_payload():
+    payload = _report([
+        ("Synthetic cash (100)", "10", "0", "20", "0"),
+        ("Synthetic liability (200)", "0", "10", "0", "20"),
+        ("Synthetic debtor (300)", "90", "0", "180", "0"),
+        ("Synthetic income (400)", "0", "90", "0", "180"),
+    ])
+    report = payload["Reports"][0]
+    report.update(ReportID="TrialBalance", ReportType="TrialBalance",
+                  ReportTitles=["Trial Balance", "Synthetic demo", "As at 30 June 2026"],
+                  ReportDate="25 September 2026")
+    report["Rows"][1]["Rows"].append({
+        "RowType": "SummaryRow",
+        "Cells": [{"Value": value} for value in ("Total", "100", "100", "200", "200")],
+    })
+    return payload
+
+
+class ReportIntegrityTests(_ExportCase):
+    def test_a_matching_report_uses_its_as_at_title_not_report_date(self):
+        raised, _, data = self.run_export([], payload=reported_payload())
+        self.assertIsNone(raised)
+        self.assertEqual(data.count(b"2026-06-30"), 4)
+        manifest = json.loads((Path(self.work_dir) / "tb.csv.manifest.json").read_text())
+        self.assertEqual(manifest["report"]["as_at"], "2026-06-30")
+
+    def assert_refused_without_replacement(self, payload):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old = {"tb.csv": b"existing CSV\n", "tb.csv.manifest.json": b"existing manifest\n"}
+            for name, content in old.items():
+                (root / name).write_bytes(content)
+            raised, _, _ = self.run_export([], payload=payload, work_dir=directory)
+            self.assertIsNotNone(raised)
+            self.assertEqual({path.name: path.read_bytes() for path in root.iterdir()}, old)
+
+    def test_report_envelope_and_period_must_agree_with_request(self):
+        variants = []
+        for key in ("ReportID", "ReportType"):
+            payload = reported_payload()
+            del payload["Reports"][0][key]
+            variants.append((f"missing {key}", payload))
+            for value in (None, "BalanceSheet", ["TrialBalance"]):
+                payload = reported_payload()
+                payload["Reports"][0][key] = value
+                variants.append((f"{key}: {value}", payload))
+        for titles in (None, "As at 30 June 2026", ["As at 31 May 2026"],
+                       ["As at 31 June 2026"], ["As at 30 Jun 2026"],
+                       ["Trial Balance"], ["As at 30 June 2026", "As at 31 May 2026"],
+                       ["As at 30 June 2026", "As at 30 June 2026"], [0]):
+            payload = reported_payload()
+            payload["Reports"][0]["ReportTitles"] = titles
+            variants.append((f"titles: {titles}", payload))
+        payload = reported_payload()
+        payload["Reports"].append(copy.deepcopy(payload["Reports"][0]))
+        variants.append(("multiple reports", payload))
+        for name, payload in variants:
+            with self.subTest(name=name):
+                self.assert_refused_without_replacement(payload)
+
+    def test_missing_or_duplicate_account_ids_are_refused(self):
+        for value in (None, "", "00000000-0000-0000-0000-000000000001"):
+            payload = reported_payload()
+            cell = payload["Reports"][0]["Rows"][1]["Rows"][1]["Cells"][0]
+            if value is None:
+                cell.pop("Attributes")
+            else:
+                cell["Attributes"][0]["Value"] = value
+            with self.subTest(value=value):
+                self.assert_refused_without_replacement(payload)
+
+    def test_a_balanced_omission_cannot_contradict_section_totals(self):
+        payload = reported_payload()
+        section = payload["Reports"][0]["Rows"][1]
+        section["Rows"] = section["Rows"][:2] + section["Rows"][-1:]
+        self.assert_refused_without_replacement(payload)
+
+    def test_account_identity_comparison_ignores_case_and_outer_whitespace(self):
+        payload = reported_payload()
+        rows = payload["Reports"][0]["Rows"][1]["Rows"]
+        rows[0]["Cells"][0]["Attributes"][0]["Value"] = "abc-def"
+        rows[1]["Cells"][0]["Attributes"][0]["Value"] = " ABC-DEF "
+        self.assert_refused_without_replacement(payload)
+
+    def test_matching_section_totals_need_not_balance_individually(self):
+        payload = reported_payload()
+        report = payload["Reports"][0]
+        rows = report["Rows"][1]["Rows"]
+        report["Rows"] = [report["Rows"][0]]
+        for index, values in enumerate((("10", "0", "20", "0"),
+                                         ("0", "10", "0", "20"),
+                                         ("90", "0", "180", "0"),
+                                         ("0", "90", "0", "180"))):
+            summary = {"RowType": "SummaryRow", "Cells": [
+                {"Value": value} for value in ("Total", *values)]}
+            report["Rows"].append({"RowType": "Section", "Title": f"Section {index}",
+                                   "Rows": [rows[index], summary]})
+        raised, _, _ = self.run_export([], payload=payload)
+        self.assertIsNone(raised)
+
+    def test_a_grand_total_is_compared_with_all_sections(self):
+        payload = reported_payload()
+        report = payload["Reports"][0]
+        rows = report["Rows"][1]["Rows"]
+        report["Rows"] = [report["Rows"][0],
+                          {"RowType": "Section", "Title": "First", "Rows": rows[:2]},
+                          {"RowType": "Section", "Title": "Second", "Rows": rows[2:4]},
+                          {"RowType": "Section", "Rows": rows[4:]}]
+        raised, _, _ = self.run_export([], payload=payload)
+        self.assertIsNone(raised)
+        report["Rows"][2]["Rows"] = []
+        self.assert_refused_without_replacement(payload)
+
+    def test_summary_rows_require_the_same_column_shape_and_money_rules(self):
+        for cells in ("invalid", [{"Value": "Total"}],
+                      [{"Value": value} for value in ("Total", "NaN", "100", "200", "200")]):
+            payload = reported_payload()
+            payload["Reports"][0]["Rows"][1]["Rows"][-1]["Cells"] = cells
+            with self.subTest(cells=cells):
+                self.assert_refused_without_replacement(payload)
+
+    def test_a_top_level_summary_is_also_a_grand_total(self):
+        payload = reported_payload()
+        report = payload["Reports"][0]
+        report["Rows"].append(report["Rows"][1]["Rows"].pop())
+        raised, _, _ = self.run_export([], payload=payload)
+        self.assertIsNone(raised)
+        report["Rows"][1]["Rows"] = report["Rows"][1]["Rows"][:2]
+        self.assert_refused_without_replacement(payload)
 
 
 # Last, so unittest.main() sees every class above it: running this file directly

@@ -14,12 +14,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned when the release citation moved from v0.1.7 to v0.1.11, the last
-# published release. The scope, refresh and reviewer paragraphs and the OAuth
-# claims are unchanged. The previous pin followed the safe-output pass (`--quiet`,
-# the redacted unbalanced-report warning, the tenant-id refusal wording and the
-# checkout guard).
-README_SHA256 = "A4020CDD067AFDBAC70BECB21B221939CD0E1452483282BA9D269A6FDC0594B9"
+# Re-pinned after documenting report identity, period, account-ID and control-total
+# validation. OAuth scope, refresh and reviewer claims are unchanged.
+README_SHA256 = "175A3BA5AC5B4FA4F686C30B3CDF26721DEF1FAAE28DBECA8890BE9E5F4B67A6"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth
