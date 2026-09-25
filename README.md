@@ -45,7 +45,7 @@ just demo
 
 This calls the existing `close-control review` command with the supplied fictional trial balances, mapping, subledger and review note. It writes `../close-control-demo/`, outside the checkout, and replaces any files with the same output names. Keep this directory for the fictional demo. Open `../close-control-demo/close-summary.md` to read the findings.
 
-The CLI exits 2 because the sample needs review. `just` reports the recipe as unsuccessful and itself exits 1; the generated `REVIEW` pack is the expected result. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
+The CLI and `just demo` both exit 2 because the sample needs review. The recipe is reported as unsuccessful, but the generated `REVIEW` pack is the expected result. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
 
 The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) installs uv and runs `uv sync --locked`; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota.
 
