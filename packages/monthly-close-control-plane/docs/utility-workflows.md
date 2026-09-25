@@ -75,10 +75,27 @@ Each command has a 300-second timeout, adjustable with `--timeout` up to 3,600 s
 The grant repository's `Joined accounting examples` workflow runs the same setup
 command on Linux and Windows for its PRs, pushes to `main`, manual runs and a
 daily schedule. It uses the current grant checkout and the public companions'
-latest `main` revisions. The manifest records the actual revisions. Companion
-changes are caught by the next scheduled run, not by a check on their own PRs.
+latest `main` revisions. The manifest records the actual revisions. That scheduled
+run checks integration with the private grant route as companion branches advance.
 The daily schedule starts once the workflow is merged to the default branch.
 Fabricated results and failure diagnostics stay in private workflow artefacts
 for seven days; no extra cross-repository secret is required.
+
+The three public repositories also define `joined-fixtures.yml` for their own
+pull requests, pushes to `main` and manual runs, on Linux and Windows. Each workflow
+checks out its proposed change and pins the other two repositories to full commit
+SHAs. All three run `close-forecast`, `quarter` and `job-cash`.
+These routes need no private repository or secret.
+Update companion pins deliberately when adopting a compatible change.
+
+The public jobs create fresh output and environment directories outside all
+checkouts. Each operating system's artefact retains the fabricated results, failure
+diagnostics, escaped summary, success manifest and replay record for seven days.
+The existing fixture assertions check cash values, command coverage and retained
+REVIEW findings. The manifests identify the actual source and dependency versions.
+Adding these workflows does not configure branch protection or establish that a
+hosted run has passed. The Linux check keeps its `public-fixtures` name; Windows
+adds `public-fixtures (Windows)`. Require the added check separately if it should
+block merges.
 
 Review results retain their accounting limits; a successful integration does not approve a close, a grant acquittal or a funding decision. Component tests continue to run through their existing CI commands. Timings are measurements for comparison, not a claim of improved performance.
