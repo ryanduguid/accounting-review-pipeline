@@ -44,6 +44,13 @@ CANONICAL_COLUMNS = (
 MODEL_PROJECTION = (
     "finding_id", "evidence_ref", "account_ref", "section", "current_ytd_net", "prior_ytd_net", "delta", "percent_change", "review_reason"
 )
+_AMOUNT_SHAPE = re.compile(r"-?[0-9]+\.[0-9]{2,}")
+_MODEL_NUMBER_SHAPES = {
+    "current_ytd_net": _AMOUNT_SHAPE,
+    "prior_ytd_net": _AMOUNT_SHAPE,
+    "delta": _AMOUNT_SHAPE,
+    "percent_change": re.compile(r"[0-9]+\.[0-9]{4}"),
+}
 ALLOWED_DECISIONS = {"ACKNOWLEDGED", "NEEDS_EVIDENCE", "ESCALATED"}
 # The model result carries a debit-positive net, so a revenue or liability
 # balance is negative. Stating that on the artefact keeps a reader of the
@@ -401,6 +408,11 @@ def _load_request(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decimal_string(value: Decimal) -> str:
+    # At least 2 decimal places, padded and never rounded, so every amount has
+    # the shape _assert_model_is_redacted holds the numeric fields to.
+    exponent = value.as_tuple().exponent
+    if isinstance(exponent, int) and exponent > -2:
+        value = value.quantize(Decimal("0.01"))
     return format(value, "f")
 
 
@@ -633,17 +645,22 @@ def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...
     # forbidden account names meant an account called "Revenue" inside section
     # "Revenue", an ordinary trial balance, raised a disclosure error naming a
     # disclosure that had not happened, and the pack could not be evaluated at all.
-    # The amount strings stay in the sweep: test_exact_account_id_leaf_still_trips
-    # pins that an account id appearing as a delta fails closed.
+    # The numeric fields are computed, so comparing them with source text only
+    # finds coincidences: a whole-dollar delta of "200" equalled account code
+    # "200" and refused a correct pack. Any formatting that dodged the collision
+    # would reveal which strings are source values. Each is held to its own
+    # number shape instead, so an account id copied into a delta still fails
+    # closed (test_exact_account_id_leaf_still_trips pins that).
     derived = {"section"}
     scanned = list(_leaf_strings({k: v for k, v in model.items() if k != "findings"}))
     for finding in model.get("findings", []):
-        scanned.extend(
-            leaf
-            for key, value in finding.items()
-            if key not in derived
-            for leaf in _leaf_strings(value)
-        )
+        for key, value in finding.items():
+            shape = _MODEL_NUMBER_SHAPES.get(key)
+            if shape is None:
+                if key not in derived:
+                    scanned.extend(_leaf_strings(value))
+            elif value is not None and not (isinstance(value, str) and shape.fullmatch(value)):
+                raise GatewayError("Internal disclosure assertion failed: model result contains raw source display data.")
     if any(leaf in forbidden for leaf in scanned):
         raise GatewayError("Internal disclosure assertion failed: model result contains raw source display data.")
     serialised = json.dumps(model, sort_keys=True)
