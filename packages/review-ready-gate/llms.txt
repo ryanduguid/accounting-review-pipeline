@@ -13,7 +13,8 @@
 - `reviewready.engine`: Builds `READY`, `NOT_READY`, or `BLOCKED` packs without mutating an accounting system.
 - `reviewready.loader`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
 - `reviewready.report`: Writes JSON, Markdown, and CSV readiness-pack files.
-- `reviewready.cli`: `review-ready gate` and `review-ready view`.
+- `reviewready.cli`: `review-ready gate`, `review-ready view` and `review-ready compare`.
+- `reviewready.comparison`: Verifies 2 runs of one pack and reports changed sources and findings as JSON; it writes nothing and changes no status.
 - `reviewready.viewer`: Fail-closed read of an existing pack. Duplicate JSON keys, disagreeing artefacts, or a missing review-boundary statement are exit `1`, not a displayed sheet.
 
 ## Architectural boundaries
