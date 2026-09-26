@@ -53,6 +53,8 @@ The [full command and all 8 exceptions](packages/monthly-close-control-plane/REA
 
 Every invented entity the components share, and the proposal to consolidate them into one fabricated firm, is recorded in [docs/fabricated-firm.md](docs/fabricated-firm.md).
 
+A firm keeping an AI register can copy the entries for evatt, the Xero Ledger Review Gate and the Workpaper Review Gate from [docs/ai-register-entries.md](docs/ai-register-entries.md).
+
 <details>
 <summary>Setup, component identities, file contracts and reference</summary>
 
