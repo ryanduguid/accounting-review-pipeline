@@ -401,14 +401,25 @@ def _load_request(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decimal_string(value: Decimal) -> str:
-    # At least 2 decimal places, padded and never rounded. A source CSV carrying
-    # whole-dollar amounts emitted a delta of "200", which equals account code
-    # "200" and tripped the disclosure check on a correct pack; "200.00" cannot
-    # equal a code, and the check itself stays exact.
+    # At least 2 decimal places, padded and never rounded.
     exponent = value.as_tuple().exponent
     if isinstance(exponent, int) and exponent > -2:
         value = value.quantize(Decimal("0.01"))
     return format(value, "f")
+
+
+def _model_number(text: str, forbidden: set[str]) -> str:
+    """Append trailing zeros while a model number equals a forbidden source value.
+
+    A whole-dollar CSV emitted a delta of "200", equal to account code "200",
+    and the disclosure check refused a correct pack. Padding alone moves the
+    collision to a code such as "200.00". Every string this produces has a
+    decimal point, so a trailing zero keeps the exact value, and the check
+    itself stays exact.
+    """
+    while text in forbidden:
+        text += "0"
+    return text
 
 
 def _percent_string(ratio: Decimal) -> str:
@@ -472,6 +483,7 @@ def _variance_findings(
             f"Accounts changed section between periods ({listed}); review the source mapping before comparison."
         )
     report_date = current_rows[0].report_date
+    forbidden = _forbidden_leaves(current_rows + prior_rows)
     findings: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for account_id in sorted(set(current_by_id) | set(prior_by_id)):
         current_row = current_by_id.get(account_id)
@@ -503,10 +515,10 @@ def _variance_findings(
             "evidence_ref": evidence_ref,
             "account_ref": account_ref,
             "section": row.section,
-            "current_ytd_net": _decimal_string(current_net),
-            "prior_ytd_net": _decimal_string(prior_net),
-            "delta": _decimal_string(delta),
-            "percent_change": None if percent is None else _percent_string(percent),
+            "current_ytd_net": _model_number(_decimal_string(current_net), forbidden),
+            "prior_ytd_net": _model_number(_decimal_string(prior_net), forbidden),
+            "delta": _model_number(_decimal_string(delta), forbidden),
+            "percent_change": None if percent is None else _model_number(_percent_string(percent), forbidden),
             "review_reason": reason,
         }
         model_item = {key: projected_values[key] for key in MODEL_PROJECTION}
@@ -621,20 +633,24 @@ def _leaf_strings(value: Any) -> Any:
             yield from _leaf_strings(child)
 
 
-def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...]) -> None:
-    # Compare each emitted leaf string for exact equality with a forbidden value;
-    # substring matching over the serialised model false-positives when an
-    # ordinary numeric AccountID happens to occur inside an amount or digest.
+def _forbidden_leaves(rows: tuple[BalanceRow, ...]) -> set[str]:
     # Tenant, account name and account code are the 3 source display values
     # the README promises the model result never carries, so all 3 are
     # forbidden as leaves, not only as key names. AccountID joins them because
     # it is the join key the evidence file is indexed by.
-    forbidden = (
+    return (
         {row.tenant for row in rows}
         | {row.account_name for row in rows}
         | {row.account_code for row in rows if row.account_code}
         | {row.account_id for row in rows}
     )
+
+
+def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...]) -> None:
+    # Compare each emitted leaf string for exact equality with a forbidden value;
+    # substring matching over the serialised model false-positives when an
+    # ordinary numeric AccountID happens to occur inside an amount or digest.
+    forbidden = _forbidden_leaves(rows)
     # A finding's `section` is source text the model is meant to carry: it is in
     # MODEL_PROJECTION and no README control names it. Comparing it against the
     # forbidden account names meant an account called "Revenue" inside section

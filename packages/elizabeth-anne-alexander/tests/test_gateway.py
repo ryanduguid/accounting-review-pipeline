@@ -573,10 +573,15 @@ def test_exact_account_id_leaf_still_trips_the_disclosure_check() -> None:
         _assert_model_is_redacted(model, rows)
 
 
-def test_whole_dollar_amounts_do_not_collide_with_an_account_code() -> None:
-    """A whole-dollar CSV once emitted delta "200", equal to account code "200"."""
-    prior = replace(_row("acct-1", ytd_credit="1200"), account_code="200", ytd_debit=Decimal("0"))
-    current = replace(_row("acct-1", ytd_credit="1000"), account_code="200", ytd_debit=Decimal("0"))
+@pytest.mark.parametrize(("code", "delta"), [("200", "200.00"), ("200.00", "200.000"), ("200.000", "200.00")])
+def test_whole_dollar_amounts_do_not_collide_with_an_account_code(code: str, delta: str) -> None:
+    """A whole-dollar CSV once emitted delta "200", equal to account code "200".
+
+    Padding alone moved the collision to a code such as "200.00", so a model
+    number that equals a source value gains a trailing zero instead.
+    """
+    prior = replace(_row("acct-1", ytd_credit="1200"), account_code=code, ytd_debit=Decimal("0"))
+    current = replace(_row("acct-1", ytd_credit="1000"), account_code=code, ytd_debit=Decimal("0"))
 
     findings = _variance_findings(
         (current,), (prior,), entity_ref="entity:unit", section="Revenue",
@@ -584,7 +589,7 @@ def test_whole_dollar_amounts_do_not_collide_with_an_account_code() -> None:
     )
     model = {"findings": [item[0] for item in findings]}
 
-    assert model["findings"][0]["delta"] == "200.00"
+    assert model["findings"][0]["delta"] == delta
     assert model["findings"][0]["prior_ytd_net"] == "-1200.00"
     _assert_model_is_redacted(model, (current, prior))
 

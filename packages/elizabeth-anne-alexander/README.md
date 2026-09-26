@@ -129,7 +129,7 @@ codes are a released contract, so they are documented here rather than changed;
   locally, with no runtime network dependency.
 - CSV schema, duplicate account IDs, reporting dates, balance pairs, source hashes, entity, basis, currency, tracking filters, and draft setting are all checked before review.
 - Monetary values use `Decimal`, never binary floating point. Evaluation runs under its own fixed 28-digit context, and a CSV whose totals would round in it is refused instead of compared inexactly.
-- Amount strings in the model result and reviewer evidence carry at least 2 decimal places, padded and never rounded, so a whole-dollar source emits `"200.00"` rather than `"200"`.
+- Amount strings in the model result and reviewer evidence carry at least 2 decimal places, padded and never rounded, so a whole-dollar source emits `"200.00"` rather than `"200"`. A model number that would equal a tenant, account name, account code or AccountID gains trailing zeros until it does not, so account code `"200.00"` turns a delta of 200 into `"200.000"`.
 - `percent_change` in the model result is expressed in per cent and quantized to 4 decimal places (`"18.3333"` means 18.3333%). It is `null` when there is no prior balance to compare against.
 - The model result states its own `currency` and `sign_convention`. Amounts are debit-positive (`ytd_net = YTDDebit - YTDCredit`), so a revenue, liability, or equity balance is negative and a revenue increase shows as a negative `delta`.
 - Current and prior reports must sit in the same Australian financial year, or be the same day and month in different years. YTD columns reset on 1 July, so a comparison across the reset would report a whole prior-year balance as a movement.

@@ -2,7 +2,9 @@
 
 - Amount strings now carry at least 2 decimal places. A whole-dollar source emitted a
   `delta` of `"200"`, which equals account code `"200"` and raised a disclosure error on a
-  correct pack. Values are padded, never rounded, and `finding_id` is unchanged.
+  correct pack. Values are padded, never rounded, and `finding_id` is unchanged. A model number that
+  would still equal a source value, such as account code `"200.00"`, gains trailing zeros until it
+  does not.
 
 - Document the actual exit codes in the README: `0` for `DECISION_RECORDED` and
   `PARTIAL_DECISION_RECORDED`, `2` for every `GatewayError` including malformed input.
