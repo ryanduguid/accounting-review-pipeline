@@ -71,8 +71,8 @@ behaviour, not as a benchmark.
 
 ## Product and fixture version
 
-Product release: unreleased. The results come from the source after release
-0.1.7 and first ship in the next release; fixture version `1`.
+Product release `0.1.8`. The results come from the source after release 0.1.7
+and first ship in 0.1.8; fixture version `1`.
 
 Published 0.1.7 gives different results, checked on 24 September 2026 UTC (25 September AEST) with
 `uvx --from review-ready-gate==0.1.7`. It reports the empty bank
