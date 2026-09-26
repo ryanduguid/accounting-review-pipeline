@@ -24,9 +24,9 @@ SAMPLES_DIR = BASE_DIR / "samples"
 #
 # NT Picnic Day, first Monday in August, whole of the Territory:
 #   https://nt.gov.au/nt-public-holidays
-# WA King's Birthday, proclaimed annually rather than by a fixed rule, whole of the state
-# apart from 2 local government districts that substitute another day:
-#   https://www.wa.gov.au/service/employment/workplace-arrangements/public-holidays-western-australia
+# Victoria's Friday before the AFL Grand Final, whole of the state with no local
+# substitution (Friday 25 September 2026):
+#   https://business.vic.gov.au/business-information/public-holidays/victorian-public-holidays-2026
 # Queensland King's Birthday, first Monday in October under the Holidays Act 1983, which
 # is also NSW, SA and ACT Labour Day:
 #   https://www.qld.gov.au/recreation/travel/holidays/public
@@ -34,15 +34,18 @@ SAMPLES_DIR = BASE_DIR / "samples"
 #   https://www.safework.sa.gov.au/resources/public-holidays
 #   https://www.act.gov.au/__data/assets/pdf_file/0004/2155495/ACT-Public-Holidays-2026.pdf
 #
-# The WA and Queensland King's Birthday dates are listed for 2026 and 2027 only, because
-# those are the years the current official pages publish and WA's date is proclaimed each
-# year rather than following a rule this file could extend. 2024 and 2025 keep the earlier
-# reduced calendar.
+# The Queensland King's Birthday is listed for 2026 and 2027 only, the years the current
+# official pages publish. The 2027 Grand Final Friday is not listed because its date depends
+# on the AFL fixture. 2024 and 2025 keep the earlier reduced calendar.
 #
-# Still not listed, so a sample due date can fall earlier than the statutory rule requires,
-# never later: Victoria's Friday before the AFL Grand Final (Friday 25 September 2026) and
-# Melbourne Cup Day (Tuesday 3 November 2026), and the part-day evening holidays South
-# Australia and Queensland observe on 24 and 31 December.
+# Deliberately not listed: holidays that local areas may replace with another day, which
+# the ATO treats as applying to only part of a state and so as business days
+# (https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-on-payday/payment-deadlines-for-payday-super).
+# These include the WA King's Birthday, which WA's own page says is not a public holiday in
+# the regions that substitute another day, and Melbourne Cup Day, which a non-metropolitan
+# council may replace. Also not listed, so a sample due date can fall earlier than the rule
+# requires, never later: the part-day evening holidays South Australia and Queensland
+# observe on 24 and 31 December.
 NATIONAL_HOLIDAYS = {
     # 2024
     datetime.date(2024, 1, 1),   # New Year's Day
@@ -72,7 +75,7 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2026, 4, 25),  # Anzac Day
     datetime.date(2026, 6, 8),   # King's Birthday
     datetime.date(2026, 8, 3),   # Picnic Day (NT)
-    datetime.date(2026, 9, 28),  # King's Birthday (WA)
+    datetime.date(2026, 9, 25),  # Friday before the AFL Grand Final (Vic)
     datetime.date(2026, 10, 5),  # King's Birthday (Qld); Labour Day (NSW, SA, ACT)
     datetime.date(2026, 12, 25), # Christmas Day
     datetime.date(2026, 12, 28), # Boxing Day (Observed)
@@ -85,7 +88,6 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2027, 4, 26),  # Anzac Day (Observed)
     datetime.date(2027, 6, 14),  # King's Birthday
     datetime.date(2027, 8, 2),   # Picnic Day (NT)
-    datetime.date(2027, 9, 27),  # King's Birthday (WA)
     datetime.date(2027, 10, 4),  # King's Birthday (Qld); Labour Day (NSW, SA, ACT)
     datetime.date(2027, 12, 25),
     datetime.date(2027, 12, 27), # Christmas Day (Observed)
