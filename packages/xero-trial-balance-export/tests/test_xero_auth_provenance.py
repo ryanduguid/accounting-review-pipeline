@@ -14,9 +14,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned after documenting report identity, period, account-ID and control-total
-# validation. OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "175A3BA5AC5B4FA4F686C30B3CDF26721DEF1FAAE28DBECA8890BE9E5F4B67A6"
+# Re-pinned after documenting the existing duplicate-column refusal.
+# OAuth scope, refresh and reviewer claims are unchanged.
+README_SHA256 = "74193AFDF40EC2F7049744DF9209563D4214E6628F182E49293C1699A7461A5F"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth

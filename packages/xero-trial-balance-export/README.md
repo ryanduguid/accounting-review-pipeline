@@ -65,7 +65,7 @@ the movement for the month ending on `--date`, which covers the common reason pe
 reach for a range. (Endpoint parameters checked against Xero's published OpenAPI
 specification on 22 August 2026.)
 
-Every export validates the response before replacing an existing CSV or manifest. It requires exactly one report identified as `TrialBalance`, the expected columns, and unique, non-empty account IDs. Its single `As at D Month YYYY` title must match the requested date, using a full English month name. Xero's separate `ReportDate` is not used as the reporting period; the [documented example](https://developer.xero.com/documentation/api/accounting/reports#trial-balance) gives those dates different values.
+Every export validates the response before replacing an existing CSV or manifest. It requires exactly one report identified as `TrialBalance`, the expected columns, and unique, non-empty account IDs. Repeated column titles are rejected. Its single `As at D Month YYYY` title must match the requested date, using a full English month name. Xero's separate `ReportDate` is not used as the reporting period; the [documented example](https://developer.xero.com/documentation/api/accounting/reports#trial-balance) gives those dates different values.
 
 Both pairs must balance (movement **and** YTD). Where Xero supplies section or grand totals, they must equal the amounts recomputed from the account rows. A balanced omission that contradicts a supplied total is refused. These checks cannot prove completeness if rows and their control totals are both absent or consistently altered. The balance warning names the pair that failed, the account count and the difference. A refusal that cannot resolve one organisation names the connected tenant IDs and their count.
 
