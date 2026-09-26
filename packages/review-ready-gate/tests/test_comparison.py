@@ -124,6 +124,19 @@ def test_a_later_pack_that_states_no_coverage_is_not_comparable(tmp_path: Path) 
     assert {row["change"] for row in result["findings"]} == {"NOT_COMPARABLE"}
 
 
+def test_reordered_coverage_is_not_a_scope_change(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    skipped = (
+        ControlNotRun("bank_rec", "bank_rec.csv", "no file was supplied"),
+        ControlNotRun("prior_findings", "prior_findings.csv", "no file was supplied"),
+    )
+    write_review_pack(replace(_synthetic(()), controls_not_run=skipped), before)
+    write_review_pack(replace(_synthetic(()), controls_not_run=skipped[::-1]), after)
+
+    assert compare_packs(before, after)["scope_changes"] == []
+
+
 def test_an_equivalent_tolerance_is_not_a_scope_change(tmp_path: Path) -> None:
     before = _run("bas-not-ready", tmp_path / "before")
     after = _run("bas-ready", tmp_path / "after", tieout_tolerance=Decimal("0.010"))

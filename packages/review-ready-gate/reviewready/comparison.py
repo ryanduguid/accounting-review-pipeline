@@ -52,6 +52,14 @@ def _thresholds_differ(previous: dict[str, Any], current: dict[str, Any]) -> boo
     return values(previous) != values(current)
 
 
+def _coverage(document: dict[str, Any]) -> list[tuple[tuple[str, Any], ...]] | None:
+    """Controls not run, in no particular order; ``None`` when the pack states none."""
+    controls = document.get("controls_not_run")
+    if controls is None:
+        return None
+    return sorted(tuple(sorted(control.items())) for control in controls)
+
+
 def _scope_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     """Name every setting that changes what a run could find."""
     changes = []
@@ -61,9 +69,12 @@ def _scope_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[di
             "previous": previous["thresholds"],
             "current": current["thresholds"],
         })
-    before, after = previous.get("controls_not_run"), current.get("controls_not_run")
-    if before != after:
-        changes.append({"member": "controls_not_run", "previous": before, "current": after})
+    if _coverage(previous) != _coverage(current):
+        changes.append({
+            "member": "controls_not_run",
+            "previous": previous.get("controls_not_run"),
+            "current": current.get("controls_not_run"),
+        })
     return changes
 
 
