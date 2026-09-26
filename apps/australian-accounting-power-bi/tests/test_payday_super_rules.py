@@ -33,10 +33,10 @@ from generate_fixtures import (  # noqa: E402
 #
 # Picnic Day, Monday 3 August 2026, appears on https://nt.gov.au/nt-public-holidays without
 # the footnote that marks the regional show days, so it applies across the whole Territory.
-# WA's King's Birthday, Monday 28 September 2026, is on
-# https://www.wa.gov.au/service/employment/workplace-arrangements/public-holidays-western-australia
-# in the statewide table; the same page lists the 2 local government districts that
-# substitute another day. Queensland's King's Birthday, Monday 5 October 2026, is on
+# Victoria's Friday before the AFL Grand Final, Friday 25 September 2026, is on
+# https://business.vic.gov.au/business-information/public-holidays/victorian-public-holidays-2026
+# without the footnote that lets a non-metropolitan council substitute Melbourne Cup Day.
+# Queensland's King's Birthday, Monday 5 October 2026, is on
 # https://www.qld.gov.au/recreation/travel/holidays/public, which states the first-Monday-in-
 # October rule; the same Monday is Labour Day in NSW
 # (https://www.nsw.gov.au/about-nsw/public-holidays), South Australia
@@ -44,16 +44,24 @@ from generate_fixtures import (  # noqa: E402
 # (https://www.act.gov.au/__data/assets/pdf_file/0004/2155495/ACT-Public-Holidays-2026.pdf).
 # All of them stop the clock under the methodology's whole-of-any-state-or-territory rule.
 #
-# Deliberately absent, and disclosed in docs/compliance-methodology.md: Victoria's Friday
-# before the AFL Grand Final (25 September 2026) and Melbourne Cup Day (3 November 2026),
-# and the part-day evening holidays South Australia and Queensland observe on 24 and 31
-# December. Each omission can only make a sample due date earlier, never later.
+# Deliberately absent, and disclosed in docs/compliance-methodology.md: the part-day evening
+# holidays South Australia and Queensland observe on 24 and 31 December. That omission can
+# only make a sample due date earlier, never later.
 INDEPENDENT_2026_HOLIDAYS = {
     datetime.date(2026, 8, 3): "Picnic Day (NT)",
-    datetime.date(2026, 9, 28): "King's Birthday (WA)",
+    datetime.date(2026, 9, 25): "Friday before the AFL Grand Final (Vic)",
     datetime.date(2026, 10, 5): "King's Birthday (Qld); Labour Day (NSW, SA, ACT)",
     datetime.date(2026, 12, 25): "Christmas Day",
     datetime.date(2026, 12, 28): "Boxing Day (Monday observance)",
+}
+
+# Holidays local areas may replace with another day. The ATO's Payment deadlines for Payday
+# Super page says a public holiday for only part of a state or territory is still a business
+# day, and WA's page says the WA King's Birthday is not a public holiday in the regions that
+# substitute; Melbourne Cup Day applies unless a non-metropolitan council substitutes.
+PART_STATE_2026_HOLIDAYS = {
+    datetime.date(2026, 9, 28): "King's Birthday (WA)",
+    datetime.date(2026, 11, 3): "Melbourne Cup Day (Vic)",
 }
 
 # Every due date for a payday on or before 16 December 2026 lands inside that same window.
@@ -129,6 +137,16 @@ class TestPaydaySuperRules(unittest.TestCase):
                 "stop the sample business-day clock",
             )
 
+    def test_holidays_local_areas_can_replace_do_not_stop_the_clock(self) -> None:
+        """A holiday some regions do not observe is a business day for Payday Super."""
+        for holiday, name in sorted(PART_STATE_2026_HOLIDAYS.items()):
+            self.assertNotIn(
+                holiday,
+                NATIONAL_HOLIDAYS,
+                f"{name} on {holiday} does not apply across the whole state, so it is a "
+                "business day",
+            )
+
     def test_committed_due_dates_recompute_from_the_independent_calendar(self) -> None:
         """Recompute the shipped due dates without touching the generator's holiday list."""
 
@@ -153,14 +171,16 @@ class TestPaydaySuperRules(unittest.TestCase):
                 f"Event {row['EventID']} due date disagrees with the independent calendar",
             )
 
-        # The 3 paydays whose 7-business-day windows cross one of these holidays, and 2
-        # controls whose windows cross none.
+        # The 4 paydays whose 7-business-day windows cross one of these holidays, and a
+        # control whose window crosses none. The 16 September payday falls due on Monday
+        # 28 September, which is a business day because only WA observes it.
         self.assertEqual(due_date(datetime.date(2026, 7, 29)), datetime.date(2026, 8, 10))
+        self.assertEqual(due_date(datetime.date(2026, 9, 16)), datetime.date(2026, 9, 28))
         self.assertEqual(due_date(datetime.date(2026, 9, 23)), datetime.date(2026, 10, 6))
         self.assertEqual(due_date(datetime.date(2026, 9, 30)), datetime.date(2026, 10, 12))
         self.assertEqual(due_date(datetime.date(2026, 8, 26)), datetime.date(2026, 9, 4))
-        self.assertEqual(due_date(datetime.date(2026, 9, 16)), datetime.date(2026, 9, 25))
         self.assertIn(datetime.date(2026, 7, 29), checked)
+        self.assertIn(datetime.date(2026, 9, 16), checked)
         self.assertIn(datetime.date(2026, 8, 26), checked)
 
     def test_gic_divisor_is_days_in_the_calendar_year(self) -> None:
