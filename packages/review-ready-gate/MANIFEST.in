@@ -15,6 +15,7 @@ include uv.lock
 # pytest stops at collection and no test runs at all.
 recursive-include tests *.py
 recursive-include examples *.csv *.json *.yml *.md
+include examples/document-intake/invoice.txt
 recursive-include schemas *.csv *.json
 recursive-include evaluation *.md *.json
 # Fixture CSVs are named one by one: a recursive rule would also pack any

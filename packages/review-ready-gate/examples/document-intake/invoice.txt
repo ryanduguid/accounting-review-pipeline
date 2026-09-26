@@ -1,0 +1,7 @@
+FABRICATED INVOICE. No goods, services or payment are involved.
+Supplier: Synthetic Stationery
+Invoice number: SYN-0001
+Invoice date: 2026-03-20
+Currency: AUD
+Total: 110.00
+GST: 10.00

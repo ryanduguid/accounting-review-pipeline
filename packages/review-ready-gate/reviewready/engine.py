@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, Decimal, Inexact, localcontext
 from pathlib import Path
 
+from .documents import document_controls, load_document
 from .errors import GateInputError, NumericGateError
 from .loader import (
     SourceSnapshot,
@@ -142,6 +143,7 @@ def review_pack(
     pack_dir: Path,
     acknowledgement_path: Path | None = None,
     tieout_tolerance: Decimal = Decimal("0.01"),
+    document_paths: tuple[Path, ...] = (),
 ) -> ReadinessPack:
     # Keep the standard precision and rounding even when a host changes its decimal context.
     with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
@@ -150,6 +152,7 @@ def review_pack(
             pack_dir=pack_dir,
             acknowledgement_path=acknowledgement_path,
             tieout_tolerance=tieout_tolerance,
+            document_paths=document_paths,
         )
 
 
@@ -159,6 +162,7 @@ def _review_pack(
     pack_dir: Path,
     acknowledgement_path: Path | None,
     tieout_tolerance: Decimal,
+    document_paths: tuple[Path, ...],
 ) -> ReadinessPack:
     if not tieout_tolerance.is_finite() or tieout_tolerance < 0:
         raise GateInputError("tie-out tolerance must be a finite non-negative decimal.")
@@ -227,6 +231,15 @@ def _review_pack(
     _apply_bas_tieout(loaded, findings, tieout_tolerance)
     _apply_bank_rec(loaded, findings, tieout_tolerance)
     _apply_year_end_tieout(loaded, findings)
+
+    if document_paths:
+        trial_balance = loaded.get("trial_balance")
+        entity = trial_balance[0].tenant if isinstance(trial_balance, list) and trial_balance else ""
+        document_findings, document_evidence = document_controls(
+            [load_document(path) for path in document_paths], entity=entity, period_end=period_end,
+        )
+        findings.extend(document_findings)
+        evidence.extend(document_evidence)
 
     prior = loaded.get("prior_findings")
     if isinstance(prior, list):
