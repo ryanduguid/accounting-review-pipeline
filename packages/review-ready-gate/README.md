@@ -233,6 +233,16 @@ review-ready view --pack-dir outputs/bas-ready
 
 Before displaying anything it fails closed on: a missing artefact; JSON that is not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated top-level members; a threshold or nested source digest that no longer parses as the writer rendered it; a `readiness-summary.md` whose overall status, source-evidence digests or review-boundary statement disagree with the JSON (including a second, conflicting status line); and a `findings.csv` whose header, row count or any cell disagrees with the JSON findings, honouring the writer's formula-injection guard exactly. On success the sheet ends with the SHA-256 of each artefact's exact bytes, so the displayed evidence can itself be archived. Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
+## Comparing two runs of a pack
+
+A pack sent back to the preparer is gated again. `review-ready compare` verifies both runs with the same checks as `view`, then prints JSON showing what moved between them: the overall status, each source file's digest, and each group of findings by code and slot. It writes nothing.
+
+```bash
+review-ready compare --previous-pack-dir outputs/bas-first-run --current-pack-dir outputs/bas-second-run
+```
+
+Each finding group is `NEW`, `RECURRING`, `CHANGED`, `NOT_RAISED` or `NOT_COMPARABLE`. `NOT_RAISED` means absent from the later run, not resolved. A changed tolerance or control coverage is listed under `scope_changes`, and a finding absent after a tolerance change, from a slot the later run did not check, or from a later pack that states no control coverage, is `NOT_COMPARABLE`. Tolerances compare by value, so `0.01` and `0.010` are the same setting. Exit `0` means both packs verified and the comparison printed; it is not a readiness verdict. A pack that fails verification, or 2 packs for different engagement types or periods, exit `1`. Packs carry no wall-clock time, so the reviewer records who made each change and why.
+
 ## Design
 
 - Exact `Decimal` arithmetic for money, never binary floating point. The gate fixes its own 28-digit context, ignoring the caller's, and refuses a pack whose trial-balance totals would round instead of comparing them inexactly.
