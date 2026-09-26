@@ -164,6 +164,46 @@ def test_wrong_review_period_blocks_even_with_a_reviewed_document(tmp_path: Path
     assert pack.findings[0].code == "DOCUMENT_CONTEXT_MISMATCH"
 
 
+@pytest.mark.parametrize("filename", ["trial_balance.csv", "self_review.json"])
+@pytest.mark.parametrize("empty", [False, True])
+@pytest.mark.parametrize("has_review", [False, True])
+def test_unavailable_pack_context_remains_not_ready(
+    tmp_path: Path, filename: str, empty: bool, has_review: bool,
+) -> None:
+    workpapers = copy_example_pack("bas-ready", tmp_path / "pack")
+    if empty:
+        (workpapers / filename).write_bytes(b"")
+    else:
+        (workpapers / filename).unlink()
+    bundle = bundle_at(tmp_path / "document")
+    if has_review:
+        reviewed(bundle)
+    assert review_pack(profile="bas", pack_dir=workpapers).status == "NOT_READY"
+    pack = review_pack(profile="bas", pack_dir=workpapers, document_paths=(bundle,))
+    assert pack.status == "NOT_READY"
+    assert not any(item.code == "DOCUMENT_CONTEXT_MISMATCH" for item in pack.findings)
+    assert any(item.code == "DOCUMENT_REVIEW_REQUIRED" for item in pack.findings) != has_review
+    assert any(item.slot.startswith("document_") for item in pack.source_evidence)
+
+
+@pytest.mark.parametrize("filename,entity,period_end", [
+    ("trial_balance.csv", ENTITY, "2026-02-28"),
+    ("self_review.json", "Another fabricated entity", "2026-03-31"),
+])
+def test_known_document_context_mismatch_still_blocks_with_another_input_missing(
+    tmp_path: Path, filename: str, entity: str, period_end: str,
+) -> None:
+    workpapers = copy_example_pack("bas-ready", tmp_path / "pack")
+    (workpapers / filename).unlink()
+    source = FIXTURE / "invoice.txt"
+    bundle = create_intake(source_path=source, text_path=source, output_dir=tmp_path / "bundle",
+                           entity=entity, period_end=period_end, text_origin="manual")
+    reviewed(bundle)
+    pack = review_pack(profile="bas", pack_dir=workpapers, document_paths=(bundle,))
+    assert pack.status == "BLOCKED"
+    assert any(item.code == "DOCUMENT_CONTEXT_MISMATCH" for item in pack.findings)
+
+
 def test_duplicate_bytes_are_flagged_without_collapsing_equal_amounts(tmp_path: Path) -> None:
     first = bundle_at(tmp_path / "first")
     second = bundle_at(tmp_path / "second", text=TEXT.replace("SYN-0001", "SYN-0002"))

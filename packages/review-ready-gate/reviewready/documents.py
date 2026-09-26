@@ -274,15 +274,17 @@ def _review_issues(review: dict[str, Any], digest: str, manifest: dict[str, Any]
     return issues
 
 
-def document_controls(bundles: list[DocumentBundle], *, entity: str,
-                      period_end: str) -> tuple[list[Finding], list[SourceEvidence]]:
+def document_controls(bundles: list[DocumentBundle], *, entity: str | None,
+                      period_end: str | None) -> tuple[list[Finding], list[SourceEvidence]]:
     findings: list[Finding] = []
     evidence: list[SourceEvidence] = []
     seen: set[str] = set()
     for index, bundle in enumerate(bundles, start=1):
         slot = f"document_{index:03d}"
         evidence.extend(bundle.evidence(index))
-        if bundle.manifest["entity_ref"] != entity or bundle.manifest["period_end"] != period_end:
+        if (entity is not None and bundle.manifest["entity_ref"] != entity) or (
+            period_end is not None and bundle.manifest["period_end"] != period_end
+        ):
             findings.append(Finding("DOCUMENT_CONTEXT_MISMATCH", "BLOCKED", slot,
                                     "Document entity or review period differs from the pack.",
                                     "Check the original and attach evidence for this entity and period."))

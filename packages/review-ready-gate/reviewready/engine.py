@@ -234,9 +234,9 @@ def _review_pack(
 
     if document_paths:
         trial_balance = loaded.get("trial_balance")
-        entity = trial_balance[0].tenant if isinstance(trial_balance, list) and trial_balance else ""
+        entity = trial_balance[0].tenant if isinstance(trial_balance, list) and trial_balance else None
         document_findings, document_evidence = document_controls(
-            [load_document(path) for path in document_paths], entity=entity, period_end=period_end,
+            [load_document(path) for path in document_paths], entity=entity, period_end=period_end or None,
         )
         findings.extend(document_findings)
         evidence.extend(document_evidence)
