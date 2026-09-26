@@ -1,3 +1,27 @@
+# v0.1.6
+
+- Add an opt-in `--balance-policy` file to `close-control review`. It flags a
+  balance on the wrong side, a balance left in an account expected to be nil
+  (such as suspense or clearing) and an account expected to move every month
+  that did not. The firm declares each account's expected side and movement;
+  nothing is inferred from `Section` or account names. Findings are `REVIEW`
+  exceptions under the `balance_policy` control, and the policy file's digest
+  is recorded.
+- Add `close-control drivers`, which lists the largest transactions behind each
+  `period_variance` exception from a verified pack and a transactions CSV,
+  with the unexplained remainder. It uses no model and writes to a separate
+  output directory; the pack and the `review` command are unchanged.
+- Hold back a computed figure that names no rate table instead of publishing it
+  as relied on, as a wrong-period figure already was, and refuse every Cc, Cf
+  and Cs character in calculation evidence, the set the loader refuses.
+- Keep clearing-reconciliation decision groups and notes intact when a
+  generated CSV is reused.
+- Require extended-format ISO dates (`YYYY-MM-DD`) in loaded files, so a pack
+  gates identically on every supported Python version.
+- Read the utility workflow handoff files as UTF-8.
+- Document a reviewer quick start that runs the published release without a
+  clone.
+
 # v0.1.5
 
 - Compare the acknowledgement effect against the writer's fixed sentence, so a

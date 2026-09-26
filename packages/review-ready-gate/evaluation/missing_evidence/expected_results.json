@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "product_release": "unreleased",
+  "product_release": "0.1.8",
   "published_release_differs": {
     "release": "0.1.7",
     "empty_bank_reconciliation": "READY with no finding",

@@ -1,3 +1,15 @@
+# v0.1.8
+
+- Add local synthetic document intake with a separate human transcription
+  review and optional evidence controls. The original, extraction and review
+  bytes are bound to the saved pack and the verified view. A missing pack input
+  still reports `NOT_READY`; a genuine context mismatch blocks. Existing
+  invocations and schemas are unchanged, and there is no new runtime
+  dependency.
+- Accept only the extended ISO date the loader requires in the readiness pack.
+- Add a missing-evidence evaluation: fabricated month-end packs that each
+  remove or empty one artefact, plus an edited-artefact case.
+
 # v0.1.7
 
 - Bind the trial balance to the declared period and check the acknowledgement effect the pack records, not the one the preparer asserts.
