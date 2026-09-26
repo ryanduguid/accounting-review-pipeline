@@ -44,6 +44,13 @@ CANONICAL_COLUMNS = (
 MODEL_PROJECTION = (
     "finding_id", "evidence_ref", "account_ref", "section", "current_ytd_net", "prior_ytd_net", "delta", "percent_change", "review_reason"
 )
+_AMOUNT_SHAPE = re.compile(r"-?[0-9]+\.[0-9]{2,}")
+_MODEL_NUMBER_SHAPES = {
+    "current_ytd_net": _AMOUNT_SHAPE,
+    "prior_ytd_net": _AMOUNT_SHAPE,
+    "delta": _AMOUNT_SHAPE,
+    "percent_change": re.compile(r"[0-9]+\.[0-9]{4}"),
+}
 ALLOWED_DECISIONS = {"ACKNOWLEDGED", "NEEDS_EVIDENCE", "ESCALATED"}
 # The model result carries a debit-positive net, so a revenue or liability
 # balance is negative. Stating that on the artefact keeps a reader of the
@@ -401,25 +408,12 @@ def _load_request(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decimal_string(value: Decimal) -> str:
-    # At least 2 decimal places, padded and never rounded.
+    # At least 2 decimal places, padded and never rounded, so every amount has
+    # the shape _assert_model_is_redacted holds the numeric fields to.
     exponent = value.as_tuple().exponent
     if isinstance(exponent, int) and exponent > -2:
         value = value.quantize(Decimal("0.01"))
     return format(value, "f")
-
-
-def _model_number(text: str, forbidden: set[str]) -> str:
-    """Append trailing zeros while a model number equals a forbidden source value.
-
-    A whole-dollar CSV emitted a delta of "200", equal to account code "200",
-    and the disclosure check refused a correct pack. Padding alone moves the
-    collision to a code such as "200.00". Every string this produces has a
-    decimal point, so a trailing zero keeps the exact value, and the check
-    itself stays exact.
-    """
-    while text in forbidden:
-        text += "0"
-    return text
 
 
 def _percent_string(ratio: Decimal) -> str:
@@ -483,7 +477,6 @@ def _variance_findings(
             f"Accounts changed section between periods ({listed}); review the source mapping before comparison."
         )
     report_date = current_rows[0].report_date
-    forbidden = _forbidden_leaves(current_rows + prior_rows)
     findings: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for account_id in sorted(set(current_by_id) | set(prior_by_id)):
         current_row = current_by_id.get(account_id)
@@ -515,10 +508,10 @@ def _variance_findings(
             "evidence_ref": evidence_ref,
             "account_ref": account_ref,
             "section": row.section,
-            "current_ytd_net": _model_number(_decimal_string(current_net), forbidden),
-            "prior_ytd_net": _model_number(_decimal_string(prior_net), forbidden),
-            "delta": _model_number(_decimal_string(delta), forbidden),
-            "percent_change": None if percent is None else _model_number(_percent_string(percent), forbidden),
+            "current_ytd_net": _decimal_string(current_net),
+            "prior_ytd_net": _decimal_string(prior_net),
+            "delta": _decimal_string(delta),
+            "percent_change": None if percent is None else _percent_string(percent),
             "review_reason": reason,
         }
         model_item = {key: projected_values[key] for key in MODEL_PROJECTION}
@@ -633,40 +626,41 @@ def _leaf_strings(value: Any) -> Any:
             yield from _leaf_strings(child)
 
 
-def _forbidden_leaves(rows: tuple[BalanceRow, ...]) -> set[str]:
+def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...]) -> None:
+    # Compare each emitted leaf string for exact equality with a forbidden value;
+    # substring matching over the serialised model false-positives when an
+    # ordinary numeric AccountID happens to occur inside an amount or digest.
     # Tenant, account name and account code are the 3 source display values
     # the README promises the model result never carries, so all 3 are
     # forbidden as leaves, not only as key names. AccountID joins them because
     # it is the join key the evidence file is indexed by.
-    return (
+    forbidden = (
         {row.tenant for row in rows}
         | {row.account_name for row in rows}
         | {row.account_code for row in rows if row.account_code}
         | {row.account_id for row in rows}
     )
-
-
-def _assert_model_is_redacted(model: dict[str, Any], rows: tuple[BalanceRow, ...]) -> None:
-    # Compare each emitted leaf string for exact equality with a forbidden value;
-    # substring matching over the serialised model false-positives when an
-    # ordinary numeric AccountID happens to occur inside an amount or digest.
-    forbidden = _forbidden_leaves(rows)
     # A finding's `section` is source text the model is meant to carry: it is in
     # MODEL_PROJECTION and no README control names it. Comparing it against the
     # forbidden account names meant an account called "Revenue" inside section
     # "Revenue", an ordinary trial balance, raised a disclosure error naming a
     # disclosure that had not happened, and the pack could not be evaluated at all.
-    # The amount strings stay in the sweep: test_exact_account_id_leaf_still_trips
-    # pins that an account id appearing as a delta fails closed.
+    # The numeric fields are computed, so comparing them with source text only
+    # finds coincidences: a whole-dollar delta of "200" equalled account code
+    # "200" and refused a correct pack. Any formatting that dodged the collision
+    # would reveal which strings are source values. Each is held to its own
+    # number shape instead, so an account id copied into a delta still fails
+    # closed (test_exact_account_id_leaf_still_trips pins that).
     derived = {"section"}
     scanned = list(_leaf_strings({k: v for k, v in model.items() if k != "findings"}))
     for finding in model.get("findings", []):
-        scanned.extend(
-            leaf
-            for key, value in finding.items()
-            if key not in derived
-            for leaf in _leaf_strings(value)
-        )
+        for key, value in finding.items():
+            shape = _MODEL_NUMBER_SHAPES.get(key)
+            if shape is None:
+                if key not in derived:
+                    scanned.extend(_leaf_strings(value))
+            elif value is not None and not (isinstance(value, str) and shape.fullmatch(value)):
+                raise GatewayError("Internal disclosure assertion failed: model result contains raw source display data.")
     if any(leaf in forbidden for leaf in scanned):
         raise GatewayError("Internal disclosure assertion failed: model result contains raw source display data.")
     serialised = json.dumps(model, sort_keys=True)

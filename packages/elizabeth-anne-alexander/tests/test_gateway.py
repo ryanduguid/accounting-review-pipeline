@@ -573,12 +573,13 @@ def test_exact_account_id_leaf_still_trips_the_disclosure_check() -> None:
         _assert_model_is_redacted(model, rows)
 
 
-@pytest.mark.parametrize(("code", "delta"), [("200", "200.00"), ("200.00", "200.000"), ("200.000", "200.00")])
-def test_whole_dollar_amounts_do_not_collide_with_an_account_code(code: str, delta: str) -> None:
+@pytest.mark.parametrize("code", ["200", "200.00", "16.6667"])
+def test_a_model_number_equal_to_an_account_code_is_not_a_disclosure(code: str) -> None:
     """A whole-dollar CSV once emitted delta "200", equal to account code "200".
 
-    Padding alone moved the collision to a code such as "200.00", so a model
-    number that equals a source value gains a trailing zero instead.
+    Codes equal to the padded delta or to the percentage must not refuse the
+    pack either, and the output must not change with the codes, or its format
+    would reveal which strings are source values.
     """
     prior = replace(_row("acct-1", ytd_credit="1200"), account_code=code, ytd_debit=Decimal("0"))
     current = replace(_row("acct-1", ytd_credit="1000"), account_code=code, ytd_debit=Decimal("0"))
@@ -589,9 +590,22 @@ def test_whole_dollar_amounts_do_not_collide_with_an_account_code(code: str, del
     )
     model = {"findings": [item[0] for item in findings]}
 
-    assert model["findings"][0]["delta"] == delta
+    assert model["findings"][0]["delta"] == "200.00"
     assert model["findings"][0]["prior_ytd_net"] == "-1200.00"
+    assert model["findings"][0]["percent_change"] == "16.6667"
     _assert_model_is_redacted(model, (current, prior))
+
+
+@pytest.mark.parametrize(("field", "leaf"), [
+    ("delta", "Name acct-1"), ("delta", "200"), ("current_ytd_net", "1e3"), ("percent_change", "16.67"),
+])
+def test_a_model_number_out_of_shape_trips_the_disclosure_check(field: str, leaf: str) -> None:
+    """The numeric fields are held to their number shape, not compared with source values."""
+    rows = (_row("acct-1"),)
+    model = {"findings": [{field: leaf}]}
+
+    with pytest.raises(GatewayError, match="raw source display data"):
+        _assert_model_is_redacted(model, rows)
 
 
 @pytest.mark.parametrize("leaf", ["Unit Test Tenant", "Name acct-1", "9999"])

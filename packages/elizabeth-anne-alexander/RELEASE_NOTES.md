@@ -2,9 +2,9 @@
 
 - Amount strings now carry at least 2 decimal places. A whole-dollar source emitted a
   `delta` of `"200"`, which equals account code `"200"` and raised a disclosure error on a
-  correct pack. Values are padded, never rounded, and `finding_id` is unchanged. A model number that
-  would still equal a source value, such as account code `"200.00"`, gains trailing zeros until it
-  does not.
+  correct pack. Values are padded, never rounded, and `finding_id` is unchanged. The disclosure check now
+  holds the 4 numeric model fields to their number formats instead of comparing them with source
+  values, so an account code equal to an amount no longer refuses a pack.
 
 - Document the actual exit codes in the README: `0` for `DECISION_RECORDED` and
   `PARTIAL_DECISION_RECORDED`, `2` for every `GatewayError` including malformed input.
