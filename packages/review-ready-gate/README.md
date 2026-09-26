@@ -265,7 +265,7 @@ Each finding group is `NEW`, `RECURRING`, `CHANGED`, `NOT_RAISED` or `NOT_COMPAR
 - [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane) - exception pack once a trial balance is allowed onto the review desk
 - [Xero Ledger Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander) - zero-network variance boundary for AI-assisted TB review
 - [australian-accounting-skills](https://github.com/ryanduguid/australian-accounting-skills) - `workpaper-tie-out` and `bas-preparation` workflows this gate enforces mechanically
-- [DrDebits](https://github.com/ryanduguid/DrDebits) - APES 110 / TPB guardrails for any LLM sitting *after* a READY pack
+- [DrDebits](https://github.com/ryanduguid/llm-tax-guardrails) - APES 110 / TPB guardrails for any LLM sitting *after* a READY pack
 
 ## Development
 
