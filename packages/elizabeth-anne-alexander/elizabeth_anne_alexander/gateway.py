@@ -401,6 +401,13 @@ def _load_request(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decimal_string(value: Decimal) -> str:
+    # At least 2 decimal places, padded and never rounded. A source CSV carrying
+    # whole-dollar amounts emitted a delta of "200", which equals account code
+    # "200" and tripped the disclosure check on a correct pack; "200.00" cannot
+    # equal a code, and the check itself stays exact.
+    exponent = value.as_tuple().exponent
+    if isinstance(exponent, int) and exponent > -2:
+        value = value.quantize(Decimal("0.01"))
     return format(value, "f")
 
 

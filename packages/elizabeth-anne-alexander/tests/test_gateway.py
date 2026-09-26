@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -267,7 +268,7 @@ def test_account_present_only_in_the_current_period_is_reported() -> None:
 
     assert len(findings) == 1
     model_item, evidence_item = findings[0]
-    assert model_item["prior_ytd_net"] == "0"
+    assert model_item["prior_ytd_net"] == "0.00"
     assert model_item["delta"] == "-5000.00"
     assert model_item["percent_change"] is None
     assert "new in the current period" in model_item["review_reason"]
@@ -285,7 +286,7 @@ def test_account_present_only_in_the_prior_period_is_reported() -> None:
 
     assert len(findings) == 1
     model_item, evidence_item = findings[0]
-    assert model_item["current_ytd_net"] == "0"
+    assert model_item["current_ytd_net"] == "0.00"
     assert model_item["prior_ytd_net"] == "-9000.00"
     assert model_item["delta"] == "9000.00"
     assert model_item["percent_change"] == "100.0000"
@@ -570,6 +571,22 @@ def test_exact_account_id_leaf_still_trips_the_disclosure_check() -> None:
 
     with pytest.raises(GatewayError, match="raw source display data"):
         _assert_model_is_redacted(model, rows)
+
+
+def test_whole_dollar_amounts_do_not_collide_with_an_account_code() -> None:
+    """A whole-dollar CSV once emitted delta "200", equal to account code "200"."""
+    prior = replace(_row("acct-1", ytd_credit="1200"), account_code="200", ytd_debit=Decimal("0"))
+    current = replace(_row("acct-1", ytd_credit="1000"), account_code="200", ytd_debit=Decimal("0"))
+
+    findings = _variance_findings(
+        (current,), (prior,), entity_ref="entity:unit", section="Revenue",
+        operation={**OPERATION, "minimum_absolute_delta": "100", "minimum_percent_delta": "0"},
+    )
+    model = {"findings": [item[0] for item in findings]}
+
+    assert model["findings"][0]["delta"] == "200.00"
+    assert model["findings"][0]["prior_ytd_net"] == "-1200.00"
+    _assert_model_is_redacted(model, (current, prior))
 
 
 @pytest.mark.parametrize("leaf", ["Unit Test Tenant", "Name acct-1", "9999"])

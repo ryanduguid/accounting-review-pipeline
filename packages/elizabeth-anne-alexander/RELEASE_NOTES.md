@@ -1,5 +1,9 @@
 # Unreleased
 
+- Amount strings now carry at least 2 decimal places. A whole-dollar source emitted a
+  `delta` of `"200"`, which equals account code `"200"` and raised a disclosure error on a
+  correct pack. Values are padded, never rounded, and `finding_id` is unchanged.
+
 - Document the actual exit codes in the README: `0` for `DECISION_RECORDED` and
   `PARTIAL_DECISION_RECORDED`, `2` for every `GatewayError` including malformed input.
 - Known item, for the owner to decide: those codes diverge from the repository convention of
