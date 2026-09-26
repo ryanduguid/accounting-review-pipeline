@@ -1,3 +1,15 @@
+# v0.1.12
+
+- Refuse a Trial Balance response whose report identity, reporting period,
+  account IDs or supplied control totals are inconsistent, before any existing
+  export is replaced.
+- Refuse a trial-balance record whose width does not match the header.
+- Report a refused callback bind, such as port 80 from a portless redirect URI,
+  as a permission problem rather than a busy port.
+- Stop `DEFAULT_TOKEN_FILE` raising `SystemExit` at import when a component of
+  the default state path is a link.
+- Document the duplicate-column refusal.
+
 # v0.1.11
 
 - Withhold the output filenames from the checkout guard under `--quiet`. The
