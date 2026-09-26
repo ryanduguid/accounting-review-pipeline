@@ -53,6 +53,8 @@ The [full command and all 8 exceptions](packages/monthly-close-control-plane/REA
 
 Every invented entity the components share, and the proposal to consolidate them into one fabricated firm, is recorded in [docs/fabricated-firm.md](docs/fabricated-firm.md).
 
+A firm keeping an AI register can copy the entries for evatt, the Xero Ledger Review Gate and the Workpaper Review Gate from [docs/ai-register-entries.md](docs/ai-register-entries.md).
+
 <details>
 <summary>Setup, component identities, file contracts and reference</summary>
 
@@ -68,7 +70,7 @@ It holds 7 independently versioned components joined only by local files and com
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.4 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.6 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
-| evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.1.1 |
+| evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.1.2 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly

@@ -38,6 +38,12 @@ this. A human check before sending is the only mitigation.
 evatt is a control that makes a policy enforceable. It is not authority to
 disclose anything.
 
+Firms deciding where client data may go usually compare a model running inside
+their Microsoft 365 tenant, a model hosted in Australian data centres and a
+model running on their own hardware. evatt sits in front of any of these: it
+reduces what leaves the machine whichever model receives the document, and it
+does not decide which destination the firm's policy permits.
+
 **No client data passes through evatt until the policy governing it is signed
 off, and that includes testing.** A trial run is a disclosure of the document to
 whatever the operator does with the output, and a control being evaluated is not
