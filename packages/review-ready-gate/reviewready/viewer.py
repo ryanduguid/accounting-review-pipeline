@@ -651,14 +651,16 @@ def verify_pack(pack_dir: Path) -> tuple[
     return document, summary_text, csv_rows, artefact_digests
 
 
-def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
+def render_review_sheet(
+    pack_dir: Path, *, document_paths: tuple[Path, ...] = (),
+) -> tuple[str, dict[str, str]]:
     """Verify a pack and render it as a plain-text review sheet.
 
     Returns the sheet and the per-artefact digests it displays. Raises
     ``GateInputError`` instead of rendering whenever any artefact is
     missing, malformed or inconsistent with its siblings.
     """
-    _document, summary_text, _csv_rows, artefact_digests = verify_pack(pack_dir)
+    document, summary_text, _csv_rows, artefact_digests = verify_pack(pack_dir)
     lines = [
         summary_text.rstrip(),
         "",
@@ -667,5 +669,20 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     ]
     for name in PACK_FILE_NAMES:
         lines.append(f"- `{name}`: `{artefact_digests[name]}`")
+    if document_paths:
+        from .documents import load_document, render_document
+
+        bundles = [load_document(path) for path in document_paths]
+        supplied = {
+            item.slot: {"filename": item.filename, "sha256": item.sha256}
+            for index, bundle in enumerate(bundles, start=1)
+            for item in bundle.evidence(index)
+        }
+        sources = cast(dict[str, dict[str, str]], document["source_sha256"])
+        recorded = {key: value for key, value in sources.items()
+                    if key.startswith("document_")}
+        if supplied != recorded:
+            raise GateInputError("Document bytes or order differ from the saved readiness pack.")
+        lines.extend(render_document(bundle) for bundle in bundles)
     lines.append("")
     return "\n".join(lines), artefact_digests

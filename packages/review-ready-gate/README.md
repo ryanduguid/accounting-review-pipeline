@@ -72,6 +72,10 @@ Missing tie-outs, open questions in email, an unbalanced trial balance and unres
 
 The repository contains fabricated data only. Do not commit client workpapers.
 
+For optional supporting documents, the [synthetic document intake example](examples/document-intake/README.md)
+preserves original bytes, proposed fields and human corrections. It adds document checks to an
+existing pack without replacing its trial balance or changing the readiness output schema.
+
 For the manager-facing, reproducible BAS evaluation, see the [manager review gate evaluation pack](evaluation/manager_review_gate/README.md).
 The [missing evidence evaluation](evaluation/missing_evidence/README.md) shows what the gate
 does when a month-end source is absent, empty, for the wrong period, or edited after the gate

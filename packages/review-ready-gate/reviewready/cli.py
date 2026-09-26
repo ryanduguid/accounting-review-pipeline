@@ -5,6 +5,7 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .documents import create_intake, load_document, render_document
 from .engine import review_pack
 from .errors import GateInputError
 from .profiles import PROFILE_NAMES
@@ -44,6 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--pack", required=True, type=Path, help="directory holding the workpaper artefacts")
     gate.add_argument("--output", required=True, type=Path, help="directory for the generated readiness pack")
     gate.add_argument("--review-note", type=Path, help="optional human acknowledgement JSON")
+    gate.add_argument("--document", type=Path, action="append", default=[],
+                      help="synthetic document bundle to check; repeat for several documents")
     gate.add_argument(
         "--tieout-tolerance",
         type=_non_negative_decimal,
@@ -59,6 +62,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="directory holding readiness-pack.json, readiness-summary.md and findings.csv",
     )
+    view.add_argument("--document", type=Path, action="append", default=[],
+                      help="display document evidence bound to this pack, in the original order")
+    intake = commands.add_parser("intake", help="prepare a fabricated labelled-invoice text bundle")
+    intake.add_argument("--synthetic", action="store_true", required=True,
+                        help="confirm that the input is fabricated data")
+    intake.add_argument("--source", type=Path, required=True, help="original .txt or .pdf document")
+    intake.add_argument("--text", type=Path, required=True, help="UTF-8 text; form feed separates pages")
+    intake.add_argument("--text-origin", choices=("manual", "pdf-inspector"), required=True)
+    intake.add_argument("--text-version", default="", help="required version for pdf-inspector text")
+    intake.add_argument("--entity", required=True, help="entity matching the trial balance Tenant")
+    intake.add_argument("--period-end", required=True, help="review period in YYYY-MM-DD format")
+    intake.add_argument("--output", type=Path, required=True, help="new directory outside a checkout")
+    document = commands.add_parser("view-document", help="verify and display a document bundle")
+    document.add_argument("--bundle", type=Path, required=True)
     return parser
 
 
@@ -70,9 +87,27 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
+    if args.command == "intake":
+        try:
+            output = create_intake(source_path=args.source, text_path=args.text,
+                                   output_dir=args.output, entity=args.entity,
+                                   period_end=args.period_end, text_origin=args.text_origin,
+                                   text_version=args.text_version)
+        except (GateInputError, OSError, ValueError) as exc:
+            print(f"review-ready intake: {exc}", file=sys.stderr)
+            return 1
+        print(f"review-ready intake: proposed fields written to {output}; human review required.")
+        return 0
+    if args.command == "view-document":
+        try:
+            print(render_document(load_document(args.bundle)))
+        except GateInputError as exc:
+            print(f"review-ready view-document: verification failed: {exc}", file=sys.stderr)
+            return 1
+        return 0
     if args.command == "view":
         try:
-            sheet, _ = render_review_sheet(args.pack_dir)
+            sheet, _ = render_review_sheet(args.pack_dir, document_paths=tuple(args.document))
         except GateInputError as exc:
             print(f"review-ready view: verification failed: {exc}", file=sys.stderr)
             return 1
@@ -92,7 +127,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"review-ready: output error: {exc}", file=sys.stderr)
         return 1
     destinations = {(args.output / name).resolve() for name in PACK_FILE_NAMES}
-    for flag, source in (("--pack", args.pack), ("--review-note", args.review_note)):
+    for flag, source in (
+        ("--pack", args.pack), ("--review-note", args.review_note),
+        *(("--document", path) for path in args.document),
+    ):
         if source is None:
             continue
         resolved = source.resolve()
@@ -123,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
             pack_dir=args.pack,
             acknowledgement_path=args.review_note,
             tieout_tolerance=args.tieout_tolerance,
+            document_paths=tuple(args.document),
         )
     except (GateInputError, ValueError) as exc:
         print(f"review-ready: input error: {exc}", file=sys.stderr)
