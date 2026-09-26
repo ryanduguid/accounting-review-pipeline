@@ -16,7 +16,7 @@ README_PATH = ROOT / "README.md"
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned after documenting the existing duplicate-column refusal.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "8C86328F825163ECD20A79E93DED2838241B33DA161D5888DEB0294B0403363A"
+README_SHA256 = "74193AFDF40EC2F7049744DF9209563D4214E6628F182E49293C1699A7461A5F"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth
