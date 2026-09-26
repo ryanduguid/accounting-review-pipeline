@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .comparison import compare_packs
 from .documents import create_intake, load_document, render_document
 from .engine import review_pack
 from .errors import GateInputError
@@ -64,6 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     view.add_argument("--document", type=Path, action="append", default=[],
                       help="display document evidence bound to this pack, in the original order")
+    compare = commands.add_parser(
+        "compare",
+        help="verify two runs of the same pack and print what moved between them as JSON",
+    )
+    compare.add_argument("--previous-pack-dir", required=True, type=Path,
+                         help="the earlier readiness pack")
+    compare.add_argument("--current-pack-dir", required=True, type=Path,
+                         help="the later readiness pack for the same engagement and period")
     intake = commands.add_parser("intake", help="prepare a fabricated labelled-invoice text bundle")
     intake.add_argument("--synthetic", action="store_true", required=True,
                         help="confirm that the input is fabricated data")
@@ -104,6 +114,14 @@ def main(argv: list[str] | None = None) -> int:
         except GateInputError as exc:
             print(f"review-ready view-document: verification failed: {exc}", file=sys.stderr)
             return 1
+        return 0
+    if args.command == "compare":
+        try:
+            comparison = compare_packs(args.previous_pack_dir, args.current_pack_dir)
+        except GateInputError as exc:
+            print(f"review-ready compare: verification failed: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(comparison, indent=2, sort_keys=True))
         return 0
     if args.command == "view":
         try:
