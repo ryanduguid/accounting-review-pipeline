@@ -154,6 +154,64 @@ def test_invalid_response_is_rejected(tmp_path, change):
         compare_packs(**inputs, responses=path)
 
 
+# One small recurring mis-coding: every month 150 of software subscriptions is
+# posted to Office Expenses (610) instead of Software Subscriptions (620).
+MISCODED = Decimal("150")
+MONTH_ENDS = ("2025-07-31", "2025-08-31", "2025-09-30", "2025-10-31", "2025-11-30",
+              "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30",
+              "2026-05-31", "2026-06-30")
+
+
+def _drift_comparisons(tmp_path, threshold):
+    """Close 12 fabricated month-ends in one financial year and compare each pair of packs."""
+    movement = {"100": ("Assets", "Operating Bank", Decimal("18850")),
+                "300": ("Revenue", "Sales Revenue", Decimal("-20000")),
+                "610": ("Expenses", "Office Expenses", Decimal("600") + MISCODED),
+                "620": ("Expenses", "Software Subscriptions", Decimal("550") - MISCODED),
+                "900": ("Equity", "Retained Earnings", Decimal("0"))}
+    opening = {"100": Decimal("50000"), "900": Decimal("-50000")}
+    ledger = []
+    for month, when in enumerate(MONTH_ENDS, start=1):
+        lines = [HEADER]
+        for account, (section, name, amount) in movement.items():
+            ytd = opening.get(account, Decimal("0")) + amount * month
+            debit, credit = (amount, 0) if amount > 0 else (0, abs(amount))
+            ytd_debit, ytd_credit = (ytd, 0) if ytd > 0 else (0, abs(ytd))
+            lines.append(f"{when},Synthetic,{section},{account},{name},{account},"
+                         f"{debit},{credit},{ytd_debit},{ytd_credit}")
+        path = tmp_path / f"{when}.csv"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        ledger.append(path)
+    packs = []
+    for prior, current in zip(ledger, ledger[1:]):
+        pack = tmp_path / f"pack-{current.stem}"
+        write_review_pack(review_close(current_path=current, prior_path=prior,
+                                       absolute_threshold=Decimal(threshold)), pack)
+        packs.append((pack, current))
+    return [compare_packs(previous_pack=old, previous_tb=old_tb, current_pack=new, current_tb=new_tb)
+            for (old, old_tb), (new, new_tb) in zip(packs, packs[1:])]
+
+
+def test_small_recurring_miscoding_never_becomes_a_finding(tmp_path):
+    comparisons = _drift_comparisons(tmp_path, "1000")
+    assert len(comparisons) == 10
+    assert all(result["scope_changes"] == [] for result in comparisons)
+    named = {item["account_id"] for result in comparisons for item in result["findings"]}
+    assert named == {"100", "300"}
+    # By June, Office Expenses is overstated by 12 x 150 and the close still passes.
+    assert comparisons[-1]["current_status"] == "PASS"
+
+
+def test_lower_threshold_cannot_tell_the_miscoded_account_apart(tmp_path):
+    comparisons = _drift_comparisons(tmp_path, "100")
+
+    def changes(account):
+        return [item["change"] for result in comparisons
+                for item in result["findings"] if item["account_id"] == account]
+
+    assert changes("610") == changes("620") == ["CHANGED"] * 9 + ["NOT_RAISED"]
+
+
 def test_cli_prints_verified_json_and_error_is_exit_one(tmp_path, capsys):
     inputs = _pair(tmp_path)
     args = ["compare"]
