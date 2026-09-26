@@ -8,6 +8,7 @@ findings. It writes nothing and decides nothing.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +41,29 @@ def _canonical(group: list[dict[str, str]]) -> list[tuple[str, ...]]:
     return sorted(tuple(detail[member] for member in _FINDING_DETAIL) for detail in group)
 
 
+def _thresholds_differ(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+    """Compare tolerances by value: 0.01 and 0.010 are one setting written two ways.
+
+    ``verify_pack`` has already proved every threshold is a finite decimal string.
+    """
+    def values(document: dict[str, Any]) -> dict[str, Decimal]:
+        return {key: Decimal(text) for key, text in document["thresholds"].items()}
+
+    return values(previous) != values(current)
+
+
 def _scope_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     """Name every setting that changes what a run could find."""
     changes = []
-    for member in ("thresholds", "controls_not_run"):
-        before, after = previous.get(member), current.get(member)
-        if before != after:
-            changes.append({"member": member, "previous": before, "current": after})
+    if _thresholds_differ(previous, current):
+        changes.append({
+            "member": "thresholds",
+            "previous": previous["thresholds"],
+            "current": current["thresholds"],
+        })
+    before, after = previous.get("controls_not_run"), current.get("controls_not_run")
+    if before != after:
+        changes.append({"member": "controls_not_run", "previous": before, "current": after})
     return changes
 
 
@@ -73,8 +90,10 @@ def _source_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[d
 
 def _finding_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     before, after = _finding_groups(previous), _finding_groups(current)
-    thresholds_changed = previous["thresholds"] != current["thresholds"]
-    not_run = {control["slot"] for control in current.get("controls_not_run") or ()}
+    thresholds_changed = _thresholds_differ(previous, current)
+    # An omitted member is a pack that states no coverage, not one that ran everything.
+    coverage = current.get("controls_not_run")
+    not_run = {control["slot"] for control in coverage or ()}
     rows = []
     for code, slot in sorted(set(before) | set(after)):
         old, new = before.get((code, slot)), after.get((code, slot))
@@ -82,9 +101,10 @@ def _finding_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[
             change = "NEW"
         elif new is None:
             # Absent from the later run is not resolved. Under a changed
-            # tolerance, or when the later run did not check that slot, it is
-            # not even comparable.
-            change = "NOT_COMPARABLE" if thresholds_changed or slot in not_run else "NOT_RAISED"
+            # tolerance, when the later run did not check that slot, or when
+            # it states no coverage at all, it is not even comparable.
+            comparable = not thresholds_changed and coverage is not None and slot not in not_run
+            change = "NOT_RAISED" if comparable else "NOT_COMPARABLE"
         elif _canonical(old) == _canonical(new):
             change = "RECURRING"
         else:

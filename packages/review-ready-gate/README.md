@@ -241,7 +241,7 @@ A pack sent back to the preparer is gated again. `review-ready compare` verifies
 review-ready compare --previous-pack-dir outputs/bas-first-run --current-pack-dir outputs/bas-second-run
 ```
 
-Each finding group is `NEW`, `RECURRING`, `CHANGED`, `NOT_RAISED` or `NOT_COMPARABLE`. `NOT_RAISED` means absent from the later run, not resolved. A changed tolerance or control coverage is listed under `scope_changes`, and a finding absent after a tolerance change, or from a slot the later run did not check, is `NOT_COMPARABLE`. Exit `0` means both packs verified and the comparison printed; it is not a readiness verdict. A pack that fails verification, or 2 packs for different engagement types or periods, exit `1`. Packs carry no wall-clock time, so the reviewer records who made each change and why.
+Each finding group is `NEW`, `RECURRING`, `CHANGED`, `NOT_RAISED` or `NOT_COMPARABLE`. `NOT_RAISED` means absent from the later run, not resolved. A changed tolerance or control coverage is listed under `scope_changes`, and a finding absent after a tolerance change, from a slot the later run did not check, or from a later pack that states no control coverage, is `NOT_COMPARABLE`. Tolerances compare by value, so `0.01` and `0.010` are the same setting. Exit `0` means both packs verified and the comparison printed; it is not a readiness verdict. A pack that fails verification, or 2 packs for different engagement types or periods, exit `1`. Packs carry no wall-clock time, so the reviewer records who made each change and why.
 
 ## Design
 

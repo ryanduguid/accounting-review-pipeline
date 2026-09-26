@@ -110,6 +110,32 @@ def test_a_finding_in_a_slot_the_later_run_skipped_is_not_comparable(tmp_path: P
     assert rows[("MISSING_ARTEFACT", "gst_control_gl")]["change"] == "RECURRING"
 
 
+def test_a_later_pack_that_states_no_coverage_is_not_comparable(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    # The earlier run states full coverage. The later one omits the member, as a
+    # pack written before coverage was recorded does, so nothing shows the control ran.
+    write_review_pack(replace(_synthetic((_finding("Still missing."),)), controls_not_run=()), before)
+    write_review_pack(_synthetic(()), after)
+
+    result = compare_packs(before, after)
+
+    assert result["scope_changes"] == [{"member": "controls_not_run", "previous": [], "current": None}]
+    assert {row["change"] for row in result["findings"]} == {"NOT_COMPARABLE"}
+
+
+def test_an_equivalent_tolerance_is_not_a_scope_change(tmp_path: Path) -> None:
+    before = _run("bas-not-ready", tmp_path / "before")
+    after = _run("bas-ready", tmp_path / "after", tieout_tolerance=Decimal("0.010"))
+    written = json.loads((after / "readiness-pack.json").read_text(encoding="utf-8"))
+    assert written["thresholds"] == {"tieout_tolerance": "0.010"}
+
+    result = compare_packs(before, after)
+
+    assert [change["member"] for change in result["scope_changes"]] == ["controls_not_run"]
+    assert {row["change"] for row in result["findings"]} == {"NOT_RAISED"}
+
+
 def test_new_and_changed_groups_are_named(tmp_path: Path) -> None:
     before = tmp_path / "before"
     after = tmp_path / "after"
