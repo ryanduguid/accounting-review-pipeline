@@ -285,9 +285,9 @@ class EvaluationPackTest(unittest.TestCase):
         root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
         canonical = "https://github.com/ryanduguid/accounting-review-pipeline"
 
-        self.assertEqual(version, "0.1.11")
-        self.assertTrue(notes.startswith("# v0.1.11\n"))
-        self.assertIn("version: 0.1.11", citation)
+        self.assertEqual(version, "0.1.12")
+        self.assertTrue(notes.startswith("# v0.1.12\n"))
+        self.assertIn("version: 0.1.12", citation)
         self.assertIn(
             f'repository-code: "{canonical}/tree/main/'
             'packages/xero-trial-balance-export"',
@@ -300,10 +300,10 @@ class EvaluationPackTest(unittest.TestCase):
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "
             "| distribution `xero-trial-balance-export`, commands `export-tb` and "
-            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.11 |",
+            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.12 |",
             root_readme,
         )
-        self.assertIn("tag=xero-trial-balance-export/v0.1.11", releasing)
+        self.assertIn("tag=xero-trial-balance-export/v0.1.12", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
         self.assertIn('--signer-digest "$policy_sha"', releasing)
         self.assertNotIn("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91", releasing)
