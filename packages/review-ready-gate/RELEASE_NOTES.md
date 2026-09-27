@@ -1,13 +1,3 @@
-# Unreleased
-
-- A `bas` pack whose GST control file holds postings dated after the
-  self-review's `period_end` is `NOT_READY` (`PERIOD_ORDER`). The next
-  quarter's GST file tied to its own activity statement and the pack read
-  `READY` for this one.
-- The README states what the bank reconciliation and GST date checks do not
-  cover: the reconciliation is not tied to the trial balance, and a GST file
-  from an earlier quarter passes the date check.
-
 # v0.1.8
 
 - Add local synthetic document intake with a separate human transcription
