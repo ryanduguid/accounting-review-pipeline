@@ -23,6 +23,7 @@ from .entities import _PREFIX, Entity
 from .errors import Halt
 from .patterns import (
     ADDRESS,
+    CARRIED_PLACEHOLDER,
     DOB,
     PLACEHOLDER,
     PLACEHOLDER_CI,
@@ -125,7 +126,7 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
     could not report it either. One definition, read by ``verify`` as well, is
     what closes that gap for good.
     """
-    found: list[tuple[int, int, int, Entity]] = []
+    found: list[tuple[int, int, int, Entity, re.Match[str]]] = []
     for priority, entity in enumerate(entities):
         # ``load`` rejects every entry these guards skip, but ``redact`` takes
         # any Sequence[Entity] and a caller can build one by hand, so the map
@@ -182,18 +183,45 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
             or entity.placeholder.rsplit("_", 1)[0] != _PREFIX.get(entity.kind)
         ):
             continue
-        for match in value_pattern(entity.value).finditer(text):
-            found.append((match.start(), match.end(), priority, entity))
+        try:
+            pattern = value_pattern(entity.value)
+        except ValueError:
+            # A value with no token ("*") has nothing to match. ``load`` refuses it.
+            continue
+        for match in pattern.finditer(text):
+            found.append((match.start(), match.end(), priority, entity, match))
     found.sort(key=lambda f: (f[0], -(f[1] - f[0]), f[2]))
+    # Placeholders already in the text, pass one's and any the input carried,
+    # are opaque. The value pattern joins tokens across "_", so a map value
+    # "TFN 01" would otherwise read pass one's TFN_01 as a mention and rewrite
+    # the only record that a tax file number stood there. Guarding here rather
+    # than only in ``load`` covers a map built by hand as well.
+    #
+    # ``CARRIED_PLACEHOLDER`` finds a placeholder standing as its own token,
+    # emphasis underscores allowed, which is every place ``value_pattern`` can
+    # start a match: "_TFN_01_", which pass one writes from "_123456783_" and
+    # which PLACEHOLDER's left boundary could not see, is protected. A
+    # placeholder-shaped run inside a longer word is not, so a map value
+    # "XCLIENT 01" still replaces "XCLIENT_01".
+    protected = [m.span("token") for m in CARRIED_PLACEHOLDER.finditer(text)]
+    protected_starts = [start for start, _end in protected]
     counts: Counter = Counter()
     pieces: list[str] = []
     cursor = 0
-    for start, end, _priority, entity in found:
+    for start, end, _priority, entity, match in found:
         if start < cursor:
+            continue
+        nearest = bisect.bisect_right(protected_starts, end - 1) - 1
+        if nearest >= 0 and protected[nearest][1] > start:
             continue
         counts[entity.kind] += 1
         pieces.append(text[cursor:start])
+        # An emphasis run the match took in is put back as asterisks: "_" next
+        # to a placeholder is a boundary character, so "_PERSON_01_" would never
+        # restore, while "*PERSON_01*" restores and still renders as emphasis.
+        pieces.append(match.group("open").replace("_", "*"))
         pieces.append(entity.placeholder)
+        pieces.append(match.group("close").replace("_", "*"))
         cursor = end
     pieces.append(text[cursor:])
     return "".join(pieces), counts
@@ -233,10 +261,10 @@ def residual(text: str) -> tuple[Unknown, ...]:
     # what keeps a name repeated down a page from filling the triage file.
     names: dict[tuple[int, str], Unknown] = {}
     for start, _end, value in person_name_spans(masked):
-        # NAME's trailing \b already stops a placeholder forming a name, so
+        # NAME's trailing edge already stops a placeholder forming a name, so
         # this guard fires on nothing today. It stays because the property it
         # protects is that the sweep never halts on the redactor's own output,
-        # and that must not rest on an incidental \b in a pattern this module
+        # and that must not rest on an incidental edge in a pattern this module
         # does not own.
         if PLACEHOLDER.search(value):
             continue
@@ -273,25 +301,25 @@ def _input_placeholders(text: str, redacted: str) -> tuple[Unknown, ...]:
     there would be worse than quoting an approximate line, so such a token is
     still reported, against the redacted line standing at its input line number.
     """
-    carried = {match.group(0) for match in PLACEHOLDER.finditer(text)}
+    carried = {match.group("token") for match in CARRIED_PLACEHOLDER.finditer(text)}
     if not carried:
         return ()
     lines, starts = _lines_and_starts(redacted)
     found: dict[tuple[int, str], Unknown] = {}
-    for match in PLACEHOLDER.finditer(redacted):
-        token = match.group(0)
+    for match in CARRIED_PLACEHOLDER.finditer(redacted):
+        token = match.group("token")
         if token not in carried:
             continue
-        number, context = _locate(lines, starts, match.start())
+        number, context = _locate(lines, starts, match.start("token"))
         found.setdefault((number, token), Unknown("placeholder", token, number, context))
     survived = {token for _number, token in found}
     if len(survived) < len(carried):
         input_lines, input_starts = _lines_and_starts(text)
-        for match in PLACEHOLDER.finditer(text):
-            token = match.group(0)
+        for match in CARRIED_PLACEHOLDER.finditer(text):
+            token = match.group("token")
             if token in survived:
                 continue
-            number, _raw = _locate(input_lines, input_starts, match.start())
+            number, _raw = _locate(input_lines, input_starts, match.start("token"))
             context = lines[number - 1].strip() if 0 < number <= len(lines) else ""
             found.setdefault((number, token), Unknown("placeholder", token, number, context))
     return tuple(found[key] for key in sorted(found))
@@ -306,17 +334,17 @@ def redact(
     purpose of the file it accompanies.
 
     CRLF is normalised to LF here, before any pass runs, because every pass
-    downstream works in LF only. The detection patterns separate digit groups
-    with ``[\\s-]?``, which is exactly one character, so a CRLF pair inside a
+    downstream works in LF only. The detection patterns once separated digit
+    groups with ``[\\s-]?``, exactly one character, so a CRLF pair inside a
     wrapped identifier matched nothing: "TFN: 123 456\\r\\n782" came back whole
     with an empty manifest, while the same document saved with LF endings was
-    redacted and counted.
+    redacted and counted. The gap now takes up to 2 characters, which admits a
+    bare CRLF pair but not a space before one, so normalising still matters.
 
     The guard sits in this function rather than in a caller because ``redact``
     is the public entry every caller routes through, and a guard in one caller
     leaves every other one, a test, a hook, another tool, with the silent
-    under-detection. Widening the separator instead would have been
-    seven edits across the detection core, each free to drift from the others.
+    under-detection.
 
     Normalising costs the caller nothing it was promised: this function owns
     detection, not byte fidelity. Line numbers in a ``Halt`` are unchanged,

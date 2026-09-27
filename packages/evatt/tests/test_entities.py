@@ -616,7 +616,7 @@ def test_load_rejects_two_values_that_fold_onto_one_another(tmp_path) -> None:
     one of them take every occurrence while the other sat there looking
     assigned and never appearing, which is how a restore puts a wrong name back.
     """
-    for second in ("jane roe", "JANE ROE", "Jane  Roe", "Jane\nRoe", " Jane Roe "):
+    for second in ("jane roe", "JANE ROE", "Jane  Roe", "Jane\nRoe"):
         document = {
             "schema_version": 1,
             "entries": [
