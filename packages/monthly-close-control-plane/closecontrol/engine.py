@@ -581,6 +581,10 @@ def review_close(
     }.items():
         if not value.is_finite() or value < ZERO:
             raise ValueError(f"{name} must be a finite non-negative decimal.")
+    # A whole-number percentage ("10" for 10%) read as 1000% passed every
+    # movement below it, and the close returned PASS.
+    if percentage_threshold > 1:
+        raise ValueError("percentage_threshold is a fraction from 0 to 1: 0.10 means 10%.")
 
     # Each source is read once. Parsing and provenance use the same immutable
     # bytes, so replacing a file while the review runs cannot make calculations
