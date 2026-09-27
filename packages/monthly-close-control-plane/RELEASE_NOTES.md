@@ -1,7 +1,3 @@
-# Unreleased
-
-- Refuse a `--percentage-threshold` above 1 with "use a fraction: 0.10 means 10%". A whole-number percentage such as `10` was read as 1000%, every movement below it passed and the close returned `PASS`. `review_close` applies the same bound.
-
 # v0.1.6
 
 - Add an opt-in `--balance-policy` file to `close-control review`. It flags a
