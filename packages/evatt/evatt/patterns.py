@@ -338,11 +338,6 @@ def value_pattern(value: str) -> re.Pattern[str]:
         # "*" or "<br>" alone leaves no token, and an empty body matched between
         # every pair of characters with a quadratic scan over emphasis runs.
         raise ValueError(f"entity value {value!r} has no token to match")
-    if any(token.lower().startswith("<br") for token in tokens):
-        # A token that begins like a <br> tag competes with the joiner for the
-        # same characters: atomic joins then miss the value's own spelling, and
-        # backtracking ones searched in cubic time.
-        raise ValueError(f"entity value {value!r} holds part of a <br> tag as a word")
     parts = [re.escape(token) for token in tokens]
     body = parts[0]
     for index, part in enumerate(parts[1:]):
@@ -373,6 +368,10 @@ _JOIN_ATOM = r"(?:[^\S\n]|[\u200b-\u200d\u2060]|\n(?:[ \t]*>)*|[*_]|<br\s*/?>)"
 # splitting a line break but not the blockquote marker after it left a value
 # written across a quoted line unmatchable too.
 _JOIN_SPLIT = re.compile("(?:%s)+" % _JOIN_ATOM, re.IGNORECASE)
+# Whitespace or markup at either end of a map value. ``value_parts`` drops it, so
+# the placeholder replaced only the words and restore wrote the edge back beside
+# the copy the document kept: "<br>Jane" came back as "<br><br>Jane".
+JOIN_EDGE = re.compile(r"\A(?:%s)|(?:%s)\Z" % (_JOIN_ATOM, _JOIN_ATOM), re.IGNORECASE)
 
 
 def value_parts(value: str) -> list[str]:

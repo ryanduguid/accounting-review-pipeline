@@ -25,7 +25,7 @@ from types import MappingProxyType
 from typing import BinaryIO, Mapping, Sequence
 
 from .errors import EvattError
-from .patterns import PLACEHOLDER_CI, PLACEHOLDER_PREFIXES, value_parts, value_pattern
+from .patterns import JOIN_EDGE, PLACEHOLDER_CI, PLACEHOLDER_PREFIXES, value_parts
 
 SCHEMA_VERSION = 1
 KINDS = ("client", "person", "staff", "entity")
@@ -151,17 +151,15 @@ def _check_fields(
         raise EvattError("entity value must be a non-empty string")
     if PLACEHOLDER_CI.search(value):
         raise EvattError(f"entity value {value!r} is shaped like an assigned placeholder")
+    # Pass two replaces only a value's words, so an edge such as the "<br>" in
+    # "<br>Jane" stays in the document and restore would write it a second time.
+    if JOIN_EDGE.search(value):
+        raise EvattError(f"entity value {value!r} starts or ends with whitespace or markup")
     # A value made only of placeholder parts ("TFN", "01", "Medicare", "TFN 01")
     # names nothing a client could be, and pass two joins tokens across "_", so
     # it would read the placeholders pass one writes as mentions.
     if all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in value_parts(value)):
         raise EvattError(f"entity value {value!r} is made only of placeholder parts")
-    # The matcher's own refusals, such as part of a <br> tag used as a word:
-    # a value it cannot match would sit in the map and never be replaced.
-    try:
-        value_pattern(value)
-    except ValueError as exc:
-        raise EvattError(f"entity value {value!r} cannot be matched: {exc}") from exc
     if not isinstance(kind, str) or kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")
     try:

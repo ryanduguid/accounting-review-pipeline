@@ -186,8 +186,7 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         try:
             pattern = value_pattern(entity.value)
         except ValueError:
-            # A value with no token ("*") or with part of a <br> tag as a word
-            # cannot be matched safely. ``load`` refuses both.
+            # A value with no token ("*") has nothing to match. ``load`` refuses it.
             continue
         for match in pattern.finditer(text):
             found.append((match.start(), match.end(), priority, entity, match))

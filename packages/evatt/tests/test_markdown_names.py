@@ -226,7 +226,7 @@ def test_a_value_holding_a_greater_than_sign_matches_its_own_spelling(value: str
     assert redact(text, (entity,), strict=False) == ("met CLIENT_07 today", {"client": 1})
 
 
-@pytest.mark.parametrize("value", ["*", "<br <br b", "A <BR/ B"])
+@pytest.mark.parametrize("value", ["*", "<br>", "_ *"])
 def test_a_value_the_matcher_refuses_is_skipped_by_redact_and_verify(value: str) -> None:
     with pytest.raises(ValueError):
         patterns.value_pattern(value)
@@ -235,10 +235,28 @@ def test_a_value_the_matcher_refuses_is_skipped_by_redact_and_verify(value: str)
     assert findings("a ... b", (entity,)) == ()
 
 
-@pytest.mark.parametrize("value", ["Jane <br Roe", "A <BR/ B"])
-def test_a_map_refuses_a_value_holding_part_of_a_br_tag(tmp_path, value: str) -> None:
-    with pytest.raises(EvattError, match="cannot be matched"):
+@pytest.mark.parametrize("value", ["Jane <br Roe", "A <BR/ B", "ACME <Brown", "<br <br b"])
+def test_a_value_holding_part_of_a_br_tag_matches_its_own_spelling(tmp_path, value: str) -> None:
+    # Each join is taken atomically, so a token that begins like a tag cannot
+    # lose characters to the joiner before it.
+    (entity,) = entities.load(_map(tmp_path, [value]))
+    text = f"met {value} today"
+    redacted, counts = redact(text, (entity,), strict=False)
+    assert (redacted, counts) == ("met PERSON_01 today", {"person": 1})
+    assert restore(redacted, (entity,)) == text
+
+
+@pytest.mark.parametrize("value", [
+    "<br>Jane", "Jane<br/>", " Jane Roe", "Jane Roe ", "*Jane Roe*", "_Jane_",
+    "Jane Roe" + chr(10), "Jane" + chr(10) + ">", chr(0x200B) + "Jane", "*", "<br>",
+])
+def test_a_map_refuses_a_value_with_whitespace_or_markup_at_either_end(tmp_path, value: str) -> None:
+    # Pass two replaces the words alone, so "<br>Jane" became "<br>PERSON_01"
+    # and restore wrote "<br><br>Jane".
+    with pytest.raises(EvattError, match="starts or ends with whitespace or markup"):
         entities.load(_map(tmp_path, [value]))
+    with pytest.raises(EvattError, match="starts or ends with whitespace or markup"):
+        entities.assign([], value, "person", "2026-09-27")
 
 
 def test_near_miss_placeholders_stay_unrestored() -> None:
@@ -271,9 +289,10 @@ def test_a_map_refuses_a_value_made_only_of_placeholder_parts(tmp_path, value) -
 
 @pytest.mark.parametrize(("value", "prefix", "unit"), [
     ("A * B", "A", "*"),
-    # Long runs of every joiner kind; a value holding part of a tag, which was
-    # cubic, is now refused (see the tests above).
+    # Long runs of every joiner kind, and a value holding part of a tag, which
+    # was cubic before the joins were atomic.
     ("A B", "A ", "<br" + chr(10) + ">"),
+    ("A <br B", "A ", "<br "),
     ("A B", "A", chr(10) + "> "),
     ("A B", "A", chr(0x200B) + "_*"),
 ])
