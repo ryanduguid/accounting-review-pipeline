@@ -46,7 +46,7 @@ source and signer identity:
 
 ```bash
 set -euo pipefail
-tag=accounting-excel-toolkit/v0.1.6
+tag=accounting-excel-toolkit/v0.1.7
 repo=ryanduguid/accounting-review-pipeline
 release_commit="$(git ls-remote "https://github.com/$repo.git" "refs/tags/$tag^{}" | cut -f1)"
 test -n "$release_commit"
