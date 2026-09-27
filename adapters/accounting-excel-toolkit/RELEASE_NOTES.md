@@ -1,3 +1,12 @@
+# v0.1.7
+
+- Xero aged payables keep their source section labels on request, so supplier and expense-claim balances reconcile separately; the default output is unchanged (#163).
+- The aged payables and receivables parsers refuse a record whose width differs from the header instead of reading a malformed CSV, and the aged summary queries no longer describe their output as verified (#246).
+- `Xero.TrialBalance` buffers its file like the other three queries, so header measurement and parsing read the same bytes, and its final parse refuses an extra value.
+- The workpaper header macro no longer stops with run-time error 13 when cell A3 already holds an error value.
+- `tools/xero_account_transactions.py` inspects exported Xero account-transaction reports offline against their documented shapes, with a fabricated sample, and keeps row observations apart from clearing-item identity (#215).
+- `Fx.AUFinancialYear` documents how to let a western or central state's local calendar decide the financial year.
+
 # v0.1.6
 
 - Require all 6 ageing bucket headers and retain fixed-decimal currency columns.
