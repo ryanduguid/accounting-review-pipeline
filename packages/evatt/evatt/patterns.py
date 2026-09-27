@@ -49,7 +49,9 @@ Six deliberate divergences from the origin:
 * The labelled TFN also takes "tax file no.", qualifier words, markdown
   between the label and its digits and an emphasis underscore touching the
   label, and every digit gap, labelled or bare, takes up to 2 characters where
-  the origin takes one (``[\\s-]?``). PDF-to-text output doubles spaces.
+  the origin takes one (``[\\s-]?``). PDF-to-text output doubles spaces. A
+  bare TFN's 2 gaps need not match, where the origin required the second to
+  repeat the first.
 """
 from __future__ import annotations
 
@@ -136,11 +138,16 @@ PHONE = re.compile(
 # single character class avoid nested whitespace matching and keep scans bounded.
 # Mixed or unmatched delimiter runs are conservatively treated as formatting:
 # the label still identifies the candidate, even when the markup is malformed.
-_WORD = r"(?:number|no|card(?:holder)?)\b\.?"
+_WORD = r"(?:number|no|card(?:holder)?)(?![^\W_])\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
 _SEP = r"(?:[.:#,(|;/=\u2013-]\s*)?"
 _MARKUP = r"(?:[*_`][*_`\s]*(?![*_`\s]))?"
-_GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
+# A qualifier can close its own emphasis before the separator, as in
+# "**ABN no.**: 51 824 753 557", so a third _MARKUP sits between the first
+# qualifier and _SEP. Each _MARKUP takes a whole run or nothing, because of its
+# final lookahead, so 2 of them meeting across an empty qualifier give 2 parses
+# of a run, not one per split point.
+_GAP = r"\s*%s%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _MARKUP, _SEP, _QUALIFIER, _MARKUP)
 # Digit groups inside an identifier may be separated by up to 2 spaces or
 # hyphens: PDF-to-text conversion doubles spaces, and "tfn:  123  456  782"
 # came back whole with a clean verify. Only the interior gap is widened. The
@@ -157,7 +164,7 @@ _LABEL_END = r"(?![^\W\d_])"
 # "tax file no." is as common as "tax file number". The qualifier stays
 # mandatory, so "tax file 2026-2027" is not a label.
 TFN_LABELLED = re.compile(
-    r"%s(?:tax file (?:number|no\b\.?)|TFN)%s%s(\d(?:%s\d){7,8})(?![\s-]?\d)"
+    r"%s(?:tax file (?:number|no(?![^\W_])\.?)|TFN)%s%s(\d(?:%s\d){7,8})(?![\s-]?\d)"
     % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
     re.I,
 )
@@ -190,7 +197,11 @@ MEDICARE_LABELLED = re.compile(
 # which for such tails is roughly one in 11. That price is worth paying,
 # because over-redaction costs one placeholder in a private file while
 # under-detection leaks a tax file number.
-TFN_BARE = re.compile(r"(?<![\d$])(\d{3}([\s-]{0,2})\d{3}\2\d{3})(?![\s-]?\d)")
+#
+# The 2 gaps of a bare TFN are independent. The origin required the second to
+# repeat the first, so a valid TFN written "123  456 782" passed with no halt;
+# the check digit, not the spacing, is what separates a TFN from a number.
+TFN_BARE = re.compile(r"(?<![\d$])(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
 ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
 ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
 MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]{0,2}\d{5}[\s-]{0,2}\d)(?![\s-]?\d)")
@@ -259,6 +270,19 @@ PLACEHOLDER = re.compile(
 # ``_PREFIX`` and ``_KIND_PREFIX``. Widening it there would change which inputs
 # halt and which tokens restore, which is a different decision from this one.
 PLACEHOLDER_CI = re.compile(PLACEHOLDER.pattern, re.I)
+# Every placeholder-shaped span, with no boundary at all. Pass two protects
+# these from rewriting: PLACEHOLDER's left boundary hides "_TFN_01_", which pass
+# one writes from "_123456783_", while ``value_pattern`` reads the underscores as
+# emphasis, so a map value "TFN 01 Jane" rewrote the tax file number's only
+# record. Protecting a span that is not a placeholder costs nothing, because no
+# map value can start inside a longer word.
+PLACEHOLDER_SPAN = re.compile(r"(?:%s)_\d{2,}" % "|".join(PLACEHOLDER_PREFIXES))
+# A placeholder an input carries, with emphasis allowed at its edges the way
+# NAME allows it: "_PERSON_01_" is still a carried token, while "MY_CLIENT_01"
+# and "XCLIENT_01" stay parts of longer tokens.
+CARRIED_PLACEHOLDER = re.compile(
+    r"(?<![A-Za-z0-9])(?<![A-Za-z0-9]_)(?:%s)_\d{2,}" % "|".join(PLACEHOLDER_PREFIXES)
+)
 
 
 def value_pattern(value: str) -> re.Pattern[str]:
@@ -300,7 +324,7 @@ def value_pattern(value: str) -> re.Pattern[str]:
     name; while each side kept its own form the known name passed through
     unchanged and verified clean.
 
-    Markdown and invisible joiners count as whitespace too (``_JOIN``): a
+    Markdown and invisible joiners count as whitespace too (``_JOIN_ATOM``): a
     mapped name written "_Jane Roe_", "Jane<br>Roe" in a table cell, "Jane" and
     "Roe" on 2 lines of a blockquote, or with a zero-width character between
     them was sent through unchanged and verified clean. The value is split on
@@ -314,25 +338,40 @@ def value_pattern(value: str) -> re.Pattern[str]:
     the run around the placeholder as asterisks, because an underscore beside
     a placeholder is a boundary character and ``restore`` would refuse it.
     """
-    body = _JOIN.join(re.escape(part) for part in value_parts(value))
+    parts = [re.escape(part) for part in value_parts(value)]
+    if not parts:
+        # "*" or "<br>" alone leaves no token, and an empty body matched between
+        # every pair of characters with a quadratic scan over emphasis runs.
+        raise ValueError(f"entity value {value!r} has no token to match")
+    body = parts[0]
+    for index, part in enumerate(parts[1:]):
+        # Each joiner run is taken whole, as an atomic group. Python 3.10 has
+        # no ``(?>...)``, and a lookahead is never re-entered, so capturing the
+        # run in one and consuming it by backreference is the same thing. A
+        # token such as "<br" could otherwise take part of a joiner between 2
+        # variable runs, and "A <br <br B" searched in cubic time.
+        body += r"(?=(?P<j%d>%s+))(?P=j%d)%s" % (index, _JOIN_ATOM, index, part)
     # ``(?<![\w*])`` lets a match start only where an emphasis run starts, not
     # part-way through one: a search that could start at every star of a long
-    # run and back the ``open`` group off from each is quadratic.
+    # run and back the ``open`` group off from each is quadratic. The second
+    # alternative starts a match straight after a star, taking only
+    # underscores, so "paid**jane roe**" and the second of 2 abutting bold names
+    # still match without reopening that scan.
     return re.compile(
-        r"(?<![\w*])(?P<open>[*_]*)" + body + r"(?P<close>[*_]*)(?!\w)", re.IGNORECASE
+        r"(?P<open>(?<![\w*])[*_]*|(?<=\*)_*)" + body + r"(?P<close>[*_]*)(?!\w)",
+        re.IGNORECASE,
     )
 
 
 # One separator between the tokens of a mapped value. Each alternative starts
-# with a different character and consumes a fixed shape, so a run of joiners
-# has one parse and a failing search stays linear.
+# with a different character, but a token can still begin with part of one
+# ("<br"), which is why ``value_pattern`` takes each run atomically.
 _JOIN_ATOM = r"(?:[^\S\n]|[\u200b-\u200d\u2060]|\n(?:[ \t]*>)*|[*_]|<br\s*/?>)"
-_JOIN = _JOIN_ATOM + "+"
 _JOIN_SPLIT = re.compile(r"(?:\s|[\u200b-\u200d\u2060]|[*_>]|<br\s*/?>)+", re.IGNORECASE)
 
 
 def value_parts(value: str) -> list[str]:
-    """The tokens of an entity map value, split on everything ``_JOIN`` accepts.
+    """The tokens of an entity map value, split on everything ``_JOIN_ATOM`` accepts.
 
     ``value_pattern`` joins these, and ``entities._fold`` compares them, so a map
     cannot hold 2 spellings the matcher treats as one name.

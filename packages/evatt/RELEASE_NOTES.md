@@ -1,8 +1,9 @@
 # Unreleased
 
 - Match a mapped name through underscore and asterisk emphasis, `<br>` line breaks, blockquote continuations and zero-width joiners, and write its placeholder inside the original emphasis so it restores. Report `__John Smith__` and other emphasised unmapped names in the residual sweep.
-- Keep pass-one placeholders out of pass two's reach, and refuse map values made only of placeholder parts or differing from another entry only in the separators the matcher joins.
-- Detect identifiers whose digit groups are separated by up to 2 spaces or hyphens, the `tax file no.` label and labels touching an emphasis underscore such as `__TFN__:`.
+- Keep every placeholder already in the text, underscore-wrapped ones included, out of pass two's reach; halt on a placeholder the input carries inside emphasis; and refuse map values made only of placeholder parts or differing from another entry only in the separators the matcher joins.
+- Detect identifiers whose digit groups are separated by up to 2 spaces or hyphens (a bare TFN's 2 gaps may differ), the `tax file no.` label, and labels and qualifiers with emphasis edges such as `__TFN__:` and `**ABN no.**:`.
+- Skip a map value with no token, such as `*`, and match joiner runs atomically, so a value holding a partial `<br` tag no longer searches in cubic time.
 - Name the shapes still unsupported in the README and DECISIONS.md ruling 42.
 
 # v0.1.2

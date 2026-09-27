@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .entities import _PREFIX, Entity
-from .patterns import PLACEHOLDER, structured_spans, value_pattern
+from .patterns import CARRIED_PLACEHOLDER, structured_spans, value_pattern
 from .redact import redact, residual
 
 # The 4 prefixes ``assign`` mints, taken from the table it mints them with so
@@ -75,9 +75,9 @@ def _carried_placeholders(text: str, entities: Sequence[Entity]) -> list[Finding
     """
     assigned = {entity.placeholder: entity for entity in entities}
     found: list[Finding] = []
-    # PLACEHOLDER has no capturing group, so findall returns whole matches, and
+    # CARRIED_PLACEHOLDER has no capturing group, so findall returns whole matches, and
     # dict.fromkeys keeps one report per distinct placeholder in document order.
-    for token in dict.fromkeys(PLACEHOLDER.findall(text)):
+    for token in dict.fromkeys(CARRIED_PLACEHOLDER.findall(text)):
         if token.rsplit("_", 1)[0] not in _ENTITY_PREFIXES:
             continue
         entity = assigned.get(token)

@@ -14,7 +14,7 @@ import unicodedata
 import pytest
 from evatt import entities, patterns
 from evatt.entities import Entity
-from evatt.errors import EvattError
+from evatt.errors import EvattError, Halt
 from evatt.redact import redact
 from evatt.restore import restore
 from evatt.verify import findings
@@ -52,6 +52,19 @@ def test_a_mapped_name_in_markdown_is_replaced_and_restores(text: str, expected:
     assert_person_round_trip(text, expected)
 
 
+@pytest.mark.parametrize(("text", "expected", "count"), [
+    # Lower case, so the residual sweep cannot rescue a miss (Oracle review of 27 Sep).
+    ("paid**jane roe** today", "paid**PERSON_01** today", 1),
+    ("**jane roe****jane roe**", "**PERSON_01****PERSON_01**", 2),
+    ("paid**_jane roe_**", "paid***PERSON_01***", 1),
+])
+def test_a_mapped_name_straight_after_a_star_is_replaced(text: str, expected: str, count: int) -> None:
+    redacted, counts = redact(text, MAP, strict=False)
+    assert (redacted, counts) == (expected, {"person": count})
+    assert findings(redacted, MAP) == ()
+    assert restore(redacted, MAP).count(PERSON.value) == count
+
+
 @pytest.mark.parametrize("joiner", JOINERS)
 def test_a_mapped_name_split_by_an_invisible_joiner_is_replaced(joiner: str) -> None:
     assert_person_round_trip(f"Jane{joiner}Roe signed", "PERSON_01 signed")
@@ -82,9 +95,11 @@ def test_a_name_joined_to_a_word_by_one_underscore_is_a_longer_token(text: str) 
 
 
 # Shapes this change does not join, recorded as unsupported in DECISIONS.md
-# ruling 42 and the README. Each passes redact untouched with no halt, so the
-# operator's read of the whole output is the only control. A test that starts
-# failing here means a shape became supported: move it and update both.
+# ruling 42 and the README. Each passes pass two untouched. Most also pass the
+# residual sweep, so the operator's read of the whole output is the only
+# control; a capitalised fragment left behind can still halt a strict run. A
+# test that starts failing here means a shape became supported: move it and
+# update both.
 @pytest.mark.parametrize("text", [
     "Jane" + chr(92) + "\nRoe signed",
     "Jane&nbsp;Roe signed",
@@ -121,6 +136,13 @@ def test_the_tools_own_placeholders_never_trigger_the_residual_sweep() -> None:
     ("TFN: 123 456\n782 on file", "TFN: TFN_01 on file", "tfn"),
     ("TFN:" + chr(0xA0) + "123" + chr(0xA0) + "456" + chr(0xA0) + "782", "TFN:" + chr(0xA0) + "TFN_01", "tfn"),
     ("MY_TFN: 123 456 783", "MY_TFN: TFN_01", "tfn"),
+    # A bare TFN's 2 gaps are independent; the check digit is what admits it.
+    ("123  456 782", "TFN_01", "tfn"),
+    # A qualifier takes an emphasis edge and may close its emphasis before the colon.
+    ("__tax file no__: 123456783", "__tax file no__: TFN_01", "tfn"),
+    ("__Medicare card__: 2123456711", "__Medicare card__: MEDICARE_01", "medicare"),
+    ("**Medicare card**: 2123456711", "**Medicare card**: MEDICARE_01", "medicare"),
+    ("**ABN no.**: 51 824 753 557", "**ABN no.**: ABN_01", "abn"),
     # Unchanged from before the widening: the one-character trailing pins keep these.
     ("TFN: 123 456 782  2026", "TFN: TFN_01  2026", "tfn"),
     ("row 7 123 456 782  45,000.00", "row 7 TFN_01  45,000.00", "tfn"),
@@ -165,6 +187,30 @@ def test_a_map_value_cannot_rewrite_a_pass_one_placeholder(value: str) -> None:
     assert (counts["tfn"], counts["medicare"], counts["email"]) == (1, 1, 1)
 
 
+@pytest.mark.parametrize("value", ["TFN 01", "TFN 01 Jane"])
+def test_a_map_value_cannot_rewrite_an_underscore_wrapped_placeholder(value: str) -> None:
+    # Pass one keeps the underscores around "_123456783_", and PLACEHOLDER's
+    # left boundary did not see the TFN_01 inside them, so pass two rewrote it.
+    rogue = Entity(value, "CLIENT_07", "client", "2026-09-27")
+    assert redact("TFN: _123456783_ Jane", (rogue,), strict=False) == ("TFN: _TFN_01_ Jane", {"tfn": 1})
+
+
+def test_an_underscore_wrapped_placeholder_in_the_input_is_carried() -> None:
+    with pytest.raises(Halt):
+        redact("_PERSON_09_ Smith", MAP)
+    assert ("placeholder", "PERSON_09") in [(f.kind, f.value) for f in findings("_PERSON_09_ Smith", MAP)]
+
+
+def test_a_placeholder_inside_a_longer_token_is_not_carried() -> None:
+    assert redact("see MY_CLIENT_01 and XCLIENT_01", ()) == ("see MY_CLIENT_01 and XCLIENT_01", {})
+
+
+def test_a_value_with_no_token_is_refused_by_the_matcher_and_skipped_by_redact() -> None:
+    with pytest.raises(ValueError, match="no token"):
+        patterns.value_pattern("*")
+    assert redact("a ... b", (Entity("*", "CLIENT_07", "client", "2026-09-27"),), strict=False) == ("a ... b", {})
+
+
 def test_near_miss_placeholders_stay_unrestored() -> None:
     client = Entity("Sample Holdings Pty Ltd", "CLIENT_01", "client", "2026-09-27")
     text = "PRIOR_CLIENT_01 XCLIENT_01 CLIENT_01s"
@@ -193,16 +239,23 @@ def test_a_map_refuses_a_value_made_only_of_placeholder_parts(tmp_path, value) -
         entities.load(_map(tmp_path, [value]))
 
 
-def test_a_value_with_star_runs_matches_in_linear_time() -> None:
+@pytest.mark.parametrize(("value", "prefix", "unit"), [
+    ("A * B", "A", "*"),
+    # A token that is part of a joiner ("<br") between 2 joiner runs was cubic.
+    ("A <br B", "A ", "<br" + chr(10) + ">"),
+    ("A <br <br B", "A ", "<br" + chr(10) + ">"),
+])
+def test_a_failing_value_search_stays_linear(value: str, prefix: str, unit: str) -> None:
     # A subprocess bounds a catastrophic regression to a failure, not a hung suite.
-    probe = "from evatt import patterns; assert patterns.value_pattern('A * B').search('A' + '*' * 20000 + 'X') is None"
+    probe = (f"from evatt import patterns; "
+             f"assert patterns.value_pattern({value!r}).search({prefix!r} + {unit!r} * 20000 + 'X') is None")
     subprocess.run([sys.executable, "-c", probe], check=True, timeout=60)
-    pattern = patterns.value_pattern("A * B")
+    pattern = patterns.value_pattern(value)
 
     def duration(size: int) -> float:
         best = float("inf")
         for _ in range(3):
-            text = "A" + "*" * size + "X"
+            text = prefix + unit * size + "X"
             start = time.perf_counter()
             assert pattern.search(text) is None
             best = min(best, time.perf_counter() - start)
