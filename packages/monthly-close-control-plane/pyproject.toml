@@ -40,7 +40,6 @@ dev = [
 
 [project.scripts]
 close-control = "closecontrol.cli:main"
-openaccountants-au = "closecontrol.pipeline_cli:main"
 
 [tool.setuptools]
 packages = ["closecontrol"]

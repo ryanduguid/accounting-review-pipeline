@@ -20,14 +20,10 @@ from pathlib import Path
 import pytest
 from elizabeth_anne_alexander import gateway
 from elizabeth_anne_alexander.errors import GatewayError
-from elizabeth_anne_alexander.gateway import (
-    _load_context,
-    _load_manifest,
-    _load_policy,
-    _load_request,
-    _load_tb,
-)
+from elizabeth_anne_alexander.gateway import _load_manifest
 from elizabeth_anne_alexander.util import canonical_json, sha256_bytes, snapshot_file
+
+from loaders import _load_context, _load_policy, _load_request, _load_tb
 
 PKG = Path(__file__).resolve().parents[1] / "elizabeth_anne_alexander"
 CURRENT_MANIFEST = "sample-tb-2026-06-30.manifest.json"
