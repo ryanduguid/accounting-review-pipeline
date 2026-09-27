@@ -270,18 +270,13 @@ PLACEHOLDER = re.compile(
 # ``_PREFIX`` and ``_KIND_PREFIX``. Widening it there would change which inputs
 # halt and which tokens restore, which is a different decision from this one.
 PLACEHOLDER_CI = re.compile(PLACEHOLDER.pattern, re.I)
-# Every placeholder-shaped span, with no boundary at all. Pass two protects
-# these from rewriting: PLACEHOLDER's left boundary hides "_TFN_01_", which pass
-# one writes from "_123456783_", while ``value_pattern`` reads the underscores as
-# emphasis, so a map value "TFN 01 Jane" rewrote the tax file number's only
-# record. Protecting a span that is not a placeholder costs nothing, because no
-# map value can start inside a longer word.
-PLACEHOLDER_SPAN = re.compile(r"(?:%s)_\d{2,}" % "|".join(PLACEHOLDER_PREFIXES))
-# A placeholder an input carries, with emphasis allowed at its edges the way
-# NAME allows it: "_PERSON_01_" is still a carried token, while "MY_CLIENT_01"
-# and "XCLIENT_01" stay parts of longer tokens.
+# A placeholder standing as its own token, allowing an emphasis run of
+# underscores before it: "_PERSON_01_" is one, while "MY_CLIENT_01",
+# "MY__CLIENT_01" and "XCLIENT_01" are parts of longer tokens. The run is
+# consumed from a real edge, because fixed-width lookbehinds let a second
+# underscore through. The placeholder itself is the ``token`` group.
 CARRIED_PLACEHOLDER = re.compile(
-    r"(?<![A-Za-z0-9])(?<![A-Za-z0-9]_)(?:%s)_\d{2,}" % "|".join(PLACEHOLDER_PREFIXES)
+    r"(?<![A-Za-z0-9_])_*(?P<token>(?:%s)_\d{2,})" % "|".join(PLACEHOLDER_PREFIXES)
 )
 
 
@@ -338,11 +333,17 @@ def value_pattern(value: str) -> re.Pattern[str]:
     the run around the placeholder as asterisks, because an underscore beside
     a placeholder is a boundary character and ``restore`` would refuse it.
     """
-    parts = [re.escape(part) for part in value_parts(value)]
-    if not parts:
+    tokens = value_parts(value)
+    if not tokens:
         # "*" or "<br>" alone leaves no token, and an empty body matched between
         # every pair of characters with a quadratic scan over emphasis runs.
         raise ValueError(f"entity value {value!r} has no token to match")
+    if any(token.lower().startswith("<br") for token in tokens):
+        # A token that begins like a <br> tag competes with the joiner for the
+        # same characters: atomic joins then miss the value's own spelling, and
+        # backtracking ones searched in cubic time.
+        raise ValueError(f"entity value {value!r} holds part of a <br> tag as a word")
+    parts = [re.escape(token) for token in tokens]
     body = parts[0]
     for index, part in enumerate(parts[1:]):
         # Each joiner run is taken whole, as an atomic group. Python 3.10 has
@@ -367,7 +368,10 @@ def value_pattern(value: str) -> re.Pattern[str]:
 # with a different character, but a token can still begin with part of one
 # ("<br"), which is why ``value_pattern`` takes each run atomically.
 _JOIN_ATOM = r"(?:[^\S\n]|[\u200b-\u200d\u2060]|\n(?:[ \t]*>)*|[*_]|<br\s*/?>)"
-_JOIN_SPLIT = re.compile(r"(?:\s|[\u200b-\u200d\u2060]|[*_>]|<br\s*/?>)+", re.IGNORECASE)
+# A bare ">" is not a separator: the joiner accepts one only as a blockquote
+# marker after a line break, so splitting "Jane>Roe" on it left a value that
+# could not match its own spelling.
+_JOIN_SPLIT = re.compile(r"(?:\s|[\u200b-\u200d\u2060]|[*_]|<br\s*/?>)+", re.IGNORECASE)
 
 
 def value_parts(value: str) -> list[str]:

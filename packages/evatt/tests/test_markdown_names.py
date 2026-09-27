@@ -202,13 +202,37 @@ def test_an_underscore_wrapped_placeholder_in_the_input_is_carried() -> None:
 
 
 def test_a_placeholder_inside_a_longer_token_is_not_carried() -> None:
-    assert redact("see MY_CLIENT_01 and XCLIENT_01", ()) == ("see MY_CLIENT_01 and XCLIENT_01", {})
+    text = "see MY_CLIENT_01, MY__CLIENT_01 and XCLIENT_01"
+    assert redact(text, ()) == (text, {})
+    assert findings(text, ()) == ()
 
 
-def test_a_value_with_no_token_is_refused_by_the_matcher_and_skipped_by_redact() -> None:
-    with pytest.raises(ValueError, match="no token"):
-        patterns.value_pattern("*")
-    assert redact("a ... b", (Entity("*", "CLIENT_07", "client", "2026-09-27"),), strict=False) == ("a ... b", {})
+def test_a_value_enclosing_a_placeholder_shaped_run_is_still_replaced() -> None:
+    # Protection covers placeholders pass one wrote and tokens the input
+    # carries, not a placeholder-shaped run inside a mapped value's own word.
+    client = Entity("XCLIENT 01", "CLIENT_07", "client", "2026-09-27")
+    assert redact("paid XCLIENT_01 today", (client,), strict=False) == ("paid CLIENT_07 today", {"client": 1})
+
+
+@pytest.mark.parametrize(("value", "text"), [("Jane>Roe", "met Jane>Roe today"), ("A > B", "met A > B today")])
+def test_a_value_holding_a_greater_than_sign_matches_its_own_spelling(value: str, text: str) -> None:
+    entity = Entity(value, "CLIENT_07", "client", "2026-09-27")
+    assert redact(text, (entity,), strict=False) == ("met CLIENT_07 today", {"client": 1})
+
+
+@pytest.mark.parametrize("value", ["*", "<br <br b", "A <BR/ B"])
+def test_a_value_the_matcher_refuses_is_skipped_by_redact_and_verify(value: str) -> None:
+    with pytest.raises(ValueError):
+        patterns.value_pattern(value)
+    entity = Entity(value, "CLIENT_07", "client", "2026-09-27")
+    assert redact("a ... b", (entity,), strict=False) == ("a ... b", {})
+    assert findings("a ... b", (entity,)) == ()
+
+
+@pytest.mark.parametrize("value", ["Jane <br Roe", "A <BR/ B"])
+def test_a_map_refuses_a_value_holding_part_of_a_br_tag(tmp_path, value: str) -> None:
+    with pytest.raises(EvattError, match="cannot be matched"):
+        entities.load(_map(tmp_path, [value]))
 
 
 def test_near_miss_placeholders_stay_unrestored() -> None:
@@ -241,9 +265,11 @@ def test_a_map_refuses_a_value_made_only_of_placeholder_parts(tmp_path, value) -
 
 @pytest.mark.parametrize(("value", "prefix", "unit"), [
     ("A * B", "A", "*"),
-    # A token that is part of a joiner ("<br") between 2 joiner runs was cubic.
-    ("A <br B", "A ", "<br" + chr(10) + ">"),
-    ("A <br <br B", "A ", "<br" + chr(10) + ">"),
+    # Long runs of every joiner kind; a value holding part of a tag, which was
+    # cubic, is now refused (see the tests above).
+    ("A B", "A ", "<br" + chr(10) + ">"),
+    ("A B", "A", chr(10) + "> "),
+    ("A B", "A", chr(0x200B) + "_*"),
 ])
 def test_a_failing_value_search_stays_linear(value: str, prefix: str, unit: str) -> None:
     # A subprocess bounds a catastrophic regression to a failure, not a hung suite.

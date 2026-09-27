@@ -25,7 +25,7 @@ from types import MappingProxyType
 from typing import BinaryIO, Mapping, Sequence
 
 from .errors import EvattError
-from .patterns import PLACEHOLDER_CI, PLACEHOLDER_PREFIXES, value_parts
+from .patterns import PLACEHOLDER_CI, PLACEHOLDER_PREFIXES, value_parts, value_pattern
 
 SCHEMA_VERSION = 1
 KINDS = ("client", "person", "staff", "entity")
@@ -156,6 +156,12 @@ def _check_fields(
     # it would read the placeholders pass one writes as mentions.
     if all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in value_parts(value)):
         raise EvattError(f"entity value {value!r} is made only of placeholder parts")
+    # The matcher's own refusals, such as part of a <br> tag used as a word:
+    # a value it cannot match would sit in the map and never be replaced.
+    try:
+        value_pattern(value)
+    except ValueError as exc:
+        raise EvattError(f"entity value {value!r} cannot be matched: {exc}") from exc
     if not isinstance(kind, str) or kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")
     try:

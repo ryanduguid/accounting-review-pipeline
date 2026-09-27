@@ -27,10 +27,8 @@ from .patterns import (
     DOB,
     PLACEHOLDER,
     PLACEHOLDER_CI,
-    PLACEHOLDER_SPAN,
     person_name_spans,
     structured_spans,
-    value_parts,
     value_pattern,
 )
 
@@ -150,14 +148,10 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         # pattern ``value_pattern`` compiles below. Case-sensitive, it let
         # "tfn_01" straight through and did exactly that damage, and ``load``
         # accepted the same value, so the map gate was no backstop either.
-        #
-        # A value made only of joiners, such as "*", has no token left once
-        # ``value_parts`` splits it, and ``value_pattern`` refuses it.
         if (
             not isinstance(entity.value, str)
             or not entity.value.strip()
             or PLACEHOLDER_CI.search(entity.value)
-            or not value_parts(entity.value)
         ):
             continue
         # The mirror of the guard above, on the other half of the entry, and
@@ -189,16 +183,28 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
             or entity.placeholder.rsplit("_", 1)[0] != _PREFIX.get(entity.kind)
         ):
             continue
-        for match in value_pattern(entity.value).finditer(text):
+        try:
+            pattern = value_pattern(entity.value)
+        except ValueError:
+            # A value with no token ("*") or with part of a <br> tag as a word
+            # cannot be matched safely. ``load`` refuses both.
+            continue
+        for match in pattern.finditer(text):
             found.append((match.start(), match.end(), priority, entity, match))
     found.sort(key=lambda f: (f[0], -(f[1] - f[0]), f[2]))
     # Placeholders already in the text, pass one's and any the input carried,
     # are opaque. The value pattern joins tokens across "_", so a map value
     # "TFN 01" would otherwise read pass one's TFN_01 as a mention and rewrite
     # the only record that a tax file number stood there. Guarding here rather
-    # than only in ``load`` covers a map built by hand as well. The scan has no
-    # boundary (``PLACEHOLDER_SPAN``), so "_TFN_01_" is protected too.
-    protected = [m.span() for m in PLACEHOLDER_SPAN.finditer(text)]
+    # than only in ``load`` covers a map built by hand as well.
+    #
+    # ``CARRIED_PLACEHOLDER`` finds a placeholder standing as its own token,
+    # emphasis underscores allowed, which is every place ``value_pattern`` can
+    # start a match: "_TFN_01_", which pass one writes from "_123456783_" and
+    # which PLACEHOLDER's left boundary could not see, is protected. A
+    # placeholder-shaped run inside a longer word is not, so a map value
+    # "XCLIENT 01" still replaces "XCLIENT_01".
+    protected = [m.span("token") for m in CARRIED_PLACEHOLDER.finditer(text)]
     protected_starts = [start for start, _end in protected]
     counts: Counter = Counter()
     pieces: list[str] = []
@@ -296,25 +302,25 @@ def _input_placeholders(text: str, redacted: str) -> tuple[Unknown, ...]:
     there would be worse than quoting an approximate line, so such a token is
     still reported, against the redacted line standing at its input line number.
     """
-    carried = {match.group(0) for match in CARRIED_PLACEHOLDER.finditer(text)}
+    carried = {match.group("token") for match in CARRIED_PLACEHOLDER.finditer(text)}
     if not carried:
         return ()
     lines, starts = _lines_and_starts(redacted)
     found: dict[tuple[int, str], Unknown] = {}
     for match in CARRIED_PLACEHOLDER.finditer(redacted):
-        token = match.group(0)
+        token = match.group("token")
         if token not in carried:
             continue
-        number, context = _locate(lines, starts, match.start())
+        number, context = _locate(lines, starts, match.start("token"))
         found.setdefault((number, token), Unknown("placeholder", token, number, context))
     survived = {token for _number, token in found}
     if len(survived) < len(carried):
         input_lines, input_starts = _lines_and_starts(text)
         for match in CARRIED_PLACEHOLDER.finditer(text):
-            token = match.group(0)
+            token = match.group("token")
             if token in survived:
                 continue
-            number, _raw = _locate(input_lines, input_starts, match.start())
+            number, _raw = _locate(input_lines, input_starts, match.start("token"))
             context = lines[number - 1].strip() if 0 < number <= len(lines) else ""
             found.setdefault((number, token), Unknown("placeholder", token, number, context))
     return tuple(found[key] for key in sorted(found))

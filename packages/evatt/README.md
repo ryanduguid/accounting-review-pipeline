@@ -191,18 +191,20 @@ an extra placeholder costs a triage decision while a miss leaks.
 - **Markdown between a label and its digits does not break the label.**
   `**TFN**: 123 456 783`, `__TFN__: 123 456 783`, `**ABN no.**: 51 824 753 557`,
   `TFN: **123 456 783**`, `` TFN: `123 456 783` `` and a table cell
-  `| TFN | 123 456 783 |` are all labelled identifiers.
+  `| TFN | 123 456 783 |` are all labelled identifiers. Emphasis around a
+  qualifier alone, as in `Medicare __card__ number:`, breaks the label.
 - **Digit groups may be separated by up to 2 spaces or hyphens**, as PDF-to-text
   conversion writes them, and `tax file no.` is a label beside `tax file number`
   and `TFN`. Three or more spaces between groups, and a labelled number with
   another digit group one space after it, as in `TFN: 123456783 2026`, are not
-  replaced and usually pass without a halt.
+  reliably redacted: they may be left in place or only partly replaced, usually
+  without a halt.
 - **A mapped name is matched through the markdown most documents put in it.**
   `_Jane Roe_`, `**Jane Roe**`, `Jane<br>Roe` in a table cell, a name wrapped
   inside a blockquote, `Jane_Roe` and a zero-width joiner between the words are
   all replaced, in upper, lower or mixed case, and the placeholder keeps the
-  emphasis around it. These shapes are not replaced, and most pass without a
-  halt: first and last names in separate table columns, initials such as
+  emphasis around it. These shapes are not reliably redacted, and most pass
+  without a halt: first and last names in separate table columns, initials such as
   `J. Roe`, `Jane&nbsp;Roe`, `Jane <em>Roe</em>`, a backslash hard break between
   the words, a name split across code spans and a zero-width character inside a
   word. Read the whole output for them. Matching through markup also reaches
