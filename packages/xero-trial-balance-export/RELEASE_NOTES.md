@@ -1,3 +1,12 @@
+# v0.1.13
+
+- `xero-tb-auth --help` prints usage and exits 0 before reading the
+  environment. It ignored the argument, read the credentials and started OAuth,
+  opening a browser.
+- `requirements.lock` is exported from this component's own `uv.lock`, and CI
+  fails when the two differ; the hash-locked install and the component lock can
+  no longer drift apart.
+
 # v0.1.12
 
 - Refuse a Trial Balance response whose report identity, reporting period,
