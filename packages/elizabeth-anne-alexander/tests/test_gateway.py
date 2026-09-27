@@ -18,13 +18,14 @@ from elizabeth_anne_alexander.gateway import (
     BalanceRow,
     _assert_model_is_redacted,
     _iso_timestamp,
-    _load_tb,
     _variance_findings,
     evaluate,
     validate_review,
 )
 from elizabeth_anne_alexander.persist import write_evaluation
 from elizabeth_anne_alexander.util import canonical_json, package_root, sha256_bytes
+
+from loaders import _load_tb
 
 PKG = Path(__file__).resolve().parents[1] / "elizabeth_anne_alexander"
 
@@ -548,7 +549,7 @@ def test_unknown_section_is_denied_by_policy(tmp_path: Path) -> None:
     bad = tmp_path / "request.json"
     bad.write_text(json.dumps(request), encoding="utf-8")
 
-    from elizabeth_anne_alexander.gateway import _load_policy, _load_request
+    from loaders import _load_policy, _load_request
 
     policy = _load_policy(PKG / "policy" / "demo-policy-v1.json")
     with pytest.raises(GatewayError, match="not allowlisted"):
@@ -1213,7 +1214,7 @@ def test_the_three_artefacts_the_scope_note_exempts_reject_an_added_mode_key(tmp
     disabled all 3 of these artefacts load and the run completes, so the
     tie-out was pinning prose that nothing policed.
     """
-    from elizabeth_anne_alexander.gateway import _load_policy, _load_request
+    from loaders import _load_policy, _load_request
 
     policy_path = tmp_path / "policy.json"
     policy_source = json.loads((PKG / "policy" / "demo-policy-v1.json").read_text(encoding="utf-8"))
@@ -1281,7 +1282,7 @@ def test_an_absurd_percentage_is_refused_not_raised_out_of_the_projection() -> N
 def test_a_non_iterable_model_projection_is_refused_not_a_type_error(tmp_path: Path) -> None:
     """tuple() on an int raises TypeError, which is not the fail-closed error
     every other malformed-policy path produces."""
-    from elizabeth_anne_alexander.gateway import _load_policy
+    from loaders import _load_policy
 
     source = json.loads((PKG / "policy" / "demo-policy-v1.json").read_text(encoding="utf-8"))
     source["model_projection"] = 9

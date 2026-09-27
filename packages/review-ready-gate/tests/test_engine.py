@@ -165,7 +165,7 @@ def test_exception_tieout_is_not_ready(tmp_path: Path) -> None:
     from reviewready.engine import _apply_year_end_tieout, _overall
     from reviewready.models import TieOutRow
     findings = []
-    _apply_year_end_tieout({"tie_out_matrix": [TieOutRow("Cash", Decimal("10"), "WP1", "cash.csv", "EXCEPTION")]}, findings)
+    _apply_year_end_tieout({"tie_out_matrix": [TieOutRow("Cash", "WP1", "cash.csv", "EXCEPTION")]}, findings)
     assert _overall(findings) == "NOT_READY"
     assert any(item.code == "TIEOUT_BREAK" for item in findings)
 

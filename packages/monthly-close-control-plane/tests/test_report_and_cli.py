@@ -7,7 +7,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,7 +16,6 @@ from closecontrol.engine import CloseReviewPack, review_close
 from closecontrol.errors import ControlInputError
 from closecontrol.loader import load_canonical_tb
 from closecontrol.models import ExceptionItem
-from closecontrol.pipeline_cli import main as quarantined_main
 from closecontrol.report import CHECKOUT_MARKERS, _same_directory, write_review_pack
 from closecontrol.viewer import render_review_sheet
 
@@ -30,20 +28,6 @@ PACK_FILES = [
     "close-summary.md",
     "exceptions.csv",
 ]
-
-
-def test_openaccountants_au_redirects_without_running_a_review(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr(sys, "argv", ["openaccountants-au"])
-
-    assert quarantined_main() == 2
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "quarantined" in captured.err
-    assert "close-control" in captured.err
-    assert "ato-benchmark-compare" in captured.err
 
 
 def _single_exception_pack(

@@ -852,7 +852,7 @@ class TokenCacheProtectionTest(unittest.TestCase):
         self.assertIn(self.tokens["access_token"].encode(), self._raw())
 
         os.chmod(self.token_file, 0o644)
-        self.assertEqual(xero_client.load_tokens(), self.tokens)
+        self.assertEqual(xero_client._current_token_session().load(), self.tokens)
         self.assertEqual(
             stat.S_IMODE(os.stat(self.token_file).st_mode),
             stat.S_IRUSR | stat.S_IWUSR,
@@ -985,7 +985,7 @@ class TokenCacheConcurrencyTest(unittest.TestCase):
                 self.assertEqual(post_calls.value, 1)
 
             with mock.patch.object(xero_client, "TOKEN_FILE", self.token_file):
-                saved = xero_client.load_tokens()
+                saved = xero_client._current_token_session().load()
             self.assertEqual(saved["refresh_token"], "NEW-R")
             with open(f"{self.token_file}.lock", "rb") as source:
                 lock_bytes = source.read()
