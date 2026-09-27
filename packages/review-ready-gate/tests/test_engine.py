@@ -27,6 +27,27 @@ def test_empty_required_artefact_is_not_ready(tmp_path: Path) -> None:
     )
 
 
+def test_gst_postings_from_after_the_period_are_not_ready(tmp_path: Path) -> None:
+    """The next quarter's GST file tied to its own activity statement and read READY."""
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    gst = (dest / "gst_control_gl.csv").read_text(encoding="utf-8")
+    (dest / "gst_control_gl.csv").write_text(
+        gst.replace("2026-01-15", "2026-05-15").replace("2026-02-20", "2026-06-20"), encoding="utf-8"
+    )
+    pack = review_pack(profile="bas", pack_dir=dest)
+    assert pack.status == "NOT_READY"
+    periods = [item for item in pack.findings if item.code == FINDING_PERIOD_ORDER]
+    assert [item.slot for item in periods] == ["gst_control_gl"]
+    assert "2026-05-15, 2026-06-20" in periods[0].reason
+
+
+def test_gst_postings_on_the_period_end_are_in_period(tmp_path: Path) -> None:
+    dest = copy_example_pack("bas-ready", tmp_path / "pack")
+    gst = (dest / "gst_control_gl.csv").read_text(encoding="utf-8")
+    (dest / "gst_control_gl.csv").write_text(gst.replace("2026-02-20", "2026-03-31"), encoding="utf-8")
+    assert review_pack(profile="bas", pack_dir=dest).status == "READY"
+
+
 def test_false_self_review_assertion_is_not_ready(tmp_path: Path) -> None:
     dest = copy_example_pack("bas-ready", tmp_path / "pack")
     payload = json.loads((dest / "self_review.json").read_text(encoding="utf-8"))
