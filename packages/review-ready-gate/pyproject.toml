@@ -33,6 +33,9 @@ dev = [
     "coverage==7.16.1",
     "build>=1.6.1",
     "tomli>=2.0; python_version < '3.11'",
+    # release-python builds without isolation, so the backend comes from this
+    # locked extra, pinned exactly as [build-system] requires.
+    "setuptools==84.0.0",
 ]
 
 [project.scripts]

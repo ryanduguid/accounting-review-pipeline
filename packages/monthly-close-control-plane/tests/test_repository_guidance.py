@@ -9,7 +9,7 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
-LANDED_RELEASE_POLICY = "87767ec809dc7f77bcd45808219adaf67841ae7b"
+LANDED_RELEASE_POLICY = "ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711"
 RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
     "release-elizabeth-anne-alexander.yml",

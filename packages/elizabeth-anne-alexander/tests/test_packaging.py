@@ -54,7 +54,7 @@ def test_release_workflow_keeps_the_pinned_reusable_policy_caller() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/"
-        "release-python.yml@87767ec809dc7f77bcd45808219adaf67841ae7b"
+        "release-python.yml@ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711"
     ) in workflow
     assert "version-parser: python-literal" in workflow
     assert "version-file: elizabeth_anne_alexander/version.py" in workflow
