@@ -1,3 +1,13 @@
+# v0.1.7
+
+- Refuse a `--percentage-threshold` above 1, from the command line and from
+  `review_close`, with "use a fraction: 0.10 means 10%". A whole number such as
+  10 was read as 1000%, so an account had to move by ten times its prior
+  balance before the variance gate fired, and the close returned `PASS`.
+- Record in `docs/close-comparison.md` that close comparison misses a small
+  recurring mis-coding: a 12-month fabricated ledger with one recurring 150
+  mis-coding names no affected account at the default thresholds.
+
 # v0.1.6
 
 - Add an opt-in `--balance-policy` file to `close-control review`. It flags a
