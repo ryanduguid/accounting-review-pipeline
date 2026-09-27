@@ -787,6 +787,53 @@ def test_cli_writes_review_pack_and_returns_attention_exit_code(tmp_path: Path) 
     assert payload["acknowledgement"]["effect"].startswith("Acknowledgement is evidence")
 
 
+@pytest.mark.parametrize("threshold", ["10", "1.01", "100"])
+def test_a_whole_number_percentage_threshold_is_refused_with_guidance(
+    threshold: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ "10" meant 10% to the operator and 1000% to the gate, and the close returned PASS."""
+    output = tmp_path / "pack"
+    exit_code = main(
+        [
+            "review",
+            "--current", str(EXAMPLES / "current_trial_balance.csv"),
+            "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+            "--percentage-threshold", threshold,
+            "--output", str(output),
+        ]
+    )
+
+    assert exit_code == 1
+    assert "use a fraction: 0.10 means 10%" in capsys.readouterr().err
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("threshold", ["0.10", "1"])
+def test_a_fractional_percentage_threshold_still_runs(threshold: str, tmp_path: Path) -> None:
+    output = tmp_path / "pack"
+    exit_code = main(
+        [
+            "review",
+            "--current", str(EXAMPLES / "current_trial_balance.csv"),
+            "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+            "--percentage-threshold", threshold,
+            "--output", str(output),
+        ]
+    )
+
+    assert exit_code in (0, 2)
+    assert (output / "close-review-pack.json").is_file()
+
+
+def test_review_close_refuses_a_percentage_threshold_above_one() -> None:
+    with pytest.raises(ValueError, match="fraction from 0 to 1"):
+        review_close(
+            current_path=EXAMPLES / "current_trial_balance.csv",
+            prior_path=EXAMPLES / "prior_trial_balance.csv",
+            percentage_threshold=Decimal("10"),
+        )
+
+
 def test_workbench_writes_the_existing_review_pack_and_hands_off_to_the_reviewer(
     capsys, tmp_path: Path
 ) -> None:
