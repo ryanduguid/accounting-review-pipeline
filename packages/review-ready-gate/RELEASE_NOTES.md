@@ -1,3 +1,18 @@
+# v0.1.9
+
+- Flag GST control postings dated after the self-review's `period_end` as
+  `NOT_READY` (`PERIOD_ORDER`, slot `gst_control_gl`). The BAS tie-out summed
+  every GST row, so a GST file and activity statement from the next quarter tied
+  and read `READY` for the declared quarter. Only the upper bound is checked;
+  a lower bound needs a period start the self-review does not carry yet.
+- State two limits in the README: a bank reconciliation is checked against the
+  GL balance it records itself, not the pack's trial balance, and the GST
+  control file only for postings after `period_end`.
+- Add `review-ready compare`, which verifies two runs of one pack and reports
+  status, source digest and finding-group changes as `NEW`, `RECURRING`,
+  `CHANGED`, `NOT_RAISED` or `NOT_COMPARABLE`.
+- Link DrDebits at its renamed repository, `llm-tax-guardrails`.
+
 # v0.1.8
 
 - Add local synthetic document intake with a separate human transcription
