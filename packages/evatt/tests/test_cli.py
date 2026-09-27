@@ -588,3 +588,29 @@ def test_verify_exits_two_on_a_mapped_name_left_in_lower_case(tmp_path) -> None:
     (root / "leaked.md").write_text("client: sample holdings pty ltd\n", encoding="utf-8")
     assert main(["verify", "--in", str(root / "leaked.md"),
                  "--map", str(root / "entities.json")]) == 2
+
+
+def test_the_research_walkthrough_round_trips_the_samples(tmp_path) -> None:
+    """The README's outside-tool walkthrough, run on the fabricated samples it names."""
+    root = workspace(tmp_path)
+    entity_map = str(root / "entities.json")
+    question = root / "build" / "question.md"
+
+    assert main(["redact", "--in", str(SAMPLES / "research-question.md"), "--map", entity_map,
+                 "--out", str(question)]) == 0
+    sent = question.read_text(encoding="utf-8")
+    for value in ("Sample Holdings Pty Ltd", "Sample Trust", "Jane Roe",
+                  "123 456 782", "12 345 678 901"):
+        assert value not in sent
+    for placeholder in ("CLIENT_01", "ENTITY_01", "PERSON_01", "TFN_01", "ABN_01"):
+        assert placeholder in sent
+    assert main(["verify", "--in", str(question), "--map", entity_map]) == 0
+
+    answer = root / "build" / "answer.md"
+    assert main(["restore", "--in", str(SAMPLES / "research-answer.md"), "--map", entity_map,
+                 "--out", str(answer)]) == 0
+    restored = answer.read_text(encoding="utf-8")
+    for value in ("Sample Holdings Pty Ltd", "Sample Trust", "Jane Roe"):
+        assert value in restored
+    # Structured identifiers are one-way: the placeholder is all the reply can carry.
+    assert "TFN_01" in restored
