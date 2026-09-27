@@ -29,6 +29,9 @@ def test_labelled_code_runs_keep_spans_counts_and_verification(label, kind, valu
         f'{label}: {fence} ** _ {value} _ ** {fence}',
         f'{fence} {label} *** {fence}: {value}',
         f'{label}: {fence} {value} {fence}',
+        f'__{label}__: {fence}{value}{fence}',
+        f'_{label}_: {value}',
+        f'| __{label}__ | {value} |',
     ):
         spans = patterns.structured_spans(text)
         assert [(kind_, text[start:end]) for start, end, kind_, _ in spans] == [(kind, value)]
@@ -73,6 +76,17 @@ def test_failing_markup_runs_have_bounded_growth(label, pattern, padding):
     assert small < 0.1
     large = duration(20_000)
     assert large < small * 8 + 0.01
+
+
+@pytest.mark.parametrize('text', [
+    'XTFN: 123 456 783',
+    'TFNX: 123 456 783',
+    'TFN_x: 123 456 783',
+    'xABN: 51 824 753 557',
+    'Medicares: 2123 45671 1',
+])
+def test_a_label_inside_a_longer_word_is_not_a_label(text):
+    assert patterns.structured_spans(text) == []
 
 
 @pytest.mark.parametrize('interruption', ['unrelated', '/', '$', '!'])

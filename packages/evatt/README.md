@@ -146,7 +146,9 @@ an extra placeholder costs a triage decision while a miss leaks.
 - **Unmapped names can escape the residual sweep.** It looks for 2 or
   3 capitalised Latin-1 tokens and filters statutory vocabulary. Lower-case
   names, single names, other scripts and names containing statutory words can
-  pass unnoticed. Dates and addresses also have limited format coverage.
+  pass unnoticed, and so can a name whose words are split by markup rather than
+  spaces, such as `__John__ __Smith__`, `John<br>Smith` or a blockquote wrap.
+  Dates and addresses also have limited format coverage.
   Seed known values in the map and inspect the whole output before sending.
 - **evatt does not detect an ATO client reference.** No single fixed published
   format exists for one, so a pattern would be guesswork producing either noise
@@ -187,8 +189,28 @@ an extra placeholder costs a triage decision while a miss leaks.
   is written composed. A name the map holds as one code point and a document
   spells with a combining mark are one name to both `redact` and `verify`.
 - **Markdown between a label and its digits does not break the label.**
-  `**TFN**: 123 456 783`, `TFN: **123 456 783**`, `` TFN: `123 456 783` `` and a
-  table cell `| TFN | 123 456 783 |` are all labelled identifiers.
+  `**TFN**: 123 456 783`, `__TFN__: 123 456 783`, `**ABN no.**: 51 824 753 557`,
+  `TFN: **123 456 783**`, `` TFN: `123 456 783` `` and a table cell
+  `| TFN | 123 456 783 |` are all labelled identifiers. Emphasis around a
+  qualifier alone, as in `Medicare __card__ number:`, breaks the label.
+- **Digit groups may be separated by up to 2 spaces or hyphens**, as PDF-to-text
+  conversion writes them, and `tax file no.` is a label beside `tax file number`
+  and `TFN`. Three or more spaces between groups, and a labelled number with
+  another digit group one space after it, as in `TFN: 123456783 2026`, are not
+  reliably redacted: they may be left in place or only partly replaced, usually
+  without a halt.
+- **A mapped name is matched through the markdown most documents put in it.**
+  `_Jane Roe_`, `**Jane Roe**`, `Jane<br>Roe` in a table cell, a name wrapped
+  inside a blockquote, `Jane_Roe` and a zero-width joiner between the words are
+  all replaced, in upper, lower or mixed case, and the placeholder keeps the
+  emphasis around it. These shapes are not reliably redacted, and most pass
+  without a halt: first and last names in separate table columns, initials such as
+  `J. Roe`, `Jane&nbsp;Roe`, `Jane <em>Roe</em>`, a backslash hard break between
+  the words, a name split across code spans and a zero-width character inside a
+  word. Read the whole output for them. Matching through markup also reaches
+  text that is not a name: a mapped `Net Profit` replaces `` `net*profit` `` in
+  a code span, and a name split by a blank line or a `***` rule is replaced as
+  one.
 
 Contextual re-identification is not addressed by any of this. Read the
 document before you send it.

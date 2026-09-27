@@ -86,8 +86,8 @@ def restore(text: str, entities: Sequence[Entity]) -> str:
     visibly unrestored rather than silently wrong.
 
     Line endings are not this function's business either way. ``redact`` and
-    ``verify.findings`` normalise CRLF to LF because their patterns separate
-    digit groups with a single character; a placeholder holds no whitespace at
+    ``verify.findings`` normalise CRLF to LF because their patterns are written
+    for LF breaks; a placeholder holds no whitespace at
     all, so no break can split one and there is nothing here for a normalising
     pass to rescue. The text comes back with the endings it arrived with, and
     ``cli._read`` hands this LF text so ``cli._write`` can put the source's own

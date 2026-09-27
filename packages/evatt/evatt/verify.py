@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .entities import _PREFIX, Entity
-from .patterns import PLACEHOLDER, structured_spans, value_pattern
+from .patterns import CARRIED_PLACEHOLDER, structured_spans, value_pattern
 from .redact import redact, residual
 
 # The 4 prefixes ``assign`` mints, taken from the table it mints them with so
@@ -45,7 +45,12 @@ def _mentions(text: str, value: str) -> bool:
     lower-case client name was invisible to the command whose job is to say a
     file is not ready to send.
     """
-    return value_pattern(value).search(text) is not None
+    try:
+        pattern = value_pattern(value)
+    except ValueError:
+        # ``redact`` skips a value the matcher refuses, so there is nothing of it to find.
+        return False
+    return pattern.search(text) is not None
 
 
 def _carried_placeholders(text: str, entities: Sequence[Entity]) -> list[Finding]:
@@ -75,9 +80,9 @@ def _carried_placeholders(text: str, entities: Sequence[Entity]) -> list[Finding
     """
     assigned = {entity.placeholder: entity for entity in entities}
     found: list[Finding] = []
-    # PLACEHOLDER has no capturing group, so findall returns whole matches, and
+    # CARRIED_PLACEHOLDER has one group, the token, so findall returns the tokens, and
     # dict.fromkeys keeps one report per distinct placeholder in document order.
-    for token in dict.fromkeys(PLACEHOLDER.findall(text)):
+    for token in dict.fromkeys(CARRIED_PLACEHOLDER.findall(text)):
         if token.rsplit("_", 1)[0] not in _ENTITY_PREFIXES:
             continue
         entity = assigned.get(token)
