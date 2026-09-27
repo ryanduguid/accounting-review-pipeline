@@ -41,6 +41,7 @@ pythonpath = [
   ".",
   "packages/review-ready-gate",
   "packages/monthly-close-control-plane/tests",
+  "packages/elizabeth-anne-alexander/tests",
   "packages/xero-trial-balance-export",
 ]
 

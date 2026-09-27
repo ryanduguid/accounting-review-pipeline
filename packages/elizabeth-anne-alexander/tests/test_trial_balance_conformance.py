@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 from elizabeth_anne_alexander.errors import GatewayError
-from elizabeth_anne_alexander.gateway import CANONICAL_COLUMNS, _load_tb
+from elizabeth_anne_alexander.gateway import CANONICAL_COLUMNS
+
+from loaders import _load_tb
 
 REPO = Path(__file__).resolve().parents[1]
 CORPUS = Path(__file__).resolve().parents[3] / "contracts" / "xero-trial-balance-v1"

@@ -447,8 +447,8 @@ def test_repository_identity_is_distinct_from_package_identity() -> None:
     assert f"**Repository**: {PACKAGE_URL}" in llms
     assert (
         "| Monthly Close Controls | `packages/monthly-close-control-plane/` | "
-        "distribution `monthly-close-control-plane`, import `closecontrol`, commands "
-        "`close-control` and `openaccountants-au` | 0.1.7 |"
+        "distribution `monthly-close-control-plane`, import `closecontrol`, command "
+        "`close-control` | 0.1.7 |"
     ) in root_readme
 
 

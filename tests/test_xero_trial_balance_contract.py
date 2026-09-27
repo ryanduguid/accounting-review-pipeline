@@ -96,7 +96,11 @@ class CanonicalContractTest(unittest.TestCase):
         from closecontrol.engine import _integrity_exceptions
         from closecontrol.loader import load_canonical_tb as load_monthly
         from elizabeth_anne_alexander.errors import GatewayError
-        from elizabeth_anne_alexander.gateway import _load_tb
+        from elizabeth_anne_alexander.gateway import _load_tb_snapshot
+        from elizabeth_anne_alexander.util import snapshot_file
+
+        def _load_tb(path: Path) -> tuple:
+            return _load_tb_snapshot(snapshot_file(path, label="source CSV"))
         from reviewready.engine import _tb_balanced
         from reviewready.loader import SourceSnapshot, load_canonical_tb as load_readiness
 
