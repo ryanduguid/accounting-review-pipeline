@@ -8,7 +8,7 @@ Each entry describes the version named in its System row, as that version's READ
 
 | Field | Entry |
 | --- | --- |
-| System | [evatt](../packages/evatt/README.md) 0.1.2, local pseudonymisation of Australian client data in markdown |
+| System | [evatt](../packages/evatt/README.md) 0.1.3, local pseudonymisation of Australian client data in markdown |
 | Contains an AI model | No. It prepares documents for an external model and restores named entities in the answer. |
 | Role in an AI-assisted workflow | Runs before a document is sent to a model, replacing structured identifiers and mapped named entities with placeholders |
 | Data handled | Client markdown; structured identifiers such as TFN, ABN, ACN, BSB and Medicare numbers (replaced one-way); named entities from a local, gitignored map |
