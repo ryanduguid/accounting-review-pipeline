@@ -15,12 +15,12 @@ concurrency:
 
 jobs:
   public-fixtures:
-    name: ${{ matrix.os == 'ubuntu-24.04' && 'public-fixtures' || 'public-fixtures (Windows)' }}
+    name: ${{ matrix.os == 'ubuntu-26.04' && 'public-fixtures' || 'public-fixtures (Windows)' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest]
+        os: [ubuntu-26.04, windows-latest]
     timeout-minutes: 20
     steps:
       # The current repository uses the event revision, including the PR merge.

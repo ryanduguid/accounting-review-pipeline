@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 15
     name: publish to PyPI
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment:
       name: pypi-elizabeth-anne-alexander
       url: https://pypi.org/p/elizabeth-anne-alexander
@@ -121,7 +121,7 @@ jobs:
   recover-pypi-0-2-3:
     name: Publish the verified 0.2.3 release to PyPI
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/tags/elizabeth-anne-alexander/v0.2.3-pypi-recovery'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     environment:
       name: pypi-elizabeth-anne-alexander
