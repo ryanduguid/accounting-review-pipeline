@@ -26,7 +26,7 @@ since nothing but the check digit separates one from an ordinary number. The
 origin module splits it the same way, applying its plausibility test inside
 ``if pattern is TFN_BARE`` and admitting the labelled pattern unconditionally.
 
-Four deliberate divergences from the origin:
+Six deliberate divergences from the origin:
 
 * The twelve month names are not in ``_STATUTORY_WORDS`` here. Over Register
   text they filter citation noise; over a workpaper they suppress ``June
@@ -44,6 +44,12 @@ Four deliberate divergences from the origin:
   statutory vocabulary. Both follow from the same asymmetry as the months: over
   a workpaper an undetected person leaks and an over-detected phrase costs one
   triage decision.
+* ``NAME``'s edges let emphasis underscores touch a name, where the origin's
+  ``\\b`` saw no edge, so "_John Smith_" and "__John Smith__" reach triage.
+* The labelled TFN also takes "tax file no.", qualifier words, markdown
+  between the label and its digits and an emphasis underscore touching the
+  label, and every digit gap, labelled or bare, takes up to 2 characters where
+  the origin takes one (``[\\s-]?``). PDF-to-text output doubles spaces.
 """
 from __future__ import annotations
 
@@ -61,7 +67,19 @@ from typing import Callable
 _UPPER = r"A-Z\u00c0-\u00d6\u00d8-\u00de"
 _LOWER = r"a-z\u00df-\u00f6\u00f8-\u00ff"
 _TOKEN = r"[%s][%s%s'\u2019-]{1,20}" % (_UPPER, _UPPER, _LOWER)
-NAME = re.compile(r"\b%s,?\s+%s(?:\s+%s)?\b" % (_TOKEN, _TOKEN, _TOKEN))
+# The edges are symmetric and let emphasis underscores stand beside a name,
+# so "_John Smith_" and "__John Smith__" are still candidates: ``\b`` saw no
+# boundary between "_" and "J" and the residual sweep never reported them. A
+# single underscore joining the name to a letter or digit still makes a longer
+# token: ``(?<![^\W_]_)`` and ``(?!_[^\W_])`` keep "x_John Smith" out, and with
+# it this package's own placeholders, "Dear PERSON_01" and "Card
+# MEDICARE_MEDICARE_01" being a capitalised word, a space and a placeholder
+# prefix. Lookbehind has a fixed width, so "x__John Smith" is a candidate;
+# that over-reports, which is the safe direction.
+NAME = re.compile(
+    r"(?<![^\W_])(?<![^\W_]_)%s,?\s+%s(?:\s+%s)?(?![^\W_])(?!_[^\W_])"
+    % (_TOKEN, _TOKEN, _TOKEN)
+)
 # One token on its own, used to find the token boundaries inside a NAME match.
 _NAME_TOKEN = re.compile(_TOKEN)
 
@@ -123,22 +141,40 @@ _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
 _SEP = r"(?:[.:#,(|;/=\u2013-]\s*)?"
 _MARKUP = r"(?:[*_`][*_`\s]*(?![*_`\s]))?"
 _GAP = r"\s*%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _SEP, _QUALIFIER, _MARKUP)
+# Digit groups inside an identifier may be separated by up to 2 spaces or
+# hyphens: PDF-to-text conversion doubles spaces, and "tfn:  123  456  782"
+# came back whole with a clean verify. Only the interior gap is widened. The
+# trailing pin stays one character, so "TFN: 123 456 782  2026" still takes the
+# identifier and leaves the year, where a 2-character pin would have lost the
+# identifier altogether. Mandatory digits separate every gap run, so the scan
+# stays linear.
+_DIGIT_GAP = r"[\s-]{0,2}"
+# A label's own edges let an emphasis underscore touch it, so "__TFN__: ..."
+# is a label as "**TFN**: ..." already was; ``\b`` saw no edge between "_" and
+# "T". Letters on either side still make it part of a longer word.
+_LABEL_START = r"(?<![^\W_])"
+_LABEL_END = r"(?![^\W\d_])"
+# "tax file no." is as common as "tax file number". The qualifier stays
+# mandatory, so "tax file 2026-2027" is not a label.
 TFN_LABELLED = re.compile(
-    r"\b(?:tax file number|TFN)(?![^\W\d])%s(\d(?:[\s-]?\d){7,8})(?![\s-]?\d)" % _GAP,
+    r"%s(?:tax file (?:number|no\b\.?)|TFN)%s%s(\d(?:%s\d){7,8})(?![\s-]?\d)"
+    % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
     re.I,
 )
 # The trailing dot of the spaced-out form is optional: "A.B.N 51 824 753 556"
 # is written as often as "A.B.N.", and the label is the evidence either way.
 ABN_LABELLED = re.compile(
-    r"(?:\bABN(?![^\W\d])|\bA\.B\.N\.?)%s(\d(?:[\s-]?\d){10})(?![\s-]?\d)" % _GAP,
+    r"%s(?:ABN%s|A\.B\.N\.?)%s(\d(?:%s\d){10})(?![\s-]?\d)"
+    % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
     re.I,
 )
 ACN_LABELLED = re.compile(
-    r"(?:\bACN(?![^\W\d])|\bA\.C\.N\.?)%s(\d(?:[\s-]?\d){8})(?![\s-]?\d)" % _GAP,
+    r"%s(?:ACN%s|A\.C\.N\.?)%s(\d(?:%s\d){8})(?![\s-]?\d)"
+    % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
     re.I,
 )
 MEDICARE_LABELLED = re.compile(
-    r"\bMedicare(?![^\W\d])%s(\d(?:[\s-]?\d){9})(?![\s-]?\d)" % _GAP,
+    r"%sMedicare%s%s(\d(?:%s\d){9})(?![\s-]?\d)" % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
     re.I,
 )
 # All 4 bare runs take the same one-character money guard, ``(?<![\d$])``,
@@ -154,10 +190,10 @@ MEDICARE_LABELLED = re.compile(
 # which for such tails is roughly one in 11. That price is worth paying,
 # because over-redaction costs one placeholder in a private file while
 # under-detection leaks a tax file number.
-TFN_BARE = re.compile(r"(?<![\d$])(\d{3}([\s-]?)\d{3}\2\d{3})(?![\s-]?\d)")
-ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
-ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]?\d{3}[\s-]?\d{3})(?![\s-]?\d)")
-MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]?\d{5}[\s-]?\d)(?![\s-]?\d)")
+TFN_BARE = re.compile(r"(?<![\d$])(\d{3}([\s-]{0,2})\d{3}\2\d{3})(?![\s-]?\d)")
+ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
+ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
+MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]{0,2}\d{5}[\s-]{0,2}\d)(?![\s-]?\d)")
 # No check digit exists for a BSB, so the hyphen is required. Accepting bare
 # 6-digit runs would swallow ordinary numbers with nothing to reject them on.
 BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")
@@ -200,9 +236,11 @@ PLACEHOLDER_BOUNDARY = "[A-Za-z0-9_]"
 # token an operator has to be told about, so the halt in
 # ``redact._input_placeholders`` must still fire on it. ``restore`` pins both
 # sides, which is the safe direction: it declines a token these report.
+PLACEHOLDER_PREFIXES = (
+    "CLIENT", "PERSON", "STAFF", "ENTITY", "TFN", "ABN", "ACN", "BSB", "MEDICARE", "EMAIL", "PHONE",
+)
 PLACEHOLDER = re.compile(
-    r"(?<!%s)(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\d{2,}"
-    % PLACEHOLDER_BOUNDARY
+    r"(?<!%s)(?:%s)_\d{2,}" % (PLACEHOLDER_BOUNDARY, "|".join(PLACEHOLDER_PREFIXES))
 )
 # The same shape, folded for case, and used by exactly the 2 guards that ask
 # whether an entity map VALUE is placeholder-shaped: ``entities._check_fields``
@@ -240,7 +278,8 @@ def value_pattern(value: str) -> re.Pattern[str]:
 
     * ``re.IGNORECASE``, so "jane roe", "Jane roe" and "JANE ROE" are all the
       mapped person.
-    * every run of whitespace inside the value becomes ``\\s+``, so a hard wrap
+    * every run of whitespace inside the value becomes a joiner run (see
+      below), which includes ``\\s+``, so a hard wrap
       or a double space still matches. Markdown is wrapped, and NAME's own
       ``\\s+`` spans a newline, so the map has to as well.
 
@@ -252,18 +291,54 @@ def value_pattern(value: str) -> re.Pattern[str]:
     that differ only by case or whitespace are now one pattern, and the map
     must refuse to hold both or one person owns two placeholders.
 
-    The word boundaries stay ``(?<!\\w)`` and ``(?!\\w)``, unchanged, so a value
-    is still matched as a whole word and never inside a longer one.
+    The word boundaries stay ``(?<!\\w)`` and ``(?!\\w)``, outside any emphasis run, so a
+    value is still matched as a whole word and never inside a longer one.
 
     The value is composed to NFC first, because ``redact`` and ``verify``
     compose the document the same way. A map seeded with "José" as one code
     point and a document that spells it as "e" plus a combining acute are one
     name; while each side kept its own form the known name passed through
     unchanged and verified clean.
+
+    Markdown and invisible joiners count as whitespace too (``_JOIN``): a
+    mapped name written "_Jane Roe_", "Jane<br>Roe" in a table cell, "Jane" and
+    "Roe" on 2 lines of a blockquote, or with a zero-width character between
+    them was sent through unchanged and verified clean. The value is split on
+    the same joiners, so a value holds no joiner character of its own and the
+    pattern keeps one variable run between tokens; "A * B" compiled with a
+    literal star between 2 such runs searched in quadratic time.
+
+    An emphasis run hugging the value (``open`` and ``close``) is part of the
+    match, so the edge check looks past it: "_Jane Roe_" matches, while
+    "x_Jane_Roe_y" is still a longer token and does not. ``redact`` re-emits
+    the run around the placeholder as asterisks, because an underscore beside
+    a placeholder is a boundary character and ``restore`` would refuse it.
+    """
+    body = _JOIN.join(re.escape(part) for part in value_parts(value))
+    # ``(?<![\w*])`` lets a match start only where an emphasis run starts, not
+    # part-way through one: a search that could start at every star of a long
+    # run and back the ``open`` group off from each is quadratic.
+    return re.compile(
+        r"(?<![\w*])(?P<open>[*_]*)" + body + r"(?P<close>[*_]*)(?!\w)", re.IGNORECASE
+    )
+
+
+# One separator between the tokens of a mapped value. Each alternative starts
+# with a different character and consumes a fixed shape, so a run of joiners
+# has one parse and a failing search stays linear.
+_JOIN_ATOM = r"(?:[^\S\n]|[\u200b-\u200d\u2060]|\n(?:[ \t]*>)*|[*_]|<br\s*/?>)"
+_JOIN = _JOIN_ATOM + "+"
+_JOIN_SPLIT = re.compile(r"(?:\s|[\u200b-\u200d\u2060]|[*_>]|<br\s*/?>)+", re.IGNORECASE)
+
+
+def value_parts(value: str) -> list[str]:
+    """The tokens of an entity map value, split on everything ``_JOIN`` accepts.
+
+    ``value_pattern`` joins these, and ``entities._fold`` compares them, so a map
+    cannot hold 2 spellings the matcher treats as one name.
     """
     value = unicodedata.normalize("NFC", value)
-    body = r"\s+".join(re.escape(part) for part in value.split())
-    return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.IGNORECASE)
+    return [part for part in _JOIN_SPLIT.split(value) if part]
 
 # The origin list ends with the 12 month names. They are dropped here: over
 # a workpaper they suppress "June Smith", "April Jones", "August Meyer" and

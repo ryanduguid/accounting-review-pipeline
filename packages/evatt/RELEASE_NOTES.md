@@ -1,3 +1,10 @@
+# Unreleased
+
+- Match a mapped name through underscore and asterisk emphasis, `<br>` line breaks, blockquote continuations and zero-width joiners, and write its placeholder inside the original emphasis so it restores. Report `__John Smith__` and other emphasised unmapped names in the residual sweep.
+- Keep pass-one placeholders out of pass two's reach, and refuse map values made only of placeholder parts or differing from another entry only in the separators the matcher joins.
+- Detect identifiers whose digit groups are separated by up to 2 spaces or hyphens, the `tax file no.` label and labels touching an emphasis underscore such as `__TFN__:`.
+- Name the shapes still unsupported in the README and DECISIONS.md ruling 42.
+
 # v0.1.2
 
 - Detect labelled identifiers in padded code spans containing literal emphasis markers. Preserve the surrounding markup, line endings and replacement counts.

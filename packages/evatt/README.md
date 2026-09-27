@@ -187,8 +187,22 @@ an extra placeholder costs a triage decision while a miss leaks.
   is written composed. A name the map holds as one code point and a document
   spells with a combining mark are one name to both `redact` and `verify`.
 - **Markdown between a label and its digits does not break the label.**
-  `**TFN**: 123 456 783`, `TFN: **123 456 783**`, `` TFN: `123 456 783` `` and a
-  table cell `| TFN | 123 456 783 |` are all labelled identifiers.
+  `**TFN**: 123 456 783`, `__TFN__: 123 456 783`, `TFN: **123 456 783**`,
+  `` TFN: `123 456 783` `` and a table cell `| TFN | 123 456 783 |` are all
+  labelled identifiers.
+- **Digit groups may be separated by up to 2 spaces or hyphens**, as PDF-to-text
+  conversion writes them, and `tax file no.` is a label beside `tax file number`
+  and `TFN`. Three or more spaces between groups, and a labelled number with
+  another digit group one space after it, as in `TFN: 123456783 2026`, pass
+  through untouched with no halt.
+- **A mapped name is matched through the markdown most documents put in it.**
+  `_Jane Roe_`, `**Jane Roe**`, `Jane<br>Roe` in a table cell, a name wrapped
+  inside a blockquote, `Jane_Roe` and a zero-width joiner between the words are
+  all replaced, and the placeholder keeps the emphasis around it. These shapes
+  pass through untouched with no halt: first and last names in separate table
+  columns, initials such as `J. Roe`, `Jane&nbsp;Roe`, `Jane <em>Roe</em>`, a
+  backslash hard break between the words, a name split across code spans and a
+  zero-width character inside a word. Read the whole output for them.
 
 Contextual re-identification is not addressed by any of this. Read the
 document before you send it.

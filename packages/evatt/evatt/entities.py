@@ -18,7 +18,6 @@ import re
 import secrets
 import shutil
 import subprocess
-import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -26,7 +25,7 @@ from types import MappingProxyType
 from typing import BinaryIO, Mapping, Sequence
 
 from .errors import EvattError
-from .patterns import PLACEHOLDER_CI
+from .patterns import PLACEHOLDER_CI, PLACEHOLDER_PREFIXES, value_parts
 
 SCHEMA_VERSION = 1
 KINDS = ("client", "person", "staff", "entity")
@@ -106,9 +105,13 @@ def _fold(value: str) -> str:
     Composed to NFC first, as ``patterns.value_pattern`` composes the value it
     matches with, so a map cannot hold one name twice as two canonically
     equivalent spellings and ``assign`` returns the existing entity for either.
+
+    The tokens come from ``patterns.value_parts``, which splits on the markdown
+    and invisible joiners the matcher accepts between tokens as well as on
+    whitespace: "Jane Roe" and "Jane_Roe" are one name to pass two, so they are
+    one name here.
     """
-    value = unicodedata.normalize("NFC", value)
-    return " ".join(value.split()).translate(_EXTRA_IGNORECASE_FOLDS).casefold()
+    return " ".join(value_parts(value)).translate(_EXTRA_IGNORECASE_FOLDS).casefold()
 
 
 def _check_fields(
@@ -148,6 +151,11 @@ def _check_fields(
         raise EvattError("entity value must be a non-empty string")
     if PLACEHOLDER_CI.search(value):
         raise EvattError(f"entity value {value!r} is shaped like an assigned placeholder")
+    # A value made only of placeholder parts ("TFN", "01", "Medicare", "TFN 01")
+    # names nothing a client could be, and pass two joins tokens across "_", so
+    # it would read the placeholders pass one writes as mentions.
+    if all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in value_parts(value)):
+        raise EvattError(f"entity value {value!r} is made only of placeholder parts")
     if not isinstance(kind, str) or kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")
     try:
