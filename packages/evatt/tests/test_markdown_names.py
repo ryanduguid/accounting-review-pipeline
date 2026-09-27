@@ -214,7 +214,13 @@ def test_a_value_enclosing_a_placeholder_shaped_run_is_still_replaced() -> None:
     assert redact("paid XCLIENT_01 today", (client,), strict=False) == ("paid CLIENT_07 today", {"client": 1})
 
 
-@pytest.mark.parametrize(("value", "text"), [("Jane>Roe", "met Jane>Roe today"), ("A > B", "met A > B today")])
+@pytest.mark.parametrize(("value", "text"), [
+    ("Jane>Roe", "met Jane>Roe today"),
+    ("A > B", "met A > B today"),
+    # A value written across a quoted line splits the way the joiner reads it.
+    ("Jane" + chr(10) + "> Roe", "met Jane" + chr(10) + "> Roe today"),
+    ("Jane" + chr(10) + "> Roe", "met Jane Roe today"),
+])
 def test_a_value_holding_a_greater_than_sign_matches_its_own_spelling(value: str, text: str) -> None:
     entity = Entity(value, "CLIENT_07", "client", "2026-09-27")
     assert redact(text, (entity,), strict=False) == ("met CLIENT_07 today", {"client": 1})

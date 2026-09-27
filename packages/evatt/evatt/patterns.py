@@ -368,10 +368,11 @@ def value_pattern(value: str) -> re.Pattern[str]:
 # with a different character, but a token can still begin with part of one
 # ("<br"), which is why ``value_pattern`` takes each run atomically.
 _JOIN_ATOM = r"(?:[^\S\n]|[\u200b-\u200d\u2060]|\n(?:[ \t]*>)*|[*_]|<br\s*/?>)"
-# A bare ">" is not a separator: the joiner accepts one only as a blockquote
-# marker after a line break, so splitting "Jane>Roe" on it left a value that
-# could not match its own spelling.
-_JOIN_SPLIT = re.compile(r"(?:\s|[\u200b-\u200d\u2060]|[*_]|<br\s*/?>)+", re.IGNORECASE)
+# A value splits on exactly what the joiner consumes, so it always matches its
+# own spelling: splitting on a bare ">" left "Jane>Roe" unmatchable, and
+# splitting a line break but not the blockquote marker after it left a value
+# written across a quoted line unmatchable too.
+_JOIN_SPLIT = re.compile("(?:%s)+" % _JOIN_ATOM, re.IGNORECASE)
 
 
 def value_parts(value: str) -> list[str]:
