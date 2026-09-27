@@ -56,6 +56,29 @@ evatt verify  --in build/notes.md --map entities.json
 evatt restore --in answer.md --map entities.json --out build/answer.md
 ```
 
+## Worked example: a question for an outside research tool
+
+A tax research question usually names the client. Redact it before it goes to
+any outside AI research tool, and restore the reply on your own machine. With
+the fabricated samples, from a repository that ignores the map (see
+Requirements):
+
+```
+cp evatt/samples/entities.sample.json entities.json
+evatt redact  --in evatt/samples/research-question.md --map entities.json --out build/question.md
+evatt verify  --in build/question.md --map entities.json
+evatt restore --in evatt/samples/research-answer.md --map entities.json --out build/answer.md
+```
+
+`build/question.md` carries `CLIENT_01`, `ENTITY_01` and `PERSON_01` in place of
+the names and `TFN_01` and `ABN_01` in place of the identifiers. That file, not
+the original, is what the tool receives. `research-answer.md` stands in for the
+tool's reply: `restore` puts the names back, and the identifiers stay as
+placeholders because they are one-way. Read `build/question.md` before you send
+it, because a year, an industry and an amount together can still identify a
+client. The tool's own terms decide what happens to what you send, and evatt
+cannot change them.
+
 ## Requirements
 
 Python 3.10 or later, and `git` on `PATH`. Every command asks git whether it

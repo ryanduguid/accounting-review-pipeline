@@ -597,6 +597,7 @@ def test_every_sample_exists() -> None:
     expected = {
         "clean.md", "entities-only.md", "identifiers.md",
         "unmapped-name.md", "negatives.md", "unicode-names.md",
+        "research-question.md", "research-answer.md",
     }
     assert {p.name for p in SAMPLES.glob("*.md")} == expected
 
