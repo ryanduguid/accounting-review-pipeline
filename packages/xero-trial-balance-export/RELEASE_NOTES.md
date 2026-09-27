@@ -1,13 +1,3 @@
-# Unreleased
-
-- `xero-tb-auth --help` prints usage and exits 0 before anything reads the
-  environment. It used to ignore every argument and start the OAuth flow,
-  opening a browser.
-- `requirements.lock` is exported from this component's `uv.lock` (urllib3
-  2.7.0, idna 3.19, charset-normalizer 3.5.1), CI fails when the two differ,
-  and the dependency audit covers the hash-locked install as well as the
-  project environment. The previous lock had drifted since 3 September.
-
 # v0.1.12
 
 - Refuse a Trial Balance response whose report identity, reporting period,
