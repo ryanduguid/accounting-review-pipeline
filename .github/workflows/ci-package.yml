@@ -178,6 +178,14 @@ jobs:
           cp -R . "${standalone}/"
           rm -rf "${standalone}/.venv"
           (cd "${standalone}" && uv lock --check)
+          # requirements.lock, the hash-locked install the README gives, is
+          # exported from this uv.lock. It drifted for 3 weeks while Dependabot
+          # moved the lock alone, so a stale or hand-edited export fails here.
+          if [ -f requirements.lock ]; then
+            (cd "${standalone}" && uv export --locked --no-dev --no-emit-project \
+              --format requirements-txt --output-file requirements.lock)
+            diff -u requirements.lock "${standalone}/requirements.lock"
+          fi
       - name: ruff
         run: uv run --locked --extra dev ruff check .
       - name: mypy
@@ -209,6 +217,12 @@ jobs:
           prune-cache: true
       - name: audit the locked project environment
         run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+      - name: audit the hash-locked runtime
+        # The README installs from requirements.lock, not from the environment
+        # audited above, so an advisory against a version pinned only there
+        # went unreported.
+        if: hashFiles(format('{0}/requirements.lock', inputs.package_dir)) != ''
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --strict --require-hashes --disable-pip -r requirements.lock
 
   build:
     needs: changes

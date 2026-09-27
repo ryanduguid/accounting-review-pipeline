@@ -142,11 +142,19 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
-| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement |
-| `month_end` | current TB, prior TB, open items, self-review | optional bank rec; prior date earlier; same tenant |
+| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; no GST posting dated after `period_end` |
+| `month_end` | current TB, prior TB, open items, self-review | optional bank rec (statement against its own GL balance); prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines |
 
 Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`.
+
+Two limits of these controls. The bank reconciliation compares each account's
+statement balance with the GL balance the reconciliation itself records; it is
+not tied to the pack's trial balance, so a reconciliation prepared against an
+earlier ledger state, or for an account the trial balance does not hold, can
+still pass. And the GST control file is checked for postings after
+`period_end` only: a file from an earlier quarter passes the date check, because
+the self-review carries no period start.
 
 A `READY` status means no configured control tripped, and only the controls that
 ran can trip. Every optional slot with no usable input is therefore listed under

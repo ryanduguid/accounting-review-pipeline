@@ -229,6 +229,7 @@ def _review_pack(
     _apply_period_binding(loaded, findings)
     _apply_open_item_controls(loaded, findings)
     _apply_bas_tieout(loaded, findings, tieout_tolerance)
+    _apply_gst_period(loaded, findings)
     _apply_bank_rec(loaded, findings, tieout_tolerance)
     _apply_year_end_tieout(loaded, findings)
 
@@ -459,6 +460,44 @@ def _apply_bas_tieout(
                 reviewer_action="Return the pack. Complete the GST control tie-out before review.",
             )
         )
+
+
+def _apply_gst_period(loaded: dict[str, object], findings: list[Finding]) -> None:
+    """Refuse GST control postings dated after the period the self-review declares.
+
+    The BAS tie-out sums every row, so a GST control export from the next
+    quarter tied to that quarter's activity statement and the pack read READY
+    for this one. Only the upper bound is checked: late entries, annual
+    reporters and monthly packs all post on or before the period end, and a
+    lower bound needs a period start the self-review does not yet carry.
+    """
+    self_review = loaded.get("self_review")
+    gst = loaded.get("gst_control_gl")
+    if not isinstance(self_review, SelfReview) or not isinstance(gst, list):
+        return
+    late = sorted(
+        {
+            row.posted_on
+            for row in gst
+            if isinstance(row, GstControlRow) and row.posted_on > self_review.period_end
+        }
+    )
+    if not late:
+        return
+    shown = ", ".join(day.isoformat() for day in late[:3])
+    more = f" and {len(late) - 3} more" if len(late) > 3 else ""
+    findings.append(
+        Finding(
+            code=FINDING_PERIOD_ORDER,
+            status="NOT_READY",
+            slot="gst_control_gl",
+            reason=(
+                f"GST control postings are dated after the declared period_end "
+                f"{self_review.period_end.isoformat()}: {shown}{more}."
+            ),
+            reviewer_action="Return the pack. The GST control export must be for the period the self-review declares.",
+        )
+    )
 
 
 def _apply_bank_rec(
