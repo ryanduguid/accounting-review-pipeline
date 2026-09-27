@@ -1,4 +1,4 @@
-# Unreleased
+# v0.1.3
 
 - Match a mapped name through underscore and asterisk emphasis, `<br>` line breaks, blockquote continuations and zero-width joiners, and write its placeholder inside the original emphasis so it restores. Report `__John Smith__` and other emphasised unmapped names in the residual sweep.
 - Keep every placeholder already in the text, underscore-wrapped ones included, out of pass two's reach; halt on a placeholder the input carries inside emphasis; and refuse map values made only of placeholder parts or differing from another entry only in the separators the matcher joins.
