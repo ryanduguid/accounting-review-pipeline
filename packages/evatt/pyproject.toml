@@ -34,6 +34,9 @@ dev = [
     "pytest-cov==7.1.0",
     "coverage==7.16.1",
     "build>=1.6.1",
+    # release-python builds without isolation, so the backend comes from this
+    # locked extra, pinned exactly as [build-system] requires.
+    "setuptools==84.0.0",
 ]
 
 [project.scripts]
