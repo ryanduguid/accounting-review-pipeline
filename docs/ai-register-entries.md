@@ -23,7 +23,7 @@ Each entry describes the version named in its System row, as that version's READ
 
 | Field | Entry |
 | --- | --- |
-| System | [Xero Ledger Review Gate](../packages/elizabeth-anne-alexander/README.md) (`elizabeth-anne-alexander`) 0.2.4, a fixed-policy review boundary for AI-assisted trial-balance variance review |
+| System | [Xero Ledger Review Gate](../packages/elizabeth-anne-alexander/README.md) (`elizabeth-anne-alexander`) 0.2.5, a fixed-policy review boundary for AI-assisted trial-balance variance review |
 | Contains an AI model | No. It contains no LLM client; it produces a bounded, redacted result that a model or a person can review. |
 | Role in an AI-assisted workflow | Turns synthetic Xero-shaped trial balances into a variance result that carries no tenant name, account name or account code. Each finding keeps its trial-balance section, such as Revenue, which is source text passed to the model. |
 | Data handled | Synthetic Xero-shaped trial-balance fixtures only; it is a design demonstration and does not accept client exports |
