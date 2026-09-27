@@ -87,9 +87,7 @@ class BalanceRow:
 
 @dataclass(frozen=True)
 class Source:
-    manifest_path: Path
     manifest: dict[str, Any]
-    csv_path: Path
     rows: tuple[BalanceRow, ...]
     manifest_snapshot: FileSnapshot
     csv_snapshot: FileSnapshot
@@ -247,12 +245,6 @@ def _load_tb_snapshot(snapshot: FileSnapshot) -> tuple[BalanceRow, ...]:
     return tuple(rows)
 
 
-def _load_tb(path: Path) -> tuple[BalanceRow, ...]:
-    # The snapshot catches filesystem failures before parsing and ensures the
-    # rows and digest can only describe the same immutable byte sequence.
-    return _load_tb_snapshot(snapshot_file(path, label="source CSV"))
-
-
 def _load_manifest(path: Path) -> Source:
     manifest, manifest_snapshot = load_json_exact_snapshot(
         path,
@@ -291,9 +283,7 @@ def _load_manifest(path: Path) -> Source:
     if rows[0].report_date != as_at:
         raise GatewayError("manifest report.as_at and CSV ReportDate do not match.")
     return Source(
-        manifest_path=path,
         manifest=manifest,
-        csv_path=csv_path,
         rows=rows,
         manifest_snapshot=manifest_snapshot,
         csv_snapshot=csv_snapshot,
@@ -338,11 +328,6 @@ def _load_context_snapshot(path: Path) -> tuple[Source, Source, FileSnapshot]:
     return current, prior, context_snapshot
 
 
-def _load_context(path: Path) -> tuple[Source, Source]:
-    current, prior, _snapshot = _load_context_snapshot(path)
-    return current, prior
-
-
 def _load_policy_snapshot(path: Path) -> tuple[dict[str, Any], FileSnapshot]:
     policy, policy_snapshot = load_json_exact_snapshot(
         path,
@@ -380,11 +365,6 @@ def _load_policy_snapshot(path: Path) -> tuple[dict[str, Any], FileSnapshot]:
     return policy, policy_snapshot
 
 
-def _load_policy(path: Path) -> dict[str, Any]:
-    policy, _snapshot = _load_policy_snapshot(path)
-    return policy
-
-
 def _load_request_snapshot(path: Path, policy: dict[str, Any]) -> tuple[dict[str, Any], FileSnapshot]:
     request, request_snapshot = load_json_exact_snapshot(
         path,
@@ -400,11 +380,6 @@ def _load_request_snapshot(path: Path, policy: dict[str, Any]) -> tuple[dict[str
         raise GatewayError("Request section is not allowlisted by policy.")
     _non_empty(request["request_id"], field="request_id")
     return request, request_snapshot
-
-
-def _load_request(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
-    request, _snapshot = _load_request_snapshot(path, policy)
-    return request
 
 
 def _decimal_string(value: Decimal) -> str:

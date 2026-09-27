@@ -564,9 +564,8 @@ class TokenSession:
         """Return this session's fixed, resolved cache path."""
         return self._token_file
 
-    @contextmanager
-    def _locked(self):
-        """Hold the cross-process lock for this cache transaction."""
+    def _resolved_token_file(self) -> str:
+        """The real cache path, refused unless it is a token.json inside the allowed root."""
         token_file = os.path.realpath(
             os.path.abspath(os.path.expanduser(self._token_file))
         )
@@ -574,6 +573,12 @@ class TokenSession:
             raise SystemExit("error: token cache path must be named token.json")
         if not token_file.startswith(self._allowed_root + os.sep):
             raise SystemExit("error: token cache path escaped its allowed directory")
+        return token_file
+
+    @contextmanager
+    def _locked(self):
+        """Hold the cross-process lock for this cache transaction."""
+        token_file = self._resolved_token_file()
         lock_path = token_file + ".lock"
         try:
             os.makedirs(os.path.dirname(token_file) or ".", exist_ok=True)
@@ -610,13 +615,7 @@ class TokenSession:
 
     def _persist_unlocked(self, data: dict, *, legacy_migration: bool) -> None:
         """Write a complete cache document through the atomic replacement path."""
-        token_file = os.path.realpath(
-            os.path.abspath(os.path.expanduser(self._token_file))
-        )
-        if os.path.basename(token_file) != "token.json":
-            raise SystemExit("error: token cache path must be named token.json")
-        if not token_file.startswith(self._allowed_root + os.sep):
-            raise SystemExit("error: token cache path escaped its allowed directory")
+        token_file = self._resolved_token_file()
         encoded = _encode_token_cache(data)
         fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(token_file), suffix=".tmp")
         try:
@@ -695,13 +694,7 @@ class TokenSession:
             self._save_unlocked(token_response)
 
     def _load_unlocked(self) -> dict:
-        token_file = os.path.realpath(
-            os.path.abspath(os.path.expanduser(self._token_file))
-        )
-        if os.path.basename(token_file) != "token.json":
-            raise SystemExit("error: token cache path must be named token.json")
-        if not token_file.startswith(self._allowed_root + os.sep):
-            raise SystemExit("error: token cache path escaped its allowed directory")
+        token_file = self._resolved_token_file()
         if not os.path.exists(token_file):
             raise SystemExit("No token.json - run: python auth.py")
         try:
@@ -792,11 +785,6 @@ def _current_token_session() -> TokenSession:
 def save_tokens(token_response: dict) -> None:
     """Compatibility wrapper for auth.py and existing callers."""
     _current_token_session().save(token_response)
-
-
-def load_tokens() -> dict:
-    """Compatibility wrapper for callers that read the current cache."""
-    return _current_token_session().load()
 
 
 def get_access_token(client_id: str, client_secret: str, force: bool = False) -> str:

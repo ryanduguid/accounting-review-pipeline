@@ -73,10 +73,10 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create a review-first monthly close control pack from validated trial-balance exports.")
     commands = parser.add_subparsers(dest="command", required=True)
-    review = commands.add_parser("review", help="run integrity, variance, mapping, and optional reconciliation controls")
+    review = commands.add_parser("review", aliases=["workbench"],
+                                 help="run integrity, variance, mapping, and optional reconciliation controls "
+                                      "(as `workbench`, with the local close-review banner)")
     _add_close_arguments(review)
-    workbench = commands.add_parser("workbench", help="run the local close-review workbench")
-    _add_close_arguments(workbench)
     view = commands.add_parser("view", help="display an existing review pack after verifying its four files agree")
     view.add_argument("--pack-dir", required=True, type=Path, help="directory holding close-review-pack.json, close-summary.md, exceptions.csv and client-queries.csv")
     clearing = commands.add_parser("reconcile", help="review clearing-account transactions and carry outstanding items forward")

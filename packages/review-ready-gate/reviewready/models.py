@@ -87,7 +87,6 @@ class BankRecRow:
 @dataclass(frozen=True)
 class TieOutRow:
     statement_line: str
-    statement_amount: Decimal
     workpaper_ref: str
     source_file: str
     status: TieOutStatus

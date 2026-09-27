@@ -393,15 +393,11 @@ def load_tie_out_matrix(snapshot: SourceSnapshot) -> list[TieOutRow]:
             raise SchemaError(
                 f"{path}: row {row_number} Status must be TIED, EXCEPTION, or UNSUPPORTED."
             )
+        # The amount is validated but not kept: the gate reads the line and its status.
+        parse_money(values["StatementAmount"], field="StatementAmount", row_number=row_number, path=path)
         rows.append(
             TieOutRow(
                 statement_line=statement_line,
-                statement_amount=parse_money(
-                    values["StatementAmount"],
-                    field="StatementAmount",
-                    row_number=row_number,
-                    path=path,
-                ),
                 workpaper_ref=_text(
                     values["WorkpaperRef"],
                     field="WorkpaperRef",
