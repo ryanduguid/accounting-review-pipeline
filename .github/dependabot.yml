@@ -9,6 +9,12 @@ updates:
   # 2026, and all 4 failed on 20 September. The root entry below moves the
   # member floors and locks, and ci-package.yml checks each member lock from a
   # copy outside the workspace.
+  #
+  # This entry never edits requirements.lock: it left the file alone through
+  # 2 group bumps. The lock is exported from the exporter's uv.lock and CI
+  # fails when the two differ, so when the root entry moves the exporter's
+  # lock, regenerate the export in the same pull request (see the exporter's
+  # CONTRIBUTING.md).
   - package-ecosystem: "pip"
     directory: "/packages/xero-trial-balance-export"
     schedule:

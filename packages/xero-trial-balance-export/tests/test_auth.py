@@ -73,10 +73,24 @@ class CallbackServerBindTest(unittest.TestCase):
                 mock.patch.dict(os.environ, env, clear=False), \
                 mock.patch.object(auth, "_CallbackServer", side_effect=refused), \
                 self.assertRaises(SystemExit) as raised:
-            auth.main()
+            auth.main([])
         message = str(raised.exception.code)
         self.assertIn("not permitted to listen on localhost:80", message)
         self.assertNotIn("Something else holds that port", message)
+
+    def test_help_prints_usage_without_reading_the_environment_or_opening_a_browser(self):
+        """xero-tb-auth ignored --help and went on to start OAuth (roadmap finding RARP-6)."""
+        for env in ({}, {"XERO_CLIENT_ID": "fabricated-client", "XERO_CLIENT_SECRET": "fabricated-secret"}):
+            with self.subTest(configured=bool(env)):
+                out = io.StringIO()
+                with mock.patch.object(auth, "load_dotenv", side_effect=AssertionError("read the environment file")), \
+                        mock.patch.object(auth.webbrowser, "open", side_effect=AssertionError("opened a browser")), \
+                        mock.patch.dict(os.environ, env, clear=True), \
+                        redirect_stdout(out), \
+                        self.assertRaises(SystemExit) as raised:
+                    auth.main(["--help"])
+                self.assertEqual(raised.exception.code, 0)
+                self.assertIn("usage: xero-tb-auth", out.getvalue())
 
     def test_a_second_listener_on_the_same_port_is_refused(self):
         port = _free_port()
@@ -340,7 +354,7 @@ class StateCheckTest(unittest.TestCase):
                 mock.patch.object(auth, "save_tokens") as save_tokens:
             with redirect_stdout(io.StringIO()):
                 try:
-                    auth.main()
+                    auth.main([])
                 except SystemExit as exc:
                     raised = exc
         return raised, post, save_tokens
@@ -413,7 +427,7 @@ class ExchangeResponseTest(unittest.TestCase):
                 mock.patch.object(auth, "save_tokens") as save_tokens:
             with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
                 try:
-                    auth.main()
+                    auth.main([])
                 except SystemExit as exc:
                     raised = exc
         return raised, save_tokens, stderr.getvalue()
@@ -508,7 +522,7 @@ class ExchangeRejectionTest(unittest.TestCase):
                 mock.patch.object(auth, "save_tokens") as save_tokens:
             with redirect_stdout(io.StringIO()):
                 try:
-                    auth.main()
+                    auth.main([])
                 except SystemExit as exc:
                     raised = exc
         return raised, save_tokens

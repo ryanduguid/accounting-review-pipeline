@@ -11,6 +11,7 @@ below are requested automatically at consent time; there is nothing to
 configure in the developer portal.
 """
 
+import argparse
 import os
 import re
 import secrets
@@ -211,7 +212,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         pass
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    # Arguments first, before anything reads the environment: "--help" used to
+    # be ignored, and the command went on to start OAuth and open a browser.
+    argparse.ArgumentParser(
+        prog="xero-tb-auth",
+        description="Authorise this exporter against Xero once, in a browser, and cache the token.",
+    ).parse_args(argv)
     load_dotenv()
     # Re-resolve after load_dotenv: a XERO_TOKEN_FILE set in .env is not in
     # the environment when xero_client is imported.

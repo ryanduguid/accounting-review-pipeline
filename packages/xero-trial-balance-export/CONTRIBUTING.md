@@ -24,6 +24,15 @@ python -m pip install --require-hashes -r requirements.lock
 python -m unittest discover -s tests -v
 ```
 
+`requirements.lock` is exported from this component's own `uv.lock`, and CI
+fails when the two differ. After the lock moves, regenerate the export from a
+copy of this directory outside the workspace, because inside it uv reads the
+root lock:
+
+```bash
+uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file requirements.lock
+```
+
 `tests/test_evaluation_pack.py` reads the shared trial-balance contract at
 `contracts/xero-trial-balance-v1/`, which lives above this component and is not
 in the source archive. Run it from a full `accounting-review-pipeline` checkout;
