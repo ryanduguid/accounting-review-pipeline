@@ -59,16 +59,22 @@ evatt restore --in answer.md --map entities.json --out build/answer.md
 ## Worked example: a question for an outside research tool
 
 A tax research question usually names the client. Redact it before it goes to
-any outside AI research tool, and restore the reply on your own machine. With
-the fabricated samples, from a repository that ignores the map (see
-Requirements):
+any outside AI research tool, and restore the reply on your own machine. Run the
+fabricated samples from `packages/evatt/` in a checkout, where this repository's
+`.gitignore` already covers the map and `build/`:
 
 ```
 cp evatt/samples/entities.sample.json entities.json
-evatt redact  --in evatt/samples/research-question.md --map entities.json --out build/question.md
-evatt verify  --in build/question.md --map entities.json
-evatt restore --in evatt/samples/research-answer.md --map entities.json --out build/answer.md
+uv run --locked evatt redact  --in evatt/samples/research-question.md --map entities.json --out build/question.md
+uv run --locked evatt verify  --in build/question.md --map entities.json
+uv run --locked evatt restore --in evatt/samples/research-answer.md --map entities.json --out build/answer.md
 ```
+
+An installed wheel carries the same samples inside the `evatt` package, and
+`python -c "import evatt, pathlib; print(pathlib.Path(evatt.__file__).parent / 'samples')"`
+prints where. Copy that folder to `evatt/samples/` in a repository whose
+`.gitignore` covers the map and `build/` (see Requirements), then run the same
+commands without `uv run --locked`.
 
 `build/question.md` carries `CLIENT_01`, `ENTITY_01` and `PERSON_01` in place of
 the names and `TFN_01` and `ABN_01` in place of the identifiers. That file, not
