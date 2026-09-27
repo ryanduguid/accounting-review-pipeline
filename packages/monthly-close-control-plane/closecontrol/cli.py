@@ -34,6 +34,14 @@ def _non_negative_decimal(value: str) -> Decimal:
     return result
 
 
+def _fraction(value: str) -> Decimal:
+    """A proportion from 0 to 1. "10" read as 1000% let every movement under it pass."""
+    result = _non_negative_decimal(value)
+    if result > 1:
+        raise argparse.ArgumentTypeError("use a fraction: 0.10 means 10%")
+    return result
+
+
 def _add_close_arguments(command: argparse.ArgumentParser) -> None:
     """Add the one validated input contract shared by close entry points."""
     command.add_argument("--current", required=True, type=Path, help="current-period canonical trial-balance CSV")
@@ -58,7 +66,7 @@ def _add_close_arguments(command: argparse.ArgumentParser) -> None:
                               "never a silent omission. Repeat for more than one")
     command.add_argument("--output", required=True, type=Path, help="directory for the generated review pack")
     command.add_argument("--absolute-threshold", type=_non_negative_decimal, default=Decimal("1000"), help="minimum absolute YTD variance for review")
-    command.add_argument("--percentage-threshold", type=_non_negative_decimal, default=Decimal("0.10"), help="minimum proportional YTD variance for review, e.g. 0.10")
+    command.add_argument("--percentage-threshold", type=_fraction, default=Decimal("0.10"), help="minimum proportional YTD variance for review, as a fraction from 0 to 1, e.g. 0.10 for 10%%")
     command.add_argument("--reconciliation-tolerance", type=_non_negative_decimal, default=Decimal("0.01"), help="maximum permitted GL/subledger difference")
 
 
