@@ -63,16 +63,22 @@ def _coverage(document: dict[str, Any]) -> list[tuple[tuple[str, Any], ...]] | N
 
 
 def _document_sources(document: dict[str, Any]) -> dict[str, str]:
-    """Read the digests of original files from the recorded sources."""
-    originals = {}
+    """Require one original-file digest for each recorded document slot."""
+    originals: dict[str, list[str]] = {
+        item["slot"]: [] for item in document["findings"]
+        if item["slot"].startswith("document_")
+    }
     for key, source in document["source_sha256"].items():
-        # DocumentBundle.evidence() records the original as its second source.
-        match = re.fullmatch(r"(document_[0-9]{3,})_2", key)
+        match = re.fullmatch(r"(document_[0-9]{3,})_[0-9]+", key)
         if match:
             slot = match[1]
+            digests = originals.setdefault(slot, [])
             if source["filename"] in {f"{slot}/original.txt", f"{slot}/original.pdf"}:
-                originals[slot] = source["sha256"]
-    return originals
+                digests.append(source["sha256"])
+    for slot, digests in originals.items():
+        if len(digests) != 1:
+            raise GateInputError(f"compare needs {slot} to record exactly one original file")
+    return {slot: digests[0] for slot, digests in originals.items()}
 
 
 def _unmatched_documents(previous: dict[str, Any], current: dict[str, Any]) -> set[str]:
@@ -148,9 +154,9 @@ def _finding_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[
         if old is None:
             change = "NEW"
         elif new is None:
-            # Absent from the later run is not resolved. Under a changed
-            # tolerance, when the later run did not check that slot, or when
-            # it states no coverage at all, it is not even comparable.
+            # Absent from the later run is not resolved. Changed tolerances,
+            # unrun slots, unstated coverage or an unmatched original document
+            # occurrence also prevent comparison.
             comparable = (not thresholds_changed and coverage is not None
                           and slot not in not_run and slot not in unmatched_documents)
             change = "NOT_RAISED" if comparable else "NOT_COMPARABLE"

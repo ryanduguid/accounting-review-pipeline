@@ -2,13 +2,16 @@
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from reviewready.comparison import compare_packs
 from reviewready.documents import REVIEW_NAME, create_intake
 from reviewready.engine import review_pack
+from reviewready.errors import GateInputError
 from reviewready.report import write_review_pack
+from reviewready.viewer import verify_pack
 from tests.support import EXAMPLES
 
 
@@ -123,3 +126,69 @@ def test_duplicate_document_removal_preserves_multiplicity(tmp_path: Path) -> No
     assert findings(result)[("DOCUMENT_REVIEW_REQUIRED", "document_001")] == "RECURRING"
     assert findings(result)[("DOCUMENT_REVIEW_REQUIRED", "document_002")] == "NOT_COMPARABLE"
     assert findings(result)[("DOCUMENT_DUPLICATE", "document_002")] == "NOT_COMPARABLE"
+
+
+def test_original_evidence_number_does_not_change_coverage(tmp_path: Path) -> None:
+    bundle = document(tmp_path / "document")
+    before = saved(tmp_path / "before", (bundle,))
+    reviewed(bundle)
+    pack = review_pack(profile="bas", pack_dir=EXAMPLES / "bas-ready", document_paths=(bundle,))
+    sources = tuple(replace(source, slot="document_001_9")
+                    if source.filename == "document_001/original.txt" else source
+                    for source in pack.source_evidence)
+    after = tmp_path / "after"
+    write_review_pack(replace(pack, source_evidence=sources), after)
+    verify_pack(after)
+    result = compare_packs(before, after)
+    assert result["scope_changes"] == []
+    assert findings(result)[("DOCUMENT_REVIEW_REQUIRED", "document_001")] == "NOT_RAISED"
+
+
+@pytest.mark.parametrize("evidence", ["missing_original", "duplicate_original", "findings_only"])
+def test_document_coverage_requires_one_original_per_slot(tmp_path: Path, evidence: str) -> None:
+    bundle = document(tmp_path / "document")
+    pack = review_pack(profile="bas", pack_dir=EXAMPLES / "bas-ready", document_paths=(bundle,))
+    sources = pack.source_evidence
+    if evidence == "duplicate_original":
+        original = next(source for source in sources if source.filename == "document_001/original.txt")
+        sources += (replace(original, slot="document_001_9"),)
+    elif evidence == "missing_original":
+        sources = tuple(source for source in sources
+                        if source.filename != "document_001/original.txt")
+    else:
+        sources = tuple(source for source in sources if not source.slot.startswith("document_"))
+    output = tmp_path / "pack"
+    write_review_pack(replace(pack, source_evidence=sources), output)
+    verify_pack(output)
+    with pytest.raises(GateInputError, match="document_001.*exactly one original"):
+        compare_packs(output, output)
+
+
+def test_missing_original_fails_even_without_document_findings(tmp_path: Path) -> None:
+    bundle = document(tmp_path / "document")
+    reviewed(bundle)
+    pack = review_pack(profile="bas", pack_dir=EXAMPLES / "bas-ready", document_paths=(bundle,))
+    assert not pack.findings
+    sources = tuple(source for source in pack.source_evidence
+                    if source.filename != "document_001/original.txt")
+    output = tmp_path / "pack"
+    write_review_pack(replace(pack, source_evidence=sources), output)
+    verify_pack(output)
+    with pytest.raises(GateInputError, match="document_001.*exactly one original"):
+        compare_packs(output, output)
+
+
+@pytest.mark.parametrize("first_reviewed", [False, True])
+def test_duplicate_matching_uses_previous_occurrence_order(tmp_path: Path, first_reviewed: bool) -> None:
+    first = document(tmp_path / "first")
+    second = document(tmp_path / "second")
+    survivor = first if first_reviewed else second
+    reviewed(survivor)
+    result = compare_packs(saved(tmp_path / "before", (first, second)),
+                           saved(tmp_path / "after", (survivor,)))
+    slot = "document_002" if first_reviewed else "document_001"
+    change = "NOT_COMPARABLE" if first_reviewed else "NOT_RAISED"
+    assert findings(result)[("DOCUMENT_REVIEW_REQUIRED", slot)] == change
+    assert result["scope_changes"] == [{"member": "document_coverage",
+                                        "previous": [digest(first)] * 2,
+                                        "current": [digest(survivor)]}]

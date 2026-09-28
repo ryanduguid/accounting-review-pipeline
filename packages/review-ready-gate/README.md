@@ -258,6 +258,8 @@ human review preserves that coverage. A finding absent after its document is
 removed becomes `NOT_COMPARABLE`; duplicate copies match in their original order.
 Findings still group by code and slot, so reordering can move a finding between
 groups. The source rows show the changed file hashes in each slot.
+Each recorded document slot must identify exactly one original file. Missing or
+duplicate original-file evidence prevents comparison and exits `1`.
 
 ## Design
 
