@@ -21,7 +21,7 @@ members = ["packages/*"]
 # for their own CI. The 5 check tools carry the same exact pin in every
 # member's `dev` extra and here, so one workspace resolution holds them all and
 # `just lint`, `just typecheck` and `just test` run the versions CI runs. Move
-# a pin in all 5 places together.
+# a pin in all 6 places together.
 [dependency-groups]
 dev = [
   "ruff==0.16.8",
