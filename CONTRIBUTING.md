@@ -33,7 +33,7 @@ The shared component gates are defined once in `.github/workflows/ci-package.yml
 
 Every member's `dev` extra and the root `dev` group carry the same exact pins for `ruff`,
 `mypy`, `pytest`, `pytest-cov` and `coverage`, so one workspace resolution holds them all
-and the versions `just` runs are the versions CI runs. Move a pin in all 5 places
+and the versions `just` runs are the versions CI runs. Move a pin in all 6 places
 together, then regenerate the root and component lockfiles.
 
 Two consequences of the workspace are worth knowing before you run a component's own
