@@ -251,6 +251,18 @@ review-ready compare --previous-pack-dir outputs/bas-first-run --current-pack-di
 
 Each finding group is `NEW`, `RECURRING`, `CHANGED`, `NOT_RAISED` or `NOT_COMPARABLE`. `NOT_RAISED` means absent from the later run, not resolved. A changed tolerance or control coverage is listed under `scope_changes`, and a finding absent after a tolerance change, from a slot the later run did not check, or from a later pack that states no control coverage, is `NOT_COMPARABLE`. Tolerances compare by value, so `0.01` and `0.010` are the same setting. Exit `0` means both packs verified and the comparison printed; it is not a readiness verdict. A pack that fails verification, or 2 packs for different engagement types or periods, exit `1`. Packs carry no wall-clock time, so the reviewer records who made each change and why.
 
+The comparison records changes to the supplied documents as `document_coverage`
+under `scope_changes`. It matches original files by their hashes and retains
+duplicate counts. Reordering documents, correcting intake metadata or recording a
+human review preserves that coverage. A finding absent after its document is
+removed becomes `NOT_COMPARABLE`; duplicate copies match in their original order.
+Findings still group by code and slot, so reordering can move a finding between
+groups. The source rows show the changed file hashes in each slot.
+Each recorded document slot must identify exactly one original file. Missing or
+duplicate original-file evidence prevents comparison and exits `1`.
+Document filenames establish the slots even when evidence labels change. A
+numbered document label that contradicts its filename also prevents comparison.
+
 ## Design
 
 - Exact `Decimal` arithmetic for money, never binary floating point. The gate fixes its own 28-digit context, ignoring the caller's, and refuses a pack whose trial-balance totals would round instead of comparing them inexactly.
