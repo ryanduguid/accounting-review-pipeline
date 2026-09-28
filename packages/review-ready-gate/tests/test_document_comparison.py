@@ -178,6 +178,48 @@ def test_missing_original_fails_even_without_document_findings(tmp_path: Path) -
         compare_packs(output, output)
 
 
+def test_relabelled_document_evidence_preserves_coverage(tmp_path: Path) -> None:
+    bundle = document(tmp_path / "document")
+    reviewed(bundle)
+    before = saved(tmp_path / "before", (bundle,))
+    pack = review_pack(profile="bas", pack_dir=EXAMPLES / "bas-ready", document_paths=(bundle,))
+    assert not pack.findings
+    sources = tuple(replace(source, slot=f"evidence_{index}")
+                    if source.slot.startswith("document_") else source
+                    for index, source in enumerate(pack.source_evidence))
+    after = tmp_path / "after"
+    write_review_pack(replace(pack, source_evidence=sources), after)
+    verify_pack(after)
+    assert compare_packs(before, after)["scope_changes"] == []
+
+
+def test_relabelled_extra_original_is_still_ambiguous(tmp_path: Path) -> None:
+    bundle = document(tmp_path / "document")
+    reviewed(bundle)
+    pack = review_pack(profile="bas", pack_dir=EXAMPLES / "bas-ready", document_paths=(bundle,))
+    original = next(source for source in pack.source_evidence
+                    if source.filename == "document_001/original.txt")
+    sources = (*pack.source_evidence, replace(original, slot="extra_original"))
+    output = tmp_path / "pack"
+    write_review_pack(replace(pack, source_evidence=sources), output)
+    verify_pack(output)
+    with pytest.raises(GateInputError, match="document_001.*exactly one original"):
+        compare_packs(output, output)
+
+
+def test_document_evidence_slot_must_agree_with_filename(tmp_path: Path) -> None:
+    bundle = document(tmp_path / "document")
+    reviewed(bundle)
+    pack = review_pack(profile="bas", pack_dir=EXAMPLES / "bas-ready", document_paths=(bundle, bundle))
+    sources = tuple(replace(source, filename="document_002/document-intake.json")
+                    if source.slot == "document_001_1" else source for source in pack.source_evidence)
+    output = tmp_path / "pack"
+    write_review_pack(replace(pack, source_evidence=sources), output)
+    verify_pack(output)
+    with pytest.raises(GateInputError, match="document_001_1.*filename"):
+        compare_packs(output, output)
+
+
 @pytest.mark.parametrize("first_reviewed", [False, True])
 def test_duplicate_matching_uses_previous_occurrence_order(tmp_path: Path, first_reviewed: bool) -> None:
     first = document(tmp_path / "first")

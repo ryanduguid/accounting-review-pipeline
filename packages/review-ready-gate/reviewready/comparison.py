@@ -69,11 +69,13 @@ def _document_sources(document: dict[str, Any]) -> dict[str, str]:
         if item["slot"].startswith("document_")
     }
     for key, source in document["source_sha256"].items():
-        match = re.fullmatch(r"(document_[0-9]{3,})_[0-9]+", key)
-        if match:
-            slot = match[1]
-            digests = originals.setdefault(slot, [])
-            if source["filename"] in {f"{slot}/original.txt", f"{slot}/original.pdf"}:
+        label = re.fullmatch(r"(document_[0-9]{3,})_[0-9]+", key)
+        filename = re.fullmatch(r"(document_[0-9]{3,})/(.+)", source["filename"])
+        if label and (not filename or label[1] != filename[1]):
+            raise GateInputError(f"compare needs {key} to agree with its document filename")
+        if filename:
+            digests = originals.setdefault(filename[1], [])
+            if filename[2] in {"original.txt", "original.pdf"}:
                 digests.append(source["sha256"])
     for slot, digests in originals.items():
         if len(digests) != 1:

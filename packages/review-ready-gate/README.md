@@ -260,6 +260,8 @@ Findings still group by code and slot, so reordering can move a finding between
 groups. The source rows show the changed file hashes in each slot.
 Each recorded document slot must identify exactly one original file. Missing or
 duplicate original-file evidence prevents comparison and exits `1`.
+Document filenames establish the slots even when evidence labels change. A
+numbered document label that contradicts its filename also prevents comparison.
 
 ## Design
 
