@@ -8,6 +8,8 @@ findings. It writes nothing and decides nothing.
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -60,6 +62,40 @@ def _coverage(document: dict[str, Any]) -> list[tuple[tuple[str, Any], ...]] | N
     return sorted(tuple(sorted(control.items())) for control in controls)
 
 
+def _document_sources(document: dict[str, Any]) -> dict[str, str]:
+    """Require one original-file digest for each recorded document slot."""
+    originals: dict[str, list[str]] = {
+        item["slot"]: [] for item in document["findings"]
+        if item["slot"].startswith("document_")
+    }
+    for key, source in document["source_sha256"].items():
+        label = re.fullmatch(r"(document_[0-9]{3,})_[0-9]+", key)
+        filename = re.fullmatch(r"(document_[0-9]{3,})/(.+)", source["filename"])
+        if label and (not filename or label[1] != filename[1]):
+            raise GateInputError(f"compare needs {key} to agree with its document filename")
+        if filename:
+            digests = originals.setdefault(filename[1], [])
+            if filename[2] in {"original.txt", "original.pdf"}:
+                digests.append(source["sha256"])
+    for slot, digests in originals.items():
+        if len(digests) != 1:
+            raise GateInputError(f"compare needs {slot} to record exactly one original file")
+    return {slot: digests[0] for slot, digests in originals.items()}
+
+
+def _unmatched_documents(previous: dict[str, Any], current: dict[str, Any]) -> set[str]:
+    """Match original files in source order, retaining duplicate counts."""
+    unmatched = {item["slot"] for item in previous["findings"]
+                 if item["slot"].startswith("document_")}
+    available = Counter(_document_sources(current).values())
+    for slot, digest in sorted(_document_sources(previous).items(),
+                               key=lambda item: int(item[0].removeprefix("document_"))):
+        if available[digest]:
+            available[digest] -= 1
+            unmatched.discard(slot)
+    return unmatched
+
+
 def _scope_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     """Name every setting that changes what a run could find."""
     changes = []
@@ -74,6 +110,14 @@ def _scope_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[di
             "member": "controls_not_run",
             "previous": previous.get("controls_not_run"),
             "current": current.get("controls_not_run"),
+        })
+    before_documents = sorted(_document_sources(previous).values())
+    after_documents = sorted(_document_sources(current).values())
+    if before_documents != after_documents:
+        changes.append({
+            "member": "document_coverage",
+            "previous": before_documents,
+            "current": after_documents,
         })
     return changes
 
@@ -105,16 +149,18 @@ def _finding_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[
     # An omitted member is a pack that states no coverage, not one that ran everything.
     coverage = current.get("controls_not_run")
     not_run = {control["slot"] for control in coverage or ()}
+    unmatched_documents = _unmatched_documents(previous, current)
     rows = []
     for code, slot in sorted(set(before) | set(after)):
         old, new = before.get((code, slot)), after.get((code, slot))
         if old is None:
             change = "NEW"
         elif new is None:
-            # Absent from the later run is not resolved. Under a changed
-            # tolerance, when the later run did not check that slot, or when
-            # it states no coverage at all, it is not even comparable.
-            comparable = not thresholds_changed and coverage is not None and slot not in not_run
+            # Absent from the later run is not resolved. Changed tolerances,
+            # unrun slots, unstated coverage or an unmatched original document
+            # occurrence also prevent comparison.
+            comparable = (not thresholds_changed and coverage is not None
+                          and slot not in not_run and slot not in unmatched_documents)
             change = "NOT_RAISED" if comparable else "NOT_COMPARABLE"
         elif _canonical(old) == _canonical(new):
             change = "RECURRING"
