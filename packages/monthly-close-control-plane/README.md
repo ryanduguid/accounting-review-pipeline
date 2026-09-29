@@ -453,6 +453,13 @@ directional mark, an embedding, override or isolate, and everything rendered
 into the pack is escaped like any other untrusted cell. A label is a slug, so
 it cannot carry any of that either.
 
+When present, `synthetic_input` and `validation.accepted` must be JSON booleans;
+strings, numbers, nulls and containers make the evidence unreadable. A
+`COMPUTED` record with `validation.accepted=false` is a blocking inconsistency.
+Older records that omit either flag keep their existing treatment, including
+`false` for an omitted synthetic flag. A refusal with `accepted=false` retains
+its existing treatment; that flag alone does not block it.
+
 ### What is checked, and what each failure earns
 
 | Check | Status |

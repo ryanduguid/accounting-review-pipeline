@@ -115,6 +115,62 @@ def test_a_well_formed_file_loads_with_its_figures(tmp_path):
     assert evidence.findings == ()
 
 
+@pytest.mark.parametrize("field", ["synthetic_input", "validation.accepted"])
+@pytest.mark.parametrize("invalid", ["false", "true", 0, 1, 0.0, 1.0, None, [], {}])
+def test_present_non_boolean_flags_block_the_pack(tmp_path, field, invalid):
+    path = write(tmp_path, build_record(**{field: invalid}))
+    with pytest.raises(SchemaError, match=field + ".*bool"):
+        module.load(path)
+    pack = run(tmp_path, calculation_evidence_paths=[path])
+    assert pack.status == "BLOCKED"
+    assert any(item.control == "calculation_evidence" and field in item.reason
+               for item in pack.exceptions)
+
+
+def test_a_computed_record_the_producer_did_not_accept_is_blocked(tmp_path):
+    path = write(tmp_path, build_record(**{"validation.accepted": False}))
+    evidence = module.load(path)
+    assert evidence.usable is False
+    assert any("accepted" in finding for finding in evidence.findings)
+    pack = run(tmp_path, calculation_evidence_paths=[path],
+               required_calculations=("coal-lsl-levy",))
+    assert pack.status == "BLOCKED"
+    assert any(item.control == "calculation_evidence" and "accepted" in item.reason
+               for item in pack.exceptions)
+
+
+@pytest.mark.parametrize("synthetic", [False, True])
+def test_literal_synthetic_flags_are_preserved(tmp_path, synthetic):
+    evidence = module.load(write(tmp_path, build_record(synthetic_input=synthetic)))
+    assert evidence.synthetic_input is synthetic
+    assert evidence.usable is True
+
+
+@pytest.mark.parametrize("field", ["synthetic_input", "validation.accepted", "validation"])
+def test_omitted_legacy_flags_keep_their_loading_result(tmp_path, field):
+    record = build_record()
+    target = record["calculation"]
+    parts = field.split(".")
+    for part in parts[:-1]:
+        target = target[part]
+    del target[parts[-1]]
+    record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
+    path = write(tmp_path, record)
+    evidence = module.load(path)
+    assert evidence.usable is True
+    assert evidence.synthetic_input is (field != "synthetic_input")
+    pack = run(tmp_path, calculation_evidence_paths=[path])
+    assert not [item for item in pack.exceptions if item.control == "calculation_evidence"]
+
+
+def test_an_accepted_false_contradiction_preserves_other_producer_findings(tmp_path):
+    record = build_record(**{"validation.accepted": False,
+                             "validation.findings": ["fabricated existing concern"]})
+    evidence = module.load(write(tmp_path, record))
+    assert any("accepted=false" in finding for finding in evidence.findings)
+    assert any("fabricated existing concern" in finding for finding in evidence.findings)
+
+
 def test_a_tampered_file_is_detected_by_its_own_digest(tmp_path):
     record = build_record()
     record["calculation"]["normalised"]["values"]["levy"] = "1.00"
