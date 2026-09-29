@@ -258,6 +258,15 @@ def _period_comparison_exceptions(
             # _percent_change returns if the division cannot be represented.
             material_by_percentage = percentage is None or percentage >= percentage_threshold
             if material_by_amount and material_by_percentage:
+                # percentage_change is unsigned, so a balance that crosses zero
+                # (a credit of 20,000 becoming a debit of 30,000 reads as 250%)
+                # looks like a same-direction movement unless the reason says so.
+                if percentage is None:
+                    reason = "YTD net balance moved beyond the configured absolute threshold; no percentage change could be computed from the prior YTD balance, so the percentage threshold was not tested."
+                elif current.ytd_net != ZERO and (current.ytd_net < ZERO) != (prior.ytd_net < ZERO):
+                    reason = "YTD net balance moved beyond both configured materiality thresholds and changed sign; the percentage change measures the move across zero."
+                else:
+                    reason = "YTD net balance moved beyond both configured materiality thresholds."
                 result.append(
                     _exception(
                         "period_variance", "REVIEW", current,
@@ -266,11 +275,7 @@ def _period_comparison_exceptions(
                         difference=difference,
                         threshold=absolute_threshold,
                         percentage_change=percentage,
-                        reason=(
-                            "YTD net balance moved beyond both configured materiality thresholds."
-                            if percentage is not None
-                            else "YTD net balance moved beyond the configured absolute threshold; no percentage change could be computed from the prior YTD balance, so the percentage threshold was not tested."
-                        ),
+                        reason=reason,
                         reviewer_action="Investigate the driver, retain supporting evidence, and document the reviewer conclusion.",
                     )
                 )
