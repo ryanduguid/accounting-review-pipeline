@@ -139,7 +139,7 @@ def _remove(path: Path) -> None:
 
 
 def _collision(args: argparse.Namespace) -> str | None:
-    """Name the protected file this run would overwrite, or None when it is safe.
+    """Name a file collision this run would mutate, or None when paths are distinct.
 
     ``redact --map entities.json --out entities.json`` exited 0 and left the map
     holding redacted markdown. The map is the only copy of the key, structured
@@ -153,13 +153,17 @@ def _collision(args: argparse.Namespace) -> str | None:
     named ``out.md.manifest.json`` beside ``--out out.md`` is overwritten by the
     manifest, and an input named ``out.md.triage.md`` beside the same ``--out``
     is overwritten by the triage file.
+
+    Outputs must also be distinct from each other. A manifest hard-linked to
+    the document replaces its text with JSON, while removing a triage path
+    targeted by an output symlink leaves that output dangling.
     """
     if args.command == "verify":
         return None
-    protected = (
+    protected = [
         (args.entity_map.resolve(), "the entity map"),
         (args.source.resolve(), "the input"),
-    )
+    ]
     written = [("--out", args.out)]
     if args.command == "redact":
         written.append(("the manifest path --out derives", _manifest_path(args.out)))
@@ -171,6 +175,7 @@ def _collision(args: argparse.Namespace) -> str | None:
                 resolved.exists() and candidate.exists() and resolved.samefile(candidate)
             ):
                 return f"{name} is {description}, {resolved}; refusing to overwrite it"
+        protected.append((resolved, name))
     return None
 
 
