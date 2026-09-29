@@ -17,7 +17,7 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned after documenting the Xero Developer Platform terms' limits on
 # API data (approved use case; no AI model training or adaptation).
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "825517E9412397BD2BB6E28B52353B723D5CF9B3189E019FF677F43CADF70B3B"
+README_SHA256 = "415BD513EE2BD77735E5484387F85278ED99C12736B95F827B70235CDAE2B41E"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth
