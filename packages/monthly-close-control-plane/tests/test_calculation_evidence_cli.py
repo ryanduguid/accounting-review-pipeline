@@ -7,6 +7,7 @@ what the pack ends up holding, and which exit code comes back.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import socket
 from pathlib import Path
@@ -74,6 +75,24 @@ def test_supplying_evidence_records_it_and_keeps_the_exit_contract(tmp_path):
     assert not [item for item in pack["exceptions"] if item["control"] == "calculation_evidence"]
 
 
+@pytest.mark.parametrize("accepted", [False, "false"])
+def test_an_invalid_acceptance_flag_blocks_the_written_pack(tmp_path, accepted):
+    record = json.loads(GOOD.read_text(encoding="utf-8"))
+    record["calculation"]["validation"]["accepted"] = accepted
+    canonical = json.dumps(record["calculation"], sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False, allow_nan=False).encode("utf-8")
+    record["calculation_sha256"] = hashlib.sha256(canonical).hexdigest()
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    code, pack = review(tmp_path, "--calculation-evidence", str(path),
+                        "--require-calculation", "coal-lsl-levy")
+    assert code == 2
+    assert pack["overall_status"] == "BLOCKED"
+    assert any(item["control"] == "calculation_evidence" and item["status"] == "BLOCKED"
+               for item in pack["exceptions"])
+    assert not any(item["usable"] for item in pack["calculation_evidence"]["supplied"])
+
+
 def test_a_required_calculation_with_no_evidence_raises_an_exception(tmp_path):
     code, pack = review(tmp_path, "--require-calculation", "coal-lsl-levy")
     assert code == 2
@@ -92,6 +111,25 @@ def test_a_recorded_refusal_never_becomes_a_figure(tmp_path):
     assert supplied["status"] == "UPSTREAM_REFUSED"
     assert supplied["values"] == {}
     assert supplied["usable"] is False
+    assert not [item for item in pack["exceptions"]
+                if item["control"] == "calculation_evidence" and "accepted" in item["reason"]]
+
+
+def test_an_accepted_false_refusal_without_other_findings_keeps_review(tmp_path):
+    record = json.loads(GOOD.read_text(encoding="utf-8"))
+    record["calculation"]["call"]["status"] = "UPSTREAM_REFUSED"
+    record["calculation"]["validation"] = {"accepted": False, "findings": []}
+    record["calculation"]["normalised"]["values"] = {}
+    canonical = json.dumps(record["calculation"], sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False, allow_nan=False).encode("utf-8")
+    record["calculation_sha256"] = hashlib.sha256(canonical).hexdigest()
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    code, pack = review(tmp_path, "--calculation-evidence", str(path))
+    assert code == 2
+    findings = [item for item in pack["exceptions"] if item["control"] == "calculation_evidence"]
+    assert findings and all(item["status"] == "REVIEW" for item in findings)
+    assert pack["calculation_evidence"]["supplied"][0]["usable"] is False
 
 
 def test_a_missing_evidence_file_is_an_input_error_not_a_pass(tmp_path, capsys):

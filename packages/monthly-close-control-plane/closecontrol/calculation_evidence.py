@@ -201,6 +201,10 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     if not isinstance(calculation, dict):
         raise SchemaError(f"{source}: evidence carries no calculation block.")
 
+    synthetic_input = calculation.get("synthetic_input", False)
+    if type(synthetic_input) is not bool:
+        raise SchemaError(f"{source}: synthetic_input must be a boolean.")
+
     recorded_digest = _text(record.get("calculation_sha256"), "calculation_sha256", source, limit=64)
     try:
         actual_digest = hashlib.sha256(_canonical(calculation)).hexdigest()
@@ -291,6 +295,12 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
         )
 
     validation = _block(calculation, "validation")
+    if "accepted" in validation:
+        accepted = validation["accepted"]
+        if type(accepted) is not bool:
+            raise SchemaError(f"{source}: validation.accepted must be a boolean.")
+        if accepted is False and status in COMPUTED_STATUSES:
+            findings.append("the producer records a COMPUTED result with validation.accepted=false")
     if validation:
         entries = _array(validation.get("findings"), "validation.findings", source)
         for index, finding in enumerate(entries):
@@ -320,7 +330,7 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
         values=values,
         rate_tables=tuple(rate_tables),
         advisory_notes=tuple(notes),
-        synthetic_input=bool(calculation.get("synthetic_input")),
+        synthetic_input=synthetic_input,
         findings=tuple(findings),
     )
 
