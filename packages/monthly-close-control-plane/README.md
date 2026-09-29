@@ -300,7 +300,7 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 | --- | --- | --- | --- | ---: | --- |
 | REVIEW | account_mapping | Varrock Ventures Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
 | REVIEW | financial_year_reset | n/a | n/a | n/a | Current ReportDate 2026-07-31 and prior ReportDate 2026-06-30 fall in different Australian financial years (1 July to 30 June). YTD figures reset on 1 July, so this YTD-vs-YTD comparison crosses a year reset and the period_variance verdicts for profit-and-loss-style rows are not meaningful. |
-| REVIEW | period_variance | Varrock Ventures Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
+| REVIEW | period_variance | Varrock Ventures Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance movement met or exceeded both configured materiality thresholds. |
 | REVIEW | subledger_reconciliation | Varrock Ventures Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
 ```
 
@@ -309,7 +309,7 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 ```csv
 control,status,tenant,account_id,account_code,account_name,review_group,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
 period_variance,REVIEW,Varrock Ventures Pty Ltd,100,1000,Operating Bank,Cash and cash equivalents,120000.00,105000.00,15000.00,10000.00,14.29%,
-  YTD net balance moved beyond both configured materiality thresholds.,
+  YTD net balance movement met or exceeded both configured materiality thresholds.,
   "Investigate the driver, retain supporting evidence, and document the reviewer conclusion."
 ```
 
@@ -514,7 +514,7 @@ A close can be technically balanced and still need review. This tool keeps the e
 - Schema, duplicate-key, date, and numeric gates fail closed.
 - Current-period and YTD debits must exactly equal credits.
 - Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts, and supplied subledger differences become explicit exceptions.
-- A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and render `percentage_change` as `n/a (prior period zero)`, rather than reporting that a percentage test passed that never ran. The sentinel is used instead of a blank cell because a blank reads as 'no change', while no consumer can read `n/a (prior period zero)` as a zero percentage.
+- A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and render `percentage_change` as `n/a (prior period zero)`, rather than reporting that a percentage test passed that never ran. The sentinel is used instead of a blank cell because a blank reads as 'no change', while no consumer can read `n/a (prior period zero)` as a zero percentage. `percentage_change` is unsigned, so when the prior and current YTD balances are both non-zero with opposite signs the reason also says the balance changed sign: a 20,000 credit becoming a 30,000 debit reads as 250%.
 - Output has only `PASS`, `REVIEW`, and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later. Each digest is calculated from the same immutable byte snapshot the loader parses, so a file replaced during a run cannot be misidentified as the source of the calculations.
 - Spreadsheet-facing source text whose first non-whitespace character is `=`, `+`, `-` or `@` is neutralised with a leading apostrophe. This includes identifier- and number-shaped text such as `+unsafe`, `@123` and `-1000`; the guard does not try to decide which formula-looking values a particular spreadsheet may evaluate. Every exception table cell rendered into `close-summary.md` is flattened onto one line, and its backslashes are escaped before its pipes so that neither a pipe nor a backslash shielding one can add a cell and shift the columns a reviewer reads. A reviewer-note comment keeps its line breaks: a multi-line comment renders as an indented blockquote under the acknowledgement item, with each line escaped the same way and a leading `#` escaped so quoted text cannot forge a document heading.

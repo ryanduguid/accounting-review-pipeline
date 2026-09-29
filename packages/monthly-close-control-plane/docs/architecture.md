@@ -67,7 +67,7 @@ Money is parsed into `Decimal`, not `float`. The integrity controls compare debi
 | Missing supplied mapping | `REVIEW` | Grouped review should not silently omit a new account. |
 | Supplied subledger difference | `REVIEW` | An out-of-tolerance control-account difference needs supporting reconciliation. |
 
-Account movement is raised only when a YTD variance clears both the absolute and the percentage threshold. The one carve-out is a nil prior YTD balance, which leaves no percentage change to compute: the absolute threshold decides alone, `percentage_change` carries the sentinel `n/a (prior period zero)`, and the exception reason names the absolute threshold only. The sentinel is used instead of a blank cell because a blank reads as 'no change', while no consumer can read `n/a (prior period zero)` as a zero percentage.
+Account movement is raised only when a YTD variance clears both the absolute and the percentage threshold. The one carve-out is a nil prior YTD balance, which leaves no percentage change to compute: the absolute threshold decides alone, `percentage_change` carries the sentinel `n/a (prior period zero)`, and the exception reason names the absolute threshold only. The sentinel is used instead of a blank cell because a blank reads as 'no change', while no consumer can read `n/a (prior period zero)` as a zero percentage. Because `percentage_change` is unsigned, a variance whose prior and current YTD balances are both non-zero with opposite signs carries a reason that says the balance changed sign.
 
 ## Deterministic evidence
 

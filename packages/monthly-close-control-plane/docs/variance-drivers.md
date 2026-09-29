@@ -1,6 +1,6 @@
 # Variance drivers
 
-A `period_variance` exception says an account moved beyond both thresholds. The
+A `period_variance` exception says an account's movement met or exceeded both thresholds. The
 reviewer still has to explain why. `close-control drivers` lists the largest
 transactions posted to each of those accounts between the pack's two report
 dates, so the explanation starts from ledger evidence. It writes no commentary
