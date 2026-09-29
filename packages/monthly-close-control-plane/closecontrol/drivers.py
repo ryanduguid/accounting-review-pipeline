@@ -1,6 +1,6 @@
 """Rank the transactions behind each period_variance exception in a verified pack.
 
-A variance exception says an account moved beyond the thresholds; the reviewer
+A variance exception says an account's movement met or exceeded the thresholds; the reviewer
 still has to find out why. This lists the largest transactions posted to the
 account between the two report dates, so the explanation starts from ledger
 evidence rather than memory. It explains nothing itself: the reviewer writes
