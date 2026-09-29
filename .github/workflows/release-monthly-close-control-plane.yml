@@ -36,6 +36,7 @@ jobs:
         .github/workflows/ci.yml: test (3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
+        .github/workflows/codeql.yml: codeql-gates
       source-directory: packages/monthly-close-control-plane
       tag-prefix: monthly-close-control-plane
       upload-dist-artifact: true

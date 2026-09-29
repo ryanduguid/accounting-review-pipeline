@@ -109,3 +109,13 @@ jobs:
           failed = [name for name, value in results.items() if value["result"] != expected]
           if failed:
               raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit's first parent holds the base branch's workflow.
+          fetch-depth: 2
+          sparse-checkout: .github
+      - name: Require every job to be listed and kept
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/ci/check_gates.py .github/workflows/joined-conformance.yml conformance-gates --no-results

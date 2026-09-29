@@ -1,9 +1,9 @@
 name: tests
 
-# The `test`, `package` and `lint` jobs are Monthly Close Controls' own checks
-# and the anchor required checks on main (`package`, `test (3.10)` to
-# `test (3.13)`), so they keep their ids and this workflow carries no path
-# filter. They run the same gates as ci-package.yml: `test` measures branch
+# The `test`, `package` and `lint` jobs are Monthly Close Controls' own checks,
+# which its release workflow selects by name, so they keep their ids. This
+# workflow carries no path filter, so `pipeline-gates`, the check branch
+# protection requires, reports on every pull request. They run the same gates as ci-package.yml: `test` measures branch
 # coverage and `dependency-audit` runs pip-audit against the locked
 # environment. The `component` matrix calls the reusable ci-package.yml once per
 # other Python distribution; on a pull request each call filters itself to its
@@ -271,3 +271,13 @@ jobs:
           failed = [name for name, value in results.items() if value["result"] != expected]
           if failed:
               raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit's first parent holds the base branch's workflow.
+          fetch-depth: 2
+          sparse-checkout: .github
+      - name: Require every job to be listed and kept
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/ci/check_gates.py .github/workflows/ci.yml pipeline-gates --no-results

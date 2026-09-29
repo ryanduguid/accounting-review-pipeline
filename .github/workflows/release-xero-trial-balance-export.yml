@@ -37,6 +37,7 @@ jobs:
         .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
+        .github/workflows/codeql.yml: codeql-gates
       source-directory: packages/xero-trial-balance-export
       tag-prefix: xero-trial-balance-export
       upload-dist-artifact: true

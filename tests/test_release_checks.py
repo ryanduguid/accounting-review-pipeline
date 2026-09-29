@@ -7,8 +7,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = "ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711"
-# These are component jobs from successful main-branch runs, never skip-tolerant
-# aggregate gates. Review the list when a component's CI contract changes.
+# These are component jobs from successful main-branch runs, plus aggregates that
+# require every job in their workflow to succeed; never a skip-tolerant aggregate
+# gate. Review the list when a component's CI contract changes.
 REQUIRED = {
     "release-accounting-excel-toolkit.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
@@ -18,7 +19,8 @@ REQUIRED = {
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.13)",
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)",
         ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python"
+        ".github/workflows/codeql.yml: Analyze Python",
+        ".github/workflows/codeql.yml: codeql-gates"
     ],
     "release-elizabeth-anne-alexander.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
@@ -30,7 +32,8 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.13)",
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python"
+        ".github/workflows/codeql.yml: Analyze Python",
+        ".github/workflows/codeql.yml: codeql-gates"
     ],
     "release-evatt.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
@@ -41,7 +44,8 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/evatt / test (3.12)",
         ".github/workflows/ci.yml: packages/evatt / test (3.13)",
         ".github/workflows/ci.yml: packages/evatt / test (3.14)",
-        ".github/workflows/codeql.yml: Analyze Python"
+        ".github/workflows/codeql.yml: Analyze Python",
+        ".github/workflows/codeql.yml: codeql-gates"
     ],
     "release-monthly-close-control-plane.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
@@ -54,7 +58,8 @@ REQUIRED = {
         ".github/workflows/ci.yml: test (3.13)",
         ".github/workflows/ci.yml: test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python"
+        ".github/workflows/codeql.yml: Analyze Python",
+        ".github/workflows/codeql.yml: codeql-gates"
     ],
     "release-review-ready-gate.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
@@ -66,7 +71,8 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/review-ready-gate / test (3.13)",
         ".github/workflows/ci.yml: packages/review-ready-gate / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python"
+        ".github/workflows/codeql.yml: Analyze Python",
+        ".github/workflows/codeql.yml: codeql-gates"
     ],
     "release-xero-trial-balance-export.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
@@ -78,7 +84,8 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.13)",
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python"
+        ".github/workflows/codeql.yml: Analyze Python",
+        ".github/workflows/codeql.yml: codeql-gates"
     ]
 }
 
