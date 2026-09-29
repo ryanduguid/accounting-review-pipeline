@@ -331,5 +331,4 @@ jobs:
       - name: Require every job to be listed and kept
         env:
           RESULTS: ${{ toJSON(needs) }}
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 .github/ci/check_gates.py .github/workflows/ci-package.yml gates --no-results
