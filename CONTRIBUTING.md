@@ -81,10 +81,13 @@ For a potential security vulnerability follow `SECURITY.md`.
 
 ## Required CI results
 
-Branch protection should require `pipeline-gates`, `conformance-gates` and
-`standard-library-gates`, plus one `<component directory> / gates` result per
-Python component. Each result fails if an expected job fails, is cancelled or
-does not run. On a pull request, unchanged components skip their matrix jobs and
+Branch protection requires one aggregate per workflow: `pipeline-gates`,
+`conformance-gates`, `standard-library-gates`, `public-fixtures-gates` and
+`codeql-gates`, plus the `CodeQL` results check and `Attribution policy`.
+`pipeline-gates` needs every `<component directory> / gates` result, so those
+are not listed separately. Each aggregate fails if an expected job fails, is
+cancelled or does not run, and fails when a job in its workflow is missing from
+its `needs`. On a pull request, unchanged components skip their matrix jobs and
 the final result accepts that only after successful path selection. A push to
 `main` runs every job, so the release commit carries the component evidence the
 release gate requires. File moves select both the source and destination

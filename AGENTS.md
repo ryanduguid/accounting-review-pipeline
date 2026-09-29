@@ -97,8 +97,8 @@ the exporter, Monthly Close Controls and the Xero Ledger Review Gate, the 3 comp
 platform-specific behaviour. Each call filters
 itself to its component directory, the shared contract and the root files, so a change to
 one component runs that component alone. Monthly Close Controls keeps its own `test`,
-`package` and `lint` jobs in `ci.yml` because they are the anchor required checks on
-`main`. The Excel adapter and the Power BI application have no `pyproject.toml`, so their
+`package` and `lint` jobs in `ci.yml` because its release workflow selects them by
+name. The Excel adapter and the Power BI application have no `pyproject.toml`, so their
 root workflows run ruff and mypy from `ruff.toml` and `mypy.ini` and their unittest suites
 on the same Python matrix.
 

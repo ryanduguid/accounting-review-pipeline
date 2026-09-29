@@ -93,9 +93,8 @@ checkouts. Each operating system's artefact retains the fabricated results, fail
 diagnostics, escaped summary, success manifest and replay record for seven days.
 The existing fixture assertions check cash values, command coverage and retained
 REVIEW findings. The manifests identify the actual source and dependency versions.
-Adding these workflows does not configure branch protection or establish that a
-hosted run has passed. The Linux check keeps its `public-fixtures` name; Windows
-adds `public-fixtures (Windows)`. Require the added check separately if it should
-block merges.
+The Linux check keeps its `public-fixtures` name and Windows adds
+`public-fixtures (Windows)`. Each workflow's `public-fixtures-gates` job needs
+both, and branch protection in the three public repositories requires it.
 
 Review results retain their accounting limits; a successful integration does not approve a close, a grant acquittal or a funding decision. Component tests continue to run through their existing CI commands. Timings are measurements for comparison, not a claim of improved performance.
