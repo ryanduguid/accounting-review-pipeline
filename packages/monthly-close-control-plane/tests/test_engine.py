@@ -280,6 +280,60 @@ def test_a_same_sign_movement_keeps_the_plain_reason(tmp_path: Path) -> None:
     assert variances["110"].reason == "YTD net balance moved beyond both configured materiality thresholds."
 
 
+def _signed_pair(tmp_path: Path, prior_debit: str, prior_credit: str, current_debit: str, current_credit: str) -> dict[str, Path]:
+    """Balanced trial balances where account 110 carries the given YTD debit and credit."""
+    prior = _write(
+        tmp_path / "prior.csv",
+        [
+            f"2026-06-30,{TENANT},Assets,110,Trade Debtors,1100,0.00,0.00,{prior_debit},{prior_credit}",
+            f"2026-06-30,{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,{prior_credit},{prior_debit}",
+        ],
+    )
+    current = _write(
+        tmp_path / "current.csv",
+        [
+            f"2026-07-31,{TENANT},Assets,110,Trade Debtors,1100,0.00,0.00,{current_debit},{current_credit}",
+            f"2026-07-31,{TENANT},Equity,900,Retained Earnings,3000,0.00,0.00,{current_credit},{current_debit}",
+        ],
+    )
+    return {"current_path": current, "prior_path": prior}
+
+
+def test_a_debit_balance_that_becomes_a_credit_balance_also_says_so(tmp_path: Path) -> None:
+    pack = review_close(
+        **_signed_pair(tmp_path, "30000.00", "0.00", "0.00", "20000.00"),
+        absolute_threshold=Decimal("10000"),
+    )
+
+    debtors = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}["110"]
+    assert (debtors.prior_value, debtors.current_value) == (Decimal("30000.00"), Decimal("-20000.00"))
+    assert debtors.difference == Decimal("-50000.00")
+    assert debtors.status == "REVIEW"
+    assert debtors.reason.endswith("and changed sign; the percentage change measures the move across zero.")
+
+
+def test_a_credit_balance_that_grows_keeps_the_plain_reason(tmp_path: Path) -> None:
+    pack = review_close(
+        **_signed_pair(tmp_path, "0.00", "20000.00", "0.00", "30000.00"),
+        absolute_threshold=Decimal("5000"),
+    )
+
+    debtors = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}["110"]
+    assert debtors.percentage_change == Decimal("0.5")
+    assert debtors.reason == "YTD net balance moved beyond both configured materiality thresholds."
+
+
+def test_a_sign_change_below_the_absolute_threshold_raises_nothing(tmp_path: Path) -> None:
+    # A 100 credit becoming a 50 debit is a 150% swing, but 150 is below the
+    # absolute threshold, so the new wording cannot create an exception.
+    pack = review_close(
+        **_signed_pair(tmp_path, "0.00", "100.00", "50.00", "0.00"),
+        absolute_threshold=Decimal("10000"),
+    )
+
+    assert not [item for item in pack.exceptions if item.control == "period_variance"]
+
+
 def test_a_credit_balance_falling_to_nil_has_not_changed_sign(tmp_path: Path) -> None:
     # Nil has no sign: clearing a 20,000 credit is a 100% movement, not a reversal.
     prior = _write(
