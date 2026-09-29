@@ -42,6 +42,7 @@ jobs:
         .github/workflows/ci.yml: packages/evatt / test (3.13)
         .github/workflows/ci.yml: packages/evatt / test (3.14)
         .github/workflows/codeql.yml: Analyze Python
+        .github/workflows/codeql.yml: codeql-gates
       source-directory: packages/evatt
       tag-prefix: evatt
       upload-dist-artifact: true

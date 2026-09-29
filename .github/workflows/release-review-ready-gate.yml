@@ -35,6 +35,7 @@ jobs:
         .github/workflows/ci.yml: packages/review-ready-gate / test (3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
+        .github/workflows/codeql.yml: codeql-gates
       source-directory: packages/review-ready-gate
       tag-prefix: review-ready-gate
       upload-dist-artifact: true
