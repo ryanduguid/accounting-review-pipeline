@@ -34,6 +34,8 @@ jobs:
           persist-credentials: false
       - name: Verify path selection
         run: python -m unittest tests.test_ci_paths tests.test_release_pins tests.test_release_checks -v
+      - name: Check each AI register entry names its component's version
+        run: python -m unittest tests.test_ai_register_entries -v
       - name: Select affected checks
         id: select
         env:
