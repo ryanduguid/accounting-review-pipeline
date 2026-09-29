@@ -225,13 +225,13 @@ def test_movement_from_a_nil_prior_balance_is_always_material_by_percentage(tmp_
     # own percentage_change column is blank: the reviewer would go looking for a
     # percentage the pack never computed.
     assert variances["777"].reason == (
-        "YTD net balance moved beyond the configured absolute threshold; "
+        "YTD net balance movement met or exceeded the configured absolute threshold; "
         "no percentage change could be computed from the prior YTD balance, "
         "so the percentage threshold was not tested."
     )
     # The mirror case, a balance falling to nil, has a defined percentage.
     assert variances["888"].percentage_change == Decimal("1")
-    assert variances["888"].reason == "YTD net balance moved beyond both configured materiality thresholds."
+    assert variances["888"].reason == "YTD net balance movement met or exceeded both configured materiality thresholds."
 
 
 def test_a_balance_that_changes_sign_says_so_in_the_reason(tmp_path: Path) -> None:
@@ -264,9 +264,24 @@ def test_a_balance_that_changes_sign_says_so_in_the_reason(tmp_path: Path) -> No
     assert debtors.difference == Decimal("50000.00")
     assert debtors.percentage_change == Decimal("2.5")
     assert debtors.reason == (
-        "YTD net balance moved beyond both configured materiality thresholds and "
-        "changed sign; the percentage change measures the move across zero."
+        "YTD net balance changed sign, and its movement met or exceeded both configured "
+        "materiality thresholds; the percentage change measures the move across zero."
     )
+
+
+def test_a_movement_exactly_at_both_thresholds_is_reported_as_meeting_them(tmp_path: Path) -> None:
+    # 100,000 to 110,000 moves exactly 10,000 and exactly 10%: both tests are
+    # inclusive, so the exception is raised and the reason must not say "beyond".
+    pack = review_close(
+        **_variance_pair(tmp_path, current_ytd="110000.00"),
+        absolute_threshold=Decimal("10000"),
+        percentage_threshold=Decimal("0.10"),
+    )
+
+    variances = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}
+    assert variances["110"].difference == Decimal("10000.00")
+    assert variances["110"].percentage_change == Decimal("0.1")
+    assert variances["110"].reason == "YTD net balance movement met or exceeded both configured materiality thresholds."
 
 
 def test_a_same_sign_movement_keeps_the_plain_reason(tmp_path: Path) -> None:
@@ -277,7 +292,7 @@ def test_a_same_sign_movement_keeps_the_plain_reason(tmp_path: Path) -> None:
 
     variances = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}
     assert variances["110"].percentage_change == Decimal("0.3")
-    assert variances["110"].reason == "YTD net balance moved beyond both configured materiality thresholds."
+    assert variances["110"].reason == "YTD net balance movement met or exceeded both configured materiality thresholds."
 
 
 def _signed_pair(tmp_path: Path, prior_debit: str, prior_credit: str, current_debit: str, current_credit: str) -> dict[str, Path]:
@@ -309,7 +324,7 @@ def test_a_debit_balance_that_becomes_a_credit_balance_also_says_so(tmp_path: Pa
     assert (debtors.prior_value, debtors.current_value) == (Decimal("30000.00"), Decimal("-20000.00"))
     assert debtors.difference == Decimal("-50000.00")
     assert debtors.status == "REVIEW"
-    assert debtors.reason.endswith("and changed sign; the percentage change measures the move across zero.")
+    assert debtors.reason.startswith("YTD net balance changed sign, and its movement met or exceeded")
 
 
 def test_a_credit_balance_that_grows_keeps_the_plain_reason(tmp_path: Path) -> None:
@@ -320,7 +335,7 @@ def test_a_credit_balance_that_grows_keeps_the_plain_reason(tmp_path: Path) -> N
 
     debtors = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}["110"]
     assert debtors.percentage_change == Decimal("0.5")
-    assert debtors.reason == "YTD net balance moved beyond both configured materiality thresholds."
+    assert debtors.reason == "YTD net balance movement met or exceeded both configured materiality thresholds."
 
 
 def test_a_sign_change_below_the_absolute_threshold_raises_nothing(tmp_path: Path) -> None:
@@ -357,7 +372,7 @@ def test_a_credit_balance_falling_to_nil_has_not_changed_sign(tmp_path: Path) ->
 
     variances = {item.account_id: item for item in pack.exceptions if item.control == "period_variance"}
     assert variances["110"].percentage_change == Decimal("1")
-    assert variances["110"].reason == "YTD net balance moved beyond both configured materiality thresholds."
+    assert variances["110"].reason == "YTD net balance movement met or exceeded both configured materiality thresholds."
 
 
 def test_totals_that_balance_only_under_exact_decimal_arithmetic_pass(tmp_path: Path) -> None:

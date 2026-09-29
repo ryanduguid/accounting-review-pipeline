@@ -309,7 +309,7 @@ def test_a_backslash_before_a_pipe_in_a_source_csv_cannot_shift_a_summary_column
     # the difference.
     assert cells[3] == f"1770 / {name}"
     assert cells[4] == "800000.00"
-    assert cells[5].startswith("YTD net balance moved beyond")
+    assert cells[5].startswith("YTD net balance movement met or exceeded")
 
 
 def test_a_missing_tenant_account_or_difference_renders_as_ascii(tmp_path: Path) -> None:

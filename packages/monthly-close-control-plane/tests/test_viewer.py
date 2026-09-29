@@ -336,7 +336,7 @@ def _two_query_pack(tmp_path: Path) -> Path:
         difference=Decimal("30000.00"),
         threshold=Decimal("1000"),
         percentage_change=None,
-        reason="YTD net balance moved beyond both configured materiality thresholds.",
+        reason="YTD net balance movement met or exceeded both configured materiality thresholds.",
         reviewer_action="Investigate the driver and retain supporting evidence.",
     )
     output = tmp_path / "two-query-pack"

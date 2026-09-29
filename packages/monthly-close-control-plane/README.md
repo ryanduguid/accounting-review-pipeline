@@ -300,7 +300,7 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 | --- | --- | --- | --- | ---: | --- |
 | REVIEW | account_mapping | Varrock Ventures Pty Ltd | 6000 / Operating Expenses | n/a | Current account has no supplied review-group mapping. |
 | REVIEW | financial_year_reset | n/a | n/a | n/a | Current ReportDate 2026-07-31 and prior ReportDate 2026-06-30 fall in different Australian financial years (1 July to 30 June). YTD figures reset on 1 July, so this YTD-vs-YTD comparison crosses a year reset and the period_variance verdicts for profit-and-loss-style rows are not meaningful. |
-| REVIEW | period_variance | Varrock Ventures Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance moved beyond both configured materiality thresholds. |
+| REVIEW | period_variance | Varrock Ventures Pty Ltd | 1000 / Operating Bank | 15000.00 | YTD net balance movement met or exceeded both configured materiality thresholds. |
 | REVIEW | subledger_reconciliation | Varrock Ventures Pty Ltd | 2000 / Trade Creditors | -250.00 | Current trial-balance balance differs from the supplied subledger beyond tolerance. |
 ```
 
@@ -309,7 +309,7 @@ This pack is a review aid. It does not approve a close, post a journal, make a p
 ```csv
 control,status,tenant,account_id,account_code,account_name,review_group,current_value,prior_value,difference,threshold,percentage_change,reason,reviewer_action
 period_variance,REVIEW,Varrock Ventures Pty Ltd,100,1000,Operating Bank,Cash and cash equivalents,120000.00,105000.00,15000.00,10000.00,14.29%,
-  YTD net balance moved beyond both configured materiality thresholds.,
+  YTD net balance movement met or exceeded both configured materiality thresholds.,
   "Investigate the driver, retain supporting evidence, and document the reviewer conclusion."
 ```
 

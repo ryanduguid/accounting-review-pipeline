@@ -262,11 +262,11 @@ def _period_comparison_exceptions(
                 # (a credit of 20,000 becoming a debit of 30,000 reads as 250%)
                 # looks like a same-direction movement unless the reason says so.
                 if percentage is None:
-                    reason = "YTD net balance moved beyond the configured absolute threshold; no percentage change could be computed from the prior YTD balance, so the percentage threshold was not tested."
+                    reason = "YTD net balance movement met or exceeded the configured absolute threshold; no percentage change could be computed from the prior YTD balance, so the percentage threshold was not tested."
                 elif current.ytd_net != ZERO and (current.ytd_net < ZERO) != (prior.ytd_net < ZERO):
-                    reason = "YTD net balance moved beyond both configured materiality thresholds and changed sign; the percentage change measures the move across zero."
+                    reason = "YTD net balance changed sign, and its movement met or exceeded both configured materiality thresholds; the percentage change measures the move across zero."
                 else:
-                    reason = "YTD net balance moved beyond both configured materiality thresholds."
+                    reason = "YTD net balance movement met or exceeded both configured materiality thresholds."
                 result.append(
                     _exception(
                         "period_variance", "REVIEW", current,
