@@ -210,6 +210,9 @@ an extra placeholder costs a triage decision while a miss leaks.
 - **`--out` refuses to equal the map or the input**, including the manifest and
   triage paths it derives from `--out`. The map is the only copy of the key,
   and one mistyped path used to overwrite it with redacted markdown.
+  The redacted document, manifest and triage paths must also refer to separate
+  files, including through symbolic or hard links. A collision returns exit 1
+  before any file is written or removed, preserving the previous files.
 - **CRLF input is normalised to LF for detection.** The CLI writes the file
   back with the ending its source carried. Restoration uses the map's spelling
   and whitespace, so case variants and wrapped names do not round trip byte

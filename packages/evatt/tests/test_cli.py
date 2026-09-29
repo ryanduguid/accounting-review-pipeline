@@ -132,6 +132,43 @@ def test_output_hardlink_cannot_overwrite_a_protected_file(tmp_path, command, pr
     assert (root / protected).read_bytes() == before
 
 
+@pytest.mark.parametrize("link_name,target_name,kind", [
+    ("out.md.manifest.json", "out.md", "hardlink"),
+    ("out.md.triage.md", "out.md", "hardlink"),
+    ("out.md.triage.md", "out.md.manifest.json", "hardlink"),
+    ("out.md", "out.md.manifest.json", "symlink"),
+    ("out.md", "out.md.triage.md", "symlink"),
+    ("out.md.manifest.json", "out.md.triage.md", "symlink"),
+])
+def test_redact_refuses_aliased_outputs_before_writing(
+    tmp_path, capsys, link_name, target_name, kind,
+) -> None:
+    root = workspace(tmp_path)
+    shutil.copy(SAMPLES / "entities-only.md", root / "in.md")
+    paths = [root / name for name in (
+        "in.md", "entities.json", "out.md", "out.md.manifest.json", "out.md.triage.md",
+    )]
+    for path in paths[2:]:
+        path.write_text("fabricated previous output\n", encoding="utf-8")
+    link, target = root / link_name, root / target_name
+    link.unlink()
+    if kind == "hardlink":
+        link.hardlink_to(target)
+    else:
+        try:
+            link.symlink_to(target)
+        except OSError as error:
+            pytest.skip(f"file symlinks are unavailable: {error}")
+    before = {path: path.read_bytes() for path in paths}
+
+    assert main(["redact", "--in", str(root / "in.md"),
+                 "--map", str(root / "entities.json"), "--out", str(root / "out.md")]) == 1
+
+    assert {path: path.read_bytes() for path in paths} == before
+    assert link.samefile(target)
+    assert "refusing" in capsys.readouterr().err
+
+
 def test_the_halt_sentence_is_written_once(tmp_path, capsys) -> None:
     """The triage file and the console must not carry 2 copies of one sentence.
 
