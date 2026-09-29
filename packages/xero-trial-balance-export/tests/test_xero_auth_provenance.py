@@ -14,9 +14,10 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned after documenting the existing duplicate-column refusal.
+# Re-pinned after documenting the Xero Developer Platform terms' limits on
+# API data (approved use case; no AI model training or adaptation).
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "74193AFDF40EC2F7049744DF9209563D4214E6628F182E49293C1699A7461A5F"
+README_SHA256 = "415BD513EE2BD77735E5484387F85278ED99C12736B95F827B70235CDAE2B41E"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth
