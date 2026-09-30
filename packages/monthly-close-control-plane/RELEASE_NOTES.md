@@ -4,6 +4,7 @@
 - Calculation evidence with a malformed boolean flag, or a `COMPUTED` result its producer marked `validation.accepted=false`, now blocks reliance through the existing unreadable-evidence and validation paths. The loader used to read `synthetic_input="false"` as true. Present flags must be JSON booleans; omitted legacy flags and genuine refusals are treated as before.
 - A `period_variance` exception says when an account's YTD net balance changed sign. `percentage_change` is unsigned, so a 20,000 credit that became a 30,000 debit read as 250% with nothing to show the move across zero.
 - `workbench` is now an alias of `review`; its arguments and banner are unchanged.
+- The utility workflows example (`examples/utility_workflows.py`) runs each project under Python 3.12 rather than 3.11.
 
 # v0.1.7
 
