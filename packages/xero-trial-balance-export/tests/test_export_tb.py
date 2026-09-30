@@ -2476,6 +2476,7 @@ class QuietFailureMessageTest(_ExportCase):
             for quiet in (False, True):
                 with self.subTest(manifest=manifest, quiet=quiet), \
                         tempfile.TemporaryDirectory() as root:
+                    root = os.path.realpath(root)
                     name = "synthetic-entity.csv"
                     real_replace = os.replace
 
