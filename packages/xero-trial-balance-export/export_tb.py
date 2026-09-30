@@ -20,6 +20,7 @@ no file and exits non-zero.
 
 import argparse
 import csv
+import errno
 import hashlib
 import io
 import json
@@ -587,9 +588,10 @@ def _write_targets(out_path: str, *, with_manifest: bool) -> list[str]:
     # both be ignored by a rule that covers the shape.
     targets = [out_path]
     targets += [os.path.join(out_dir, _staged_name(".csv.tmp")) for _ in range(2)]
-    if with_manifest:
-        manifest = manifest_path_for(out_path)
+    manifest = manifest_path_for(out_path)
+    if with_manifest or os.path.lexists(manifest):
         targets += [manifest, manifest + ".previous"]
+    if with_manifest:
         targets += [
             os.path.join(out_dir, _staged_name(".manifest.json.tmp")) for _ in range(2)
         ]
@@ -962,12 +964,32 @@ def set_aside_manifest(out_path: str) -> str | None:
         return None
     aside = manifest_path + ".previous"
     try:
-        os.replace(manifest_path, aside)
+        # Windows exclusive creation can follow a dangling file symlink.
+        if os.path.lexists(aside):
+            raise FileExistsError(errno.EEXIST, "recovery path is already occupied")
+        descriptor = os.open(aside, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except OSError as exc:
         sys.exit(
+            f"error: cannot reserve the recovery path {shown_path(aside)} "
+            f"({exc.strerror}); the CSV and current manifest are unchanged. "
+            "Inspect any existing recovery file before moving or removing it, then run again."
+        )
+    try:
+        os.close(descriptor)
+        os.replace(manifest_path, aside)
+    except OSError as exc:
+        try:
+            os.remove(aside)
+        except OSError as cleanup_error:
+            print(
+                f"warning: the empty recovery reservation at {shown_path(aside)} "
+                f"could not be removed ({cleanup_error.strerror}); inspect it before running again.",
+                file=sys.stderr,
+            )
+        sys.exit(
             f"error: a manifest from an earlier export, {shown_path(manifest_path)}, could not be "
-            f"set aside ({exc}), so nothing was written and the fetched report is not "
-            "kept. Delete it by hand and run again."
+            f"set aside ({exc.strerror}), so the CSV and current manifest are unchanged "
+            "and the fetched report is not kept."
         )
     return aside
 

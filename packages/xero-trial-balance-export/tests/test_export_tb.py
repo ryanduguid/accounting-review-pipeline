@@ -268,6 +268,118 @@ class ManifestTest(_ExportCase):
         self.assertEqual(manifest["entity_ref"]["tenant_name"], "New Tenant Pty Ltd")
         self.assertEqual(manifest["export"]["sha256"], hashlib.sha256(data).hexdigest())
 
+    def test_occupied_recovery_file_preserves_the_existing_export(self):
+        for no_manifest in (False, True):
+            for quiet in (False, True):
+                with self.subTest(no_manifest=no_manifest, quiet=quiet), \
+                        tempfile.TemporaryDirectory() as root:
+                    csv = Path(root) / "synthetic-entity.csv"
+                    manifest = Path(str(csv) + ".manifest.json")
+                    aside = Path(str(manifest) + ".previous")
+                    originals = {csv: b"old csv", manifest: b"old manifest", aside: b"recovery"}
+                    for path, content in originals.items():
+                        path.write_bytes(content)
+                    flags = (["--no-manifest"] if no_manifest else [])
+                    flags += ["--quiet"] if quiet else []
+                    with patch.object(export_tb, "write_csv", return_value="a" * 64) as write_csv:
+                        raised, stdout, _ = self.run_export(
+                            self.BALANCED, out=csv.name, work_dir=root, extra_args=flags
+                        )
+                    self.assertIsInstance(raised, SystemExit)
+                    write_csv.assert_not_called()
+                    for path, content in originals.items():
+                        self.assertEqual(path.read_bytes(), content)
+                    self.assertIn("inspect", str(raised).lower())
+                    if quiet:
+                        self.assertNotIn(csv.name, str(raised) + stdout)
+
+    def test_occupied_recovery_links_are_not_followed_or_removed(self):
+        for kind in ("hard", "dangling"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as root:
+                csv = Path(root) / "tb.csv"
+                manifest = Path(str(csv) + ".manifest.json")
+                aside = Path(str(manifest) + ".previous")
+                target = Path(root) / "unrelated"
+                manifest.write_bytes(b"old manifest")
+                if kind == "hard":
+                    target.write_bytes(b"unrelated recovery")
+                    os.link(target, aside)
+                else:
+                    try:
+                        aside.symlink_to(target)
+                    except (NotImplementedError, OSError):
+                        self.skipTest("creating file symlinks is unavailable")
+                with self.assertRaises(SystemExit):
+                    export_tb.set_aside_manifest(str(csv))
+                self.assertEqual(manifest.read_bytes(), b"old manifest")
+                self.assertTrue(os.path.lexists(aside))
+                if kind == "hard":
+                    self.assertTrue(aside.samefile(target))
+                    self.assertEqual(target.read_bytes(), b"unrelated recovery")
+                else:
+                    self.assertTrue(aside.is_symlink())
+                    self.assertFalse(target.exists())
+
+    def test_failed_parking_removes_only_its_reservation(self):
+        with tempfile.TemporaryDirectory() as root:
+            csv = Path(root) / "tb.csv"
+            manifest = Path(str(csv) + ".manifest.json")
+            aside = Path(str(manifest) + ".previous")
+            manifest.write_bytes(b"old manifest")
+
+            def fail_replace(source, destination):
+                self.assertEqual(Path(destination), aside)
+                self.assertTrue(aside.is_file())
+                self.assertEqual(aside.read_bytes(), b"")
+                raise PermissionError(13, "Access is denied")
+
+            with patch.object(export_tb.os, "replace", side_effect=fail_replace):
+                with self.assertRaises(SystemExit):
+                    export_tb.set_aside_manifest(str(csv))
+            self.assertEqual(manifest.read_bytes(), b"old manifest")
+            self.assertFalse(aside.exists())
+
+    def test_exclusive_reservation_refuses_a_file_created_after_the_precheck(self):
+        with tempfile.TemporaryDirectory() as root:
+            csv = str(Path(root) / "synthetic-entity.csv")
+            manifest = Path(csv + ".manifest.json")
+            aside = Path(str(manifest) + ".previous")
+            manifest.write_bytes(b"old manifest")
+            aside.write_bytes(b"unrelated recovery")
+            with patch.object(export_tb, "QUIET", True), \
+                    patch.object(export_tb.os.path, "lexists", side_effect=[True, False]):
+                with self.assertRaises(SystemExit) as result:
+                    export_tb.set_aside_manifest(csv)
+            self.assertNotIn("synthetic-entity.csv", str(result.exception))
+            self.assertEqual(manifest.read_bytes(), b"old manifest")
+            self.assertEqual(aside.read_bytes(), b"unrelated recovery")
+
+    def test_recovery_path_is_untouched_without_a_current_manifest(self):
+        with tempfile.TemporaryDirectory() as root:
+            csv = str(Path(root) / "tb.csv")
+            aside = Path(csv + ".manifest.json.previous")
+            aside.write_bytes(b"earlier recovery")
+            self.assertIsNone(export_tb.set_aside_manifest(csv))
+            self.assertEqual(aside.read_bytes(), b"earlier recovery")
+
+    def test_reservation_cleanup_failure_is_reported_without_quiet_filenames(self):
+        with tempfile.TemporaryDirectory() as root:
+            csv = Path(root) / "synthetic-entity.csv"
+            manifest = Path(str(csv) + ".manifest.json")
+            aside = Path(str(manifest) + ".previous")
+            manifest.write_bytes(b"old manifest")
+            error = PermissionError(13, "Access is denied", str(aside))
+            with patch.object(export_tb, "QUIET", True), \
+                    patch.object(export_tb.os, "replace", side_effect=error), \
+                    patch.object(export_tb.os, "remove", side_effect=error), \
+                    patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                with self.assertRaises(SystemExit) as result:
+                    export_tb.set_aside_manifest(str(csv))
+            self.assertEqual(manifest.read_bytes(), b"old manifest")
+            self.assertEqual(aside.read_bytes(), b"")
+            self.assertIn("reservation", stderr.getvalue())
+            self.assertNotIn(csv.name, stderr.getvalue() + str(result.exception))
+
     def test_an_earlier_manifest_that_cannot_be_set_aside_stops_the_run_before_the_csv(self):
         raised, _, first = self.run_export(self.BALANCED, tenant_name="Old Tenant Pty Ltd")
         self.assertIsNone(raised)
@@ -284,7 +396,7 @@ class ManifestTest(_ExportCase):
                 self.BALANCED, tenant_name="New Tenant Pty Ltd", work_dir=self.work_dir
             )
         self.assertIn("could not be set aside", str(raised))
-        self.assertIn("nothing was written", str(raised))
+        self.assertIn("CSV and current manifest are unchanged", str(raised))
         # The earlier CSV and its manifest still describe each other.
         self.assertEqual(data, first)
         self.assertEqual(self.manifest()[1], old_manifest)
@@ -2164,6 +2276,58 @@ class CheckoutGuardTest(_ExportCase):
         self.assertIsNone(raised)
         self.assertIn("Wrote 2 accounts to", out)
         self.assertIsNotNone(data)
+
+    def test_no_manifest_rerun_checks_existing_manifest_recovery_paths(self):
+        for quiet in (False, True):
+            for ignore_manifest in (False, True):
+                with self.subTest(quiet=quiet, ignore_manifest=ignore_manifest):
+                    ignores = "*.csv\n*.csv.tmp\n"
+                    if ignore_manifest:
+                        ignores += "*.manifest.json\n"
+                    repo = self._repo(ignore=ignores)
+                    csv = Path(repo) / "synthetic-entity.csv"
+                    manifest = Path(str(csv) + ".manifest.json")
+                    csv.write_bytes(b"old csv")
+                    manifest.write_bytes(b"old manifest")
+                    flags = ["--no-manifest"] + (["--quiet"] if quiet else [])
+                    with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                        raised, stdout, data = self.run_export(
+                            self.BALANCED, out=csv.name, work_dir=repo, extra_args=flags
+                        )
+                    self.assertIsInstance(raised, SystemExit)
+                    self.assertEqual(raised.code, 2)
+                    self.assertEqual(data, b"old csv")
+                    self.assertEqual(manifest.read_bytes(), b"old manifest")
+                    self.assertFalse(Path(str(manifest) + ".previous").exists())
+                    if quiet:
+                        self.assertNotIn(csv.name, stderr.getvalue() + stdout)
+                    else:
+                        self.assertIn(csv.name + ".manifest.json.previous", stderr.getvalue())
+
+    def test_no_manifest_rerun_needs_no_new_manifest_staging_ignores(self):
+        repo = self._repo(ignore="*.csv\n*.csv.tmp\n*.manifest.json\n*.manifest.json.previous\n")
+        manifest = Path(repo) / "tb.csv.manifest.json"
+        manifest.write_bytes(b"old manifest")
+        raised, _, data = self.run_export(
+            self.BALANCED, work_dir=repo, extra_args=("--no-manifest",)
+        )
+        self.assertIsNone(raised)
+        self.assertIsNotNone(data)
+        self.assertFalse(manifest.exists())
+        self.assertFalse(Path(str(manifest) + ".previous").exists())
+
+    def test_no_manifest_targets_include_a_dangling_old_manifest(self):
+        with tempfile.TemporaryDirectory() as root:
+            csv = str(Path(root) / "tb.csv")
+            manifest = Path(csv + ".manifest.json")
+            try:
+                manifest.symlink_to(Path(root) / "absent")
+            except (NotImplementedError, OSError):
+                self.skipTest("creating file symlinks is unavailable")
+            targets = export_tb._write_targets(csv, with_manifest=False)
+            self.assertIn(str(manifest), targets)
+            self.assertIn(str(manifest) + ".previous", targets)
+            self.assertFalse(any(path.endswith(".manifest.json.tmp") for path in targets))
 
     def test_a_default_filename_is_checked_before_credentials_are_read(self):
         """Without --out the filename needs the tenant, so the directory is
