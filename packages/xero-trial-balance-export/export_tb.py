@@ -65,6 +65,29 @@ def shown_path(path: str) -> str:
         return path
     return os.path.join(os.path.dirname(path) or ".", _WITHHELD)
 
+
+def _diagnostic_detail(exc: BaseException | None) -> str:
+    """Keep structured OS details without repeating quiet filenames."""
+    if not QUIET:
+        return str(exc)
+    if exc is None:
+        return "error details unavailable"
+    if not isinstance(exc, OSError):
+        return type(exc).__name__
+    parts = []
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None:
+        parts.append(f"winerror {winerror}")
+    if exc.errno is not None:
+        parts.append(f"errno {exc.errno}")
+    if isinstance(exc.strerror, str) and exc.strerror:
+        message = exc.strerror
+        for filename in (exc.filename, getattr(exc, "filename2", None)):
+            if filename:
+                message = message.replace(os.fsdecode(filename), _WITHHELD)
+        parts.append(message)
+    return ": ".join(parts) if parts else type(exc).__name__
+
 # The exported header, in order. This module owns it: every other file that
 # needs the tuple imports it from here rather than restating it.
 CANONICAL_COLUMNS = (
@@ -493,7 +516,7 @@ def _enclosing_checkout(directory: str) -> str | None:
             pass  # Genuinely not there, or a path component that cannot hold one.
         except OSError as exc:
             raise ValueError(
-                f"{candidate} cannot be examined for a {CHECKOUT_MARKER} entry ({exc}), "
+                f"{candidate} cannot be examined for a {CHECKOUT_MARKER} entry ({_diagnostic_detail(exc)}), "
                 "so this run cannot show the export would land outside version control."
             ) from exc
         else:
@@ -531,7 +554,7 @@ def _git_ignores(checkout: str, path: str) -> bool:
         # default filename takes the organisation's name.
         raise ValueError(
             f"git could not be run to ask whether {checkout} ignores "
-            f"{shown_path(path)} ({exc}), so this run cannot show the export "
+            f"{shown_path(path)} ({_diagnostic_detail(exc)}), so this run cannot show the export "
             "would stay out of a commit."
         ) from exc
     if completed.returncode in (0, 1):
@@ -900,7 +923,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
     try:
         os.makedirs(out_dir, exist_ok=True)
     except OSError as exc:
-        sys.exit(f"error: cannot create the output directory {out_dir} ({exc}).")
+        sys.exit(f"error: cannot create the output directory {out_dir} ({_diagnostic_detail(exc)}).")
     # makedirs(exist_ok=True) is satisfied by a directory that already exists
     # and is not writable, so mkstemp still has to be guarded: a read-only
     # output directory raised a bare PermissionError traceback here, after the
@@ -909,7 +932,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
         fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".csv.tmp")
     except OSError as exc:
         sys.exit(
-            f"error: cannot write a temporary file in {out_dir} ({exc}); "
+            f"error: cannot write a temporary file in {out_dir} ({_diagnostic_detail(exc)}); "
             "the report was fetched but nothing was written."
         )
 
@@ -919,7 +942,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
     def fsync_error(exc: OSError) -> str:
         return (
             f"error: wrote the balanced export to {tmp_path} but could "
-            f"not flush it to disk ({exc}). The file is complete and "
+            f"not flush it to disk ({_diagnostic_detail(exc)}). The file is complete and "
             f"balance-checked: rename {tmp_path} over {shown_path(out_path)} once "
             "the disk is writable - the report has been fetched "
             "already and re-running spends another refresh token."
@@ -929,7 +952,7 @@ def write_csv(out_rows: list[dict], out_path: str) -> str:
         return (
             f"error: wrote the balanced export to {tmp_path} but could not move "
             f"it onto {shown_path(out_path)} after {REPLACE_ATTEMPTS} attempts "
-            f"({last_error}). Close whatever holds {shown_path(out_path)} open (Excel or "
+            f"({_diagnostic_detail(last_error)}). Close whatever holds {shown_path(out_path)} open (Excel or "
             f"Power BI Desktop keep a lock on it), then rename {tmp_path} over "
             "it - the report has been fetched already and re-running spends "
             "another refresh token."
@@ -1013,7 +1036,7 @@ def restore_manifest(aside: str, out_path: str) -> None:
     except OSError as exc:
         print(
             f"warning: the earlier manifest is at {shown_path(aside)} and could not be restored to "
-            f"{shown_path(manifest_path)} ({exc}); rename it back by hand. The earlier CSV is unchanged.",
+            f"{shown_path(manifest_path)} ({_diagnostic_detail(exc)}); rename it back by hand. The earlier CSV is unchanged.",
             file=sys.stderr,
         )
 
@@ -1025,7 +1048,7 @@ def discard_manifest(aside: str) -> None:
     except OSError as exc:
         print(
             f"warning: the earlier manifest set aside at {shown_path(aside)} could not be removed "
-            f"({exc}); delete it by hand. It describes a previous export.",
+            f"({_diagnostic_detail(exc)}); delete it by hand. It describes a previous export.",
             file=sys.stderr,
         )
 
@@ -1065,7 +1088,7 @@ def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, b
     except OSError as exc:
         sys.exit(
             f"error: wrote {shown_path(out_path)} but cannot write a temporary manifest in {out_dir} "
-            f"({exc}); the export is complete and its SHA-256 is {digest}."
+            f"({_diagnostic_detail(exc)}); the export is complete and its SHA-256 is {digest}."
         )
 
     def write_payload(fh) -> None:
@@ -1075,7 +1098,7 @@ def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, b
     def fsync_error(exc: OSError) -> str:
         return (
             f"error: wrote {shown_path(out_path)} and its manifest to {tmp_path} but could not "
-            f"flush the manifest to disk ({exc}). Rename {tmp_path} over "
+            f"flush the manifest to disk ({_diagnostic_detail(exc)}). Rename {tmp_path} over "
             f"{shown_path(manifest_path)} once the disk is writable; the export is complete."
         )
 
@@ -1083,7 +1106,7 @@ def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, b
         return (
             f"error: wrote {shown_path(out_path)} and its manifest to {tmp_path} but could not "
             f"move it onto {shown_path(manifest_path)} after {REPLACE_ATTEMPTS} attempts "
-            f"({last_error}). Rename {tmp_path} over it; the export is complete."
+            f"({_diagnostic_detail(last_error)}). Rename {tmp_path} over it; the export is complete."
         )
 
     durable_replace(
