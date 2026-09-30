@@ -1095,6 +1095,152 @@ def test_the_readme_states_the_timestamp_grammar_the_gateway_enforces() -> None:
         assert refused in grammar
 
 
+@pytest.mark.parametrize("failure_at", [None, 1, 2, 3])
+def test_evaluation_preserves_unrelated_stage_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_at: int | None
+) -> None:
+    from elizabeth_anne_alexander import persist
+
+    monkeypatch.chdir(tmp_path)
+    model, evidence, receipt = _evaluate()
+    output = Path("build/run")
+    paths = write_evaluation(model, evidence, receipt, output)
+    originals = {key: path.read_bytes() for key, path in paths.items()}
+    sentinels = {path.with_name(path.name + ".partial"): b"unrelated work\n" for path in paths.values()}
+    for path, data in sentinels.items():
+        path.write_bytes(data)
+    original_paths = set(output.rglob("*"))
+    real_write = persist._write_json
+    writes = 0
+
+    def failing(path: Path, payload: dict) -> None:
+        nonlocal writes
+        writes += 1
+        if writes == failure_at:
+            path.write_text("partial write", encoding="utf-8")
+            raise OSError("injected staging failure")
+        real_write(path, payload)
+
+    monkeypatch.setattr(persist, "_write_json", failing)
+    if failure_at is None:
+        write_evaluation(model, evidence, receipt, output)
+    else:
+        with pytest.raises(GatewayError, match="injected staging failure"):
+            write_evaluation(model, evidence, receipt, output)
+
+    assert {key: path.read_bytes() for key, path in paths.items()} == originals
+    for path, data in sentinels.items():
+        assert path.is_file()
+        assert path.read_bytes() == data
+    assert set(output.rglob("*")) == original_paths
+
+
+def test_evaluation_does_not_follow_an_unrelated_stage_hard_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    output = Path("build/run")
+    output.mkdir(parents=True)
+    original = tmp_path / "unrelated.txt"
+    original.write_bytes(b"unrelated fabricated file\n")
+    stage = output / "model-result.json.partial"
+    os.link(original, stage)
+
+    paths = write_evaluation(*_evaluate(), output)
+
+    assert original.read_bytes() == b"unrelated fabricated file\n"
+    assert stage.is_file() and stage.samefile(original)
+    assert not paths["model"].samefile(original)
+
+
+def test_overlapping_evaluations_keep_their_stages_separate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from elizabeth_anne_alexander import persist
+
+    monkeypatch.chdir(tmp_path)
+    payloads = _evaluate()
+    output = Path("build/run")
+    real_replace = persist._replace
+    interleaved = False
+
+    def replace_after_another_run(source: Path, destination: Path) -> None:
+        nonlocal interleaved
+        if not interleaved:
+            interleaved = True
+            write_evaluation(*payloads, output)
+        real_replace(source, destination)
+
+    monkeypatch.setattr(persist, "_replace", replace_after_another_run)
+    paths = write_evaluation(*payloads, output)
+
+    assert interleaved
+    for key, expected in zip(("model", "evidence", "receipt"), payloads):
+        assert json.loads(paths[key].read_text(encoding="utf-8")) == expected
+    assert set(output.resolve().iterdir()) == set(paths.values())
+
+
+@pytest.mark.parametrize("key", ["model", "evidence", "receipt"])
+def test_evaluation_replaces_a_final_hard_link_without_changing_its_other_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    output = Path("build/run")
+    output.mkdir(parents=True)
+    names = {"model": "model-result.json", "evidence": "reviewer-evidence.json", "receipt": "receipt.json"}
+    original = tmp_path / "unrelated.txt"
+    original.write_bytes(b"unrelated fabricated file\n")
+    os.link(original, output / names[key])
+
+    paths = write_evaluation(*_evaluate(), output)
+
+    assert original.read_bytes() == b"unrelated fabricated file\n"
+    assert not paths[key].samefile(original)
+
+
+@pytest.mark.parametrize("write_fails", [False, True])
+def test_staging_cleanup_failure_preserves_the_original_write_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, write_fails: bool
+) -> None:
+    from elizabeth_anne_alexander import persist
+
+    monkeypatch.chdir(tmp_path)
+    payloads = _evaluate()
+    output = Path("build/run")
+    create = persist.tempfile.TemporaryDirectory
+    cleanup = create.cleanup
+    stages = []
+
+    def cleanup_failure() -> None:
+        raise OSError("injected cleanup failure")
+
+    def create_staging(*args, **kwargs):
+        staging = create(*args, **kwargs)
+        stages.append(staging)
+        monkeypatch.setattr(staging, "cleanup", cleanup_failure)
+        return staging
+
+    def write_failure(path: Path, payload: dict) -> None:
+        raise OSError("original write failure")
+
+    monkeypatch.setattr(persist.tempfile, "TemporaryDirectory", create_staging)
+    if write_fails:
+        monkeypatch.setattr(persist, "_write_json", write_failure)
+    try:
+        if write_fails:
+            with pytest.raises(GatewayError, match="original write failure"):
+                write_evaluation(*payloads, output)
+        else:
+            paths = write_evaluation(*payloads, output)
+            for key, expected in zip(("model", "evidence", "receipt"), payloads):
+                assert json.loads(paths[key].read_text(encoding="utf-8")) == expected
+        assert len(stages) == 1
+    finally:
+        for staging in stages:
+            assert Path(staging.name).resolve().parent == output.resolve()
+            cleanup(staging)
+
+
 def test_an_interrupted_rerun_leaves_the_previous_run_intact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A half-written pack must not mix one run's model result with another run's receipt."""
 
