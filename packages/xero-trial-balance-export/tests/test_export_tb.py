@@ -2471,6 +2471,140 @@ class QuietFailureMessageTest(_ExportCase):
         ("Trade Debtors (610)", "", "1200.00", "", "15234.50"),
     ]
 
+    def test_replace_failures_keep_recovery_paths_without_quiet_output_names(self):
+        for manifest in (False, True):
+            for quiet in (False, True):
+                with self.subTest(manifest=manifest, quiet=quiet), \
+                        tempfile.TemporaryDirectory() as root:
+                    root = os.path.realpath(root)
+                    name = "synthetic-entity.csv"
+                    real_replace = os.replace
+
+                    def refuse(source, destination):
+                        if str(destination).endswith(".manifest.json" if manifest else ".csv"):
+                            raise PermissionError(13, "Access is denied", str(source), 5, str(destination))
+                        return real_replace(source, destination)
+
+                    with patch.object(export_tb, "QUIET", False), \
+                            patch.object(export_tb.os, "replace", side_effect=refuse), \
+                            patch.object(xero_client.time, "sleep"):
+                        raised, stdout, _ = self.run_export(
+                            self.BALANCED, out=name, work_dir=root,
+                            extra_args=("--quiet",) if quiet else (),
+                        )
+                    self.assertIsInstance(raised, SystemExit)
+                    message = str(raised)
+                    self.assertIn("Access is denied", message)
+                    self.assertIn(f"after {xero_client.REPLACE_ATTEMPTS} attempts", message)
+                    suffix = ".manifest.json.tmp" if manifest else ".csv.tmp"
+                    stages = [path for path in Path(root).iterdir() if path.name.endswith(suffix)]
+                    self.assertEqual(len(stages), 1)
+                    self.assertIn(str(stages[0]), message)
+                    self.assertTrue(stages[0].read_bytes())
+                    if quiet:
+                        self.assertNotIn(name, message + stdout)
+                    else:
+                        self.assertIn(name, message)
+
+    def test_recovery_warnings_do_not_repeat_quiet_filenames(self):
+        for restore in (False, True):
+            for quiet in (False, True):
+                with self.subTest(restore=restore, quiet=quiet), \
+                        tempfile.TemporaryDirectory() as root:
+                    csv = str(Path(root) / "synthetic-entity.csv")
+                    aside = csv + ".manifest.json.previous"
+                    Path(aside).write_bytes(b"fabricated manifest")
+                    error = PermissionError(13, "Access is denied", aside, 5, csv + ".manifest.json")
+                    operation = "replace" if restore else "remove"
+                    with patch.object(export_tb, "QUIET", quiet), \
+                            patch.object(export_tb.os, operation, side_effect=error), \
+                            patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                        if restore:
+                            export_tb.restore_manifest(aside, csv)
+                        else:
+                            export_tb.discard_manifest(aside)
+                    message = stderr.getvalue()
+                    self.assertIn("Access is denied", message)
+                    self.assertIn("by hand", message)
+                    self.assertEqual(Path(aside).read_bytes(), b"fabricated manifest")
+                    if quiet:
+                        self.assertNotIn("synthetic-entity.csv", message)
+                    else:
+                        self.assertIn("synthetic-entity.csv", message)
+
+    def test_native_replace_failure_withholds_the_destination(self):
+        with tempfile.TemporaryDirectory() as root:
+            destination = Path(root) / "synthetic-entity.csv"
+            destination.mkdir()
+            with patch.object(export_tb, "QUIET", True), patch.object(xero_client.time, "sleep"):
+                with self.assertRaises(SystemExit) as result:
+                    export_tb.write_csv([], str(destination))
+            message = str(result.exception)
+            self.assertNotIn(destination.name, message)
+            self.assertIn("rename", message)
+            stages = list(Path(root).glob("*.csv.tmp"))
+            self.assertEqual(len(stages), 1)
+            self.assertIn(str(stages[0]), message)
+            self.assertTrue(stages[0].read_bytes())
+
+    def test_git_timeout_hides_command_arguments_only_in_quiet_mode(self):
+        with tempfile.TemporaryDirectory() as root:
+            target = str(Path(root) / "synthetic-entity.csv")
+            error = subprocess.TimeoutExpired(["git", "check-ignore", "--", target], 30)
+            for quiet in (False, True):
+                with self.subTest(quiet=quiet), patch.object(export_tb, "QUIET", quiet), \
+                        patch.object(export_tb.subprocess, "run", side_effect=error):
+                    with self.assertRaises(ValueError) as result:
+                        export_tb._git_ignores(root, target)
+                message = str(result.exception)
+                if quiet:
+                    self.assertNotIn("synthetic-entity.csv", message)
+                    self.assertIn("TimeoutExpired", message)
+                else:
+                    self.assertIn(str(error), message)
+
+    def test_fsync_errors_keep_structured_diagnostics_and_staged_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            target = Path(root) / "synthetic-entity.csv"
+            with patch.object(export_tb, "QUIET", True), \
+                    patch.object(export_tb.os, "fsync", side_effect=OSError(28, "No space left on device")):
+                with self.assertRaises(SystemExit) as result:
+                    export_tb.write_csv([], str(target))
+            message = str(result.exception)
+            self.assertNotIn(target.name, message)
+            self.assertIn("No space left on device", message)
+            self.assertIn("28", message)
+            stages = list(Path(root).glob("*.csv.tmp"))
+            self.assertEqual(len(stages), 1)
+            self.assertIn(str(stages[0]), message)
+
+
+    def test_diagnostic_detail_keeps_codes_without_either_filename(self):
+        source = "synthetic-source.csv"
+        destination = "synthetic-destination.csv"
+        error = OSError(13, f"Cannot move {source} onto {destination}", source, 5, destination)
+        with patch.object(export_tb, "QUIET", True):
+            detail = export_tb._diagnostic_detail(error)
+        self.assertNotIn(source, detail)
+        self.assertNotIn(destination, detail)
+        self.assertIn("Cannot move", detail)
+        self.assertIn(str(error.errno), detail)
+        if getattr(error, "winerror", None) is not None:
+            self.assertIn(str(error.winerror), detail)
+        with patch.object(export_tb, "QUIET", False):
+            self.assertEqual(export_tb._diagnostic_detail(error), str(error))
+
+    def test_diagnostic_detail_does_not_render_unstructured_quiet_text(self):
+        for error in (OSError("synthetic-entity.csv: custom failure"),
+                      subprocess.SubprocessError("synthetic-entity.csv"), None):
+            with self.subTest(error=type(error).__name__):
+                with patch.object(export_tb, "QUIET", True):
+                    detail = export_tb._diagnostic_detail(error)
+                expected = type(error).__name__ if error is not None else "error details unavailable"
+                self.assertEqual(detail, expected)
+                with patch.object(export_tb, "QUIET", False):
+                    self.assertEqual(export_tb._diagnostic_detail(error), str(error))
+
     def _run_with_a_failed_manifest(self, extra_args):
         """Let the CSV land, then refuse the manifest's temporary file."""
         real_mkstemp = tempfile.mkstemp
