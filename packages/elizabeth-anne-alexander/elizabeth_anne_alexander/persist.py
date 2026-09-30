@@ -1,4 +1,4 @@
-"""Atomic write of one evaluation pack (model, evidence, receipt)."""
+"""Stage and replace a synthetic evaluation pack (model, evidence, receipt)."""
 from __future__ import annotations
 
 import json
@@ -162,8 +162,9 @@ def write_evaluation(model: dict[str, Any], evidence: dict[str, Any], receipt: d
     The 3 files describe one run. Writing them straight into the output
     directory means an interrupted second run can leave a truncated file, or a
     new model-result.json beside the previous run's evidence and receipt. Each
-    file is written under a temporary name first, and nothing is moved until
-    all 3 staged files exist.
+    file is written in a private temporary directory first, and nothing is
+    moved until all 3 staged files exist. Cleanup is best effort and touches
+    only this invocation's staging directory.
 
     Three separate moves are not one atomic step, so a failure between them can
     still leave one new file beside 2 old ones. The receipt seals both the
@@ -173,18 +174,21 @@ def write_evaluation(model: dict[str, Any], evidence: dict[str, Any], receipt: d
     """
     output_dir = path_within(output_dir, build_root(), label="output directory", require_exists=False)
     paths = {"model": output_dir / "model-result.json", "evidence": output_dir / "reviewer-evidence.json", "receipt": output_dir / "receipt.json"}
-    staged = {key: path.with_name(path.name + ".partial") for key, path in paths.items()}
+    staging: tempfile.TemporaryDirectory[str] | None = None
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
+        staging = tempfile.TemporaryDirectory(dir=output_dir, prefix=".evaluation-")
+        staged = {key: Path(staging.name) / path.name for key, path in paths.items()}
         for key, payload in (("model", model), ("evidence", evidence), ("receipt", receipt)):
             _write_json(staged[key], payload)
         for key in ("model", "evidence", "receipt"):
             _replace(staged[key], paths[key])
     except OSError as exc:
-        for temporary in staged.values():
+        raise GatewayError(f"run output cannot be written to {output_dir}: {exc}.") from exc
+    finally:
+        if staging is not None:
             try:
-                temporary.unlink()
+                staging.cleanup()
             except OSError:
                 pass
-        raise GatewayError(f"run output cannot be written to {output_dir}: {exc}.") from exc
     return paths
