@@ -347,7 +347,7 @@ class ManifestTest(_ExportCase):
             manifest.write_bytes(b"old manifest")
             aside.write_bytes(b"unrelated recovery")
             with patch.object(export_tb, "QUIET", True), \
-                    patch.object(export_tb.os.path, "lexists", side_effect=[True, False]):
+                    patch.object(export_tb.os, "lstat", side_effect=[manifest.lstat(), FileNotFoundError()]):
                 with self.assertRaises(SystemExit) as result:
                     export_tb.set_aside_manifest(csv)
             self.assertNotIn("synthetic-entity.csv", str(result.exception))
@@ -361,6 +361,31 @@ class ManifestTest(_ExportCase):
             aside.write_bytes(b"earlier recovery")
             self.assertIsNone(export_tb.set_aside_manifest(csv))
             self.assertEqual(aside.read_bytes(), b"earlier recovery")
+
+    def test_manifest_inspection_failure_stops_before_reservation(self):
+        for entry in ("manifest", "recovery"):
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as root:
+                csv = str(Path(root) / "synthetic-entity.csv")
+                manifest = Path(csv + ".manifest.json")
+                aside = Path(str(manifest) + ".previous")
+                manifest.write_bytes(b"old manifest")
+                denied = manifest if entry == "manifest" else aside
+                real_lstat = os.lstat
+
+                def inspect(path, *args, **kwargs):
+                    if Path(path) == denied:
+                        raise PermissionError(13, "Access is denied", str(denied))
+                    return real_lstat(path, *args, **kwargs)
+
+                with patch.object(export_tb, "QUIET", True), \
+                        patch.object(export_tb.os, "lstat", side_effect=inspect), \
+                        patch.object(export_tb.os, "open", wraps=os.open) as reserve:
+                    with self.assertRaises(SystemExit) as result:
+                        export_tb.set_aside_manifest(csv)
+                reserve.assert_not_called()
+                self.assertNotIn("synthetic-entity.csv", str(result.exception))
+                self.assertEqual(manifest.read_bytes(), b"old manifest")
+                self.assertFalse(aside.exists())
 
     def test_reservation_cleanup_failure_is_reported_without_quiet_filenames(self):
         with tempfile.TemporaryDirectory() as root:
@@ -2328,6 +2353,30 @@ class CheckoutGuardTest(_ExportCase):
             self.assertIn(str(manifest), targets)
             self.assertIn(str(manifest) + ".previous", targets)
             self.assertFalse(any(path.endswith(".manifest.json.tmp") for path in targets))
+
+    def test_no_manifest_rerun_refuses_uninspectable_manifest(self):
+        repo = self._repo(ignore="*.csv\n*.csv.tmp\n*.manifest.json\n*.manifest.json.previous\n")
+        csv = Path(repo) / "synthetic-entity.csv"
+        manifest = Path(str(csv) + ".manifest.json")
+        csv.write_bytes(b"old csv")
+        manifest.write_bytes(b"old manifest")
+        real_lstat = os.lstat
+
+        def inspect(path, *args, **kwargs):
+            if Path(path) == manifest:
+                raise PermissionError(13, "Access is denied", str(manifest))
+            return real_lstat(path, *args, **kwargs)
+
+        with patch.object(export_tb, "QUIET", False), \
+                patch.object(export_tb.os, "lstat", side_effect=inspect):
+            raised, stdout, data = self.run_export(
+                self.BALANCED, out=csv.name, work_dir=repo,
+                extra_args=("--no-manifest", "--quiet"),
+            )
+        self.assertIsInstance(raised, SystemExit)
+        self.assertNotIn(csv.name, str(raised) + stdout)
+        self.assertEqual(data, b"old csv")
+        self.assertEqual(manifest.read_bytes(), b"old manifest")
 
     def test_a_default_filename_is_checked_before_credentials_are_read(self):
         """Without --out the filename needs the tenant, so the directory is
