@@ -1,3 +1,8 @@
+# v0.1.10
+
+- `review-ready compare` tracks document coverage between readiness runs. Removing an unreviewed supporting document used to leave the earlier finding labelled `NOT_RAISED` with no change in scope; that finding is now `NOT_COMPARABLE`, and the comparison reports the change as `document_coverage` under `scope_changes`. Document slots come from filenames and need exactly one original file each; changed evidence labels are accepted. Readiness statuses, pack verification and finding groups are unchanged.
+- `TieOutRow.statement_amount`, which was parsed and never read, is gone. The loader still validates that column.
+
 # v0.1.9
 
 - Flag GST control postings dated after the self-review's `period_end` as
