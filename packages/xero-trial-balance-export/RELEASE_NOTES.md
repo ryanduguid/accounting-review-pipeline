@@ -3,8 +3,7 @@
 - The exporter no longer overwrites an unrelated `.manifest.json.previous` recovery file. It refuses inspection errors, checks for an occupied path and reserves it exclusively before parking the current manifest, and a failed park removes only its own reservation. A `--no-manifest` rerun checks the existing manifest and recovery paths against the checkout's ignore rules.
 - Quiet failures no longer repeat a withheld output filename through exception text. Structured OS codes and messages remain, and recovery instructions still name staged files.
 - The README says what Xero's developer terms allow for exported API data and documents the recovery limits.
-- `load_tokens`, which only the tests called, is removed; the token-cache path guard is one helper.
-- The locked environment moves to idna 3.20.
+- The internal `load_tokens` helper, which only the tests called, is removed; the token-cache path guard is one helper. The supported interface is the `export-tb` and `xero-tb-auth` commands.
 
 # v0.1.13
 
