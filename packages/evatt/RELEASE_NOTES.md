@@ -1,3 +1,8 @@
+# v0.1.4
+
+- The redact command refuses to run when its document, manifest or triage paths refer to the same file through a symbolic or hard link, and checks each output against those already examined before any write or removal. A manifest hard-linked to the output could replace the sanitised document with JSON while the command reported success. All three outputs now need separate files, including triage hard links that happened to work before; the refusal exits 1 and leaves the previous files in place.
+- The README walks through redacting a fabricated research question before it goes to an outside AI research tool and restoring the reply locally, with the two samples in `evatt/samples/`.
+
 # v0.1.3
 
 - Match a mapped name through underscore and asterisk emphasis, `<br>` line breaks, blockquote continuations and zero-width joiners, and write its placeholder inside the original emphasis so it restores. Report `__John Smith__` and other emphasised unmapped names in the residual sweep.

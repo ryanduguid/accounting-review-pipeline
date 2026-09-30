@@ -4,8 +4,9 @@
 | --- | --- | --- |
 | `evatt` | `evatt` | `evatt` |
 
-The `evatt/v0.1.3` tag carries an immutable release with a wheel, a source
-distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`. The
+This checkout targets `evatt/v0.1.4`. Each evatt release is an immutable GitHub
+release with a wheel, a source distribution, an SPDX SBOM, a release manifest
+and `SHA256SUMS`; check GitHub Releases for the published assets. The
 distribution is not on PyPI, by design: install it from the release assets, or
 run `uv run --locked evatt ...` from `packages/evatt/` in a checkout.
 

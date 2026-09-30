@@ -1,3 +1,8 @@
+# v0.2.6
+
+- `write_evaluation` stages each run's JSON files in its own temporary directory under the validated output directory. It used three fixed `.partial` paths, so one run could overwrite or remove unrelated files, or another run's staging files, at those paths. Cleanup touches only that run's directory. Output names, JSON formatting, error mapping and receipt validation are unchanged.
+- The README says what Xero's developer terms allow for exported API data.
+
 # v0.2.5
 
 - Amount strings now carry at least 2 decimal places. A whole-dollar source emitted a
