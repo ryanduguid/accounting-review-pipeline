@@ -138,7 +138,7 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
 
     def execute(owner, arguments, expected=0, kind="workflow"):
         project = projects[owner]
-        command = ["uv", "run", "--project", str(project), "--locked", "--python", "3.11", "python", *map(str, arguments)]
+        command = ["uv", "run", "--project", str(project), "--locked", "--python", "3.12", "python", *map(str, arguments)]
         # RTK is optional for users. Preserve exact JSON when it is installed locally.
         if shutil.which("rtk"):
             command = ["rtk", "proxy", *command]
