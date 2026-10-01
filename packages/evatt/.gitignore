@@ -5,6 +5,9 @@ entities.json
 # and it lands in the directory the operator sends from, so it is never
 # committable either.
 *.triage.md
+# Disclosure records contain destination and decision metadata and a map digest.
+# Keep them local even though they do not contain the map's values.
+*.disclosure.json
 # save writes the map through a neighbouring .tmp holding the same real values.
 # It refuses to write one at a path git would let you commit, and a hard kill or
 # a power loss can leave one behind, so a rule has to cover the .tmp as well.

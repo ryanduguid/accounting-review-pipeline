@@ -6,6 +6,16 @@ The entity map is the key, and it stays on the local disk. Do not place a real e
 
 Pseudonymisation reduces what a recipient receives. It is not a compliance determination, and the residual risk is contextual re-identification. See `DISCLAIMER.md`.
 
+Disclosure records are unsigned local evidence. Matching hashes and supplied
+identifiers do not authenticate an approver or grant disclosure permission.
+Records contain destination and decision metadata and a digest that can be
+compared with candidate maps, so they must stay local and gitignored. Use trusted
+worktree directories; the path checks do not protect against a hostile process
+changing directories concurrently. A sender must authenticate the external
+decision separately and consume only the exact bytes returned by the check.
+Destination and decision identifiers must be non-secret opaque IDs. Command-line
+arguments can appear in local shell history and process inspection.
+
 ## Reporting a vulnerability
 
 Report a suspected vulnerability privately through [GitHub's advisory form](https://github.com/ryanduguid/accounting-review-pipeline/security/advisories/new), or by email to ryan@duguid.com.au. Do not open a public issue for one.

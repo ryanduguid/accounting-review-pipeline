@@ -37,9 +37,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import sys
 from pathlib import Path
+from typing import NoReturn
 
+from . import disclosure
 from . import entities as entities_module
 from . import verify as verify_module
 from .errors import EvattError, Halt
@@ -49,11 +53,21 @@ from .restore import restore
 from .version import __version__
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+class _ArgumentParser(argparse.ArgumentParser):
+    private_errors = False
+
+    def error(self, message: str) -> NoReturn:
+        if self.private_errors or self.prog.endswith((" disclosure-record", " disclosure-check")):
+            message = "invalid disclosure arguments"
+        super().error(message)
+
+
+def build_parser(*, private_errors: bool = False) -> argparse.ArgumentParser:
+    parser = _ArgumentParser(
         prog="evatt",
         description="Pseudonymise Australian client data in markdown, locally, before sending it.",
     )
+    parser.private_errors = private_errors
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -70,6 +84,18 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser = commands.add_parser("verify", help="re-scan a sanitised file")
     verify_parser.add_argument("--in", dest="source", required=True, type=Path)
     verify_parser.add_argument("--map", dest="entity_map", required=True, type=Path)
+
+    for name, help_text in (
+        ("disclosure-record", "record local evidence for an intended disclosure"),
+        ("disclosure-check", "check local evidence; does not authenticate permission"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("--in", dest="source", required=True, type=Path)
+        command.add_argument("--map", dest="entity_map", required=True, type=Path)
+        command.add_argument("--destination", required=True)
+        command.add_argument("--decision-ref", required=True)
+        command.add_argument("--out" if name == "disclosure-record" else "--record",
+                             required=True, type=Path)
     return parser
 
 
@@ -223,9 +249,85 @@ def _write_triage(path: Path, halt: Halt) -> None:
     _write(path, "\n".join(lines) + "\n")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _record_path(path: Path) -> None:
+    """Reject static links in the record path; the containing worktree must be trusted."""
+    for candidate in (path, *path.parents):
+        if candidate.resolve() != Path(os.path.abspath(candidate)) or candidate.is_symlink():
+            raise EvattError("disclosure record paths must not use links")
+
+
+def _read_record(path: Path) -> bytes:
+    _record_path(path)
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise EvattError("disclosure record must be a regular file with one link")
+    flags = (os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+             | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(os.open(path, flags), "rb") as handle:
+        opened = os.fstat(handle.fileno())
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+            raise EvattError("disclosure record must be a regular file with one link")
+        return handle.read(disclosure.MAX_RECORD_BYTES + 1)
+
+
+def _disclosure_command(args: argparse.Namespace) -> int:
+    # Fixed diagnostics cover map validation, git, paths and malformed data.
+    # Those errors can otherwise quote the very values this boundary protects.
     try:
-        args = build_parser().parse_args(argv)
+        entities_module.require_gitignored(args.entity_map)
+        entity_map = entities_module.load(args.entity_map)
+    except (OSError, ValueError, RuntimeError):
+        return _fail("cannot use entity map; it must be valid, ignored and untracked")
+    try:
+        payload = args.source.read_bytes()
+        if args.command == "disclosure-record":
+            record = disclosure.create_record(payload, entity_map,
+                                              destination=args.destination,
+                                              decision_ref=args.decision_ref)
+            protected = (args.source, args.entity_map, _manifest_path(args.source),
+                         _triage_path(args.source))
+            if any(args.out.resolve() == path.resolve() for path in protected):
+                raise EvattError("disclosure record path collides with a protected file")
+            _record_path(args.out)
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            entities_module.require_gitignored(args.out, "the disclosure record")
+            # Exclusive creation never truncates an existing record or alias.
+            # A failed write may leave an incomplete record, which checking rejects.
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+            with os.fdopen(os.open(args.out, flags, 0o600), "wb") as handle:
+                if handle.write(record) != len(record):
+                    raise OSError("incomplete disclosure record write")
+            print("Local disclosure evidence recorded. External authorisation has not been checked.")
+        else:
+            entities_module.require_gitignored(args.record, "the disclosure record")
+            disclosure.check_record(payload, entity_map, _read_record(args.record),
+                                    expected_destination=args.destination,
+                                    expected_decision_ref=args.decision_ref)
+            print("Local disclosure evidence matches. External authorisation has not been checked.")
+    except disclosure.DisclosureRefused as error:
+        print(f"refused: {error}", file=sys.stderr)
+        return 2
+    except EvattError:
+        return _fail("invalid disclosure input or record path; use local ignored, untracked records")
+    except (OSError, UnicodeError, RuntimeError):
+        return _fail("cannot read or create disclosure files; existing files are never overwritten")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    try:
+        # Omitted or misspelt commands and argparse's option abbreviations
+        # must not expose disclosure identifiers in argument diagnostics.
+        private = any(
+            argument.startswith("disclosure-")
+            or (argument.startswith("--") and argument != "--" and any(
+                option.startswith(argument.partition("=")[0])
+                for option in ("--destination", "--decision-ref", "--record")
+            ))
+            for argument in arguments
+        )
+        args = build_parser(private_errors=private).parse_args(arguments)
     except SystemExit as request:
         # --help and --version are argparse doing what it was asked; anything
         # else is a usage error, and a usage error is malformed input, not a
@@ -234,6 +336,9 @@ def main(argv: list[str] | None = None) -> int:
         if request.code in (0, None):
             raise
         return 1
+
+    if args.command in ("disclosure-record", "disclosure-check"):
+        return _disclosure_command(args)
 
     try:
         collision = _collision(args)

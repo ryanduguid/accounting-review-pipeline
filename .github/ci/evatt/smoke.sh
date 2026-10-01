@@ -12,7 +12,7 @@ set -euo pipefail
 # map, so the demo directory has to be a work tree with a covering
 # ignore rule.
 git init --quiet .
-printf 'entities.json\n*.triage.md\n' > .gitignore
+printf 'entities.json\n*.triage.md\n*.disclosure.json\n' > .gitignore
 samples=$(python -c "import evatt, pathlib; print(pathlib.Path(evatt.__file__).parent / 'samples')")
 cp "${samples}/entities.sample.json" entities.json
 cp "${samples}/entities-only.md" in.md
@@ -26,6 +26,24 @@ evatt restore --in build/out.md --map entities.json --out build/back.md
 cmp in.md build/back.md
 test -f build/out.md.manifest.json
 cat build/out.md.manifest.json
+# Local evidence matches only the exact bytes and supplied context. No sender
+# is invoked, and a matching record does not authenticate disclosure permission.
+evatt disclosure-record --in build/out.md --map entities.json \
+  --destination model:sample-tenant:sample-project --decision-ref sample-decision:42 \
+  --out build/out.disclosure.json
+evatt disclosure-check --in build/out.md --map entities.json \
+  --destination model:sample-tenant:sample-project --decision-ref sample-decision:42 \
+  --record build/out.disclosure.json
+evatt disclosure-check --in build/out.md --map entities.json \
+  --destination model:sample-other --decision-ref sample-decision:42 \
+  --record build/out.disclosure.json && dc=0 || dc=$?
+test "$dc" = "2"
+cp build/out.md build/changed.md
+printf '\n' >> build/changed.md
+evatt disclosure-check --in build/changed.md --map entities.json \
+  --destination model:sample-tenant:sample-project --decision-ref sample-decision:42 \
+  --record build/out.disclosure.json && bc=0 || bc=$?
+test "$bc" = "2"
 # A file that uses CRLF throughout comes back with CRLF intact.
 awk '{ printf "%s\r\n", $0 }' in.md > crlf.md
 evatt redact --in crlf.md --map entities.json --out build/crlf.md
@@ -63,3 +81,4 @@ test "$before" = "$(cksum < entities.json)"
 # Nothing the demo produced left the map committable.
 git add -A
 test -z "$(git ls-files entities.json)"
+test -z "$(git ls-files build/out.disclosure.json)"

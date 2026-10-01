@@ -454,9 +454,10 @@ def require_gitignored(map_path: Path, description: str = "the entity map") -> N
     temporary it is about to create, which is why *map_path* need not exist yet.
 
     *description* names what is being refused, because this guard now covers
-    3 different files. The map and its temporaries are the key; the CLI's triage
+    several local files. The map and its temporaries are the key; the CLI's triage
     file is a worklist quoting whole residual lines about a real document, and
-    telling an operator that "the entity map must never be committed" about a
+    disclosure records contain sensitive metadata too. Telling an operator that
+    "the entity map must never be committed" about a
     path ending ``.triage.md`` sends them to fix the wrong file.
     """
     target = map_path.resolve()
