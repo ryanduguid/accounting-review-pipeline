@@ -10,7 +10,10 @@ import pytest
 from evatt import cli, disclosure
 from evatt.errors import EvattError
 
-from test_cli import workspace
+if __package__:
+    from .test_cli import workspace
+else:
+    from test_cli import workspace
 
 DESTINATION = "model:sample-tenant:sample-project"
 DECISION = "sample-decision:42"
