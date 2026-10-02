@@ -63,12 +63,12 @@ EVALUATE
             if (-not $reader.Read()) { throw "No result for $($case.Name)" }
             $status = $reader.GetString(0)
             $benchmark = if ($reader.IsDBNull(1)) { $null } else { [double]$reader.GetValue(1) }
-            $matches = if ($null -eq $case.Benchmark) {
+            $benchmarkMatches = if ($null -eq $case.Benchmark) {
                 $null -eq $benchmark
             } else {
                 $null -ne $benchmark -and [Math]::Abs($benchmark - $case.Benchmark) -lt 0.00000001
             }
-            if ($status -ne $case.Status -or -not $matches) {
+            if ($status -ne $case.Status -or -not $benchmarkMatches) {
                 $failed++
                 Write-Output "FAIL $($case.Name): status='$status', benchmark='$benchmark'; expected '$($case.Status)', '$($case.Benchmark)'"
             } else {
