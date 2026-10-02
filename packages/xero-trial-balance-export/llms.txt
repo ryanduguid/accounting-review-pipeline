@@ -1,7 +1,11 @@
 # xero-trial-balance-export
+
+> Read-only CLI and Python utility that exports Xero trial balances through OAuth 2.0 into validated CSV files, writing nothing unless movement and year-to-date totals both balance. The only component in the pipeline that touches the network or credentials.
+
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export
-- **CLI Commands**: `export-tb`, `xero-tb-auth`
+- **Distribution name**: `xero-trial-balance-export`
+- **CLI commands**: `export-tb`, `xero-tb-auth`
 - **Domain**: Read-only CLI and Python utility for exporting Xero trial balances via OAuth 2.0 into structured, validated CSV files for Power BI, Excel, and pandas.
 - **Standards**: Xero API OAuth 2.0 authorization-code flow (confidential client with client secret; no PKCE), double-entry trial balance movement gates.
 
@@ -12,7 +16,7 @@
 - `token_store`: Resolves `token.json` (`--token-file`, `XERO_TOKEN_FILE`, existing module-adjacent file, then the per-user state directory).
 
 ## Architectural invariants
-1. **Balance Gate Integrity**: Never writes a CSV file unless the current-month Debit/Credit totals and the year-to-date YTDDebit/YTDCredit totals each balance and all required report columns are present.
+1. **Balance gate integrity**: Never writes a CSV file unless the current-month Debit/Credit totals and the year-to-date YTDDebit/YTDCredit totals each balance and all required report columns are present.
 
 ## Offline evaluation
-- [`evaluation/xero_tb_integrity`](evaluation/xero_tb_integrity/README.md): Fabricated local fixtures that reproduce the movement and YTD balance gate without OAuth, credentials or network access.
+- [`evaluation/xero_tb_integrity`](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/xero-trial-balance-export/evaluation/xero_tb_integrity/README.md): Fabricated local fixtures that reproduce the movement and YTD balance gate without OAuth, credentials or network access.

@@ -1,13 +1,15 @@
 # Workpaper Review Gate
 
+> Local, deterministic readiness gate for Australian public-practice workpaper packs (BAS, month-end, year-end). `READY` means a pack may enter manager review; it is not sign-off.
+
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate
 - **Distribution name**: `review-ready-gate`
 - **CLI command**: `review-ready`
 - **Domain**: Local, deterministic readiness gating for Australian public-practice workpaper packs (BAS, month-end, year-end).
 - **Control basis**: Required-artefact completeness, self-review assertions, open-item blocking, trial-balance integrity, GST 1A/1B tie-out, optional bank rec, year-end tie-out matrix, and prior-finding repeats.
-- **Manager evaluation**: [evaluation/manager_review_gate/README.md](evaluation/manager_review_gate/README.md)
-- **Missing evidence evaluation**: [evaluation/missing_evidence/README.md](evaluation/missing_evidence/README.md) (absent, empty, wrong-period and edited evidence; practitioner review pending)
+- **Manager evaluation**: [evaluation/manager_review_gate/README.md](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/evaluation/manager_review_gate/README.md)
+- **Missing evidence evaluation**: [evaluation/missing_evidence/README.md](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/evaluation/missing_evidence/README.md) (absent, empty, wrong-period and edited evidence; practitioner review pending)
 
 ## Core modules
 - `reviewready.engine`: Builds `READY`, `NOT_READY`, or `BLOCKED` packs without mutating an accounting system.
@@ -21,4 +23,4 @@
 1. **Gate, not review.** A `READY` pack may enter manager review. The tool does not decide that the work is correct.
 2. **Acknowledgement never changes status.** A review note records that a human looked; it cannot flip `NOT_READY` or `BLOCKED` to `READY`.
 3. **No operational authority.** The package does not post journals, lodge returns, or connect to Xero.
-4. **Sibling tools.** Trial-balance variance review remains [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline). This gate sits upstream of that pack.
+4. **Sibling tools.** Trial-balance variance review remains [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane). This gate sits upstream of that pack.

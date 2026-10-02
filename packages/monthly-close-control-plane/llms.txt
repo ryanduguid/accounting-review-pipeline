@@ -1,13 +1,15 @@
 # Monthly Close Controls
 
+> Local, deterministic review packs from current and prior validated trial balance exports, with `PASS`, `REVIEW` or `BLOCKED` results for a human reviewer. It does not approve or lock a close.
+
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane
 - **Distribution name**: `monthly-close-control-plane`
-- **CLI Commands**: `close-control`. The `openaccountants-au` entry point is
+- **CLI commands**: `close-control`. The `openaccountants-au` entry point is
   quarantined: it prints a redirect on stderr and exits 2. Use `close-control`
   for the close pack and `ato-benchmark-compare` for range tests.
 - **Domain**: Local, deterministic review-pack generation for current and prior validated trial-balance exports.
-- **Control Basis**: Double-entry balance checks, material year-to-date variance review, account-change review, mapping checks, and optional subledger reconciliation.
+- **Control basis**: Double-entry balance checks, material year-to-date variance review, account-change review, mapping checks, and optional subledger reconciliation.
 
 ## Core modules and controls
 - `closecontrol.engine`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
@@ -16,6 +18,10 @@
 - `closecontrol.pipeline_cli`: Holds the quarantined `openaccountants-au` entry point. It runs no review; it prints where to go instead and exits 2.
 
 ## Architectural boundaries
-1. **Review-First Policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.
-2. **Source Provenance**: SHA-256 digests identify the exact source snapshots used for a run. They do not prove that a period is closed or prevent later ledger changes.
-3. **No Operational Authority**: The package does not post journals, make payments, lodge returns, distribute reports, approve a close, or lock a period.
+1. **Review-first policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.
+2. **Source provenance**: SHA-256 digests identify the exact source snapshots used for a run. They do not prove that a period is closed or prevent later ledger changes.
+3. **No operational authority**: The package does not post journals, make payments, lodge returns, distribute reports, approve a close, or lock a period.
+
+## Docs
+- [README](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/monthly-close-control-plane/README.md)
+- Browser walkthrough: https://duguid.com.au/tools/monthly-close-controls/#worked-example

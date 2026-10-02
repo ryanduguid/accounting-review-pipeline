@@ -1,13 +1,15 @@
 # Xero Ledger Review Gate (elizabeth-anne-alexander)
 
+> Synthetic-data demonstration of a fixed-policy boundary for AI-assisted trial balance review: deterministic pre-validation, separate model-facing and reviewer-only files, and validation of recorded human decisions.
+
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander
-- **Package Name**: `elizabeth-anne-alexander`
-- **CLI Command**: `elizabeth-anne-alexander`
+- **Distribution name**: `elizabeth-anne-alexander`
+- **CLI command**: `elizabeth-anne-alexander`
 - **Domain**: Local, synthetic-data demonstration of a fixed-policy boundary for AI-assisted trial-balance review.
-- **Core Principles**: Data minimisation, deterministic pre-validation, explicit model-facing and reviewer-only artefacts, and validation of recorded human review decisions.
+- **Core principles**: Data minimisation, deterministic pre-validation, explicit model-facing and reviewer-only artefacts, and validation of recorded human review decisions.
 
 ## Architectural boundaries
-1. **Demonstration Has No Network Client**: The package contains no OAuth, API, HTTP, MCP, or LLM client, credential store, or accounting-system write path.
-2. **Synthetic Data Only**: Samples, tests, manifests, review context, model results, reviewer evidence, and receipts are synthetic. Real Xero exports, client data, tokens, and workpapers do not belong in this repository.
-3. **Not an Access-Control System**: Separating model-facing and reviewer-only files demonstrates disclosure minimisation; it is not an air gap, multi-user security boundary, client-data processor, or production security system.
+1. **No network client**: The package contains no OAuth, API, HTTP, MCP, or LLM client, credential store, or accounting-system write path.
+2. **Synthetic data only**: Samples, tests, manifests, review context, model results, reviewer evidence, and receipts are synthetic. Real Xero exports, client data, tokens, and workpapers do not belong in this repository.
+3. **Not an access-control system**: Separating model-facing and reviewer-only files demonstrates disclosure minimisation; it is not an air gap, multi-user security boundary, client-data processor, or production security system.
