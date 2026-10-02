@@ -1,12 +1,14 @@
 # evatt
 
+> Local pseudonymisation of Australian client data in Markdown, so a document can go to an external model without its identifiers. Fails closed; pseudonymised data is still personal information.
+
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/evatt
 - **Distribution name**: `evatt`
 - **Python import**: `evatt`
 - **CLI command**: `evatt`, with the subcommands `redact`, `restore` and `verify`
 - **Domain**: Local pseudonymisation of Australian client data in markdown, so a document can be handed to an external model without the identifiers in it.
-- **Release state**: This checkout targets `evatt/v0.1.4`. Releases come from this repository as immutable GitHub releases with a wheel, a source distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`; check GitHub Releases for the published assets. The distribution is not on PyPI, and `release-evatt.yml` carries no `pypi` job by design. It installs from the release assets or runs from a checkout.
+- **Release state**: The current release is `evatt/v0.1.4`. Releases come from this repository as immutable GitHub releases with a wheel, a source distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`; check GitHub Releases for the published assets. The distribution is not on PyPI, and `release-evatt.yml` carries no `pypi` job by design. It installs from the release assets or runs from a checkout.
 
 ## Core modules
 - `evatt.patterns`: Detection patterns and check digits for TFN, ABN, ACN, BSB and Medicare numbers, plus names, emails, phone numbers and the statutory vocabulary the residual sweep filters.
