@@ -50,8 +50,9 @@ documented position needs is caught by any of them.
 ## Demo rule
 
 Every command asks git whether it would let you commit the map, so a scratch
-directory used to try the tool has to be a work tree with a rule covering the
-map. `git init` and a one-line `.gitignore` are enough. The component workflow
+directory used to try the tool has to be a work tree with rules covering the
+map, triage files and any disclosure records. Initialise Git and add the rules
+listed in the README. The component workflow
 does exactly that before it runs the clean-wheel demo.
 
 ## Prose rule

@@ -94,24 +94,27 @@ unclear. A halt asks the same question about the triage path before it writes
 one. That question has no answer outside a work tree, so the map, and therefore
 the run, must live inside a repository that ignores it.
 
-The rules covering `entities.json`, `*.entities.json`, `*.triage.md` and `*.tmp`
+The rules covering `entities.json`, `*.entities.json`, `*.triage.md`, `*.tmp`
+and `*.disclosure.json`
 live in this repository's own `.gitignore`, which ships in neither the wheel nor
 the source distribution. **If you installed evatt as a package, you have none of
 them and must write your own**, in the repository your map and your run live in.
-Three kinds of path are guarded, and a rule has to cover every one of them:
+Four kinds of path are guarded, and a rule has to cover every one of them:
 
 ```
 entities.json
 *.entities.json
 *.tmp
 *.triage.md
+*.disclosure.json
 ```
 
 The first 2 are the map itself, under whichever of the two names you use. The
 `*.tmp` rule covers the temporary `save` writes beside the map before renaming
 it over the top, which is named `<map>.tmp.<random>.tmp` and holds the same real
-values as the map; a hard kill can leave one behind. The last is the triage
-worklist a halt writes beside `--out`.
+values as the map; a hard kill can leave one behind. The triage rule covers the
+worklist a halt writes beside `--out`. The disclosure rule covers local evidence
+records, whose metadata and map digest must also stay local.
 
 Leave any of them out and the run fails closed, naming the path and the rule it
 wants, rather than writing the file.
@@ -121,7 +124,7 @@ wants, rather than writing the file.
 | Code | Meaning |
 | --- | --- |
 | 0 | Clean |
-| 2 | Halted on unclassified candidates, or verify found something |
+| 2 | Halted on candidates, verify found something, or disclosure evidence was refused |
 | 1 | Malformed input |
 
 A usage error from the command line is a 1, not argparse's usual 2, so a
@@ -256,6 +259,73 @@ it was added. Keep the map append-only: never delete an entry or change what
 its placeholder means. Assignment uses the highest remaining ordinal plus one;
 deleting the highest entry would allow its placeholder to be reissued.
 `evatt/samples/entities.sample.json` is a fabricated map of the right shape.
+
+## Disclosure evidence
+
+`disclosure-record` records local evidence for an intended disclosure.
+`disclosure-check` checks that evidence against independently supplied context.
+Neither command authenticates a human decision or grants permission to send.
+
+```bash
+evatt disclosure-record --in build/notes.md --map entities.json \
+  --destination model:sample-tenant:sample-project --decision-ref sample-decision:42 \
+  --out build/notes.disclosure.json
+evatt disclosure-check --in build/notes.md --map entities.json \
+  --destination model:sample-tenant:sample-project --decision-ref sample-decision:42 \
+  --record build/notes.disclosure.json
+```
+
+Both commands read the file once as immutable bytes and require UTF-8 without
+a byte order mark, including empty input. The existing verifier scans decoded
+text using its documented CRLF and Unicode NFC normalisation. The payload digest
+hashes the original bytes unchanged, including line endings, Unicode composition
+and trailing whitespace. Detection retains its documented limits.
+The existing replacement-count manifest stays unchanged.
+
+The separate JSON record has exactly `schema`, `output_sha256`,
+`entity_map_sha256`, `tool_version`, `destination` and `decision_ref`.
+The schema is `evatt.disclosure-evidence/v1`. Its map digest hashes
+`evatt.entity-map/v1` followed by a zero byte and the loaded map's JSON: ASCII
+escapes, sorted object keys, separators `,` and `:`, `schema_version`, and every
+entry's `value`, `placeholder`, `kind` and `added`. Entry order is retained;
+map-file formatting is ignored. Only the digest is stored. Candidate maps can
+be hashed and compared, so this record remains sensitive metadata.
+
+Destination IDs use 1 to 128 lower case ASCII letters, digits, dots, underscores,
+colons or hyphens, starting with a letter or digit. Decision references use the
+same form but also permit upper case letters. Inputs are compared exactly;
+evatt does not trim them, resolve them or convert them to URLs. Use opaque IDs
+that distinguish the actual tenant, account and resource. Never put names,
+credentials or bearer tokens in either field.
+Use non-secret IDs: command-line arguments can appear in local shell history
+and process inspection.
+
+Checking rejects changed bytes, map entries, destination, decision reference or
+tool version. It also rejects unknown schemas, duplicate or unknown fields,
+incorrect types and hashes, and records larger than 4,096 bytes. Both identifiers
+are required on each invocation; do not copy the expected context from the record.
+
+Creation refuses existing paths, including links, and the input's reserved
+manifest and triage paths. Checking refuses linked or non-regular record files.
+Record paths must not contain links. Both commands require ignored, untracked
+records at the time they run. Use a trusted local worktree: these checks do not
+confine a process that can change its directories concurrently. Failed writes
+can leave an incomplete record, which checking rejects. On Windows, directory
+permissions control access; POSIX creation uses owner-only file permissions.
+
+For a library caller, `evatt.disclosure.create_record(payload, entries,
+destination=..., decision_ref=...)` returns record bytes.
+`check_record(payload, entries, record, expected_destination=...,
+expected_decision_ref=...)` returns the same immutable payload bytes on success.
+Use validated entries from `entities.load`. The pure API performs no file or Git
+operations; callers must keep its returned metadata private.
+
+**Matching evidence is not permission.** The record is unsigned and can be edited
+consistently. An outer sender must independently authenticate the external human
+decision for the exact payload and actual destination, then send only the checked
+bytes. Reopening the file, re-encoding it, adding message text or attaching another
+file needs separate validation. evatt sends nothing and cannot prevent manual
+copying or authenticate the external decision.
 
 ## Documents
 

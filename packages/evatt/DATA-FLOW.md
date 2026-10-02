@@ -37,6 +37,19 @@ does not make that journey and cannot see it.
 Counts by kind. No values. A manifest that carried the values would defeat the
 purpose of the file it accompanies.
 
+The optional disclosure commands keep a separate local record. They read the
+sanitised file once as immutable bytes and run the existing verifier over the
+decoded text with its documented normalisation. They bind the unchanged bytes'
+SHA-256 digest to the loaded map's digest, evatt version, destination ID and
+external decision reference. They do not alter the replacement-count manifest.
+
+`disclosure-check` reports local consistency only. Its pure API returns the exact
+checked bytes, so a caller can use that snapshot without reopening the file.
+Neither the CLI nor the API authenticates the unsigned record or human decision.
+A sender must independently authenticate the external decision, bind it to the
+actual destination and exact bytes, and account for any added message content.
+evatt has no sender and does not prevent copying, later edits or manual disclosure.
+
 ## 5. What stays on the local disk
 
 The entity map, its `.tmp` while it is being replaced, and any triage file. All
@@ -44,7 +57,11 @@ The entity map, its `.tmp` while it is being replaced, and any triage file. All
 git would let you commit, and a halt refuses to write a triage file at a path
 git would let you commit.
 
-The rules covering those 3 names live in this repository's `.gitignore`.
+Disclosure records contain no document text or map entries, but their metadata
+and map digest must also stay local. Both disclosure commands require ignored,
+untracked records at the time they run.
+
+The rules covering these files live in this repository's `.gitignore`.
 That file is in neither the wheel nor the source distribution, so an installed
 user has none of them and has to write the equivalent rules in the repository
 their map and their runs live in. The guards are what enforce the rule; the
