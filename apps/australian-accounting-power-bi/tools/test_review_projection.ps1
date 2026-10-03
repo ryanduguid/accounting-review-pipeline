@@ -31,12 +31,12 @@ try {
         if ($actual.Count -ne $expected.Count) { throw "Imported row count differs: $($pair[0])" }
         foreach ($row in $expected) {
             $key = "$($pair[0])[$($pair[2])]"
-            $matches = @($actual | Where-Object { $_.$key -eq $row.($pair[2]) })
-            if ($pair[0] -eq 'Review_Evidence') { $matches = @($matches | Where-Object { $_.'Review_Evidence[ExceptionKey]' -eq $row.ExceptionKey }) }
-            if ($matches.Count -ne 1) { throw "Imported identity differs: $($pair[0])" }
+            $projectionMatches = @($actual | Where-Object { $_.$key -eq $row.($pair[2]) })
+            if ($pair[0] -eq 'Review_Evidence') { $projectionMatches = @($projectionMatches | Where-Object { $_.'Review_Evidence[ExceptionKey]' -eq $row.ExceptionKey }) }
+            if ($projectionMatches.Count -ne 1) { throw "Imported identity differs: $($pair[0])" }
             foreach ($property in $row.PSObject.Properties) {
                 $field = "$($pair[0])[$($property.Name)]"
-                if ($matches[0].$field -cne $property.Value) { throw "Imported text differs: $field" }
+                if ($projectionMatches[0].$field -cne $property.Value) { throw "Imported text differs: $field" }
                 $assertions++
             }
         }
