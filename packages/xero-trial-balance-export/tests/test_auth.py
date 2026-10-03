@@ -210,6 +210,13 @@ class DribblingConnectionTest(unittest.TestCase):
     """
 
     def test_a_dribbling_socket_does_not_outlast_the_deadline(self):
+        # A shorter absolute budget exercises the same timer without waiting
+        # out the real 10 s. It stays below the 2 s read timeout, which a byte
+        # every 0.25 s keeps resetting, so only the absolute budget can end
+        # this connection. The real values' order is asserted below.
+        budget_patch = mock.patch.object(auth, "CALLBACK_CONNECTION_TIMEOUT", 1.5)
+        budget_patch.start()
+        self.addCleanup(budget_patch.stop)
         port = _free_port()
         server = auth._CallbackServer(("127.0.0.1", port), auth._CallbackHandler)
         self.addCleanup(server.server_close)
