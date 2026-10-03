@@ -15,6 +15,10 @@ CLIENT = Entity("Sample Holdings Pty Ltd", "CLIENT_01", "client", "2026-09-09")
 PERSON = Entity("Jane Roe", "PERSON_01", "person", "2026-09-09")
 SHORT = Entity("Sample", "CLIENT_02", "client", "2026-09-09")
 MAP = (CLIENT, PERSON)
+PARENTHESISED = (
+    Entity("(Jane Roe)", "PERSON_01", "person", "2026-09-27"),
+    Entity("(John Smith)", "PERSON_02", "person", "2026-09-27"),
+)
 ENTITY_ONLY = "Jane Roe of Sample Holdings Pty Ltd lodged on time"
 STRUCTURED = "Jane Roe, TFN 123 456 782, ABN 51 824 753 556, BSB 062-000"
 
@@ -779,3 +783,81 @@ def test_the_sanitised_text_is_composed() -> None:
     decomposed = unicodedata.normalize("NFD", "caf\u00e9 receipts")
     redacted, _counts = redact(decomposed)
     assert redacted == "caf\u00e9 receipts"
+
+
+@pytest.mark.parametrize("phone", ["(02) 1234 5678", "+61 2 1234 5678"])
+def test_a_name_touching_a_phone_is_replaced_or_halts(phone) -> None:
+    source = "Jane Roe" + phone
+    text, counts = redact_module.redact(source, MAP)
+    assert (text, counts) == ("PERSON_01 PHONE_01", {"person": 1, "phone": 1})
+    assert restore(text, MAP) == "Jane Roe PHONE_01"
+    assert verify_module.findings(text, MAP) == ()
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(source, ())
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("name", "Jane Roe")]
+    assert [(f.kind, f.value) for f in verify_module.findings(source, ())] == [
+        ("phone", phone), ("name", "Jane Roe"),
+    ]
+
+
+@pytest.mark.parametrize("name", ["(jane roe)", "(Jane Roe)"])
+def test_a_punctuated_map_value_touching_a_phone_is_replaced(name) -> None:
+    text, counts = redact_module.redact(name + "(02) 1234 5678", PARENTHESISED)
+    assert (text, counts) == ("PERSON_01 PHONE_01", {"person": 1, "phone": 1})
+    assert restore(text, PARENTHESISED) == "(Jane Roe) PHONE_01"
+    assert verify_module.findings(text, PARENTHESISED) == ()
+
+
+def test_a_repaired_phone_junction_keeps_the_same_identifier_and_count() -> None:
+    text, counts = redact_module.redact("Jane Roe(02) 1234 5678; (02) 1234 5678", MAP)
+    assert (text, counts) == ("PERSON_01 PHONE_01; PHONE_01", {"person": 1, "phone": 2})
+    assert restore(text, MAP) == "Jane Roe PHONE_01; PHONE_01"
+
+
+def test_pass_one_preserves_start_whitespace_and_digit_start_controls() -> None:
+    source = (
+        "(02) 1234 5678 at the start,\n(02) 1234 5678 after a break, "
+        "(02) 1234 5678 after a space and TFN:123 456 782 after a colon"
+    )
+    assert redact(source) == (
+        "PHONE_01 at the start,\nPHONE_01 after a break, "
+        "PHONE_01 after a space and TFN:TFN_01 after a colon",
+        {"phone": 3, "tfn": 1},
+    )
+
+
+@pytest.mark.parametrize(("source", "expected", "count", "restored"), [
+    ("(Jane Roe)(John Smith)", "PERSON_01 PERSON_02", 2, "(Jane Roe) (John Smith)"),
+    ("(John Smith)(Jane Roe)(John Smith)", "PERSON_02 PERSON_01 PERSON_02", 3,
+     "(John Smith) (Jane Roe) (John Smith)"),
+    ("(Jane Roe) (John Smith)", "PERSON_01 PERSON_02", 2, "(Jane Roe) (John Smith)"),
+    ("*(Jane Roe)*(Jane Roe)", "*PERSON_01*PERSON_01", 2, "*(Jane Roe)*(Jane Roe)"),
+    ("**(Jane Roe)****(Jane Roe)**", "**PERSON_01****PERSON_01**", 2,
+     "**(Jane Roe)****(Jane Roe)**"),
+])
+def test_touching_mapped_values_keep_restorable_boundaries(source, expected, count, restored) -> None:
+    text, counts = redact_module.redact(source, PARENTHESISED)
+    assert (text, counts) == (expected, {"person": count})
+    assert restore(text, PARENTHESISED) == restored
+    assert verify_module.findings(text, PARENTHESISED) == ()
+
+
+def test_a_skipped_overlap_preserves_the_last_accepted_junction() -> None:
+    entries = (*PARENTHESISED, Entity("Roe", "PERSON_03", "person", "2026-09-27"))
+    text, counts = redact_module.redact("(Jane Roe)(John Smith)", entries)
+    assert (text, counts) == ("PERSON_01 PERSON_02", {"person": 2})
+    assert restore(text, entries) == "(Jane Roe) (John Smith)"
+
+
+def test_a_skipped_protected_match_preserves_junctions_and_one_way_tokens() -> None:
+    rogue = Entity("TFN 01", "CLIENT_07", "client", "2026-09-27")
+    entries = (*PARENTHESISED, rogue)
+    text, counts = redact_module.redact("TFN:123 456 782 (Jane Roe)(John Smith)", entries)
+    assert (text, counts) == ("TFN:TFN_01 PERSON_01 PERSON_02", {"tfn": 1, "person": 2})
+    assert restore(text, entries) == "TFN:TFN_01 (Jane Roe) (John Smith)"
+
+
+def test_a_carried_placeholder_still_halts_beside_touching_mapped_values() -> None:
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("PERSON_99 (Jane Roe)(John Smith)", PARENTHESISED)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("placeholder", "PERSON_99")]
