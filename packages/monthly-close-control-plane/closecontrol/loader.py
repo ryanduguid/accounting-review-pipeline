@@ -72,6 +72,15 @@ def _snapshot(path: Path | SourceSnapshot, *, label: str) -> SourceSnapshot:
     return SourceSnapshot.capture(path, label=label)
 
 
+def _no_duplicate_json_members(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"JSON member {key!r} appears more than once.")
+        result[key] = value
+    return result
+
+
 def _require_columns(
     fieldnames: Sequence[str] | None, required: tuple[str, ...], path: Path
 ) -> None:
@@ -316,10 +325,15 @@ def load_reviewer_acknowledgement(
         return None
     snapshot = _snapshot(path, label="Review-note file")
     path = snapshot.path
+    text = snapshot.text(label="Review-note file", encoding="utf-8-sig")
     try:
-        payload = json.loads(snapshot.text(label="Review-note file", encoding="utf-8-sig"))
+        payload = json.loads(text, object_pairs_hook=_no_duplicate_json_members)
     except json.JSONDecodeError as exc:
         raise SchemaError(f"{path}: review note is not valid JSON.") from exc
+    except RecursionError as exc:
+        raise SchemaError(f"{path}: review note is nested too deeply to read.") from exc
+    except ValueError as exc:
+        raise SchemaError(f"{path}: review note could not be read ({exc}).") from exc
     if not isinstance(payload, dict) or set(payload) != {"reviewer_initials", "reviewed_on", "comment"}:
         raise SchemaError(f"{path}: review note must contain exactly reviewer_initials, reviewed_on, and comment.")
     initials = payload["reviewer_initials"]

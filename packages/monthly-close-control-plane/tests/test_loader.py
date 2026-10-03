@@ -240,3 +240,52 @@ def test_review_note_with_utf8_bom_parses_same_as_without(tmp_path: Path) -> Non
     with_bom.write_text(payload, encoding="utf-8-sig")
 
     assert load_reviewer_acknowledgement(with_bom) == load_reviewer_acknowledgement(plain)
+
+
+
+@pytest.mark.parametrize("field,value", [
+    ("reviewer_initials", '"RD"'),
+    ("reviewed_on", '"2026-04-12"'),
+    ("comment", '"Reviewed fabricated facts."'),
+])
+@pytest.mark.parametrize("escaped", [False, True])
+def test_audit_review_note_rejects_duplicate_members(tmp_path, field, value, escaped):
+    payload = '{"reviewer_initials":"RD","reviewed_on":"2026-04-12","comment":"Reviewed fabricated facts."}'
+    duplicate = field if not escaped else "\\u" + f"{ord(field[0]):04x}" + field[1:]
+    payload = payload.replace(f'"{field}":{value}', f'"{field}":{value},"{duplicate}":{value}')
+    note = tmp_path / "duplicate.json"
+    note.write_text(payload, encoding="utf-8")
+    with pytest.raises(SchemaError, match="more than once"):
+        load_reviewer_acknowledgement(note)
+
+
+def test_audit_review_note_rejects_nested_duplicate_members(tmp_path):
+    note = tmp_path / "nested.json"
+    note.write_text('{"reviewer_initials":"RD","reviewed_on":"2026-04-12",'
+                    '"comment":{"nested":[{"x":1,"x":2}]}}', encoding="utf-8")
+    with pytest.raises(SchemaError, match="more than once"):
+        load_reviewer_acknowledgement(note)
+
+
+@pytest.mark.parametrize("payload,diagnostic", [
+    ('{"comment":' + '1' * 5000 + '}', "could not be read"),
+    ('[' * 2000 + '0' + ']' * 2000, "nested too deeply|must contain exactly"),
+], ids=["huge-integer", "deep-arrays"])
+def test_audit_review_note_normalises_interpreter_limits(tmp_path, payload, diagnostic):
+    note = tmp_path / "limits.json"
+    note.write_text(payload, encoding="utf-8")
+    with pytest.raises(SchemaError, match=diagnostic):
+        load_reviewer_acknowledgement(note)
+
+
+
+def test_audit_review_note_translates_decoder_recursion(tmp_path, monkeypatch):
+    note = tmp_path / "note.json"
+    note.write_text("{}", encoding="utf-8")
+
+    def too_deep(*args, **kwargs):
+        raise RecursionError("fabricated decoder limit")
+
+    monkeypatch.setattr(json, "loads", too_deep)
+    with pytest.raises(SchemaError, match="nested too deeply"):
+        load_reviewer_acknowledgement(note)

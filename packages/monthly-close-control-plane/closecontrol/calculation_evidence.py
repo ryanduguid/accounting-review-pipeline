@@ -31,7 +31,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .errors import ControlInputError, SchemaError
-from .loader import SourceSnapshot
+from .loader import SourceSnapshot, _no_duplicate_json_members
 
 #: Evidence schemas this consumer knows how to read. A file naming anything
 #: else is refused: an unknown schema is not a shape to guess at.
@@ -175,8 +175,9 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     source = snapshot.path
     if len(snapshot.content) > MAX_EVIDENCE_BYTES:
         raise SchemaError(f"{source}: evidence file exceeds {MAX_EVIDENCE_BYTES} bytes.")
+    text = snapshot.text(label="Calculation-evidence file", encoding="utf-8-sig")
     try:
-        record = json.loads(snapshot.text(label="Calculation-evidence file", encoding="utf-8-sig"))
+        record = json.loads(text, object_pairs_hook=_no_duplicate_json_members)
     except json.JSONDecodeError as exc:
         raise SchemaError(f"{source}: evidence is not valid JSON.") from exc
     except RecursionError as exc:
@@ -208,7 +209,7 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     recorded_digest = _text(record.get("calculation_sha256"), "calculation_sha256", source, limit=64)
     try:
         actual_digest = hashlib.sha256(_canonical(calculation)).hexdigest()
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, RecursionError) as exc:
         raise SchemaError(f"{source}: the calculation block cannot be canonicalised.") from exc
 
     findings: list[str] = []
@@ -241,15 +242,10 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
                 "the evidence records a computed figure with no manifest, so nothing names the "
                 "rate tables it consumed"
             )
-        if not isinstance(advisory, dict) or not advisory.get("notes"):
-            findings.append(
-                "the evidence records a computed figure with no advisory, so the calculator's "
-                "own boundary statement is missing"
-            )
     # An entry of the wrong type is a finding, not something to step over.
     # Dropping it silently let a manifest of one malformed row look like a
-    # manifest naming nothing, and an advisory of [123] satisfy the presence
-    # check above while producing no boundary statement at all.
+    # manifest naming nothing, and an advisory of [123] look present while
+    # producing no readable boundary statement at all.
     rate_tables: list[str] = []
     if isinstance(manifest, dict):
         entries = _array(manifest.get("rate_table_uris"), "manifest.rate_table_uris", source)
@@ -281,6 +277,12 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
                 )
                 continue
             notes.append(_text(note, f"advisory.notes[{index}]", source, limit=600))
+
+    if status in COMPUTED_STATUSES and not any(note.strip() for note in notes):
+        findings.append(
+            "the evidence records a computed figure with no advisory, so the calculator's "
+            "own boundary statement is missing"
+        )
 
     values: dict[str, Decimal] = {}
     raw_values = _block(normalised, "values")
@@ -347,11 +349,15 @@ def covers_period(evidence: CalculationEvidence, report_date: date) -> bool | No
     else is unreadable here on purpose.
     """
     tail = evidence.period.rsplit(":", 1)[-1] if evidence.period else ""
-    if len(tail) == 7 and tail[4] == "-" and tail[:4].isdigit() and tail[5:].isdigit():
-        return tail == report_date.strftime("%Y-%m")
-    if len(tail) == 6 and tail.startswith("fy") and tail[2:].isdigit():
-        ending = int(tail[2:])
+    if re.fullmatch(r"[0-9]{4}-[0-9]{2}", tail):
         try:
+            month = date(int(tail[:4]), int(tail[5:]), 1)
+        except ValueError:
+            return None
+        return (month.year, month.month) == (report_date.year, report_date.month)
+    if re.fullmatch(r"fy[0-9]{4}", tail):
+        try:
+            ending = int(tail[2:])
             if "fbt" in evidence.period:
                 start, end = date(ending - 1, 4, 1), date(ending, 3, 31)
             else:

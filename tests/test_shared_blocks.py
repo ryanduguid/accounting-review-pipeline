@@ -51,6 +51,7 @@ IDENTICAL = {
     "loader.py": (
         "_ACCOUNTING_NUMBER",
         "_EXTENDED_ISO_DATE",
+        "_no_duplicate_json_members",
         "_require_columns",
         "_text",
     ),
