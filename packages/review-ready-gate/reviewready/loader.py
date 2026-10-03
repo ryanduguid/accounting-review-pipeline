@@ -451,10 +451,15 @@ def load_prior_findings(snapshot: SourceSnapshot) -> list[PriorFinding]:
 
 def load_self_review(snapshot: SourceSnapshot, *, expected_profile: str) -> SelfReview:
     path = snapshot.path
+    text = snapshot.text(label="Self-review file", encoding="utf-8-sig")
     try:
-        payload = json.loads(snapshot.text(label="Self-review file", encoding="utf-8-sig"))
+        payload = json.loads(text, object_pairs_hook=_no_duplicate_json_members)
     except json.JSONDecodeError as exc:
         raise SchemaError(f"{path}: self-review is not valid JSON.") from exc
+    except RecursionError as exc:
+        raise SchemaError(f"{path}: self-review is nested too deeply to read.") from exc
+    except ValueError as exc:
+        raise SchemaError(f"{path}: self-review could not be read ({exc}).") from exc
     if not isinstance(payload, dict) or set(payload) != SELF_REVIEW_KEYS:
         raise SchemaError(
             f"{path}: self-review must contain exactly preparer_initials, prepared_on, "

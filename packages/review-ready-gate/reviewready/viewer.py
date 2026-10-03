@@ -136,6 +136,11 @@ def _parse_json(payload: bytes) -> dict[str, object]:
         raise GateInputError(f"{_JSON_NAME}: not valid UTF-8") from exc
     except json.JSONDecodeError as exc:
         raise GateInputError(f"{_JSON_NAME}: not valid JSON ({exc.msg})") from exc
+    except RecursionError as exc:
+        raise GateInputError(f"{_JSON_NAME}: nested too deeply to read") from exc
+    except ValueError as exc:
+        # The integer-digit limit, among others.
+        raise GateInputError(f"{_JSON_NAME}: not readable ({exc})") from exc
     if not isinstance(document, dict):
         raise GateInputError(f"{_JSON_NAME}: top level must be a JSON object")
     members = set(document)

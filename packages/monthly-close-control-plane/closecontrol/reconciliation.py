@@ -10,7 +10,7 @@ from decimal import Context, Decimal, localcontext
 from pathlib import Path
 
 from .errors import ControlInputError
-from .loader import SourceSnapshot, _read_csv_rows, _text, parse_money
+from .loader import SourceSnapshot, _no_duplicate_json_members, _read_csv_rows, _text, parse_money
 
 COLUMNS = ("Tenant", "AccountID", "Currency", "TransactionID", "Date", "Reference",
            "Description", "Debit", "Credit")
@@ -57,7 +57,11 @@ def _total(items: list[dict[str, str]]) -> Decimal:
 
 def _opening(snapshot: SourceSnapshot, identity: dict[str, str], start: date
              ) -> tuple[list[dict[str, str]], dict[str, str]]:
-    payload = json.loads(snapshot.text(label="Opening items", encoding="utf-8-sig"))
+    text = snapshot.text(label="Opening items", encoding="utf-8-sig")
+    try:
+        payload = json.loads(text, object_pairs_hook=_no_duplicate_json_members)
+    except (ValueError, RecursionError) as exc:
+        raise ControlInputError(f"Opening items are not readable JSON: {exc}") from exc
     fields = {"schema", "identity", "period_end", "balance", "items", "notes"}
     if (not isinstance(payload, dict) or set(payload) != fields
             or payload["schema"] != "clearing-carry-v1" or payload["identity"] != identity
