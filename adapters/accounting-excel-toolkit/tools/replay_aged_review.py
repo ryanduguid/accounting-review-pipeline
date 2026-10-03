@@ -7,7 +7,7 @@ import csv
 import hashlib
 import io
 import json
-import subprocess
+import subprocess  # nosec B404 - each fabricated case exercises the real CLI.
 import sys
 import tempfile
 from pathlib import Path
@@ -80,7 +80,8 @@ def replay(selected="all"):
             if case["control"] is not None:
                 control.write_text(json.dumps(case["control"]), encoding="utf-8")
                 command += ["--control", str(control)]
-            result = subprocess.run(command, capture_output=True, text=True)
+            # The list selects our interpreter and reviewed CLI, with fabricated local file paths.
+            result = subprocess.run(command, capture_output=True, text=True)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             body = result.stderr if result.returncode == 1 else result.stdout
             output = json.loads(body)
             expected = case["expected_message"]
@@ -103,7 +104,8 @@ if __name__ == "__main__":
     if args.output.resolve().is_relative_to(HERE.parent) or args.output.exists():
         parser.error("Choose a new output outside the checkout.")
     pack = replay(args.case)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    # The CLI intentionally creates the operator's new external output directory.
+    args.output.parent.mkdir(parents=True, exist_ok=True)  # NOSONAR
     with args.output.open("x", encoding="utf-8") as stream:
         stream.write(json.dumps(pack, indent=2, ensure_ascii=True) + "\n")
     print("FAILURE REPLAY QUALIFIED")

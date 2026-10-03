@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404 - installed commands must run outside the checkout.
 import sys
 from pathlib import Path
 
@@ -14,14 +14,15 @@ def main() -> None:
     command = Path(sys.executable).with_name(
         "close-control.exe" if sys.platform == "win32" else "close-control"
     )
-    provenance = subprocess.run(
+    # Fixed interpreter and import statement; isolated mode checks installed provenance.
+    provenance = subprocess.run(  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         [sys.executable, "-I", "-c", "import closecontrol; print(closecontrol.__file__)"],
         check=True, capture_output=True, text=True,
     )
     installed = Path(provenance.stdout.strip()).resolve()
     if installed.is_relative_to(source) or not installed.is_relative_to(Path(sys.prefix)):
         raise RuntimeError(f"Expected the isolated installed package, got {installed}.")
-    subprocess.run(
+    subprocess.run(  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         [sys.executable, "-I", "-c", "from importlib.metadata import distribution; "
          "d=distribution('monthly-close-control-plane'); "
          "assert d.version == '0.1.8'; "
@@ -31,7 +32,8 @@ def main() -> None:
     )
 
     def run(expected: int, *args: str) -> None:
-        result = subprocess.run([str(command), *args], capture_output=True, text=True)
+        # Fixed installed executable with arguments defined by this smoke, without a shell.
+        result = subprocess.run([str(command), *args], capture_output=True, text=True)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit, python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
         print(result.stdout, end="")
         if result.returncode != expected:
             raise RuntimeError(f"Expected exit {expected}, got {result.returncode}: {result.stderr}")

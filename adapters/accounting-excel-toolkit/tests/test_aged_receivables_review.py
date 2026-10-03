@@ -3,7 +3,7 @@ import hashlib
 import importlib.util
 import io
 import json
-import subprocess
+import subprocess  # nosec B404 - real CLI integration checks use fixed local code.
 import sys
 import tempfile
 import unittest
@@ -12,7 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("aged_review", ROOT / "tools/xero_aged_receivables.py")
-assert spec is not None and spec.loader is not None
+if spec is None or spec.loader is None:
+    raise ImportError("Cannot load the aged receivables review tool.")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -89,13 +90,13 @@ class AgedReceivablesReviewTests(unittest.TestCase):
         for row in records[6:]:
             row.pop(1)
         records[6][1] = "100"
-        records[6][0] = "001, Café\nBranch"
+        records[6][0] = " 001, Café\nBranch "
         records[-1][1] = "75"
         out = io.StringIO(newline="")
         csv.writer(out).writerows(records)
         result = self.review(b"\xef\xbb\xbf" + out.getvalue().encode())
         self.assertEqual(result["summary_status"], "PASS")
-        self.assertEqual(result["rows"][0]["Contact"], "001, Café\nBranch")
+        self.assertEqual(result["rows"][0]["Contact"], " 001, Café\nBranch ")
         columns = [tie for tie in result["ties"] if tie["check"].startswith("contact column ")]
         self.assertEqual(len(columns), 5)
         self.assertFalse(any("Current" in tie["check"] for tie in columns))
@@ -299,7 +300,8 @@ class AgedReceivablesReviewTests(unittest.TestCase):
                     evidence = {**self.manifest, "report_name": title,
                                 "source_sha256": hashlib.sha256(content).hexdigest()}
                     manifest.write_text(json.dumps(evidence), encoding="utf-8")
-                    completed = subprocess.run([
+                    # Fixed interpreter and reviewed script; fabricated file paths are list arguments.
+                    completed = subprocess.run([  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
                         sys.executable, "-B", str(ROOT / "tools/xero_aged_receivables.py"),
                         str(source), "--manifest", str(manifest), "--control", str(control),
                     ], capture_output=True, text=True, check=False)
@@ -372,6 +374,21 @@ class AgedReceivablesReviewTests(unittest.TestCase):
     def test_duplicate_json_fields_are_invalid(self):
         with self.assertRaises(ValueError):
             json.loads('{"amount":"1","amount":"2"}', object_pairs_hook=module.unique_object)
+
+    def test_record_and_screen_counts_require_builtin_integers(self):
+        class Count(int):
+            pass
+
+        for value in (True, False, Count(self.manifest["footer_record"]), "10", 10.0):
+            with self.subTest(footer_record=value), self.assertRaises(ValueError):
+                self.review(footer_record=value)
+        for value in (True, False, Count(3), "3", 3.0, -1):
+            with self.subTest(on_screen_rows=value):
+                result = self.review(on_screen_rows=value)
+                self.assertEqual(result["summary_status"], "REVIEW")
+                self.assertEqual(result["exceptions"], [
+                    "On-screen contact row count is missing or does not agree."])
+                self.assertEqual(result["debtor_decisions"], "REVIEW")
 
     def test_section_rows_and_incomplete_timestamp_or_screen_total_need_review(self):
         content = self.content.replace(b"00123,100,,0,0,0,0,100", b"Section A,,,,,,,")

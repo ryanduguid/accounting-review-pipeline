@@ -8,7 +8,7 @@ import io
 import json
 import platform
 import statistics
-import subprocess
+import subprocess  # nosec B404 - the benchmark includes interpreter startup.
 import sys
 import tempfile
 import time
@@ -52,7 +52,8 @@ def measure(root):
     result = inspect_export(content, manifest, control)
     reviewed = time.perf_counter_ns()
     rendered = json.dumps(result, ensure_ascii=True) + "\n" + briefing(result)
-    (root / "review.txt").write_text(rendered, encoding="utf-8")
+    # The worker uses the local benchmark directory explicitly selected by its operator.
+    (root / "review.txt").write_text(rendered, encoding="utf-8")  # NOSONAR
     finished = time.perf_counter_ns()
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
@@ -76,7 +77,8 @@ def benchmark():
             measure(root)  # One explicit warm-up per fixed workload.
             warm = [measure(root) for _ in range(3)]
             started = time.perf_counter_ns()
-            cold = subprocess.run([sys.executable, str(Path(__file__)), "--worker", str(root)],
+            # Fixed interpreter and this reviewed script; no shell or external command text.
+            cold = subprocess.run([sys.executable, str(Path(__file__)), "--worker", str(root)],  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
                                   capture_output=True, text=True, check=True)
             fresh = json.loads(cold.stdout)
             fresh["process_wall_ns"] = time.perf_counter_ns() - started
@@ -100,7 +102,8 @@ if __name__ == "__main__":
         if args.output is None or args.output.exists() or args.output.resolve().is_relative_to(HERE.parent):
             parser.error("Choose a new measurement file outside the checkout.")
         results = benchmark()
-        args.output.parent.mkdir(parents=True, exist_ok=True)
+        # This local CLI intentionally creates the operator's new external output directory.
+        args.output.parent.mkdir(parents=True, exist_ok=True)  # NOSONAR
         with args.output.open("x", encoding="utf-8") as stream:
             stream.write(json.dumps(results, indent=2) + "\n")
         print("WORKFLOW MEASUREMENTS QUALIFIED")
