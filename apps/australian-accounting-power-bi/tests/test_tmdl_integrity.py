@@ -324,7 +324,7 @@ class TestTmdlIntegrity(unittest.TestCase):
 
     def test_all_measures_have_supported_descriptions_and_numeric_formats(self) -> None:
         """Require descriptions for every measure and formats for non-text measures."""
-        tmdl_files = list(TMDL_TABLES_DIR.glob("*.tmdl"))
+        tmdl_files = sorted(TMDL_TABLES_DIR.glob("*.tmdl"))
         measure_count = 0
         unformatted_measures: list[str] = []
 
