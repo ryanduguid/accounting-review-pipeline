@@ -218,12 +218,37 @@ def test_audit_review_note_translates_decoder_recursion(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("text,diagnostic", [
-    ("[" * 100_000 + "]" * 100_000, "nested too deeply"),
+    ("NESTED", "nested too deeply"),
     ('{"x": ' + "9" * 5000 + '}', "could not be read"),
     ('{"preparer_initials": "RD", "preparer_initials": "XX"}', "more than once"),
 ], ids=["nested-too-deeply", "integer-over-the-digit-limit", "duplicate-member"])
-def test_self_review_the_parser_cannot_hold_is_a_schema_error(tmp_path: Path, text: str, diagnostic: str) -> None:
+def test_self_review_the_parser_cannot_hold_is_a_schema_error(
+    tmp_path: Path, monkeypatch, text: str, diagnostic: str
+) -> None:
+    if text == "NESTED":
+        text = _stack_runs_out_on_sentinel(monkeypatch)
     path = tmp_path / "self_review.json"
     path.write_text(text, encoding="utf-8")
     with pytest.raises(SchemaError, match=diagnostic):
         load_self_review(_snapshot(path), expected_profile="bas")
+
+
+def _stack_runs_out_on_sentinel(monkeypatch):
+    """Make the decoder raise RecursionError for one sentinel payload.
+
+    How deep the parser can go depends on the platform's stack, so a fixture
+    of nested arrays fails on Windows and parses on Linux. Every other payload
+    is decoded normally.
+    """
+    import json as json_module
+
+    real_loads = json_module.loads
+    sentinel = "[[[[sentinel]]]]"
+
+    def loads(text, *args, **kwargs):
+        if isinstance(text, str) and text.startswith(sentinel):
+            raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+        return real_loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(json_module, "loads", loads)
+    return sentinel

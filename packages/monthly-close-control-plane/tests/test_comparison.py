@@ -224,10 +224,31 @@ def test_cli_prints_verified_json_and_error_is_exit_one(tmp_path, capsys):
     assert "verification failed" in capsys.readouterr().err
 
 
-def test_a_response_file_nested_too_deeply_is_an_input_error(tmp_path):
+def test_a_response_file_nested_too_deeply_is_an_input_error(tmp_path, monkeypatch):
     from closecontrol.comparison import _responses
 
     path = tmp_path / "responses.json"
-    path.write_text("[" * 100_000 + "]" * 100_000, encoding="utf-8")
+    path.write_text(_stack_runs_out_on_sentinel(monkeypatch), encoding="utf-8")
     with pytest.raises(ControlInputError, match="Invalid response JSON"):
         _responses(path, "0" * 64, {}, "2026-06")
+
+
+def _stack_runs_out_on_sentinel(monkeypatch):
+    """Make the decoder raise RecursionError for one sentinel payload.
+
+    How deep the parser can go depends on the platform's stack, so a fixture
+    of nested arrays fails on Windows and parses on Linux. Every other payload
+    is decoded normally.
+    """
+    import json as json_module
+
+    real_loads = json_module.loads
+    sentinel = "[[[[sentinel]]]]"
+
+    def loads(text, *args, **kwargs):
+        if isinstance(text, str) and text.startswith(sentinel):
+            raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+        return real_loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(json_module, "loads", loads)
+    return sentinel

@@ -564,8 +564,34 @@ def test_list_engagement_type_fails_closed(pack_dir: Path) -> None:
         render_review_sheet(pack_dir)
 
 
-@pytest.mark.parametrize("text", ["[" * 100_000 + "]" * 100_000, '{"x": ' + "9" * 5000 + '}'], ids=["nested-too-deeply", "integer-over-the-digit-limit"])
-def test_json_the_parser_cannot_hold_fails_closed(pack_dir: Path, text: str) -> None:
-    (pack_dir / "readiness-pack.json").write_text(text, encoding="utf-8")
-    with pytest.raises(GateInputError, match="nested too deeply|not readable"):
+def test_an_integer_over_the_digit_limit_fails_closed(pack_dir: Path) -> None:
+    (pack_dir / "readiness-pack.json").write_text('{"x": ' + "9" * 5000 + '}', encoding="utf-8")
+    with pytest.raises(GateInputError, match="not readable"):
         render_review_sheet(pack_dir)
+
+
+def test_json_nested_too_deeply_fails_closed(pack_dir: Path, monkeypatch) -> None:
+    (pack_dir / "readiness-pack.json").write_text(_stack_runs_out_on_sentinel(monkeypatch), encoding="utf-8")
+    with pytest.raises(GateInputError, match="nested too deeply"):
+        render_review_sheet(pack_dir)
+
+
+def _stack_runs_out_on_sentinel(monkeypatch):
+    """Make the decoder raise RecursionError for one sentinel payload.
+
+    How deep the parser can go depends on the platform's stack, so a fixture
+    of nested arrays fails on Windows and parses on Linux. Every other payload
+    is decoded normally.
+    """
+    import json as json_module
+
+    real_loads = json_module.loads
+    sentinel = "[[[[sentinel]]]]"
+
+    def loads(text, *args, **kwargs):
+        if isinstance(text, str) and text.startswith(sentinel):
+            raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+        return real_loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(json_module, "loads", loads)
+    return sentinel

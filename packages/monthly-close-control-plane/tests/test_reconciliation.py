@@ -495,11 +495,11 @@ def test_partial_settlements_roll_forward_without_clearing_unrelated_zero_net_it
 
 
 @pytest.mark.parametrize("text", [
-    "[" * 100_000 + "]" * 100_000,
+    "NESTED",
     '{"schema": "clearing-carry-v1", "schema": "clearing-carry-v1"}',
     "{not json",
 ], ids=["nested-too-deeply", "duplicate-member", "not-json"])
-def test_unreadable_opening_items_are_an_input_error(tmp_path, text):
+def test_unreadable_opening_items_are_an_input_error(tmp_path, monkeypatch, text):
     from datetime import date
 
     from closecontrol.errors import ControlInputError
@@ -507,6 +507,29 @@ def test_unreadable_opening_items_are_an_input_error(tmp_path, text):
     from closecontrol.reconciliation import _opening
 
     path = tmp_path / "opening.json"
+    if text == "NESTED":
+        text = _stack_runs_out_on_sentinel(monkeypatch)
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ControlInputError, match="Opening items are not readable JSON"):
         _opening(SourceSnapshot.capture(path, label="Opening items"), {}, date(2026, 7, 1))
+
+
+def _stack_runs_out_on_sentinel(monkeypatch):
+    """Make the decoder raise RecursionError for one sentinel payload.
+
+    How deep the parser can go depends on the platform's stack, so a fixture
+    of nested arrays fails on Windows and parses on Linux. Every other payload
+    is decoded normally.
+    """
+    import json as json_module
+
+    real_loads = json_module.loads
+    sentinel = "[[[[sentinel]]]]"
+
+    def loads(text, *args, **kwargs):
+        if isinstance(text, str) and text.startswith(sentinel):
+            raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+        return real_loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(json_module, "loads", loads)
+    return sentinel
