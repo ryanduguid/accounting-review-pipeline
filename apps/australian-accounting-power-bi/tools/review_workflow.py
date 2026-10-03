@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import stat
 import subprocess
 from datetime import datetime, timezone
 from decimal import Context, Decimal, localcontext
@@ -51,8 +52,23 @@ def ordinary(path: Path) -> Path:
     path = path.absolute()
     if str(path).startswith("\\\\") or path.drive.upper() == "Z:":
         raise ValueError("Use a local directory.")
-    for part in (path, *path.parents):
-        if part.exists() and (part.is_symlink() or getattr(part.stat(), "st_file_attributes", 0) & 0x400):
+    current = Path()
+    missing_depth = 0
+    for component in path.parts:
+        if component == "..":
+            current = current.parent
+            missing_depth = max(0, missing_depth - 1)
+            continue
+        current /= component
+        if missing_depth:
+            missing_depth += 1
+            continue
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError:
+            missing_depth = 1
+            continue
+        if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
             raise ValueError("Linked paths are not admitted.")
     return path.resolve()
 

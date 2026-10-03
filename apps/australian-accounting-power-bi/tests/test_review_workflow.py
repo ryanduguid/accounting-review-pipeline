@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -81,7 +82,7 @@ class ReviewWorkflowTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 workflow.trial_balances(case, changed, 9)
 
-    def test_sources_detect_one_byte_change_and_link_escape(self) -> None:
+    def test_sources_detect_one_byte_change(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             app = Path(directory)
             (app / "samples").mkdir()
@@ -101,7 +102,7 @@ class ReviewWorkflowTests(unittest.TestCase):
                   r"\\.\C:\private", "//?/Z:/private", "//?/C:/private")
         for value in values:
             with self.subTest(value=value), ExitStack() as stack:
-                for method in ("absolute", "exists", "is_symlink", "stat", "resolve"):
+                for method in ("absolute", "exists", "is_symlink", "stat", "lstat", "resolve"):
                     stack.enter_context(patch.object(Path, method, side_effect=AssertionError("Filesystem access attempted.")))
                 with self.assertRaisesRegex(ValueError, "local directory"):
                     workflow.ordinary(Path(value))
@@ -111,11 +112,83 @@ class ReviewWorkflowTests(unittest.TestCase):
             normalised = MagicMock(drive=drive, **{"__str__.return_value": text})
             with self.subTest(drive=drive, text=text), ExitStack() as stack:
                 absolute = stack.enter_context(patch.object(Path, "absolute", return_value=normalised))
-                for method in ("exists", "is_symlink", "stat", "resolve"):
+                for method in ("exists", "is_symlink", "stat", "lstat", "resolve"):
                     stack.enter_context(patch.object(Path, method, side_effect=AssertionError("Filesystem access attempted.")))
                 with self.assertRaisesRegex(ValueError, "local directory"):
                     workflow.ordinary(Path("relative"))
                 absolute.assert_called_once_with()
+
+    def assert_link_refused_before_child(self, link: Path, candidate: Path) -> None:
+        inspected = []
+        native_lstat = Path.lstat
+
+        def checked_lstat(path: Path) -> os.stat_result:
+            if path.name == "new-review.html":
+                raise AssertionError("Child metadata accessed before link refusal.")
+            inspected.append(path)
+            return native_lstat(path)
+
+        with patch.object(Path, "lstat", autospec=True, side_effect=checked_lstat), \
+                patch.object(Path, "resolve", side_effect=AssertionError("Resolution attempted before link refusal.")):
+            with self.assertRaisesRegex(ValueError, "Linked paths are not admitted"):
+                workflow.ordinary(candidate)
+        self.assertIn(link, inspected)
+
+    def test_real_symlinks_are_refused_before_child_access(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "target"
+            target.mkdir()
+            for name, destination in (("broken-link", root / "missing-target"), ("directory-link", target)):
+                link = root / name
+                try:
+                    link.symlink_to(destination, target_is_directory=True)
+                except OSError as error:
+                    if os.name == "nt":
+                        self.skipTest(f"Windows symlink creation unavailable: {error}")
+                    raise
+                try:
+                    for candidate in (link / "new-review.html",
+                                      root / "missing" / ".." / name / "new-review.html",
+                                      root / "missing" / "deeper" / ".." / ".." / name / "new-review.html"):
+                        with self.subTest(link=name, candidate=str(candidate)):
+                            self.assert_link_refused_before_child(link, candidate)
+                finally:
+                    link.unlink()
+
+    @unittest.skipUnless(os.name == "nt", "Windows junction regression")
+    def test_real_windows_junction_is_refused_before_child_access(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "target"
+            target.mkdir()
+            marker = target / "preserved.txt"
+            marker.write_text("Target retained.", encoding="utf-8")
+            link = root / "junction"
+            script = root / "create-junction.ps1"
+            script.write_text("param([string]$Link, [string]$Target)\n$ErrorActionPreference = 'Stop'\n"
+                              "New-Item -ItemType Junction -Path $Link -Target $Target | Out-Null\n", encoding="utf-8")
+            subprocess.run(["powershell.exe", "-NoProfile", "-File", str(script),
+                            "-Link", str(link), "-Target", str(target)], check=True, capture_output=True)
+            try:
+                for candidate in (link / "new-review.html", root / "missing" / ".." / "junction" / "new-review.html",
+                                  root / "missing" / "deeper" / ".." / ".." / "junction" / "new-review.html"):
+                    with self.subTest(candidate=str(candidate)):
+                        self.assert_link_refused_before_child(link, candidate)
+            finally:
+                link.rmdir()
+            self.assertEqual(marker.read_text(encoding="utf-8"), "Target retained.")
+
+    def test_missing_subtree_parent_climb_preserves_local_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            candidate = root / "missing" / "deeper" / ".." / ".." / "new-review.html"
+            self.assertEqual(workflow.new_output(candidate), root / "new-review.html")
+
+    def test_metadata_permission_errors_propagate(self) -> None:
+        with patch.object(Path, "lstat", side_effect=PermissionError("Metadata denied.")):
+            with self.assertRaisesRegex(PermissionError, "Metadata denied"):
+                workflow.ordinary(Path("new-review.html"))
 
     def test_new_local_output_outside_version_control_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
