@@ -19,6 +19,7 @@ erDiagram
     
     Dim_ANZSIC ||--o{ Dim_Entity : "ANZSIC_Code"
     Dim_ANZSIC ||--o{ Fact_ATOBenchmark : "ANZSIC_Code"
+    Review_Exception ||--o{ Review_Evidence : "ExceptionKey"
 ```
 
 ---
@@ -53,7 +54,7 @@ erDiagram
 
 ### `Dim_Employee` (synthetic workforce master)
 - **Primary Key**: `EmployeeID`
-- **Granularity**: One row per employee.
+- **Granularity**: One row per employee using the latest pay date, with EventID as a deterministic tie-breaker. Entity and fund history remains on each payroll event; use fact attributes for historical analysis.
 - **Attributes**: `EntityID`, `EmployeeName`, `SuperFundUSI`, `SuperFundName`.
 
 ---
@@ -73,9 +74,19 @@ erDiagram
 ### `Fact_PayrollSuper`
 - **Granularity**: Individual employee Single Touch Payroll (STP Phase 2) pay run events.
 - **Foreign Keys**: `PayDate` -> `Dim_Date[Date]`, `EntityID` -> `Dim_Entity[EntityID]`, `EmployeeID` -> `Dim_Employee[EmployeeID]`.
-- **Metrics**: `GrossEarnings`, `QualifyingEarnings_CodeQ`, `SuperLiability_CodeL` (12.0%), `RemittanceDate`, `FundReceiptDate`, `StatutoryDueDate` (7 national business days from payday), `ComplianceStatus`, `SGC_Shortfall`, `GIC_NominalInterest`.
+- **Metrics**: `GrossEarnings`, `QualifyingEarnings_CodeQ`, `SuperLiability_CodeL` (12.0%), `RemittanceDate`, `FundReceiptDate`, `StatutoryDueDate` (7 national business days from payday), `ComplianceStatus`, `SGC_Shortfall`, `GIC_NominalInterest`. Derived fields `PaymentRegime` and `EstimateBasis` distinguish quarterly samples, published or projected rates and calendar review.
 
 ### `Fact_ATOBenchmark`
 - **Granularity**: One fabricated sample reference row per ANZSIC code and turnover bracket. The values are invented for this sample model. They are not ATO benchmark percentiles and carry no source date, citation or percentile definition.
 - **Foreign Keys**: `ANZSIC_Code` -> `Dim_ANZSIC[ANZSIC_Code]`.
 - **Metrics**: `GrossProfitPct_Low`, `GrossProfitPct_Avg`, `GrossProfitPct_High`, `TotalExpensesPct_Avg`, `RentPct_Avg`, `MotorVehiclePct_Avg`, `LabourPct_Avg`.
+
+## Refresh boundary
+
+The six CSV headers are unchanged. Financial imports use Power Query `Currency.Type` and native fixed-decimal model columns; this is separate from the Python review packages' `Decimal` guarantee. The shared chart assumes a common meaning for each text account code across entities.
+
+`ModelStartDate` and `ModelEndDate` define the ledger, budget and pay-date horizon. Budget dates must be month starts. `IndustryLookup` is the single classification lookup used by the dimension and import validation. `Dim_Account` derives account-group ordering from the chart's existing `SortOrder`.
+
+See [model controls](model-controls.md) for validation rules and native rejection checks. These controls validate the supplied sample structure; they do not reconcile it to an external accounting system.
+
+The review island has three tables: Review_Run, Review_Exception and Review_Evidence. Its single exception-key relationship remains separate from the financial model. Review amounts are exact producer text; its display measure checks selection and row presence only. See [review workflow](review-workflow.md).

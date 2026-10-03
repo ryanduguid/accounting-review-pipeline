@@ -2,32 +2,33 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "31caa04ade7438a262aa",
   "position": {
-    "x": 800,
-    "y": 220,
-    "z": 5000,
-    "height": 480,
-    "width": 460,
-    "tabOrder": 5000
+    "x": 20,
+    "y": 480,
+    "width": 1240,
+    "height": 220,
+    "z": 2200,
+    "tabOrder": 0
   },
   "visual": {
-    "visualType": "scatterChart",
+    "visualType": "clusteredBarChart",
     "query": {
       "queryState": {
-        "X": {
+        "Category": {
           "projections": [
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
+                      "Entity": "Dim_Entity"
                     }
                   },
-                  "Property": "Gross Profit Margin %"
+                  "Property": "TradingName"
                 }
               },
-              "queryRef": "Fact_GeneralLedger.Gross Profit Margin %",
-              "nativeQueryRef": "Gross Profit Margin %"
+              "queryRef": "Dim_Entity.TradingName",
+              "nativeQueryRef": "TradingName",
+              "displayName": "Entity"
             }
           ]
         },
@@ -45,25 +46,23 @@
                 }
               },
               "queryRef": "Fact_ATOBenchmark.Actual Total Expense Ratio %",
-              "nativeQueryRef": "Actual Total Expense Ratio %"
-            }
-          ]
-        },
-        "Category": {
-          "projections": [
+              "nativeQueryRef": "Actual Total Expense Ratio %",
+              "displayName": "Actual expenses / revenue"
+            },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "Dim_Entity"
+                      "Entity": "Fact_ATOBenchmark"
                     }
                   },
-                  "Property": "TradingName"
+                  "Property": "ATO Benchmark Expense Ratio %"
                 }
               },
-              "queryRef": "Dim_Entity.TradingName",
-              "nativeQueryRef": "TradingName"
+              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %",
+              "nativeQueryRef": "ATO Benchmark Expense Ratio %",
+              "displayName": "Sample industry ratio"
             }
           ]
         }
@@ -73,6 +72,13 @@
       "title": [
         {
           "properties": {
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Expense ratio compared with the fabricated industry reference'"
+                }
+              }
+            },
             "show": {
               "expr": {
                 "Literal": {
@@ -80,10 +86,28 @@
                 }
               }
             },
-            "text": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "'Gross Margin vs Operating Expense Ratio Distribution'"
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
                 }
               }
             }
@@ -102,8 +126,210 @@
             }
           }
         }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Compare each entity''s total expenses as a share of revenue with its fabricated industry ratio. These are demonstration figures, not published ATO benchmarks.'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "categoryAxis": [
+        {
+          "properties": {
+            "showAxisTitle": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            },
+            "labelColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#526170'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "valueAxis": [
+        {
+          "properties": {
+            "showAxisTitle": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            },
+            "labelColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#526170'"
+                    }
+                  }
+                }
+              }
+            },
+            "gridlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            },
+            "gridlineStyle": {
+              "expr": {
+                "Literal": {
+                  "Value": "'dotted'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "legend": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "position": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Top'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            },
+            "labelColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#21665B'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Actual Total Expense Ratio %"
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#315D8A'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %"
+          }
+        }
+      ],
+      "labels": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

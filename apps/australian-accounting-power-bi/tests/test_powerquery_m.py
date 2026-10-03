@@ -43,7 +43,10 @@ class TestPowerQueryM(unittest.TestCase):
             sorted(named_expressions()),
             [
                 "Dim_Date_AU",
+                "Fx_MoneyDisplay",
+                "Fx_RequireRows",
                 "Fx_ValidateABN",
+                "IndustryLookup",
                 "Source_Dim_Account",
                 "Source_Dim_Entity",
                 "Source_Fact_ATOBenchmark",

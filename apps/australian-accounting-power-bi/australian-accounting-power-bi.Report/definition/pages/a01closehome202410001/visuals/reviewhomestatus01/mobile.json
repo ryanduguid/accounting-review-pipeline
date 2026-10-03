@@ -1,0 +1,146 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.4.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 816,
+    "z": 0,
+    "width": 324,
+    "height": 200,
+    "tabOrder": 2
+  },
+  "objects": {
+    "columnHeaders": [
+      {
+        "properties": {
+          "defaultColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "100D"
+              }
+            }
+          },
+          "autoSizeColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "false"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "grid": [
+      {
+        "properties": {
+          "rowPadding": {
+            "expr": {
+              "Literal": {
+                "Value": "14D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "columnWidth": [
+      {
+        "selector": {
+          "metadata": "Review_Run.CloseStatus"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "112D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Run.ReadinessStatus"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "128D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Run.Basis"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Run.ControlsNotRunDisplay"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Run.UnmappedExceptions"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "104D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Run.AbsoluteThresholdDisplay"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "128D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Run.PercentageThreshold"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "128D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

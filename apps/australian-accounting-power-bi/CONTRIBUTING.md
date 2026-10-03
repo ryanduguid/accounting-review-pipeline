@@ -13,7 +13,7 @@ Thank you for your interest in improving Australian Accounting Power BI.
 
 ## Development workflow
 
-Work from `apps/australian-accounting-power-bi/` in [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline). Keep the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) as the data-only authority. Run the native fabricated-data refresh and inspect all 4 report pages in Power BI Desktop before claiming native validation; the commands below check structure only.
+Work from `apps/australian-accounting-power-bi/` in [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline). Keep the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) as the data-only authority. Run the native fabricated-data refresh and inspect all 6 report pages in Power BI Desktop before claiming native validation; the commands below check structure only.
 
 1. Clone the repository and inspect or edit TMDL / M files using your preferred code editor (VS Code with TMDL extension, Tabular Editor, or Power BI Desktop with developer mode enabled).
 2. Run automated test suites:
@@ -30,3 +30,8 @@ against a refreshed, disposable sample project. The
 [native verification record](docs/native-verification.md) explains the 16 cases
 and independent CSV expectations. This native gate requires Power BI Desktop;
 structural CI alone does not run it.
+
+After changing imports, calculation groups or report controls, run the additional
+native checks in [model controls](docs/model-controls.md):
+`tools/test_review_controls.ps1` and `tools/test_refresh_guards.ps1`.
+The rejection gate mutates only a marked disposable copy of the fabricated samples.

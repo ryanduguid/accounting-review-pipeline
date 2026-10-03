@@ -4,6 +4,7 @@ table Fact_Budget
 	/// Total budgeted amount for the selected period.
 	measure 'Budget Amount' = SUM(Fact_Budget[BudgetAmount])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Revenue budget
 		lineageTag: bud-meas-0001
 
 	/// Total budgeted revenue.
@@ -13,6 +14,7 @@ table Fact_Budget
 				KEEPFILTERS(Dim_Account[Class] = "Revenue")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Revenue budget
 		lineageTag: bud-meas-0002
 
 	/// Total budgeted expenses.
@@ -22,16 +24,19 @@ table Fact_Budget
 				KEEPFILTERS(Dim_Account[Class] = "Expense")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Revenue budget
 		lineageTag: bud-meas-0003
 
 	/// Variance between actual revenue and budgeted revenue.
-	measure 'Budget Variance $' = [Revenue] - [Budget Revenue]
+	measure 'Budget Variance $' = IF(NOT ISBLANK([Budget Revenue]), [Revenue] - [Budget Revenue])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Revenue budget
 		lineageTag: bud-meas-0004
 
 	/// Percentage variance against revenue budget.
-	measure 'Budget Variance %' = DIVIDE([Budget Variance $], [Budget Revenue], 0)
+	measure 'Budget Variance %' = DIVIDE([Budget Variance $], [Budget Revenue])
 		formatString: 0.0%
+		displayFolder: Revenue budget
 		lineageTag: bud-meas-0005
 
 	column PeriodDate
@@ -42,12 +47,14 @@ table Fact_Budget
 		sourceColumn: PeriodDate
 
 	column EntityID
+		isHidden
 		dataType: string
 		lineageTag: bud-col-0002
 		summarizeBy: none
 		sourceColumn: EntityID
 
 	column AccountCode
+		isHidden
 		dataType: string
 		lineageTag: bud-col-0003
 		summarizeBy: none

@@ -112,10 +112,15 @@ table Dim_Date
 		summarizeBy: none
 		sourceColumn: FYEndDate
 
+	column CalendarYearMonth
+		dataType: string
+		summarizeBy: none
+		sourceColumn: CalendarYearMonth
+
 	partition Dim_Date = m
 		mode: import
 		source =
 			let
-				Source = Dim_Date_AU(#date(2024, 7, 1), #date(2027, 6, 30))
+				Source = Dim_Date_AU(ModelStartDate, ModelEndDate)
 			in
 				Source

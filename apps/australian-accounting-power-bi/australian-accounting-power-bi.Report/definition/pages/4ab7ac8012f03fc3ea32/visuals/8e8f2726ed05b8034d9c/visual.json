@@ -3,11 +3,11 @@
   "name": "8e8f2726ed05b8034d9c",
   "position": {
     "x": 20,
-    "y": 220,
-    "z": 6000,
-    "height": 480,
+    "y": 312,
     "width": 1240,
-    "tabOrder": 6000
+    "height": 388,
+    "z": 2100,
+    "tabOrder": 0
   },
   "visual": {
     "visualType": "tableEx",
@@ -23,11 +23,12 @@
                       "Entity": "Fact_PayrollSuper"
                     }
                   },
-                  "Property": "PayDate"
+                  "Property": "EventID"
                 }
               },
-              "queryRef": "Fact_PayrollSuper.PayDate",
-              "nativeQueryRef": "PayDate"
+              "queryRef": "Fact_PayrollSuper.EventID",
+              "nativeQueryRef": "Event",
+              "displayName": "Event"
             },
             {
               "field": {
@@ -41,21 +42,8 @@
                 }
               },
               "queryRef": "Fact_PayrollSuper.EmployeeName",
-              "nativeQueryRef": "EmployeeName"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Dim_Entity"
-                    }
-                  },
-                  "Property": "TradingName"
-                }
-              },
-              "queryRef": "Dim_Entity.TradingName",
-              "nativeQueryRef": "TradingName"
+              "nativeQueryRef": "Employee",
+              "displayName": "Employee"
             },
             {
               "field": {
@@ -65,39 +53,12 @@
                       "Entity": "Fact_PayrollSuper"
                     }
                   },
-                  "Property": "GrossEarnings"
+                  "Property": "PayDate"
                 }
               },
-              "queryRef": "Fact_PayrollSuper.GrossEarnings",
-              "nativeQueryRef": "GrossEarnings"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_PayrollSuper"
-                    }
-                  },
-                  "Property": "QualifyingEarnings_CodeQ"
-                }
-              },
-              "queryRef": "Fact_PayrollSuper.QualifyingEarnings_CodeQ",
-              "nativeQueryRef": "QualifyingEarnings_CodeQ"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_PayrollSuper"
-                    }
-                  },
-                  "Property": "SuperLiability_CodeL"
-                }
-              },
-              "queryRef": "Fact_PayrollSuper.SuperLiability_CodeL",
-              "nativeQueryRef": "SuperLiability_CodeL"
+              "queryRef": "Fact_PayrollSuper.PayDate",
+              "nativeQueryRef": "Paid",
+              "displayName": "Paid"
             },
             {
               "field": {
@@ -111,7 +72,8 @@
                 }
               },
               "queryRef": "Fact_PayrollSuper.StatutoryDueDate",
-              "nativeQueryRef": "StatutoryDueDate"
+              "nativeQueryRef": "Due",
+              "displayName": "Due"
             },
             {
               "field": {
@@ -125,7 +87,8 @@
                 }
               },
               "queryRef": "Fact_PayrollSuper.FundReceiptDate",
-              "nativeQueryRef": "FundReceiptDate"
+              "nativeQueryRef": "Received",
+              "displayName": "Received"
             },
             {
               "field": {
@@ -135,11 +98,12 @@
                       "Entity": "Fact_PayrollSuper"
                     }
                   },
-                  "Property": "ComplianceStatus"
+                  "Property": "ReceiptStatus"
                 }
               },
-              "queryRef": "Fact_PayrollSuper.ComplianceStatus",
-              "nativeQueryRef": "ComplianceStatus"
+              "queryRef": "Fact_PayrollSuper.ReceiptStatus",
+              "nativeQueryRef": "Receipt status",
+              "displayName": "Receipt status"
             },
             {
               "field": {
@@ -153,7 +117,8 @@
                 }
               },
               "queryRef": "Fact_PayrollSuper.SGC_Shortfall",
-              "nativeQueryRef": "SGC_Shortfall"
+              "nativeQueryRef": "Input estimate $",
+              "displayName": "Input estimate $"
             },
             {
               "field": {
@@ -163,11 +128,12 @@
                       "Entity": "Fact_PayrollSuper"
                     }
                   },
-                  "Property": "GIC_NominalInterest"
+                  "Property": "EstimateBasis"
                 }
               },
-              "queryRef": "Fact_PayrollSuper.GIC_NominalInterest",
-              "nativeQueryRef": "GIC_NominalInterest"
+              "queryRef": "Fact_PayrollSuper.EstimateBasis",
+              "nativeQueryRef": "Estimate basis",
+              "displayName": "Estimate basis"
             }
           ]
         }
@@ -187,7 +153,32 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Payday Super Late Receipt & SGC Exposure Audit Ledger'"
+                  "Value": "'Payroll receipt detail | supplied estimates'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
                 }
               }
             }
@@ -206,8 +197,176 @@
             }
           }
         }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Recorded payroll dates and source estimates. Late receipts are selected initially; clear the status selector to review all records. Estimate basis identifies projected rates and calendar review. Source estimates are not an assessed charge.'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E7EDEB'"
+                    }
+                  }
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "backColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#FFFFFF'"
+                }
+              }
+            },
+            "backColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#F3F5F6'"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "rowPadding": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "textSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "gridVertical": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            },
+            "outlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

@@ -25,6 +25,7 @@ DATA_MODEL_FILE = BASE_DIR / "docs" / "data-model.md"
 
 # The star schema drawn by README.md and docs/data-model.md, as (fromColumn, toColumn) pairs.
 DOCUMENTED_RELATIONSHIPS = {
+    ("Review_Evidence.ExceptionKey", "Review_Exception.ExceptionKey"),
     ("Fact_GeneralLedger.AccountCode", "Dim_Account.AccountCode"),
     ("Fact_GeneralLedger.EntityID", "Dim_Entity.EntityID"),
     ("Fact_GeneralLedger.PostingDate", "Dim_Date.Date"),
@@ -102,6 +103,11 @@ class TestTmdlIntegrity(unittest.TestCase):
             f"../{PROJECT_NAME}.SemanticModel",
         )
         self.assertIn(f"database '{PROJECT_NAME}'", database)
+        compatibility = re.search(r"compatibilityLevel:\s*(\d+)", database)
+        self.assertIsNotNone(compatibility)
+        assert compatibility is not None
+        # Desktop saves this project at 1606 and rejects a subsequent downgrade.
+        self.assertGreaterEqual(int(compatibility.group(1)), 1606)
 
     def test_tables_directory_exists_and_populated(self) -> None:
         self.assertTrue(TMDL_TABLES_DIR.is_dir(), "TMDL tables directory must exist")
@@ -180,7 +186,7 @@ class TestTmdlIntegrity(unittest.TestCase):
 
     def test_dim_anzsic_declares_every_industry_code_the_model_joins_on(self) -> None:
         """Dim_ANZSIC is a literal lookup, so both ANZSIC relationships die without these codes."""
-        partition = (TMDL_TABLES_DIR / "Dim_ANZSIC.tmdl").read_text(encoding="utf-8")
+        partition = (TMDL_TABLES_DIR.parent / "expressions.tmdl").read_text(encoding="utf-8")
         declared = set(re.findall(r'\{"(\d{4})",', partition))
 
         joined: set[str] = set()
@@ -264,7 +270,7 @@ class TestTmdlIntegrity(unittest.TestCase):
             for number, line in enumerate(
                 (TMDL_TABLES_DIR / f"{table}.tmdl").read_text(encoding="utf-8").splitlines(), 1
             )
-            if "Dim_Account[" in line and "KEEPFILTERS(" not in line
+            if "Dim_Account[" in line and "KEEPFILTERS(" not in line and "ISINSCOPE(" not in line
         ]
         self.assertEqual(
             offenders,
@@ -318,7 +324,7 @@ class TestTmdlIntegrity(unittest.TestCase):
 
     def test_all_measures_have_supported_descriptions_and_numeric_formats(self) -> None:
         """Require descriptions for every measure and formats for non-text measures."""
-        tmdl_files = list(TMDL_TABLES_DIR.glob("*.tmdl"))
+        tmdl_files = sorted(TMDL_TABLES_DIR.glob("*.tmdl"))
         measure_count = 0
         unformatted_measures: list[str] = []
 
@@ -352,11 +358,11 @@ class TestTmdlIntegrity(unittest.TestCase):
                     f"Measure [{measure_name}] in {tmdl_file.name} is missing a supported description",
                 )
 
-        self.assertEqual(measure_count, 47, "Expected exactly 47 explicit DAX measures across model")
+        self.assertEqual(measure_count, 63, "Expected exactly 63 explicit DAX measures across model")
         self.assertEqual(
             unformatted_measures,
-            ["Fact_ATOBenchmark.tmdl:[ATO Compliance Risk Profile]", "Fact_ATOBenchmark.tmdl:[Benchmark Turnover Band]"],
-            "Only the comparison status and selected band may omit a numeric format string",
+            ["Fact_ATOBenchmark.tmdl:[ATO Compliance Risk Profile]", "Fact_ATOBenchmark.tmdl:[Benchmark Turnover Band]", "Fact_GeneralLedger.tmdl:[Consolidation Scope]", "Fact_GeneralLedger.tmdl:[Report Selection]", "Fact_GeneralLedger.tmdl:[Revenue Budget Title]", "Fact_GeneralLedger.tmdl:[Monthly Revenue Title]", "Fact_PayrollSuper.tmdl:[Payroll Review Note]", "Review_Exception.tmdl:[Finding Action]", "Review_Exception.tmdl:[Finding Question]", "Review_Exception.tmdl:[Finding Reason]", "Review_Exception.tmdl:[Finding Evidence requested]", "Review_Exception.tmdl:[Finding Evidence state]"],
+            "Only the twelve text measures may omit a numeric format string",
         )
 
     def test_calculation_groups_have_precedence_and_ordinals(self) -> None:

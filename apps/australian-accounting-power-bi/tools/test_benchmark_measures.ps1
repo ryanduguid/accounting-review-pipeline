@@ -17,7 +17,7 @@ $connection.Open()
 # to the synthetic input measures below, rather than the stored model inputs.
 $tablePath = Join-Path $PSScriptRoot '../australian-accounting-power-bi.SemanticModel/definition/tables/Fact_ATOBenchmark.tmdl'
 $tableSource = [IO.File]::ReadAllText($tablePath)
-$definitions = foreach ($match in [regex]::Matches($tableSource, '(?ms)^\tmeasure ''([^'']+)'' =\s*(.*?)(?=^\t\t(?:formatString|lineageTag):)')) {
+$definitions = foreach ($match in [regex]::Matches($tableSource, '(?ms)^\tmeasure ''([^'']+)'' =\s*(.*?)(?=^\t\t(?:formatString|displayFolder|lineageTag):)')) {
     if ($match.Groups[1].Value -eq 'Actual Total Expense Ratio %') { continue }
     "MEASURE Fact_ATOBenchmark[$($match.Groups[1].Value)] = $($match.Groups[2].Value.Trim())"
 }

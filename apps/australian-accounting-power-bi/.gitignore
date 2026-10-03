@@ -31,3 +31,4 @@ Thumbs.db
 # Safe sample allowlist (only fabricated fixtures)
 samples/*
 !samples/sample-*.csv
+!samples/shared-review-case.json

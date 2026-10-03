@@ -19,55 +19,24 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = BASE_DIR / "samples"
 
-# Sample business-day calendar 2024-2027: the eight nationwide public holidays, plus the
-# whole-of-state and whole-of-territory dates listed below.
-#
-# NT Picnic Day, first Monday in August, whole of the Territory:
-#   https://nt.gov.au/nt-public-holidays
-# Victoria's Friday before the AFL Grand Final, whole of the state with no local
-# substitution (Friday 25 September 2026):
-#   https://business.vic.gov.au/business-information/public-holidays/victorian-public-holidays-2026
-# Queensland King's Birthday, first Monday in October under the Holidays Act 1983, which
-# is also NSW, SA and ACT Labour Day:
-#   https://www.qld.gov.au/recreation/travel/holidays/public
-#   https://www.nsw.gov.au/about-nsw/public-holidays
-#   https://www.safework.sa.gov.au/resources/public-holidays
-#   https://www.act.gov.au/__data/assets/pdf_file/0004/2155495/ACT-Public-Holidays-2026.pdf
-#
-# The Queensland King's Birthday is listed for 2026 and 2027 only, the years the current
-# official pages publish. The 2027 Grand Final Friday is not listed because its date depends
-# on the AFL fixture. 2024 and 2025 keep the earlier reduced calendar.
-#
-# Deliberately not listed: holidays that local areas may replace with another day, which
-# the ATO treats as applying to only part of a state and so as business days
-# (https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-on-payday/payment-deadlines-for-payday-super).
-# These include the WA King's Birthday, which WA's own page says is not a public holiday in
-# the regions that substitute another day, and Melbourne Cup Day, which a non-metropolitan
-# council may replace. Also not listed, so a sample due date can fall earlier than the rule
-# requires, never later: the part-day evening holidays South Australia and Queensland
-# observe on 24 and 31 December.
+# Reference snapshot checked 25 September 2026. See docs/compliance-methodology.md.
+# The supported receipt calendar is 1 January 2026 to 31 July 2027.
+# Whole dates are excluded for the December part-day holidays as a provisional
+# sample assumption. Those events are labelled for calendar review in the report.
+# Local substitute holidays remain business days under the current-main rule:
+# WA King's Birthday and Melbourne Cup Day are deliberately absent.
+CALENDAR_START = datetime.date(2026, 1, 1)
+CALENDAR_END = datetime.date(2027, 7, 31)
 NATIONAL_HOLIDAYS = {
-    # 2024
-    datetime.date(2024, 1, 1),   # New Year's Day
-    datetime.date(2024, 1, 26),  # Australia Day
-    datetime.date(2024, 3, 29),  # Good Friday
-    datetime.date(2024, 4, 1),   # Easter Monday
-    datetime.date(2024, 4, 25),  # Anzac Day
-    datetime.date(2024, 6, 10),  # King's Birthday
-    datetime.date(2024, 8, 5),   # Picnic Day (NT)
-    datetime.date(2024, 12, 25), # Christmas Day
-    datetime.date(2024, 12, 26), # Boxing Day
-    # 2025
-    datetime.date(2025, 1, 1),
-    datetime.date(2025, 1, 27),  # Australia Day (Observed)
-    datetime.date(2025, 4, 18),  # Good Friday
-    datetime.date(2025, 4, 21),  # Easter Monday
-    datetime.date(2025, 4, 25),  # Anzac Day
-    datetime.date(2025, 6, 9),   # King's Birthday
-    datetime.date(2025, 8, 4),   # Picnic Day (NT)
-    datetime.date(2025, 12, 25), # Christmas Day
-    datetime.date(2025, 12, 26), # Boxing Day
     # 2026
+    datetime.date(2026, 3, 2),  # WA Labour Day
+    datetime.date(2026, 3, 9),  # Canberra Day; Labour Day; Eight Hours Day
+    datetime.date(2026, 4, 27),  # Anzac Day additional holiday
+    datetime.date(2026, 5, 4),  # May Day; Labour Day
+    datetime.date(2026, 6, 1),  # Reconciliation Day; WA Day
+    datetime.date(2026, 9, 25),  # Friday before the AFL Grand Final
+    datetime.date(2026, 12, 24),  # Part-day holiday: sample excludes whole date
+    datetime.date(2026, 12, 31),  # Part-day holiday: sample excludes whole date
     datetime.date(2026, 1, 1),
     datetime.date(2026, 1, 26),  # Australia Day
     datetime.date(2026, 4, 3),   # Good Friday
@@ -75,11 +44,15 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2026, 4, 25),  # Anzac Day
     datetime.date(2026, 6, 8),   # King's Birthday
     datetime.date(2026, 8, 3),   # Picnic Day (NT)
-    datetime.date(2026, 9, 25),  # Friday before the AFL Grand Final (Vic)
     datetime.date(2026, 10, 5),  # King's Birthday (Qld); Labour Day (NSW, SA, ACT)
     datetime.date(2026, 12, 25), # Christmas Day
     datetime.date(2026, 12, 28), # Boxing Day (Observed)
     # 2027
+    datetime.date(2027, 3, 1),  # WA Labour Day
+    datetime.date(2027, 3, 8),  # Canberra Day; Labour Day; Eight Hours Day
+    datetime.date(2027, 5, 3),  # May Day; Labour Day
+    datetime.date(2027, 5, 31),  # Reconciliation Day
+    datetime.date(2027, 6, 7),  # WA Day
     datetime.date(2027, 1, 1),
     datetime.date(2027, 1, 26),
     datetime.date(2027, 3, 26),  # Good Friday
@@ -87,24 +60,20 @@ NATIONAL_HOLIDAYS = {
     datetime.date(2027, 4, 25),  # Anzac Day
     datetime.date(2027, 4, 26),  # Anzac Day (Observed)
     datetime.date(2027, 6, 14),  # King's Birthday
-    datetime.date(2027, 8, 2),   # Picnic Day (NT)
-    datetime.date(2027, 10, 4),  # King's Birthday (Qld); Labour Day (NSW, SA, ACT)
-    datetime.date(2027, 12, 25),
-    datetime.date(2027, 12, 27), # Christmas Day (Observed)
-    datetime.date(2027, 12, 28), # Boxing Day (Observed)
 }
 
 # ATO published general interest charge annual rates, keyed by calendar quarter.
 # GIC is reset every quarter, so an accrual that crosses a quarter boundary must use each
 # day's own rate rather than one rate for the whole period.
 GIC_PUBLISHED_RATES = {
+    (2026, 4): Decimal("0.1151"),  # Published by the ATO on 4 September 2026
     (2026, 3): Decimal("0.1143"),  # July-September 2026, the first quarter of the Payday Super regime
 }
 
 # Quarters the ATO has not yet published are modelled by carrying the last published rate
 # forward. This is a stated assumption, not published data. Move a rate into
 # GIC_PUBLISHED_RATES as the ATO releases it.
-GIC_PROJECTED_RATE = Decimal("0.1143")
+GIC_PROJECTED_RATE = GIC_PUBLISHED_RATES[max(GIC_PUBLISHED_RATES)]
 
 # Administrative uplift for a qualifying earnings day: 60% of individual final SG shortfalls
 # plus individual notional earnings (SGAA 1992 s 19B). Reducible by 20 percentage points for a
@@ -154,6 +123,8 @@ def notional_earnings(
 
 def is_national_business_day(d: datetime.date) -> bool:
     """Return True if weekday (Mon-Fri) and not a national Australian public holiday."""
+    if not CALENDAR_START <= d <= CALENDAR_END:
+        raise ValueError("Date outside the verified sample calendar: " + d.isoformat())
     return d.weekday() < 5 and d not in NATIONAL_HOLIDAYS
 
 def add_business_days(start_date: datetime.date, num_days: int) -> datetime.date:
@@ -283,16 +254,19 @@ def generate_fixtures():
     gl_rows = []
     journal_id = 1000
 
-    def add_balanced_journal(date_str: str, entity_id: str, desc: str, debits: list[tuple[str, Decimal]], credits: list[tuple[str, Decimal]], ic_entity: str = ""):
+    def add_balanced_journal(date_str: str, entity_id: str, desc: str, debits: list[tuple[str, Decimal]], credits: list[tuple[str, Decimal]], ic_entity: str = "", journal_key: str | None = None):
         nonlocal journal_id
-        journal_id += 1
+        if journal_key is None:
+            journal_id += 1
+            journal_key = f"JNL{journal_id}"
         d_sum = round(sum(amt for _, amt in debits), 2)
         c_sum = round(sum(amt for _, amt in credits), 2)
-        assert d_sum == c_sum, f"Unbalanced journal {journal_id}: Debits {d_sum} != Credits {c_sum}"
+        if d_sum != c_sum:
+            raise ValueError(f"Unbalanced journal {journal_id}: Debits {d_sum} != Credits {c_sum}")
         line_no = 1
         for code, amt in debits:
             gl_rows.append({
-                "JournalID": f"JNL{journal_id}",
+                "JournalID": journal_key,
                 "LineNumber": line_no,
                 "PostingDate": date_str,
                 "EntityID": entity_id,
@@ -307,7 +281,7 @@ def generate_fixtures():
             line_no += 1
         for code, amt in credits:
             gl_rows.append({
-                "JournalID": f"JNL{journal_id}",
+                "JournalID": journal_key,
                 "LineNumber": line_no,
                 "PostingDate": date_str,
                 "EntityID": entity_id,
@@ -376,7 +350,9 @@ def generate_fixtures():
 
         # --- INTERCOMPANY TRANSACTIONS (Strictly matched pairs for elimination) ---
         # 1. ENT001 charges ENT002 and ENT003 Management Fees ($10,000 and $6,000)
-        add_balanced_journal(d_end, "ENT001", "Intercompany Management Fees Charged", [("180", Decimal("16000.0"))], [("650", Decimal("16000.0"))], ic_entity="GROUP")
+        add_balanced_journal(d_end, "ENT001", "Intercompany Management Fees Charged", [("180", Decimal("10000.0"))], [("650", Decimal("10000.0"))], ic_entity="ENT002")
+        # Keep existing journal identifiers stable when splitting the second counterparty.
+        add_balanced_journal(d_end, "ENT001", "Intercompany Management Fees Charged", [("180", Decimal("6000.0"))], [("650", Decimal("6000.0"))], ic_entity="ENT003", journal_key=f"ICM3-{year}-{month:02d}")
         add_balanced_journal(d_end, "ENT002", "Intercompany Management Fee Incurred", [("880", Decimal("10000.0"))], [("380", Decimal("10000.0"))], ic_entity="ENT001")
         add_balanced_journal(d_end, "ENT003", "Intercompany Management Fee Incurred", [("880", Decimal("6000.0"))], [("380", Decimal("6000.0"))], ic_entity="ENT001")
 
@@ -511,16 +487,16 @@ def generate_fixtures():
     # carry no source date, citation or percentile definition.
     benchmarks = [
         # ANZSIC 6962 - Management Advice & Consulting
-        {"ANZSIC_Code": "6962", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "88.0", "GrossProfitPct_Avg": "92.5", "GrossProfitPct_High": "96.0", "TotalExpensesPct_Avg": "68.0", "RentPct_Avg": "4.5", "MotorVehiclePct_Avg": "3.2", "LabourPct_Avg": "42.0"},
-        {"ANZSIC_Code": "6962", "TurnoverRange": "$1m-$5m", "GrossProfitPct_Low": "85.0", "GrossProfitPct_Avg": "90.0", "GrossProfitPct_High": "94.0", "TotalExpensesPct_Avg": "72.0", "RentPct_Avg": "5.0", "MotorVehiclePct_Avg": "2.5", "LabourPct_Avg": "46.0"},
+        {"ANZSIC_Code": "6962", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "88.0", "GrossProfitPct_Avg": "92.5", "GrossProfitPct_High": "96.0", "TotalExpensesPct_Avg": "75.5", "RentPct_Avg": "4.5", "MotorVehiclePct_Avg": "3.2", "LabourPct_Avg": "42.0"},
+        {"ANZSIC_Code": "6962", "TurnoverRange": "$1m-$5m", "GrossProfitPct_Low": "85.0", "GrossProfitPct_Avg": "90.0", "GrossProfitPct_High": "94.0", "TotalExpensesPct_Avg": "82.0", "RentPct_Avg": "5.0", "MotorVehiclePct_Avg": "2.5", "LabourPct_Avg": "46.0"},
         # ANZSIC 4122 - Fresh Meat, Fish and Poultry Retailing
-        {"ANZSIC_Code": "4122", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "34.0", "GrossProfitPct_Avg": "39.5", "GrossProfitPct_High": "45.0", "TotalExpensesPct_Avg": "28.0", "RentPct_Avg": "5.2", "MotorVehiclePct_Avg": "1.8", "LabourPct_Avg": "14.5"},
-        {"ANZSIC_Code": "4122", "TurnoverRange": "$1m-$5m", "GrossProfitPct_Low": "36.0", "GrossProfitPct_Avg": "41.0", "GrossProfitPct_High": "47.0", "TotalExpensesPct_Avg": "29.5", "RentPct_Avg": "4.8", "MotorVehiclePct_Avg": "1.2", "LabourPct_Avg": "16.0"},
+        {"ANZSIC_Code": "4122", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "34.0", "GrossProfitPct_Avg": "39.5", "GrossProfitPct_High": "45.0", "TotalExpensesPct_Avg": "88.5", "RentPct_Avg": "5.2", "MotorVehiclePct_Avg": "1.8", "LabourPct_Avg": "14.5"},
+        {"ANZSIC_Code": "4122", "TurnoverRange": "$1m-$5m", "GrossProfitPct_Low": "36.0", "GrossProfitPct_Avg": "41.0", "GrossProfitPct_High": "47.0", "TotalExpensesPct_Avg": "88.5", "RentPct_Avg": "4.8", "MotorVehiclePct_Avg": "1.2", "LabourPct_Avg": "16.0"},
         # ANZSIC 4610 - Road Freight Transport
-        {"ANZSIC_Code": "4610", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "72.0", "GrossProfitPct_Avg": "78.0", "GrossProfitPct_High": "84.0", "TotalExpensesPct_Avg": "65.0", "RentPct_Avg": "2.8", "MotorVehiclePct_Avg": "18.5", "LabourPct_Avg": "31.0"},
-        {"ANZSIC_Code": "4610", "TurnoverRange": "$1m-$5m", "GrossProfitPct_Low": "70.0", "GrossProfitPct_Avg": "76.5", "GrossProfitPct_High": "82.0", "TotalExpensesPct_Avg": "66.5", "RentPct_Avg": "2.5", "MotorVehiclePct_Avg": "16.0", "LabourPct_Avg": "33.5"},
+        {"ANZSIC_Code": "4610", "TurnoverRange": "$500k-$1m", "GrossProfitPct_Low": "72.0", "GrossProfitPct_Avg": "78.0", "GrossProfitPct_High": "84.0", "TotalExpensesPct_Avg": "87.0", "RentPct_Avg": "2.8", "MotorVehiclePct_Avg": "18.5", "LabourPct_Avg": "31.0"},
+        {"ANZSIC_Code": "4610", "TurnoverRange": "$1m-$5m", "GrossProfitPct_Low": "70.0", "GrossProfitPct_Avg": "76.5", "GrossProfitPct_High": "82.0", "TotalExpensesPct_Avg": "90.0", "RentPct_Avg": "2.5", "MotorVehiclePct_Avg": "16.0", "LabourPct_Avg": "33.5"},
         # ANZSIC 6712 - Non-Residential Property Operators
-        {"ANZSIC_Code": "6712", "TurnoverRange": "$100k-$500k", "GrossProfitPct_Low": "92.0", "GrossProfitPct_Avg": "96.0", "GrossProfitPct_High": "98.5", "TotalExpensesPct_Avg": "42.0", "RentPct_Avg": "0.0", "MotorVehiclePct_Avg": "1.5", "LabourPct_Avg": "5.0"},
+        {"ANZSIC_Code": "6712", "TurnoverRange": "$100k-$500k", "GrossProfitPct_Low": "92.0", "GrossProfitPct_Avg": "96.0", "GrossProfitPct_High": "98.5", "TotalExpensesPct_Avg": "46.0", "RentPct_Avg": "0.0", "MotorVehiclePct_Avg": "1.5", "LabourPct_Avg": "5.0"},
     ]
 
     with open(SAMPLES_DIR / "sample-ato-benchmarks.csv", "w", newline="", encoding="utf-8") as f:
