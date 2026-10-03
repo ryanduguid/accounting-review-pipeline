@@ -20,7 +20,8 @@
 //      (4 decimal places) under a pinned en-AU culture. A blank cell is a genuine zero; any other cell that will not
 //      parse raises an error naming the column and the value, instead of
 //      loading as 0.
-//   3. The trailing summary "Total" row is excluded from the returned customer rows.
+//   3. Only the identified terminal footer is excluded. Omitted HasSummaryFooter
+//      infers a Total/Percentage pair; lone terminal labels require true or false.
 //   4. Bucket and Total columns are returned as Xero exported them. This query
 //      does not tie row buckets to the exported Total, so check it yourself:
 //      use List.Sum and Value.Subtract with Precision.Decimal, then require
@@ -29,7 +30,7 @@
 //
 // Usage: Xero.AgedReceivables("C:\exports\aged-receivables-2026-06-30.csv")
 let
-    AgedReceivables = (FilePath as text) as table =>
+    AgedReceivables = (FilePath as text, optional HasSummaryFooter as nullable logical) as table =>
         let
             fileBinary = Binary.Buffer(File.Contents(FilePath)),
             lines = Lines.FromBinary(fileBinary, null, null, 65001),
@@ -197,21 +198,44 @@ let
                         each Text.Trim(Text.From(Record.Field(row, _) ?? "")) = ""
                     )
                 ),
+            // A label alone does not identify a footer or a contact.
+            IndexedPromoted = Table.AddIndexColumn(Promoted, "__agedRow", 0, 1, Int64.Type),
+            MissingLabels = Table.SelectRows(IndexedPromoted, each contactOf(_) = "" and not isSectionRow(_)),
+            Validated = if Table.IsEmpty(MissingLabels) then IndexedPromoted else
+                error Error.Record("Xero.AgedReceivables", "Missing contact label",
+                    "An amount-bearing record has no contact label. Fix the export before loading."),
+            Labelled = Table.SelectRows(Validated, each contactOf(_) <> ""),
+            tail = Table.LastN(Labelled, 2),
+            last = if Table.IsEmpty(tail) then null else Table.Last(tail),
+            prior = if Table.RowCount(tail) = 2 then Table.First(tail) else null,
+            lastLabel = if last = null then "" else Text.Lower(contactOf(last)),
+            priorLabel = if prior = null then "" else Text.Lower(contactOf(prior)),
+            paired = lastLabel = "percentage of total" and priorLabel = "total"
+                and not isSectionRow(prior) and not isSectionRow(last),
+            loneTotal = lastLabel = "total" and not isSectionRow(last),
+            footerRows =
+                if HasSummaryFooter = false then {}
+                else if paired then {prior[__agedRow], last[__agedRow]}
+                else if HasSummaryFooter = true and loneTotal then {last[__agedRow]}
+                else if HasSummaryFooter = true or lastLabel = "total"
+                    or lastLabel = "percentage of total" then
+                    error Error.Record("Xero.AgedReceivables", "Ambiguous summary footer",
+                        "Confirm the terminal row role. Pass HasSummaryFooter=true for a footer or false for contacts.")
+                else {},
             sectionSubtotals = List.Transform(
                 List.Select(
-                    Table.Column(Table.SelectRows(Promoted, each isSectionRow(_)), contactCol),
+                    Table.Column(Table.SelectRows(Validated, each isSectionRow(_)), contactCol),
                     each Text.Trim(Text.From(_ ?? "")) <> ""
                 ),
                 each "Total " & Text.Trim(Text.From(_))
             ),
-            // Drop blank, section, subtotal, Total and Percentage of total rows
+            // Drop blank, section, identified subtotal and confirmed footer rows
             Filtered = Table.SelectRows(
-                Promoted,
+                Validated,
                 each let val = contactOf(_) in
                     val <> ""
                     and not isSectionRow(_)
-                    and Text.Lower(val) <> "total"
-                    and Text.Lower(val) <> "percentage of total"
+                    and not List.Contains(footerRows, [__agedRow])
                     and not List.Contains(sectionSubtotals, val)
             ),
             // Culture pinned to en-AU, the same rule Xero.TrialBalance's
@@ -241,7 +265,7 @@ let
                 amountCols,
                 (columnName as text) => {columnName, parseAmount(columnName), Currency.Type}
             ) & {{contactCol, each Text.Trim(Text.From(_ ?? "")), type text}},
-            Typed = Table.TransformColumns(Filtered, TransformOps),
+            Typed = Table.TransformColumns(Table.RemoveColumns(Filtered, {"__agedRow"}), TransformOps),
             // Rename contact column to canonical "Contact" if needed
             Renamed = if contactCol <> "Contact" then Table.RenameColumns(Typed, {{contactCol, "Contact"}}) else Typed
         in

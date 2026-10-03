@@ -366,11 +366,11 @@ class NativeExcelAcceptanceSafetyTests(unittest.TestCase):
         self.assertIn("attempt[Error][Detail]", source)
         self.assertIn('Text.Contains(detail, "CSV record 3")', source)
         self.assertIn(
-            "$expectedChildCount = if ($childSet -eq 'Core') { 60 } else { 27 }",
+            "$expectedChildCount = if ($childSet -eq 'Core') { 78 } else { 27 }",
             source,
         )
         self.assertIn("if ($childRows.Count -ne $expectedChildCount)", source)
-        self.assertIn("if ($rowCount -ne 87)", source)
+        self.assertIn("if ($rowCount -ne 105)", source)
         self.assertIn("foreach ($scaleRows in @(500, 5000, 10000))", source)
         self.assertIn("[Diagnostics.Stopwatch]::StartNew()", source)
         self.assertIn("ScaleRows = $scaleRows", source)
@@ -1817,7 +1817,10 @@ class XeroAgedReceivablesSafetyTests(unittest.TestCase):
         # total rows are dropped by these exact rules, mirrored by
         # _aged_body_rows above.
         self.assertIn("not isSectionRow(_)", source)
-        self.assertIn('Text.Lower(val) <> "percentage of total"', source)
+        self.assertIn('not List.Contains(footerRows, [__agedRow])', source)
+        self.assertIn('each contactOf(_) = "" and not isSectionRow(_)', source)
+        self.assertIn('Labelled = Table.SelectRows(Validated,', source)
+        self.assertIn('"Missing contact label"', source)
         self.assertIn("not List.Contains(sectionSubtotals, val)", source)
         self.assertIn('each "Total " & Text.Trim(Text.From(_))', source)
 
@@ -1967,7 +1970,10 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
         self.assertNotIn("Value.FromText", source)
         # The payables copy carries the same 3 drop rules.
         self.assertIn("not isSectionRow(_)", source)
-        self.assertIn('Text.Lower(val) <> "percentage of total"', source)
+        self.assertIn('not List.Contains(footerRows, [__agedRow])', source)
+        self.assertIn('each supplierOf(_) = "" and not isSectionRow(_)', source)
+        self.assertIn('Labelled = Table.SelectRows(Validated,', source)
+        self.assertIn('"Missing supplier label"', source)
         self.assertIn("not List.Contains(sectionSubtotals, val)", source)
         self.assertIn('each "Total " & Text.Trim(Text.From(_))', source)
 
@@ -2064,4 +2070,3 @@ class XeroAgedPayablesSafetyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

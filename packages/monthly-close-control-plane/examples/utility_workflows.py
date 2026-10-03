@@ -222,7 +222,8 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
             RESULTS["summary"](output, calls, provenance, failure="Source changed during execution; see source-changes.json")
             raise ValueError("Source changed during the run; review source-changes.json")
         RESULTS["summary"](output, calls, provenance, lines=verified_lines)
-        manifest = {"fixture_validation": "passed", "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
+        manifest = {"fixture_validation": "passed", "execution_mode": "source-project",
+                    "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
                     "projects": provenance, "runtimes": runtimes, "tools": {"driver_python": sys.version, "uv": uv_version.stdout.strip()},
                     "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                        for path in sorted(output.rglob("*")) if path.is_file()},

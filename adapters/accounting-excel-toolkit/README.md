@@ -26,7 +26,92 @@ Power Query (M) functions and VBA modules for accountants working with Australia
 
 Every function here solves a problem the Australian ledger-export formats create. Written independently, from scratch, in my own time and on my own equipment.
 
+## Offline aged receivables review
+
+The [standard-library verifier](tools/xero_aged_receivables.py) checks a supplied
+Aged Receivables Summary CSV with Python 3.10 or later and no installed dependencies.
+Run this fabricated example from `adapters/accounting-excel-toolkit/`:
+
+```powershell
+python tools/xero_aged_receivables.py samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json
+```
+
+Retain the [source manifest](samples/sample-aged-receivables-manifest.json), exact
+source bytes and digest, generated timestamp, cut-off, settings and population.
+Identify the terminal footer by its logical CSV record number, then confirm the
+on-screen contact count and total. The first record's first field must be
+`Aged Receivables Summary` after trimming surrounding source whitespace; the
+manifest's `report_name` must match that title exactly. The observed entity and
+date positions are records 2 and 3. The verifier requires exactly one distinct
+entity record before the header, excluding the title, `As at` and `Ageing by`
+records. That entity and the unique cut-off record must confirm the manifest
+before a control tie is supported. Their positions may vary; extra or
+contradictory entity records require review. Subtitles may move the header.
+Unsupported titles require review while supported arithmetic continues.
+The title and digest establish declarations and byte consistency, not Xero
+origin or the truthfulness of the source, manifest or footer identification.
+
+The output keeps each contact, signed credit and duplicate label, including a
+contact named `Total`. It reports separate ties for contact buckets, footer
+buckets, every supplied ageing column, contact totals, the recorded screen total
+and the comparable [independent control](samples/sample-aged-receivables-control.json).
+`Current` remains optional. Decimal differences are compared before rounding,
+with `abs(difference) < 0.005`; the fixed tolerance assumes a two-decimal currency
+convention such as AUD. Supplied amounts accept at most 15 integer digits and
+4 decimal places. A comparable control is required for summary `PASS`, although
+`--control` is optional at the command line.
+
+For a valid invocation, exits are `0` for summary `PASS`, `2` for `REVIEW` and
+`1` for invalid source or evidence input. Command-line usage errors also exit `2`.
+Debtor decisions always remain `REVIEW`. Agreement between row and column totals
+cannot establish each contact's ageing allocation, completeness or collectability.
+Obtain Aged Receivables Detail and receipt/dispute evidence before debtor decisions.
+Keep real exports and generated results in the firm's approved location outside
+version control. The [debtor review recipe](https://github.com/ryanduguid/australian-accounting-skills/blob/main/.claude/skills/xero-exports/references/debtor-review.md)
+describes the review pack and human decision boundary.
+
 ## Power Query functions
+
+The aged importers identify a summary footer by its position and shape. With
+`HasSummaryFooter` omitted, they remove only the last two nonblank labelled
+records when these are amount-bearing `Total` and `Percentage of total` rows.
+A lone terminal row with either label requires explicit confirmation. Use
+`Xero.AgedReceivables(path, true)` for a confirmed footer or
+`Xero.AgedReceivables(path, false)` to retain those labels as contacts. Payables
+takes this option third: `Xero.AgedPayables(path, true, false)` retains those
+contacts and returns the `Section` column. Section headings and their identified
+subtotals are still removed. Footer identification cannot authenticate an export
+or reconcile its values.
+
+## Draft evidence, requests and failure examples
+
+The optional helpers use the existing verifier and fabricated sample. Give each
+command a new output outside the checkout:
+
+```powershell
+python tools/debtor_evidence.py draft samples/sample-aged-receivables-review.csv --output ../manifest-draft
+python tools/debtor_evidence.py review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output ../debtor-review
+python tools/replay_aged_review.py --case all --output ../aged-replay.json
+python tools/benchmark_aged_review.py --output ../aged-measurements.json
+```
+
+The draft records source metadata and its byte digest. Independent settings,
+screen observations and footer identification remain blank, and the command
+exits `2` for review. A person must supply and confirm those observations.
+The review command writes the verifier's result and separate evidence requests
+with an owner, source record and next action. It preserves duplicate contacts
+and signed amounts; debtor decisions remain `REVIEW`. Its exits follow the
+verifier: `0` for summary `PASS`, `2` for `REVIEW`, and `1` for invalid input.
+
+Replay exercises 12 success and failure cases through the actual verifier CLI,
+checking statuses, messages and exits. The benchmark measures file loading,
+validation, rendering and writing for 10, 1,000 and 10,000 fabricated zero-value
+contacts. It reports three warm runs after a warm-up and one fresh process per
+size. Python allocation tracing excludes other process memory, and filesystem
+caching is uncontrolled. These measurements establish neither human time saved
+nor a production performance guarantee.
+
+## Install Power Query functions
 
 For the observed Xero Account Transactions layout, use the
 [CSV inspection and canonical conversion guide](docs/account-transactions-import.md).
@@ -46,8 +131,8 @@ Power BI is the same from step 3 onward: **Get Data**, **Blank Query**, then **A
 | Function | Category | What it does |
 |---|---|---|
 | [`Xero.TrialBalance`](powerquery/Xero.TrialBalance.pq) | Xero | Parse a Xero TB CSV: skips metadata rows, picks the right Debit/Credit pair (plain pair = period movement, YTD pair = as-at balances; default returns as-at, `useYTD = false` for movement), drops Total row, splits account code as text (alphanumeric up to 10 chars with at least one digit, leading zeros survive). Handles 2 observed CSV layouts, a combined account cell (`Business Bank Account (090)`) and separate `Account Code` / `Account Name` columns, plus the Excel export saved as CSV (`Account Code`, `Account`, `Account Type`, `Debit - Year to date`, `Credit - Year to date` and a comparative column named for the prior date), whose labels are mapped onto the separate-column names before the pair is chosen |
-| [`Xero.AgedReceivables`](powerquery/Xero.AgedReceivables.pq) | Xero | Parse a Xero Aged Receivables Summary CSV: skips metadata rows, finds the header by name (`Contact` or `Customer`, returned as `Contact`), drops the summary Total row, the trailing `Percentage of total` row and any section row (every amount cell blank) together with its `Total <section>` subtotal, keeps the contact key as text, and types every ageing bucket and the Total under a pinned en-AU culture (a blank cell is a genuine zero; any other cell that will not parse errors and names the column and the value). Every record from the header down must carry the same field count as the header: a present empty cell is valid, while a missing or extra field raises a named error instead of loading as a zero or being dropped. Buckets and Total come back as Xero exported them, so the bucket-to-total tie-out stays the caller's |
-| [`Xero.AgedPayables`](powerquery/Xero.AgedPayables.pq) | Xero | The same contract on the payables side: header by name (`Contact`, `Supplier` or `Vendor`, returned as `Supplier`), summary Total, `Percentage of total`, section and section-subtotal rows dropped (the observed export groups suppliers under `Aged Payables` and closes it with `Total Aged Payables`), supplier key forced to text, ageing buckets and Total typed under en-AU with the same blank-is-zero, matching-record-width and refuse-to-guess rules, and returned as exported |
+| [`Xero.AgedReceivables`](powerquery/Xero.AgedReceivables.pq) | Xero | Parse a Xero Aged Receivables Summary CSV: skips metadata rows, finds the header by name (`Contact` or `Customer`, returned as `Contact`), identifies the terminal summary footer as described above and removes it and any section row (every amount cell blank) together with its `Total <section>` subtotal, keeps the contact key as text, and types every ageing bucket and the Total under a pinned en-AU culture (a blank cell is a genuine zero; any other cell that will not parse errors and names the column and the value). Every record from the header down must carry the same field count as the header: a present empty cell is valid, while a missing or extra field raises a named error instead of loading as a zero or being dropped. Buckets and Total come back as Xero exported them, so the bucket-to-total tie-out stays the caller's |
+| [`Xero.AgedPayables`](powerquery/Xero.AgedPayables.pq) | Xero | The same contract on the payables side: header by name (`Contact`, `Supplier` or `Vendor`, returned as `Supplier`), the identified summary footer, section and section-subtotal rows removed (the observed export groups suppliers under `Aged Payables` and closes it with `Total Aged Payables`), supplier key forced to text, ageing buckets and Total typed under en-AU with the same blank-is-zero, matching-record-width and refuse-to-guess rules, and returned as exported |
 | [`PaydaySuper.Report`](powerquery/PaydaySuper.Report.pq) | Close inputs | Load the fixed 18-column `payday-super-checker` report contract by header name. It keeps IDs as text, retains the producer's raw `verdict`, caveats, notes and unassessable range, types producer amounts without recalculating them, and returns the terminal provenance separately as metadata |
 | [`Fx.PromoteHeaderAt`](powerquery/Fx.PromoteHeaderAt.pq) | Generic | Find-and-promote the real header row in any ledger export that buries it below title rows; errors clearly when the format changed |
 | [`Fx.AUFinancialYear`](powerquery/Fx.AUFinancialYear.pq) | AU helpers | FY label, start, end for any date (1 July to 30 June); timezone-stamped values are read in AEST (+10), so an instant in the last 2 hours of 30 June in Perth (last 30 minutes in Adelaide/Darwin) lands in FY+1. Switching the zone alone does not move it: the value is still a `datetimezone`, which the helper converts back to +10. For a western or central state's local calendar, convert and then drop the offset yourself and pass the plain datetime in, `DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(d, 8))` for Perth or `DateTimeZone.RemoveZone(DateTimeZone.SwitchZone(d, 9, 30))` for Adelaide and Darwin |
@@ -140,7 +225,7 @@ To import a module into Excel:
 Three layers check this repository, and each covers different ground:
 
 - **CI (GitHub Actions, [`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml))** runs the Python suite in `tests/` on every push and pull request, with no Excel present. These are static source checks: they read the `.pq` and `.bas` files as text and pin the guards, constants and structures the docs promise. Covered: the M parsers' predicates, pair selection, header promotion and AEST conversion expressions; the VBA recon sheet-marker safety logic and protected-sheet guards; the accounting number format staying byte-identical across both modules; `.bas` files staying ASCII with CRLF endings; sample fixtures balancing and matching across both layouts; README sentences the test docstrings quote; release archive determinism; and the PowerShell runner's own safety properties (portability, fabricated inputs only, COM cleanup). CI never executes M or VBA.
-- **[`tools/native_excel_acceptance.ps1`](tools/native_excel_acceptance.ps1)** runs the Power Query functions for real. It evaluates 87 checks in Excel's actual Power Query engine: both fabricated trial-balance layouts, the fabricated Payday Super producer contract, financial-year boundaries, ABN validation, header promotion, and adverse and lazy-evaluation branches. The default run isolates the 60 core checks and 27 Payday Super checks in fresh child PowerShell and Excel processes; the Payday child uses 21 separate single-source queries across 20 fabricated files to avoid Excel's cross-source privacy/firewall composition boundary. The suite also preserves a quoted multiline field, materialises 500-, 5,000- and 10,000-contribution fabricated reports, and prints each measured refresh time. It needs Windows, Windows PowerShell 5.1+, desktop Excel with Power Query, and the `Microsoft.Mashup.OleDb.1` provider. It does not import or execute VBA. The aged-parser checks cover fixed decimal amounts, absent ageing buckets, invalid values and separate supplier and expense-claim sections.
+- **[`tools/native_excel_acceptance.ps1`](tools/native_excel_acceptance.ps1)** runs the Power Query functions for real. It evaluates 105 checks in Excel's actual Power Query engine: both fabricated trial-balance layouts, the fabricated Payday Super producer contract, financial-year boundaries, ABN validation, header promotion, and adverse and lazy-evaluation branches. The default run isolates the 78 core checks and 27 Payday Super checks in fresh child PowerShell and Excel processes; the Payday child uses 21 separate single-source queries across 20 fabricated files to avoid Excel's cross-source privacy/firewall composition boundary. The suite also preserves a quoted multiline field, materialises 500-, 5,000- and 10,000-contribution fabricated reports, and prints each measured refresh time. It needs Windows, Windows PowerShell 5.1+, desktop Excel with Power Query, and the `Microsoft.Mashup.OleDb.1` provider. It does not import or execute VBA. The aged-parser checks cover fixed decimal amounts, absent ageing buckets, invalid values, genuine `Total` contacts, explicit footer roles, missing contact labels and separate supplier and expense-claim sections.
 - **Manual Excel run** is the only check for VBA behaviour end to end: importing the modules, running `modWorkpaperFormat` and `modReconCompare` against real worksheets, and confirming Mac behaviour (the recon module's platform error message). Nothing automated executes the macros.
 
 ## Principles
@@ -170,6 +255,6 @@ Ryan Duguid, accountant in Newcastle NSW, provisional member of Chartered Accoun
 ## CI coverage
 
 The root [`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml) runs static Python guards. `tools/native_excel_acceptance.ps1`
-(87 checks) and VBA end-to-end remain local Windows work. Power Query
+(105 checks) and VBA end-to-end remain local Windows work. Power Query
 behaviour is not executed on GitHub-hosted runners. Tagged releases call
 `ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA.

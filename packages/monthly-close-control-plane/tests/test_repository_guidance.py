@@ -207,30 +207,26 @@ def _multiline_ci_commands(step_name: str) -> list[str]:
 
 def _ci_smoke_contract() -> tuple[str, ...]:
     commands = _multiline_ci_commands("Install and smoke-test the built wheel outside the checkout")
-    assert len(commands) == 5, "package smoke step must contain five active commands"
+    assert len(commands) == 6, "package smoke step must contain six active commands"
 
     venv = re.fullmatch(r"python -m venv (?P<path>/\S+)", commands[0])
     assert venv is not None, f"unexpected CI venv command: {commands[0]!r}"
     venv_path = PurePosixPath(venv["path"])
     assert venv_path == PurePosixPath("/tmp/venv")
-    assert commands[1] == (
-        f"{venv_path}/bin/pip install --no-index --find-links dist "
-        "monthly-close-control-plane"
+    assert commands[1] == "wheels=(dist/*.whl)"
+    assert commands[2] == 'test "${#wheels[@]}" -eq 1'
+    assert commands[3] == f'{venv_path}/bin/pip install --no-index "${{wheels[0]}}"'
+    assert commands[4] == "cd /tmp"
+    assert commands[5] == (
+        f"{venv_path}/bin/python -I "
+        '"$GITHUB_WORKSPACE/packages/monthly-close-control-plane/tests/smoke_installed_wheel.py" '
+        '"$GITHUB_WORKSPACE/packages/monthly-close-control-plane"'
     )
-    assert commands[2] == "cd /tmp"
-    assert commands[3] == (
-        f"{venv_path}/bin/close-control review "
-        '--current "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/current_trial_balance.csv" '
-        '--prior "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/prior_trial_balance.csv" '
-        "--output pack || [ $? -eq 2 ]"
-    )
-    assert commands[4] == "test -f pack/close-review-pack.json"
     return (
         "venv:system-temp",
         "install:monthly-close-control-plane",
         "cwd:system-temp",
-        "review:fabricated-current+prior:output=pack:accept=2",
-        "exists:pack/close-review-pack.json",
+        "installed-command-smoke:isolated-python",
     )
 
 
@@ -244,15 +240,11 @@ def _guidance_smoke_contract(commands: list[str]) -> tuple[str, ...]:
     assert '& "$smokeDir\\venv\\Scripts\\python.exe" -m pip install --no-index "$wheel"' in commands
     assert "Resolve-Path dist" not in script and "--find-links" not in script
     assert (
-        '& "$smokeDir\\venv\\Scripts\\close-control.exe" review '
-        '--current "$repoRoot\\examples\\current_trial_balance.csv" '
-        '--prior "$repoRoot\\examples\\prior_trial_balance.csv" --output pack'
+        '& "$smokeDir\\venv\\Scripts\\python.exe" -I '
+        '"$repoRoot\\tests\\smoke_installed_wheel.py" "$repoRoot"'
     ) in commands
     assert (
-        'if ($LASTEXITCODE -ne 2) { throw "expected REVIEW exit 2, got $LASTEXITCODE" }'
-    ) in commands
-    assert (
-        'if (-not (Test-Path "pack\\close-review-pack.json")) { throw "smoke pack missing" }'
+        'if ($LASTEXITCODE -ne 0) { throw "installed command smoke failed with exit $LASTEXITCODE" }'
     ) in commands
     assert script.count("try {") == 2 and script.count("finally {") == 2
     assert "Pop-Location" in commands
@@ -262,8 +254,7 @@ def _guidance_smoke_contract(commands: list[str]) -> tuple[str, ...]:
         "venv:system-temp",
         "install:monthly-close-control-plane",
         "cwd:system-temp",
-        "review:fabricated-current+prior:output=pack:accept=2",
-        "exists:pack/close-review-pack.json",
+        "installed-command-smoke:isolated-python",
     )
 
 
