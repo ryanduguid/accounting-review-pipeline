@@ -1,0 +1,11 @@
+{
+  "entity": "Synthetic Entity A",
+  "as_at": "2026-09-30",
+  "currency": "AUD",
+  "accounting_basis": "accrual",
+  "filters": "all tracking; draft excluded",
+  "population": "trade receivables",
+  "source": "Fabricated TB-A, receivables control",
+  "sign_convention": "debit-positive",
+  "amount": "85"
+}

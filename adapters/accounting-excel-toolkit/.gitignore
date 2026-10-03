@@ -32,6 +32,9 @@ exports/
 !samples/sample-payday-super-report.csv
 !samples/sample-xero-aged-payables.csv
 !samples/sample-xero-aged-receivables.csv
+!samples/sample-aged-receivables-review.csv
+!samples/sample-aged-receivables-manifest.json
+!samples/sample-aged-receivables-control.json
 !samples/sample-xero-trial-balance-columns.csv
 !samples/sample-xero-trial-balance-excel-export.csv
 !samples/sample-xero-trial-balance.csv

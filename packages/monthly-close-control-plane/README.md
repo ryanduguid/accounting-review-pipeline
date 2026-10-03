@@ -53,18 +53,20 @@ No Python or clone needed: the [reviewer quick start](docs/reviewer-quick-start.
 runs the published 0.1.5 release on fabricated files with `uvx`, and shows how to
 keep the resulting pack with a job and check it later.
 
-Source additions: [compare successive verified close packs](docs/close-comparison.md)
+Published controls: [compare successive verified close packs](docs/close-comparison.md)
 and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 [Variance drivers](docs/variance-drivers.md) rank the transactions behind each
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots and inter-entity balances from supplied canonical records.
 Comparison, equity reconciliation and evidence schedules ship from 0.1.5.
-Variance drivers and the balance policy are in the development source only;
-the published 0.1.5 package does not include them.
+The published 0.1.8 package also includes variance drivers and the balance policy.
+The quick start remains pinned to 0.1.5; use 0.1.8 to run these controls.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
+The [monthly owner review](docs/monthly-owner-review.md) adds debtor evidence,
+cash decisions and a separate installed-package check to the maintained examples.
 
 The [architecture note](docs/architecture.md) sets out the control boundary and
 the review-pack pipeline. For transaction-level clearing-account matching, see the
@@ -203,7 +205,7 @@ Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
 ## Mapping compatibility policy
 
-The development source adds optional `--mapping-policy` to `review` and
+The published package accepts optional `--mapping-policy` on `review` and
 `workbench`. It requires `--mapping` and accepts a local UTF-8 CSV with exactly
 `Section,ReviewGroup` columns, in either order. Each row permits one source
 section for one review group. A group may allow several sections. Blank fields,
@@ -229,7 +231,7 @@ existing behaviour. This option ships from 0.1.5.
 
 ## Balance policy
 
-The development source adds optional `--balance-policy` to `review` and
+The published 0.1.8 package accepts optional `--balance-policy` on `review` and
 `workbench`. It accepts a local UTF-8 CSV with exactly
 `AccountID,ExpectedBalance,ExpectMovement` columns. `ExpectedBalance` is
 `debit`, `credit`, `nil` or `any`; `ExpectMovement` is `yes` or `no`. Blank

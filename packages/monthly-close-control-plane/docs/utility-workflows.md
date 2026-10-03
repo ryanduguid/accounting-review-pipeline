@@ -1,6 +1,6 @@
 # Run the joined accounting examples
 
-Use the current Git source checkouts for Accounting Review Pipeline, au-fpa-pack, australian-accounting and grant-acquittal-workpapers. The new commands are not established by older published packages. Install Python 3.11 or later, Git and uv. The driver uses Python 3.11 for each command; uv supplies it and dependencies if absent. Initial setup may download public dependencies. The calculations use local fabricated inputs.
+Use the current Git source checkouts for Accounting Review Pipeline, au-fpa-pack, australian-accounting and grant-acquittal-workpapers. The new commands are not established by older published packages. Install Python 3.11 or later, Git and uv. The driver uses Python 3.12 for each command; uv supplies it and dependencies if absent. Initial setup may download public dependencies. The calculations use local fabricated inputs.
 
 The joined examples are available on all four repositories' `main` branches.
 The grant route needs access to the private grant-acquittal-workpapers checkout.
@@ -61,7 +61,9 @@ are regression expectations for these fabricated examples, not rules for
 assessing client accounts or configurable quarter inputs.
 
 A successful run records `fixture_validation: passed` and writes `summary.md`
-with coverage, cash results, retained review findings and source revisions.
+with `execution_mode: source-project` in its manifest. It runs the source
+projects through their locked environments; installed-wheel evidence is separate.
+The summary records coverage, cash results, retained review findings and source revisions.
 The companion grant workflow can append it to the private Actions job summary
 with its `--summary` setup option after that companion update is installed. Failed
 commands produce a failure summary; fixture validation errors retain

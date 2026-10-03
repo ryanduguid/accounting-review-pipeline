@@ -4,8 +4,8 @@
 Runs the repository's Power Query acceptance checks in desktop Excel.
 
 .DESCRIPTION
-Evaluates 87 checks in Excel's real Power Query engine. The default All mode
-isolates the 60 core checks and 27 Payday Super checks in fresh child
+Evaluates 105 checks in Excel's real Power Query engine. The default All mode
+isolates the 78 core checks and 27 Payday Super checks in fresh child
 PowerShell and Excel processes. The Payday child uses 21 independent
 single-source queries across 20 fabricated files so Excel's
 cross-source privacy/firewall composition state cannot mask adapter behaviour.
@@ -27,7 +27,7 @@ repository containing this script.
 
 .PARAMETER CheckSet
 Internal isolation mode. The default All mode launches fresh child PowerShell
-processes for the 60 core checks and 27 Payday Super checks. Core and Payday
+processes for the 78 core checks and 27 Payday Super checks. Core and Payday
 are child modes so Excel's Mashup host cannot carry file-source state from one
 group into the other.
 
@@ -308,7 +308,7 @@ if ($CheckSet -eq 'All') {
             if ($payload.SchemaVersion -ne 1 -or $payload.CheckSet -ne $childSet) {
                 throw "$childSet native acceptance result has the wrong schema or check-set identity."
             }
-            $expectedChildCount = if ($childSet -eq 'Core') { 60 } else { 27 }
+            $expectedChildCount = if ($childSet -eq 'Core') { 78 } else { 27 }
             $childRows = @($payload.Rows)
             if ($childRows.Count -ne $expectedChildCount) {
                 throw (
@@ -359,8 +359,8 @@ if ($CheckSet -eq 'All') {
         }
         $allRows = @($childPayloads['Core'].Rows) + @($childPayloads['Payday'].Rows)
         $rowCount = $allRows.Count
-        if ($rowCount -ne 87) {
-            throw "Combined native acceptance count was $rowCount; expected exactly 87."
+        if ($rowCount -ne 105) {
+            throw "Combined native acceptance count was $rowCount; expected exactly 105."
         }
         $failedChecks = Write-NativeCheckSummary `
             -Rows $allRows `
@@ -648,6 +648,25 @@ Total Expense Claims,0,10.2468,0,0,0,0,10.2468
 Total,0,103.2468,0,0,0,0,103.2468
 Percentage of total,0,100,0,0,0,0,100
 '@ | Set-Content -LiteralPath $agedSections -Encoding UTF8
+    $agedTotals = Join-Path $temporaryDirectory 'aged-total-contacts.csv'
+    @'
+Contact,< 1 Month,1 Month,2 Months,3 Months,Older,Total
+Aged Payables,,,,,,
+Total,10,0,0,0,0,10
+00123,-2,0,0,0,0,-2
+Total,3,0,0,0,0,3
+Total Aged Payables,11,0,0,0,0,11
+Total,11,0,0,0,0,11
+,,,,,,
+Percentage of total,100,0,0,0,0,100
+'@ | Set-Content -LiteralPath $agedTotals -Encoding UTF8
+    $mAgedTotals = ConvertTo-MText $agedTotals
+    $agedMissingLabel = Join-Path $temporaryDirectory 'aged-missing-label.csv'
+    [IO.File]::WriteAllText($agedMissingLabel, ([IO.File]::ReadAllText($agedTotals) + ",9,0,0,0,0,9`r`n"), $utf8WithBom)
+    $mAgedMissingLabel = ConvertTo-MText $agedMissingLabel
+    $agedLoneTotal = Join-Path $temporaryDirectory 'aged-lone-total.csv'
+    [IO.File]::WriteAllText($agedLoneTotal, "Contact,< 1 Month,1 Month,2 Months,3 Months,Older,Total`r`nTotal,3,0,0,0,0,3`r`n", $utf8WithBom)
+    $mAgedLoneTotal = ConvertTo-MText $agedLoneTotal
     $mAgedSections = ConvertTo-MText $agedSections
     $paydayScaleAmount = Join-Path $temporaryDirectory 'payday-scale-amount.csv'
     [IO.File]::WriteAllText($paydayScaleAmount, ([IO.File]::ReadAllText($paydaySuperFixture).Replace('780.00', '780.00001')), $utf8WithBom)
@@ -686,6 +705,8 @@ let
     chk = (name, expected, actual) =>
         [Check = name, Expected = s(expected), Actual = s(actual), Pass = (s(expected) = s(actual))],
     raises = (f) => (try f())[HasError],
+    raisesNamed = (f, message) => let result = try f() in
+        if result[HasError] then result[Error][Message] = message else false,
     payablesSections = Xero_AgedPayables($mAgedSections, true),
     payablesLegacy = Xero_AgedPayables($mAgedSections),
     suppliers = Table.SelectRows(payablesSections, each [Section] = "Aged Payables"),
@@ -714,6 +735,31 @@ let
         List.Sum({Currency.From("1.0000"), Currency.From(difference)}, Precision.Decimal),
         List.Sum({Currency.From("1.0000")}, Precision.Decimal), Precision.Decimal)) < Currency.From("0.005"),
     checks = {
+        chk("receivables: missing label after footer fails inference", true, raisesNamed(() => Table.RowCount(Xero_AgedReceivables($mAgedMissingLabel)), "Missing contact label")),
+        chk("payables: missing label after footer fails inference", true, raisesNamed(() => Table.RowCount(Xero_AgedPayables($mAgedMissingLabel)), "Missing supplier label")),
+        chk("receivables: missing label fails asserted footer", true, raisesNamed(() => Table.RowCount(Xero_AgedReceivables($mAgedMissingLabel, true)), "Missing contact label")),
+        chk("payables: missing label fails asserted footer", true, raisesNamed(() => Table.RowCount(Xero_AgedPayables($mAgedMissingLabel, false, true)), "Missing supplier label")),
+        chk("receivables: missing label fails contact override", true, raisesNamed(() => Table.RowCount(Xero_AgedReceivables($mAgedMissingLabel, false)), "Missing contact label")),
+        chk("payables: missing label fails contact override", true, raisesNamed(() => Table.RowCount(Xero_AgedPayables($mAgedMissingLabel, false, false)), "Missing supplier label")),
+        chk("receivables: genuine Total contacts and credit retained", true,
+            let t = Xero_AgedReceivables($mAgedTotals) in
+                Table.RowCount(t) = 3 and t[Contact] = {"Total", "00123", "Total"}
+                and t[Total] = {Currency.From("10"), Currency.From("-2"), Currency.From("3")}
+                and not List.Contains(Table.ColumnNames(t), "__agedRow")),
+        chk("payables: Total contacts inherit their section", true,
+            let t = Xero_AgedPayables($mAgedTotals, true) in
+                Table.RowCount(t) = 3 and t[Section] = {"Aged Payables", "Aged Payables", "Aged Payables"}
+                and t[Supplier] = {"Total", "00123", "Total"}),
+        chk("receivables: lone Total requires a role", true, raises(() => Table.RowCount(Xero_AgedReceivables($mAgedLoneTotal)))),
+        chk("payables: lone Total requires a role", true, raises(() => Table.RowCount(Xero_AgedPayables($mAgedLoneTotal)))),
+        chk("receivables: explicit footer excludes lone Total", 0, Table.RowCount(Xero_AgedReceivables($mAgedLoneTotal, true))),
+        chk("payables: explicit footer excludes lone Total", 0, Table.RowCount(Xero_AgedPayables($mAgedLoneTotal, false, true))),
+        chk("receivables: explicit contact keeps lone Total", 1, Table.RowCount(Xero_AgedReceivables($mAgedLoneTotal, false))),
+        chk("payables: explicit contact keeps lone Total", 1, Table.RowCount(Xero_AgedPayables($mAgedLoneTotal, false, false))),
+        chk("receivables: asserted footer requires terminal Total", true, raises(() => Table.RowCount(Xero_AgedReceivables($mAgedExact, true)))),
+        chk("payables: asserted footer requires terminal Total", true, raises(() => Table.RowCount(Xero_AgedPayables($mAgedExact, false, true)))),
+        chk("receivables: contact override retains apparent footer pair", 5, Table.RowCount(Xero_AgedReceivables($mAgedTotals, false))),
+        chk("payables: contact override retains apparent footer pair", 5, Table.RowCount(Xero_AgedPayables($mAgedTotals, false, false))),
         chk("payables sections: legacy columns and values preserved", true,
             not List.Contains(Table.ColumnNames(payablesLegacy), "Section")
             and Table.ToRows(payablesLegacy) = Table.ToRows(Table.RemoveColumns(payablesSections, {"Section"}))),
@@ -1191,7 +1237,7 @@ in
         if ($CheckSet -eq 'Core') {
             [pscustomobject]@{
                 Name = 'ZZ_CoreChecks'
-                ExpectedRows = 60
+                ExpectedRows = 78
                 Source = $coreChecksM
             }
         }
@@ -1288,7 +1334,7 @@ in
         Release-ComReference $worksheet 'Worksheet'
         $worksheet = $null
     }
-    $expectedRowCount = if ($CheckSet -eq 'Core') { 60 } else { 27 }
+    $expectedRowCount = if ($CheckSet -eq 'Core') { 78 } else { 27 }
     if ($checkRows.Count -ne $expectedRowCount) {
         throw (
             "$CheckSet child aggregated $($checkRows.Count) rows; " +

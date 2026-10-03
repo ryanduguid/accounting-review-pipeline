@@ -77,9 +77,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "wheel install failed with exit $LASTEXITCODE" }
     Push-Location $smokeDir
     try {
-        & "$smokeDir\venv\Scripts\close-control.exe" review --current "$repoRoot\examples\current_trial_balance.csv" --prior "$repoRoot\examples\prior_trial_balance.csv" --output pack
-        if ($LASTEXITCODE -ne 2) { throw "expected REVIEW exit 2, got $LASTEXITCODE" }
-        if (-not (Test-Path "pack\close-review-pack.json")) { throw "smoke pack missing" }
+        & "$smokeDir\venv\Scripts\python.exe" -I "$repoRoot\tests\smoke_installed_wheel.py" "$repoRoot"
+        if ($LASTEXITCODE -ne 0) { throw "installed command smoke failed with exit $LASTEXITCODE" }
     }
     finally {
         Pop-Location

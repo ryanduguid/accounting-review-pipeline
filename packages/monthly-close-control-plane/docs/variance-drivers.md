@@ -7,8 +7,7 @@ dates, so the explanation starts from ledger evidence. It writes no commentary
 and clears nothing: the reviewer decides what drove the movement and whether it
 is right.
 
-The development source adds this command; the published 0.1.5 package does
-not include it.
+The published 0.1.8 package includes this command.
 
 ```bash
 close-control drivers --pack-dir ../close-demo/pack \

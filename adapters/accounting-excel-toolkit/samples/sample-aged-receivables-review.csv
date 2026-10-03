@@ -1,0 +1,10 @@
+Aged Receivables Summary
+Synthetic Entity A
+As at 30 September 2026
+Ageing by due date
+
+Contact,Current,< 1 Month,1 Month,2 Months,3 Months,Older,Total
+00123,100,,0,0,0,0,100
+00123,0,-25,0,0,0,0,-25
+Total,0,0,10,0,0,0,10
+Total,100,-25,10,0,0,0,85

@@ -137,13 +137,13 @@ jobs:
         working-directory: packages/monthly-close-control-plane
         run: |
           python -m venv /tmp/venv
-          /tmp/venv/bin/pip install --no-index --find-links dist monthly-close-control-plane
+          wheels=(dist/*.whl)
+          test "${#wheels[@]}" -eq 1
+          /tmp/venv/bin/pip install --no-index "${wheels[0]}"
           cd /tmp
-          /tmp/venv/bin/close-control review \
-            --current "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/current_trial_balance.csv" \
-            --prior "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/examples/prior_trial_balance.csv" \
-            --output pack || [ $? -eq 2 ]
-          test -f pack/close-review-pack.json
+          /tmp/venv/bin/python -I \
+            "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/tests/smoke_installed_wheel.py" \
+            "$GITHUB_WORKSPACE/packages/monthly-close-control-plane"
 
   lint:
     permissions:

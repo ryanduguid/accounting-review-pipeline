@@ -1,0 +1,16 @@
+{
+  "report_name": "Aged Receivables Summary",
+  "entity": "Synthetic Entity A",
+  "generated_at": "2026-10-01T09:00:00+10:00",
+  "as_at": "2026-09-30",
+  "ageing_basis": "due date",
+  "accounting_basis": "accrual",
+  "currency": "AUD",
+  "filters": "all tracking; draft excluded",
+  "population": "trade receivables",
+  "source_format": "recalculated Excel sheet saved as CSV UTF-8",
+  "source_sha256": "a5d49efd7e1a476ed88695750b9845b1dd4ad7702ba30eb4bf3742955104825c",
+  "footer_record": 10,
+  "on_screen_rows": 3,
+  "on_screen_total": "85"
+}
