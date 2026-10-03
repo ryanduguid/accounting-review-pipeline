@@ -13,7 +13,7 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from decimal import Context, Decimal, localcontext
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 APP = Path(__file__).resolve().parents[1]
@@ -45,6 +45,9 @@ def csv_bytes(columns: list[str], values: list[dict[str, Any]]) -> bytes:
 
 
 def ordinary(path: Path) -> Path:
+    windows_drive = PureWindowsPath(path).drive
+    if windows_drive.upper() == "Z:" or windows_drive.startswith("\\\\"):
+        raise ValueError("Use a local directory.")
     path = path.absolute()
     if str(path).startswith("\\\\") or path.drive.upper() == "Z:":
         raise ValueError("Use a local directory.")

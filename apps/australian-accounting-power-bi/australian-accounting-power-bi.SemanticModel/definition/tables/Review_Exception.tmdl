@@ -170,9 +170,12 @@ table Review_Exception
 			let
 				Source = Table.PromoteHeaders(Csv.Document(File.Contents(SampleFolder & "/sample-review-exceptions.csv"), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]), [PromoteAllScalars=true]),
 				Schema = if Table.ColumnNames(Source) <> {"RunID", "Entity", "Tenant", "Period", "Basis", "Currency", "ExceptionKey", "Control", "Status", "AccountID", "Account", "Current", "Prior", "Difference", "Threshold", "Reason", "Action", "Question", "EvidenceRequested", "EvidenceState"} then error "Review fixture schema differs." else Source,
-				Required = Fx_RequireRows(Schema, {"RunID", "Entity", "Period", "Basis", "Currency", "ExceptionKey"}, {"ExceptionKey"}, "Review_Exception"),
+				Required = Fx_RequireRows(Schema, {"RunID", "Entity", "Tenant", "Period", "Basis", "Currency", "ExceptionKey"}, {"ExceptionKey"}, "Review_Exception"),
 				Context = if Table.RowCount(Required) = 0 or Table.RowCount(Table.SelectRows(Required, each [Entity] <> "ENT001" or [Period] <> "2024-09-30" or [Currency] <> "AUD" or [Basis] <> "Accrual, single entity gross ledger" or Text.Length([RunID]) <> 64)) > 0 then error "Review fixture context differs." else Required,
-				Typed = Table.TransformColumnTypes(Context, List.Transform(Table.ColumnNames(Context), each {_, type text})),
+				RunContextColumns = {"RunID", "Entity", "Tenant", "Period", "Basis", "Currency"},
+				Unmatched = Table.NestedJoin(Context, RunContextColumns, Table.SelectColumns(Review_Run, RunContextColumns), RunContextColumns, "RunMatch", JoinKind.LeftAnti),
+				Validated = if not Table.IsEmpty(Unmatched) then error "Review exception projection differs." else Context,
+				Typed = Table.TransformColumnTypes(Validated, List.Transform(Table.ColumnNames(Validated), each {_, type text})),
 				Display = List.Accumulate({"Current", "Prior", "Difference"}, Typed, (state, field) => Table.AddColumn(state, field & "Display", each Fx_MoneyDisplay(Record.Field(_, field)), type text))
 			in
 				if not Table.IsEmpty(Table.SelectRowsWithErrors(Display)) then error Error.Record("Review amount", "Invalid decimal display value", "Correct the source CSV before refreshing.") else Display

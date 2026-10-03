@@ -7,10 +7,11 @@ import json
 import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack
 from decimal import Decimal
 from html.parser import HTMLParser
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 APP = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("review_workflow", APP / "tools/review_workflow.py")
@@ -94,9 +95,32 @@ class ReviewWorkflowTests(unittest.TestCase):
                 workflow.sources(app)
 
     def test_network_and_nas_paths_are_refused_before_access(self) -> None:
-        for value in (r"z:\private", r"Z:\private", r"\\office-nas\ryan\private"):
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "local directory"):
-                workflow.ordinary(Path(value))
+        values = (r"z:\private", r"Z:\private", r"Z:private", "Z:/private",
+                  r"\\office-nas\ryan\private", "//office-nas/ryan/private",
+                  r"\\?\Z:\private", r"\\?\C:\private", r"\\?\UNC\office-nas\ryan\private",
+                  r"\\.\C:\private", "//?/Z:/private", "//?/C:/private")
+        for value in values:
+            with self.subTest(value=value), ExitStack() as stack:
+                for method in ("absolute", "exists", "is_symlink", "stat", "resolve"):
+                    stack.enter_context(patch.object(Path, method, side_effect=AssertionError("Filesystem access attempted.")))
+                with self.assertRaisesRegex(ValueError, "local directory"):
+                    workflow.ordinary(Path(value))
+
+    def test_native_absolutisation_retains_prohibited_location_refusal(self) -> None:
+        for drive, text in (("Z:", r"Z:\private"), ("", r"\\office-nas\ryan\private")):
+            normalised = MagicMock(drive=drive, **{"__str__.return_value": text})
+            with self.subTest(drive=drive, text=text), ExitStack() as stack:
+                absolute = stack.enter_context(patch.object(Path, "absolute", return_value=normalised))
+                for method in ("exists", "is_symlink", "stat", "resolve"):
+                    stack.enter_context(patch.object(Path, method, side_effect=AssertionError("Filesystem access attempted.")))
+                with self.assertRaisesRegex(ValueError, "local directory"):
+                    workflow.ordinary(Path("relative"))
+                absolute.assert_called_once_with()
+
+    def test_new_local_output_outside_version_control_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "new-review.html"
+            self.assertEqual(workflow.new_output(destination), destination.resolve())
 
     def test_output_inside_repository_or_existing_destination_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "outside version control"):

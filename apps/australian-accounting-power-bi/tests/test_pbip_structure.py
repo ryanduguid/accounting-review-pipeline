@@ -482,6 +482,11 @@ class ReportUniformityTests(unittest.TestCase):
             position = document["position"]
             if visual["visualType"] == "pageNavigator":
                 navigators.append(document)
+                alt = visual["visualContainerObjects"]["general"][0]["properties"]["altText"]
+                self.assertEqual(
+                    alt["expr"]["Literal"]["Value"],
+                    "'Navigate report pages. Each page retains its own selections.'",
+                )
                 self.assertEqual(
                     [position[key] for key in ("x", "y", "width", "height")],
                     [520, 8, 740, 40],

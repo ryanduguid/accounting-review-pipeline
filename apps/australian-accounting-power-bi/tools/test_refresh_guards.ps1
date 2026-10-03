@@ -51,7 +51,22 @@ try {
         @{ Name = 'missing exception key'; File = 'review-evidence'; Table = 'Review_Evidence'; Error = 'Missing required value' },
         @{ Name = 'invalid review difference display'; File = 'review-exceptions'; Table = 'Review_Exception'; Error = 'Invalid decimal display value' },
         @{ Name = 'invalid evidence amount display'; File = 'review-evidence'; Table = 'Review_Evidence'; Error = 'Invalid decimal display value' },
-        @{ Name = 'invalid threshold display'; File = 'review-run'; Table = 'Review_Run'; Error = 'Invalid decimal display value' }
+        @{ Name = 'invalid threshold display'; File = 'review-run'; Table = 'Review_Run'; Error = 'Invalid decimal display value' },
+        @{ Name = 'evidence attached to another finding'; File = 'review-evidence'; FullModel = $true; Error = 'Review evidence projection differs' },
+        @{ Name = 'orphan evidence'; File = 'review-evidence'; FullModel = $true; Error = 'Review evidence projection differs' },
+        @{ Name = 'different authoritative run'; File = 'review-run'; FullModel = $true; Error = 'Review exception projection differs' },
+        @{ Name = 'exception from another run'; File = 'review-exceptions'; FullModel = $true; Error = 'Review exception projection differs' },
+        @{ Name = 'evidence from another run'; File = 'review-evidence'; FullModel = $true; Error = 'Review evidence projection differs' },
+        @{ Name = 'missing evidence account'; File = 'review-evidence'; FullModel = $true; Error = 'Missing required value' },
+        @{ Name = 'evidence account differs'; File = 'review-evidence'; FullModel = $true; Error = 'Review evidence projection differs' },
+        @{ Name = 'evidence tenant differs'; File = 'review-evidence'; FullModel = $true; Error = 'Review evidence projection differs' },
+        @{ Name = 'uppercase run digest'; File = 'review-run'; FullModel = $true; Error = 'Review fixture context differs' },
+        @{ Name = 'nonhex run digest'; File = 'review-run'; FullModel = $true; Error = 'Review fixture context differs' },
+        @{ Name = 'second distinct run'; File = 'review-run'; FullModel = $true; Error = 'Review fixture context differs' },
+        @{ Name = 'missing run tenant'; File = 'review-run'; FullModel = $true; Error = 'Missing required value' },
+        @{ Name = 'unsupported run tenant'; File = 'review-run'; FullModel = $true; Error = 'Review fixture context differs' },
+        @{ Name = 'exception tenant differs'; File = 'review-exceptions'; FullModel = $true; Error = 'Review exception projection differs' },
+        @{ Name = 'missing evidence tenant'; File = 'review-evidence'; FullModel = $true; Error = 'Missing required value' }
     )
     foreach ($case in $cases) {
         $path = Join-Path $folder ("sample-$($case.File).csv")
@@ -59,6 +74,35 @@ try {
         try {
             $rows = @(Import-Csv -LiteralPath $path)
             switch ($case.Name) {
+                'evidence attached to another finding' {
+                    $other = Import-Csv -LiteralPath (Join-Path $folder 'sample-review-exceptions.csv') |
+                        Where-Object AccountID -ne $rows[0].AccountID | Select-Object -First 1
+                    if ($null -eq $other) { throw 'The fixture needs a finding for a different account.' }
+                    $rows[0].ExceptionKey = $other.ExceptionKey
+                }
+                'orphan evidence' { $rows[0].ExceptionKey = 'NONEXISTENT' }
+                'different authoritative run' { $rows[0].RunID = 'a' * 64 }
+                'exception from another run' { $rows[0].RunID = 'a' * 64 }
+                'evidence from another run' { $rows[0].RunID = 'a' * 64 }
+                'missing evidence account' { $rows[0].AccountID = '' }
+                'evidence account differs' {
+                    $other = Import-Csv -LiteralPath (Join-Path $folder 'sample-review-exceptions.csv') |
+                        Where-Object AccountID -ne $rows[0].AccountID | Select-Object -First 1
+                    if ($null -eq $other) { throw 'The fixture needs a finding for a different account.' }
+                    $rows[0].AccountID = $other.AccountID
+                }
+                'evidence tenant differs' { $rows[0].Tenant = 'Different fabricated tenant' }
+                'uppercase run digest' { $rows[0].RunID = $rows[0].RunID.ToUpperInvariant() }
+                'nonhex run digest' { $rows[0].RunID = 'g' + $rows[0].RunID.Substring(1) }
+                'second distinct run' {
+                    $second = $rows[0].PSObject.Copy()
+                    $second.RunID = 'a' * 64
+                    $rows += $second
+                }
+                'missing run tenant' { $rows[0].Tenant = '' }
+                'unsupported run tenant' { $rows[0].Tenant = 'Different fabricated tenant' }
+                'exception tenant differs' { $rows[0].Tenant = 'Different fabricated tenant' }
+                'missing evidence tenant' { $rows[0].Tenant = '' }
                 'invalid review difference display' { $rows[0].Difference = 'invalid' }
                 'invalid evidence amount display' { $rows[0].Amount = 'invalid' }
                 'invalid threshold display' { $rows[0].AbsoluteThreshold = 'invalid' }
@@ -95,7 +139,11 @@ try {
             $rows | Export-Csv -LiteralPath $path -NoTypeInformation -Encoding UTF8
             $failure = $null
             try {
-                $model.Tables[$case.Table].RequestRefresh([Microsoft.AnalysisServices.Tabular.RefreshType]::Full)
+                if ($case.FullModel) {
+                    $model.RequestRefresh([Microsoft.AnalysisServices.Tabular.RefreshType]::Full)
+                } else {
+                    $model.Tables[$case.Table].RequestRefresh([Microsoft.AnalysisServices.Tabular.RefreshType]::Full)
+                }
                 $model.SaveChanges() | Out-Null
             } catch { $failure = $_.Exception.ToString() }
             if ($null -eq $failure) { throw "Refresh accepted $($case.Name)." }
