@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import socket
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -113,6 +114,112 @@ def test_a_well_formed_file_loads_with_its_figures(tmp_path):
     assert evidence.rate_tables == ("urn:sbrm:rate:coal-lsl-levy:2026-07:levy-rate",)
     assert evidence.usable is True
     assert evidence.findings == ()
+
+
+@pytest.mark.parametrize("replacement", [
+    '"status": "REFUSED", "status": "COMPUTED"',
+    '"status": "COMPUTED", "status": "REFUSED"',
+    '"status": "COMPUTED", "status": "COMPUTED"',
+    '"status": "COMPUTED", "st\\u0061tus": "COMPUTED"',
+])
+def test_audit_duplicate_status_is_unreadable_even_with_a_matching_digest(tmp_path, replacement):
+    record = build_record()
+    text = json.dumps(record).replace('"status": "COMPUTED"', replacement)
+    path = tmp_path / "duplicate.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(SchemaError, match="more than once"):
+        module.load(path)
+    pack = run(tmp_path, calculation_evidence_paths=[path])
+    assert pack.status == "BLOCKED"
+    assert not pack.relied_on
+
+
+def test_audit_nested_duplicate_in_an_array_is_unreadable(tmp_path):
+    record = build_record()
+    text = json.dumps(record).replace('"notes": []', '"notes": [{"x": 1, "\\u0078": 1}]')
+    path = tmp_path / "nested.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(SchemaError, match="more than once"):
+        module.load(path)
+
+
+def test_audit_bom_and_repeated_keys_in_separate_objects_remain_valid(tmp_path):
+    record = build_record()
+    record["observation"]["status"] = "separate object"
+    path = tmp_path / "valid.json"
+    path.write_text(json.dumps(record), encoding="utf-8-sig")
+    assert module.load(path).usable
+
+
+@pytest.mark.parametrize("notes", [[], [""], [" "], ["", "   "], ["\u2003"]])
+def test_audit_blank_advisory_cannot_support_a_computed_figure(tmp_path, notes):
+    path = write(tmp_path, build_record(**{"upstream.advisory.notes": notes}))
+    evidence = module.load(path)
+    assert not evidence.usable
+    assert any("no advisory" in finding for finding in evidence.findings)
+    assert run(tmp_path, calculation_evidence_paths=[path]).status == "BLOCKED"
+
+
+def test_audit_one_substantive_note_is_sufficient_and_refusal_needs_no_advisory(tmp_path):
+    notes = [" ", "Review the supplied facts before relying on this estimate."]
+    computed = module.load(write(tmp_path, build_record(**{"upstream.advisory.notes": notes})))
+    assert computed.usable
+    assert computed.advisory_notes == tuple(notes)
+    refused = module.load(write(tmp_path, build_record(**{
+        "call.status": "REFUSED", "upstream.advisory": None, "normalised.values": {},
+    })))
+    assert refused.findings == ()
+    assert not refused.usable
+
+
+@pytest.mark.parametrize("period,report_date,expected", [
+    ("2026-07", date(2026, 7, 31), True),
+    ("2026-06", date(2026, 7, 31), False),
+    ("2026-00", date(2026, 7, 31), None),
+    ("2026-13", date(2026, 7, 31), None),
+    ("2026-99", date(2026, 7, 31), None),
+    ("0000-01", date(2026, 7, 31), None),
+    ("0001-01", date(1, 1, 1), True),
+    ("9999-12", date(9999, 12, 31), True),
+    ("２０２６-０７", date(2026, 7, 31), None),
+    ("2026-²⁷", date(2026, 7, 31), None),
+    ("fy²⁰²⁶", date(2026, 7, 31), None),
+    ("fy２０２６", date(2026, 7, 31), None),
+    ("fy0000", date(2026, 7, 31), None),
+    ("fy0001", date(1, 6, 30), None),
+    ("fy0002", date(1, 7, 1), True),
+    ("fy9999", date(9999, 6, 30), True),
+    ("fy2027", date(2026, 6, 30), False),
+    ("fy2027", date(2026, 7, 1), True),
+    ("fy2027", date(2027, 6, 30), True),
+    ("fy2027", date(2027, 7, 1), False),
+    ("fbt:fy2027", date(2026, 3, 31), False),
+    ("fbt:fy2027", date(2026, 4, 1), True),
+    ("fbt:fy2027", date(2027, 3, 31), True),
+    ("fbt:fy2027", date(2027, 4, 1), False),
+])
+def test_audit_period_distinguishes_invalid_from_nonmatching(tmp_path, period, report_date, expected):
+    evidence = module.load(write(tmp_path, build_record()))
+    assert module.covers_period(replace(evidence, period=period), report_date) is expected
+
+
+def test_audit_invalid_month_reaches_the_existing_review_boundary(tmp_path):
+    path = write(tmp_path, build_record(**{"call.period": "2026-13"}))
+    pack = run(tmp_path, calculation_evidence_paths=[path])
+    assert pack.status == "REVIEW"
+    assert not pack.relied_on
+    assert any("cannot read as a period" in item.reason for item in pack.exceptions)
+
+
+def test_audit_canonicalisation_depth_is_an_input_error(tmp_path, monkeypatch):
+    path = write(tmp_path, build_record())
+
+    def too_deep(payload):
+        raise RecursionError("fabricated canonicalisation limit")
+
+    monkeypatch.setattr(module, "_canonical", too_deep)
+    with pytest.raises(SchemaError, match="cannot be canonicalised"):
+        module.load(path)
 
 
 @pytest.mark.parametrize("field", ["synthetic_input", "validation.accepted"])
