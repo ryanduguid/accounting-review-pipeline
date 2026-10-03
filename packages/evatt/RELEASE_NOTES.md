@@ -1,3 +1,11 @@
+# Unreleased
+
+- Keep names detectable when a following phone's opening punctuation is replaced,
+  and separate touching mapped placeholders so both restore. Existing emphasis
+  between accepted matches keeps its spacing. Restore retains any added space.
+- Document the remaining punctuation-edge, shared-emphasis and longer-word
+  placeholder limitations in the README and DECISIONS.md rulings 43 and 44.
+
 # v0.1.4
 
 - The redact command refuses to run when its document, manifest or triage paths refer to the same file through a symbolic or hard link, and checks each output against those already examined before any write or removal. A manifest hard-linked to the output could replace the sanitised document with JSON while the command reported success. All three outputs now need separate files, including triage hard links that happened to work before; the refusal exits 1 and leaves the previous files in place.

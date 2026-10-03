@@ -99,6 +99,10 @@ def _replace_structured(text: str) -> tuple[str, Counter]:
             assigned[key] = placeholder
         counts[kind] += 1
         pieces.append(text[cursor:start])
+        # Consuming a phone's opening punctuation must not join a preceding
+        # name to PHONE_01 and hide it from pass two and the residual sweep.
+        if start and not text[start - 1].isspace() and re.match(r"\w", text[start]) is None:
+            pieces.append(" ")
         pieces.append(placeholder)
         cursor = end
     pieces.append(text[cursor:])
@@ -208,6 +212,7 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
     counts: Counter = Counter()
     pieces: list[str] = []
     cursor = 0
+    previous_close = ""
     for start, end, _priority, entity, match in found:
         if start < cursor:
             continue
@@ -215,13 +220,18 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         if nearest >= 0 and protected[nearest][1] > start:
             continue
         counts[entity.kind] += 1
+        # Touching accepted values need separate tokens for restore. Emphasis
+        # already supplies a boundary and keeps its existing spacing.
+        if pieces and start == cursor and not previous_close and not match.group("open"):
+            pieces.append(" ")
         pieces.append(text[cursor:start])
         # An emphasis run the match took in is put back as asterisks: "_" next
         # to a placeholder is a boundary character, so "_PERSON_01_" would never
         # restore, while "*PERSON_01*" restores and still renders as emphasis.
         pieces.append(match.group("open").replace("_", "*"))
         pieces.append(entity.placeholder)
-        pieces.append(match.group("close").replace("_", "*"))
+        previous_close = match.group("close")
+        pieces.append(previous_close.replace("_", "*"))
         cursor = end
     pieces.append(text[cursor:])
     return "".join(pieces), counts

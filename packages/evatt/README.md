@@ -176,6 +176,17 @@ an extra placeholder costs a triage decision while a miss leaks.
   It cannot catch a detection bug: what the detector could not see going in it
   cannot see coming out. A clean `verify` says the output agrees with the
   detector, not that the output is clean.
+- **Replacement can add a space at a touching junction.** A punctuation-starting
+  phone beside a name becomes `PERSON_01 PHONE_01`; two touching mapped values
+  become separate placeholders. Restore retains that space. Existing emphasis
+  between accepted matches keeps its spacing.
+- **Some mapped junctions remain unsupported.** A punctuation-edged value after
+  a word character, such as `(John Smith)` after `0412 345 678`, can be missed.
+  Different mapped values sharing an emphasis delimiter can overlap, leaving
+  the later value unmatched, as in `*(Jane Roe)*(John Smith)`. A placeholder-like
+  map value such as `XTFN_01` can also rewrite structured output inside a longer
+  word. Avoid such map values and inspect the whole output before sending;
+  `verify` shares these detection limits.
 - **Unmapped names can escape the residual sweep.** It looks for 2 or
   3 capitalised Latin-1 tokens and filters statutory vocabulary. Lower-case
   names, single names, other scripts and names containing statutory words can
