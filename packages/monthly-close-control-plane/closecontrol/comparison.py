@@ -89,7 +89,7 @@ def _responses(path: Path | None, pack_hash: str,
     try:
         document = json.loads(source.text(label="Response file", encoding="utf-8-sig"),
                               object_pairs_hook=_no_duplicate_keys)
-    except (ValueError, UnicodeError) as exc:
+    except (ValueError, UnicodeError, RecursionError) as exc:
         raise ControlInputError(f"Invalid response JSON: {exc}") from exc
     if (not isinstance(document, dict)
             or set(document) != {"schema_version", "pack_sha256", "responses"}
