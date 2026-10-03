@@ -19,6 +19,7 @@ from debtor_evidence import briefing
 from xero_aged_receivables import inspect_export
 
 HERE = Path(__file__).resolve().parent
+REPOSITORY = Path(__file__).resolve().parents[3]
 
 
 def workload(count):
@@ -99,7 +100,7 @@ if __name__ == "__main__":
     if args.worker:
         print(json.dumps(measure(args.worker)))
     else:
-        if args.output is None or args.output.exists() or args.output.resolve().is_relative_to(HERE.parent):
+        if args.output is None or args.output.exists() or args.output.resolve().is_relative_to(REPOSITORY):
             parser.error("Choose a new measurement file outside the checkout.")
         results = benchmark()
         # This local CLI intentionally creates the operator's new external output directory.

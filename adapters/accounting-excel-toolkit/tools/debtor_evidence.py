@@ -13,6 +13,7 @@ from pathlib import Path
 
 from xero_aged_receivables import BUCKETS, MANIFEST_FIELDS, inspect_export, unique_object
 
+REPOSITORY = Path(__file__).resolve().parents[3]
 
 def draft_manifest(content):
     records = list(csv.reader(io.StringIO(content.decode("utf-8-sig"), newline=""), strict=True))
@@ -87,7 +88,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         output = args.output.resolve()
-        if output.is_relative_to(Path(__file__).resolve().parents[1]):
+        if output.is_relative_to(REPOSITORY):
             raise ValueError("Evidence output must be outside the checkout.")
         if output.exists():
             raise ValueError("Output already exists; preserve the previous evidence.")

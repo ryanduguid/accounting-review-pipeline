@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+REPOSITORY = Path(__file__).resolve().parents[3]
 SAMPLES = HERE.parent / "samples"
 
 
@@ -101,7 +102,7 @@ if __name__ == "__main__":
     parser.add_argument("--case", default="all", choices=["all", *[case["case"] for case in catalogue()]])
     parser.add_argument("--output", type=Path, required=True, help="new external replay JSON file")
     args = parser.parse_args()
-    if args.output.resolve().is_relative_to(HERE.parent) or args.output.exists():
+    if args.output.resolve().is_relative_to(REPOSITORY) or args.output.exists():
         parser.error("Choose a new output outside the checkout.")
     pack = replay(args.case)
     # The CLI intentionally creates the operator's new external output directory.

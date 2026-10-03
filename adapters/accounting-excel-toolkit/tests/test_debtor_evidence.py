@@ -1,4 +1,5 @@
 import json
+import subprocess  # nosec B404 - fixed local CLI regression commands.
 import sys
 import tempfile
 import unittest
@@ -12,6 +13,46 @@ import xero_aged_receivables  # noqa: E402
 
 
 class DebtorEvidenceTests(unittest.TestCase):
+    def run_output_cli(self, tool, output):
+        arguments = [sys.executable, str(ROOT / "tools" / f"{tool}.py")]
+        if tool == "debtor_evidence":
+            arguments += ["draft", str(ROOT / "samples/sample-aged-receivables-review.csv")]
+        elif tool == "replay_aged_review":
+            arguments += ["--case", "clean"]
+        arguments += ["--output", str(output)]
+        return subprocess.run(arguments, capture_output=True, text=True, timeout=60, check=False)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+
+    def test_all_output_clis_reject_repository_paths_before_creating_parents(self):
+        repository = ROOT.parents[1]
+        with tempfile.TemporaryDirectory(prefix="debtor-output-test-", dir=repository) as temporary:
+            for tool in ("debtor_evidence", "benchmark_aged_review", "replay_aged_review"):
+                with self.subTest(tool=tool):
+                    output = Path(temporary) / tool / "new-output"
+                    result = self.run_output_cli(tool, output)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("outside the checkout", result.stdout + result.stderr)
+                    self.assertFalse(output.parent.exists())
+
+    def test_all_output_clis_accept_new_external_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for tool in ("debtor_evidence", "benchmark_aged_review", "replay_aged_review"):
+                with self.subTest(tool=tool):
+                    output = Path(temporary) / tool / "new-output"
+                    result = self.run_output_cli(tool, output)
+                    self.assertEqual(result.returncode, 2 if tool == "debtor_evidence" else 0,
+                                     result.stdout + result.stderr)
+                    self.assertTrue(output.exists())
+
+    def test_all_output_clis_preserve_existing_external_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "existing-output"
+            output.write_bytes(b"Existing operator evidence.\n")
+            for tool in ("debtor_evidence", "benchmark_aged_review", "replay_aged_review"):
+                with self.subTest(tool=tool):
+                    result = self.run_output_cli(tool, output)
+                    self.assertEqual(result.returncode, 1 if tool == "debtor_evidence" else 2)
+                    self.assertEqual(output.read_bytes(), b"Existing operator evidence.\n")
+
     def test_failure_catalogue_runs_actual_cli_and_expected_exits(self):
         outcomes = replay_aged_review.replay()["cases"]
         self.assertEqual(len(outcomes), 12)
