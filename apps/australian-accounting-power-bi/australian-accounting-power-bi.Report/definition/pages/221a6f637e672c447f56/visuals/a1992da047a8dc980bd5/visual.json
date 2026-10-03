@@ -3,11 +3,11 @@
   "name": "a1992da047a8dc980bd5",
   "position": {
     "x": 20,
-    "y": 10,
-    "z": 1000,
-    "height": 60,
-    "width": 1240,
-    "tabOrder": 1000
+    "y": 0,
+    "width": 488,
+    "height": 52,
+    "z": 0,
+    "tabOrder": 9
   },
   "visual": {
     "visualType": "textbox",
@@ -19,12 +19,12 @@
               {
                 "textRuns": [
                   {
-                    "value": "Multi-Entity Group Rollup & Intercompany Elimination Matrix",
+                    "value": "Group balances",
                     "textStyle": {
                       "fontFamily": "Segoe UI Semibold",
-                      "fontSize": "24pt",
+                      "fontSize": "22pt",
                       "fontWeight": "bold",
-                      "color": "#17324D"
+                      "color": "#23384A"
                     }
                   }
                 ]
@@ -34,6 +34,34 @@
         }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Group balances. Fabricated accounting data for review.'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

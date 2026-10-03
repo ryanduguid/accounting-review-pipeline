@@ -1,0 +1,238 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.4.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 1024,
+    "z": 0,
+    "width": 324,
+    "height": 960,
+    "tabOrder": 1
+  },
+  "objects": {
+    "columnHeaders": [
+      {
+        "properties": {
+          "defaultColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "100D"
+              }
+            }
+          },
+          "autoSizeColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "false"
+              }
+            }
+          },
+          "fontSize": {
+            "expr": {
+              "Literal": {
+                "Value": "11D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "grid": [
+      {
+        "properties": {
+          "rowPadding": {
+            "expr": {
+              "Literal": {
+                "Value": "14D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "columnWidth": [
+      {
+        "selector": {
+          "metadata": "Review_Exception.Account"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "120D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Status"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "80D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.DifferenceDisplay"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "108D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.EvidenceState"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Difference"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Action"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Question"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.ExceptionKey"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.RunID"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Entity"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Period"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Exception.Basis"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "visualContainerObjects": {
+    "title": [
+      {
+        "properties": {
+          "text": {
+            "expr": {
+              "Literal": {
+                "Value": "'Findings | change in AUD'"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

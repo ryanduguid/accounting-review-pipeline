@@ -4,65 +4,97 @@ table Fact_PayrollSuper
 	/// Total gross earnings paid across Single Touch Payroll events.
 	measure 'Gross Wages Paid' = SUM(Fact_PayrollSuper[GrossEarnings])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0001
 
 	/// Qualifying earnings under post-1 July 2026 Payday Super regime (STP Code Q).
 	measure 'Qualifying Earnings (Code Q)' = SUM(Fact_PayrollSuper[QualifyingEarnings_CodeQ])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0002
 
 	/// Statutory 12.0% superannuation liability accrued (STP Code L).
 	measure 'Super Liability Accrued (Code L)' = SUM(Fact_PayrollSuper[SuperLiability_CodeL])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0003
 
-	/// Contributions verified received by employee funds within 7 national business days.
+	/// Recorded liability with an on-time receipt date under the supplied deadline; full payment is assumed.
 	measure 'Super Remitted On-Time' =
 			CALCULATE(
 				SUM(Fact_PayrollSuper[SuperLiability_CodeL]),
-				Fact_PayrollSuper[ComplianceStatus] = "ON_TIME"
+				KEEPFILTERS(Fact_PayrollSuper[ComplianceStatus] = "ON_TIME")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0004
 
-	/// Contributions received after the 7-business-day statutory fund receipt deadline.
+	/// Recorded liability with a receipt date after the supplied deadline; no legal determination.
 	measure 'Super in Breach (Late)' =
 			CALCULATE(
 				SUM(Fact_PayrollSuper[SuperLiability_CodeL]),
-				Fact_PayrollSuper[ComplianceStatus] = "LATE_BREACH"
+				KEEPFILTERS(Fact_PayrollSuper[ComplianceStatus] = "LATE_BREACH")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0005
 
-	/// Proportion of superannuation liability received by funds within the statutory deadline.
+	/// Share of recorded liability with an on-time receipt; the input has no receipt amount or exception evidence.
 	/// Blank rather than 100% for a period with no payroll events, matching [ATO Compliance Risk Profile].
-	measure 'Payday Super Compliance Rate %' = DIVIDE([Super Remitted On-Time], [Super Liability Accrued (Code L)], BLANK())
+	measure 'Payday Super Compliance Rate %' = DIVIDE(COALESCE([Super Remitted On-Time], 0), [Super Liability Accrued (Code L)], BLANK())
 		formatString: 0.0%
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0006
 
 	/// Estimated Super Guarantee Charge (individual final shortfall, notional earnings, and administrative uplift).
-	measure 'Total SGC Exposure' = SUM(Fact_PayrollSuper[SGC_Shortfall])
+	measure 'Total SGC Exposure' =
+			VAR NeedsReview = [Calendar Review Events]
+			RETURN IF(NeedsReview = 0, CALCULATE(SUM(Fact_PayrollSuper[SGC_Shortfall]), KEEPFILTERS(Fact_PayrollSuper[PaymentRegime] = "Payday sample")))
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0007
 
 	/// Individual notional earnings accrued on late contributions, compounding daily at the general interest charge (GIC) rate.
-	measure 'Total GIC Nominal Interest' = SUM(Fact_PayrollSuper[GIC_NominalInterest])
+	measure 'Total GIC Nominal Interest' = IF([Calendar Review Events] = 0, CALCULATE(SUM(Fact_PayrollSuper[GIC_NominalInterest]), KEEPFILTERS(Fact_PayrollSuper[PaymentRegime] = "Payday sample")))
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0008
 
 	/// Total count of individual employee pay run events.
 	measure 'Payroll Events Count' = COUNTROWS(Fact_PayrollSuper)
 		formatString: #,##0
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0009
 
-	/// Count of pay run events that breached the 7-business-day fund receipt deadline.
+	/// Count of recorded receipts after their supplied due dates.
 	measure 'Late Events Count' =
 			CALCULATE(
 				COUNTROWS(Fact_PayrollSuper),
-				Fact_PayrollSuper[ComplianceStatus] = "LATE_BREACH"
+				KEEPFILTERS(Fact_PayrollSuper[ComplianceStatus] = "LATE_BREACH")
 			)
 		formatString: #,##0
+		displayFolder: Recorded payroll receipts
 		lineageTag: stp-meas-0010
+
+	/// Events needing review of part-day holiday treatment; total charge is withheld when these are selected.
+	measure 'Calendar Review Events' =
+			COALESCE(CALCULATE(COUNTROWS(Fact_PayrollSuper), KEEPFILTERS(Fact_PayrollSuper[EstimateBasis] = "Calendar review: part-day holidays")), 0)
+		formatString: #,##0
+		displayFolder: Recorded payroll receipts
+		lineageTag: 563b9fdd-27cf-4e4b-ae2a-fcc307978dc2
+
+	/// Explains the selected receipt evidence and why estimates may be unavailable; no legal determination.
+	measure 'Payroll Review Note' =
+			VAR EventCount = [Payroll Events Count]
+			VAR CalendarCount = [Calendar Review Events]
+			RETURN SWITCH(TRUE(),
+			    ISBLANK(EventCount) || EventCount = 0, "No payroll receipts match these selections. Choose another entity, year, regime or receipt status.",
+			    CalendarCount > 0, FORMAT(CalendarCount, "0") & " events need calendar review. Total SGC and interest estimates are withheld; full receipt is assumed.",
+			    SELECTEDVALUE(Fact_PayrollSuper[PaymentRegime]) = "Quarterly sample", "Quarterly receipt sample. Payday charge estimates do not apply; full receipt is assumed.",
+			    "Recorded receipt dates; full payment is assumed. SGC and interest are estimates. Check each row's estimate basis.")
+		displayFolder: Report context
+		lineageTag: bdf9e7b5-b217-5468-a77d-1a4ef31cc9dc
+
 
 	column EventID
 		dataType: string
@@ -72,12 +104,14 @@ table Fact_PayrollSuper
 		sourceColumn: EventID
 
 	column EmployeeID
+		isHidden
 		dataType: string
 		lineageTag: stp-col-0002
 		summarizeBy: none
 		sourceColumn: EmployeeID
 
 	column EntityID
+		isHidden
 		dataType: string
 		lineageTag: stp-col-0003
 		summarizeBy: none
@@ -151,6 +185,7 @@ table Fact_PayrollSuper
 		sourceColumn: StatutoryDueDate
 
 	column ComplianceStatus
+		isHidden
 		dataType: string
 		lineageTag: stp-col-0014
 		summarizeBy: none
@@ -170,10 +205,27 @@ table Fact_PayrollSuper
 		summarizeBy: sum
 		sourceColumn: GIC_NominalInterest
 
+	column PaymentRegime
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PaymentRegime
+
+	column EstimateBasis
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EstimateBasis
+
+	/// Human-readable receipt status derived from the validated source code.
+	column ReceiptStatus
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ReceiptStatus
+
 	partition Fact_PayrollSuper = m
 		mode: import
 		source =
 			let
-				Source = Source_Fact_PayrollSuper
+				Source = Source_Fact_PayrollSuper,
+				WithReceiptLabel = Table.AddColumn(Source, "ReceiptStatus", each if [ComplianceStatus] = "ON_TIME" then "On time" else "Late", type text)
 			in
-				Source
+				WithReceiptLabel

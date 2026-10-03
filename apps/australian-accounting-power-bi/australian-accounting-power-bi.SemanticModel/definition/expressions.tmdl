@@ -1,14 +1,57 @@
 /// Absolute path to this checkout's samples folder. Set before refreshing in Desktop.
 expression SampleFolder = "" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
 
+expression ModelStartDate = #date(2024, 7, 1)
+
+expression ModelEndDate = #date(2027, 6, 30)
+
+expression Fx_MoneyDisplay = ```
+	// Groups original digits without converting or rounding an amount.
+	(raw as nullable text) as nullable text =>
+	let
+	    Negative = raw <> null and Text.StartsWith(raw, "-"),
+	    Unsigned = if Negative then Text.Range(raw, 1) else raw,
+	    Parts = if Unsigned = null then {} else Text.Split(Unsigned, "."),
+	    Valid = List.Count(Parts) = 2 and Text.Length(Parts{0}) > 0 and Text.Length(Parts{1}) = 2
+	        and Text.Select(Parts{0}, {"0".."9"}) = Parts{0} and Text.Select(Parts{1}, {"0".."9"}) = Parts{1},
+	    Digits = Parts{0},
+	    Count = Text.Length(Digits),
+	    Groups = List.Transform({0..Number.IntegerDivide(Count - 1, 3)}, (index) =>
+	        Text.Middle(Digits, List.Max({0, Count - (index + 1) * 3}), List.Min({3, Count - index * 3}))),
+	    Display = Text.Combine(List.Reverse(Groups), ",") & "." & Parts{1}
+	in
+	    if raw = null then null
+	    else if not Valid then error Error.Record("Review amount", "Invalid decimal display value", "Use the verified two-decimal source string.")
+	    else if Negative then "(" & Display & ")" else Display
+	```
+
+expression Fx_RequireRows = ```
+	let
+	    Validate = (rows as table, required as list, keys as list, source as text) as table =>
+	    let
+	        Missing = Table.SelectRows(rows, (row) => List.AnyTrue(List.Transform(required,
+	            (name) => Record.Field(row, name) = null or Text.Trim(Text.From(Record.Field(row, name))) = ""))),
+	        DuplicateKeys = Table.RowCount(rows) <> Table.RowCount(Table.Distinct(Table.SelectColumns(rows, keys)))
+	    in
+	        if not Table.IsEmpty(Table.SelectRowsWithErrors(rows)) then
+	            error Error.Record(source, "Invalid source values", "Correct the CSV types before refreshing.")
+	        else if not Table.IsEmpty(Missing) then
+	            error Error.Record(source, "Missing required value", "Required columns: " & Text.Combine(required, ", "))
+	        else if DuplicateKeys then
+	            error Error.Record(source, "Duplicate key", "Key columns: " & Text.Combine(keys, ", "))
+	        else rows
+	in
+	    Validate
+	```
+
 expression Source_Dim_Account = ```
 	// Dim_Account.pq
 	// Ingests and types the standard Australian Chart of Accounts dimension.
 
 	let
-	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-chart-of-accounts.csv"), [Delimiter=",", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-chart-of-accounts.csv"), [Delimiter=",", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.Csv, ExtraValues=ExtraValues.Error]),
 	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	    ParsedTable = Table.TransformColumnTypes(PromoteHeaders, {
 	        {"AccountCode", type text},
 	        {"AccountName", type text},
 	        {"Class", type text},
@@ -18,9 +61,18 @@ expression Source_Dim_Account = ```
 	        {"CashFlowCategory", type text},
 	        {"NormalBalance", type text},
 	        {"SortOrder", Int64.Type}
-	    })
+	    }),
+	    TypedTable = Fx_RequireRows(ParsedTable, {"AccountCode", "AccountName", "Class", "SubClass", "ReportSection", "NormalBalance", "SortOrder"}, {"AccountCode"}, "Source_Dim_Account")
 	in
-	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
+	        if Table.IsEmpty(Table.SelectRows(TypedTable, each
+	            not List.Contains({"Asset", "Liability", "Equity", "Revenue", "Expense"}, [Class])
+	            or not List.Contains({"Debit", "Credit"}, [NormalBalance])
+	            or ([Class] = "Expense" and not List.Contains({"Cost of Sales", "Operating Expenses"}, [SubClass]))
+	            or ([Class] = "Asset" and not List.Contains({"Current Assets", "Non-Current Assets"}, [SubClass]))
+	            or ([Class] = "Liability" and not List.Contains({"Current Liabilities", "Non-Current Liabilities"}, [SubClass]))
+	            or [ReportSection] <> (if List.Contains({"Revenue", "Expense"}, [Class]) then "Profit and Loss" else "Balance Sheet"))) then TypedTable
+	        else error Error.Record("Source_Dim_Account", "Unknown account classification", "Use the documented chart classifications.")
 	    else error Error.Record("Source_Dim_Account", "Invalid source values",
 	        "Correct the source CSV before refreshing the model.")
 	```
@@ -54,7 +106,8 @@ expression Dim_Date_AU = ```
 	        AddFinQuarter = Table.AddColumn(AddFinMonthNum, "FinancialQuarter", each "FQ" & Text.From(Number.IntegerDivide([FinancialMonthNumber] - 1, 3) + 1), type text),
 	        AddFinYearQuarter = Table.AddColumn(AddFinQuarter, "FinancialYearQuarter", each [FinancialYear] & " " & [FinancialQuarter], type text),
 	        AddFinYearMonth = Table.AddColumn(AddFinYearQuarter, "FinancialYearMonth", each [FinancialYear] & "-" & Text.PadStart(Text.From([FinancialMonthNumber]), 2, "0"), type text),
-	        AddFYStartDate = Table.AddColumn(AddFinYearMonth, "FYStartDate", each #date([FinancialYearNumber] - 1, 7, 1), type date),
+	        AddCalendarMonth = Table.AddColumn(AddFinYearMonth, "CalendarYearMonth", each Date.ToText([Date], "yyyy-MM"), type text),
+	        AddFYStartDate = Table.AddColumn(AddCalendarMonth, "FYStartDate", each #date([FinancialYearNumber] - 1, 7, 1), type date),
 	        AddFYEndDate = Table.AddColumn(AddFYStartDate, "FYEndDate", each #date([FinancialYearNumber], 6, 30), type date)
 	    in
 	        AddFYEndDate
@@ -67,9 +120,9 @@ expression Source_Dim_Entity = ```
 	// Ingests and types the multi-entity corporate structure master table.
 
 	let
-	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-entities.csv"), [Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-entities.csv"), [Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.Csv, ExtraValues=ExtraValues.Error]),
 	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	    ParsedTable = Table.TransformColumnTypes(PromoteHeaders, {
 	        {"EntityID", type text},
 	        {"LegalName", type text},
 	        {"TradingName", type text},
@@ -81,6 +134,7 @@ expression Source_Dim_Entity = ```
 	        {"Currency", type text},
 	        {"ConsolidationWeight", type number}
 	    }),
+	    TypedTable = Fx_RequireRows(ParsedTable, {"EntityID", "LegalName", "TradingName", "Currency", "ConsolidationWeight", "ANZSIC_Code"}, {"EntityID"}, "Source_Dim_Entity"),
 	    // ABN is an attribute, not a key: a blank one is left alone, a wrong one refused.
 	    InvalidABNs = Table.SelectRows(TypedTable, each
 	        [ABN] <> null and Text.Trim([ABN]) <> "" and not Fx_ValidateABN([ABN]))
@@ -88,21 +142,25 @@ expression Source_Dim_Entity = ```
 	    if not Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
 	        error Error.Record("Source_Dim_Entity", "Invalid source values",
 	            "Correct the source CSV before refreshing the model.")
+	    else if not Table.IsEmpty(Table.SelectRows(TypedTable, each not List.Contains(IndustryLookup[ANZSIC_Code], [ANZSIC_Code]))) then
+	        error Error.Record("Source_Dim_Entity", "Unknown industry", "Add the industry to the model lookup before loading this entity.")
 	    else if not Table.IsEmpty(InvalidABNs) then
 	        error Error.Record("Source_Dim_Entity", "Invalid ABN",
 	            "EntityID " & Text.From(InvalidABNs{0}[EntityID]) & " carries an ABN that fails "
 	            & "the ATO modulus-89 checksum. Correct the source CSV before refreshing.")
+	    else if not Table.IsEmpty(Table.SelectRows(TypedTable, each [Currency] <> "AUD" or [ConsolidationWeight] <> 1)) then
+	        error Error.Record("Source_Dim_Entity", "Unsupported group", "This model supports wholly owned AUD entities only.")
 	    else TypedTable
 	```
 
 expression Source_Fact_ATOBenchmark = ```
 	// Fact_ATOBenchmark.pq
-	// Ingests ATO Small Business Benchmarks across industry codes (ANZSIC) and turnover brackets.
+	// Reads fabricated industry comparisons across ANZSIC codes and turnover brackets.
 
 	let
-	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-ato-benchmarks.csv"), [Delimiter=",", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-ato-benchmarks.csv"), [Delimiter=",", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.Csv, ExtraValues=ExtraValues.Error]),
 	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	    ParsedTable = Table.TransformColumnTypes(PromoteHeaders, {
 	        {"ANZSIC_Code", type text},
 	        {"TurnoverRange", type text},
 	        {"GrossProfitPct_Low", type number},
@@ -113,6 +171,7 @@ expression Source_Fact_ATOBenchmark = ```
 	        {"MotorVehiclePct_Avg", type number},
 	        {"LabourPct_Avg", type number}
 	    }),
+	    TypedTable = Fx_RequireRows(ParsedTable, {"ANZSIC_Code", "TurnoverRange", "GrossProfitPct_Low", "GrossProfitPct_Avg", "GrossProfitPct_High", "TotalExpensesPct_Avg", "RentPct_Avg", "MotorVehiclePct_Avg", "LabourPct_Avg"}, {"ANZSIC_Code", "TurnoverRange"}, "Source_Fact_ATOBenchmark"),
 	    // Derive numeric bounds without changing the nine-column CSV contract.
 	    ParseAmount = (value as text) as number =>
 	        let
@@ -125,7 +184,14 @@ expression Source_Fact_ATOBenchmark = ```
 	    LowerBound = Table.AddColumn(TypedTable, "TurnoverLowerBound", each ParseAmount(Text.BeforeDelimiter([TurnoverRange], "-")), Int64.Type),
 	    UpperBound = Table.AddColumn(LowerBound, "TurnoverUpperBound", each ParseAmount(Text.AfterDelimiter([TurnoverRange], "-")), Int64.Type)
 	in
-	    if Table.IsEmpty(Table.SelectRowsWithErrors(UpperBound)) then UpperBound
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(UpperBound)) then
+	        if Table.IsEmpty(Table.SelectRows(UpperBound, each
+	            not List.Contains(IndustryLookup[ANZSIC_Code], [ANZSIC_Code])
+	            or [TurnoverLowerBound] < 0 or [TurnoverUpperBound] <= [TurnoverLowerBound]
+	            or [GrossProfitPct_Low] < 0 or [GrossProfitPct_High] > 100
+	            or [GrossProfitPct_Low] > [GrossProfitPct_Avg] or [GrossProfitPct_Avg] > [GrossProfitPct_High]
+	            or [TotalExpensesPct_Avg] < 0 or [RentPct_Avg] < 0 or [MotorVehiclePct_Avg] < 0 or [LabourPct_Avg] < 0)) then UpperBound
+	        else error Error.Record("Source_Fact_ATOBenchmark", "Invalid sample reference", "Check industry, turnover limits and percentage bounds.")
 	    else error Error.Record("Source_Fact_ATOBenchmark", "Invalid source values",
 	        "Correct the source CSV before refreshing the model.")
 	```
@@ -134,16 +200,23 @@ expression Source_Fact_Budget = ```
 	// Ingests and types monthly entity budgets.
 
 	let
-	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-budgets.csv"), [Delimiter=",", Columns=4, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-budgets.csv"), [Delimiter=",", Columns=4, Encoding=65001, QuoteStyle=QuoteStyle.Csv, ExtraValues=ExtraValues.Error]),
 	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	    ParsedTable = Table.TransformColumnTypes(PromoteHeaders, {
 	        {"PeriodDate", type date},
 	        {"EntityID", type text},
 	        {"AccountCode", type text},
 	        {"BudgetAmount", Currency.Type}
-	    })
+	    }),
+	    TypedTable = Fx_RequireRows(ParsedTable, {"PeriodDate", "EntityID", "AccountCode", "BudgetAmount"}, {"PeriodDate", "EntityID", "AccountCode"}, "Source_Fact_Budget")
 	in
-	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
+	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
+	        if Table.IsEmpty(Table.SelectRows(TypedTable, each
+	            not List.Contains(Source_Dim_Entity[EntityID], [EntityID])
+	            or not List.Contains(Source_Dim_Account[AccountCode], [AccountCode])
+	            or [PeriodDate] < ModelStartDate or [PeriodDate] > ModelEndDate
+	            or Date.Day([PeriodDate]) <> 1)) then TypedTable
+	        else error Error.Record("Source_Fact_Budget", "Invalid budget key or period", "Use known entity/account keys and a month start inside the model horizon.")
 	    else error Error.Record("Source_Fact_Budget", "Invalid source values",
 	        "Correct the source CSV before refreshing the model.")
 	```
@@ -153,9 +226,9 @@ expression Source_Fact_GeneralLedger = ```
 	// Ingests, validates, and types balanced General Ledger journal entries.
 
 	let
-	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-general-ledger.csv"), [Delimiter=",", Columns=11, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-general-ledger.csv"), [Delimiter=",", Columns=11, Encoding=65001, QuoteStyle=QuoteStyle.Csv, ExtraValues=ExtraValues.Error]),
 	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	    ParsedTable = Table.TransformColumnTypes(PromoteHeaders, {
 	        {"JournalID", type text},
 	        {"LineNumber", Int64.Type},
 	        {"PostingDate", type date},
@@ -168,32 +241,62 @@ expression Source_Fact_GeneralLedger = ```
 	        {"IntercompanyEntityID", type text},
 	        {"IsIntercompany", type logical}
 	    }),
+	    TypedTable = Fx_RequireRows(ParsedTable, {"JournalID", "LineNumber", "PostingDate", "EntityID", "AccountCode", "Debit", "Credit", "Amount", "IsIntercompany"}, {"JournalID", "LineNumber"}, "Source_Fact_GeneralLedger"),
+	    EntityKeys = List.Buffer(Source_Dim_Entity[EntityID]),
+	    AccountKeys = List.Buffer(Source_Dim_Account[AccountCode]),
 	    ByJournal = Table.Group(TypedTable, {"JournalID"}, {
 	        {"TotalDebit", each List.Sum([Debit]), Currency.Type},
 	        {"TotalCredit", each List.Sum([Credit]), Currency.Type}
 	    }),
-	    Unbalanced = Table.SelectRows(ByJournal, each [TotalDebit] <> [TotalCredit])
+	    Unbalanced = Table.SelectRows(ByJournal, each [TotalDebit] <> [TotalCredit]),
+	    InvalidLines = Table.SelectRows(TypedTable, each
+	        [Amount] <> Value.Subtract([Debit], [Credit], Precision.Decimal)
+	        or [Debit] < 0 or [Credit] < 0 or ([Debit] > 0 and [Credit] > 0) or [LineNumber] < 1
+	        or not List.Contains(EntityKeys, [EntityID])
+	        or not List.Contains(AccountKeys, [AccountCode])
+	        or [PostingDate] < ModelStartDate or [PostingDate] > ModelEndDate
+	        or (if [IsIntercompany] then
+	            not List.Contains(EntityKeys, [IntercompanyEntityID]) or [EntityID] = [IntercompanyEntityID]
+	            else [IntercompanyEntityID] <> null and Text.Trim([IntercompanyEntityID]) <> "")),
+	    // Daily bilateral reconciliation: balance sheet and profit/loss legs must each cancel.
+	    // ponytail: Daily totals can hide offsetting errors; transaction matching needs a shared source identifier.
+	    Intercompany = Table.SelectRows(TypedTable, each [IsIntercompany]),
+	    Pair = Table.AddColumn(Intercompany, "Pair", each Text.Combine(List.Sort({[EntityID], [IntercompanyEntityID]}), "/"), type text),
+	    Accounts = Table.NestedJoin(Pair, {"AccountCode"}, Source_Dim_Account, {"AccountCode"}, "Account", JoinKind.LeftOuter),
+	    Class = Table.ExpandTableColumn(Accounts, "Account", {"Class"}),
+	    Leg = Table.AddColumn(Class, "Leg", each if List.Contains({"Revenue", "Expense"}, [Class]) then "Profit and loss" else "Balance sheet", type text),
+	    Pairs = Table.Group(Leg, {"PostingDate", "Pair", "Leg"}, {
+	        {"Difference", each List.Sum([Amount]), Currency.Type},
+	        {"Entities", each List.Count(List.Distinct([EntityID])), Int64.Type}
+	    }),
+	    Unmatched = Table.SelectRows(Pairs, each [Difference] <> 0 or [Entities] <> 2)
 	in
 	    if not Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
 	        error Error.Record("Source_Fact_GeneralLedger", "Invalid source values",
 	            "Correct the source CSV before refreshing the model.")
+	    else if not Table.IsEmpty(InvalidLines) then
+	        error Error.Record("Source_Fact_GeneralLedger", "Invalid ledger line",
+	            "JournalID " & InvalidLines{0}[JournalID] & ": check Amount = Debit - Credit, keys, date, debit/credit signs and counterparty.")
 	    else if not Table.IsEmpty(Unbalanced) then
 	        error Error.Record("Source_Fact_GeneralLedger", "Unbalanced journal",
 	            "JournalID " & Text.From(Unbalanced{0}[JournalID]) & " has debits of "
 	            & Text.From(Unbalanced{0}[TotalDebit]) & " against credits of "
 	            & Text.From(Unbalanced{0}[TotalCredit]) & ". Grouped by JournalID only, so a "
 	            & "cross-entity journal that balances overall is not refused.")
+	    else if not Table.IsEmpty(Unmatched) then
+	        error Error.Record("Source_Fact_GeneralLedger", "Unmatched intercompany pair",
+	            Unmatched{0}[Pair] & " on " & Date.ToText(Unmatched{0}[PostingDate], "yyyy-MM-dd") & ": " & Unmatched{0}[Leg])
 	    else TypedTable
 	```
 
 expression Source_Fact_PayrollSuper = ```
 	// Fact_PayrollSuper.pq
-	// Ingests Single Touch Payroll (STP Phase 2) events and evaluates Payday Super compliance.
+	// Reads fabricated payroll receipts and supplied estimates; it does not establish legal compliance.
 
 	let
-	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-payroll-super.csv"), [Delimiter=",", Columns=16, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+	    Source = Csv.Document(File.Contents(SampleFolder & "/sample-payroll-super.csv"), [Delimiter=",", Columns=16, Encoding=65001, QuoteStyle=QuoteStyle.Csv, ExtraValues=ExtraValues.Error]),
 	    PromoteHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-	    TypedTable = Table.TransformColumnTypes(PromoteHeaders, {
+	    ParsedTable = Table.TransformColumnTypes(PromoteHeaders, {
 	        {"EventID", type text},
 	        {"EmployeeID", type text},
 	        {"EntityID", type text},
@@ -210,11 +313,32 @@ expression Source_Fact_PayrollSuper = ```
 	        {"ComplianceStatus", type text},
 	        {"SGC_Shortfall", Currency.Type},
 	        {"GIC_NominalInterest", Currency.Type}
-	    })
+	    }),
+	    TypedTable = Fx_RequireRows(ParsedTable, {"EventID", "EmployeeID", "EntityID", "EmployeeName", "PayDate", "GrossEarnings", "QualifyingEarnings_CodeQ", "SuperLiability_CodeL", "SuperFundUSI", "SuperFundName", "StatutoryDueDate"}, {"EventID"}, "Source_Fact_PayrollSuper"),
+	    InvalidEvents = Table.SelectRows(TypedTable, each
+	        not List.Contains(Source_Dim_Entity[EntityID], [EntityID])
+	        or [PayDate] < ModelStartDate or [PayDate] > ModelEndDate
+	        or [GrossEarnings] < 0 or [QualifyingEarnings_CodeQ] < 0 or [SuperLiability_CodeL] < 0
+	        or [StatutoryDueDate] < [PayDate]),
+	    Unsupported = Table.SelectRows(TypedTable, each
+	        [FundReceiptDate] = null or [RemittanceDate] = null or [SGC_Shortfall] = null or [GIC_NominalInterest] = null
+	        or [FundReceiptDate] < [RemittanceDate] or [RemittanceDate] < [PayDate]
+	        or [SGC_Shortfall] < 0 or [GIC_NominalInterest] < 0
+	        or [ComplianceStatus] <> (if [FundReceiptDate] > [StatutoryDueDate] then "LATE_BREACH" else "ON_TIME")),
+	    Regime = Table.AddColumn(TypedTable, "PaymentRegime", each if [PayDate] < #date(2026, 7, 1) then "Quarterly sample" else "Payday sample", type text),
+	    EstimateBasis = Table.AddColumn(Regime, "EstimateBasis", each
+	        if [PayDate] < #date(2026, 7, 1) then "Quarterly sample: no SGC assessment"
+	        else if [PayDate] <= #date(2026, 12, 31) and [StatutoryDueDate] >= #date(2026, 12, 24) then "Calendar review: part-day holidays"
+	        else if [FundReceiptDate] > #date(2026, 12, 31) then "Projected GIC: full receipt assumed"
+	        else "Published GIC: full receipt assumed", type text)
 	in
-	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then TypedTable
-	    else error Error.Record("Source_Fact_PayrollSuper", "Invalid source values",
-	        "Correct the source CSV before refreshing the model.")
+	    if not Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
+	        error Error.Record("Source_Fact_PayrollSuper", "Invalid source values", "Correct the source CSV before refreshing.")
+	    else if not Table.IsEmpty(InvalidEvents) then
+	        error Error.Record("Source_Fact_PayrollSuper", "Invalid payroll event", "Check entity, pay date, due date and non-negative amounts.")
+	    else if not Table.IsEmpty(Unsupported) then
+	        error Error.Record("Source_Fact_PayrollSuper", "Unsupported payroll scenario", "This sample requires a recorded full receipt, consistent status and supplied estimates. Missing, partial or split payments need a separate assessment.")
+	    else EstimateBasis
 	```
 
 expression Fx_ValidateABN = ```
@@ -248,4 +372,22 @@ expression Fx_ValidateABN = ```
 	        IsValid
 	in
 	    ValidateABN
+	```
+
+expression IndustryLookup = ```
+	let
+		// One row per industry classification used by the group. The codes are the
+		// join keys for samples/sample-entities.csv and samples/sample-ato-benchmarks.csv,
+		// so this literal must stay in step with both fixtures.
+		Source = Table.FromRows(
+			{
+				{"4122", "G - Retail Trade", "41 - Food Retailing", "Fresh Meat, Fish and Poultry Retailing"},
+				{"4610", "I - Transport, Postal and Warehousing", "46 - Road Transport", "Road Freight Transport"},
+				{"6712", "L - Rental, Hiring and Real Estate Services", "67 - Property Operators and Real Estate Services", "Non-Residential Property Operators"},
+				{"6962", "M - Professional, Scientific and Technical Services", "69 - Professional, Scientific and Technical Services", "Management Advice & Consulting"}
+			},
+			type table [ANZSIC_Code = text, Division = text, Subdivision = text, IndustryTitle = text]
+		)
+	in
+		Source
 	```

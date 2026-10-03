@@ -3,11 +3,11 @@
   "name": "d2bc413b94de8771ea78",
   "position": {
     "x": 20,
-    "y": 220,
-    "z": 6000,
-    "height": 480,
-    "width": 760,
-    "tabOrder": 6000
+    "y": 300,
+    "width": 720,
+    "height": 208,
+    "z": 2200,
+    "tabOrder": 3
   },
   "visual": {
     "visualType": "pivotTable",
@@ -23,25 +23,12 @@
                       "Entity": "Dim_Account"
                     }
                   },
-                  "Property": "ReportSection"
-                }
-              },
-              "queryRef": "Dim_Account.ReportSection",
-              "nativeQueryRef": "ReportSection"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Dim_Account"
-                    }
-                  },
                   "Property": "SubClass"
                 }
               },
               "queryRef": "Dim_Account.SubClass",
-              "nativeQueryRef": "SubClass"
+              "nativeQueryRef": "SubClass",
+              "displayName": "Account group"
             },
             {
               "field": {
@@ -55,25 +42,8 @@
                 }
               },
               "queryRef": "Dim_Account.AccountName",
-              "nativeQueryRef": "AccountName"
-            }
-          ]
-        },
-        "Columns": {
-          "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "CalcGroup_TimeIntelligence"
-                    }
-                  },
-                  "Property": "Time Calculation"
-                }
-              },
-              "queryRef": "CalcGroup_TimeIntelligence.Time Calculation",
-              "nativeQueryRef": "Time Calculation"
+              "nativeQueryRef": "AccountName",
+              "displayName": "Account"
             }
           ]
         },
@@ -87,53 +57,45 @@
                       "Entity": "Fact_GeneralLedger"
                     }
                   },
-                  "Property": "Revenue"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.Revenue",
-              "nativeQueryRef": "Revenue"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
-                  "Property": "COGS"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.COGS",
-              "nativeQueryRef": "COGS"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
-                  "Property": "Operating Expenses"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.Operating Expenses",
-              "nativeQueryRef": "Operating Expenses"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
                   "Property": "Net Profit Before Tax"
                 }
               },
               "queryRef": "Fact_GeneralLedger.Net Profit Before Tax",
-              "nativeQueryRef": "Net Profit Before Tax"
+              "nativeQueryRef": "Actual",
+              "displayName": "Actual",
+              "format": "$#,##0;($#,##0);$0"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_GeneralLedger"
+                    }
+                  },
+                  "Property": "Prior Year Profit"
+                }
+              },
+              "queryRef": "Fact_GeneralLedger.Prior Year Profit",
+              "nativeQueryRef": "Prior year",
+              "displayName": "Prior year",
+              "format": "$#,##0;($#,##0);$0"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_GeneralLedger"
+                    }
+                  },
+                  "Property": "Profit Change $"
+                }
+              },
+              "queryRef": "Fact_GeneralLedger.Profit Change $",
+              "nativeQueryRef": "Change $",
+              "displayName": "Change $",
+              "format": "$#,##0;($#,##0);$0"
             }
           ]
         }
@@ -143,6 +105,13 @@
       "title": [
         {
           "properties": {
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Profit and loss | actual, prior year and change'"
+                }
+              }
+            },
             "show": {
               "expr": {
                 "Literal": {
@@ -150,10 +119,28 @@
                 }
               }
             },
-            "text": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "'Group Statement of Financial Performance (P&L), gross of intercompany'"
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
                 }
               }
             }
@@ -172,8 +159,214 @@
             }
           }
         }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Profit and loss by account group. Columns show actual, corresponding prior year and the change. Expand a group for accounts. A positive change increases profit.'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E7EDEB'"
+                    }
+                  }
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "backColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#FFFFFF'"
+                }
+              }
+            },
+            "backColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#F3F5F6'"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "rowPadding": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "textSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "gridVertical": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            },
+            "outlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "rowHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "showExpandCollapseButtons": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

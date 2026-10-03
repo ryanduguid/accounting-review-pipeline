@@ -1,0 +1,132 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.4.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 872,
+    "z": 0,
+    "width": 324,
+    "height": 480,
+    "tabOrder": 1
+  },
+  "objects": {
+    "columnHeaders": [
+      {
+        "properties": {
+          "defaultColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "100D"
+              }
+            }
+          },
+          "autoSizeColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "false"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "grid": [
+      {
+        "properties": {
+          "rowPadding": {
+            "expr": {
+              "Literal": {
+                "Value": "14D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "columnWidth": [
+      {
+        "selector": {
+          "metadata": "Dim_Entity.TradingName"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Fact_GeneralLedger.Gross Profit Margin %"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Fact_ATOBenchmark.Benchmark Gross Profit Lower %"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Fact_ATOBenchmark.Benchmark Gross Profit Upper %"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Fact_ATOBenchmark.Actual Total Expense Ratio %"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -20,36 +20,22 @@ from generate_fixtures import (  # noqa: E402
     GIC_PROJECTED_RATE,
     GIC_PUBLISHED_RATES,
     NATIONAL_HOLIDAYS,
+    add_business_days,
     gic_annual_rate,
     gic_days_in_year,
     gic_quarter,
     gic_rate_is_published,
+    is_national_business_day,
     notional_earnings,
 )
 
-# Every whole-of-state or whole-of-territory public holiday between 1 July and 31 December
-# 2026 that the documented sample calendar covers, listed here from its own source rather
-# than imported from the generator: a date the generator drops must fail this suite.
-#
-# Picnic Day, Monday 3 August 2026, appears on https://nt.gov.au/nt-public-holidays without
-# the footnote that marks the regional show days, so it applies across the whole Territory.
-# Victoria's Friday before the AFL Grand Final, Friday 25 September 2026, is on
-# https://business.vic.gov.au/business-information/public-holidays/victorian-public-holidays-2026
-# without the footnote that lets a non-metropolitan council substitute Melbourne Cup Day.
-# Queensland's King's Birthday, Monday 5 October 2026, is on
-# https://www.qld.gov.au/recreation/travel/holidays/public, which states the first-Monday-in-
-# October rule; the same Monday is Labour Day in NSW
-# (https://www.nsw.gov.au/about-nsw/public-holidays), South Australia
-# (https://www.safework.sa.gov.au/resources/public-holidays) and the ACT
-# (https://www.act.gov.au/__data/assets/pdf_file/0004/2155495/ACT-Public-Holidays-2026.pdf).
-# All of them stop the clock under the methodology's whole-of-any-state-or-territory rule.
-#
-# Deliberately absent, and disclosed in docs/compliance-methodology.md: the part-day evening
-# holidays South Australia and Queensland observe on 24 and 31 December. That omission can
-# only make a sample due date earlier, never later.
+# Independently transcribed from Fair Work's 2026 calendar, checked 25 September 2026.
+# The full-date treatment of December part-day holidays is a sample assumption.
 INDEPENDENT_2026_HOLIDAYS = {
     datetime.date(2026, 8, 3): "Picnic Day (NT)",
-    datetime.date(2026, 9, 25): "Friday before the AFL Grand Final (Vic)",
+    datetime.date(2026, 9, 25): "Friday before the AFL Grand Final",
+    datetime.date(2026, 12, 24): "Part-day holiday: sample assumption",
+    datetime.date(2026, 12, 31): "Part-day holiday: sample assumption",
     datetime.date(2026, 10, 5): "King's Birthday (Qld); Labour Day (NSW, SA, ACT)",
     datetime.date(2026, 12, 25): "Christmas Day",
     datetime.date(2026, 12, 28): "Boxing Day (Monday observance)",
@@ -171,17 +157,35 @@ class TestPaydaySuperRules(unittest.TestCase):
                 f"Event {row['EventID']} due date disagrees with the independent calendar",
             )
 
-        # The 4 paydays whose 7-business-day windows cross one of these holidays, and a
-        # control whose window crosses none. The 16 September payday falls due on Monday
-        # 28 September, which is a business day because only WA observes it.
+        # The 3 paydays whose 7-business-day windows cross one of these holidays, and 2
+        # controls whose windows cross none.
         self.assertEqual(due_date(datetime.date(2026, 7, 29)), datetime.date(2026, 8, 10))
-        self.assertEqual(due_date(datetime.date(2026, 9, 16)), datetime.date(2026, 9, 28))
         self.assertEqual(due_date(datetime.date(2026, 9, 23)), datetime.date(2026, 10, 6))
         self.assertEqual(due_date(datetime.date(2026, 9, 30)), datetime.date(2026, 10, 12))
         self.assertEqual(due_date(datetime.date(2026, 8, 26)), datetime.date(2026, 9, 4))
+        self.assertEqual(due_date(datetime.date(2026, 9, 16)), datetime.date(2026, 9, 28))
         self.assertIn(datetime.date(2026, 7, 29), checked)
-        self.assertIn(datetime.date(2026, 9, 16), checked)
         self.assertIn(datetime.date(2026, 8, 26), checked)
+
+    def test_new_holiday_boundaries_and_calendar_ceiling(self) -> None:
+        cases = [
+            ("2026-10-28", "2026-11-06"),
+            ("2026-12-16", "2026-12-30"),
+            ("2027-02-24", "2027-03-09"),
+            ("2027-05-26", "2027-06-08"),
+            ("2027-06-02", "2027-06-15"),
+        ]
+        for payday, expected in cases:
+            with self.subTest(payday=payday):
+                self.assertEqual(add_business_days(datetime.date.fromisoformat(payday), 7).isoformat(), expected)
+        with self.assertRaisesRegex(ValueError, "outside the verified sample calendar"):
+            is_national_business_day(datetime.date(2027, 9, 1))
+
+    def test_published_october_gic_rate_and_future_projection(self) -> None:
+        self.assertEqual(gic_annual_rate(datetime.date(2026, 10, 1)), Decimal("0.1151"))
+        self.assertTrue(gic_rate_is_published(datetime.date(2026, 12, 31)))
+        self.assertEqual(gic_annual_rate(datetime.date(2027, 1, 1)), Decimal("0.1151"))
+        self.assertFalse(gic_rate_is_published(datetime.date(2027, 1, 1)))
 
     def test_gic_divisor_is_days_in_the_calendar_year(self) -> None:
         """TAA 1953 s 8AAD divides the annual rate by the days in the calendar year, leap years included."""

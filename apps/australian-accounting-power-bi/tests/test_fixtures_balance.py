@@ -89,23 +89,38 @@ class TestFixturesBalance(unittest.TestCase):
                 self.assertIn(row["NormalBalance"], ["Debit", "Credit"])
 
     def test_intercompany_transactions_match_across_group(self) -> None:
-        """Intercompany transactions must balance to zero when aggregated across the group."""
-        gl_path = SAMPLES_DIR / "sample-general-ledger.csv"
-        ic_amounts: list[Decimal] = []
+        """Each bilateral pair balances separately for balance sheet and P&L legs."""
+        with (SAMPLES_DIR / "sample-chart-of-accounts.csv").open(encoding="utf-8") as handle:
+            classes = {row["AccountCode"]: row["Class"] for row in csv.DictReader(handle)}
+        with (SAMPLES_DIR / "sample-general-ledger.csv").open(encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if row["IsIntercompany"] == "TRUE"]
+        self.assertTrue(rows)
+        groups: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+        for row in rows:
+            pair = "/".join(sorted((row["EntityID"], row["IntercompanyEntityID"])))
+            leg = "PL" if classes[row["AccountCode"]] in {"Revenue", "Expense"} else "BS"
+            groups.setdefault((row["PostingDate"], pair, leg), []).append(row)
+        for key, lines in groups.items():
+            self.assertEqual(len({line["EntityID"] for line in lines}), 2, f"Unmatched pair {key}")
+            self.assertEqual(sum((Decimal(line["Amount"]) for line in lines), Decimal(0)), 0, f"Unmatched pair {key}")
 
-        with open(gl_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row["IsIntercompany"] == "TRUE":
-                    ic_amounts.append(Decimal(row["Amount"]))
-
-        self.assertGreater(len(ic_amounts), 0, "GL fixture must contain intercompany entries")
-        total_ic_net = sum(ic_amounts, Decimal(0))
-        self.assertEqual(
-            total_ic_net,
-            Decimal(0),
-            f"Intercompany aggregate net movement does not eliminate to zero: {total_ic_net}",
-        )
+    def test_pair_oracle_rejects_a_missing_balanced_counterparty(self) -> None:
+        with (SAMPLES_DIR / "sample-general-ledger.csv").open(encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            fields = reader.fieldnames
+            rows = list(reader)
+        target = next(row["JournalID"] for row in rows if row["EntityID"] == "ENT002" and row["IsIntercompany"] == "TRUE")
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "sample-chart-of-accounts.csv").write_bytes((SAMPLES_DIR / "sample-chart-of-accounts.csv").read_bytes())
+            with (root / "sample-general-ledger.csv").open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields or [])
+                writer.writeheader()
+                writer.writerows(row for row in rows if row["JournalID"] != target)
+            with mock.patch.dict(globals(), SAMPLES_DIR=root):
+                self.test_general_ledger_journals_strictly_balanced()
+                with self.assertRaisesRegex(AssertionError, "Unmatched pair"):
+                    self.test_intercompany_transactions_match_across_group()
 
 
 class TestFixtureRegeneration(unittest.TestCase):

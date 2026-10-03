@@ -4,25 +4,29 @@ table Fact_GeneralLedger
 	/// Total debit entries posted to the general ledger.
 	measure 'Total Debits' = SUM(Fact_GeneralLedger[Debit])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0001
 
 	/// Total credit entries posted to the general ledger.
 	measure 'Total Credits' = SUM(Fact_GeneralLedger[Credit])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0002
 
 	/// Net transactional debit minus credit movement.
 	measure 'GL Net Movement' = SUM(Fact_GeneralLedger[Amount])
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0003
 
-	/// Operating revenue recognized in the period.
+	/// Operating revenue recognised in the period.
 	measure Revenue =
 			CALCULATE(
 				SUM(Fact_GeneralLedger[Credit]) - SUM(Fact_GeneralLedger[Debit]),
 				KEEPFILTERS(Dim_Account[Class] = "Revenue")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0004
 
 	/// Direct cost of goods and services sold.
@@ -32,16 +36,19 @@ table Fact_GeneralLedger
 				KEEPFILTERS(Dim_Account[SubClass] = "Cost of Sales")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0005
 
 	/// Gross trading profit (Revenue less COGS).
 	measure 'Gross Profit' = [Revenue] - [COGS]
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0006
 
 	/// Gross profit as a percentage of total revenue.
-	measure 'Gross Profit Margin %' = DIVIDE([Gross Profit], [Revenue], 0)
+	measure 'Gross Profit Margin %' = DIVIDE([Gross Profit], [Revenue])
 		formatString: 0.0%
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0007
 
 	/// Total operating expenses including payroll, occupancy, and administration.
@@ -51,6 +58,7 @@ table Fact_GeneralLedger
 				KEEPFILTERS(Dim_Account[SubClass] = "Operating Expenses")
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0008
 
 	/// Earnings before interest, tax, depreciation, and amortisation. Depreciation (890) and
@@ -62,16 +70,19 @@ table Fact_GeneralLedger
 				KEEPFILTERS(Dim_Account[AccountCode] IN {"890", "895"})
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0009
 
 	/// Net operating income before statutory corporate income tax.
 	measure 'Net Profit Before Tax' = [Revenue] - [COGS] - [Operating Expenses]
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0010
 
 	/// Net profit before tax as a percentage of revenue.
-	measure 'Net Margin %' = DIVIDE([Net Profit Before Tax], [Revenue], 0)
+	measure 'Net Margin %' = DIVIDE([Net Profit Before Tax], [Revenue])
 		formatString: 0.0%
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0011
 
 	/// Total cumulative balance sheet assets, accumulated to the last date in context.
@@ -82,6 +93,7 @@ table Fact_GeneralLedger
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0012
 
 	/// Total cumulative balance sheet liabilities, accumulated to the last date in context.
@@ -92,11 +104,13 @@ table Fact_GeneralLedger
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0013
 
 	/// Net balance sheet asset position (Assets less Liabilities).
 	measure 'Net Assets' = [Total Assets] - [Total Liabilities]
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0014
 
 	/// Contributed capital and prior-year retained earnings, accumulated to the last date in context.
@@ -107,6 +121,7 @@ table Fact_GeneralLedger
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0015
 
 	/// Diagnostic check asserting Assets = Liabilities + Equity + earnings to date (should equal $0.00).
@@ -122,6 +137,7 @@ table Fact_GeneralLedger
 				)
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0016
 
 	/// Current Assets less Current Liabilities, both accumulated to the last date in context.
@@ -137,7 +153,68 @@ table Fact_GeneralLedger
 				DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))
 			)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Financial statements
 		lineageTag: gl-meas-0017
+
+	/// Natural balance by account; use class subtotals, not a grand total across assets, liabilities and equity.
+	measure 'Balance Sheet Amount' =
+			IF(ISINSCOPE(Dim_Account[Class]), [Total Assets] + [Total Liabilities] + [Total Equity])
+		formatString: $#,##0;($#,##0);$0
+		displayFolder: Financial statements
+		lineageTag: df4357f0-c85b-45df-bfef-518bae41e32e
+
+	/// Profit and loss for the corresponding dates in the prior year, retaining account and entity selections.
+	measure 'Prior Year Profit' =
+			CALCULATE([Net Profit Before Tax], SAMEPERIODLASTYEAR(Dim_Date[Date]))
+		formatString: $#,##0;($#,##0);$0
+		displayFolder: Financial statements
+		lineageTag: 8b44be56-a3bd-4cd7-9bdc-66e863503cfb
+
+	/// Current less prior-year profit; blank when no prior-year comparison exists.
+	measure 'Profit Change $' =
+			VAR Prior = [Prior Year Profit]
+			RETURN IF(NOT ISBLANK(Prior), [Net Profit Before Tax] - Prior)
+		formatString: $#,##0;($#,##0);$0
+		displayFolder: Financial statements
+		lineageTag: 0462a88a-4676-4693-914a-47d5eec96898
+
+	/// Explains the selected basis and the complete-group requirement.
+	measure 'Consolidation Scope' =
+			VAR CompleteGroup = COUNTROWS(VALUES(Dim_Entity[EntityID])) = CALCULATE(COUNTROWS(Dim_Entity), REMOVEFILTERS(Dim_Entity))
+			VAR Basis = SELECTEDVALUE(CalcGroup_Consolidation[Consolidation View], "Compare reporting bases")
+			RETURN IF(Basis = "Gross Group Total", "Gross amounts for selected entities. Budget covers revenue only; no full profit budget is supplied.",
+			    IF(CompleteGroup, Basis & " | complete AUD group | budgets are available only on the gross basis",
+			        "Select all entities for eliminations or consolidated amounts"))
+		displayFolder: Financial statements
+		lineageTag: a3d212ad-aaa1-4c82-9ace-c42436dc9891
+
+	/// Selected entities and calendar dates, with an explicit fabricated-data label. Discontinuous selections are labelled as selected dates.
+	measure 'Report Selection' =
+			VAR EntityCount = COUNTROWS(VALUES(Dim_Entity[EntityID]))
+			VAR AllEntities = CALCULATE(COUNTROWS(Dim_Entity), REMOVEFILTERS(Dim_Entity))
+			VAR EntityLabel = IF(EntityCount = AllEntities, "All entities", IF(EntityCount = 1, SELECTEDVALUE(Dim_Entity[TradingName]), FORMAT(EntityCount, "0") & " entities"))
+			VAR SelectedStart = MIN(Dim_Date[Date])
+			VAR SelectedEnd = MAX(Dim_Date[Date])
+			VAR Contiguous = COUNTROWS(VALUES(Dim_Date[Date])) = DATEDIFF(SelectedStart, SelectedEnd, DAY) + 1
+			VAR DateLabel = IF(ISBLANK(SelectedStart), "No matching dates; clear the date filters", IF(Contiguous, "", "Selected dates within ") & FORMAT(SelectedStart, "d MMM yyyy") & " to " & FORMAT(SelectedEnd, "d MMM yyyy"))
+			RETURN EntityLabel & " | " & DateLabel & " | AUD | Fabricated data"
+		displayFolder: Report context
+		lineageTag: c83e611f-09ef-5fae-9bf7-605f32598df7
+
+
+	/// Names the revenue comparison and explains how to restore an unavailable budget.
+	measure 'Revenue Budget Title' =
+			VAR Basis = SELECTEDVALUE(CalcGroup_Consolidation[Consolidation View], "Gross Group Total")
+			RETURN IF(Basis = "Gross Group Total", "Revenue against budget | gross basis", "Budget unavailable | select gross basis")
+		displayFolder: Report context
+		lineageTag: 6b2484f0-4d30-48a9-8c46-20cd4641807e
+
+	/// Names the monthly revenue chart and states when the budget series is unavailable.
+	measure 'Monthly Revenue Title' =
+			VAR Basis = SELECTEDVALUE(CalcGroup_Consolidation[Consolidation View], "Gross Group Total")
+			RETURN IF(Basis = "Gross Group Total", "Monthly revenue against budget | AUD", "Monthly revenue | AUD | budget unavailable")
+		displayFolder: Report context
+		lineageTag: 98c0b040-8582-44d0-94c7-ba94187b49e6
 
 	column JournalID
 		dataType: string
@@ -160,12 +237,14 @@ table Fact_GeneralLedger
 		sourceColumn: PostingDate
 
 	column EntityID
+		isHidden
 		dataType: string
 		lineageTag: gl-col-0004
 		summarizeBy: none
 		sourceColumn: EntityID
 
 	column AccountCode
+		isHidden
 		dataType: string
 		lineageTag: gl-col-0005
 		summarizeBy: none
@@ -173,21 +252,21 @@ table Fact_GeneralLedger
 
 	column Debit
 		dataType: decimal
-		formatString: $#,##0.00
+		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-col-0006
 		summarizeBy: sum
 		sourceColumn: Debit
 
 	column Credit
 		dataType: decimal
-		formatString: $#,##0.00
+		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-col-0007
 		summarizeBy: sum
 		sourceColumn: Credit
 
 	column Amount
 		dataType: decimal
-		formatString: $#,##0.00
+		formatString: $#,##0.00;($#,##0.00);$0.00
 		lineageTag: gl-col-0008
 		summarizeBy: sum
 		sourceColumn: Amount

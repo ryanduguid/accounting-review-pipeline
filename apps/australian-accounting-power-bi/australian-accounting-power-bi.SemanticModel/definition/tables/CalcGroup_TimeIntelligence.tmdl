@@ -39,14 +39,17 @@ table CalcGroup_TimeIntelligence
 			ordinal: 4
 
 		calculationItem 'Year-on-Year Variance ($)' =
-				SELECTEDMEASURE() - CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
+				IF(ISSELECTEDMEASURE([Total Debits], [Total Credits], [GL Net Movement], [Revenue], [COGS], [Gross Profit], [Operating Expenses], [EBITDA], [Net Profit Before Tax], [Total Assets], [Total Liabilities], [Net Assets], [Total Equity], [Balance Sheet Check], [Working Capital], [Balance Sheet Amount], [Prior Year Profit], [Profit Change $], [Budget Amount], [Budget Revenue], [Budget Expenses], [Budget Variance $]),
+				VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
+				RETURN IF(NOT ISBLANK(PriorVal), SELECTEDMEASURE() - PriorVal))
 			ordinal: 5
 
 		calculationItem 'Year-on-Year Variance (%)' =
+				IF(ISSELECTEDMEASURE([Total Debits], [Total Credits], [GL Net Movement], [Revenue], [COGS], [Gross Profit], [Operating Expenses], [EBITDA], [Net Profit Before Tax], [Total Assets], [Total Liabilities], [Net Assets], [Total Equity], [Balance Sheet Check], [Working Capital], [Balance Sheet Amount], [Prior Year Profit], [Profit Change $], [Budget Amount], [Budget Revenue], [Budget Expenses], [Budget Variance $]),
 				VAR CurrentVal = SELECTEDMEASURE()
 				VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
 				RETURN
-					DIVIDE(CurrentVal - PriorVal, PriorVal)
+				DIVIDE(CurrentVal - PriorVal, PriorVal))
 			ordinal: 6
 			formatStringDefinition = "0.0%"
 

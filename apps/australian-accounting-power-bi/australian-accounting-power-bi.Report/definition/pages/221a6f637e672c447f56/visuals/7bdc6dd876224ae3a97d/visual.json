@@ -3,11 +3,11 @@
   "name": "7bdc6dd876224ae3a97d",
   "position": {
     "x": 20,
-    "y": 80,
-    "z": 2000,
-    "height": 620,
-    "width": 760,
-    "tabOrder": 2000
+    "y": 212,
+    "width": 1240,
+    "height": 232,
+    "z": 2100,
+    "tabOrder": 1
   },
   "visual": {
     "visualType": "pivotTable",
@@ -27,7 +27,8 @@
                 }
               },
               "queryRef": "Dim_Account.Class",
-              "nativeQueryRef": "Class"
+              "nativeQueryRef": "Class",
+              "displayName": "Class"
             },
             {
               "field": {
@@ -41,26 +42,13 @@
                 }
               },
               "queryRef": "Dim_Account.AccountName",
-              "nativeQueryRef": "AccountName"
+              "nativeQueryRef": "AccountName",
+              "displayName": "Account"
             }
           ]
         },
         "Columns": {
           "projections": [
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Dim_Entity"
-                    }
-                  },
-                  "Property": "LegalName"
-                }
-              },
-              "queryRef": "Dim_Entity.LegalName",
-              "nativeQueryRef": "LegalName"
-            },
             {
               "field": {
                 "Column": {
@@ -73,7 +61,8 @@
                 }
               },
               "queryRef": "CalcGroup_Consolidation.Consolidation View",
-              "nativeQueryRef": "Consolidation View"
+              "nativeQueryRef": "Consolidation View",
+              "displayName": "Consolidation View"
             }
           ]
         },
@@ -87,67 +76,13 @@
                       "Entity": "Fact_GeneralLedger"
                     }
                   },
-                  "Property": "Revenue"
+                  "Property": "Balance Sheet Amount"
                 }
               },
-              "queryRef": "Fact_GeneralLedger.Revenue",
-              "nativeQueryRef": "Revenue"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
-                  "Property": "COGS"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.COGS",
-              "nativeQueryRef": "COGS"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
-                  "Property": "Operating Expenses"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.Operating Expenses",
-              "nativeQueryRef": "Operating Expenses"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
-                  "Property": "Net Profit Before Tax"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.Net Profit Before Tax",
-              "nativeQueryRef": "Net Profit Before Tax"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_GeneralLedger"
-                    }
-                  },
-                  "Property": "Net Assets"
-                }
-              },
-              "queryRef": "Fact_GeneralLedger.Net Assets",
-              "nativeQueryRef": "Net Assets"
+              "queryRef": "Fact_GeneralLedger.Balance Sheet Amount",
+              "nativeQueryRef": "Balance",
+              "displayName": "Balance",
+              "format": "$#,##0;($#,##0);$0"
             }
           ]
         }
@@ -167,7 +102,32 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Entity Rollup with Automated Intercompany Eliminations'"
+                  "Value": "'Recorded balance sheet accounts | equity excludes unclosed earnings'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
                 }
               }
             }
@@ -186,8 +146,234 @@
             }
           }
         }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Account balances show gross, intercompany and net columns. Clear the reporting-basis selector to compare all three. Net and elimination columns require all entities. Class subtotals have natural signs; there is no meaningful total across classes.'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "subTotals": [
+        {
+          "properties": {
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "columnSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E7EDEB'"
+                    }
+                  }
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "backColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#FFFFFF'"
+                }
+              }
+            },
+            "backColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#F3F5F6'"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "rowPadding": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "textSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "gridVertical": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            },
+            "outlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "rowHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "showExpandCollapseButtons": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

@@ -8,7 +8,7 @@ This model uses Calculation Groups for time intelligence and multi-entity consol
 
 Precedence: `10`
 
-Instead of creating separate MTD, QTD, FYTD, and PY measures for every financial line item, a single calculation group dynamically modifies any base measure.
+Instead of creating separate MTD, QTD, FYTD, and PY measures for every financial line item, the calculation group modifies the selected measure. Dollar and percentage change items apply only to the listed monetary measures; ratio and text measures return blank for those items.
 
 ### Calculation items
 
@@ -53,21 +53,11 @@ CALCULATE(
 )
 ```
 
-#### `Year-on-Year Variance ($)` (ordinal 5)
-```dax
-SELECTEDMEASURE() - CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
-```
+#### Year-on-year changes (ordinals 5 and 6)
 
-#### `Year-on-Year Variance (%)` (ordinal 6)
-```dax
-VAR CurrentVal = SELECTEDMEASURE()
-VAR PriorVal = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(Dim_Date[Date]))
-RETURN
-    DIVIDE(CurrentVal - PriorVal, PriorVal)
-```
-*Format string definition*: `0.0%`
+The dollar item returns current less prior-year value only when a prior value exists. The percentage item divides that change by the prior-year value and uses a `0.0%` format. A missing or zero denominator returns blank.
 
-With no prior value, or a prior value of zero, `DIVIDE` returns blank rather than 0 per cent: there is no year-on-year change to state, and 0 per cent would read as a flat year.
+Both items use an explicit `ISSELECTEDMEASURE` list of supported monetary measures. They do not subtract text or present a margin change as dollars. The full list and expressions live in [CalcGroup_TimeIntelligence.tmdl](../australian-accounting-power-bi.SemanticModel/definition/tables/CalcGroup_TimeIntelligence.tmdl).
 
 ---
 
@@ -75,32 +65,13 @@ With no prior value, or a prior value of zero, `DIVIDE` returns blank rather tha
 
 Precedence: `20`
 
-Enables simultaneous reporting of individual legal entity performance, intercompany elimination journals, and the consolidated group net total in matrix visuals.
+`Gross Group Total` preserves the selected measure and entity scope. `Intercompany Eliminations` includes intercompany lines for supported additive financial measures. `Consolidated Group Net` excludes those lines and also supports recalculated financial ratios.
 
-### Calculation items
+Net and elimination items require all entities in `Dim_Entity` to be selected. Refresh already requires AUD and an ownership weight of one. Budget, payroll, text and sample-reference measures return blank under those items. `Consolidation Scope` is the exception: its text explains unsupported selections. Budget data has no intercompany split, so a plausible unchanged budget must not be labelled as an elimination.
 
-#### `Gross Group Total` (ordinal 0)
-```dax
-SELECTEDMEASURE()
-```
+The Boolean filters use `KEEPFILTERS`. Gross less eliminations equals net for additive monetary measures; ratios must be recalculated on net inputs rather than subtracted. The [source calculation group](../australian-accounting-power-bi.SemanticModel/definition/tables/CalcGroup_Consolidation.tmdl) contains the supported-measure lists.
 
-#### `Intercompany Eliminations` (ordinal 1)
-Filters down to intercompany management fees, internal rent, and intra-group logistics transactions:
-```dax
-CALCULATE(
-    SELECTEDMEASURE(),
-    Fact_GeneralLedger[IsIntercompany] = TRUE()
-)
-```
-
-#### `Consolidated Group Net` (ordinal 2)
-Presents the true third-party consolidated financial position:
-```dax
-CALCULATE(
-    SELECTEDMEASURE(),
-    Fact_GeneralLedger[IsIntercompany] = FALSE()
-)
-```
+The report's balance-sheet measure is blank outside an account-class row, because a grand total combining assets, liabilities and equity has no useful accounting meaning. Existing total asset, liability and equity measures remain available separately.
 
 ---
 
@@ -128,3 +99,9 @@ CALCULATE(
 ```
 
 The cumulative `DATESBETWEEN(Dim_Date[Date], BLANK(), MAX(Dim_Date[Date]))` argument in the balance sheet measures stays bare on purpose: those measures must reach past the period in context. `Benchmark Annual Turnover` still removes the account filter itself, so the turnover band is unaffected.
+
+## Revenue budgets and receipt filters
+
+The report compares actual revenue with revenue budget on the gross basis. Expense budgets are partial, so the page does not present their sum as a complete profit target. `Budget Variance $` is actual revenue less budget revenue and is blank without a budget. The percentage variance is blank without a non-zero revenue budget.
+
+Payroll on-time and late measures intersect the selected receipt status using `KEEPFILTERS`. The on-time share uses the liability in the same selection. A late-only selection therefore has a zero on-time share, while a selection with no liability remains blank.

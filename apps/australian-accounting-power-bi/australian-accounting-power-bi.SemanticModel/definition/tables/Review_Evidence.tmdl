@@ -1,0 +1,104 @@
+table Review_Evidence
+	lineageTag: d466b4e0-2b03-4db0-a7d5-d5e854fbee64
+
+	/// Evidence rows appear only for one explicitly selected exception.
+	measure 'Evidence selection present' = IF(HASONEVALUE(Review_Exception[ExceptionKey]) && ISFILTERED(Review_Exception[ExceptionKey]) && COUNTROWS(Review_Evidence) > 0, 1, BLANK())
+		formatString: 0
+		displayFolder: Review evidence
+
+	column RunID
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RunID
+		lineageTag: 8fb5d671-9064-42d1-885b-6d605ed23183
+
+	column Entity
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Entity
+		lineageTag: ac02d6a2-3841-4a9d-aed1-f77a14d5046d
+
+	column Tenant
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Tenant
+		lineageTag: 16406c05-35bb-428b-8782-c89fe9f7da1d
+
+	column Period
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Period
+		lineageTag: 405067a4-a1b8-484d-97b2-e95e8af2e9f6
+
+	column Basis
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Basis
+		lineageTag: 6a694098-7d7f-4b72-9205-f2232906d20f
+
+	column Currency
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Currency
+		lineageTag: cf34250e-d543-4fcd-b3ef-8fd24296e2da
+
+	column ExceptionKey
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ExceptionKey
+		lineageTag: db56debf-1b80-4ef8-964f-494b7ffa9acb
+
+	column AccountID
+		dataType: string
+		summarizeBy: none
+		sourceColumn: AccountID
+		lineageTag: f7186a90-6f62-4355-ba67-5aaa9d9a3768
+
+	column TransactionID
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TransactionID
+		lineageTag: fae8687a-24c3-4b48-8e18-ea3e027aaee2
+
+	column Date
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Date
+		lineageTag: d2a115ed-3ab0-4f9d-860d-2985207b5664
+
+	column Reference
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Reference
+		lineageTag: 16372f67-2f89-4f18-a61a-d5d4124545db
+
+	column Description
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Description
+		lineageTag: fe974051-42a1-43ee-bc8e-8dc9ecd3e6c5
+
+	column Amount
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Amount
+		lineageTag: 8fc833dd-45a1-43fe-8988-d66e20954c58
+
+	column AmountDisplay
+		dataType: string
+		summarizeBy: none
+		sourceColumn: AmountDisplay
+		lineageTag: e1f267a4-09c7-47e3-821e-55dcd6cf3629
+
+	partition Review_Evidence = m
+		mode: import
+		source =
+			let
+				Source = Table.PromoteHeaders(Csv.Document(File.Contents(SampleFolder & "/sample-review-evidence.csv"), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]), [PromoteAllScalars=true]),
+				Schema = if Table.ColumnNames(Source) <> {"RunID", "Entity", "Tenant", "Period", "Basis", "Currency", "ExceptionKey", "AccountID", "TransactionID", "Date", "Reference", "Description", "Amount"} then error "Review fixture schema differs." else Source,
+				Required = Fx_RequireRows(Schema, {"RunID", "Entity", "Period", "Basis", "Currency", "ExceptionKey", "TransactionID"}, {"ExceptionKey", "TransactionID"}, "Review_Evidence"),
+				Context = if Table.RowCount(Required) = 0 or Table.RowCount(Table.SelectRows(Required, each [Entity] <> "ENT001" or [Period] <> "2024-09-30" or [Currency] <> "AUD" or [Basis] <> "Accrual, single entity gross ledger" or Text.Length([RunID]) <> 64)) > 0 then error "Review fixture context differs." else Required,
+				Typed = Table.TransformColumnTypes(Context, List.Transform(Table.ColumnNames(Context), each {_, type text})),
+				Display = List.Accumulate({"Amount"}, Typed, (state, field) => Table.AddColumn(state, field & "Display", each Fx_MoneyDisplay(Record.Field(_, field)), type text))
+			in
+				if not Table.IsEmpty(Table.SelectRowsWithErrors(Display)) then error Error.Record("Review amount", "Invalid decimal display value", "Correct the source CSV before refreshing.") else Display

@@ -13,6 +13,7 @@ table Dim_Account
 		lineageTag: acc-col-0002
 		summarizeBy: none
 		sourceColumn: AccountName
+		sortByColumn: SortOrder
 
 	column Class
 		dataType: string
@@ -25,6 +26,7 @@ table Dim_Account
 		lineageTag: acc-col-0004
 		summarizeBy: none
 		sourceColumn: SubClass
+		sortByColumn: SubClassSort
 
 	column ReportSection
 		dataType: string
@@ -57,10 +59,19 @@ table Dim_Account
 		summarizeBy: none
 		sourceColumn: SortOrder
 
+	column SubClassSort
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: SubClassSort
+
 	partition Dim_Account = m
 		mode: import
 		source =
 			let
-				Source = Source_Dim_Account
+				Source = Source_Dim_Account,
+				Groups = Table.Group(Source, {"SubClass"}, {{"SubClassSort", each List.Min([SortOrder]), Int64.Type}}),
+				Joined = Table.NestedJoin(Source, {"SubClass"}, Groups, {"SubClass"}, "Order", JoinKind.LeftOuter),
+				Sorted = Table.ExpandTableColumn(Joined, "Order", {"SubClassSort"})
 			in
-				Source
+				Sorted

@@ -15,6 +15,7 @@ table Fact_ATOBenchmark
 			        ) / 100
 			    )
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0001
 
 	/// Signed percentage-point distance outside the selected gross profit range; zero within its inclusive bounds.
@@ -28,11 +29,13 @@ table Fact_ATOBenchmark
 			        SWITCH(TRUE(), Actual < Low, Actual - Low, Actual > High, Actual - High, 0)
 			    )
 		formatString: +0.0%;-0.0%;0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0002
 
-	/// Actual operating expenses divided by total trading revenue.
-	measure 'Actual Total Expense Ratio %' = DIVIDE([Operating Expenses], [Revenue], 0)
+	/// All expenses, including cost of sales, divided by revenue; matches the fabricated total-expense reference.
+	measure 'Actual Total Expense Ratio %' = DIVIDE([COGS] + [Operating Expenses], [Revenue])
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0003
 
 	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
@@ -49,6 +52,7 @@ table Fact_ATOBenchmark
 			        ) / 100
 			    )
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0004
 
 	/// Rent and property occupancy expense as a proportion of total revenue.
@@ -56,12 +60,12 @@ table Fact_ATOBenchmark
 			DIVIDE(
 				CALCULATE(
 					SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
-					Dim_Account[AccountCode] = "820"
+					KEEPFILTERS(Dim_Account[AccountCode] = "820")
 				),
-				[Revenue],
-				0
+				[Revenue]
 			)
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0005
 
 	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
@@ -78,6 +82,7 @@ table Fact_ATOBenchmark
 			        ) / 100
 			    )
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0006
 
 	/// Motor vehicle running costs as a proportion of total revenue.
@@ -85,12 +90,12 @@ table Fact_ATOBenchmark
 			DIVIDE(
 				CALCULATE(
 					SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
-					Dim_Account[AccountCode] = "810"
+					KEEPFILTERS(Dim_Account[AccountCode] = "810")
 				),
-				[Revenue],
-				0
+				[Revenue]
 			)
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0007
 
 	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
@@ -107,6 +112,7 @@ table Fact_ATOBenchmark
 			        ) / 100
 			    )
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0008
 
 	/// Salaries and superannuation expense divided by total revenue.
@@ -114,12 +120,12 @@ table Fact_ATOBenchmark
 			DIVIDE(
 				CALCULATE(
 					SUM(Fact_GeneralLedger[Debit]) - SUM(Fact_GeneralLedger[Credit]),
-					Dim_Account[AccountCode] IN {"800", "805"}
+					KEEPFILTERS(Dim_Account[AccountCode] IN {"800", "805"})
 				),
-				[Revenue],
-				0
+				[Revenue]
 			)
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0009
 
 	/// Sample reference value for the selected entity and annual turnover band; blank when unavailable.
@@ -136,6 +142,7 @@ table Fact_ATOBenchmark
 			        ) / 100
 			    )
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0010
 
 	/// Gross profit comparison only. The legacy measure name is retained for report bindings; this is not an audit-risk assessment.
@@ -152,6 +159,7 @@ table Fact_ATOBenchmark
 			        Difference > 0, "Above gross profit range",
 			        "Within gross profit range"
 			    )
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0011
 
 	/// Full financial-year revenue for one entity; account and subperiod filters cannot change the band.
@@ -168,6 +176,7 @@ table Fact_ATOBenchmark
 					)
 				)
 		formatString: $#,##0.00;($#,##0.00);$0.00
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0012
 
 	/// Exactly one sample industry band, with turnover greater than its lower bound and at most its upper bound.
@@ -185,6 +194,7 @@ table Fact_ATOBenchmark
 					Turnover > 0 && NOT ISBLANK(Industry) && COUNTROWS(Bands) = 1,
 					MAXX(Bands, Fact_ATOBenchmark[TurnoverRange])
 				)
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0013
 
 	/// Lower inclusive gross profit bound for the selected sample band.
@@ -201,6 +211,7 @@ table Fact_ATOBenchmark
 					) / 100
 				)
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0014
 
 	/// Upper inclusive gross profit bound for the selected sample band.
@@ -217,6 +228,7 @@ table Fact_ATOBenchmark
 					) / 100
 				)
 		formatString: 0.0%
+		displayFolder: Sample comparisons
 		lineageTag: ato-meas-0015
 
 	column ANZSIC_Code

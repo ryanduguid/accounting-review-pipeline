@@ -2,12 +2,12 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "4ca81df17178a19d5805",
   "position": {
-    "x": 800,
-    "y": 80,
-    "z": 3000,
-    "height": 620,
-    "width": 460,
-    "tabOrder": 3000
+    "x": 20,
+    "y": 456,
+    "width": 1240,
+    "height": 244,
+    "z": 2200,
+    "tabOrder": 0
   },
   "visual": {
     "visualType": "tableEx",
@@ -23,25 +23,57 @@
                       "Entity": "Fact_GeneralLedger"
                     }
                   },
-                  "Property": "PostingDate"
+                  "Property": "JournalID"
                 }
               },
-              "queryRef": "Fact_GeneralLedger.PostingDate",
-              "nativeQueryRef": "PostingDate"
+              "queryRef": "Fact_GeneralLedger.JournalID",
+              "nativeQueryRef": "JournalID",
+              "displayName": "Journal"
             },
             {
               "field": {
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "Dim_Entity"
+                      "Entity": "Fact_GeneralLedger"
                     }
                   },
-                  "Property": "LegalName"
+                  "Property": "LineNumber"
                 }
               },
-              "queryRef": "Dim_Entity.LegalName",
-              "nativeQueryRef": "LegalName"
+              "queryRef": "Fact_GeneralLedger.LineNumber",
+              "nativeQueryRef": "LineNumber",
+              "displayName": "Line"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_GeneralLedger"
+                    }
+                  },
+                  "Property": "PostingDate"
+                }
+              },
+              "queryRef": "Fact_GeneralLedger.PostingDate",
+              "nativeQueryRef": "PostingDate",
+              "displayName": "Posted"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Fact_GeneralLedger"
+                    }
+                  },
+                  "Property": "EntityID"
+                }
+              },
+              "queryRef": "Fact_GeneralLedger.EntityID",
+              "nativeQueryRef": "EntityID",
+              "displayName": "Entity ID"
             },
             {
               "field": {
@@ -55,7 +87,8 @@
                 }
               },
               "queryRef": "Fact_GeneralLedger.IntercompanyEntityID",
-              "nativeQueryRef": "IntercompanyEntityID"
+              "nativeQueryRef": "IntercompanyEntityID",
+              "displayName": "Counterparty ID"
             },
             {
               "field": {
@@ -65,11 +98,12 @@
                       "Entity": "Fact_GeneralLedger"
                     }
                   },
-                  "Property": "Description"
+                  "Property": "AccountCode"
                 }
               },
-              "queryRef": "Fact_GeneralLedger.Description",
-              "nativeQueryRef": "Description"
+              "queryRef": "Fact_GeneralLedger.AccountCode",
+              "nativeQueryRef": "AccountCode",
+              "displayName": "Account"
             },
             {
               "field": {
@@ -83,7 +117,8 @@
                 }
               },
               "queryRef": "Fact_GeneralLedger.Amount",
-              "nativeQueryRef": "Amount"
+              "nativeQueryRef": "Amount",
+              "displayName": "Amount"
             }
           ]
         }
@@ -103,7 +138,32 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Intercompany Loan & Management Fee Audit Trail'"
+                  "Value": "'Intercompany journal detail'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
                 }
               }
             }
@@ -122,8 +182,235 @@
             }
           }
         }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Only intercompany ledger lines. Journal and line identify each entry; entity and counterparty identify the pair. Refresh checks each pair and date separately for balance sheet and profit-and-loss legs.'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E7EDEB'"
+                    }
+                  }
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "backColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#FFFFFF'"
+                }
+              }
+            },
+            "backColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#F3F5F6'"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "rowPadding": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "textSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "gridVertical": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            },
+            "outlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "intercompanyOnly",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Fact_GeneralLedger"
+              }
+            },
+            "Property": "IsIntercompany"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "s",
+              "Entity": "Fact_GeneralLedger",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "s"
+                          }
+                        },
+                        "Property": "IsIntercompany"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isLockedInViewMode": true
+      }
+    ]
   }
 }

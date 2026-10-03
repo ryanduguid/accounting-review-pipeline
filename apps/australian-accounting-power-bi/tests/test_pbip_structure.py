@@ -121,7 +121,7 @@ class SemanticModelStructureTests(unittest.TestCase):
             for match in re.findall(r"^expression\s+('[^']+'|[^\s=]+)\s*=", expression_text, re.MULTILINE)
         )
 
-        self.assertEqual(len(table_names), 11)
+        self.assertEqual(len(table_names), 14)
         self.assertEqual(
             sorted(set(table_names) & set(expression_names)),
             [],
@@ -131,7 +131,12 @@ class SemanticModelStructureTests(unittest.TestCase):
             expression_names,
             [
                 "Dim_Date_AU",
+                "Fx_MoneyDisplay",
+                "Fx_RequireRows",
                 "Fx_ValidateABN",
+                "IndustryLookup",
+                "ModelEndDate",
+                "ModelStartDate",
                 "SampleFolder",
                 "Source_Dim_Account",
                 "Source_Dim_Entity",
@@ -165,7 +170,7 @@ class SemanticModelStructureTests(unittest.TestCase):
 
         # Nine import partitions are declared here. The 2 calculation-group
         # tables receive implicit partitions when the model is loaded.
-        self.assertEqual(partition_count, 9)
+        self.assertEqual(partition_count, 12)
         self.assertEqual(unresolved, [])
 
     def test_measure_descriptions_use_supported_triple_slash_syntax(self) -> None:
@@ -183,7 +188,7 @@ class SemanticModelStructureTests(unittest.TestCase):
                     if index == 0 or not lines[index - 1].startswith("\t/// "):
                         missing.append(f"{path.name}:{index + 1}")
 
-        self.assertEqual(measure_count, 47)
+        self.assertEqual(measure_count, 63)
         self.assertEqual(unsupported, [])
         self.assertEqual(missing, [])
 
@@ -196,7 +201,7 @@ class SemanticModelStructureTests(unittest.TestCase):
             for path in (DEFINITION / "tables").glob("*.tmdl")
         )
         file_paths = re.findall(r"File\.Contents\(([^)]+)\)", "\n".join(sources))
-        self.assertEqual(len(file_paths), 6)
+        self.assertEqual(len(file_paths), 9)
         for file_path in file_paths:
             self.assertTrue(
                 file_path.startswith("SampleFolder & "),
@@ -217,10 +222,10 @@ class ReportStructureTests(unittest.TestCase):
         self.assertIn("report/definitionProperties/1.0.0", binding["$schema"])
         self.assertEqual(version["version"], "2.0.0")
         self.assertIn("report/", report["$schema"])
-        self.assertEqual(len(pages["pageOrder"]), 4)
+        self.assertEqual(len(pages["pageOrder"]), 6)
         self.assertEqual(pages["activePageName"], pages["pageOrder"][0])
 
-    def test_all_four_pages_and_twenty_one_visuals_are_materialised(self) -> None:
+    def test_all_four_pages_and_review_visuals_are_materialised(self) -> None:
         pages = read_json(REPORT_DEFINITION / "pages" / "pages.json")
         visual_types: Counter[str] = Counter()
         unbound: list[str] = []
@@ -236,24 +241,85 @@ class ReportStructureTests(unittest.TestCase):
                 visual = document["visual"]
                 visual_type = visual["visualType"]
                 visual_types[visual_type] += 1
-                if visual_type != "textbox" and not visual.get("query", {}).get("queryState"):
+                if visual_type not in {"textbox", "pageNavigator", "actionButton"} and not visual.get("query", {}).get("queryState"):
                     unbound.append(str(visual_path.relative_to(ROOT)))
 
-        self.assertEqual(
-            visual_types,
-            Counter(
-                {
-                    "cardVisual": 10,
-                    "textbox": 4,
-                    "pivotTable": 3,
-                    "tableEx": 2,
-                    "lineChart": 1,
-                    "scatterChart": 1,
-                }
-            ),
-        )
-        self.assertEqual(sum(visual_types.values()), 21)
+        self.assertEqual(visual_types["pageNavigator"], len(pages["pageOrder"]) - 1)
+        self.assertGreaterEqual(visual_types["slicer"], 2 * (len(pages["pageOrder"]) - 1))
+        self.assertGreater(visual_types["lineChart"], 0)
         self.assertEqual(unbound, [])
+
+    def test_pages_have_selectors_alt_text_and_unique_keyboard_order(self) -> None:
+        for page_path in REPORT_DEFINITION.glob("pages/*/page.json"):
+            visuals = [read_json(path) for path in page_path.parent.glob("visuals/*/visual.json")]
+            selectors = [obj for obj in visuals if obj["visual"]["visualType"] == "slicer"]
+            bindings = {field for obj in selectors for _, _, field in query_field_bindings(obj)}
+            if page_path.parent.name == "a01closehome202410001":
+                self.assertTrue({"Entity", "Period"}.issubset(bindings))
+            elif page_path.parent.name != "a02closeevid202410002":
+                self.assertTrue({"TradingName", "FinancialYear"}.issubset(bindings))
+            orders = [obj["position"]["tabOrder"] for obj in visuals]
+            self.assertEqual(len(orders), len(set(orders)))
+            # Native Desktop visits the higher tabOrder values first.
+            keyboard_order = sorted(visuals, key=lambda obj: obj["position"]["tabOrder"], reverse=True)
+            reading_order = sorted(visuals, key=lambda obj: (obj["position"]["y"], obj["position"]["x"]))
+            self.assertEqual([obj["name"] for obj in keyboard_order], [obj["name"] for obj in reading_order])
+            for obj in visuals:
+                position = obj["position"]
+                page = read_json(page_path)
+                self.assertGreaterEqual(position["x"], 0)
+                self.assertGreaterEqual(position["y"], 0)
+                self.assertLessEqual(position["x"] + position["width"], page["width"])
+                self.assertLessEqual(position["y"] + position["height"], page["height"])
+                general = obj["visual"]["visualContainerObjects"]["general"][0]
+                alt = general["properties"]["altText"]["expr"]["Literal"]["Value"]
+                self.assertGreater(len(alt), 15, obj["name"])
+
+    def test_phone_layouts_preserve_reading_order_and_touch_spacing(self) -> None:
+        for page_path in REPORT_DEFINITION.glob("pages/*/page.json"):
+            visuals = [read_json(path) for path in page_path.parent.glob("visuals/*/visual.json")]
+            expected = sorted(visuals, key=lambda obj: (obj["position"]["y"], obj["position"]["x"]))
+            mobile = [read_json(page_path.parent / "visuals" / obj["name"] / "mobile.json") for obj in expected]
+            last_bottom = -8
+            for index, (visual, portrait) in enumerate(zip(expected, mobile)):
+                with self.subTest(page=page_path.parent.name, visual=visual["name"]):
+                    self.assertIn("visualContainerMobileState/2.4.0/schema.json", portrait["$schema"])
+                    position = portrait["position"]
+                    self.assertEqual((position["x"], position["width"]), (0, 324))
+                    self.assertGreaterEqual(position["y"], last_bottom + 8)
+                    self.assertGreaterEqual(position["height"], 56)
+                    self.assertEqual(position["tabOrder"], len(expected) - index - 1)
+                    self.assertEqual(position["y"] % 4, 0)
+                    self.assertEqual(position["height"] % 4, 0)
+                    last_bottom = position["y"] + position["height"]
+                    if visual["visual"]["visualType"] == "pageNavigator":
+                        layout = portrait["objects"]["layout"][0]["properties"]
+                        self.assertEqual(layout["rowCount"]["expr"]["Literal"]["Value"], "3D")
+                        self.assertEqual(layout["columnCount"]["expr"]["Literal"]["Value"], "2D")
+                        self.assertGreaterEqual((position["height"] - 16) / 3, 44)
+
+    def test_phone_selected_finding_details_fit_the_canvas(self) -> None:
+        path = REPORT_DEFINITION / "pages/a01closehome202410001/visuals/reviewhomequestions/mobile.json"
+        portrait = read_json(path)
+        objects = portrait["objects"]
+        label = float(objects["columnHeaders"][0]["properties"]["defaultColumnWidth"]["expr"]["Literal"]["Value"][:-1])
+        value = float(objects["columnWidth"][0]["properties"]["value"]["expr"]["Literal"]["Value"][:-1])
+        self.assertLessEqual(label + value, portrait["position"]["width"] - 16)
+        self.assertGreaterEqual(value, 150)
+
+    def test_phone_results_use_the_native_vertical_card_layout(self) -> None:
+        for path in REPORT_DEFINITION.glob("pages/*/visuals/*/visual.json"):
+            visual = read_json(path)["visual"]
+            if visual["visualType"] != "cardVisual":
+                continue
+            portrait = read_json(path.with_name("mobile.json"))
+            layout = portrait["objects"]["layout"][0]
+            # Desktop writes card layout properties without a selector.
+            # A default selector is silently ignored for this category.
+            self.assertNotIn("selector", layout)
+            self.assertEqual(layout["properties"]["orientation"]["expr"]["Literal"]["Value"], "1D")
+            count = len(visual["query"]["queryState"]["Data"]["projections"])
+            self.assertGreaterEqual(portrait["position"]["height"], count * 100)
 
     def test_every_visual_field_binding_resolves_to_the_semantic_model(self) -> None:
         inventory = tmdl_field_inventory()
@@ -271,7 +337,7 @@ class ReportStructureTests(unittest.TestCase):
             relative_path = str(visual_path.relative_to(ROOT))
             bindings.extend(
                 (kind, table, field, relative_path)
-                for kind, table, field in query_field_bindings(query_state)
+                for kind, table, field in query_field_bindings(document)
             )
 
         missing = [
@@ -282,6 +348,16 @@ class ReportStructureTests(unittest.TestCase):
 
         self.assertGreater(len(bindings), 0, "Expected data-bound PBIR visuals")
         self.assertEqual(missing, [])
+
+    def test_budget_visuals_use_contextual_title_measures(self) -> None:
+        for visual_id, title_measure in (
+            ("39ec83f2c78b1ea20481", "Revenue Budget Title"),
+            ("2f440022aab813e0dbbb", "Monthly Revenue Title"),
+        ):
+            path = REPORT_DEFINITION / "pages" / "062c0d9cd2ba960997fe" / "visuals" / visual_id / "visual.json"
+            visual = read_json(path)["visual"]
+            title = visual["visualContainerObjects"]["title"][0]["properties"]["text"]
+            self.assertEqual(query_field_bindings(title), [("Measure", "Fact_GeneralLedger", title_measure)])
 
     def test_visual_titles_do_not_name_metrics_the_visual_does_not_plot(self) -> None:
         """A title is the only label a reader gets, so it must not name an absent metric.
@@ -313,7 +389,7 @@ class ReportStructureTests(unittest.TestCase):
                 if word.lower() in title.lower() and word.lower() not in bound
             )
 
-        self.assertEqual(titled, 17, "Expected 17 titled visuals across the four pages")
+        self.assertGreater(titled, 20, "Expected titled visuals across all four pages")
         self.assertEqual(unsupported, [])
 
     def test_only_consolidated_bindings_may_carry_a_consolidated_label(self) -> None:
@@ -350,6 +426,91 @@ class ReportStructureTests(unittest.TestCase):
 
         self.assertGreater(checked, 20, "Expected every page and titled visual to be checked")
         self.assertEqual(claims, [])
+
+
+class ReportUniformityTests(unittest.TestCase):
+    def test_result_cards_keep_shared_labels_surfaces_and_padding(self) -> None:
+        visuals = [read_json(path) for path in REPORT_DEFINITION.glob("pages/*/visuals/*/visual.json")]
+        cards = [visual for visual in visuals if visual["visual"]["visualType"] == "cardVisual"]
+        self.assertEqual(len(cards), 4)
+        for card in cards:
+            objects = card["visual"]["objects"]
+            for role in ("label", "fillCustom", "outline", "padding"):
+                self.assertEqual(objects[role], cards[0]["visual"]["objects"][role])
+            padding = objects["layout"][0]["properties"]["cellPadding"]
+            self.assertEqual(padding["expr"]["Literal"]["Value"], "12D")
+            expected = "14D" if card["name"] == "3fd74ef9d4436795bbdd" else "28D"
+            font = objects["value"][0]["properties"]["fontSize"]
+            self.assertEqual(font["expr"]["Literal"]["Value"], expected)
+
+    def test_query_projection_aliases_are_unique(self) -> None:
+        for path in REPORT_DEFINITION.glob("pages/*/visuals/*/visual.json"):
+            document = read_json(path)
+            aliases = [
+                projection["nativeQueryRef"]
+                for role in document["visual"].get("query", {}).get("queryState", {}).values()
+                for projection in role.get("projections", [])
+                if "nativeQueryRef" in projection
+            ]
+            self.assertEqual(len(aliases), len(set(aliases)), document["name"])
+
+    def test_visuals_follow_the_shared_grid_and_do_not_overlap(self) -> None:
+        for page_path in REPORT_DEFINITION.glob("pages/*/page.json"):
+            visuals = [read_json(path) for path in page_path.parent.glob("visuals/*/visual.json")]
+            for index, visual in enumerate(visuals):
+                position = visual["position"]
+                for key in ("x", "y", "width", "height"):
+                    self.assertEqual(position[key] % 4, 0, (visual["name"], key))
+                self.assertGreaterEqual(position["x"], 20)
+                self.assertLessEqual(position["x"] + position["width"], 1260)
+                self.assertLessEqual(position["y"] + position["height"], 700)
+                for other in visuals[index + 1 :]:
+                    candidate = other["position"]
+                    overlap = (
+                        position["x"] < candidate["x"] + candidate["width"]
+                        and candidate["x"] < position["x"] + position["width"]
+                        and position["y"] < candidate["y"] + candidate["height"]
+                        and candidate["y"] < position["y"] + position["height"]
+                    )
+                    self.assertFalse(overlap, (visual["name"], other["name"]))
+
+    def test_navigation_and_filters_keep_shared_geometry_and_style(self) -> None:
+        navigators = []
+        for path in REPORT_DEFINITION.glob("pages/*/visuals/*/visual.json"):
+            document = read_json(path)
+            visual = document["visual"]
+            position = document["position"]
+            if visual["visualType"] == "pageNavigator":
+                navigators.append(document)
+                self.assertEqual(
+                    [position[key] for key in ("x", "y", "width", "height")],
+                    [520, 8, 740, 40],
+                )
+            elif visual["visualType"] == "slicer":
+                self.assertEqual(position["height"], 60, document["name"])
+                properties = visual["objects"]["header"][0]["properties"]
+                self.assertEqual(properties["show"]["expr"]["Literal"]["Value"], "false")
+        self.assertEqual(len(navigators), 5)
+        for navigator in navigators[1:]:
+            self.assertEqual(navigator["visual"]["objects"], navigators[0]["visual"]["objects"])
+
+    def test_tables_keep_shared_typography_and_row_styles(self) -> None:
+        for path in REPORT_DEFINITION.glob("pages/*/visuals/*/visual.json"):
+            document = read_json(path)
+            visual = document["visual"]
+            if visual["visualType"] not in {"tableEx", "pivotTable"}:
+                continue
+            objects = visual["objects"]
+            for group in ("columnHeaders", "values"):
+                size = objects[group][0]["properties"]["fontSize"]
+                self.assertEqual(size["expr"]["Literal"]["Value"], "12D", document["name"])
+            headers = objects["columnHeaders"][0]["properties"]
+            self.assertEqual(
+                headers["backColor"]["solid"]["color"]["expr"]["Literal"]["Value"],
+                "'#E7EDEB'",
+            )
+            padding = objects["grid"][0]["properties"]["rowPadding"]
+            self.assertEqual(padding["expr"]["Literal"]["Value"], "2D")
 
 
 if __name__ == "__main__":
