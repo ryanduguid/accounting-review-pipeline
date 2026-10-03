@@ -45,7 +45,7 @@ def csv_bytes(columns: list[str], values: list[dict[str, Any]]) -> bytes:
 
 
 def ordinary(path: Path) -> Path:
-    windows_drive = PureWindowsPath(path).drive
+    windows_drive = PureWindowsPath(str(path)).drive
     if windows_drive.upper() == "Z:" or windows_drive.startswith("\\\\"):
         raise ValueError("Use a local directory.")
     path = path.absolute()
