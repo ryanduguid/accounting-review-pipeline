@@ -71,6 +71,8 @@ expression Source_Dim_Account = ```
 	            or ([Class] = "Expense" and not List.Contains({"Cost of Sales", "Operating Expenses"}, [SubClass]))
 	            or ([Class] = "Asset" and not List.Contains({"Current Assets", "Non-Current Assets"}, [SubClass]))
 	            or ([Class] = "Liability" and not List.Contains({"Current Liabilities", "Non-Current Liabilities"}, [SubClass]))
+	            or ([Class] = "Revenue" and not List.Contains({"Operating Revenue", "Intercompany Revenue"}, [SubClass]))
+	            or ([Class] = "Equity" and [SubClass] <> "Equity")
 	            or [ReportSection] <> (if List.Contains({"Revenue", "Expense"}, [Class]) then "Profit and Loss" else "Balance Sheet"))) then TypedTable
 	        else error Error.Record("Source_Dim_Account", "Unknown account classification", "Use the documented chart classifications.")
 	    else error Error.Record("Source_Dim_Account", "Invalid source values",
@@ -208,14 +210,29 @@ expression Source_Fact_Budget = ```
 	        {"AccountCode", type text},
 	        {"BudgetAmount", Currency.Type}
 	    }),
-	    TypedTable = Fx_RequireRows(ParsedTable, {"PeriodDate", "EntityID", "AccountCode", "BudgetAmount"}, {"PeriodDate", "EntityID", "AccountCode"}, "Source_Fact_Budget")
+	    TypedTable = Fx_RequireRows(ParsedTable, {"PeriodDate", "EntityID", "AccountCode", "BudgetAmount"}, {"PeriodDate", "EntityID", "AccountCode"}, "Source_Fact_Budget"),
+	    BudgetAccounts = List.Buffer(Table.SelectRows(Source_Dim_Account, each List.Contains({"Revenue", "Expense"}, [Class]))[AccountCode]),
+	    RevenueAccounts = List.Buffer(Table.SelectRows(Source_Dim_Account, each [Class] = "Revenue")[AccountCode]),
+	    Months = List.Generate(() => Date.StartOfMonth(ModelStartDate), each _ <= ModelEndDate, each Date.AddMonths(_, 1)),
+	    ExpectedRevenue = Table.FromRows(List.Combine(List.Transform(Source_Dim_Entity[EntityID], (entity) =>
+	        List.Transform(Months, (month) => {entity, month}))), type table [EntityID = text, PeriodDate = date]),
+	    RevenuePeriods = Table.Distinct(Table.SelectColumns(Table.SelectRows(TypedTable, each
+	        List.Contains(RevenueAccounts, [AccountCode])), {"EntityID", "PeriodDate"})),
+	    MissingRevenue = Table.NestedJoin(ExpectedRevenue, {"EntityID", "PeriodDate"},
+	        RevenuePeriods, {"EntityID", "PeriodDate"}, "Budget", JoinKind.LeftAnti)
 	in
 	    if Table.IsEmpty(Table.SelectRowsWithErrors(TypedTable)) then
 	        if Table.IsEmpty(Table.SelectRows(TypedTable, each
 	            not List.Contains(Source_Dim_Entity[EntityID], [EntityID])
 	            or not List.Contains(Source_Dim_Account[AccountCode], [AccountCode])
 	            or [PeriodDate] < ModelStartDate or [PeriodDate] > ModelEndDate
-	            or Date.Day([PeriodDate]) <> 1)) then TypedTable
+	            or Date.Day([PeriodDate]) <> 1)) then
+	            if not Table.IsEmpty(Table.SelectRows(TypedTable, each not List.Contains(BudgetAccounts, [AccountCode]))) then
+	                error Error.Record("Source_Fact_Budget", "Unsupported budget account", "Budget rows must use Revenue or Expense accounts.")
+	            else if not Table.IsEmpty(MissingRevenue) then
+	                error Error.Record("Source_Fact_Budget", "Incomplete revenue budget",
+	                    MissingRevenue{0}[EntityID] & " requires a revenue budget for " & Date.ToText(MissingRevenue{0}[PeriodDate], "yyyy-MM"))
+	            else TypedTable
 	        else error Error.Record("Source_Fact_Budget", "Invalid budget key or period", "Use known entity/account keys and a month start inside the model horizon.")
 	    else error Error.Record("Source_Fact_Budget", "Invalid source values",
 	        "Correct the source CSV before refreshing the model.")
@@ -246,9 +263,11 @@ expression Source_Fact_GeneralLedger = ```
 	    AccountKeys = List.Buffer(Source_Dim_Account[AccountCode]),
 	    ByJournal = Table.Group(TypedTable, {"JournalID"}, {
 	        {"TotalDebit", each List.Sum([Debit]), Currency.Type},
-	        {"TotalCredit", each List.Sum([Credit]), Currency.Type}
+	        {"TotalCredit", each List.Sum([Credit]), Currency.Type},
+	        {"PostingDateCount", each List.Count(List.Distinct([PostingDate])), Int64.Type}
 	    }),
 	    Unbalanced = Table.SelectRows(ByJournal, each [TotalDebit] <> [TotalCredit]),
+	    SplitDateJournals = Table.SelectRows(ByJournal, each [PostingDateCount] <> 1),
 	    InvalidLines = Table.SelectRows(TypedTable, each
 	        [Amount] <> Value.Subtract([Debit], [Credit], Precision.Decimal)
 	        or [Debit] < 0 or [Credit] < 0 or ([Debit] > 0 and [Credit] > 0) or [LineNumber] < 1
@@ -283,6 +302,9 @@ expression Source_Fact_GeneralLedger = ```
 	            & Text.From(Unbalanced{0}[TotalDebit]) & " against credits of "
 	            & Text.From(Unbalanced{0}[TotalCredit]) & ". Grouped by JournalID only, so a "
 	            & "cross-entity journal that balances overall is not refused.")
+	    else if not Table.IsEmpty(SplitDateJournals) then
+	        error Error.Record("Source_Fact_GeneralLedger", "Journal spans posting dates",
+	            "JournalID " & SplitDateJournals{0}[JournalID] & " must use one PostingDate across all lines.")
 	    else if not Table.IsEmpty(Unmatched) then
 	        error Error.Record("Source_Fact_GeneralLedger", "Unmatched intercompany pair",
 	            Unmatched{0}[Pair] & " on " & Date.ToText(Unmatched{0}[PostingDate], "yyyy-MM-dd") & ": " & Unmatched{0}[Leg])
@@ -324,6 +346,8 @@ expression Source_Fact_PayrollSuper = ```
 	        [FundReceiptDate] = null or [RemittanceDate] = null or [SGC_Shortfall] = null or [GIC_NominalInterest] = null
 	        or [FundReceiptDate] < [RemittanceDate] or [RemittanceDate] < [PayDate]
 	        or [SGC_Shortfall] < 0 or [GIC_NominalInterest] < 0
+	        or (([PayDate] < #date(2026, 7, 1) or [ComplianceStatus] = "ON_TIME")
+	            and ([SGC_Shortfall] <> 0 or [GIC_NominalInterest] <> 0))
 	        or [ComplianceStatus] <> (if [FundReceiptDate] > [StatutoryDueDate] then "LATE_BREACH" else "ON_TIME")),
 	    Regime = Table.AddColumn(TypedTable, "PaymentRegime", each if [PayDate] < #date(2026, 7, 1) then "Quarterly sample" else "Payday sample", type text),
 	    EstimateBasis = Table.AddColumn(Regime, "EstimateBasis", each

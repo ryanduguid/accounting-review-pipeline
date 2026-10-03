@@ -66,7 +66,16 @@ try {
         @{ Name = 'missing run tenant'; File = 'review-run'; FullModel = $true; Error = 'Missing required value' },
         @{ Name = 'unsupported run tenant'; File = 'review-run'; FullModel = $true; Error = 'Review fixture context differs' },
         @{ Name = 'exception tenant differs'; File = 'review-exceptions'; FullModel = $true; Error = 'Review exception projection differs' },
-        @{ Name = 'missing evidence tenant'; File = 'review-evidence'; FullModel = $true; Error = 'Missing required value' }
+        @{ Name = 'missing evidence tenant'; File = 'review-evidence'; FullModel = $true; Error = 'Missing required value' },
+        @{ Name = 'journal spans months'; File = 'general-ledger'; FullModel = $true; Error = 'Journal spans posting dates' },
+        @{ Name = 'revenue classified as cost of sales'; File = 'chart-of-accounts'; FullModel = $true; Error = 'Unknown account classification' },
+        @{ Name = 'equity classified as current assets'; File = 'chart-of-accounts'; FullModel = $true; Error = 'Unknown account classification' },
+        @{ Name = 'on-time payday SGC'; File = 'payroll-super'; FullModel = $true; Error = 'Unsupported payroll scenario' },
+        @{ Name = 'on-time payday GIC'; File = 'payroll-super'; FullModel = $true; Error = 'Unsupported payroll scenario' },
+        @{ Name = 'quarterly SGC'; File = 'payroll-super'; FullModel = $true; Error = 'Unsupported payroll scenario' },
+        @{ Name = 'quarterly GIC'; File = 'payroll-super'; FullModel = $true; Error = 'Unsupported payroll scenario' },
+        @{ Name = 'missing revenue budget'; File = 'budgets'; FullModel = $true; Error = 'Incomplete revenue budget' },
+        @{ Name = 'asset budget'; File = 'budgets'; FullModel = $true; Error = 'Unsupported budget account' }
     )
     foreach ($case in $cases) {
         $path = Join-Path $folder ("sample-$($case.File).csv")
@@ -74,6 +83,25 @@ try {
         try {
             $rows = @(Import-Csv -LiteralPath $path)
             switch ($case.Name) {
+                'journal spans months' {
+                    $journal = $rows | Where-Object IsIntercompany -eq 'FALSE' | Group-Object JournalID |
+                        Where-Object Count -eq 2 | Select-Object -First 1
+                    if ($null -eq $journal) { throw 'Expected an ordinary two-line journal.' }
+                    $line = $journal.Group | Where-Object { [decimal]$_.Credit -gt 0 } | Select-Object -First 1
+                    $line.PostingDate = ([datetime]::ParseExact($line.PostingDate, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)).AddMonths(1).ToString('yyyy-MM-dd')
+                }
+                'revenue classified as cost of sales' { ($rows | Where-Object AccountCode -eq '600').SubClass = 'Cost of Sales' }
+                'equity classified as current assets' { ($rows | Where-Object Class -eq 'Equity' | Select-Object -First 1).SubClass = 'Current Assets' }
+                'on-time payday SGC' { ($rows | Where-Object { $_.PayDate -ge '2026-07-01' -and $_.ComplianceStatus -eq 'ON_TIME' } | Select-Object -First 1).SGC_Shortfall = '1.00' }
+                'on-time payday GIC' { ($rows | Where-Object { $_.PayDate -ge '2026-07-01' -and $_.ComplianceStatus -eq 'ON_TIME' } | Select-Object -First 1).GIC_NominalInterest = '1.00' }
+                'quarterly SGC' { ($rows | Where-Object PayDate -lt '2026-07-01' | Select-Object -First 1).SGC_Shortfall = '1.00' }
+                'quarterly GIC' { ($rows | Where-Object PayDate -lt '2026-07-01' | Select-Object -First 1).GIC_NominalInterest = '1.00' }
+                'missing revenue budget' {
+                    $before = $rows.Count
+                    $rows = @($rows | Where-Object { -not ($_.EntityID -eq 'ENT002' -and $_.PeriodDate -eq '2025-07-01' -and $_.AccountCode -eq '600') })
+                    if ($rows.Count -ne $before - 1) { throw 'Expected one target revenue row.' }
+                }
+                'asset budget' { ($rows | Where-Object { $_.EntityID -eq 'ENT002' -and $_.PeriodDate -eq '2025-07-01' -and $_.AccountCode -eq '600' }).AccountCode = '100' }
                 'evidence attached to another finding' {
                     $other = Import-Csv -LiteralPath (Join-Path $folder 'sample-review-exceptions.csv') |
                         Where-Object AccountID -ne $rows[0].AccountID | Select-Object -First 1
@@ -158,6 +186,46 @@ try {
     }
     $model.RequestRefresh([Microsoft.AnalysisServices.Tabular.RefreshType]::Full)
     $model.SaveChanges() | Out-Null
+    foreach ($positive in @(
+        @{ Name = 'cross-entity balanced journal'; File = 'general-ledger' },
+        @{ Name = 'partial expense budget'; File = 'budgets' }
+    )) {
+        $path = Join-Path $folder "sample-$($positive.File).csv"
+        $original = [IO.File]::ReadAllBytes($path)
+        try {
+            $rows = @(Import-Csv -LiteralPath $path)
+            if ($positive.File -eq 'general-ledger') {
+                $journal = $rows | Where-Object IsIntercompany -eq 'FALSE' | Group-Object JournalID |
+                    Where-Object Count -eq 2 | Select-Object -First 1
+                if ($null -eq $journal) { throw 'Expected an ordinary two-line journal.' }
+                $line = $journal.Group | Where-Object { [decimal]$_.Credit -gt 0 } | Select-Object -First 1
+                $other = Import-Csv -LiteralPath (Join-Path $folder 'sample-entities.csv') |
+                    Where-Object EntityID -ne $line.EntityID | Select-Object -First 1
+                if ($null -eq $other) { throw 'Expected another known entity.' }
+                $line.EntityID = $other.EntityID
+                $difference = ($journal.Group | ForEach-Object { [decimal]$_.Debit - [decimal]$_.Credit } | Measure-Object -Sum).Sum
+                if ($difference -ne 0 -or @($journal.Group.EntityID | Select-Object -Unique).Count -ne 2 -or
+                    @($journal.Group.PostingDate | Select-Object -Unique).Count -ne 1) { throw 'Cross-entity positive control differs.' }
+            } else {
+                $expenseAccounts = @(Import-Csv -LiteralPath (Join-Path $folder 'sample-chart-of-accounts.csv') | Where-Object Class -eq 'Expense')
+                $target = $rows | Where-Object AccountCode -in $expenseAccounts.AccountCode | Select-Object -First 1
+                if ($null -eq $target) { throw 'Expected an expense budget row.' }
+                $before = $rows.Count
+                $rows = @($rows | Where-Object { -not ($_.EntityID -eq $target.EntityID -and $_.PeriodDate -eq $target.PeriodDate -and $_.AccountCode -eq $target.AccountCode) })
+                if ($rows.Count -ne $before - 1) { throw 'Expected removal of one expense budget row.' }
+            }
+            $rows | Export-Csv -LiteralPath $path -NoTypeInformation -Encoding UTF8
+            $model.RequestRefresh([Microsoft.AnalysisServices.Tabular.RefreshType]::Full)
+            $model.SaveChanges() | Out-Null
+            Write-Output "PASS accepted $($positive.Name)."
+        } finally {
+            [IO.File]::WriteAllBytes($path, $original)
+            $engine.Refresh()
+            $model = $engine.Databases[0].Model
+            $model.RequestRefresh([Microsoft.AnalysisServices.Tabular.RefreshType]::Full)
+            $model.SaveChanges() | Out-Null
+        }
+    }
     Write-Output "$($cases.Count) refresh rejection cases passed; restored fabricated inputs refreshed successfully."
 } finally {
     $engine.Disconnect()

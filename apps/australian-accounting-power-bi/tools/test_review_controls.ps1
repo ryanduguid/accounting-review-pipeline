@@ -13,6 +13,7 @@ $accounts = @{}
 Import-Csv (Join-Path $samples 'sample-chart-of-accounts.csv') | ForEach-Object { $accounts[$_.AccountCode] = $_ }
 $ledger = @(Import-Csv (Join-Path $samples 'sample-general-ledger.csv'))
 $budgets = @(Import-Csv (Join-Path $samples 'sample-budgets.csv'))
+$payroll = @(Import-Csv (Join-Path $samples 'sample-payroll-super.csv'))
 [Reflection.Assembly]::LoadFrom((Join-Path $PowerBIBin 'Microsoft.PowerBI.AdomdClient.dll')) | Out-Null
 $connection = New-Object Microsoft.AnalysisServices.AdomdClient.AdomdConnection
 $connection.ConnectionString = "Data Source=$Server"
@@ -96,6 +97,14 @@ try {
     Assert-Native 'unfiltered basis uses the gross title' '[Revenue Budget Title]' 'Revenue against budget | gross basis' $year
     Assert-Native 'subset net is unavailable' '[Revenue]' $null "$year, $netBasis, TREATAS({`"ENT001`"}, Dim_Entity[EntityID])"
     Assert-Native 'subset eliminations unavailable' '[Revenue]' $null "$year, $eliminations, TREATAS({`"ENT001`",`"ENT002`"}, Dim_Entity[EntityID])"
+    $industry = 'TREATAS({"4122"}, Dim_ANZSIC[ANZSIC_Code])'
+    Assert-Native 'industry selects one entity' 'COUNTROWS(VALUES(Dim_Entity[EntityID]))' 1 "$year, $netBasis, $industry"
+    Assert-Native 'industry does not narrow complete-group denominator' 'CALCULATE(COUNTROWS(Dim_Entity), REMOVEFILTERS(Dim_Entity))' 4 "$year, $netBasis, $industry"
+    Assert-Native 'industry subset net is unavailable' '[Revenue]' $null "$year, $netBasis, $industry"
+    Assert-Native 'industry subset eliminations are unavailable' '[Revenue]' $null "$year, $eliminations, $industry"
+    Assert-Native 'industry subset explains consolidation refusal' '[Consolidation Scope]' 'Select all entities for eliminations or consolidated amounts' "$year, $netBasis, $industry"
+    Assert-Native 'industry context names selected entity' 'IF(CONTAINSSTRING([Report Selection], "Draynor Fresh Foods"), 1, 0)' 1 "$year, $netBasis, $industry"
+    Assert-Native 'industry context does not claim all entities' 'IF(CONTAINSSTRING([Report Selection], "All entities"), 1, 0)' 0 "$year, $netBasis, $industry"
     Assert-Native 'budget is not an elimination' '[Budget Revenue]' $null "$year, $eliminations"
     Assert-Native 'budget net is unavailable' '[Budget Revenue]' $null "$year, $netBasis"
     Assert-Native 'margin elimination is unavailable' '[Gross Profit Margin %]' $null "$year, $eliminations"
@@ -148,6 +157,13 @@ try {
     Assert-Native 'discontinuous dates are labelled honestly' 'IF(CONTAINSSTRING([Report Selection], "Selected dates within"), 1, 0)' 1 "$year, TREATAS({7,9}, Dim_Date[MonthNumber])"
     Assert-Native 'complete-year context is a continuous range' 'IF(CONTAINSSTRING([Report Selection], "Selected dates within"), 1, 0)' 0 $year
     Assert-Native 'empty date selection explains recovery' 'IF(CONTAINSSTRING([Report Selection], "No matching dates"), 1, 0)' 1 'TREATAS({2099}, Dim_Date[FinancialYearNumber])'
+    Assert-Native 'contra-asset credit balance remains admitted' 'COUNTROWS(FILTER(Dim_Account, Dim_Account[AccountCode] = "210" && Dim_Account[Class] = "Asset" && Dim_Account[SubClass] = "Non-Current Assets" && Dim_Account[NormalBalance] = "Credit"))' 1 $year
+    $quarterlyCount = @($payroll | Where-Object PayDate -lt '2026-07-01').Count
+    $onTimeCount = @($payroll | Where-Object { $_.PayDate -ge '2026-07-01' -and $_.ComplianceStatus -eq 'ON_TIME' }).Count
+    if ($quarterlyCount -eq 0 -or $onTimeCount -eq 0) { throw 'Expected quarterly and on-time Payday positive controls.' }
+    Assert-Native 'quarterly zero estimates remain admitted' 'COUNTROWS(FILTER(Fact_PayrollSuper, Fact_PayrollSuper[PayDate] < DATE(2026, 7, 1) && Fact_PayrollSuper[SGC_Shortfall] = 0 && Fact_PayrollSuper[GIC_NominalInterest] = 0))' $quarterlyCount 'REMOVEFILTERS(Dim_Date)'
+    Assert-Native 'on-time Payday zero estimates remain admitted' 'COUNTROWS(FILTER(Fact_PayrollSuper, Fact_PayrollSuper[PayDate] >= DATE(2026, 7, 1) && Fact_PayrollSuper[ComplianceStatus] = "ON_TIME" && Fact_PayrollSuper[SGC_Shortfall] = 0 && Fact_PayrollSuper[GIC_NominalInterest] = 0))' $onTimeCount 'REMOVEFILTERS(Dim_Date)'
+    Assert-Native 'nominal revenue budget covers every entity/month' 'COUNTROWS(SUMMARIZE(FILTER(Fact_Budget, RELATED(Dim_Account[Class]) = "Revenue"), Fact_Budget[EntityID], Fact_Budget[PeriodDate]))' 144 'REMOVEFILTERS(Dim_Date)'
     Write-Output "$script:assertions native review-control assertions passed."
 } finally {
     $connection.Close()

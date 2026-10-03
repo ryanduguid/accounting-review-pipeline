@@ -4,9 +4,21 @@ The application reads six local, fabricated CSVs. Their headers remain unchanged
 
 ## Refresh checks
 
-Refresh rejects conversion errors, missing required values and duplicate dimension or fact keys. The ledger key is JournalID plus LineNumber. A journal balances across all its lines, including a cross-entity journal.
+Refresh rejects conversion errors, missing required values and duplicate dimension or fact keys. The ledger key is JournalID plus LineNumber. A journal balances across all its lines and uses one posting date. It may span entities.
 
 Each ledger Amount must equal Debit less Credit. Debits and credits must be non-negative and cannot both be positive on one line. Entity, account and intercompany counterparty keys must exist. Ledger dates, budget periods and pay dates must lie inside the model horizon, 1 July 2024 to 30 June 2027. Budgets use the first day of each month. Unknown industries and account classifications are refused.
+
+The chart uses these class and subclass combinations. Normal balance remains a separate attribute, so a contra-asset may have a credit balance.
+
+| Class | Subclasses |
+| --- | --- |
+| Asset | Current Assets, Non-Current Assets |
+| Liability | Current Liabilities, Non-Current Liabilities |
+| Equity | Equity |
+| Revenue | Operating Revenue, Intercompany Revenue |
+| Expense | Cost of Sales, Operating Expenses |
+
+Budget rows use Revenue or Expense accounts. Every entity needs a revenue budget for each month in the model horizon. Multiple revenue accounts and zero budget amounts are allowed. Expense budgets are deliberately partial.
 
 Intercompany lines require a named, different entity as counterparty. Refresh groups each pair and posting date separately for balance-sheet and profit-and-loss legs. Both counterparties must appear and each leg must balance. This catches a missing counterparty even when every remaining journal balances. It is a daily aggregate control, so two offsetting errors inside the same pair and leg can still cancel. Transaction matching would require another source identifier.
 
@@ -25,6 +37,8 @@ Each page has its own entity and financial-year selectors. Financial pages start
 The source records liability and dates but no amount actually received. Every sample assumes full receipt before assessment, a nominated fund and no exceptional deadline. Missing receipts and inconsistent statuses are refused. Partial or split payments, assessment history and statutory exceptions need a separate assessment.
 
 The report distinguishes quarterly and Payday samples. Its on-time rate describes the selected recorded receipts and intersects the status filter. It does not certify compliance. Projected GIC rates and part-day holiday review appear in EstimateBasis. Charge and interest totals are withheld when selected records require calendar review. See the dated sources and assumptions in [compliance methodology](compliance-methodology.md).
+
+Quarterly and on-time rows must carry zero supplied charge and interest estimates. Positive estimates are supported for late Payday sample rows under the documented assumptions.
 
 Employee dimension attributes come from the latest pay date, with EventID breaking ties. Historical employer and fund values remain on the event rows; the current dimension must not be used to infer past attributes.
 
