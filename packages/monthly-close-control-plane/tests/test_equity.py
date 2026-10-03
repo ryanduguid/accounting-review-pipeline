@@ -297,3 +297,13 @@ def test_matching_json_and_markdown_cannot_hide_invalid_arithmetic(tmp_path, mut
     write_review_pack(pack, output)
     with pytest.raises(ControlInputError):
         verify_pack(output)
+
+
+def test_an_equity_schedule_nested_too_deeply_is_an_input_error(tmp_path):
+    from closecontrol.equity import load_schedule
+    from closecontrol.loader import SourceSnapshot
+
+    path = tmp_path / "equity.json"
+    path.write_text("[" * 100_000 + "]" * 100_000, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="Invalid equity schedule"):
+        load_schedule(SourceSnapshot.capture(path, label="Equity schedule"))

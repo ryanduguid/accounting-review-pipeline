@@ -492,3 +492,21 @@ def test_partial_settlements_roll_forward_without_clearing_unrelated_zero_net_it
     with (tmp_path / "august/outstanding.csv").open(encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
     assert [r["AgeDays"] for r in rows] == ["52", "52"]
+
+
+@pytest.mark.parametrize("text", [
+    "[" * 100_000 + "]" * 100_000,
+    '{"schema": "clearing-carry-v1", "schema": "clearing-carry-v1"}',
+    "{not json",
+], ids=["nested-too-deeply", "duplicate-member", "not-json"])
+def test_unreadable_opening_items_are_an_input_error(tmp_path, text):
+    from datetime import date
+
+    from closecontrol.errors import ControlInputError
+    from closecontrol.loader import SourceSnapshot
+    from closecontrol.reconciliation import _opening
+
+    path = tmp_path / "opening.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="Opening items are not readable JSON"):
+        _opening(SourceSnapshot.capture(path, label="Opening items"), {}, date(2026, 7, 1))

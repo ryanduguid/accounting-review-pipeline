@@ -562,3 +562,10 @@ def test_list_engagement_type_fails_closed(pack_dir: Path) -> None:
     _rewrite_json(pack_dir, document)
     with pytest.raises(GateInputError, match="engagement_type must be one of"):
         render_review_sheet(pack_dir)
+
+
+@pytest.mark.parametrize("text", ["[" * 100_000 + "]" * 100_000, '{"x": ' + "9" * 5000 + '}'], ids=["nested-too-deeply", "integer-over-the-digit-limit"])
+def test_json_the_parser_cannot_hold_fails_closed(pack_dir: Path, text: str) -> None:
+    (pack_dir / "readiness-pack.json").write_text(text, encoding="utf-8")
+    with pytest.raises(GateInputError, match="nested too deeply|not readable"):
+        render_review_sheet(pack_dir)

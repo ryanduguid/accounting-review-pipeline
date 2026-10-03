@@ -215,3 +215,15 @@ def test_audit_review_note_translates_decoder_recursion(tmp_path, monkeypatch):
     monkeypatch.setattr(json, "loads", too_deep)
     with pytest.raises(SchemaError, match="nested too deeply"):
         load_reviewer_acknowledgement(note)
+
+
+@pytest.mark.parametrize("text,diagnostic", [
+    ("[" * 100_000 + "]" * 100_000, "nested too deeply"),
+    ('{"x": ' + "9" * 5000 + '}', "could not be read"),
+    ('{"preparer_initials": "RD", "preparer_initials": "XX"}', "more than once"),
+], ids=["nested-too-deeply", "integer-over-the-digit-limit", "duplicate-member"])
+def test_self_review_the_parser_cannot_hold_is_a_schema_error(tmp_path: Path, text: str, diagnostic: str) -> None:
+    path = tmp_path / "self_review.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(SchemaError, match=diagnostic):
+        load_self_review(_snapshot(path), expected_profile="bas")

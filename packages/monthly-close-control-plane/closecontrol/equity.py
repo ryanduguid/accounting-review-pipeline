@@ -62,7 +62,7 @@ def load_schedule(snapshot: SourceSnapshot) -> dict[str, Any]:
     try:
         document = json.loads(snapshot.text(label="Equity schedule", encoding="utf-8-sig"),
                               object_pairs_hook=_object)
-    except (ValueError, UnicodeError) as exc:
+    except (ValueError, UnicodeError, RecursionError) as exc:
         raise ControlInputError(f"Invalid equity schedule: {exc}") from exc
     if not isinstance(document, dict) or set(document) != _FIELDS:
         raise ControlInputError("Equity schedule must contain exactly the documented fields.")

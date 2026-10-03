@@ -1493,3 +1493,10 @@ def test_a_required_name_that_is_not_a_slug_is_refused_before_a_pack_is_written(
             prior_path=EXAMPLES / "prior_trial_balance.csv",
             required_calculations=("GST rate",),
         )
+
+
+@pytest.mark.parametrize("text", ["[" * 100_000 + "]" * 100_000, '{"x": ' + "9" * 5000 + '}'], ids=["nested-too-deeply", "integer-over-the-digit-limit"])
+def test_json_the_parser_cannot_hold_fails_closed(pack_dir: Path, text: str) -> None:
+    (pack_dir / "close-review-pack.json").write_text(text, encoding="utf-8")
+    with pytest.raises(ControlInputError, match="nested too deeply|not readable"):
+        render_review_sheet(pack_dir)
