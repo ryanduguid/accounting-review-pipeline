@@ -1,6 +1,6 @@
 # Model controls and acceptance
 
-The application reads six local, fabricated CSVs. Their headers remain unchanged. It has no OAuth, HTTP client or connection to Xero. The shared trial-balance contract tests still establish fixture compatibility only; a trial balance cannot be substituted for journal lines.
+The financial tables read six local, fabricated CSVs with unchanged headers. The separate review tables read three projection CSVs, making nine sources in total. The application has no OAuth, HTTP client or connection to Xero. The shared trial-balance contract tests still establish fixture compatibility only; a trial balance cannot be substituted for journal lines.
 
 ## Refresh checks
 
@@ -60,7 +60,7 @@ For a recorded disposable instance, run the same suites and query timings togeth
 pwsh -NoProfile -File tools/test_native_project.ps1 -InstanceFile '<instance.json>' -SourceManifest '<source-manifest.json>' -EvidenceDirectory '<evidence-folder>'
 ```
 
-The instance JSON records `server` (`localhost:<port>`), `project` (the disposable project folder), `desktop_pid`, `engine_pid`, `started_at` and `engine_started_at` (the recorded process creation timestamps). The manifest records `revision` and `source.file_inventory`, whose entries contain relative `path` and lowercase SHA-256 `source_sha256` fields for the project descriptors, report, model and six CSVs. Capture these records when preparing the copy, before changing its SampleFolder parameter. `-SourceRoot` defaults to this application; `-PowerBIBin` defaults to the installed Desktop folder.
+The instance JSON records `server` (`localhost:<port>`), `project` (the disposable project folder), `desktop_pid`, `engine_pid`, `started_at` and `engine_started_at` (the recorded process creation timestamps). The manifest records `revision` and `source.file_inventory`, whose entries contain relative `path` and lowercase SHA-256 `source_sha256` fields for the project descriptors, report, model and nine CSVs. Capture these records when preparing the copy, before changing its SampleFolder parameter. `-SourceRoot` defaults to this application; `-PowerBIBin` defaults to the installed Desktop folder.
 
 The runner compares the loaded model and copied CSVs with that source, checks the process identities and listener, and retains each suite's output. It checks the binding again after the suites. It does not refresh or modify the model. An incorrect manifest or stale instance record fails the run. Keyboard interaction, visual states and screen-reader acceptance still need separate evidence.
 
@@ -73,4 +73,4 @@ powershell -NoProfile -File tools/test_refresh_guards.ps1 -Server localhost:<por
 
 It tests offsetting amount corruption, duplicates, missing values, unknown keys, an out-of-range date, missing balanced counterparties, unsupported ownership and currency, invalid payroll receipts, account classifications and benchmark ranges. Never point it at business data.
 
-Inspect all four pages after refresh, exercise entity and year selections, clear selections and check keyboard navigation. Structural validation alone cannot establish visual or assistive-technology behaviour. Service permissions, gateway refresh, external-data reconciliation and performance at scale remain separate acceptance work.
+Inspect all six pages after refresh, including the hidden supporting-journal page reached by drill-through. Exercise entity and year selections, clear selections and check keyboard navigation. Structural validation alone cannot establish visual or assistive-technology behaviour. Service permissions, gateway refresh, external-data reconciliation and performance at scale remain separate acceptance work.
