@@ -19,7 +19,7 @@ import tempfile
 import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from decimal import Context, Decimal, DecimalException, InvalidOperation, localcontext
+from decimal import Context, Decimal, DecimalException, localcontext
 from pathlib import Path, PureWindowsPath
 from typing import Any, Iterator
 
@@ -116,6 +116,13 @@ def case_document(value: Any) -> dict[str, Any]:
     return case
 
 
+def money_text(value: Any, label: str, *, nullable: bool = False) -> str:
+    """Match the model's fixed-case display grammar without converting or rounding."""
+    if not isinstance(value, str) or not ((nullable and value == "") or re.fullmatch(r"-?[0-9]+\.[0-9]{2}", value)):
+        raise ValueError(f"{label} requires a two-decimal money string.")
+    return value
+
+
 def close_document(value: Any) -> dict[str, Any]:
     doc = string_fields(value, ("overall_status",), "Close pack")
     string_map(doc.get("source_sha256"), "Close source hashes", hashes=True, required=("current_trial_balance", "prior_trial_balance"))
@@ -127,12 +134,25 @@ def close_document(value: Any) -> dict[str, Any]:
         raise ValueError("Close report dates cannot be empty.")
     if "acknowledgement" not in doc or (doc["acknowledgement"] is not None and not isinstance(doc["acknowledgement"], dict)):
         raise ValueError("Close acknowledgement requires an object or null.")
-    string_fields(doc.get("thresholds"), ("absolute_variance", "percentage_variance"), "Close thresholds")
+    thresholds = string_fields(doc.get("thresholds"), ("absolute_variance", "percentage_variance"), "Close thresholds")
+    money_text(thresholds["absolute_variance"], "Absolute threshold")
+    if "reconciliation_tolerance" in thresholds:
+        money_text(thresholds["reconciliation_tolerance"], "Reconciliation tolerance")
+    if not re.fullmatch(r"[0-9]+\.[0-9]{2,}%", thresholds["percentage_variance"]):
+        raise ValueError("Percentage threshold requires decimal percentage text.")
     for item in object_rows(doc.get("exceptions"), "Close exceptions"):
         string_fields(item, ("control", "tenant", "account_id", "account_name", "status", "current_value",
                              "prior_value", "difference", "threshold", "reason", "reviewer_action"), "Close exception")
+        for name in ("current_value", "prior_value", "difference", "threshold"):
+            money_text(item[name], f"Close {name}", nullable=True)
+    query_ids, query_keys = set(), set()
     for item in object_rows(doc.get("client_queries"), "Close queries"):
-        string_fields(item, ("control", "tenant", "account_id", "question", "evidence_requested"), "Close query")
+        string_fields(item, ("query_id", "control", "tenant", "account_id", "question", "evidence_requested"), "Close query")
+        key = (item["control"], item["tenant"], item["account_id"])
+        if not item["query_id"] or item["query_id"] in query_ids or key in query_keys:
+            raise ValueError("Duplicate or empty close query identity.")
+        query_ids.add(item["query_id"])
+        query_keys.add(key)
     return doc
 
 
@@ -148,18 +168,18 @@ def driver_document(value: Any) -> dict[str, Any]:
         for row in object_rows(account.get("drivers"), "Driver rows"):
             string_fields(row, ("TransactionID", "Date", "Reference", "Description", "Amount"), "Driver row")
             amounts.append(row["Amount"])
-        try:
-            if any(not Decimal(amount).is_finite() for amount in amounts):
-                raise ValueError("Driver amounts must be finite decimal strings.")
-        except InvalidOperation as exc:
-            raise ValueError("Driver amounts must be finite decimal strings.") from exc
+        for amount in amounts:
+            money_text(amount, "Driver amount")
     return value
 
 
 def readiness_document(value: Any) -> dict[str, Any]:
     doc = string_fields(value, ("overall_status",), "Readiness pack")
-    if not isinstance(doc.get("controls_not_run"), list):
-        raise ValueError("Readiness controls not run requires a list.")
+    for control in object_rows(doc.get("controls_not_run"), "Readiness controls not run"):
+        names = ("slot", "filename", "reason")
+        string_fields(control, names, "Readiness control not run")
+        if set(control) != set(names) or any(not control[name] for name in names):
+            raise ValueError("Readiness controls not run requires exactly its non-empty producer fields.")
     return doc
 
 
@@ -186,6 +206,12 @@ def comparison_document(value: Any) -> dict[str, Any]:
                         string_fields(row, ("account_name", "control", "account_id"), "Displayed query")
             if not previous and not current:
                 raise ValueError("Comparison requires at least one populated side.")
+            change = item["change"]
+            if ((change == "NEW" and (previous or not current))
+                    or (change in ("NOT_RAISED", "NOT_COMPARABLE") and (not previous or current))
+                    or (change in ("CHANGED", "RECURRING") and
+                        (not previous or not current or (previous == current) != (change == "RECURRING")))):
+                raise ValueError("Comparison classification contradicts its previous/current records.")
     scope = doc.get("scope_changes")
     if not isinstance(scope, list) or any(not isinstance(item, str) for item in scope):
         raise ValueError("Comparison scope changes requires a list of strings.")
@@ -718,7 +744,7 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
                 raise ValueError("Driver totals differ from the source.")
             for driver in account["drivers"]:
                 original = population[driver["TransactionID"]]
-                if any(driver[k] != original[k] for k in ("Date", "Reference", "Description")) or Decimal(driver["Amount"]) != Decimal(original["Debit"]) - Decimal(original["Credit"]):
+                if any(driver[k] != original[k] for k in ("Date", "Reference", "Description")) or driver["Amount"] != format(Decimal(original["Debit"]) - Decimal(original["Credit"]), ".2f"):
                     raise ValueError("Driver journal detail differs from the source.")
     if doc["source_sha256"]["current_trial_balance"] != digest(current) or doc["source_sha256"]["prior_trial_balance"] != digest(prior) or doc["current_report_dates"] != [rows(current)[0]["ReportDate"]] or doc["prior_report_dates"] != [rows(prior)[0]["ReportDate"]]:
         raise ValueError("Close source binding differs.")
@@ -740,12 +766,13 @@ def projection(run: Path) -> dict[str, bytes]:
     doc = strict_json(snapshot["close/close-review-pack.json"], "Close pack")
     drivers = strict_json(snapshot["drivers/variance-drivers.json"], "Driver pack")
     driver_index = {(a["tenant"], a["account_id"]): a for a in drivers["accounts"]}
+    query_index = {(q["control"], q["tenant"], q["account_id"]): q for q in doc["client_queries"]}
     run_id = digest(snapshot["close/close-review-pack.json"])
     context = {"RunID": run_id, "Entity": case["entity"], "Tenant": case["tenant"], "Period": receipt["period"], "Basis": case["basis"], "Currency": case["currency"]}
     finding_rows, evidence_rows = [], []
     for index, item in enumerate(doc["exceptions"]):
         key = f"{run_id}:{index}"
-        query: dict[str, Any] = next((q for q in doc["client_queries"] if (q["control"], q["tenant"], q["account_id"]) == (item["control"], item["tenant"], item["account_id"])), {})
+        query: dict[str, Any] = query_index.get((item["control"], item["tenant"], item["account_id"]), {})
         evidence = driver_index.get((item["tenant"], item["account_id"])) if item["control"] == "period_variance" else None
         available = evidence is not None and Decimal(evidence["unexplained"]) == 0 and evidence["transactions_in_window"] == len(evidence["drivers"])
         finding_rows.append(context | {"ExceptionKey": key, "Control": item["control"], "Status": item["status"], "AccountID": item["account_id"], "Account": item["account_name"], "Current": item["current_value"], "Prior": item["prior_value"], "Difference": item["difference"], "Threshold": item["threshold"], "Reason": item["reason"], "Action": item["reviewer_action"], "Question": query.get("question", ""), "EvidenceRequested": query.get("evidence_requested", ""), "EvidenceState": "Journal rows reconciled" if available else "Line-level evidence is unavailable under this control contract"})

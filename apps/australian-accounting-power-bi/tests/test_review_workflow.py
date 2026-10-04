@@ -188,9 +188,73 @@ class ReviewWorkflowTests(unittest.TestCase):
         baseline = {"source_sha256": source_hashes, "accounts": [account]}
         workflow.driver_document(baseline)
         for field, value in (("movement", "NaN"), ("unexplained", "Infinity"), ("transactions_total", "bad"),
+                             ("movement", "1E+0"), ("transactions_total", "+1.00"), ("unexplained", "0.000"),
+                             ("movement", " 1.00"), ("movement", "1.00 "),
                              ("transactions_in_window", True), ("transactions_in_window", "1"), ("transactions_in_window", -1)):
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                 workflow.driver_document({"source_sha256": source_hashes, "accounts": [account | {field: value}]})
+
+    def close_fixture(self) -> dict:
+        findings = workflow.rows((APP / "samples/sample-review-exceptions.csv").read_bytes())
+        item = findings[0]
+        return {"overall_status": "REVIEW", "source_sha256": {name: "0" * 64 for name in
+                ("current_trial_balance", "prior_trial_balance")}, "current_report_dates": ["2024-09-30"],
+                "prior_report_dates": ["2024-08-31"], "controls_not_run": [], "acknowledgement": None,
+                "thresholds": {"absolute_variance": "1000.00", "percentage_variance": "10.00%"},
+                "exceptions": [{"control": item["Control"], "tenant": item["Tenant"], "account_id": item["AccountID"],
+                    "account_name": item["Account"], "status": item["Status"], "current_value": item["Current"],
+                    "prior_value": item["Prior"], "difference": item["Difference"], "threshold": item["Threshold"],
+                    "reason": item["Reason"], "reviewer_action": item["Action"]}],
+                "client_queries": [{"query_id": "Q-fixture", "control": item["Control"], "tenant": item["Tenant"],
+                    "account_id": item["AccountID"], "question": item["Question"], "evidence_requested": item["EvidenceRequested"]}]}
+
+    def test_close_query_identities_and_readiness_records_are_unambiguous(self) -> None:
+        doc = self.close_fixture()
+        workflow.close_document(doc)
+        query = doc["client_queries"][0]
+        for duplicate in (query | {"query_id": "Q-other", "question": "Conflicting question"},
+                          query | {"account_id": "different-account"}):
+            with self.subTest(query=duplicate), self.assertRaises(ValueError):
+                workflow.close_document(doc | {"client_queries": [query, duplicate]})
+        control = {"slot": "fixture", "filename": "fixture.csv", "reason": "Not supplied"}
+        workflow.readiness_document({"overall_status": "READY", "controls_not_run": [control]})
+        for invalid in (None, 1, {"slot": 1}, control | {"reason": ""}, control | {"extra": "unwitnessed"}):
+            with self.subTest(control=invalid), self.assertRaises(ValueError):
+                workflow.readiness_document({"overall_status": "READY", "controls_not_run": [invalid]})
+
+    def test_fixed_case_money_matches_the_model_display_grammar(self) -> None:
+        doc = self.close_fixture()
+        for text in ("NaN", "Infinity", "1E+3", "+1000.00", "1000.000", " 1000.00", "1000.00 ", "1_000.00"):
+            for field in ("current_value", "prior_value", "difference", "threshold"):
+                with self.subTest(field=field, text=text), self.assertRaises(ValueError):
+                    workflow.close_document(doc | {"exceptions": [doc["exceptions"][0] | {field: text}]})
+            with self.subTest(threshold=text), self.assertRaises(ValueError):
+                workflow.close_document(doc | {"thresholds": doc["thresholds"] | {"absolute_variance": text}})
+        for text in ("123456789012345678901234567890.00", "-0.00", "0001.00"):
+            accepted = doc | {"exceptions": [doc["exceptions"][0] | {"difference": text}]}
+            self.assertIs(workflow.close_document(accepted), accepted)
+        for percentage in ("NaN%", "1E+1%", "10.00", " 10.00%"):
+            with self.subTest(percentage=percentage), self.assertRaises(ValueError):
+                workflow.close_document(doc | {"thresholds": doc["thresholds"] | {"percentage_variance": percentage}})
+
+    def test_comparison_labels_require_the_producer_side_invariants(self) -> None:
+        record = {"account_name": "Fixture", "account_id": "account", "control": "period_variance",
+                  "current_value": "1.00", "status": "REVIEW"}
+        altered = record | {"current_value": "2.00"}
+        for group in ("findings", "queries"):
+            def document(change, previous, current):
+                side = (lambda value: [] if value is None else [value]) if group == "findings" else (lambda value: value)
+                item = {"change": change, "previous": side(previous), "current": side(current),
+                        "control": "period_variance", "account_id": "account", "query_id": "Q-fixture"}
+                return {"review_boundary": "Fixture", "scope_changes": [], "findings": [], "queries": [], group: [item]}
+            for change, previous, current in (("NEW", None, record), ("CHANGED", record, altered),
+                    ("RECURRING", record, record), ("NOT_RAISED", record, None), ("NOT_COMPARABLE", record, None)):
+                workflow.comparison_document(document(change, previous, current))
+            for change, previous, current in (("NEW", record, None), ("NEW", record, record),
+                    ("CHANGED", record, record), ("CHANGED", None, record), ("RECURRING", record, altered),
+                    ("RECURRING", None, record), ("NOT_RAISED", record, record), ("NOT_COMPARABLE", None, record)):
+                with self.subTest(group=group, change=change, previous=previous, current=current), self.assertRaises(ValueError):
+                    workflow.comparison_document(document(change, previous, current))
 
     def test_entrypoint_script_rejects_side_effects_and_wrong_targets(self) -> None:
         good = b'import sys\nfrom closecontrol.cli import main\nif __name__ == "__main__":\n    sys.exit(main())\n'
@@ -510,6 +574,7 @@ class ReviewWorkflowTests(unittest.TestCase):
                                   "current": current[0] if current else None})
         finding_changes[1]["current"] = [record, record | {"current_value": "0.00000", "status": "BLOCKED"},
                                          record | {"current_value": ""}]
+        query_changes[1]["current"] = record | {"question": "Changed question"}
         comparison = {"findings": finding_changes, "queries": query_changes,
                       "scope_changes": [attack], "review_boundary": "NOT_RAISED does not mean resolved or approved."}
         output = self.render_comparison(comparison, acknowledgement=True)
