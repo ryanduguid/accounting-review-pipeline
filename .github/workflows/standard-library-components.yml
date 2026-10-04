@@ -1,11 +1,13 @@
 name: Standard-library components
 
-# The Excel adapter and the Power BI application have no pyproject.toml and no
-# Python dependencies, so they are not uv workspace members and cannot run
-# through ci-package.yml. Each gets the same lint tools at the same pins
-# (configured in its own ruff.toml and mypy.ini) and its standard-library suite
-# runs on the same Python matrix. The Power BI report also runs Microsoft's
-# PBIR validator once.
+# The Excel adapter, the Power BI application and the grant workpapers
+# application have no Python dependencies and are not uv workspace members, so
+# they cannot run through ci-package.yml. The grant application keeps a
+# pyproject.toml for standalone use and is never released. Each gets the same
+# lint tools at the same pins (configured in its own ruff and mypy settings) and
+# its standard-library suite runs on the same Python matrix. The grant
+# application also runs on Windows, whose exclusive-rename publication differs
+# from Linux. The Power BI report also runs Microsoft's PBIR validator once.
 
 on:
   push:
@@ -44,6 +46,7 @@ jobs:
           CI_PATHS: |
             adapters/accounting-excel-toolkit/**
             apps/australian-accounting-power-bi/**
+            apps/grant-acquittal-workpapers/**
             contracts/xero-trial-balance-v1/**
             .github/**
             AGENTS.md
@@ -67,6 +70,7 @@ jobs:
         component:
           - adapters/accounting-excel-toolkit
           - apps/australian-accounting-power-bi
+          - apps/grant-acquittal-workpapers
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -101,6 +105,7 @@ jobs:
         component:
           - adapters/accounting-excel-toolkit
           - apps/australian-accounting-power-bi
+          - apps/grant-acquittal-workpapers
         python: ["3.10", "3.12", "3.13", "3.14"]
     defaults:
       run:
@@ -138,8 +143,36 @@ jobs:
           npx --no-install powerbi-report-author
           validate australian-accounting-power-bi.Report
 
+  verify-windows:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    timeout-minutes: 15
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - apps/grant-acquittal-workpapers
+        python: ["3.10", "3.14"]
+    defaults:
+      run:
+        working-directory: ${{ matrix.component }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Run the component's standard-library suite
+        run: python -B -m unittest discover -s tests -v
+
   standard-library-gates:
-    needs: [changes, lint, verify]
+    needs: [changes, lint, verify, verify-windows]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

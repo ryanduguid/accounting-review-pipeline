@@ -1,11 +1,11 @@
 # Accounting Review Pipeline
 
-> Local, deterministic month-end close review for Australian public practice: a Xero trial balance export, a readiness gate, close controls and a ledger-review boundary, as 7 independently versioned components. Review evidence for a human; nothing here approves, posts, pays, lodges or locks.
+> Local, deterministic month-end close review for Australian public practice: a Xero trial balance export, a readiness gate, close controls and a ledger-review boundary, as 8 independently versioned components. Review evidence for a human; nothing here approves, posts, pays, lodges or locks.
 
 ## Repository overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline
 - **Domain**: Local, deterministic month-end close review for Australian public practice, from a Xero trial-balance export through readiness gating, close controls and a ledger-review boundary.
-- **Shape**: Seven independently versioned components joined only by local files and commands. There is no root runtime package, shared library or unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint: `uv sync` then `just check` verifies a fresh clone from the top, and each component is still checked and released from its own directory.
+- **Shape**: Eight independently versioned components joined only by local files and commands. There is no root runtime package, shared library or unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint: `uv sync` then `just check` verifies a fresh clone from the top, and each component is still checked and released from its own directory.
 
 ## Components
 | Component | Directory | Identity |
@@ -16,6 +16,7 @@
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA), no Python distribution |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | command-line script `grant_workpaper.py`, standard library only, no release |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary |
 
 Each component carries its own README, version, lockfile, licence, release notes and release cadence. Component indexes: [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/xero-trial-balance-export/llms.txt), [review-ready-gate](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/llms.txt), [monthly-close-control-plane](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/monthly-close-control-plane/llms.txt), [elizabeth-anne-alexander](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/elizabeth-anne-alexander/llms.txt) and [evatt](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/evatt/llms.txt).

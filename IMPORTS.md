@@ -31,6 +31,10 @@ distribution-named directories:
 
 No distribution name, import package, command or version changed.
 
+Grant Acquittal Workpapers, imported on 4 October 2026, sits at
+`apps/grant-acquittal-workpapers/` beside the Power BI application because it is never
+released, so the identity gate's directory rule does not apply to it.
+
 ## Source identities
 
 | Component | Source and selected commit | Git tree | Tracked-tree SHA-256 | Latest release | Destination |
@@ -41,6 +45,7 @@ No distribution name, import package, command or version changed.
 | Xero Ledger Review Gate | `https://github.com/ryanduguid/xero-ledger-review-gate.git` at `a3df72bfefc94c2a4b5e6fa01fe54aec21200d1f` | `82ae98af57db154c19556f7bfe0eeeaad77bdf60` | `679976f85bb5731782d68e527f5fa3cd9680744bb46a373393f1f8cbec5efb83` | `v0.2.1` | `packages/elizabeth-anne-alexander/` |
 | Accounting Excel Toolkit | `https://github.com/ryanduguid/accounting-excel-toolkit.git` at `5c2a779d316d2e0338f2189f3c98f0add4e7cbea` | `25af282d275b3e03c93bb23eab05144453d8d89b` | `0afbb0584b8f80444880ccc5d0b19c5c29d98294e9c8adae5a9a99e9dde28ad7` | `v0.1.5` | `adapters/accounting-excel-toolkit/` |
 | Australian Accounting Power BI | `https://github.com/ryanduguid/australian-accounting-power-bi.git` at `9aab858e5e099b44ae828ac4793ca47d25cf5675` | `37db7e334d30fd7a8c1573967f9d11b5fe7c82cc` | `6fa498f69b8c0af07c5f3b6d7c8362b482eeaadd582e7dffaf9be318bb6f41ad` | no GitHub release | `apps/australian-accounting-power-bi/` |
+| Grant Acquittal Workpapers | `https://github.com/ryanduguid/grant-acquittal-workpapers.git` at `c2c3d1e21f67525b342dcde5945616466818d806` | `9b1f3b49f642abf0d07ecf65fbfcae663dba260e` | `dd1ad7790c5c21c3edfdfc392839a3b1bc84ec41a85cec046d40230a8568fe12` | never released | `apps/grant-acquittal-workpapers/` |
 
 Every source default branch is `main`. Each clone was clean at the recorded commit.
 
@@ -67,6 +72,7 @@ The fetched heads above are the selected import snapshots.
 | Xero Ledger Review Gate | distribution `elizabeth-anne-alexander` 0.2.1; import `elizabeth_anne_alexander`; command `elizabeth-anne-alexander`; version in `elizabeth_anne_alexander/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, build, wheel demo, Ruff, mypy | MIT; PyPI; zero-network synthetic demonstration |
 | Accounting Excel Toolkit | source adapter 0.1.5; version in `VERSION`; Power Query and VBA source, no Python distribution | pinned ShellCheck; unittest; optional native Excel acceptance | MIT; GitHub source-archive release with `artifact-stem: accounting-excel-toolkit`; local-file adapters only |
 | Australian Accounting Power BI | PBIP/PBIR reference application; no release and no version | unittest plus Microsoft Power BI report-authoring CLI 0.1.4 | MIT; no publisher; fabricated local model and report |
+| Grant Acquittal Workpapers | command-line script `grant_workpaper.py` and joined-example runner `setup_utility.py`; version 0.1.0 in `pyproject.toml`; no release | standalone `uv.lock` with no dependencies; unittest on Linux and Windows, Ruff, mypy | MIT; no publisher; local files and fabricated examples only |
 | evatt | distribution `evatt` 0.1.0; import `evatt`; command `evatt`; version in `evatt/version.py` (`version-parser: python-literal`) | `uv.lock`; pytest, Ruff, mypy, build, clean-wheel redact, verify, restore and halt demo | MIT; **no publisher**: `release-evatt.yml` carries no `pypi` job while the disclosure policy this package enforces is unsigned; local, offline, zero-network; standard library only |
 
 evatt has no import row above. It was written in this repository rather than
@@ -114,6 +120,7 @@ table above.
 - Xero Ledger Review Gate: source `a3df72bfefc94c2a4b5e6fa01fe54aec21200d1f`; squash commit `de7d3bab8156ec7678ad6f6d9ef6f383104a5058`; subtree merge commit `8841889c8a91508a4d81ec6835ff35fc2d903c9e`; destination `packages/elizabeth-anne-alexander/` (distribution name, owner decision D1); imported tree `82ae98af57db154c19556f7bfe0eeeaad77bdf60` equals the source tree.
 - Accounting Excel Toolkit: source `5c2a779d316d2e0338f2189f3c98f0add4e7cbea`; squash commit `13bfb74d336cc1b5f19a67538ee158f2f677fba1`; subtree merge commit `4e3ec67edc53823621f45a854278246295c3911a`; destination `adapters/accounting-excel-toolkit/`; imported tree `25af282d275b3e03c93bb23eab05144453d8d89b` equals the source tree.
 - Australian Accounting Power BI: source `9aab858e5e099b44ae828ac4793ca47d25cf5675`; squash commit `719d3ae1bf17457f60c36518c0e3519aa131544f`; subtree merge commit `e73d34dc5c82606b667d2db6d3e4a80caa3a3511`; destination `apps/australian-accounting-power-bi/`; imported tree `37db7e334d30fd7a8c1573967f9d11b5fe7c82cc` equals the source tree.
+- Grant Acquittal Workpapers (4 October 2026): source `c2c3d1e21f67525b342dcde5945616466818d806`, a private repository archived after the move; command `git subtree add --prefix=apps/grant-acquittal-workpapers https://github.com/ryanduguid/grant-acquittal-workpapers.git c2c3d1e21f67525b342dcde5945616466818d806 --squash`; destination `apps/grant-acquittal-workpapers/`. Before any other commit on the import branch, the imported tree `9b1f3b49f642abf0d07ecf65fbfcae663dba260e` equalled the source tree and the source commit was not reachable. This repository now merges by squash only, so the branch's squash and subtree merge commits were collapsed into the importing pull request's one commit, which is the import identity. The source repository keeps the history and the removed files: `.github/workflows/ci.yml`, `.github/workflows/utility-integration.yml` and the inert `.pr_agent.toml`. `mypy.ini` was added; no other imported file changed.
 
 ## Root automation and release callers
 
