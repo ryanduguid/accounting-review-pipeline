@@ -11,7 +11,12 @@ import sys
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parent
-COMPANIONS = ("accounting-review-pipeline", "au-fpa-pack", "australian-accounting")
+# The pipeline checkout two levels up holds this application, the close controls and the
+# joined runner, so one pipeline commit supplies both the close and the grant sources.
+PIPELINE = "accounting-review-pipeline"
+GRANT_PROJECT = "apps/grant-acquittal-workpapers"
+DRIVER = "packages/monthly-close-control-plane/examples/utility_workflows.py"
+COMPANIONS = ("au-fpa-pack", "australian-accounting")
 
 
 def git_command(*arguments: str) -> list[str]:
@@ -28,18 +33,22 @@ def replay_revisions(manifest: Path) -> dict[str, str]:
         projects = data["projects"]
         if set(projects) != {"close", "fpa", "wip", "grants"}:
             raise ValueError("Replay needs all four source revisions")
-        result = {}
+        if projects["grants"]["project"] != GRANT_PROJECT:
+            raise ValueError("Replay needs a manifest from a run inside the pipeline checkout; "
+                             "manifests from the separate grant repository cannot be replayed")
+        result: dict[str, str] = {}
         for owner, repository, project in (
-            ("close", COMPANIONS[0], "packages/monthly-close-control-plane"),
-            ("fpa", COMPANIONS[1], "."), ("wip", COMPANIONS[2], "packages/the-wip-tally"),
-            ("grants", "grant-acquittal-workpapers", "."),
+            ("close", PIPELINE, "packages/monthly-close-control-plane"),
+            ("fpa", COMPANIONS[0], "."), ("wip", COMPANIONS[1], "packages/the-wip-tally"),
+            ("grants", PIPELINE, GRANT_PROJECT),
         ):
             evidence = projects[owner]
             revision = evidence["revision"]
             if (evidence["project"] != project or evidence["working_tree_status"] != [] or
                     not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision)):
                 raise ValueError("Replay requires clean source checkouts and full commit IDs")
-            result[repository] = revision
+            if result.setdefault(repository, revision) != revision:
+                raise ValueError("Replay needs the close controls and grant workpapers from one pipeline commit")
         return result
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError("Invalid replay provenance manifest") from exc
@@ -69,8 +78,11 @@ def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
     revisions = replay_revisions(replay_manifest) if replay_manifest is not None else None
     workspace = workspace.resolve()
     source = SOURCE.resolve()
-    if workspace.is_relative_to(source) or source.is_relative_to(workspace):
-        raise ValueError("The workspace must be separate from the grant checkout")
+    pipeline = source.parents[1]
+    if not (pipeline / DRIVER).is_file():
+        raise ValueError("Run setup from apps/grant-acquittal-workpapers in an accounting-review-pipeline checkout")
+    if workspace.is_relative_to(pipeline) or pipeline.is_relative_to(workspace):
+        raise ValueError("The workspace must be separate from the pipeline checkout")
     ancestor = workspace.parent
     while not ancestor.exists():
         ancestor = ancestor.parent
@@ -94,13 +106,13 @@ def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
         else:
             checkout_revision(sources / name, url, revisions[name], environment)
     if revisions is not None:
-        grant_snapshot = sources / "grant-acquittal-workpapers"
-        checkout_revision(grant_snapshot, str(source), revisions["grant-acquittal-workpapers"], environment)
-        source = grant_snapshot
-    driver = sources / "accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py"
+        snapshot = sources / PIPELINE
+        checkout_revision(snapshot, str(pipeline), revisions[PIPELINE], environment)
+        pipeline = snapshot
     output = workspace / "results"
-    subprocess.run([sys.executable, str(driver), "--fpa", str(sources / "au-fpa-pack"),
-                    "--accounting", str(sources / "australian-accounting"), "--grants", str(source),
+    subprocess.run([sys.executable, str(pipeline / DRIVER), "--fpa", str(sources / "au-fpa-pack"),
+                    "--accounting", str(sources / "australian-accounting"),
+                    "--grants", str(pipeline / GRANT_PROJECT),
                     "--output", str(output), "--environment-root", str(workspace / "environments")], check=True)
     if not (output / "manifest.json").is_file():
         raise ValueError("The workflow returned without its success manifest")
@@ -116,15 +128,16 @@ def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, required=True,
-                        help="New directory outside every source checkout")
+                        help="New directory outside every Git checkout")
     parser.add_argument("--replay-manifest", type=Path,
                         help="Replay clean source commits from an all-route manifest or replay.json")
     parser.add_argument("--summary", type=Path, help="Append a result summary outside source and workspace directories")
     args = parser.parse_args(argv)
     if args.summary is not None:
         target = args.summary.resolve()
-        if any(target == root or root in target.parents for root in (SOURCE.resolve(), args.workspace.resolve())):
-            parser.error("Summary must be outside the grant checkout and workspace")
+        if any(target == root or root in target.parents
+               for root in (SOURCE.resolve().parents[1], args.workspace.resolve())):
+            parser.error("Summary must be outside the pipeline checkout and workspace")
     was_present = args.workspace.exists() or args.workspace.is_symlink()
     succeeded = False
     try:

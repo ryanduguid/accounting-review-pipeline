@@ -12,10 +12,12 @@ import setup_utility
 
 
 def manifest():
+    # The close controls and the grant workpapers come from one pipeline commit.
     return {"schema_version": "utility-workflows.v2", "workflow": "all", "projects": {
         owner: {"revision": str(index) * 40, "working_tree_status": [], "project": path}
-        for index, (owner, path) in enumerate((("close", "packages/monthly-close-control-plane"),
-            ("fpa", "."), ("wip", "packages/the-wip-tally"), ("grants", ".")), 1)}}
+        for owner, index, path in (("close", 1, "packages/monthly-close-control-plane"),
+            ("fpa", 2, "."), ("wip", 3, "packages/the-wip-tally"),
+            ("grants", 1, "apps/grant-acquittal-workpapers"))}}
 
 
 class ReplayTests(unittest.TestCase):
@@ -28,8 +30,9 @@ class ReplayTests(unittest.TestCase):
     def test_manifest_uses_fixed_repository_mapping(self):
         self.manifest.write_text(json.dumps(manifest()))
         revisions = setup_utility.replay_revisions(self.manifest)
-        self.assertEqual(set(revisions), {*setup_utility.COMPANIONS, "grant-acquittal-workpapers"})
+        self.assertEqual(set(revisions), {*setup_utility.COMPANIONS, "accounting-review-pipeline"})
         self.assertEqual(revisions["accounting-review-pipeline"], "1" * 40)
+        self.assertEqual(revisions["au-fpa-pack"], "2" * 40)
 
     def test_invalid_manifests_are_refused(self):
         changes = [lambda d: d.update(workflow="quarter"), lambda d: d.update(schema_version="future"),
@@ -38,6 +41,9 @@ class ReplayTests(unittest.TestCase):
                    lambda d: d["projects"]["fpa"].update(revision="main"),
                    lambda d: d["projects"]["wip"].update(working_tree_status=[" M source.py"]),
                    lambda d: d["projects"]["grants"].update(project="../../private"),
+                   # A manifest from the separate grant repository.
+                   lambda d: d["projects"]["grants"].update(project="."),
+                   lambda d: d["projects"]["grants"].update(revision="4" * 40),
                    lambda d: d["projects"].update(close=None)]
         for change in changes:
             with self.subTest(change=change):
@@ -85,7 +91,7 @@ class ReplayTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not match"):
                 setup_utility.checkout_revision(self.root / "new", "fixed-source", "a" * 40, {})
 
-    def test_replay_fetches_fixed_sources_and_passes_grant_snapshot(self):
+    def test_replay_fetches_fixed_sources_and_passes_pipeline_snapshot(self):
         self.manifest.write_text(json.dumps(manifest()))
         workspace = self.root / "workspace"
         seen = []
@@ -97,7 +103,9 @@ class ReplayTests(unittest.TestCase):
         def run(args, **kwargs):
             if "rev-parse" in args:
                 return subprocess.CompletedProcess(args, 128, stderr="fatal: not a git repository")
-            self.assertEqual(args[args.index("--grants") + 1], str(workspace / "sources/grant-acquittal-workpapers"))
+            snapshot = workspace / "sources/accounting-review-pipeline"
+            self.assertEqual(args[1], str(snapshot / setup_utility.DRIVER))
+            self.assertEqual(args[args.index("--grants") + 1], str(snapshot / setup_utility.GRANT_PROJECT))
             output = workspace / "results"
             output.mkdir()
             (output / "manifest.json").write_text(json.dumps({**manifest(), "fixture_validation": "passed"}))
@@ -105,9 +113,11 @@ class ReplayTests(unittest.TestCase):
 
         with patch.object(setup_utility.sys, "version_info", (3, 11)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
             setup_utility.setup(workspace, self.manifest)
-        self.assertEqual([source for _, source, _ in seen[:3]],
+        self.assertEqual([source for _, source, _ in seen[:2]],
                          [f"https://github.com/ryanduguid/{name}.git" for name in setup_utility.COMPANIONS])
-        self.assertEqual(seen[-1][1], str(setup_utility.SOURCE.resolve()))
+        # The pipeline commit comes from the local pipeline checkout, which may hold unpushed work.
+        self.assertEqual(seen[-1], ("accounting-review-pipeline", str(setup_utility.SOURCE.resolve().parents[1]), "1" * 40))
+        self.assertEqual(len(seen), 3)
 
     def test_summary_appends_and_failed_setup_never_reads_old_results(self):
         workspace = self.root / "old workspace"

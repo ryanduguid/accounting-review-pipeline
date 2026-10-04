@@ -55,11 +55,17 @@ jobs:
         shell: bash
         run: |
           fixture_status=0
-          for workflow in close-forecast quarter job-cash; do
+          for workflow in close-forecast quarter job-cash grant-cash; do
+            # Only the grant route reads the grant workpapers, which this checkout holds.
+            grants=()
+            if [ "$workflow" = grant-cash ]; then
+              grants=(--grants "$GITHUB_WORKSPACE/sources/accounting-review-pipeline/apps/grant-acquittal-workpapers")
+            fi
             python sources/accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py \
               --workflow "$workflow" \
               --fpa "$GITHUB_WORKSPACE/sources/au-fpa-pack" \
               --accounting "$GITHUB_WORKSPACE/sources/australian-accounting" \
+              "${grants[@]}" \
               --output "$RUNNER_TEMP/public-fixtures/$workflow/results" \
               --environment-root "$RUNNER_TEMP/public-fixtures/$workflow/environments" || fixture_status=1
           done
@@ -68,7 +74,7 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: |
-          for workflow in close-forecast quarter job-cash; do
+          for workflow in close-forecast quarter job-cash grant-cash; do
             summary="$RUNNER_TEMP/public-fixtures/$workflow/results/summary.md"
             if [ -f "$summary" ]; then
               cat "$summary" >> "$GITHUB_STEP_SUMMARY"

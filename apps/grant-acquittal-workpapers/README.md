@@ -3,11 +3,13 @@
 Prepare a local workpaper from a reviewed agreement summary, ledger expenses, explicit allocations and funding receipts. It uses Python's standard library and makes no network requests.
 
 ```powershell
-python grant_workpaper.py --input examples/two-grants --output ../grant-workpaper-demo
+python grant_workpaper.py --input examples/two-grants --output ../../../grant-workpaper-demo
 python -m unittest discover -s tests -v
 ```
 
-Run these commands from the grant checkout. The fabricated example returns
+Run these commands from `apps/grant-acquittal-workpapers` in an
+accounting-review-pipeline checkout; the output folder above sits beside that
+checkout. The fabricated example returns
 REVIEW (exit 2) and saves 5 review items. RECONCILED exits 0 and malformed input
 exits 1. These describe the supplied arithmetic and evidence, never grant
 eligibility or acquittal approval. Choose a new output folder for each run.
@@ -17,16 +19,16 @@ For a locked setup, use `uv sync --locked` and run the same commands through
 
 ## Run all joined accounting examples
 
-From this checkout, with Python 3.11 or later, Git and uv on PATH:
+From this directory, with Python 3.11 or later, Git and uv on PATH:
 
 ```powershell
-python setup_utility.py --workspace ../accounting-utility-demo
+python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
-This optional development command clones the public Accounting Review Pipeline,
-au-fpa-pack and australian-accounting repositories at `main`. It runs the close,
-quarter, WIP cash and grant cash examples with fabricated inputs and this grant
-checkout. Git and uv download source and dependencies; the accounting engines
+This optional development command clones the public au-fpa-pack and
+australian-accounting repositories at `main`. It runs the close, quarter, WIP
+cash and grant cash examples with fabricated inputs, using this pipeline
+checkout for the close controls, the joined runner and the grant workpapers. Git and uv download source and dependencies; the accounting engines
 continue to use local files. No new credential or access token is needed.
 
 Choose a new workspace outside every Git checkout. Setup never updates existing
@@ -37,32 +39,36 @@ records all 19 workflow commands, four runtime probes, source revisions, locks
 and output hashes. A failed run retains its workspace and any workflow diagnostics;
 correct the cause and use a new workspace path to retry.
 
-The `Joined accounting examples` workflow runs the same command on Linux and
-Windows for PRs, pushes to `main`, manual runs and daily at 19:23 UTC. The daily
-schedule starts after this workflow reaches `main`. Each run follows the latest
-public companion `main` revisions, so their changes are checked by the next
-scheduled run rather than on each companion PR. Logs and seven-day fabricated
-result artefacts remain in this private repository. Existing component tests
-remain separate from the joined integration run.
+The pipeline's `Joined accounting examples` workflow
+(`.github/workflows/joined-latest-main.yml`) runs the same command on Linux and
+Windows daily at 19:23 UTC and on manual runs. Each run follows the companions'
+latest `main` revisions, so their changes are checked by the next scheduled run.
+Pull requests and pushes run the pinned public joined fixtures instead, which
+include the grant cash route. Logs and seven-day fabricated result artefacts are
+public with the repository. Component tests remain separate from the joined
+integration run.
 
 The pipeline runner checks the fixed examples' expected periods, cash balances,
 command coverage and retained review findings before it writes a success
 manifest. `results/summary.md` reports those checks, cash results and source
-revisions. The workflow appends this summary to its private Actions job page,
+revisions. The workflow appends this summary to its Actions job page,
 including the failed command when available. Detailed subprocess diagnostics
 stay in the retained files. A passing fixture check never approves accounting.
 
 To repeat the source revisions from a previous complete run:
 
 ```powershell
-python setup_utility.py --workspace ../accounting-utility-replay --replay-manifest ../accounting-utility-demo/results/manifest.json
+python setup_utility.py --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 ```
 
 Replay accepts only full commit IDs from an all-route `utility-workflows.v2`
-manifest whose four source checkouts were clean. It fetches the three public
-commits from the fixed repositories and the grant commit from this local
-checkout, each into a new directory. It does not change this checkout. The grant
-commit must still be available locally; unavailable commits fail explicitly.
+manifest whose four source checkouts were clean, with the close controls and the
+grant workpapers at one pipeline commit. It fetches the two companion commits
+from their fixed public repositories and the pipeline commit from this local
+checkout, each into a new directory. It does not change this checkout. The
+pipeline commit must still be available locally; unavailable commits fail
+explicitly. Manifests recorded by the separate grant repository before its move
+into the pipeline are refused.
 The runner also saves `results/replay.json` before running commands. Use it with
 `--replay-manifest` when a failed all-route run has no success manifest. Failures
 before source evidence is collected do not have a replay record.
@@ -76,8 +82,9 @@ Python patch release or external tool availability. It does not resume a failed
 run or reconstruct uncommitted source edits. Without `--replay-manifest`, setup
 continues to use the public companions' latest `main` branches.
 
-For a local summary file, add `--summary ../accounting-summary.md`. It appends to
-that file, which must sit outside the grant checkout and new workspace.
+For a local summary file, add `--summary ../../../accounting-summary.md`. It
+appends to that file, which must sit outside the pipeline checkout and new
+workspace.
 Failure before the runner starts produces a setup-failure summary without
 claiming that results were verified.
 If detailed summary text is missing after successful verification, the appended
@@ -96,12 +103,12 @@ without importing one repository into the other.
 
 After running the workpaper example above, use an existing au-fpa-pack checkout
 to forecast its cash. Set `$fpa` to that checkout's path; the example below assumes
-it sits beside this repository. These scripts use Python's standard library and
-need no downloads. Run the commands from the grant checkout:
+it sits beside the pipeline checkout. These scripts use Python's standard library
+and need no downloads. Run the commands from this directory:
 
 ```powershell
-$fpa = "../au-fpa-pack"
-$workpaper = "../grant-workpaper-demo/workpaper.json"
+$fpa = "../../../au-fpa-pack"
+$workpaper = "../../../grant-workpaper-demo/workpaper.json"
 $digest = (Get-FileHash -LiteralPath $workpaper -Algorithm SHA256).Hash.ToLowerInvariant()
 python "$fpa/examples/restricted-cash/grant_cash.py" --workpaper $workpaper --workpaper-sha256 $digest
 ```
