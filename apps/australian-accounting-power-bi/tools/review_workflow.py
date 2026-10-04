@@ -2,20 +2,26 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import calendar
 import csv
 import hashlib
 import html
 import io
 import json
+import math
 import os
 import re
+import shlex
 import stat
 import subprocess
+import tempfile
+import zipfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from decimal import Context, Decimal, localcontext
+from decimal import Context, Decimal, DecimalException, InvalidOperation, localcontext
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, Iterator
 
 APP = Path(__file__).resolve().parents[1]
 NAME = "australian-accounting-power-bi"
@@ -23,6 +29,10 @@ TB_COLUMNS = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,
 CLOSE_FILES = ("close-review-pack.json", "close-summary.md", "exceptions.csv", "client-queries.csv")
 READY_FILES = ("readiness-pack.json", "readiness-summary.md", "findings.csv")
 BOUNDARY = "Fabricated demonstration. Verification and acknowledgement do not approve accounting or close a period."
+PRODUCERS = {
+    "close-control": ("monthly-close-control-plane", "closecontrol", "closecontrol.cli:main"),
+    "review-ready": ("review-ready-gate", "reviewready", "reviewready.cli:main"),
+}
 
 
 def digest(value: bytes) -> str:
@@ -31,6 +41,208 @@ def digest(value: bytes) -> str:
 
 def json_bytes(value: Any) -> bytes:
     return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def strict_json(data: bytes | str, label: str) -> Any:
+    """Refuse ambiguous or excessively nested JSON before consumers index it."""
+    def members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate object member.")
+            result[key] = value
+        return result
+
+    def constant(value: str) -> Any:
+        raise ValueError(f"Non-standard numeric token: {value}")
+
+    def floating(token: str) -> float:
+        value = float(token)
+        if not math.isfinite(value):
+            raise ValueError("JSON number is outside the finite float range.")
+        return value
+
+    try:
+        text = data.decode("utf-8-sig") if isinstance(data, bytes) else data
+        depth, quoted, escaped = 0, False, False
+        for character in text:
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif character == "\\":
+                    escaped = True
+                elif character == '"':
+                    quoted = False
+            elif character == '"':
+                quoted = True
+            elif character in "[{":
+                depth += 1
+                if depth > 64:
+                    raise ValueError("JSON nesting exceeds 64 levels.")
+            elif character in "]}":
+                depth -= 1
+        return json.loads(text, object_pairs_hook=members, parse_constant=constant, parse_float=floating)
+    except (UnicodeError, ValueError, RecursionError) as exc:
+        raise ValueError(f"{label}: {exc}") from exc
+
+
+def string_fields(record: Any, names: tuple[str, ...], label: str) -> dict[str, Any]:
+    if not isinstance(record, dict) or any(not isinstance(record.get(name), str) for name in names):
+        raise ValueError(f"{label} requires an object with string fields: {', '.join(names)}.")
+    return record
+
+
+def object_rows(value: Any, label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise ValueError(f"{label} requires a list of objects.")
+    return value
+
+
+def string_map(value: Any, label: str, *, hashes: bool = False, required: tuple[str, ...] = ()) -> dict[str, str]:
+    if not isinstance(value, dict) or any(not isinstance(key, str) or not isinstance(item, str)
+                                          or (hashes and not re.fullmatch(r"[a-f0-9]{64}", item))
+                                          for key, item in value.items()):
+        raise ValueError(f"{label} requires a string map{' of lowercase SHA-256 values' if hashes else ''}.")
+    if not set(required).issubset(value):
+        raise ValueError(f"{label} is missing required fields.")
+    return value
+
+
+def case_document(value: Any) -> dict[str, Any]:
+    case = string_fields(value, ("case_id", "entity", "tenant", "basis", "currency",
+                                "financial_year_start", "opening_journal", "population"), "Case")
+    string_map(case.get("account_ids"), "Case account identifiers")
+    string_map(case.get("source_sha256"), "Case source hashes", hashes=True)
+    return case
+
+
+def close_document(value: Any) -> dict[str, Any]:
+    doc = string_fields(value, ("overall_status",), "Close pack")
+    string_map(doc.get("source_sha256"), "Close source hashes", hashes=True, required=("current_trial_balance", "prior_trial_balance"))
+    for name in ("current_report_dates", "prior_report_dates", "controls_not_run"):
+        items = doc.get(name)
+        if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
+            raise ValueError(f"Close {name} requires a list of strings.")
+    if not doc["current_report_dates"] or not doc["prior_report_dates"]:
+        raise ValueError("Close report dates cannot be empty.")
+    if "acknowledgement" not in doc or (doc["acknowledgement"] is not None and not isinstance(doc["acknowledgement"], dict)):
+        raise ValueError("Close acknowledgement requires an object or null.")
+    string_fields(doc.get("thresholds"), ("absolute_variance", "percentage_variance"), "Close thresholds")
+    for item in object_rows(doc.get("exceptions"), "Close exceptions"):
+        string_fields(item, ("control", "tenant", "account_id", "account_name", "status", "current_value",
+                             "prior_value", "difference", "threshold", "reason", "reviewer_action"), "Close exception")
+    for item in object_rows(doc.get("client_queries"), "Close queries"):
+        string_fields(item, ("control", "tenant", "account_id", "question", "evidence_requested"), "Close query")
+    return doc
+
+
+def driver_document(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("Driver pack requires an object.")
+    string_map(value.get("source_sha256"), "Driver source hashes", hashes=True, required=("transactions", *("pack:" + name for name in CLOSE_FILES)))
+    for account in object_rows(value.get("accounts"), "Driver accounts"):
+        string_fields(account, ("tenant", "account_id", "movement", "transactions_total", "unexplained"), "Driver account")
+        if type(account.get("transactions_in_window")) is not int or account["transactions_in_window"] < 0:
+            raise ValueError("Driver transaction count requires a non-negative integer.")
+        amounts = [account[name] for name in ("movement", "transactions_total", "unexplained")]
+        for row in object_rows(account.get("drivers"), "Driver rows"):
+            string_fields(row, ("TransactionID", "Date", "Reference", "Description", "Amount"), "Driver row")
+            amounts.append(row["Amount"])
+        try:
+            if any(not Decimal(amount).is_finite() for amount in amounts):
+                raise ValueError("Driver amounts must be finite decimal strings.")
+        except InvalidOperation as exc:
+            raise ValueError("Driver amounts must be finite decimal strings.") from exc
+    return value
+
+
+def readiness_document(value: Any) -> dict[str, Any]:
+    doc = string_fields(value, ("overall_status",), "Readiness pack")
+    if not isinstance(doc.get("controls_not_run"), list):
+        raise ValueError("Readiness controls not run requires a list.")
+    return doc
+
+
+def comparison_document(value: Any) -> dict[str, Any]:
+    doc = string_fields(value, ("review_boundary",), "Comparison")
+    previous: Any = None
+    current: Any = None
+    for group in ("findings", "queries"):
+        for item in object_rows(doc.get(group), f"Comparison {group}"):
+            string_fields(item, ("change",), f"Comparison {group} record")
+            if item["change"] not in ("NEW", "CHANGED", "RECURRING", "NOT_RAISED", "NOT_COMPARABLE"):
+                raise ValueError("Unrecognised comparison classification.")
+            if group == "findings":
+                string_fields(item, ("control", "account_id"), "Finding comparison")
+                previous = object_rows(item.get("previous"), "Previous findings")
+                current = object_rows(item.get("current"), "Current findings")
+                for row in previous + current:
+                    string_fields(row, ("account_name", "current_value", "status"), "Displayed finding")
+            else:
+                string_fields(item, ("query_id",), "Query comparison")
+                previous, current = item.get("previous"), item.get("current")
+                for row in (previous, current):
+                    if row is not None:
+                        string_fields(row, ("account_name", "control", "account_id"), "Displayed query")
+            if not previous and not current:
+                raise ValueError("Comparison requires at least one populated side.")
+    scope = doc.get("scope_changes")
+    if not isinstance(scope, list) or any(not isinstance(item, str) for item in scope):
+        raise ValueError("Comparison scope changes requires a list of strings.")
+    return doc
+
+
+def producer_document(value: Any, command: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"manifest_version", "command", "launcher_name", "launcher_sha256", "interpreter", "distribution", "package"}:
+        raise ValueError("Producer manifest requires its complete identity fields; rebuild the review run.")
+    if type(value["manifest_version"]) is not int or value["manifest_version"] != 1 or value["command"] != command:
+        raise ValueError("Unsupported producer manifest.")
+    string_fields(value, ("launcher_name", "launcher_sha256"), "Producer launcher")
+    if value["launcher_name"] not in (command, command + ".exe"):
+        raise ValueError("Producer launcher name differs.")
+    interpreter = string_fields(value["interpreter"], ("implementation", "version", "cache_tag", "executable_sha256"), "Producer interpreter")
+    if set(interpreter) != {"implementation", "version", "cache_tag", "executable_sha256"}:
+        raise ValueError("Unsupported interpreter identity fields.")
+    distribution = string_fields(value["distribution"], ("name", "version", "requires_python", "entry_point"), "Producer distribution")
+    name, package, entry = PRODUCERS[command]
+    if set(distribution) != {"name", "version", "requires_python", "entry_point"} or distribution["name"] != name or distribution["entry_point"] != entry:
+        raise ValueError("Producer distribution contract differs.")
+    module = string_fields(value["package"], ("name",), "Producer package")
+    if set(module) != {"name", "files"} or module["name"] != package:
+        raise ValueError("Producer package contract differs.")
+    files = string_map(module.get("files"), "Producer package files", hashes=True)
+    if not files or any(not re.fullmatch(r"[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*", filename) or any(part in (".", "..", "__pycache__") for part in filename.split("/")) for filename in files):
+        raise ValueError("Producer package file paths differ.")
+    if any(not re.fullmatch(r"[a-f0-9]{64}", value) for value in (value["launcher_sha256"], interpreter["executable_sha256"])):
+        raise ValueError("Producer executable hashes require lowercase SHA-256 values.")
+    return value
+
+
+def receipt_document(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"schema_version", "case", "period", "invocations", "files", "boundary", "producer_manifests"}:
+        raise ValueError("Receipt requires complete producer identities; rebuild the review run.")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1 or value["boundary"] != BOUNDARY:
+        raise ValueError("Unsupported review receipt.")
+    case_document(value["case"])
+    string_fields(value, ("period", "boundary"), "Receipt")
+    if not re.fullmatch(r"2024-(08-31|09-30)", value["period"]):
+        raise ValueError("Receipt period is outside the fixed review case.")
+    string_map(value["files"], "Receipt files", hashes=True)
+    manifests = value["producer_manifests"]
+    if not isinstance(manifests, dict) or set(manifests) != set(PRODUCERS):
+        raise ValueError("Receipt requires exactly the two producer manifests.")
+    for command, manifest in manifests.items():
+        producer_document(manifest, command)
+    for invocation in object_rows(value["invocations"], "Receipt invocations"):
+        string_fields(invocation, ("command", "executable_sha256", "producer_manifest_sha256", "started", "finished"), "Receipt invocation")
+        if set(invocation) != {"command", "args", "executable_sha256", "producer_manifest_sha256", "started", "finished", "exit"} or type(invocation["exit"]) is not int:
+            raise ValueError("Receipt invocation fields differ.")
+        if not isinstance(invocation["args"], list) or any(not isinstance(arg, str) for arg in invocation["args"]):
+            raise ValueError("Receipt invocation arguments require strings.")
+        command = invocation["command"]
+        if command not in PRODUCERS or invocation["producer_manifest_sha256"] != digest(json_bytes(manifests[command])) or invocation["executable_sha256"] != manifests[command]["launcher_sha256"]:
+            raise ValueError("Receipt invocation producer identity differs.")
+    return value
 
 
 def rows(value: bytes) -> list[dict[str, str]]:
@@ -82,8 +294,253 @@ def new_output(path: Path) -> Path:
     return path
 
 
+def launcher_script(source: bytes, command: str) -> None:
+    """Recognise the two normal console-script bodies without executing them."""
+    module = PRODUCERS[command][2].split(":")[0]
+    try:
+        tree = ast.parse(source.decode("utf-8"))
+    except (UnicodeError, SyntaxError, ValueError, RecursionError) as exc:
+        raise ValueError("Producer entry-point script is malformed.") from exc
+    body = list(tree.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body.pop(0)
+    if body and isinstance(body[-1], ast.If) and all(isinstance(node, (ast.Import, ast.ImportFrom)) for node in body[:-1]):
+        guarded = body[-1]
+        if ast.dump(guarded.test) != ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body) or guarded.orelse:
+            raise ValueError("Producer script guard differs.")
+        body = body[:-1] + guarded.body
+    imports = 0
+    while body and isinstance(body[0], (ast.Import, ast.ImportFrom)):
+        node = body.pop(0)
+        if isinstance(node, ast.Import):
+            if any(alias.name not in ("sys", "re") or alias.asname is not None for alias in node.names):
+                raise ValueError("Producer script has an unsupported import.")
+        elif isinstance(node, ast.ImportFrom) and node.module == module and node.level == 0 and len(node.names) == 1 and node.names[0].name == "main" and node.names[0].asname is None:
+            imports += 1
+        else:
+            raise ValueError("Producer script entry point differs.")
+    if imports != 1:
+        raise ValueError("Producer script requires its exact entry-point import.")
+    normalisations = (
+        'sys.argv[0] = re.sub(r"(-script\\.pyw|\\.exe)?$", "", sys.argv[0])',
+        'if sys.argv[0].endswith("-script.pyw"):\n    sys.argv[0] = sys.argv[0][:-11]\nelif sys.argv[0].endswith(".exe"):\n    sys.argv[0] = sys.argv[0][:-4]',
+    )
+    if body and any(ast.dump(body[0]) == ast.dump(ast.parse(form).body[0]) for form in normalisations):
+        body = body[1:]
+    terminals = ('main()', 'sys.exit(main())', 'raise SystemExit(main())')
+    if len(body) != 1 or not any(ast.dump(body[0]) == ast.dump(ast.parse(form).body[0]) for form in terminals):
+        raise ValueError("Producer script has an unsupported call or side effect.")
+
+
+def launcher_zip(data: bytes, command: str, *, stored: bool = False) -> bytes:
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            entries = archive.infolist()
+            if len(entries) != 1 or entries[0].filename != "__main__.py" or entries[0].file_size > 65536 or entries[0].flag_bits & 1 or (stored and entries[0].compress_type != zipfile.ZIP_STORED):
+                raise ValueError("Producer launcher ZIP differs from the supported format.")
+            source = archive.read(entries[0])
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+        raise ValueError("Producer launcher ZIP is malformed.") from exc
+    launcher_script(source, command)
+    return source
+
+
+def windows_resources(executable: Path) -> dict[str, bytes | None]:
+    """Map fixed PE resources as data, never as executable code."""
+    import ctypes
+
+    api = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)
+    signatures = {
+        "LoadLibraryExW": ([ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_uint32], ctypes.c_void_p),
+        "FindResourceW": ([ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_void_p], ctypes.c_void_p),
+        "SizeofResource": ([ctypes.c_void_p, ctypes.c_void_p], ctypes.c_uint32),
+        "LoadResource": ([ctypes.c_void_p, ctypes.c_void_p], ctypes.c_void_p),
+        "LockResource": ([ctypes.c_void_p], ctypes.c_void_p),
+        "FreeLibrary": ([ctypes.c_void_p], ctypes.c_int),
+    }
+    for name, (arguments, return_type) in signatures.items():
+        function = getattr(api, name)
+        function.argtypes, function.restype = arguments, return_type
+    handle = api.LoadLibraryExW(str(executable), None, 0x22)
+    if not handle:
+        raise OSError("Producer launcher cannot be mapped as PE resources.")
+    try:
+        if not handle & 3:
+            raise ValueError("Producer launcher did not yield a data-only resource mapping.")
+        result: dict[str, bytes | None] = {}
+        for name, limit in (("UV_TRAMPOLINE_KIND", 1), ("UV_PYTHON_PATH", 131072), ("UV_SCRIPT_DATA", 1048576)):
+            resource = api.FindResourceW(handle, name, 10)
+            if not resource:
+                result[name] = None
+                continue
+            size = api.SizeofResource(handle, resource)
+            if not 0 < size <= limit:
+                raise ValueError("Producer launcher resource size is invalid.")
+            loaded = api.LoadResource(handle, resource)
+            pointer = api.LockResource(loaded) if loaded else None
+            if not pointer:
+                raise OSError("Producer launcher resource cannot be read.")
+            result[name] = ctypes.string_at(pointer, size)
+        return result
+    finally:
+        if not api.FreeLibrary(handle):
+            raise OSError("Producer launcher resource mapping cannot be released.")
+
+
+def declared_interpreter(executable: Path, data: bytes, command: str) -> Path:
+    try:
+        if os.name == "nt":
+            resources = windows_resources(executable)
+            if any(value is not None for value in resources.values()):
+                if any(value is None for value in resources.values()) or resources["UV_TRAMPOLINE_KIND"] != b"\x01":
+                    raise ValueError("Producer uv launcher resources are incomplete or malformed.")
+                path_bytes = resources["UV_PYTHON_PATH"]
+                script_bytes = resources["UV_SCRIPT_DATA"]
+                if path_bytes is None or script_bytes is None:
+                    raise ValueError("Producer uv launcher resources are incomplete.")
+                path = path_bytes.decode("utf-8")
+                if not path or len(path) > 32767 or any(character in path for character in '\x00\r\n"\ufeff') or not PureWindowsPath(path).is_absolute():
+                    raise ValueError("Producer uv interpreter path is malformed.")
+                launcher_zip(script_bytes, command, stored=True)
+                return Path(path)
+            launcher_zip(data, command)
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                prefix = data[:archive.infolist()[0].header_offset]
+            offset = prefix.rfind(b"#!", max(0, len(prefix) - 65536))
+            if offset < 0:
+                raise ValueError("Producer PyPA launcher has no interpreter shebang.")
+            shebang = prefix[offset:].decode("utf-8").rstrip("\r\n")
+        else:
+            if len(data) > 65536:
+                raise ValueError("Producer console script is too large.")
+            source = data.decode("utf-8")
+            lines = source.splitlines()
+            shebang = lines[0] if lines else ""
+            if shebang == "#!/bin/sh":
+                if len(lines) < 4 or not lines[1].startswith("'''exec' ") or lines[2] != "' '''":
+                    raise ValueError("Producer shell wrapper is unsupported.")
+                parts = shlex.split(lines[1][9:])
+                if len(parts) != 3 or parts[1:] != ["$0", "$@"]:
+                    raise ValueError("Producer shell wrapper arguments differ.")
+                shebang = "#!" + parts[0]
+                source = "\n".join(lines[3:])
+            launcher_script(source.encode("utf-8"), command)
+        path = shebang[2:] if shebang.startswith("#!") else ""
+        if os.name == "nt" and path.startswith('"') and path.endswith('"'):
+            path = path[1:-1]
+        if not path or any(character in path for character in '\x00\r\n"') or not Path(path).is_absolute() or path == "/usr/bin/env" or path.startswith("/usr/bin/env "):
+            raise ValueError("Producer interpreter shebang is unsupported.")
+        return Path(path)
+    except (UnicodeError, zipfile.BadZipFile) as exc:
+        raise ValueError("Producer launcher format is unsupported.") from exc
+
+
+def interpreter_file(path: Path) -> tuple[Path, Path]:
+    """Allow only the interpreter's POSIX leaf link, retaining its venv path."""
+    original = path
+    seen = set()
+    for _ in range(9):
+        lexical = PureWindowsPath(str(path))
+        if lexical.drive.upper() == "Z:" or lexical.drive.startswith("\\\\") or str(path).startswith(("\\\\", "//")):
+            raise ValueError("Use a local directory, never a network or NAS path.")
+        if not path.is_absolute():
+            raise ValueError("Producer interpreter requires an absolute path.")
+        path = ordinary(path.parent) / path.name
+        if path in seen:
+            raise ValueError("Producer interpreter link loop.")
+        seen.add(path)
+        metadata = path.lstat()
+        if os.name != "nt" and stat.S_ISLNK(metadata.st_mode):
+            target = Path(os.readlink(path))
+            target_lexical = PureWindowsPath(str(target))
+            if target_lexical.drive.upper() == "Z:" or target_lexical.drive.startswith("\\\\") or str(target).startswith(("\\\\", "//")):
+                raise ValueError("Use a local directory, never a network or NAS path.")
+            path = target if target.is_absolute() else path.parent / target
+            continue
+        if not stat.S_ISREG(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise ValueError("Producer interpreter must be a regular local executable.")
+        return original, path
+    raise ValueError("Producer interpreter has too many leaf links.")
+
+
+@contextmanager
+def producer_environment() -> Iterator[dict[str, str]]:
+    with tempfile.TemporaryDirectory(prefix="review-bytecode-") as cache:
+        environment = {name: os.environ[name] for name in ("PATH", "SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "LANG", "LC_ALL", "LC_CTYPE") if name in os.environ}
+        environment.update(PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1", PYTHONPYCACHEPREFIX=cache)
+        yield environment
+
+
+PRODUCER_PROBE = '''import importlib.metadata as metadata
+import importlib.util
+import json
+import re
+import sys
+from pathlib import Path
+name, package, entry, script_directory = sys.argv[1:]
+sys.path[0] = script_directory
+normalise = lambda value: re.sub(r"[-_.]+", "-", value).lower()
+distributions = [item for item in metadata.distributions() if normalise(item.metadata.get("Name", "")) == name]
+if len(distributions) != 1:
+    raise SystemExit("Producer distribution is missing or ambiguous.")
+distribution = distributions[0]
+entries = [item for item in distribution.entry_points if item.group == "console_scripts" and item.name == {"closecontrol": "close-control", "reviewready": "review-ready"}[package]]
+if len(entries) != 1 or entries[0].value != entry:
+    raise SystemExit("Producer entry point differs.")
+spec = importlib.util.find_spec(package)
+if spec is None or spec.origin is None or not spec.submodule_search_locations or len(spec.submodule_search_locations) != 1:
+    raise SystemExit("Producer package is missing or ambiguous.")
+root = Path(next(iter(spec.submodule_search_locations)))
+if Path(spec.origin) != root / "__init__.py":
+    raise SystemExit("Producer package origin differs.")
+print(json.dumps({"executable": sys.executable, "root": str(root), "implementation": sys.implementation.name, "version": ".".join(map(str, sys.version_info[:3])), "cache_tag": sys.implementation.cache_tag, "distribution": {"name": normalise(distribution.metadata["Name"]), "version": distribution.version, "requires_python": distribution.metadata.get("Requires-Python", ""), "entry_point": entries[0].value}}))
+'''
+
+
+def package_files(root: Path) -> dict[str, str]:
+    root = ordinary(root)
+    files: dict[str, str] = {}
+
+    def visit(directory: Path) -> None:
+        for entry in sorted(directory.iterdir()):
+            metadata = entry.lstat()
+            if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise ValueError("Linked producer package paths are not admitted.")
+            if entry.name.startswith(".env") or entry.name in ("direct_url.json", "credentials", "id_rsa", "id_ed25519") or entry.suffix.lower() in (".pem", ".key", ".p12", ".pfx"):
+                raise ValueError("Producer package contains an excluded private file.")
+            if entry.name == "__pycache__" or entry.suffix == ".pyc":
+                continue
+            if stat.S_ISDIR(metadata.st_mode):
+                visit(entry)
+            elif stat.S_ISREG(metadata.st_mode):
+                files[entry.relative_to(root).as_posix()] = digest(entry.read_bytes())
+            else:
+                raise ValueError("Producer package contains a non-regular file.")
+    visit(root)
+    return files
+
+
+def producer_manifest(bin_dir: Path, command: str) -> dict[str, Any]:
+    executable = ordinary(bin_dir / (command + (".exe" if os.name == "nt" else "")))
+    launcher = executable.read_bytes()
+    interpreter, target = interpreter_file(declared_interpreter(executable, launcher, command))
+    interpreter_hash = digest(target.read_bytes())
+    distribution, package, entry = PRODUCERS[command]
+    with producer_environment() as environment:
+        probe = subprocess.run([str(interpreter), "-B", "-c", PRODUCER_PROBE, distribution, package, entry, str(executable.parent)], capture_output=True, cwd=environment["PYTHONPYCACHEPREFIX"], env=environment, check=False)
+    if probe.returncode:
+        raise ValueError("Producer installed identity probe refused the installation.")
+    identity = string_fields(strict_json(probe.stdout, "Producer identity"), ("executable", "root", "implementation", "version", "cache_tag"), "Producer identity")
+    if interpreter_file(Path(identity["executable"]))[1] != target:
+        raise ValueError("Producer interpreter identity differs from its declared path.")
+    manifest = {"manifest_version": 1, "command": command, "launcher_name": executable.name, "launcher_sha256": digest(launcher), "interpreter": {name: identity[name] for name in ("implementation", "version", "cache_tag")} | {"executable_sha256": interpreter_hash}, "distribution": identity.get("distribution"), "package": {"name": package, "files": package_files(Path(identity["root"]))}}
+    if executable.read_bytes() != launcher or digest(target.read_bytes()) != interpreter_hash:
+        raise ValueError("Producer executable changed during identity inspection.")
+    return producer_document(manifest, command)
+
+
 def sources(app: Path = APP) -> tuple[dict[str, Any], dict[str, bytes]]:
-    case = json.loads(ordinary(app / "samples/shared-review-case.json").read_bytes())
+    case = case_document(strict_json(ordinary(app / "samples/shared-review-case.json").read_bytes(), "Shared case"))
     source = {}
     for name, expected in case["source_sha256"].items():
         if not re.fullmatch(r"sample-[a-z-]+\.csv", name):
@@ -138,27 +595,33 @@ def trial_balances(case: dict[str, Any], source: dict[str, bytes], month: int) -
         return tb(month), tb(month - 1), csv_bytes(list(transactions[0]), transactions)
 
 
-def invoke(bin_dir: Path, command: str, args: list[str], run: Path, label: str, allowed: tuple[int, ...] = (0,)) -> dict[str, Any]:
+def invoke(bin_dir: Path, command: str, args: list[str], run: Path, label: str, allowed: tuple[int, ...] = (0,), expected_manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     executable = ordinary(bin_dir / (command + (".exe" if os.name == "nt" else "")))
-    executable_hash = digest(executable.read_bytes())
+    manifest = producer_manifest(bin_dir, command)
+    if expected_manifest is not None and manifest != expected_manifest:
+        raise ValueError("Producer installed identity differs from the receipt.")
     started = datetime.now(timezone.utc).isoformat()
-    result = subprocess.run([str(executable), *args], capture_output=True, cwd=run, check=False)
-    if digest(ordinary(executable).read_bytes()) != executable_hash:
-        raise ValueError("Producer executable changed during invocation.")
+    with producer_environment() as environment:
+        result = subprocess.run([str(executable), *args], capture_output=True, cwd=run, env=environment, check=False)
+    if producer_manifest(bin_dir, command) != manifest:
+        raise ValueError("Producer installed identity changed during invocation.")
     for kind, data in (("stdout", result.stdout), ("stderr", result.stderr)):
         (run / "validation" / f"{label}.{kind}.txt").write_bytes(data)
     if result.returncode not in allowed:
         raise ValueError(f"{command} {label} refused the case (exit {result.returncode}); see validation logs.")
-    return {"command": command, "args": args, "executable_sha256": executable_hash, "started": started, "finished": datetime.now(timezone.utc).isoformat(), "exit": result.returncode}
+    return {"command": command, "args": args, "executable_sha256": manifest["launcher_sha256"], "producer_manifest_sha256": digest(json_bytes(manifest)), "started": started, "finished": datetime.now(timezone.utc).isoformat(), "exit": result.returncode}
 
 
-def pinned_producer(bin_dir: Path, command: str, args: list[str], expected_hash: str) -> bytes:
+def pinned_producer(bin_dir: Path, command: str, args: list[str], expected_manifest: dict[str, Any]) -> bytes:
     executable = ordinary(bin_dir / (command + (".exe" if os.name == "nt" else "")))
-    if digest(executable.read_bytes()) != expected_hash:
+    if digest(executable.read_bytes()) != expected_manifest["launcher_sha256"]:
         raise ValueError("Producer executable hash differs from the receipt.")
-    result = subprocess.run([str(executable), *args], capture_output=True, check=False)
-    if digest(ordinary(executable).read_bytes()) != expected_hash:
-        raise ValueError("Producer executable changed during invocation.")
+    if producer_manifest(bin_dir, command) != expected_manifest:
+        raise ValueError("Producer installed identity differs from the receipt.")
+    with producer_environment() as environment:
+        result = subprocess.run([str(executable), *args], capture_output=True, env=environment, check=False)
+    if producer_manifest(bin_dir, command) != expected_manifest:
+        raise ValueError("Producer installed identity changed during invocation.")
     if result.returncode:
         raise ValueError("Producer verification refused portable display.")
     return result.stdout
@@ -166,6 +629,7 @@ def pinned_producer(bin_dir: Path, command: str, args: list[str], expected_hash:
 
 def build(run: Path, bin_dir: Path, month: int, note: Path | None = None) -> Path:
     run = new_output(run)
+    manifests = {command: producer_manifest(bin_dir, command) for command in PRODUCERS}
     case, source = sources()
     current, prior, transactions = trial_balances(case, source, month)
     (run / "inputs").mkdir(parents=True)
@@ -180,23 +644,23 @@ def build(run: Path, bin_dir: Path, month: int, note: Path | None = None) -> Pat
     self_review = {"preparer_initials": "DEMO", "prepared_on": period, "engagement_type": "month_end", "period_end": period, "assertions": dict.fromkeys(("pack_complete", "tie_outs_done", "open_items_listed", "variances_explained", "self_reviewed"), True)}
     (run / "inputs/self_review.json").write_bytes(json_bytes(self_review))
     commands = []
-    commands.append(invoke(bin_dir, "review-ready", ["gate", "--profile", "month_end", "--pack", "inputs", "--output", "readiness"], run, "readiness", (0, 2)))
-    commands.append(invoke(bin_dir, "review-ready", ["view", "--pack-dir", "readiness"], run, "readiness-view"))
+    commands.append(invoke(bin_dir, "review-ready", ["gate", "--profile", "month_end", "--pack", "inputs", "--output", "readiness"], run, "readiness", (0, 2), manifests["review-ready"]))
+    commands.append(invoke(bin_dir, "review-ready", ["view", "--pack-dir", "readiness"], run, "readiness-view", expected_manifest=manifests["review-ready"]))
     args = ["review", "--current", "inputs/trial_balance.csv", "--prior", "inputs/prior_trial_balance.csv", "--output", "close"]
     if note:
         (run / "inputs/review-note.json").write_bytes(ordinary(note).read_bytes())
         args += ["--review-note", "inputs/review-note.json"]
-    commands.append(invoke(bin_dir, "close-control", args, run, "close", (0, 2)))
+    commands.append(invoke(bin_dir, "close-control", args, run, "close", (0, 2), manifests["close-control"]))
     before = {name: digest((run / "close" / name).read_bytes()) for name in CLOSE_FILES}
-    commands.append(invoke(bin_dir, "close-control", ["view", "--pack-dir", "close"], run, "close-view"))
+    commands.append(invoke(bin_dir, "close-control", ["view", "--pack-dir", "close"], run, "close-view", expected_manifest=manifests["close-control"]))
     if before != {name: digest((run / "close" / name).read_bytes()) for name in CLOSE_FILES}:
         raise ValueError("Close outputs changed during verification.")
-    commands.append(invoke(bin_dir, "close-control", ["drivers", "--pack-dir", "close", "--transactions", "inputs/transactions.csv", "--currency", case["currency"], "--top", "100000", "--output", "drivers"], run, "drivers"))
-    doc = json.loads((run / "close/close-review-pack.json").read_bytes())
+    commands.append(invoke(bin_dir, "close-control", ["drivers", "--pack-dir", "close", "--transactions", "inputs/transactions.csv", "--currency", case["currency"], "--top", "100000", "--output", "drivers"], run, "drivers", expected_manifest=manifests["close-control"]))
+    doc = close_document(strict_json((run / "close/close-review-pack.json").read_bytes(), "Close pack"))
     if doc["source_sha256"]["current_trial_balance"] != digest(current) or doc["source_sha256"]["prior_trial_balance"] != digest(prior) or doc["current_report_dates"] != [period] or any(r["tenant"] not in ("", case["tenant"]) for r in doc["exceptions"]):
         raise ValueError("Close provenance or context differs from the case.")
     files = {str(path.relative_to(run)).replace("\\", "/"): digest(path.read_bytes()) for folder in ("inputs", "close", "readiness", "drivers", "validation") for path in (run / folder).iterdir()}
-    receipt = {"schema_version": 1, "case": case, "period": period, "invocations": commands, "files": files, "boundary": BOUNDARY}
+    receipt = {"schema_version": 1, "case": case, "period": period, "invocations": commands, "files": files, "boundary": BOUNDARY, "producer_manifests": manifests}
     data = json_bytes(receipt)
     (run / "receipt.json").write_bytes(data)
     (run / "receipt.sha256").write_text(digest(data), encoding="ascii")
@@ -209,7 +673,7 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
     data = ordinary(run / "receipt.json").read_bytes()
     if digest(data) != ordinary(run / "receipt.sha256").read_text(encoding="ascii"):
         raise ValueError("Receipt digest differs.")
-    receipt = json.loads(data)
+    receipt = receipt_document(strict_json(data, "Receipt"))
     if receipt.get("schema_version") != 1 or receipt.get("boundary") != BOUNDARY:
         raise ValueError("Unsupported review receipt.")
     expected = {f"close/{n}" for n in CLOSE_FILES} | {f"readiness/{n}" for n in READY_FILES} | {"inputs/trial_balance.csv", "inputs/prior_trial_balance.csv", "inputs/transactions.csv", "inputs/case.json", "drivers/variance-drivers.json", "drivers/variance-drivers.csv"}
@@ -224,7 +688,7 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
             raise ValueError(f"Sealed artefact changed: {name}")
     case = receipt["case"]
     expected_case, _ = sources()
-    if json.loads(snapshot["inputs/case.json"]) != case or case != expected_case:
+    if case_document(strict_json(snapshot["inputs/case.json"], "Case input")) != case or case != expected_case:
         raise ValueError("Case identity differs.")
     source = {name: snapshot["inputs/" + name] for name in case["source_sha256"]}
     if any(digest(data) != case["source_sha256"][name] for name, data in source.items()):
@@ -234,8 +698,9 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
         raise ValueError("Ledger and review sources do not tie.")
     if receipt["period"] != rows(current)[0]["ReportDate"]:
         raise ValueError("Receipt period differs from the ledger case.")
-    doc = json.loads(snapshot["close/close-review-pack.json"])
-    drivers = json.loads(snapshot["drivers/variance-drivers.json"])
+    doc = close_document(strict_json(snapshot["close/close-review-pack.json"], "Close pack"))
+    drivers = driver_document(strict_json(snapshot["drivers/variance-drivers.json"], "Driver pack"))
+    readiness_document(strict_json(snapshot["readiness/readiness-pack.json"], "Readiness pack"))
     population = {r["TransactionID"]: r for r in rows(transactions)}
     driver_accounts = set()
     with localcontext(Context(prec=40)):
@@ -272,8 +737,8 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
 def projection(run: Path) -> dict[str, bytes]:
     receipt, snapshot = verify(run)
     case = receipt["case"]
-    doc = json.loads(snapshot["close/close-review-pack.json"])
-    drivers = json.loads(snapshot["drivers/variance-drivers.json"])
+    doc = strict_json(snapshot["close/close-review-pack.json"], "Close pack")
+    drivers = strict_json(snapshot["drivers/variance-drivers.json"], "Driver pack")
     driver_index = {(a["tenant"], a["account_id"]): a for a in drivers["accounts"]}
     run_id = digest(snapshot["close/close-review-pack.json"])
     context = {"RunID": run_id, "Entity": case["entity"], "Tenant": case["tenant"], "Period": receipt["period"], "Basis": case["basis"], "Currency": case["currency"]}
@@ -287,29 +752,31 @@ def projection(run: Path) -> dict[str, bytes]:
         if available and evidence is not None:
             for row in evidence["drivers"]:
                 evidence_rows.append(context | {"ExceptionKey": key, "AccountID": item["account_id"], "TransactionID": row["TransactionID"], "Date": row["Date"], "Reference": row["Reference"], "Description": row["Description"], "Amount": row["Amount"]})
-    ready = json.loads(snapshot["readiness/readiness-pack.json"])
+    if not finding_rows:
+        raise ValueError("The fixed review case requires at least one finding.")
+    ready = strict_json(snapshot["readiness/readiness-pack.json"], "Readiness pack")
     run_row = context | {"CloseStatus": doc["overall_status"], "ReadinessStatus": ready["overall_status"], "PriorPeriod": doc["prior_report_dates"][0], "AbsoluteThreshold": doc["thresholds"]["absolute_variance"], "PercentageThreshold": doc["thresholds"]["percentage_variance"], "ControlsNotRun": "; ".join(doc["controls_not_run"]), "ReadinessControlsNotRun": json.dumps(ready["controls_not_run"], ensure_ascii=False), "Acknowledgement": json.dumps(doc["acknowledgement"], ensure_ascii=False), "UnmappedExceptions": str(sum(r["EvidenceState"] != "Journal rows reconciled" for r in finding_rows)), "SourceTBHash": digest(snapshot["inputs/trial_balance.csv"]), "SourceGLHash": case["source_sha256"]["sample-general-ledger.csv"], "Verification": "CLI verified synthetic case; unsigned local receipt", "Boundary": BOUNDARY}
     return {"sample-review-run.csv": csv_bytes(list(run_row), [run_row]), "sample-review-exceptions.csv": csv_bytes(list(finding_rows[0]), finding_rows), "sample-review-evidence.csv": csv_bytes(list(context) + ["ExceptionKey", "AccountID", "TransactionID", "Date", "Reference", "Description", "Amount"], evidence_rows)}
 
 
 def render_html(run: Path, bin_dir: Path, previous: Path | None = None) -> str:
     receipt, snapshot = verify(run)
-    executable_hashes = {r["command"]: r["executable_sha256"] for r in receipt["invocations"]}
+    manifests = receipt["producer_manifests"]
     # Reuse the producer verifier again at display time; no second pack validator.
     for command, folder in (("close-control", "close"), ("review-ready", "readiness")):
-        pinned_producer(bin_dir, command, ["view", "--pack-dir", str(run / folder)], executable_hashes[command])
+        pinned_producer(bin_dir, command, ["view", "--pack-dir", str(run / folder)], manifests[command])
     projected = projection(run)
-    doc = json.loads(snapshot["close/close-review-pack.json"])
+    doc = strict_json(snapshot["close/close-review-pack.json"], "Close pack")
     change = "No previous verified run supplied."
     if previous:
         old_receipt, old_snapshot = verify(previous)
         if old_receipt["case"] != receipt["case"]:
             raise ValueError("Comparison context differs.")
-        if any(r["executable_sha256"] != executable_hashes["close-control"] for r in old_receipt["invocations"] if r["command"] == "close-control"):
-            raise ValueError("Comparison producer executable identities differ.")
-        comparison = json.loads(pinned_producer(bin_dir, "close-control", ["compare", "--previous-pack", str(previous / "close"), "--current-pack", str(run / "close"), "--previous-tb", str(previous / "inputs/trial_balance.csv"), "--current-tb", str(run / "inputs/trial_balance.csv")], executable_hashes["close-control"]))
-        changed = [name for name in receipt["files"] if name.startswith("inputs/") and receipt["files"][name] != old_receipt["files"].get(name)]
-        change = json.dumps({"changed_inputs": changed, "findings": comparison["findings"], "queries": comparison["queries"], "scope_changes": comparison["scope_changes"], "acknowledgement_changed": json.loads(old_snapshot["close/close-review-pack.json"])["acknowledgement"] != doc["acknowledgement"], "meaning": comparison["review_boundary"]}, ensure_ascii=False, indent=2)
+        if old_receipt["producer_manifests"]["close-control"] != manifests["close-control"]:
+            raise ValueError("Comparison producer installed identities differ.")
+        comparison = comparison_document(strict_json(pinned_producer(bin_dir, "close-control", ["compare", "--previous-pack", str(previous / "close"), "--current-pack", str(run / "close"), "--previous-tb", str(previous / "inputs/trial_balance.csv"), "--current-tb", str(run / "inputs/trial_balance.csv")], manifests["close-control"]), "Comparison"))
+        changed = sorted(name for name in receipt["files"].keys() | old_receipt["files"].keys() if name.startswith("inputs/") and receipt["files"].get(name) != old_receipt["files"].get(name))
+        change = json.dumps({"changed_inputs": changed, "findings": comparison["findings"], "queries": comparison["queries"], "scope_changes": comparison["scope_changes"], "acknowledgement_changed": strict_json(old_snapshot["close/close-review-pack.json"], "Previous close pack")["acknowledgement"] != doc["acknowledgement"], "meaning": comparison["review_boundary"]}, ensure_ascii=False, indent=2)
         if verify(previous)[1] != old_snapshot:
             raise ValueError("Previous run changed during display.")
     if verify(run)[1] != snapshot:
@@ -509,7 +976,7 @@ def main() -> None:
             for name, value in values.items():
                 (output / name).write_bytes(value)
         print("Review workflow verification completed.")
-    except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
+    except (ValueError, OSError, KeyError, DecimalException) as exc:
         parser.exit(1, f"Review workflow refused: {exc}\n")
 
 

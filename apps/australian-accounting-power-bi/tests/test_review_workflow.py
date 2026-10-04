@@ -1,11 +1,14 @@
 """Regression checks for the synthetic journal boundary and review consumers."""
 from __future__ import annotations
 
+import ctypes
 import html
 import importlib.util
 import json
 import os
+import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -16,9 +19,20 @@ from unittest.mock import MagicMock, patch
 
 APP = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("review_workflow", APP / "tools/review_workflow.py")
-assert spec and spec.loader
+if spec is None or spec.loader is None:
+    raise ImportError("Review workflow loader is unavailable.")
 workflow = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workflow)
+
+
+def manifest_fixture(command: str, launcher: bytes = b"original") -> dict:
+    distribution, package, entry = workflow.PRODUCERS[command]
+    return {"manifest_version": 1, "command": command,
+            "launcher_name": command + (".exe" if os.name == "nt" else ""),
+            "launcher_sha256": workflow.digest(launcher),
+            "interpreter": {"implementation": "cpython", "version": "3.14.7", "cache_tag": "cpython-314", "executable_sha256": "0" * 64},
+            "distribution": {"name": distribution, "version": "0.1.0", "requires_python": ">=3.10", "entry_point": entry},
+            "package": {"name": package, "files": {"__init__.py": "0" * 64, "py.typed": workflow.digest(b"")}}}
 
 
 class ReportElements(HTMLParser):
@@ -31,6 +45,178 @@ class ReportElements(HTMLParser):
 
 
 class ReviewWorkflowTests(unittest.TestCase):
+    def resource_api(self, payloads: dict[str, bytes], *, handle: int = 5) -> MagicMock:
+        api = MagicMock()
+        api.LoadLibraryExW.return_value = handle
+        api.FreeLibrary.return_value = 1
+        names = {name: index + 1 for index, name in enumerate(payloads)}
+        buffers = {names[name]: ctypes.create_string_buffer(value) for name, value in payloads.items()}
+        api.FindResourceW.side_effect = lambda module, name, kind: names.get(name, 0)
+        api.SizeofResource.side_effect = lambda module, resource: len(payloads[next(name for name, index in names.items() if index == resource)])
+        api.LoadResource.side_effect = lambda module, resource: resource
+        api.LockResource.side_effect = lambda resource: ctypes.addressof(buffers[resource])
+        return api
+
+    def test_native_resource_reader_maps_only_data_and_releases_it(self) -> None:
+        payloads = {"UV_TRAMPOLINE_KIND": b"\x01", "UV_PYTHON_PATH": b"C:/fixture/python.exe", "UV_SCRIPT_DATA": b"fixture"}
+        api = self.resource_api(payloads)
+        with patch("ctypes.WinDLL", return_value=api, create=True) as loader:
+            self.assertEqual(workflow.windows_resources(Path("fixture.exe")), payloads)
+        loader.assert_called_once_with("kernel32", use_last_error=True)
+        api.LoadLibraryExW.assert_called_once_with("fixture.exe", None, 0x22)
+        self.assertEqual([call.args[2] for call in api.FindResourceW.call_args_list], [10, 10, 10])
+        api.FreeLibrary.assert_called_once_with(5)
+
+    def test_resource_reader_refuses_invalid_handles_sizes_and_pointers(self) -> None:
+        for handle, payloads, null_pointer in ((0, {}, False), (4, {}, False), (5, {"UV_TRAMPOLINE_KIND": b""}, False),
+                                               (5, {"UV_TRAMPOLINE_KIND": b"\x01\x01"}, False),
+                                               (5, {"UV_PYTHON_PATH": b"x" * 131073}, False),
+                                               (5, {"UV_TRAMPOLINE_KIND": b"\x01"}, True)):
+            api = self.resource_api(payloads, handle=handle)
+            if null_pointer:
+                api.LockResource.side_effect = lambda resource: None
+            with self.subTest(handle=handle, sizes={name: len(value) for name, value in payloads.items()}), patch("ctypes.WinDLL", return_value=api, create=True):
+                with self.assertRaises((ValueError, OSError)):
+                    workflow.windows_resources(Path("fixture.exe"))
+                if handle:
+                    api.FreeLibrary.assert_called_once_with(handle)
+                else:
+                    api.FreeLibrary.assert_not_called()
+
+    def test_resource_reader_reports_release_failure_and_absent_resources(self) -> None:
+        api = self.resource_api({})
+        with patch("ctypes.WinDLL", return_value=api, create=True):
+            self.assertEqual(workflow.windows_resources(Path("fixture.exe")), dict.fromkeys(("UV_TRAMPOLINE_KIND", "UV_PYTHON_PATH", "UV_SCRIPT_DATA")))
+        api.FreeLibrary.assert_called_once_with(5)
+        api = self.resource_api({})
+        api.FreeLibrary.return_value = 0
+        with patch("ctypes.WinDLL", return_value=api, create=True), self.assertRaisesRegex(OSError, "released"):
+            workflow.windows_resources(Path("fixture.exe"))
+
+    def test_private_package_names_are_refused_before_any_file_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env").touch()
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("Private file bytes were accessed.")), self.assertRaisesRegex(ValueError, "excluded private file"):
+                workflow.package_files(root)
+
+    def test_child_environment_removes_shadow_paths_and_uses_empty_bytecode_cache(self) -> None:
+        with patch.object(workflow.os, "environ", {"PYTHONPATH": "shadow", "PYTHONHOME": "shadow", "PATH": "fixture-path"}):
+            with workflow.producer_environment() as environment:
+                self.assertNotIn("PYTHONPATH", environment)
+                self.assertNotIn("PYTHONHOME", environment)
+                self.assertEqual(environment["PYTHONNOUSERSITE"], "1")
+                self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
+                cache = Path(environment["PYTHONPYCACHEPREFIX"])
+                self.assertEqual(list(cache.iterdir()), [])
+            self.assertFalse(cache.exists())
+
+    @unittest.skipIf(os.name == "nt", "POSIX interpreter leaf-link contract")
+    def test_interpreter_leaf_links_are_bounded_and_parent_links_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "python-target"
+            target.write_bytes(b"regular executable fixture")
+            link = root / "python"
+            link.symlink_to(target.name)
+            self.assertEqual(workflow.interpreter_file(link), (link, target))
+            link.unlink()
+            link.symlink_to("other")
+            other = root / "other"
+            other.symlink_to(link.name)
+            with self.assertRaisesRegex(ValueError, "link loop"):
+                workflow.interpreter_file(link)
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(root, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "Linked paths"):
+                workflow.interpreter_file(linked_parent / target.name)
+
+    @unittest.skipIf(os.name == "nt", "POSIX console-script formats")
+    def test_posix_direct_and_quoted_shell_wrappers_bind_the_declared_interpreter(self) -> None:
+        body = b'from closecontrol.cli import main\nmain()\n'
+        for source, expected in ((b'#!/fixture/python\n' + body, "/fixture/python"),
+                                 (b'#!/bin/sh\n\'\'\'exec\' "/fixture with spaces/python" "$0" "$@"\n\' \'\'\'\n' + body, "/fixture with spaces/python")):
+            self.assertEqual(workflow.declared_interpreter(Path("unused"), source, "close-control"), Path(expected))
+        for source in (b'#!/usr/bin/env python\n' + body, b'#!relative/python\n' + body,
+                       b'#!/bin/sh\nexec /fixture/python\n' + body):
+            with self.assertRaises(ValueError):
+                workflow.declared_interpreter(Path("unused"), source, "close-control")
+
+    def test_model_account_mapping_matches_the_pinned_case(self) -> None:
+        case, _ = workflow.sources()
+        model = (APP / "australian-accounting-power-bi.SemanticModel/definition/tables/Review_Evidence.tmdl").read_text()
+        mapping = model.split("AccountMap = #table", 1)[1].split("Run = Review_Run", 1)[0]
+        pairs = re.findall(r'\{"([^"]+)", "([^"]+)"\}', mapping)
+        self.assertEqual(len(pairs), len(case["account_ids"]))
+        self.assertEqual(dict(pairs), case["account_ids"])
+
+    def test_ambiguous_and_deep_json_are_controlled_cli_refusals(self) -> None:
+        values = (b'{"files":{},"files":{}}', b'{"case":{"entity":"one","entity":"two"}}',
+                  b'[]', b'null', b'{"schema_version":true}', b'{"files":null}',
+                  b'{"case":[]}', b'{"invocations":{}}', b'{"period":12}',
+                  b'{"value":NaN}', b'{"value":Infinity}', b'{"value":1e999}', b'\xff',
+                  b'{"value":' + b'[' * 128 + b'0' + b']' * 128 + b'}')
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            for data in values:
+                with self.subTest(data=data[:60]):
+                    (run / "receipt.json").write_bytes(data)
+                    (run / "receipt.sha256").write_text(workflow.digest(data), encoding="ascii")
+                    result = subprocess.run([sys.executable, "-B", str(APP / "tools/review_workflow.py"), "verify", "--run", str(run)], capture_output=True, timeout=30)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(b"Review workflow refused:", result.stderr)
+                    self.assertNotIn(b"Traceback", result.stderr)
+
+    def test_json_strings_do_not_count_as_structure_and_utf8_bom_is_accepted(self) -> None:
+        document = {"quoted": '[{\\"' * 100}
+        self.assertEqual(workflow.strict_json(b'\xef\xbb\xbf' + workflow.json_bytes(document), "Fixture"), document)
+
+    def test_consumed_pack_shapes_are_validated_before_indexing(self) -> None:
+        value: object
+        for validator, values in ((workflow.close_document, ([], None, {"overall_status": "REVIEW", "source_sha256": []})),
+                                  (workflow.driver_document, ([], None, {"source_sha256": {}, "accounts": [None]})),
+                                  (workflow.readiness_document, (None, {"overall_status": "READY", "controls_not_run": None})),
+                                  (workflow.comparison_document, ([], {"review_boundary": "boundary", "findings": None}))):
+            for value in values:
+                with self.subTest(validator=validator.__name__, value=value), self.assertRaises(ValueError):
+                    validator(value)
+
+    def test_driver_numeric_fields_require_finite_text_and_integer_counts(self) -> None:
+        account = {"tenant": "fixture", "account_id": "account", "movement": "1.00", "transactions_total": "1.00", "unexplained": "0.00", "transactions_in_window": 1,
+                   "drivers": [{"TransactionID": "J:1", "Date": "2024-09-30", "Reference": "J", "Description": "Fixture", "Amount": "1.00"}]}
+        source_hashes = {"transactions": "0" * 64, **{"pack:" + name: "0" * 64 for name in workflow.CLOSE_FILES}}
+        baseline = {"source_sha256": source_hashes, "accounts": [account]}
+        workflow.driver_document(baseline)
+        for field, value in (("movement", "NaN"), ("unexplained", "Infinity"), ("transactions_total", "bad"),
+                             ("transactions_in_window", True), ("transactions_in_window", "1"), ("transactions_in_window", -1)):
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                workflow.driver_document({"source_sha256": source_hashes, "accounts": [account | {field: value}]})
+
+    def test_entrypoint_script_rejects_side_effects_and_wrong_targets(self) -> None:
+        good = b'import sys\nfrom closecontrol.cli import main\nif __name__ == "__main__":\n    sys.exit(main())\n'
+        workflow.launcher_script(good, "close-control")
+        pypa = b'import re\nimport sys\nif __name__ == "__main__":\n    from closecontrol.cli import main\n    sys.argv[0] = re.sub(r"(-script\\.pyw|\\.exe)?$", "", sys.argv[0])\n    sys.exit(main())\n'
+        workflow.launcher_script(pypa, "close-control")
+        for source in (good.replace(b"closecontrol", b"reviewready"), good + b'print("side effect")\n',
+                       good.replace(b"main()", b'main("argument")'), good.replace(b"import sys", b"import subprocess"),
+                       pypa.replace(b'    sys.exit', b'    print("side effect")\n    sys.exit'),
+                       pypa.replace(b'closecontrol.cli import main', b'closecontrol.cli import main as other')):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                workflow.launcher_script(source, "close-control")
+
+    def test_package_manifest_includes_empty_marker_and_detects_file_population(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "__init__.py").write_bytes(b"# Fixture\n")
+            (root / "py.typed").write_bytes(b"")
+            original = workflow.package_files(root)
+            self.assertEqual(original["py.typed"], workflow.digest(b""))
+            (root / "added.py").write_bytes(b"# Added\n")
+            self.assertNotEqual(workflow.package_files(root), original)
+            (root / "added.py").unlink()
+            (root / "py.typed").unlink()
+            self.assertNotEqual(workflow.package_files(root), original)
+
     def test_shared_case_preserves_all_six_pinned_sources(self) -> None:
         case, source = workflow.sources()
         self.assertEqual(len(source), 6)
@@ -233,7 +419,7 @@ class ReviewWorkflowTests(unittest.TestCase):
         item = dict.fromkeys(("Control", "Account", "Status", "Current", "Prior", "Difference", "Threshold", "Reason", "Action", "Question", "EvidenceRequested", "EvidenceState", "ExceptionKey"), attack)
         evidence = dict.fromkeys(("ExceptionKey", "TransactionID", "Date", "Reference", "Description", "Amount"), attack)
         projected = {"sample-review-run.csv": workflow.csv_bytes(list(context), [context]), "sample-review-exceptions.csv": workflow.csv_bytes(list(item), [item]), "sample-review-evidence.csv": workflow.csv_bytes(list(evidence), [evidence])}
-        receipt = {"files": {attack: attack}, "invocations": [{"command": command, "executable_sha256": "0" * 64} for command in ("close-control", "review-ready")]}
+        receipt = {"files": {attack: attack}, "producer_manifests": {command: manifest_fixture(command) for command in workflow.PRODUCERS}}
         snapshot = {"close/close-review-pack.json": b"{}"}
         with patch.object(workflow, "verify", return_value=(receipt, snapshot)), patch.object(workflow, "projection", return_value=projected), patch.object(workflow, "pinned_producer", return_value=b""):
             output = workflow.render_html(Path("unused"), Path("unused"))
@@ -262,7 +448,7 @@ class ReviewWorkflowTests(unittest.TestCase):
         evidence[0]["Amount"] = "-1234567890.00100"
         evidence[0]["Reference"] = 'Reference <demo> & "quoted"'
         projected = {"sample-review-run.csv": (APP / "samples/sample-review-run.csv").read_bytes(), "sample-review-exceptions.csv": workflow.csv_bytes(list(findings[0]), findings), "sample-review-evidence.csv": workflow.csv_bytes(list(evidence[0]), evidence)}
-        receipt = {"files": {}, "invocations": [{"command": command, "executable_sha256": "0" * 64} for command in ("close-control", "review-ready")]}
+        receipt = {"files": {}, "producer_manifests": {command: manifest_fixture(command) for command in workflow.PRODUCERS}}
         with patch.object(workflow, "verify", return_value=(receipt, {"close/close-review-pack.json": b"{}"})), patch.object(workflow, "projection", return_value=projected), patch.object(workflow, "pinned_producer", return_value=b""):
             output = workflow.render_html(Path("unused"), Path("unused"))
         parsed = ReportElements()
@@ -288,21 +474,22 @@ class ReviewWorkflowTests(unittest.TestCase):
             bin_dir = Path(directory)
             executable = bin_dir / ("close-control.exe" if workflow.os.name == "nt" else "close-control")
             executable.write_bytes(b"fabricated test executable")
-            receipt = {"invocations": [{"command": "close-control", "executable_sha256": workflow.digest(executable.read_bytes())}]}
-            with patch.object(workflow, "verify", return_value=(receipt, {})), patch.object(workflow.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)):
+            manifest = manifest_fixture("close-control", executable.read_bytes())
+            receipt = {"producer_manifests": {"close-control": manifest}}
+            with patch.object(workflow, "verify", return_value=(receipt, {})), patch.object(workflow, "producer_manifest", return_value=manifest), patch.object(workflow.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)):
                 with self.assertRaisesRegex(ValueError, "Producer verification refused"):
                     workflow.render_html(Path("unused"), bin_dir)
 
-    def render_comparison(self, comparison: dict, *, acknowledgement: bool = False) -> str:
+    def render_comparison(self, comparison: dict, *, acknowledgement: bool = False, removed_input: bool = False) -> str:
         projected = {name: (APP / "samples" / name).read_bytes() for name in
                      ("sample-review-run.csv", "sample-review-exceptions.csv", "sample-review-evidence.csv")}
         previous, current = Path("previous"), Path("current")
-        invocations = [{"command": command, "executable_sha256": "0" * 64}
-                       for command in ("close-control", "review-ready")]
         def verified(run):
+            files = {"inputs/trial_balance.csv": "old" if run == previous else "new"}
+            if run == previous and removed_input:
+                files["inputs/review-note.json"] = "old note"
             return ({"case": "same fabricated case", "period": "2024-08-31" if run == previous else "2024-09-30",
-                     "files": {"inputs/trial_balance.csv": "old" if run == previous else "new"},
-                     "invocations": invocations},
+                     "files": files, "producer_manifests": {command: manifest_fixture(command) for command in workflow.PRODUCERS}},
                     {"close/close-review-pack.json": workflow.json_bytes({"acknowledgement":
                      "fabricated note" if run == current and acknowledgement else None})})
         with patch.object(workflow, "verify", side_effect=verified), patch.object(workflow, "projection", return_value=projected), patch.object(workflow, "pinned_producer", return_value=workflow.json_bytes(comparison)):
@@ -376,6 +563,14 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertIn("<dt>Acknowledgement changed</dt><dd>No</dd>", summary)
         self.assertNotIn("No previous verified run supplied.", output)
 
+    def test_comparison_lists_a_removed_input_separately_from_acknowledgement(self) -> None:
+        output = self.render_comparison({"findings": [], "queries": [], "scope_changes": [],
+                                         "review_boundary": "The producer boundary."}, removed_input=True)
+        record = output.split('<section id="comparison-record"', 1)[1].split("<pre>", 1)[1].split("</pre>", 1)[0]
+        change = json.loads(html.unescape(record))
+        self.assertEqual(change["changed_inputs"], ["inputs/review-note.json", "inputs/trial_balance.csv"])
+        self.assertFalse(change["acknowledgement_changed"])
+
     def test_changed_producer_is_refused_before_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             bin_dir = Path(directory)
@@ -383,7 +578,7 @@ class ReviewWorkflowTests(unittest.TestCase):
             executable.write_bytes(b"replacement stub")
             with patch.object(workflow.subprocess, "run") as invoke:
                 with self.assertRaisesRegex(ValueError, "hash differs"):
-                    workflow.pinned_producer(bin_dir, "close-control", [], workflow.digest(b"original"))
+                    workflow.pinned_producer(bin_dir, "close-control", [], manifest_fixture("close-control"))
                 invoke.assert_not_called()
 
     def test_producer_change_during_build_and_display_is_refused(self) -> None:
@@ -395,10 +590,10 @@ class ReviewWorkflowTests(unittest.TestCase):
                 return subprocess.CompletedProcess([], 0, stdout=b"", stderr=b"")
             for display in (False, True):
                 executable.write_bytes(b"original")
-                with self.subTest(display=display), patch.object(workflow.subprocess, "run", side_effect=replace_producer):
+                with self.subTest(display=display), patch.object(workflow.subprocess, "run", side_effect=replace_producer), patch.object(workflow, "producer_manifest", side_effect=lambda *args: manifest_fixture("close-control", executable.read_bytes())):
                     with self.assertRaisesRegex(ValueError, "changed during invocation"):
                         if display:
-                            workflow.pinned_producer(bin_dir, "close-control", [], workflow.digest(b"original"))
+                            workflow.pinned_producer(bin_dir, "close-control", [], manifest_fixture("close-control"))
                         else:
                             workflow.invoke(bin_dir, "close-control", [], bin_dir, "test")
 

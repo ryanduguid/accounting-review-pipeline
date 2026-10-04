@@ -20,7 +20,12 @@ python -B tools/review_workflow.py verify --run C:/Users/-/Documents/review-demo
 Use `--bin-dir` for another installed CLI directory. On Linux, supply the
 environment's `bin` directory explicitly. The workflow invokes `review-ready`
 and `close-control` as independent commands. It imports no sibling runtime.
-It retains the commands, executable hashes, timestamps, exit codes and logs.
+It retains the commands, producer manifests, timestamps, exit codes and logs.
+Each manifest binds the supported launcher, its declared Python interpreter,
+selected distribution and entry point, and all resolved first-party package
+files, including empty files and typing markers. Normal uv and PyPA console launchers
+are supported. Unknown launchers, linked package paths and changed identities
+are refused. Rebuild any earlier demonstration run that lacks these manifests.
 
 The case is ENT001, Varrock Ventures Pty Ltd, in AUD on an accrual basis.
 August and September 2024 share the original ledger's first financial year and
@@ -50,8 +55,9 @@ accounting, posts a journal or closes a period.
 The producer's `view` commands verify their output files. The admission receipt
 binds the original sources, derived inputs, results and driver output. Consumers
 recheck their hashes and journal ties. The portable record runs the producer
-verifiers again before display, using the executable hashes recorded before and
-after each invocation. Duplicate driver account identities are refused. A
+verifiers again before display, comparing complete producer identities before
+and after each invocation. Child commands ignore inherited Python search paths
+and source-tree bytecode. Duplicate driver account identities are refused. A
 comparison invokes the existing `compare`
 command after verifying both runs and their common case context.
 
@@ -63,9 +69,15 @@ remain text; the report does not reclassify findings or calculate materiality.
 Controls not run are listed without a coverage percentage. `NOT_RAISED` in a
 comparison does not mean resolved or approved. Acknowledgement changes appear
 separately from finding and input changes.
+Changed inputs include files added, changed or removed between runs. Ambiguous
+JSON, malformed consumed fields and JSON nesting beyond 64 levels are refused
+through the workflow's normal error message.
 
 The receipt and HTML are unsigned local records. Hashes detect accidental edits,
 but someone who can replace the complete run can replace its receipt too. The
+producer identity does not establish publisher authenticity or bind the whole
+operating system, Python libraries or environment. It does not prevent concurrent
+replacement races or prove that the initial installation was benign. The
 HTML is one file with embedded CSS, escaped data and no scripts or external
 resources. Keep generated packs and portable records outside the checkout.
 
@@ -104,6 +116,13 @@ form an island with one relationship from evidence to exception; they do not
 filter the financial model. The evidence page receives the exception, run,
 entity, period and basis, and its display measure suppresses rows when no
 exception is selected. Hidden pages are navigation settings, not access controls.
+For each finding labelled Journal rows reconciled, refresh requires the complete
+account population from the trusted ledger for the run's entity and month. It
+checks each identifier, date, reference, description and exact amount, then ties
+the source total to that finding's difference. Unavailable findings cannot carry
+journal evidence. Each repeated account finding needs its own complete evidence
+population. The finding record remains authoritative; this check does not
+reconstruct every producer finding or authenticate the whole review pack.
 
 ## Prepare Desktop and verify
 
@@ -123,6 +142,7 @@ settings and refresh. Then run:
 ```powershell
 powershell -NoProfile -File tools/test_native_project.ps1 -InstanceFile C:/Users/-/Documents/review-demo/native/instance.json -SourceManifest C:/Users/-/Documents/review-demo/native/source-manifest.json -EvidenceDirectory C:/Users/-/Documents/review-demo/native-evidence
 powershell -NoProfile -File tools/test_refresh_guards.ps1 -Server localhost:<recorded-port> -SampleFolder C:/Users/-/Documents/review-demo/native/project/samples
+powershell -NoProfile -File tools/test_review_evidence.ps1 -Server localhost:<recorded-port> -SampleFolder C:/Users/-/Documents/review-demo/native/project/samples
 ```
 
 The runner verifies process creation times, engine ownership, model definitions,
