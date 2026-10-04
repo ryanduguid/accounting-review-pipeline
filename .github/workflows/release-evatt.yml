@@ -37,7 +37,7 @@ jobs:
         .github/workflows/ci.yml: packages/evatt / build
         .github/workflows/ci.yml: packages/evatt / dependency-audit
         .github/workflows/ci.yml: packages/evatt / lint
-        .github/workflows/ci.yml: packages/evatt / test (3.10)
+        .github/workflows/ci.yml: packages/evatt / test (3.11)
         .github/workflows/ci.yml: packages/evatt / test (3.12)
         .github/workflows/ci.yml: packages/evatt / test (3.13)
         .github/workflows/ci.yml: packages/evatt / test (3.14)

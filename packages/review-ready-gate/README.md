@@ -16,7 +16,7 @@
 
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/review-ready-gate.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/review-ready-gate/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
 
 [Browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) · [Reproduce locally](evaluation/manager_review_gate/README.md) · [Quick demo](#quick-demo) · [Release notes](RELEASE_NOTES.md)
@@ -302,6 +302,6 @@ uv build
 
 The test suite covers schema gates, the 3 fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.10, 3.12, 3.13 and 3.14, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
+Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.11, 3.12, 3.13 and 3.14, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
 
 MIT licensed. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).

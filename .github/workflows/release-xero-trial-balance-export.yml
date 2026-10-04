@@ -31,7 +31,7 @@ jobs:
         .github/workflows/ci.yml: packages/xero-trial-balance-export / build
         .github/workflows/ci.yml: packages/xero-trial-balance-export / dependency-audit
         .github/workflows/ci.yml: packages/xero-trial-balance-export / lint
-        .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.10)
+        .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.11)
         .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.12)
         .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.13)
         .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.14)

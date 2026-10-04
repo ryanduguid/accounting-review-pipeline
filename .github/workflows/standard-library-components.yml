@@ -106,7 +106,7 @@ jobs:
           - adapters/accounting-excel-toolkit
           - apps/australian-accounting-power-bi
           - apps/grant-acquittal-workpapers
-        python: ["3.10", "3.12", "3.13", "3.14"]
+        python: ["3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -153,7 +153,7 @@ jobs:
       matrix:
         component:
           - apps/grant-acquittal-workpapers
-        python: ["3.10", "3.14"]
+        python: ["3.11", "3.14"]
     defaults:
       run:
         working-directory: ${{ matrix.component }}

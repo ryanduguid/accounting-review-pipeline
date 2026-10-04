@@ -88,7 +88,7 @@ cannot change them.
 
 ## Requirements
 
-Python 3.10 or later, and `git` on `PATH`. Every command asks git whether it
+Python 3.11 or later, and `git` on `PATH`. Every command asks git whether it
 would let you commit the map, and refuses to run when the answer is yes or
 unclear. A halt asks the same question about the triage path before it writes
 one. That question has no answer outside a work tree, so the map, and therefore

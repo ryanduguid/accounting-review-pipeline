@@ -14,9 +14,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned after documenting manifest recovery reservation and checkout paths.
+# Re-pinned when the badge and install step named the Python 3.11 floor.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "872BB8F10207CA1E9890E641B70A9ECC0835790D18BCF74A25345F1740B94A00"
+README_SHA256 = "109D6FE25AA36B76283901EEBC25EAA528F2BC3B2E7BA4A11D98E5417A7F3C6F"
 # Re-pinned when main() began reporting a refused bind (PermissionError, as on
 # port 80 from a portless redirect URI) separately from a port another process
 # holds. Only that except branch and its message are new; SCOPES, the OAuth

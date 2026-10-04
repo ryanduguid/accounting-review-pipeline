@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import tomllib
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -12,12 +13,6 @@ from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 from yaml.resolver import BaseResolver
 from yaml.tokens import AliasToken, AnchorToken
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI job
-    import tomli as tomllib
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MONOREPO_ROOT = ROOT.parents[1]

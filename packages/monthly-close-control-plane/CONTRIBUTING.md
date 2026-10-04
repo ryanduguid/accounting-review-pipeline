@@ -10,7 +10,7 @@ Keep this project in its narrow role: a local, deterministic review-pack generat
 
 ## Local verification
 
-Python 3.10 or newer. The repository uses `uv` and commits its lock file.
+Python 3.11 or newer. The repository uses `uv` and commits its lock file.
 
 ```bash
 uv lock --check
