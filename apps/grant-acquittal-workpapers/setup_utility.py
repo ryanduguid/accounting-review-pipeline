@@ -79,7 +79,8 @@ def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
     workspace = workspace.resolve()
     source = SOURCE.resolve()
     pipeline = source.parents[1]
-    if not (pipeline / DRIVER).is_file():
+    # Replay runs the recorded commit's runner, which is checked once that commit is fetched.
+    if revisions is None and not (pipeline / DRIVER).is_file():
         raise ValueError("Run setup from apps/grant-acquittal-workpapers in an accounting-review-pipeline checkout")
     if workspace.is_relative_to(pipeline) or pipeline.is_relative_to(workspace):
         raise ValueError("The workspace must be separate from the pipeline checkout")
@@ -109,6 +110,8 @@ def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
         snapshot = sources / PIPELINE
         checkout_revision(snapshot, str(pipeline), revisions[PIPELINE], environment)
         pipeline = snapshot
+        if not (pipeline / DRIVER).is_file() or not (pipeline / GRANT_PROJECT).is_dir():
+            raise ValueError("The recorded pipeline commit lacks the joined runner or the grant workpapers")
     output = workspace / "results"
     subprocess.run([sys.executable, str(pipeline / DRIVER), "--fpa", str(sources / "au-fpa-pack"),
                     "--accounting", str(sources / "australian-accounting"),
