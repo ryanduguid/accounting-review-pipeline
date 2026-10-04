@@ -20,6 +20,15 @@ def manifest():
             ("grants", 1, "apps/grant-acquittal-workpapers"))}}
 
 
+def fake_pipeline(root, runner=True):
+    """A pipeline checkout holding the grant workpapers and, optionally, the joined runner."""
+    (root / setup_utility.GRANT_PROJECT).mkdir(parents=True)
+    if runner:
+        driver = root / setup_utility.DRIVER
+        driver.parent.mkdir(parents=True)
+        driver.write_text("")
+
+
 class ReplayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="recorded revision ")
@@ -98,6 +107,8 @@ class ReplayTests(unittest.TestCase):
 
         def checkout(destination, source, revision, environment):
             destination.mkdir()
+            if destination.name == "accounting-review-pipeline":
+                fake_pipeline(destination)
             seen.append((destination.name, source, revision))
 
         def run(args, **kwargs):
@@ -118,6 +129,39 @@ class ReplayTests(unittest.TestCase):
         # The pipeline commit comes from the local pipeline checkout, which may hold unpushed work.
         self.assertEqual(seen[-1], ("accounting-review-pipeline", str(setup_utility.SOURCE.resolve().parents[1]), "1" * 40))
         self.assertEqual(len(seen), 3)
+
+    def test_replay_runner_comes_from_the_recorded_commit(self):
+        self.manifest.write_text(json.dumps(manifest()))
+        for recorded_runner in (True, False):
+            with self.subTest(recorded_runner=recorded_runner):
+                # The current checkout no longer has the runner where the recorded commit did.
+                current = self.root / f"current {recorded_runner}"
+                fake_pipeline(current, runner=False)
+                workspace = self.root / f"workspace {recorded_runner}"
+                started = []
+
+                def checkout(destination, source, revision, environment):
+                    destination.mkdir()
+                    if destination.name == "accounting-review-pipeline":
+                        fake_pipeline(destination, runner=recorded_runner)
+
+                def run(args, **kwargs):
+                    if "rev-parse" in args:
+                        return subprocess.CompletedProcess(args, 128, stderr="fatal: not a git repository")
+                    started.append(args[1])
+                    output = workspace / "results"
+                    output.mkdir()
+                    (output / "manifest.json").write_text(json.dumps({**manifest(), "fixture_validation": "passed"}))
+                    return subprocess.CompletedProcess(args, 0)
+
+                with patch.object(setup_utility, "SOURCE", current / setup_utility.GRANT_PROJECT), patch.object(setup_utility.sys, "version_info", (3, 11)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
+                    if recorded_runner:
+                        setup_utility.setup(workspace, self.manifest)
+                        self.assertEqual(started, [str(workspace / "sources/accounting-review-pipeline" / setup_utility.DRIVER)])
+                    else:
+                        with self.assertRaisesRegex(ValueError, "lacks the joined runner"):
+                            setup_utility.setup(workspace, self.manifest)
+                        self.assertEqual(started, [])
 
     def test_summary_appends_and_failed_setup_never_reads_old_results(self):
         workspace = self.root / "old workspace"
