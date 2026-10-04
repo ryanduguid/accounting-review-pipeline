@@ -1,0 +1,132 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.4.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 784,
+    "z": 0,
+    "width": 324,
+    "height": 600,
+    "tabOrder": 0
+  },
+  "objects": {
+    "columnHeaders": [
+      {
+        "properties": {
+          "defaultColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "100D"
+              }
+            }
+          },
+          "autoSizeColumnWidth": {
+            "expr": {
+              "Literal": {
+                "Value": "false"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "grid": [
+      {
+        "properties": {
+          "rowPadding": {
+            "expr": {
+              "Literal": {
+                "Value": "14D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "columnWidth": [
+      {
+        "selector": {
+          "metadata": "Review_Evidence.TransactionID"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "124D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Evidence.Date"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "124D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Evidence.Reference"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Evidence.Description"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Evidence.AmountDisplay"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "140D"
+              }
+            }
+          }
+        }
+      },
+      {
+        "selector": {
+          "metadata": "Review_Evidence.Evidence selection present"
+        },
+        "properties": {
+          "value": {
+            "expr": {
+              "Literal": {
+                "Value": "1D"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

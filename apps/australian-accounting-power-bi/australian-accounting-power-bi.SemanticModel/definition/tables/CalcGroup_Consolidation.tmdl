@@ -8,17 +8,21 @@ table CalcGroup_Consolidation
 			ordinal: 0
 
 		calculationItem 'Intercompany Eliminations' =
-				CALCULATE(
-					SELECTEDMEASURE(),
-					Fact_GeneralLedger[IsIntercompany] = TRUE()
-				)
+				VAR CompleteGroup = COUNTROWS(VALUES(Dim_Entity[EntityID])) = CALCULATE(COUNTROWS(Dim_Entity), REMOVEFILTERS(Dim_Entity))
+				VAR Supported = ISSELECTEDMEASURE([Total Debits], [Total Credits], [GL Net Movement], [Revenue], [COGS], [Gross Profit], [Operating Expenses], [EBITDA], [Net Profit Before Tax], [Total Assets], [Total Liabilities], [Net Assets], [Total Equity], [Balance Sheet Check], [Working Capital], [Balance Sheet Amount], [Prior Year Profit], [Profit Change $])
+				RETURN
+				    IF(ISSELECTEDMEASURE([Consolidation Scope], [Report Selection], [Revenue Budget Title], [Monthly Revenue Title]), SELECTEDMEASURE(),
+				        IF(CompleteGroup && Supported,
+				            CALCULATE(SELECTEDMEASURE(), KEEPFILTERS(Fact_GeneralLedger[IsIntercompany] = TRUE()))))
 			ordinal: 1
 
 		calculationItem 'Consolidated Group Net' =
-				CALCULATE(
-					SELECTEDMEASURE(),
-					Fact_GeneralLedger[IsIntercompany] = FALSE()
-				)
+				VAR CompleteGroup = COUNTROWS(VALUES(Dim_Entity[EntityID])) = CALCULATE(COUNTROWS(Dim_Entity), REMOVEFILTERS(Dim_Entity))
+				VAR Supported = ISSELECTEDMEASURE([Total Debits], [Total Credits], [GL Net Movement], [Revenue], [COGS], [Gross Profit], [Operating Expenses], [EBITDA], [Net Profit Before Tax], [Total Assets], [Total Liabilities], [Net Assets], [Total Equity], [Balance Sheet Check], [Working Capital], [Balance Sheet Amount], [Prior Year Profit], [Profit Change $], [Gross Profit Margin %], [Net Margin %], [Actual Total Expense Ratio %], [Actual Rent to Revenue %], [Actual Motor Vehicle %], [Actual Labour Ratio %])
+				RETURN
+				    IF(ISSELECTEDMEASURE([Consolidation Scope], [Report Selection], [Revenue Budget Title], [Monthly Revenue Title]), SELECTEDMEASURE(),
+				        IF(CompleteGroup && Supported,
+				            CALCULATE(SELECTEDMEASURE(), KEEPFILTERS(Fact_GeneralLedger[IsIntercompany] = FALSE()))))
 			ordinal: 2
 
 	column 'Consolidation View'

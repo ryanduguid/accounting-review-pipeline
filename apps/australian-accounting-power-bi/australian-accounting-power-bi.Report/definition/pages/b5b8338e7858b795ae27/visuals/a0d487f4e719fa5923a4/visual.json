@@ -3,11 +3,11 @@
   "name": "a0d487f4e719fa5923a4",
   "position": {
     "x": 20,
-    "y": 220,
-    "z": 4000,
-    "height": 480,
-    "width": 760,
-    "tabOrder": 4000
+    "y": 260,
+    "width": 1240,
+    "height": 208,
+    "z": 2100,
+    "tabOrder": 1
   },
   "visual": {
     "visualType": "pivotTable",
@@ -27,21 +27,8 @@
                 }
               },
               "queryRef": "Dim_Entity.TradingName",
-              "nativeQueryRef": "TradingName"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Dim_ANZSIC"
-                    }
-                  },
-                  "Property": "IndustryTitle"
-                }
-              },
-              "queryRef": "Dim_ANZSIC.IndustryTitle",
-              "nativeQueryRef": "IndustryTitle"
+              "nativeQueryRef": "TradingName",
+              "displayName": "Entity"
             }
           ]
         },
@@ -59,7 +46,8 @@
                 }
               },
               "queryRef": "Fact_GeneralLedger.Gross Profit Margin %",
-              "nativeQueryRef": "Gross Profit Margin %"
+              "nativeQueryRef": "Actual GP %",
+              "displayName": "Actual GP %"
             },
             {
               "field": {
@@ -69,11 +57,12 @@
                       "Entity": "Fact_ATOBenchmark"
                     }
                   },
-                  "Property": "ATO Benchmark Gross Profit %"
+                  "Property": "Benchmark Gross Profit Lower %"
                 }
               },
-              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Gross Profit %",
-              "nativeQueryRef": "ATO Benchmark Gross Profit %"
+              "queryRef": "Fact_ATOBenchmark.Benchmark Gross Profit Lower %",
+              "nativeQueryRef": "Sample low %",
+              "displayName": "Sample low %"
             },
             {
               "field": {
@@ -83,11 +72,12 @@
                       "Entity": "Fact_ATOBenchmark"
                     }
                   },
-                  "Property": "Gross Profit Variance to Benchmark %"
+                  "Property": "Benchmark Gross Profit Upper %"
                 }
               },
-              "queryRef": "Fact_ATOBenchmark.Gross Profit Variance to Benchmark %",
-              "nativeQueryRef": "Gross Profit Variance to Benchmark %"
+              "queryRef": "Fact_ATOBenchmark.Benchmark Gross Profit Upper %",
+              "nativeQueryRef": "Sample high %",
+              "displayName": "Sample high %"
             },
             {
               "field": {
@@ -101,7 +91,8 @@
                 }
               },
               "queryRef": "Fact_ATOBenchmark.Actual Total Expense Ratio %",
-              "nativeQueryRef": "Actual Total Expense Ratio %"
+              "nativeQueryRef": "Actual total costs %",
+              "displayName": "Actual total costs %"
             },
             {
               "field": {
@@ -115,106 +106,8 @@
                 }
               },
               "queryRef": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %",
-              "nativeQueryRef": "ATO Benchmark Expense Ratio %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "Actual Labour Ratio %"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.Actual Labour Ratio %",
-              "nativeQueryRef": "Actual Labour Ratio %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "ATO Benchmark Labour %"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Labour %",
-              "nativeQueryRef": "ATO Benchmark Labour %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "Actual Rent to Revenue %"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.Actual Rent to Revenue %",
-              "nativeQueryRef": "Actual Rent to Revenue %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "ATO Benchmark Rent %"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Rent %",
-              "nativeQueryRef": "ATO Benchmark Rent %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "Actual Motor Vehicle %"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.Actual Motor Vehicle %",
-              "nativeQueryRef": "Actual Motor Vehicle %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "ATO Benchmark Motor Vehicle %"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.ATO Benchmark Motor Vehicle %",
-              "nativeQueryRef": "ATO Benchmark Motor Vehicle %"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Fact_ATOBenchmark"
-                    }
-                  },
-                  "Property": "ATO Compliance Risk Profile"
-                }
-              },
-              "queryRef": "Fact_ATOBenchmark.ATO Compliance Risk Profile",
-              "nativeQueryRef": "ATO Compliance Risk Profile",
-              "displayName": "Gross profit comparison"
+              "nativeQueryRef": "Sample total costs %",
+              "displayName": "Sample total costs %"
             }
           ]
         }
@@ -234,7 +127,32 @@
             "text": {
               "expr": {
                 "Literal": {
-                "Value": "'Expense and margin ratios vs fabricated sample benchmarks'"
+                  "Value": "'Margins and total expenses | sample references'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI Semibold'"
                 }
               }
             }
@@ -253,8 +171,484 @@
             }
           }
         }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Gross profit compared with the fabricated range and total expenses compared with the fabricated average. Total expenses include cost of sales and operating expenses. No reference means blank, not zero.'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
-    "drillFilterOtherVisuals": true
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E7EDEB'"
+                    }
+                  }
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "autoSizeColumnWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "fontColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#23384A'"
+                }
+              }
+            },
+            "backColorPrimary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#FFFFFF'"
+                }
+              }
+            },
+            "backColorSecondary": {
+              "expr": {
+                "Literal": {
+                  "Value": "'#F3F5F6'"
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "rowPadding": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "textSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "gridVertical": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "gridHorizontalColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            },
+            "outlineColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D7DEE3'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "rowHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#23384A'"
+                    }
+                  }
+                }
+              }
+            },
+            "wordWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "showExpandCollapseButtons": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "columnWidth": [
+        {
+          "selector": {
+            "metadata": "Dim_Entity.TradingName"
+          },
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "300D"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_GeneralLedger.Gross Profit Margin %"
+          },
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "164D"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Benchmark Gross Profit Lower %"
+          },
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "164D"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Benchmark Gross Profit Upper %"
+          },
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "164D"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Actual Total Expense Ratio %"
+          },
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "216D"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %"
+          },
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "216D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "columnFormatting": [
+        {
+          "selector": {
+            "metadata": "Fact_GeneralLedger.Gross Profit Margin %"
+          },
+          "properties": {
+            "alignment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
+                }
+              }
+            },
+            "styleHeader": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleValues": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleTotal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Benchmark Gross Profit Lower %"
+          },
+          "properties": {
+            "alignment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
+                }
+              }
+            },
+            "styleHeader": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleValues": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleTotal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Benchmark Gross Profit Upper %"
+          },
+          "properties": {
+            "alignment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
+                }
+              }
+            },
+            "styleHeader": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleValues": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleTotal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.Actual Total Expense Ratio %"
+          },
+          "properties": {
+            "alignment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
+                }
+              }
+            },
+            "styleHeader": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleValues": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleTotal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "metadata": "Fact_ATOBenchmark.ATO Benchmark Expense Ratio %"
+          },
+          "properties": {
+            "alignment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right'"
+                }
+              }
+            },
+            "styleHeader": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleValues": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "styleTotal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

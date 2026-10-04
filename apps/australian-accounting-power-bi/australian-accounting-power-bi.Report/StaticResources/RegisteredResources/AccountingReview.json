@@ -1,0 +1,60 @@
+{
+  "name": "AccountingReview.json",
+  "dataColors": [
+    "#21665B",
+    "#315D8A",
+    "#925300",
+    "#7D4F86",
+    "#A33D35"
+  ],
+  "background": "#FFFFFF",
+  "foreground": "#23384A",
+  "tableAccent": "#21665B",
+  "good": "#21665B",
+  "bad": "#A33D35",
+  "neutral": "#925300",
+  "textClasses": {
+    "label": {
+      "fontFace": "Segoe UI",
+      "fontSize": 12,
+      "color": "#23384A"
+    },
+    "title": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 12,
+      "color": "#23384A"
+    },
+    "callout": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 28,
+      "color": "#23384A"
+    }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [
+          {
+            "show": true,
+            "color": {
+              "solid": {
+                "color": "#FFFFFF"
+              }
+            },
+            "transparency": 0
+          }
+        ],
+        "border": [
+          {
+            "show": false
+          }
+        ],
+        "visualHeader": [
+          {
+            "show": true
+          }
+        ]
+      }
+    }
+  }
+}

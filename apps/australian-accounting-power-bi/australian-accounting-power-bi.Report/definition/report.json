@@ -9,6 +9,15 @@
         "page": "2.1.0"
       },
       "type": "SharedResources"
+    },
+    "customTheme": {
+      "name": "AccountingReview.json",
+      "type": "RegisteredResources",
+      "reportVersionAtImport": {
+        "visual": "2.9.0",
+        "page": "2.1.0",
+        "report": "3.3.0"
+      }
     }
   },
   "settings": {
@@ -19,5 +28,18 @@
     "allowChangeFilterTypes": true,
     "allowInlineExploration": true,
     "useEnhancedTooltips": true
-  }
+  },
+  "resourcePackages": [
+    {
+      "name": "RegisteredResources",
+      "type": "RegisteredResources",
+      "items": [
+        {
+          "name": "AccountingReview.json",
+          "path": "AccountingReview.json",
+          "type": "CustomTheme"
+        }
+      ]
+    }
+  ]
 }

@@ -21,9 +21,9 @@ TMDL_DIR = BASE_DIR / "australian-accounting-power-bi.SemanticModel" / "definiti
 TMDL_TABLES_DIR = TMDL_DIR / "tables"
 
 # TMDL declares no dataType on a measure; the engine infers it from the expression. These
-# two return text, which is why the format rule exempts them and why the TMDL integrity
+# twelve return text, which is why the format rule exempts them and why the TMDL integrity
 # suite allows them to ship without a format string.
-TEXT_MEASURES = {"ATO Compliance Risk Profile", "Benchmark Turnover Band"}
+TEXT_MEASURES = {"ATO Compliance Risk Profile", "Benchmark Turnover Band", "Consolidation Scope", "Report Selection", "Revenue Budget Title", "Monthly Revenue Title", "Payroll Review Note", "Finding Action", "Finding Question", "Finding Reason", "Finding Evidence requested", "Finding Evidence state"}
 
 
 def evaluate(expression: str, obj: dict[str, object]) -> bool:

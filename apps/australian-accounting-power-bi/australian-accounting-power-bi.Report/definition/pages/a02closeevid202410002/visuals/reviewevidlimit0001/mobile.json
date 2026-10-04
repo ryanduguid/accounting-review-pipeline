@@ -1,0 +1,34 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainerMobileState/2.4.0/schema.json",
+  "position": {
+    "x": 0,
+    "y": 168,
+    "z": 0,
+    "width": 324,
+    "height": 168,
+    "tabOrder": 3
+  },
+  "objects": {
+    "general": [
+      {
+        "properties": {
+          "paragraphs": [
+            {
+              "textRuns": [
+                {
+                  "value": "For journal rows, select one finding on Close review and choose View journal evidence. The verified Monthly Close driver supplies these rows to explain the movement between report dates. Reconciliation does not approve transactions.",
+                  "textStyle": {
+                    "fontFamily": "Segoe UI Semibold",
+                    "fontSize": "12pt",
+                    "fontWeight": "bold",
+                    "color": "#23384A"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

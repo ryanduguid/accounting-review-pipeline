@@ -41,3 +41,7 @@ relationship 'Dim_Entity to Dim_ANZSIC'
 relationship 'Fact_ATOBenchmark to Dim_ANZSIC'
 	fromColumn: Fact_ATOBenchmark.ANZSIC_Code
 	toColumn: Dim_ANZSIC.ANZSIC_Code
+
+relationship 'Review evidence to exception'
+	fromColumn: Review_Evidence.ExceptionKey
+	toColumn: Review_Exception.ExceptionKey
