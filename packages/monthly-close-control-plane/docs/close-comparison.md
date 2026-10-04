@@ -38,6 +38,11 @@ in the same pattern, so the comparison cannot tell which is wrong. Catching it
 needs evidence the pack does not hold, such as a budget, prior-year balances or
 a review of how each supplier's bills are coded.
 
+The separate [classification evidence check](classification-evidence.md) accepts
+explicit purpose and account assertions for selected transactions. It can name
+the software items in that example and retain their original assignments after
+a recode. Its result does not change either pack or clear a close finding.
+
 Optional --responses accepts a separate UTF-8 JSON file:
 
 ```json

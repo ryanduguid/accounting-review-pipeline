@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "tenant": "Synthetic",
+  "currency": "AUD",
+  "period_start": "2025-01-01",
+  "period_end": "2025-12-31",
+  "original_sha256": "e6782bb725768a243f916be50c8c61932634529506d015ecaa4f09042a0254d7",
+  "current_sha256": "e6782bb725768a243f916be50c8c61932634529506d015ecaa4f09042a0254d7",
+  "expectations": [
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-1",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-1"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-1",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-1"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-2",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-2"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-2",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-2"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-3",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-3"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-3",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-3"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-4",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-4"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-4",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-4"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-5",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-5"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-5",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-5"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-6",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-6"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-6",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-6"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-7",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-7"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-7",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-7"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-8",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-8"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-8",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-8"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-9",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-9"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-9",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-9"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-10",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-10"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-10",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-10"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-11",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-11"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-11",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-11"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "software-12",
+      "current_account_id": "610",
+      "expected_account_id": "620",
+      "purpose": "Software access",
+      "evidence_reference": "Separately fabricated bill purpose for software-12"
+    },
+    {
+      "original_account_id": "610",
+      "transaction_id": "office-12",
+      "current_account_id": "610",
+      "expected_account_id": "610",
+      "purpose": "Office stationery",
+      "evidence_reference": "Separately fabricated bill purpose for office-12"
+    }
+  ]
+}
