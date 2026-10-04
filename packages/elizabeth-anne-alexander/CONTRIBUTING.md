@@ -20,7 +20,7 @@ If your change widens the model-facing payload, or lets reviewer-only evidence r
 
 ## Local verification
 
-Python 3.10 or newer, with `uv` and a committed lock file.
+Python 3.11 or newer, with `uv` and a committed lock file.
 
 ```bash
 uv sync --locked --extra dev --python 3.12
@@ -28,7 +28,7 @@ uv run --locked --extra dev --python 3.12 pytest
 uv run --locked --extra dev --python 3.12 python -m build
 ```
 
-CI runs the tests on Python 3.10, 3.12, 3.13 and 3.14, plus a packaging job and CodeQL.
+CI runs the tests on Python 3.11, 3.12, 3.13 and 3.14, plus a packaging job and CodeQL.
 
 ## Pull requests
 

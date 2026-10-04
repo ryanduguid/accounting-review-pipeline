@@ -134,7 +134,7 @@ def _read(path: Path) -> tuple[str, str]:
 
     ``newline=""`` turns off universal newlines so the endings can be counted
     before anything is decided about them. ``Path.read_text`` grew a ``newline``
-    parameter only in 3.13 and this package supports 3.10, which is why the
+    parameter only in 3.13 and this package supports 3.11, which is why the
     handle is opened by hand.
     """
     with path.open(encoding="utf-8", newline="") as handle:

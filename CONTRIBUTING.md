@@ -24,7 +24,7 @@ the per-component commands in the `AGENTS.md` command-routing table, which remai
 authority; `just` runs them from one place, it does not replace them.
 
 `just check` is the fast local pass, not a CI equivalent. It runs Ruff, mypy, pytest and
-unittest. CI additionally runs the tests with branch coverage on Python 3.10, 3.12, 3.13
+unittest. CI additionally runs the tests with branch coverage on Python 3.11, 3.12, 3.13
 and 3.14, verifies each component lockfile, audits each locked environment with pip-audit,
 installs the exporter's hash-locked requirements, builds each distribution and imports it
 from a clean environment, validates

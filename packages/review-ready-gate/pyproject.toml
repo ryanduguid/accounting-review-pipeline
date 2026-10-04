@@ -7,7 +7,7 @@ name = "review-ready-gate"
 version = "0.1.10"
 description = "Stop incomplete workpapers reaching manager review"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ryan Duguid" }]
@@ -32,7 +32,6 @@ dev = [
     "pytest-cov==7.1.0",
     "coverage==7.16.1",
     "build>=1.6.1",
-    "tomli>=2.0; python_version < '3.11'",
     # release-python builds without isolation, so the backend comes from this
     # locked extra, pinned exactly as [build-system] requires.
     "setuptools==84.0.0",
@@ -62,7 +61,7 @@ src = ["reviewready", "tests"]
 select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 packages = ["reviewready"]
 ignore_missing_imports = true
 pretty = true

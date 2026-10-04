@@ -56,7 +56,7 @@ function Get-Python {
     if ($null -ne $python) {
         return $python.Source
     }
-    throw "python is not on PATH. Install Python 3.10+ and retry."
+    throw "python is not on PATH. Install Python 3.11+ and retry."
 }
 
 function Invoke-NamedOrModuleCli {

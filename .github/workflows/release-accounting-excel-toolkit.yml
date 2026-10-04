@@ -27,7 +27,7 @@ jobs:
       required-checks: |
         .github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner
         .github/workflows/standard-library-components.yml: lint (adapters/accounting-excel-toolkit)
-        .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.10)
+        .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.11)
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.12)
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.13)
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)
