@@ -1,6 +1,7 @@
 # Never commit a client's ledger export, workpaper, credentials, or generated review pack.
 *.csv
 !packages/monthly-close-control-plane/examples/*.csv
+!packages/monthly-close-control-plane/examples/classification/transactions.csv
 !packages/monthly-close-control-plane/schemas/*.csv
 # The data-only Xero trial-balance contract is fabricated and re-included explicitly.
 !contracts/xero-trial-balance-v1/schema.csv
