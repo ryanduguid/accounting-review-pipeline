@@ -14,7 +14,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [evatt](../packages/evatt/README.md) 0.1.4, local pseudonymisation of Australian client data in markdown |
+| Name and version | [evatt](../packages/evatt/README.md) 0.2.0, local pseudonymisation of Australian client data in markdown |
 | Source and updates | Ryan Duguid, the sole maintainer, under the MIT licence, with no warranty or support agreement. Each release has [release notes](../packages/evatt/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Runs before a document is sent to a model, replacing structured identifiers and mapped named entities with placeholders |
 | Known limitations and prohibited use | Not for client data before the firm signs off the policy that governs it, and not authority to disclose anything. Contextual re-identification is the residual risk; there is no ATO client reference detector; general ledger codes shaped like a BSB are replaced; unmapped names can escape the residual sweep; `verify` re-runs the same detection rather than a second detector |
@@ -57,7 +57,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [Workpaper Review Gate](../packages/review-ready-gate/README.md) (`review-ready-gate`) 0.1.10, a readiness gate for workpaper packs before manager review |
+| Name and version | [Workpaper Review Gate](../packages/review-ready-gate/README.md) (`review-ready-gate`) 0.2.0, a readiness gate for workpaper packs before manager review |
 | Source and updates | Ryan Duguid, the sole maintainer, under the MIT licence, with no warranty or support agreement. Each release has [release notes](../packages/review-ready-gate/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Stops an incomplete, untied or unbalanced pack reaching manager review, however it was prepared |
 | Known limitations and prohibited use | Not tax, financial, audit or legal advice, and not a sign-off. `READY` means no configured control tripped, not that every control ran; the pack lists the optional controls that had no input. Tie-out tolerance is an input to each gate run. The bank reconciliation is checked against the GL balance it records itself, not the pack's trial balance, and the GST control file only for postings after `period_end`. The command refuses to write a pack inside a version-control checkout it can detect, but a work tree chosen by `--work-tree` or `core.worktree` in another repository cannot be detected, so the check is a backstop, not proof that a directory is untracked. |

@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | `evatt` | `evatt` | `evatt` |
 
-This checkout targets `evatt/v0.1.4`. Each evatt release is an immutable GitHub
+This checkout targets `evatt/v0.2.0`. Each evatt release is an immutable GitHub
 release with a wheel, a source distribution, an SPDX SBOM, a release manifest
 and `SHA256SUMS`; check GitHub Releases for the published assets. The
 distribution is not on PyPI, by design: install it from the release assets, or

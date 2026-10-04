@@ -578,7 +578,7 @@ wheels = [
 
 [[package]]
 name = "monthly-close-control-plane"
-version = "0.1.8"
+version = "0.2.0"
 source = { editable = "packages/monthly-close-control-plane" }
 
 [package.optional-dependencies]
@@ -822,7 +822,7 @@ wheels = [
 
 [[package]]
 name = "review-ready-gate"
-version = "0.1.10"
+version = "0.2.0"
 source = { editable = "packages/review-ready-gate" }
 
 [package.optional-dependencies]

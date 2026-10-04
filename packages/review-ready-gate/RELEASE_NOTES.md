@@ -1,3 +1,9 @@
+# v0.2.0
+
+- Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.10 remains the last release that installs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).
+- The self-review and review acknowledgement loaders refuse a JSON member stated twice at any depth, so a conflicting second value can no longer replace the first ([#307](https://github.com/ryanduguid/accounting-review-pipeline/pull/307), [#309](https://github.com/ryanduguid/accounting-review-pipeline/pull/309)).
+- `load_self_review` and the viewer report JSON nested too deeply to parse, or holding an over-long integer, as `SchemaError` instead of a traceback; `review-ready gate` used to end in a `RecursionError` traceback on 100,000 nested arrays ([#309](https://github.com/ryanduguid/accounting-review-pipeline/pull/309)).
+
 # v0.1.10
 
 - `review-ready compare` tracks document coverage between readiness runs. Removing an unreviewed supporting document used to leave the earlier finding labelled `NOT_RAISED` with no change in scope; that finding is now `NOT_COMPARABLE`, and the comparison reports the change as `document_coverage` under `scope_changes`. Document slots come from filenames and need exactly one original file each; changed evidence labels are accepted. Readiness statuses, pack verification and finding groups are unchanged.
