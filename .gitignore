@@ -1,0 +1,17 @@
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.pem
+*.key
+input/
+output/
+client-data/
+*.xlsx
+*.xls
+*.pdf
