@@ -1,0 +1,3 @@
+receipt_id,grant_id,date,amount,evidence
+R1,G-A,2026-07-01,5000,Fabricated bank receipt A
+R2,G-B,2026-10-01,10000,Fabricated bank receipt B

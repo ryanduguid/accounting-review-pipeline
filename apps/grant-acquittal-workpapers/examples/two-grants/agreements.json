@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "entity": "Fabricated Community Association",
+  "currency": "AUD",
+  "ledger_start": "2026-07-01",
+  "ledger_end": "2027-06-30",
+  "amount_basis": "GST-inclusive",
+  "agreements": [
+    {
+      "grant_id": "G-A",
+      "start": "2026-07-01",
+      "end": "2027-06-30",
+      "opening_cash": "10000",
+      "opening_unspent_funding": "8000",
+      "budget": {
+        "Delivery": "10000",
+        "Administration": "2000"
+      },
+      "agreement_evidence": "Fabricated reviewed summary A"
+    },
+    {
+      "grant_id": "G-B",
+      "start": "2026-10-01",
+      "end": "2027-09-30",
+      "opening_cash": "0",
+      "opening_unspent_funding": "0",
+      "budget": {
+        "Delivery": "12000",
+        "Administration": "2000"
+      },
+      "agreement_evidence": "Fabricated reviewed summary B"
+    }
+  ]
+}
