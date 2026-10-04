@@ -1,10 +1,12 @@
-# Unreleased
+# v0.2.0
 
+- Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.4 remains the last release that runs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).
+- New `evatt disclosure-record` and `evatt disclosure-check` bind a payload to its exact bytes, validated entity map, destination, decision reference and tool version. Both rescan with the current verifier and require ignored, untracked local records. A record checks consistency only; the sender still authenticates the external decision ([#300](https://github.com/ryanduguid/accounting-review-pipeline/pull/300)).
 - Keep names detectable when a following phone's opening punctuation is replaced,
   and separate touching mapped placeholders so both restore. Existing emphasis
   between accepted matches keeps its spacing. Restore retains any added space.
 - Document the remaining punctuation-edge, shared-emphasis and longer-word
-  placeholder limitations in the README and DECISIONS.md rulings 43 and 44.
+  placeholder limitations in the README and DECISIONS.md rulings 43 and 44 ([#305](https://github.com/ryanduguid/accounting-review-pipeline/pull/305)).
 
 # v0.1.4
 

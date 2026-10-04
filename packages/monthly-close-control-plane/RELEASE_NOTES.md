@@ -1,3 +1,11 @@
+# v0.2.0
+
+- Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.8 remains the last release that installs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).
+- New `close-control classify` compares a selection of postings, before and after any recode, with supplied purpose and expected-account assertions. A posting whose original account disagrees with its evidence is `REVIEW` (exit 2) with `CODING_DIFFERENCE`, and the original discrepancy stays visible after a recode. It reports evidence only and changes no close finding ([#319](https://github.com/ryanduguid/accounting-review-pipeline/pull/319)).
+- Calculation evidence and review acknowledgements refuse a JSON member stated twice at any depth, `COMPUTED` evidence needs at least one advisory note with text, and a period with an impossible month or non-ASCII digits takes the unreadable-period `REVIEW` path ([#307](https://github.com/ryanduguid/accounting-review-pipeline/pull/307)).
+- Opening items refuse duplicate members, and opening items, equity schedules, comparison responses and the viewer report JSON nested too deeply to parse, or holding an over-long integer, as an input error instead of a traceback ([#309](https://github.com/ryanduguid/accounting-review-pipeline/pull/309)).
+- The installed-wheel smoke test runs `review`, `view`, `drivers`, the balance policy and the tamper refusal outside the checkout, and the monthly owner review guide documents its dated workflow ([#304](https://github.com/ryanduguid/accounting-review-pipeline/pull/304)).
+
 # v0.1.8
 
 - Breaking: the `openaccountants-au` console script is removed, with its `closecontrol/pipeline_cli.py` stub. It only printed that it was quarantined and exited 2; use `close-control` for the close pack and `ato-benchmark-compare` for range tests.

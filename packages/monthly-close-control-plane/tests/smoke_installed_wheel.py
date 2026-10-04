@@ -25,7 +25,7 @@ def main() -> None:
     subprocess.run(  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         [sys.executable, "-I", "-c", "from importlib.metadata import distribution; "
          "d=distribution('monthly-close-control-plane'); "
-         "assert d.version == '0.1.8'; "
+         "assert d.version == '0.2.0'; "
          "assert any(e.group == 'console_scripts' and e.name == 'close-control' "
          "and e.value == 'closecontrol.cli:main' for e in d.entry_points)"],
         check=True, capture_output=True, text=True,

@@ -64,8 +64,7 @@ The published 0.1.8 package also includes variance drivers and the balance polic
 The quick start remains pinned to 0.1.5; use 0.1.8 to run these controls.
 The [classification evidence check](docs/classification-evidence.md) compares
 selected postings with supplied purpose and account assertions, preserving
-original discrepancies after a recode. It is in the development source only;
-no published package includes it yet.
+original discrepancies after a recode. It first ships in 0.2.0.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
