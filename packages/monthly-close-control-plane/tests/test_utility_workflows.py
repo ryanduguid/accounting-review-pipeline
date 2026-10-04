@@ -56,7 +56,7 @@ def test_fresh_environments_cannot_overlap_outputs(tmp_path, layout):
         PREPARE(output, source, None, None, environments, "quarter")
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="The cross-repository driver requires Python 3.11")
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="The cross-repository driver requires Python 3.14")
 def test_provenance_uses_workspace_lock_and_tracks_uncommitted_source(tmp_path):
     MODULE["git_output"](tmp_path, "init")
     (tmp_path / "pyproject.toml").write_text('[tool.uv.workspace]\nmembers = ["packages/*"]\n')

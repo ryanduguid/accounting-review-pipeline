@@ -87,13 +87,13 @@ OAuth or publishing credentials. Production packages do not import sibling packa
 
 ## Anchor remote preflight (read-only)
 
-The anchor remains public and active as `accounting-review-pipeline`; its default branch is
-`main`. Branch protection on `main` requires the status checks `package`, `test (3.10)`,
-`test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python` with strict up-to-date
-enforcement, so the root `ci.yml` keeps the workflow name `tests` with job ids `test`,
-`package` and `lint`, and `codeql.yml` keeps its job name `Analyze Python`. The repository
-has exactly one environment, `pypi`. The latest anchor release is `v0.1.2`. No remote
-setting was changed.
+The import preflight recorded the public `accounting-review-pipeline` anchor with
+default branch `main`. Its recorded protected checks were `package`, `test (3.10)`,
+`test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python`, with strict up-to-date
+enforcement. The root workflow retains the name `tests` and job ids `test`, `package`
+and `lint`; `codeql.yml` retains `Analyze Python`. Before merging the Python 3.14
+migration, verify the current protected check contexts against the new matrix.
+The preflight recorded one environment, `pypi`, and anchor release `v0.1.2`.
 
 ## Release policy prerequisite
 
@@ -187,7 +187,7 @@ demonstrations run as its per-component `smoke` input. evatt runs through the sa
 rather than through a workflow of its own: `evatt.yml` was replaced by a fourth `component`
 entry (`packages/evatt`, import `evatt`), and its clean-wheel redact, verify, restore and
 halt demonstration runs as that entry's `smoke` input, over the reusable workflow's Python
-3.10, 3.12, 3.13 and 3.14 legs. `AGENTS.md` lists the current gates.
+3.14 leg. `AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
 

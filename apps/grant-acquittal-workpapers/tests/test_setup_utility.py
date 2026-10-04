@@ -23,7 +23,7 @@ class SetupUtilityTests(unittest.TestCase):
         self.calls = []
         self.addCleanup(patch.stopall)
         patch.object(setup_utility, "SOURCE", self.source).start()
-        patch.object(setup_utility.sys, "version_info", (3, 11)).start()
+        patch.object(setup_utility.sys, "version_info", (3, 14)).start()
         patch.object(setup_utility.shutil, "which", side_effect=lambda name: None if name == "rtk" else name).start()
 
     def command(self, arguments, **kwargs):
@@ -117,8 +117,8 @@ class SetupUtilityTests(unittest.TestCase):
         self.assertFalse(self.workspace.exists())
 
     def test_old_python_fails_before_workspace_creation(self):
-        with patch.object(setup_utility.sys, "version_info", (3, 10)):
-            with self.assertRaisesRegex(ValueError, "3.11"):
+        with patch.object(setup_utility.sys, "version_info", (3, 13)):
+            with self.assertRaisesRegex(ValueError, "3.14"):
                 setup_utility.setup(self.workspace)
         self.assertFalse(self.workspace.exists())
 

@@ -29,7 +29,7 @@ Every function here solves a problem the Australian ledger-export formats create
 ## Offline aged receivables review
 
 The [standard-library verifier](tools/xero_aged_receivables.py) checks a supplied
-Aged Receivables Summary CSV with Python 3.11 or later and no installed dependencies.
+Aged Receivables Summary CSV with Python 3.14 or later and no installed dependencies.
 Run this fabricated example from `adapters/accounting-excel-toolkit/`:
 
 ```powershell

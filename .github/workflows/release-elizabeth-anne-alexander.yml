@@ -25,16 +25,13 @@ jobs:
       attestations: write # Record provenance and SBOM attestations for release assets.
       contents: write # Create the draft release, upload assets and publish it.
       id-token: write # Obtain the OIDC identity required to sign attestations.
-    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711
+    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@f068fb4f1d8f90e07429ded7cfb85bdbcc2960fe
     with:
       required-checks: |
         .github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / build
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / dependency-audit
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / lint
-        .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.11)
-        .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.12)
-        .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.13)
         .github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
@@ -59,6 +56,9 @@ jobs:
       contents: read # Read the pinned policy.
       id-token: write # Mint the OIDC token PyPI Trusted Publishing verifies.
     steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
       - name: Check out the policy that built the candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,6 +132,9 @@ jobs:
       attestations: read
       id-token: write
     steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
       - name: Verify the existing immutable release and its attested assets
         env:
           GH_TOKEN: ${{ github.token }}

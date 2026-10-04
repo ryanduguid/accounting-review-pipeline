@@ -17,7 +17,7 @@ This exporter reads a Xero trial balance and writes a validated CSV. It stays re
 
 ## Local verification
 
-Python 3.11 or newer. The lock file pins dependencies with hashes.
+Python 3.14 or newer. The lock file pins dependencies with hashes.
 
 ```bash
 python -m pip install --require-hashes -r requirements.lock
