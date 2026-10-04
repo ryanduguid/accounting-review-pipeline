@@ -1,0 +1,25 @@
+Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit
+Synthetic,610,AUD,software-1,2025-01-15,fabricated-software-1,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-1,2025-01-15,fabricated-office-1,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-2,2025-02-15,fabricated-software-2,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-2,2025-02-15,fabricated-office-2,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-3,2025-03-15,fabricated-software-3,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-3,2025-03-15,fabricated-office-3,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-4,2025-04-15,fabricated-software-4,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-4,2025-04-15,fabricated-office-4,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-5,2025-05-15,fabricated-software-5,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-5,2025-05-15,fabricated-office-5,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-6,2025-06-15,fabricated-software-6,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-6,2025-06-15,fabricated-office-6,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-7,2025-07-15,fabricated-software-7,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-7,2025-07-15,fabricated-office-7,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-8,2025-08-15,fabricated-software-8,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-8,2025-08-15,fabricated-office-8,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-9,2025-09-15,fabricated-software-9,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-9,2025-09-15,fabricated-office-9,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-10,2025-10-15,fabricated-software-10,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-10,2025-10-15,fabricated-office-10,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-11,2025-11-15,fabricated-software-11,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-11,2025-11-15,fabricated-office-11,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,software-12,2025-12-15,fabricated-software-12,Recurring supplier fee,150.00,0
+Synthetic,610,AUD,office-12,2025-12-15,fabricated-office-12,Recurring supplier fee,150.00,0

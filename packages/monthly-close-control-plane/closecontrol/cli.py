@@ -7,6 +7,7 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .classification import classify
 from .comparison import compare_packs
 from .drivers import variance_drivers, write_drivers
 from .engine import review_close
@@ -100,6 +101,10 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("previous-pack", "current-pack", "previous-tb", "current-tb"):
         comparison.add_argument(f"--{flag}", required=True, type=Path)
     comparison.add_argument("--responses", type=Path, help="optional responses bound to the current pack")
+    classification = commands.add_parser("classify", help="compare postings with supplied bill-purpose evidence")
+    for flag in ("original-transactions", "current-transactions", "coding-evidence"):
+        classification.add_argument(f"--{flag}", required=True, type=Path)
+    classification.add_argument("--currency", required=True)
     schedule = commands.add_parser("schedule", help="review a canonical expense, migration or inter-entity schedule")
     schedule.add_argument("--kind", required=True, choices=("expenses", "migration", "interentity"))
     schedule.add_argument("--input", required=True, type=Path)
@@ -118,8 +123,17 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command not in {"review", "workbench", "view", "reconcile", "drivers", "compare", "schedule"}:  # pragma: no cover - argparse validates command choices.
+    if args.command not in {"review", "workbench", "view", "reconcile", "drivers", "compare", "schedule", "classify"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
+    if args.command == "classify":
+        try:
+            result = classify(args.original_transactions, args.current_transactions,
+                              args.coding_evidence, currency=args.currency)
+        except (ControlInputError, ValueError, OSError, csv.Error) as exc:
+            print(f"close-control classify: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["status"] == "PASS" else 2
     if args.command == "schedule":
         try:
             result = review_schedule(args.input, kind=args.kind)

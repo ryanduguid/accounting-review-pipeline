@@ -62,6 +62,10 @@ migration snapshots and inter-entity balances from supplied canonical records.
 Comparison, equity reconciliation and evidence schedules ship from 0.1.5.
 The published 0.1.8 package also includes variance drivers and the balance policy.
 The quick start remains pinned to 0.1.5; use 0.1.8 to run these controls.
+The [classification evidence check](docs/classification-evidence.md) compares
+selected postings with supplied purpose and account assertions, preserving
+original discrepancies after a recode. It is in the development source only;
+no published package includes it yet.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
