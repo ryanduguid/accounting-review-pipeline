@@ -13,8 +13,12 @@ class SetupUtilityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="utility setup ")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
-        self.source = self.root / "grant source"
-        self.source.mkdir()
+        self.pipeline = self.root / "pipeline checkout"
+        self.source = self.pipeline / setup_utility.GRANT_PROJECT
+        self.source.mkdir(parents=True)
+        self.driver = self.pipeline / setup_utility.DRIVER
+        self.driver.parent.mkdir(parents=True)
+        self.driver.write_text("")
         self.workspace = self.root / "new workspace"
         self.calls = []
         self.addCleanup(patch.stopall)
@@ -39,11 +43,13 @@ class SetupUtilityTests(unittest.TestCase):
             output = setup_utility.setup(self.workspace)
         self.assertEqual(output, self.workspace / "results")
         clones = [args for args, _ in self.calls if "clone" in args]
-        self.assertEqual(len(clones), 3)
+        self.assertEqual(len(clones), 2)
         for name, args in zip(setup_utility.COMPANIONS, clones):
             self.assertIn(f"https://github.com/ryanduguid/{name}.git", args)
             self.assertEqual(args[args.index("--branch") + 1], "main")
         driver, options = self.calls[-1]
+        # The enclosing pipeline checkout runs the close controls and supplies the grant route.
+        self.assertEqual(driver[1], str(self.driver))
         self.assertEqual(driver[driver.index("--grants") + 1], str(self.source))
         self.assertEqual(driver[driver.index("--environment-root") + 1], str(self.workspace / "environments"))
         self.assertTrue(options["check"])
@@ -60,9 +66,19 @@ class SetupUtilityTests(unittest.TestCase):
         self.assertEqual(sentinel.read_text(), "original")
 
     def test_source_nested_workspace_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "separate"):
-            setup_utility.setup(self.source / "outputs")
+        for target in (self.source / "outputs", self.pipeline / "outputs"):
+            with self.subTest(target=target), self.assertRaisesRegex(ValueError, "separate"):
+                setup_utility.setup(target)
         self.assertEqual(list(self.source.iterdir()), [])
+        self.assertFalse((self.pipeline / "outputs").exists())
+
+    def test_application_outside_a_pipeline_checkout_is_refused(self):
+        self.driver.unlink()
+        with patch.object(setup_utility.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "accounting-review-pipeline checkout"):
+                setup_utility.setup(self.workspace)
+        command.assert_not_called()
+        self.assertFalse(self.workspace.exists())
 
     def test_other_git_checkout_is_refused_before_creating_workspace(self):
         with patch.object(setup_utility.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
