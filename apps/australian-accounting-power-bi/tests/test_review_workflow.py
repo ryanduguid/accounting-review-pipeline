@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 import html
 import importlib.util
+import io
 import json
 import os
 import re
@@ -11,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, redirect_stderr
 from decimal import Decimal
 from html.parser import HTMLParser
 from pathlib import Path
@@ -249,12 +250,55 @@ class ReviewWorkflowTests(unittest.TestCase):
                 return {"review_boundary": "Fixture", "scope_changes": [], "findings": [], "queries": [], group: [item]}
             for change, previous, current in (("NEW", None, record), ("CHANGED", record, altered),
                     ("RECURRING", record, record), ("NOT_RAISED", record, None), ("NOT_COMPARABLE", record, None)):
-                workflow.comparison_document(document(change, previous, current))
+                valid = document(change, previous, current)
+                if change == "NOT_COMPARABLE":
+                    valid["scope_changes"] = ["thresholds"]
+                workflow.comparison_document(valid)
             for change, previous, current in (("NEW", record, None), ("NEW", record, record),
                     ("CHANGED", record, record), ("CHANGED", None, record), ("RECURRING", record, altered),
                     ("RECURRING", None, record), ("NOT_RAISED", record, record), ("NOT_COMPARABLE", None, record)):
                 with self.subTest(group=group, change=change, previous=previous, current=current), self.assertRaises(ValueError):
                     workflow.comparison_document(document(change, previous, current))
+
+    def test_comparison_scope_and_repeated_group_order_follow_the_producer(self) -> None:
+        record = {"account_name": "Fixture", "account_id": "account", "control": "period_variance",
+                  "current_value": "1.00", "status": "REVIEW"}
+        for group in ("findings", "queries"):
+            previous = [record] if group == "findings" else record
+            current: list[dict[str, str]] | None = [] if group == "findings" else None
+            item = {"control": "period_variance", "account_id": "account", "query_id": "Q-fixture",
+                    "previous": previous, "current": current}
+            for change, scope in (("NOT_COMPARABLE", []), ("NOT_RAISED", ["thresholds"]),
+                                  ("NOT_COMPARABLE", [""]), ("NOT_COMPARABLE", [" "])):
+                document = {"review_boundary": "Fixture", "scope_changes": scope, "findings": [], "queries": [],
+                            group: [item | {"change": change}]}
+                with self.subTest(group=group, change=change, scope=scope), self.assertRaises(ValueError):
+                    workflow.comparison_document(document)
+        altered = record | {"current_value": "2.00"}
+        ordered = sorted([record, altered], key=lambda row: json.dumps(row, sort_keys=True))
+        item = {"control": "period_variance", "account_id": "account", "previous": ordered,
+                "current": list(reversed(ordered))}
+        document = {"review_boundary": "Fixture", "scope_changes": [], "queries": [],
+                    "findings": [item | {"change": "CHANGED"}]}
+        with self.assertRaises(ValueError):
+            workflow.comparison_document(document)
+        workflow.comparison_document(document | {"findings": [item | {"change": "RECURRING"}]})
+
+    def test_invalid_comparison_is_a_controlled_html_cli_refusal(self) -> None:
+        record = {"account_name": "Fixture", "account_id": "account", "control": "period_variance",
+                  "current_value": "1.00", "status": "REVIEW"}
+        comparison = {"review_boundary": "Fixture", "scope_changes": [], "queries": [], "findings": [
+            {"control": "period_variance", "account_id": "account", "change": "NOT_COMPARABLE",
+             "previous": [record], "current": []}]}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "refused.html"
+            stderr = io.StringIO()
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as refused:
+                self.render_comparison(comparison, cli_output=output)
+            self.assertEqual(refused.exception.code, 1)
+            self.assertIn("Review workflow refused:", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+            self.assertFalse(output.exists())
 
     def test_entrypoint_script_rejects_side_effects_and_wrong_targets(self) -> None:
         good = b'import sys\nfrom closecontrol.cli import main\nif __name__ == "__main__":\n    sys.exit(main())\n'
@@ -544,7 +588,7 @@ class ReviewWorkflowTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Producer verification refused"):
                     workflow.render_html(Path("unused"), bin_dir)
 
-    def render_comparison(self, comparison: dict, *, acknowledgement: bool = False, removed_input: bool = False) -> str:
+    def render_comparison(self, comparison: dict, *, acknowledgement: bool = False, removed_input: bool = False, cli_output: Path | None = None) -> str:
         projected = {name: (APP / "samples" / name).read_bytes() for name in
                      ("sample-review-run.csv", "sample-review-exceptions.csv", "sample-review-evidence.csv")}
         previous, current = Path("previous"), Path("current")
@@ -557,6 +601,11 @@ class ReviewWorkflowTests(unittest.TestCase):
                     {"close/close-review-pack.json": workflow.json_bytes({"acknowledgement":
                      "fabricated note" if run == current and acknowledgement else None})})
         with patch.object(workflow, "verify", side_effect=verified), patch.object(workflow, "projection", return_value=projected), patch.object(workflow, "pinned_producer", return_value=workflow.json_bytes(comparison)):
+            if cli_output is not None:
+                with patch.object(sys, "argv", ["review_workflow.py", "html", "--run", str(current),
+                                               "--previous", str(previous), "--output", str(cli_output)]):
+                    workflow.main()
+                return ""
             return workflow.render_html(current, Path("unused"), previous)
 
     def test_comparison_preserves_classifications_exact_records_and_escapes_data(self) -> None:
@@ -575,6 +624,9 @@ class ReviewWorkflowTests(unittest.TestCase):
         finding_changes[1]["current"] = [record, record | {"current_value": "0.00000", "status": "BLOCKED"},
                                          record | {"current_value": ""}]
         query_changes[1]["current"] = record | {"question": "Changed question"}
+        not_raised = self.render_comparison({"findings": [finding_changes.pop(3)], "queries": [query_changes.pop(3)],
+                                             "scope_changes": [], "review_boundary": "Unscoped comparison"})
+        self.assertIn('data-change="NOT_RAISED">Not raised</th><td class="amount">1</td><td class="amount">1</td>', not_raised)
         comparison = {"findings": finding_changes, "queries": query_changes,
                       "scope_changes": [attack], "review_boundary": "NOT_RAISED does not mean resolved or approved."}
         output = self.render_comparison(comparison, acknowledgement=True)
@@ -594,12 +646,12 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(sum(tag == "table" for tag, _ in parsed_summary.elements), 1)
         self.assertEqual(sum(tag == "ul" and attrs.get("class") == "comparison-records"
                              for tag, attrs in parsed_summary.elements), 2)
-        self.assertEqual(sum(tag == "h4" for tag, _ in parsed_summary.elements), 10)
-        self.assertEqual(comparison_summary.count("<dt>Value in 2024-08-31</dt>"), 5)
-        self.assertEqual(comparison_summary.count("<dt>Value in 2024-09-30</dt>"), 5)
+        self.assertEqual(sum(tag == "h4" for tag, _ in parsed_summary.elements), 8)
+        self.assertEqual(comparison_summary.count("<dt>Value in 2024-08-31</dt>"), 4)
+        self.assertEqual(comparison_summary.count("<dt>Value in 2024-09-30</dt>"), 4)
         self.assertNotIn("scroll the comparison tables", comparison_summary)
         for change, label in (("NEW", "New"), ("CHANGED", "Changed"), ("RECURRING", "Recurring"),
-                              ("NOT_RAISED", "Not raised"), ("NOT_COMPARABLE", "Not comparable")):
+                              ("NOT_COMPARABLE", "Not comparable")):
             self.assertIn(f'data-change="{change}">{label}</th><td class="amount">1</td><td class="amount">1</td>', summary)
         raw = html.unescape(full.split("<pre>", 1)[1].split("</pre>", 1)[0])
         document = json.loads(raw)

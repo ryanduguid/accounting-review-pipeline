@@ -185,6 +185,9 @@ def readiness_document(value: Any) -> dict[str, Any]:
 
 def comparison_document(value: Any) -> dict[str, Any]:
     doc = string_fields(value, ("review_boundary",), "Comparison")
+    scope = doc.get("scope_changes")
+    if not isinstance(scope, list) or any(not isinstance(item, str) or not item.strip() for item in scope):
+        raise ValueError("Comparison scope changes requires non-empty strings.")
     previous: Any = None
     current: Any = None
     for group in ("findings", "queries"):
@@ -207,14 +210,14 @@ def comparison_document(value: Any) -> dict[str, Any]:
             if not previous and not current:
                 raise ValueError("Comparison requires at least one populated side.")
             change = item["change"]
+            same = (sorted(previous, key=lambda row: json.dumps(row, sort_keys=True)) ==
+                    sorted(current, key=lambda row: json.dumps(row, sort_keys=True))) if group == "findings" else previous == current
             if ((change == "NEW" and (previous or not current))
                     or (change in ("NOT_RAISED", "NOT_COMPARABLE") and (not previous or current))
+                    or (change == "NOT_RAISED" and scope) or (change == "NOT_COMPARABLE" and not scope)
                     or (change in ("CHANGED", "RECURRING") and
-                        (not previous or not current or (previous == current) != (change == "RECURRING")))):
+                        (not previous or not current or same != (change == "RECURRING")))):
                 raise ValueError("Comparison classification contradicts its previous/current records.")
-    scope = doc.get("scope_changes")
-    if not isinstance(scope, list) or any(not isinstance(item, str) for item in scope):
-        raise ValueError("Comparison scope changes requires a list of strings.")
     return doc
 
 
