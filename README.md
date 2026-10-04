@@ -5,9 +5,10 @@
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
-Seven independently versioned components that carry an Australian month end from a
+Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
-close controls, a workpaper readiness gate, an Excel toolkit and a Power BI project.
+close controls, a workpaper readiness gate, an Excel toolkit, a Power BI project and
+grant acquittal workpapers.
 They are joined by local files and commands, not by a shared runtime, and each keeps
 its own distribution name, version, licence and command.
 
@@ -60,7 +61,7 @@ A firm keeping an AI register can draw on the supplier information for evatt, th
 
 This repository brings together Monthly Close Controls and its related tools. Its canonical GitHub repository
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
-It holds 7 independently versioned components joined only by local files and commands:
+It holds 8 independently versioned components joined only by local files and commands:
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
@@ -70,6 +71,7 @@ It holds 7 independently versioned components joined only by local files and com
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.6 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.7 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | command-line script `grant_workpaper.py`, standard library only, no release | 0.1.0 |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.1.4 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column

@@ -1,6 +1,6 @@
 # Accounting Review Pipeline agent instructions
 
-This repository is the local assembly of the Accounting Review Pipeline: 7 independently
+This repository is the local assembly of the Accounting Review Pipeline: 8 independently
 versioned components joined only by local files and commands. Its canonical GitHub repository
 is `ryanduguid/accounting-review-pipeline`.
 Follow the closest component `AGENTS.md`, `CONTRIBUTING.md` or `README.md` for component work.
@@ -49,7 +49,8 @@ reviewed Release Policy identity gate requires a nested release's directory leaf
 `packages/monthly-close-controls`, `packages/workpaper-review-gate` and
 `packages/xero-ledger-review-gate` therefore became `packages/monthly-close-control-plane`,
 `packages/review-ready-gate` and `packages/elizabeth-anne-alexander`. The exporter, the Excel
-adapter and the Power BI application keep the plan's paths. `IMPORTS.md` records the decision.
+adapter and the Power BI application keep the plan's paths. The grant workpapers application,
+imported later, sits at `apps/grant-acquittal-workpapers/` because it is never released. `IMPORTS.md` records the decision.
 
 ## Setup
 
@@ -75,6 +76,7 @@ Run every check from the owning component directory with its documented commands
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `python -B -m unittest discover -s tests -v`, on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
@@ -98,9 +100,9 @@ platform-specific behaviour. Each call filters
 itself to its component directory, the shared contract and the root files, so a change to
 one component runs that component alone. Monthly Close Controls keeps its own `test`,
 `package` and `lint` jobs in `ci.yml` because its release workflow selects them by
-name. The Excel adapter and the Power BI application have no `pyproject.toml`, so their
-root workflows run ruff and mypy from `ruff.toml` and `mypy.ini` and their unittest suites
-on the same Python matrix.
+name. The Excel adapter, the Power BI application and the grant workpapers application are
+not workspace members, so their root workflow runs ruff and mypy from their own settings and
+their unittest suites on the same Python matrix, with a Windows leg for the grant application.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change

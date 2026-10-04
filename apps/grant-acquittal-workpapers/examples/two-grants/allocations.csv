@@ -1,0 +1,6 @@
+allocation_id,ledger_id,grant_id,budget_line,amount,cash_allocated,approved,evidence
+A1,L1,G-A,Delivery,600,480,yes,Fabricated reviewed allocation 60 per cent
+A2,L1,G-B,Delivery,400,320,yes,Fabricated reviewed allocation 40 per cent
+A3,L2,G-B,Delivery,2000,2000,yes,Fabricated allocation pending period review
+A4,L3,G-A,Delivery,3000,0,no,
+A5,L4,G-A,Administration,300,300,yes,Fabricated partial allocation

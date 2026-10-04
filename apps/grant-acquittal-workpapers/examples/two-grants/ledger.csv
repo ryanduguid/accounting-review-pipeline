@@ -1,0 +1,5 @@
+ledger_id,date,description,amount,cash_paid,evidence
+L1,2026-10-15,Shared programme invoice,1000,800,Fabricated invoice L1
+L2,2026-09-15,Programme B early cost,2000,2000,Fabricated invoice L2
+L3,2026-11-20,Programme A delivery,3000,0,
+L4,2026-12-01,General administration,500,500,Fabricated invoice L4

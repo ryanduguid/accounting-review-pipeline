@@ -9,8 +9,9 @@
 #     uv tool install rust-just
 #
 # The five Python distributions are uv workspace members. The Excel adapter and
-# the Power BI application have no pyproject.toml; their standard-library
-# unittest suites run from the same .venv. Adding a component means adding it to
+# the Power BI application have no pyproject.toml, and the grant workpapers
+# application is not a member; their standard-library unittest suites run from
+# the same .venv. Adding a component means adding it to
 # the matching list below and to the root pyproject.toml workspace members.
 
 # pytest components: directory:import package
@@ -26,6 +27,7 @@ unittest_components := trim(replace('''
 packages/xero-trial-balance-export
 adapters/accounting-excel-toolkit
 apps/australian-accounting-power-bi
+apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
