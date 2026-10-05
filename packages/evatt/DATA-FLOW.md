@@ -19,6 +19,7 @@ recipient receives; it does not change the character of the data.
 
 ```mermaid
 flowchart LR
+%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#7851A9", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#7851A9", "titleColor": "#FFFFF0"}}}%%
     Raw["raw .md"] --> Structured["pass 1: structured identifiers, labelled or check digit confirmed"]
     Structured --> Entities["pass 2: known entities from the local map"]
     Entities --> Residual{"pass 3: residual sweep"}
