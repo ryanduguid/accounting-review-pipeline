@@ -19,7 +19,7 @@ recipient receives; it does not change the character of the data.
 
 ```mermaid
 flowchart LR
-%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#7851A9", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#7851A9", "titleColor": "#FFFFF0"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#FFFFF0", "titleColor": "#FFFFF0"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); }"}}%%
     Raw["raw .md"] --> Structured["pass 1: structured identifiers, labelled or check digit confirmed"]
     Structured --> Entities["pass 2: known entities from the local map"]
     Entities --> Residual{"pass 3: residual sweep"}
@@ -28,6 +28,9 @@ flowchart LR
     Out --> Model["external model, operator's choice"]
     Model --> Answer["answer carrying placeholders"]
     Answer --> Restore["restore, local, entity map only"]
+    style Halt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Out fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Restore fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
 ```
 
 The operator carries the sanitised file to the model and the answer back. evatt
