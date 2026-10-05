@@ -105,8 +105,10 @@ the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7f
 5 September 2026 and then `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`, and left the earlier
 commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
-produced no release. Every root release caller now pins `ec6b0ee`, a later policy commit
-that descends from that twin, so the reusable workflows remain reachable;
+produced no release. Every root release caller now pins `f068fb4`, the reviewed policy
+commit published on the Python 3.14 migration branch. The reusable workflows are
+fetchable at that commit. Merge the policy producer first; a squash merge requires
+repinning callers to the resulting main commit before release qualification.
 `tests/test_release_pins.py` holds the README and the release recipes to whatever the
 callers pin today.
 
