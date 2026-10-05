@@ -15,7 +15,7 @@ or establish that input came from Xero.
 
 ```mermaid
 flowchart LR
-%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#7851A9", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#7851A9", "titleColor": "#FFFFF0"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#FFFFF0", "titleColor": "#FFFFF0"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); }"}}%%
     Source["Synthetic Xero-Shaped Trial Balance CSV"] --> Ingestion["Schema & Hash Validation"]
     Ingestion --> Sandbox["In-Memory Decimal Math Engine"]
     Sandbox --> Split{"Artefact Splitter"}
@@ -23,6 +23,9 @@ flowchart LR
     Split -->|Redacted Values Only| ModelArtifact["model-result.json<br/><i>(Bounded Review Values)</i>"]
     Split -->|Local Evidence Only| HumanArtifact["reviewer-evidence.json<br/><i>(For Human Review)</i>"]
     Split -->|Local Checksum Binding| Receipt["receipt.json<br/><i>(Unkeyed SHA-256 Digests)</i>"]
+    style ModelArtifact fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style HumanArtifact fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
 ```
 
 ## 4. Receipt limitation
