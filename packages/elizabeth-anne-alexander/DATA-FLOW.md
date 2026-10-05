@@ -15,6 +15,7 @@ or establish that input came from Xero.
 
 ```mermaid
 flowchart LR
+%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#7851A9", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#7851A9", "titleColor": "#FFFFF0"}}}%%
     Source["Synthetic Xero-Shaped Trial Balance CSV"] --> Ingestion["Schema & Hash Validation"]
     Ingestion --> Sandbox["In-Memory Decimal Math Engine"]
     Sandbox --> Split{"Artefact Splitter"}

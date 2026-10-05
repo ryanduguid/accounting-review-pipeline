@@ -49,8 +49,8 @@ Xero Ledger Review Gate consumes synthetic Xero-shaped trial-balance fixtures an
 ## Zero-network architecture
 
 ```mermaid
-%%{init: {"themeVariables": {"lineColor": "#B1AFAD"}}}%%
 flowchart TD
+%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#7851A9", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#7851A9", "titleColor": "#FFFFF0"}}}%%
     subgraph ClientPerimeter ["Local Client Perimeter (Zero-Network)"]
         Raw["Synthetic Xero-Shaped Trial Balance Fixture"] --> Validate["Context & Hash Integrity Gate"]
         Validate --> Engine["Decimal Variance Review Engine<br/><i>(Fixed Policy v1)</i>"]
@@ -71,9 +71,9 @@ flowchart TD
         Decision -->|NEEDS_EVIDENCE / ESCALATED| Action["Further Investigation"]
     end
 
-    style ClientPerimeter fill:#140E24,stroke:#4F485E,stroke-width:2px,color:#FFFFFF
-    style ArtifactSplit fill:#1E1236,stroke:#5C2D91,stroke-width:2px,color:#FFFFFF
-    style Governance fill:#2D184E,stroke:#8A4AC7,stroke-width:2px,color:#FFFFFF
+    style ClientPerimeter fill:#000000,stroke:#7851A9,stroke-width:2px,color:#FFFFF0
+    style ArtifactSplit fill:#000000,stroke:#7851A9,stroke-width:2px,color:#FFFFF0
+    style Governance fill:#000000,stroke:#7851A9,stroke-width:2px,color:#FFFFF0
 ```
 
 ---

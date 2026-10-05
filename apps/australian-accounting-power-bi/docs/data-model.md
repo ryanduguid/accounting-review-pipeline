@@ -4,6 +4,7 @@ The semantic model follows Kimball star schema principles, strictly separating d
 
 ```mermaid
 erDiagram
+%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#7851A9", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#000000"}}}%%
     Dim_Entity ||--o{ Fact_GeneralLedger : "EntityID"
     Dim_Entity ||--o{ Fact_Budget : "EntityID"
     Dim_Entity ||--o{ Fact_PayrollSuper : "EntityID"
