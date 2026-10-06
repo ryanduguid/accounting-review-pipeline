@@ -18,10 +18,8 @@ Do not reuse `v0.1.2` as a version number; `v0.1.3` is the recovery version.
 
 ## Protected xero-trial-balance-export/v0.1.5 failed tag
 
-The annotated `xero-trial-balance-export/v0.1.5` tag is protected. [Release
-workflow run
-33648952579](https://github.com/ryanduguid/accounting-review-pipeline/actions/runs/33648952579)
-ran at commit `9b1cc3b8d1403c6779436b96f3f54e3202b9b407`, reached through tag
+The annotated `xero-trial-balance-export/v0.1.5` tag is protected. Release
+workflow run 33648952579 ran at commit `9b1cc3b8d1403c6779436b96f3f54e3202b9b407`, reached through tag
 object `c979f669468c838e5f247ed60cdda728170d46a1`, and stopped in the read-only
 consumer-test job because the clean runner had no `requirements-test.txt` and
 therefore did not install `requests`. It created no draft, release or release
