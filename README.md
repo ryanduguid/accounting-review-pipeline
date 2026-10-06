@@ -48,6 +48,14 @@ This calls the existing `close-control review` command with the supplied fiction
 
 The CLI and `just demo` both exit 2 because the sample needs review. The recipe is reported as unsuccessful, but the generated `REVIEW` pack is the expected result. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
 
+Check that the four result files agree before reviewing the pack:
+
+```bash
+uv run --locked close-control view --pack-dir ../close-control-demo
+```
+
+The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all four result files together and record each review decision in your workpaper. For a published-package example without a clone, use the [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md).
+
 The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) installs uv and runs `uv sync --locked`; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota.
 
 [Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Workpaper Review Gate](packages/review-ready-gate/README.md)
