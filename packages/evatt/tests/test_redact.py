@@ -185,6 +185,61 @@ def test_overlapping_entity_values_leave_no_fragment_of_a_person() -> None:
     assert redact("Jane Roe Holdings lodged the return", tuple(reversed(overlap)))[0] == text
 
 
+@pytest.mark.parametrize(
+    "text, expected, counts, found",
+    [
+        (
+            "(02) 9876 5432jane@example.com",
+            "PHONE_01EMAIL_01",
+            {"phone": 1, "email": 1},
+            [("phone", "(02) 9876 5432"), ("email", "jane@example.com")],
+        ),
+        (
+            "ABN 51 824 753 556jane@example.com",
+            "ABN ABN_01EMAIL_01",
+            {"abn": 1, "email": 1},
+            [("abn", "51 824 753 556"), ("email", "jane@example.com")],
+        ),
+        # The mirror: the domain runs on into the phone's first digit group.
+        # The remainder starts with a space, so ruling 43's separator applies.
+        (
+            "jane@example.com0412 345 678",
+            "EMAIL_01 PHONE_01",
+            {"email": 1, "phone": 1},
+            [("email", "jane@example.com0412"), ("phone", " 345 678")],
+        ),
+        # The remainder is keyed on its own text, so the same address written
+        # cleanly later in the document takes the same placeholder.
+        (
+            "(02) 9876 5432jane@example.com, then jane@example.com",
+            "PHONE_01EMAIL_01, then EMAIL_01",
+            {"phone": 1, "email": 2},
+            [
+                ("phone", "(02) 9876 5432"),
+                ("email", "jane@example.com"),
+                ("email", "jane@example.com"),
+            ],
+        ),
+    ],
+)
+def test_an_email_written_against_an_identifier_is_replaced_too(
+    text, expected, counts, found
+) -> None:
+    """EMAIL can start or end inside a digit run, so 2 candidates can share characters.
+
+    ``structured_spans`` kept the leftmost and dropped the other whole. Strict
+    ``redact`` returned "PHONE_01jane@example.com" and "ABN ABN_01jane@example.com"
+    with no halt and a manifest counting the identifier alone, and only
+    ``verify`` saw the address. The later candidate now keeps the part past the
+    earlier one's end, so every matched character is replaced under its own kind.
+    """
+    sanitised, manifest = redact_module.redact(text, ())
+    assert sanitised == expected
+    assert manifest == counts
+    assert [(f.kind, f.value) for f in verify_module.findings(text, ())] == found
+    assert verify_module.findings(sanitised, ()) == ()
+
+
 def test_an_empty_entity_value_cannot_rewrite_the_document() -> None:
     """re.escape("") gives a pattern that matches at every non-word boundary."""
     for value in ("", "   "):
