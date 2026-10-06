@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       run: ${{ steps.select.outputs.run }}
@@ -63,7 +63,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -98,7 +98,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -174,7 +174,7 @@ jobs:
   standard-library-gates:
     needs: [changes, lint, verify, verify-windows]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 2
     permissions:
       contents: read

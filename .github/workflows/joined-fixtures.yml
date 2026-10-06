@@ -96,7 +96,7 @@ jobs:
     # "# removed-jobs: <job>" comment to this file.
     needs: [public-fixtures]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read

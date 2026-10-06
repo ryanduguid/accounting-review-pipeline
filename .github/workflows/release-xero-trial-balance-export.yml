@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 15
     name: publish to PyPI
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment:
       name: pypi-xero-trial-balance-export
       url: https://pypi.org/p/xero-trial-balance-export

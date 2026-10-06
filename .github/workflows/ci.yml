@@ -60,7 +60,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -93,7 +93,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -116,7 +116,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,7 +149,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -255,7 +255,7 @@ jobs:
   pipeline-gates:
     needs: [component, test, dependency-audit, package, lint, windows, windows-workspace]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 2
     permissions:
       contents: read
