@@ -548,6 +548,15 @@ def structured_spans(text: str) -> list[tuple[int, int, str, str]]:
     Every pattern is run over the whole input and the results are resolved once,
     rather than replacing as we go. Replacing in place and re-scanning is how a
     redactor ends up matching its own placeholders.
+
+    A candidate that starts inside a span already taken but runs past its end
+    keeps the part past that end, as its own kind, and ``matched_text`` is then
+    that part alone. EMAIL's local part can start inside a digit run and its
+    domain can end inside one, so "(02) 9876 5432jane@example.com" is a phone
+    and an email sharing "5432". Dropping the later candidate returned
+    "PHONE_01jane@example.com" with no halt, and only ``verify`` saw the
+    address. Keeping the tail replaces every character any pattern matched;
+    the shared characters stay with the span that starts first.
     """
     found: list[tuple[int, int, str, str, int]] = []
     for priority, (kind, pattern, validator) in enumerate(_STRUCTURED):
@@ -560,12 +569,16 @@ def structured_spans(text: str) -> list[tuple[int, int, str, str]]:
             start, end = match.span(group)
             found.append((start, end, kind, value, priority))
     # Leftmost wins; at one start the longest wins; on an exact tie the kind
-    # listed first in _STRUCTURED wins.
+    # listed first in _STRUCTURED wins. A candidate wholly inside what is
+    # already taken adds nothing; one running past it is trimmed, never dropped.
     found.sort(key=lambda f: (f[0], -(f[1] - f[0]), f[4]))
     taken: list[tuple[int, int, str, str]] = []
-    consumed = -1
+    consumed = 0
     for start, end, kind, value, _priority in found:
-        if start >= consumed:
-            taken.append((start, end, kind, value))
-            consumed = end
+        if end <= consumed:
+            continue
+        if start < consumed:
+            start, value = consumed, text[consumed:end]
+        taken.append((start, end, kind, value))
+        consumed = end
     return taken

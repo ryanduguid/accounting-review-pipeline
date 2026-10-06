@@ -10,7 +10,7 @@ is the record of the judgement calls made along the way.
 Every entry below is a decision taken without asking, on the reasoning stated, with
 the cost of being wrong. Rework anything here that reads wrong.
 
-## Rulings (44)
+## Rulings (45)
 
 1. this ledger's first line uses a hyphen, not the em dash the skill template shows. Reason: the repository prose guard rejects em dashes in written files, and the recovery contract only requires the first line to name the plan file, which a hyphen preserves. Cost if wrong: a future controller matching the template literally could fail to recognise the ledger and re-dispatch completed tasks, so the plan path is spelt out in full on that line.
 2. `verify.findings` runs the residual sweep over the redacted form rather than the raw text. Reason: running it raw reported a known client twice, once as a mapped entity and again as an unclassified name, which buries the genuinely unknown items the operator must act on. Cost if wrong: verify under-reports a name that is in the map but which the operator wanted re-surfaced, caught by Task 6's verify tests.
@@ -76,6 +76,8 @@ longer words. For example, `0412 345 678(john smith)` and
 rewrite structured output embedded in a longer word. Verification shares the
 detectors and does not establish completeness. Inspect the whole output before
 sending.
+
+45. (27 September 2026, merged 6 October 2026) a structured candidate that starts inside a span already taken and runs past its end keeps that remainder, replaced under its own kind, rather than being dropped or halting. Reason: EMAIL's local part can start inside a digit run and its domain can end inside one, so "(02) 9876 5432jane@example.com" is a phone and an email sharing "5432". `structured_spans` kept the leftmost span and dropped the other whole. Strict redact returned "PHONE_01jane@example.com", and "ABN ABN_01jane@example.com" for the ABN form, with no halt, and only verify reported the address; "jane@example.com0412 345 678" lost the phone the same way, left "345 678" beside EMAIL_01 and verified clean. A halt would stop the operator with nothing left to classify, because pass one had already detected both and named their kinds. Its triage line would also quote the redacted text, which still held the address, and an address in plaintext beside the output is the exposure ruling 31 removed. Replacing the remainder covers every character any pattern matched and needs no new halt kind. Cost if wrong: the shared characters go to the span that starts first, and the other is keyed on what remains. An address written straight after a phone is keyed without the phone's digits, so a real "5432jane@example.com" would share EMAIL_01 with a different "jane@example.com" in the same document. An address whose domain runs into a phone keeps those digits and the phone is keyed on its last 6, so each takes a placeholder apart from the same identifier written cleanly elsewhere. The 2 placeholders are written touching, "PHONE_01EMAIL_01", as the input wrote them, and no matched character survives. When the remainder starts with a space or punctuation after a non-space character, ruling 43's separator applies, so "jane@example.com0412 345 678" becomes "EMAIL_01 PHONE_01".
 
 ## Deferred minors, shipped as they are (28)
 

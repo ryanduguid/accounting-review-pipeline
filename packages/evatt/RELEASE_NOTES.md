@@ -1,3 +1,7 @@
+# Unreleased
+
+- Replace both identifiers when an email is written straight against a phone number, ABN or other identifier, so `(02) 9876 5432jane@example.com` becomes `PHONE_01EMAIL_01`, where it had become `PHONE_01jane@example.com`. Whichever started second was dropped, and the rest of it stayed in the sanitised output with no halt.
+
 # v0.2.0
 
 - Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.4 remains the last release that runs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).
