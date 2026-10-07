@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "To cite the repository, use this metadata. To rely on one component, cite that component's own CITATION.cff and its release tag."
+title: "Accounting Review Pipeline"
+type: software
+authors:
+  - family-names: Duguid
+    given-names: Ryan
+abstract: "Runs deterministic month-end close checks on Xero trial-balance exports and produces exception packs for human sign-off."
+repository-code: "https://github.com/ryanduguid/accounting-review-pipeline"
+url: "https://duguid.com.au/tools/"
+license: MIT
+keywords:
+  - accounting
+  - accounting-automation
+  - australian-tax
+  - close-controls
+  - financial-controls
+  - financial-reporting
+  - human-in-the-loop
+  - internal-controls
+  - month-end-close
+  - monthly-close
+  - python
+  - reconciliation
+  - trial-balance
+  - xero
