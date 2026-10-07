@@ -19,6 +19,14 @@ review. The Xero trial-balance exporter is the exception: it pulls through Xero 
 before writing its CSV (see packages/xero-trial-balance-export/README.md).
 None of them approves a close, locks a period or lodges anything.
 
+For a Xero Activity Statement transaction GST review, use the
+[BAS skill and transaction procedure](https://github.com/ryanduguid/australian-accounting-skills/blob/main/docs/bas-walkthrough.md#transaction-gst-review-in-codex-chatgpt-or-copilot).
+Account for supplied rows and establish supply treatment, buyer entitlement and
+attribution separately. The BAS readiness gate checks pack evidence and the GST
+control tie-out; it does not classify transaction tax treatment. Equal ledger
+and statement errors can still reconcile. Carry unresolved transaction findings
+to the authorised reviewer alongside the gate result.
+
 **Start here:** [review-pack contract](#review-pack-contract) ·
 [status meanings](#status-contract) ·
 [Monthly Close Controls](packages/monthly-close-control-plane/README.md) ·
