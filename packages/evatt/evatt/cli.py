@@ -253,7 +253,7 @@ def _write_triage(path: Path, halt: Halt) -> None:
 def _record_path(path: Path) -> None:
     """Reject static links in the record path; the containing worktree must be trusted."""
     get_attributes = None
-    if os.name == "nt":
+    if sys.platform == "win32":
         # lstat can follow non-name-surrogate reparse points on Windows.
         # Query the entry attributes before allowing any such traversal.
         get_attributes = ctypes.WinDLL("kernel32", use_last_error=True).GetFileAttributesW
@@ -261,7 +261,7 @@ def _record_path(path: Path) -> None:
         get_attributes.restype = ctypes.c_uint32
 
     def inspect(candidate: Path) -> None:
-        if get_attributes is not None:
+        if sys.platform == "win32" and get_attributes is not None:
             attributes = get_attributes(str(candidate))
             if attributes == 0xFFFFFFFF:
                 error = ctypes.get_last_error()

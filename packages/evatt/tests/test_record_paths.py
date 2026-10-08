@@ -3,10 +3,10 @@ import ctypes
 import os
 import stat
 import struct
-import subprocess
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import TestCase
 from unittest.mock import Mock
 
 import pytest
@@ -23,6 +23,7 @@ arguments = disclosure_tests.arguments
 assert_private = disclosure_tests.assert_private
 files = disclosure_tests.files
 symlink_or_skip = disclosure_tests.symlink_or_skip
+_checks = TestCase()
 
 
 @pytest.mark.parametrize("suffix", ["linked", "linked/..", "linked/new/deeper"])
@@ -34,13 +35,13 @@ def test_missing_prefix_cannot_conceal_a_static_link(files, suffix, command):
     linked = source.parent / "linked"
     symlink_or_skip(target, linked, directory=True)
     if command == "disclosure-check":
-        assert cli.main(arguments(files)) == 0
+        _checks.assertEqual(cli.main(arguments(files)), 0)
     missing = source.parent / "missing"
     disguised = missing / ".." / suffix / record.name
-    assert cli.main(arguments((source, mapping, disguised), command)) == 1
-    assert not missing.exists()
-    assert list(target.iterdir()) == []
-    assert record.exists() == (command == "disclosure-check")
+    _checks.assertEqual(cli.main(arguments((source, mapping, disguised), command)), 1)
+    _checks.assertFalse(missing.exists())
+    _checks.assertEqual(list(target.iterdir()), [])
+    _checks.assertEqual(record.exists(), command == "disclosure-check")
 
 
 @pytest.mark.parametrize("relative", ["missing/../record", "new/deep/record", "real/../record"])
@@ -50,14 +51,14 @@ def test_ordinary_relative_and_missing_paths_work(files, monkeypatch, relative):
     monkeypatch.chdir(source.parent)
     spelled = Path(relative).with_name(record.name)
     selected = (source, mapping, spelled)
-    assert cli.main(arguments(selected)) == 0
-    assert cli.main(arguments(selected, "disclosure-check")) == 0
+    _checks.assertEqual(cli.main(arguments(selected)), 0)
+    _checks.assertEqual(cli.main(arguments(selected, "disclosure-check")), 0)
 
 
 @pytest.mark.parametrize("error", [PermissionError, NotADirectoryError, OSError, RuntimeError])
 def test_record_metadata_errors_are_private(files, monkeypatch, capsys, error):
     source, mapping, record = files
-    assert cli.main(arguments(files)) == 0
+    _checks.assertEqual(cli.main(arguments(files)), 0)
     assert_private(capsys)
     original = Path.lstat
 
@@ -67,17 +68,17 @@ def test_record_metadata_errors_are_private(files, monkeypatch, capsys, error):
         return original(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "lstat", fail)
-    assert cli.main(arguments(files, "disclosure-check")) == 1
+    _checks.assertEqual(cli.main(arguments(files, "disclosure-check")), 1)
     output = assert_private(capsys)
-    assert output.out == ""
-    assert str(source) not in output.err
-    assert str(mapping) not in output.err
-    assert str(record) not in output.err
+    _checks.assertEqual(output.out, "")
+    _checks.assertNotIn(str(source), output.err)
+    _checks.assertNotIn(str(mapping), output.err)
+    _checks.assertNotIn(str(record), output.err)
 
 
 def test_symbolic_link_mode_is_refused_without_windows_attributes(files, monkeypatch):
     _source, _mapping, record = files
-    assert cli.main(arguments(files)) == 0
+    _checks.assertEqual(cli.main(arguments(files)), 0)
     original = Path.lstat
 
     def metadata(path, *args, **kwargs):
@@ -86,7 +87,7 @@ def test_symbolic_link_mode_is_refused_without_windows_attributes(files, monkeyp
         return original(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "lstat", metadata)
-    assert cli.main(arguments(files, "disclosure-check")) == 1
+    _checks.assertEqual(cli.main(arguments(files, "disclosure-check")), 1)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="native Windows entry attributes")
@@ -110,8 +111,8 @@ def test_native_reparse_attributes_are_refused_before_lstat(
         return original(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "lstat", forbid)
-    assert cli.main(arguments(files)) == 1
-    assert not record.exists()
+    _checks.assertEqual(cli.main(arguments(files)), 1)
+    _checks.assertFalse(record.exists())
     assert_private(capsys)
 
 
@@ -125,7 +126,7 @@ def test_unknown_native_attribute_failures_are_private(files, monkeypatch, capsy
     monkeypatch.setattr(ctypes, "WinDLL", lambda *args, **kwargs: SimpleNamespace(
         GetFileAttributesW=GetAttributes()))
     monkeypatch.setattr(ctypes, "get_last_error", lambda: error)
-    assert cli.main(arguments(files)) == 1
+    _checks.assertEqual(cli.main(arguments(files)), 1)
     assert_private(capsys)
 
 
@@ -141,8 +142,8 @@ def short_path(path):
     result = Path(buffer.value)
     if os.path.normcase(str(result)) == os.path.normcase(str(path)):
         pytest.skip("this volume does not provide a distinct ordinary short name")
-    assert result.resolve() == path.resolve()
-    assert not result.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    _checks.assertEqual(result.resolve(), path.resolve())
+    _checks.assertFalse(result.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
     return result
 
 
@@ -169,9 +170,9 @@ def short_leaf(path):
         if not close(handle):
             raise ctypes.WinError(ctypes.get_last_error())
     result = path.parent / short_path(path).name
-    assert result.stem.casefold() != path.stem.casefold()
-    assert result.suffix.casefold() != path.suffix.casefold()
-    assert result.resolve() == path.resolve()
+    _checks.assertNotEqual(result.stem.casefold(), path.stem.casefold())
+    _checks.assertNotEqual(result.suffix.casefold(), path.suffix.casefold())
+    _checks.assertEqual(result.resolve(), path.resolve())
     return result
 
 
@@ -185,29 +186,28 @@ def test_native_short_directory_and_leaf_names_preserve_record_controls(files, s
     record = folder / "ordinary long disclosure record.disclosure.json"
     spelled = alias / record.name
     # The original resolve-versus-abspath predicate rejects this ordinary alias.
-    assert spelled.resolve() != Path(os.path.abspath(spelled))
+    _checks.assertNotEqual(spelled.resolve(), Path(os.path.abspath(spelled)))
     creation = spelled if short_creation else record
     checking = record if short_creation else spelled
-    assert cli.main(arguments((source, mapping, creation))) == 0
-    assert cli.main(arguments((source, mapping, checking), "disclosure-check")) == 0
+    _checks.assertEqual(cli.main(arguments((source, mapping, creation))), 0)
+    _checks.assertEqual(cli.main(arguments((source, mapping, checking), "disclosure-check")), 0)
     leaf_alias = short_leaf(record)
-    assert record.lstat().st_nlink == 1
+    _checks.assertEqual(record.lstat().st_nlink, 1)
     selected = (source, mapping, leaf_alias)
-    assert cli.main(arguments(selected, "disclosure-check")) == 0
+    _checks.assertEqual(cli.main(arguments(selected, "disclosure-check")), 0)
     original = record.read_bytes()
-    assert cli.main(arguments(selected)) == 1
-    assert record.read_bytes() == original
+    _checks.assertEqual(cli.main(arguments(selected)), 1)
+    _checks.assertEqual(record.read_bytes(), original)
     hardlink = folder / "hardlink.disclosure.json"
     hardlink.hardlink_to(record)
-    assert cli.main(arguments(selected, "disclosure-check")) == 1
+    _checks.assertEqual(cli.main(arguments(selected, "disclosure-check")), 1)
     hardlink.unlink()
-    subprocess.run(["git", "add", "-f", str(record)], cwd=source.parent,
-                   capture_output=True, check=True)
-    assert cli.main(arguments(selected, "disclosure-check")) == 1
-    subprocess.run(["git", "reset", "--", str(record)], cwd=source.parent,
-                   capture_output=True, check=True)
+    # Reuse absolute executable resolution and the isolated Git environment.
+    _checks.assertEqual(cli.entities_module._git(["add", "-f"], record), 0)
+    _checks.assertEqual(cli.main(arguments(selected, "disclosure-check")), 1)
+    _checks.assertEqual(cli.entities_module._git(["reset"], record), 0)
     (source.parent / ".gitignore").write_text("entities.json\n", encoding="utf-8")
-    assert cli.main(arguments(selected, "disclosure-check")) == 1
+    _checks.assertEqual(cli.main(arguments(selected, "disclosure-check")), 1)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="native Windows short names")
@@ -217,8 +217,8 @@ def test_short_parent_spelling_cannot_overwrite_protected_files(files, name):
     alias = short_path(source.parent)
     protected = source.parent / name
     original = protected.read_bytes() if protected.exists() else None
-    assert cli.main(arguments((source, mapping, alias / name))) == 1
-    assert (protected.read_bytes() if protected.exists() else None) == original
+    _checks.assertEqual(cli.main(arguments((source, mapping, alias / name))), 1)
+    _checks.assertEqual(protected.read_bytes() if protected.exists() else None, original)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="native Windows junctions")
@@ -230,12 +230,12 @@ def test_native_junction_is_refused(files, command):
     folder = source.parent / "ordinary long records directory"
     folder.mkdir()
     target_record = folder / record.name
-    assert cli.main(arguments((source, mapping, target_record))) == 0
+    _checks.assertEqual(cli.main(arguments((source, mapping, target_record))), 0)
     junction = source.parent / "junction"
     _winapi.CreateJunction(str(folder), str(junction))
     try:
-        assert junction.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
-        assert cli.main(arguments((source, mapping, junction / record.name), command)) == 1
+        _checks.assertTrue(junction.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        _checks.assertEqual(cli.main(arguments((source, mapping, junction / record.name), command)), 1)
     finally:
         junction.rmdir()
 
@@ -276,7 +276,7 @@ def test_native_non_surrogate_reparse_entry_is_refused(files):
         observed = attributes(str(point))
         if observed == 0xFFFFFFFF:
             raise ctypes.WinError(ctypes.get_last_error())
-        assert observed & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        _checks.assertTrue(observed & stat.FILE_ATTRIBUTE_REPARSE_POINT)
         with pytest.raises(EvattError, match="must not use links"):
             cli._record_path(point)
         with pytest.raises((EvattError, OSError)):
