@@ -36,6 +36,7 @@ redirecting stdout to the sanitised text still sees why a run failed.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import stat
@@ -251,9 +252,38 @@ def _write_triage(path: Path, halt: Halt) -> None:
 
 def _record_path(path: Path) -> None:
     """Reject static links in the record path; the containing worktree must be trusted."""
-    for candidate in (path, *path.parents):
-        if candidate.resolve() != Path(os.path.abspath(candidate)) or candidate.is_symlink():
+    get_attributes = None
+    if os.name == "nt":
+        # lstat can follow non-name-surrogate reparse points on Windows.
+        # Query the entry attributes before allowing any such traversal.
+        get_attributes = ctypes.WinDLL("kernel32", use_last_error=True).GetFileAttributesW
+        get_attributes.argtypes = [ctypes.c_wchar_p]
+        get_attributes.restype = ctypes.c_uint32
+
+    def inspect(candidate: Path) -> None:
+        if get_attributes is not None:
+            attributes = get_attributes(str(candidate))
+            if attributes == 0xFFFFFFFF:
+                error = ctypes.get_last_error()
+                if error in (2, 3):  # File or parent directory does not exist.
+                    return
+                raise ctypes.WinError(error)
+            if attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise EvattError("disclosure record paths must not use links")
+        try:
+            entry = candidate.lstat()
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(entry.st_mode):
             raise EvattError("disclosure record paths must not use links")
+
+    lexical = (path, *path.parents)
+    for candidate in lexical:
+        inspect(candidate)
+    # A missing component before '..' can conceal an existing linked prefix.
+    normalised = tuple(Path(os.path.abspath(candidate)) for candidate in lexical)
+    for candidate in (*normalised, *normalised[-1].parents):
+        inspect(candidate)
 
 
 def _read_record(path: Path) -> bytes:
