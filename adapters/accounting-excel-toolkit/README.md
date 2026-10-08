@@ -89,10 +89,10 @@ The optional helpers use the existing verifier and fabricated sample. Give each
 command a new output outside the checkout:
 
 ```powershell
-python tools/debtor_evidence.py draft samples/sample-aged-receivables-review.csv --output ../manifest-draft
-python tools/debtor_evidence.py review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output ../debtor-review
-python tools/replay_aged_review.py --case all --output ../aged-replay.json
-python tools/benchmark_aged_review.py --output ../aged-measurements.json
+python tools/debtor_evidence.py draft samples/sample-aged-receivables-review.csv --output $env:TEMP/manifest-draft
+python tools/debtor_evidence.py review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output $env:TEMP/debtor-review
+python tools/replay_aged_review.py --case all --output $env:TEMP/aged-replay.json
+python tools/benchmark_aged_review.py --output $env:TEMP/aged-measurements.json
 ```
 
 The draft records source metadata and its byte digest. Independent settings,
