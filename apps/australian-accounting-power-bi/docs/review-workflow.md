@@ -124,6 +124,51 @@ journal evidence. Each repeated account finding needs its own complete evidence
 population. The finding record remains authoritative; this check does not
 reconstruct every producer finding or authenticate the whole review pack.
 
+## Export a single review run
+
+Create a ZIP with the sealed run, its preparation assertions and validation
+logs, the three CSV projections, the offline HTML report and an unsigned member
+inventory. Use a new local destination outside version control and outside the
+sealed run directory:
+
+```powershell
+python -B tools/review_workflow.py export --run C:/Users/-/Documents/review-demo/september --output C:/Users/-/Documents/review-demo/september-evidence.zip
+python -B tools/review_workflow.py verify-export --run C:/Users/-/Documents/review-demo/september-evidence.zip
+```
+
+The export supports one fixed fabricated run. It refuses free-form review notes,
+extra files or directories, `--review-note` and `--previous`. Before reading the
+receipt or sealed inputs, it checks their fixed inventory, regular-file types
+and individual and aggregate sizes. Admission covers ordinary directory entries
+and default data streams; it does not inspect alternate streams or storage aliases.
+It reruns the existing producer checks and
+uses their exact bytes. The archive includes the synthetic preparer assertions
+in `run/inputs/self_review.json`; it creates no reviewer approval.
+
+Recipients can run `verify-export` with an independently obtained copy of
+`tools/review_workflow.py`, Python and the ZIP. They need no samples, installed
+producers or original run directory. Verification reads members without
+extracting them and checks the exact inventory, sizes, hashes and nested receipt.
+The verification command refuses `--previous`, `--review-note` and `--output`.
+It reports unsigned internal member-byte consistency. Anyone able to replace the
+whole archive can replace its hashes. This check does not authenticate provenance,
+prove producer execution, approve accounting or establish complete evidence or
+controls. HTML and CSVs are workflow-derived views generated from the captured
+run during export. Portable verification binds their bytes but does not establish
+their semantic correspondence to the packs. The nested binding covers the
+receipt's file map; the existing local checks own the other financial ties.
+
+The stored ZIP is deterministic for an unchanged run and renderer. The fixed-case
+limits are 64 files, 512 KiB per member and 2 MiB for the archive and payload.
+August and September payloads fit these limits. Logs retain their original local
+output paths. Inspect the archive before sharing it; the export sends nothing.
+Retain the raw ZIP and the exact verifier revision. This profile has been checked
+with Python 3.14.8; compatibility with other runtime serializers is unverified.
+Cleanup uses the created file's descriptor identity and checks it before removing
+a failed output. A partial file may remain when identity cannot be established.
+Publication and cleanup assume cooperating local processes; they do not isolate
+the destination from another process replacing it between filesystem operations.
+
 ## Prepare Desktop and verify
 
 ```powershell
