@@ -1,6 +1,7 @@
 """Portable integrity tests use fabricated bytes, without financial producer claims."""
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import os
@@ -14,7 +15,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from test_review_workflow import manifest_fixture, workflow
+support_spec = importlib.util.spec_from_file_location(
+    "evidence_export_test_support", Path(__file__).with_name("test_review_workflow.py")
+)
+if support_spec is None or support_spec.loader is None:
+    raise ImportError("Review workflow test support loader is unavailable.")
+support = importlib.util.module_from_spec(support_spec)
+support_spec.loader.exec_module(support)
+manifest_fixture, workflow = support.manifest_fixture, support.workflow
 
 
 class EvidenceExportTests(unittest.TestCase):
