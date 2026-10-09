@@ -4,7 +4,7 @@ The semantic model follows Kimball star schema principles, strictly separating d
 
 ```mermaid
 erDiagram
-%%{init: {"theme": "base", "themeVariables": {"background": "#000000", "primaryColor": "#990024", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#66023C", "labelBackground": "#000000"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); } .labelBkg { background-color: #000000; }"}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#7851A9", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#66023C", "labelBackground": "#000000"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); } .labelBkg { background-color: #000000; }"}}%%
     Dim_Entity ||--o{ Fact_GeneralLedger : "EntityID"
     Dim_Entity ||--o{ Fact_Budget : "EntityID"
     Dim_Entity ||--o{ Fact_PayrollSuper : "EntityID"
