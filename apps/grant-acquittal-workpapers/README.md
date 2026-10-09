@@ -19,7 +19,7 @@ For a locked setup, use `uv sync --locked` and run the same commands through
 
 ## Run all joined accounting examples
 
-From this directory, with Python 3.11 or later, Git and uv on PATH:
+From this directory, with Python 3.14 or later, Git and uv on PATH:
 
 ```powershell
 python setup_utility.py --workspace ../../../accounting-utility-demo
@@ -170,7 +170,7 @@ The fabricated ledger totals $6,500. Allocations total $6,300 and $200 remains u
 
 Run the standard-library unittest suite above. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
 
-GitHub Actions runs the suite with Python 3.11 and 3.14, including a competing
+GitHub Actions runs the suite with Python 3.14, including a competing
 destination created immediately before publication. Pull requests run on Linux;
 pushes to `main` and manual runs also test Windows. It does not run macOS, so the
 `RENAME_EXCL` path is untested there.

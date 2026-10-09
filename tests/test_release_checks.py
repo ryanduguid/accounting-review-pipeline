@@ -7,7 +7,7 @@ from pathlib import Path
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = "ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711"
+POLICY = "f068fb4f1d8f90e07429ded7cfb85bdbcc2960fe"
 # These are component jobs from successful main-branch runs, plus aggregates that
 # require every job in their workflow to succeed; never a skip-tolerant aggregate
 # gate. Review the list when a component's CI contract changes.
@@ -15,9 +15,6 @@ REQUIRED = {
     "release-accounting-excel-toolkit.yml": [
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
         ".github/workflows/standard-library-components.yml: lint (adapters/accounting-excel-toolkit)",
-        ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.11)",
-        ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.12)",
-        ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.13)",
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python",
@@ -28,9 +25,6 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / build",
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / dependency-audit",
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / lint",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.11)",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.12)",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.13)",
         ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python",
@@ -41,9 +35,6 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/evatt / build",
         ".github/workflows/ci.yml: packages/evatt / dependency-audit",
         ".github/workflows/ci.yml: packages/evatt / lint",
-        ".github/workflows/ci.yml: packages/evatt / test (3.11)",
-        ".github/workflows/ci.yml: packages/evatt / test (3.12)",
-        ".github/workflows/ci.yml: packages/evatt / test (3.13)",
         ".github/workflows/ci.yml: packages/evatt / test (3.14)",
         ".github/workflows/codeql.yml: Analyze Python",
         ".github/workflows/codeql.yml: codeql-gates"
@@ -53,9 +44,6 @@ REQUIRED = {
         ".github/workflows/ci.yml: dependency-audit",
         ".github/workflows/ci.yml: lint",
         ".github/workflows/ci.yml: package",
-        ".github/workflows/ci.yml: test (3.11)",
-        ".github/workflows/ci.yml: test (3.12)",
-        ".github/workflows/ci.yml: test (3.13)",
         ".github/workflows/ci.yml: test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python",
@@ -66,9 +54,6 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/review-ready-gate / build",
         ".github/workflows/ci.yml: packages/review-ready-gate / dependency-audit",
         ".github/workflows/ci.yml: packages/review-ready-gate / lint",
-        ".github/workflows/ci.yml: packages/review-ready-gate / test (3.11)",
-        ".github/workflows/ci.yml: packages/review-ready-gate / test (3.12)",
-        ".github/workflows/ci.yml: packages/review-ready-gate / test (3.13)",
         ".github/workflows/ci.yml: packages/review-ready-gate / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python",
@@ -79,9 +64,6 @@ REQUIRED = {
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / build",
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / dependency-audit",
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / lint",
-        ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.11)",
-        ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.12)",
-        ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.13)",
         ".github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python",

@@ -30,16 +30,13 @@ jobs:
       attestations: write # Record provenance and SBOM attestations for release assets.
       contents: write # Create the draft release, upload assets and publish it.
       id-token: write # Obtain the OIDC identity required to sign attestations.
-    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711
+    uses: ryanduguid/release-policy/.github/workflows/release-python.yml@f068fb4f1d8f90e07429ded7cfb85bdbcc2960fe
     with:
       required-checks: |
         .github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner
         .github/workflows/ci.yml: packages/evatt / build
         .github/workflows/ci.yml: packages/evatt / dependency-audit
         .github/workflows/ci.yml: packages/evatt / lint
-        .github/workflows/ci.yml: packages/evatt / test (3.11)
-        .github/workflows/ci.yml: packages/evatt / test (3.12)
-        .github/workflows/ci.yml: packages/evatt / test (3.13)
         .github/workflows/ci.yml: packages/evatt / test (3.14)
         .github/workflows/codeql.yml: Analyze Python
         .github/workflows/codeql.yml: codeql-gates

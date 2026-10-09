@@ -65,7 +65,7 @@ class ReplayTests(unittest.TestCase):
     def test_invalid_replay_does_not_create_workspace(self):
         self.manifest.write_text("{}")
         target = self.root / "new"
-        with patch.object(setup_utility.sys, "version_info", (3, 11)), patch.object(setup_utility.shutil, "which", return_value="tool"):
+        with patch.object(setup_utility.sys, "version_info", (3, 14)), patch.object(setup_utility.shutil, "which", return_value="tool"):
             with self.assertRaises(ValueError):
                 setup_utility.setup(target, self.manifest)
         self.assertFalse(target.exists())
@@ -122,7 +122,7 @@ class ReplayTests(unittest.TestCase):
             (output / "manifest.json").write_text(json.dumps({**manifest(), "fixture_validation": "passed"}))
             return subprocess.CompletedProcess(args, 0)
 
-        with patch.object(setup_utility.sys, "version_info", (3, 11)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
+        with patch.object(setup_utility.sys, "version_info", (3, 14)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
             setup_utility.setup(workspace, self.manifest)
         self.assertEqual([source for _, source, _ in seen[:2]],
                          [f"https://github.com/ryanduguid/{name}.git" for name in setup_utility.COMPANIONS])
@@ -154,7 +154,7 @@ class ReplayTests(unittest.TestCase):
                     (output / "manifest.json").write_text(json.dumps({**manifest(), "fixture_validation": "passed"}))
                     return subprocess.CompletedProcess(args, 0)
 
-                with patch.object(setup_utility, "SOURCE", current / setup_utility.GRANT_PROJECT), patch.object(setup_utility.sys, "version_info", (3, 11)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
+                with patch.object(setup_utility, "SOURCE", current / setup_utility.GRANT_PROJECT), patch.object(setup_utility.sys, "version_info", (3, 14)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
                     if recorded_runner:
                         setup_utility.setup(workspace, self.manifest)
                         self.assertEqual(started, [str(workspace / "sources/accounting-review-pipeline" / setup_utility.DRIVER)])
@@ -169,7 +169,7 @@ class ReplayTests(unittest.TestCase):
         (workspace / "results/summary.md").write_text("Fixture checks passed.")
         target = self.root / "summary.md"
         target.write_text("Earlier step\n")
-        with patch.object(setup_utility.sys, "version_info", (3, 11)):
+        with patch.object(setup_utility.sys, "version_info", (3, 14)):
             self.assertEqual(setup_utility.main(["--workspace", str(workspace), "--summary", str(target)]), 1)
         text = target.read_text()
         self.assertTrue(text.startswith("Earlier step"))

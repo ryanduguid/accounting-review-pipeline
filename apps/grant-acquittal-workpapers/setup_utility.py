@@ -68,8 +68,8 @@ def checkout_revision(destination: Path, source: str, revision: str, environment
 
 
 def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
-    if sys.version_info < (3, 11):
-        raise ValueError("Setup needs Python 3.11 or later")
+    if sys.version_info < (3, 14):
+        raise ValueError("Setup needs Python 3.14 or later")
     for tool in ("git", "uv"):
         if not shutil.which(tool):
             raise ValueError(f"Install {tool} and put it on PATH before running setup")

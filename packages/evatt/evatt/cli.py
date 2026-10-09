@@ -134,9 +134,8 @@ def _read(path: Path) -> tuple[str, str]:
     worth carrying an offset map for. A lone ``\\r`` is left where it stands.
 
     ``newline=""`` turns off universal newlines so the endings can be counted
-    before anything is decided about them. ``Path.read_text`` grew a ``newline``
-    parameter only in 3.13 and this package supports 3.11, which is why the
-    handle is opened by hand.
+    before anything is decided about them. The handle is opened with that
+    setting so the line endings can be counted before normalisation.
     """
     with path.open(encoding="utf-8", newline="") as handle:
         raw = handle.read()

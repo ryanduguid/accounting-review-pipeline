@@ -23,7 +23,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 | Key stakeholders affected | May include the firm's clients and the people named in their documents, whose personal information it is meant to keep from the model provider |
 | Contains an AI model | No. It prepares documents for an external model and restores named entities in the answer. |
 | Datasets and training | Tested on fabricated sample documents only. It trains, fine-tunes and evaluates no model. |
-| Technical requirements | Python 3.11 or later and `git` on `PATH`. The map and the run must sit in a git work tree that ignores the map, or every command refuses to run. |
+| Technical requirements | Python 3.14 or later and `git` on `PATH`. The map and the run must sit in a git work tree that ignores the map, or every command refuses to run. |
 | Network access | None. The package has no network client, and the map stays on the local machine. |
 | Privacy position | Pseudonymised data remains personal information for anyone holding the key; this does not take the data outside the Privacy Act |
 | Where a person decides | The firm signs off the policy before any client data passes through evatt, including testing. The operator checks each document for contextual re-identification before sending it. |
@@ -45,7 +45,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 | Key stakeholders affected | None in its synthetic-only design; a firm that adapted the design to real ledgers would affect the clients whose accounts are reviewed |
 | Contains an AI model | No. It contains no LLM client; it produces a bounded, redacted result that a model or a person can review. |
 | Datasets and training | Tested on the fabricated `xero-tb-csv.v1` contract corpus, whose digests every consumer's tests check. It trains, fine-tunes and evaluates no model. |
-| Technical requirements | Python 3.11 or later, run locally |
+| Technical requirements | Python 3.14 or later, run locally |
 | Network access | None, and no write operation on any accounting system |
 | Where a person decides | A human decision file records the reviewer's decision, and `validate-review` checks it against the run's artefacts and receipt |
 | Acceptance and testing | A change reaches `main` only when the required CI checks pass, and they run the component's test suite on Linux and Windows |
@@ -66,7 +66,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 | Key stakeholders affected | May include the clients whose workpapers pass through the gate, and the reviewers who rely on its status |
 | Contains an AI model | No. A firm lists it as a control on workpapers, whether a person or an AI tool prepared them. |
 | Datasets and training | Tested on fabricated example and evaluation packs only. It trains, fine-tunes and evaluates no model. |
-| Technical requirements | Python 3.11 or later, run locally, with packs written to a working directory outside any version-control checkout |
+| Technical requirements | Python 3.14 or later, run locally, with packs written to a working directory outside any version-control checkout |
 | Network access | None |
 | Where a person decides | `READY` only admits a pack to manager review. The reviewer decides whether the work is correct, and an acknowledgement never changes a computed status. |
 | Acceptance and testing | A change reaches `main` only when the required CI checks pass, and they run the component's test suite and its fabricated evaluation packs |

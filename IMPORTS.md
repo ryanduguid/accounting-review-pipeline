@@ -87,13 +87,13 @@ OAuth or publishing credentials. Production packages do not import sibling packa
 
 ## Anchor remote preflight (read-only)
 
-The anchor remains public and active as `accounting-review-pipeline`; its default branch is
-`main`. Branch protection on `main` requires the status checks `package`, `test (3.10)`,
-`test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python` with strict up-to-date
-enforcement, so the root `ci.yml` keeps the workflow name `tests` with job ids `test`,
-`package` and `lint`, and `codeql.yml` keeps its job name `Analyze Python`. The repository
-has exactly one environment, `pypi`. The latest anchor release is `v0.1.2`. No remote
-setting was changed.
+The import preflight recorded the public `accounting-review-pipeline` anchor with
+default branch `main`. Its recorded protected checks were `package`, `test (3.10)`,
+`test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python`, with strict up-to-date
+enforcement. The root workflow retains the name `tests` and job ids `test`, `package`
+and `lint`; `codeql.yml` retains `Analyze Python`. Before merging the Python 3.14
+migration, verify the current protected check contexts against the new matrix.
+The preflight recorded one environment, `pypi`, and anchor release `v0.1.2`.
 
 ## Release policy prerequisite
 
@@ -105,8 +105,10 @@ the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7f
 5 September 2026 and then `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`, and left the earlier
 commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
-produced no release. Every root release caller now pins `ec6b0ee`, a later policy commit
-that descends from that twin, so the reusable workflows remain reachable;
+produced no release. Every root release caller now pins `f068fb4`, the reviewed policy
+commit published on the Python 3.14 migration branch. The reusable workflows are
+fetchable at that commit. Merge the policy producer first; a squash merge requires
+repinning callers to the resulting main commit before release qualification.
 `tests/test_release_pins.py` holds the README and the release recipes to whatever the
 callers pin today.
 
@@ -187,7 +189,7 @@ demonstrations run as its per-component `smoke` input. evatt runs through the sa
 rather than through a workflow of its own: `evatt.yml` was replaced by a fourth `component`
 entry (`packages/evatt`, import `evatt`), and its clean-wheel redact, verify, restore and
 halt demonstration runs as that entry's `smoke` input, over the reusable workflow's Python
-3.10, 3.12, 3.13 and 3.14 legs. `AGENTS.md` lists the current gates.
+3.14 leg. `AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
 

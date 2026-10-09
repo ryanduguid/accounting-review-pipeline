@@ -7,7 +7,7 @@ name = "evatt"
 dynamic = ["version"]
 description = "A local, zero-network pseudonymisation boundary for Australian client data in markdown"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ryan Duguid" }]
@@ -54,6 +54,7 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.ruff]
+target-version = "py314"
 line-length = 100
 src = ["evatt", "tests"]
 
@@ -61,7 +62,7 @@ src = ["evatt", "tests"]
 select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 packages = ["evatt"]
 ignore_missing_imports = true
 pretty = true

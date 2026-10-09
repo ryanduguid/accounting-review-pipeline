@@ -7,7 +7,7 @@ name = "review-ready-gate"
 version = "0.2.0"
 description = "Stop incomplete workpapers reaching manager review"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ryan Duguid" }]
@@ -54,6 +54,7 @@ addopts = "-q"
 pythonpath = ["."]
 
 [tool.ruff]
+target-version = "py314"
 line-length = 100
 src = ["reviewready", "tests"]
 
@@ -61,7 +62,7 @@ src = ["reviewready", "tests"]
 select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 packages = ["reviewready"]
 ignore_missing_imports = true
 pretty = true

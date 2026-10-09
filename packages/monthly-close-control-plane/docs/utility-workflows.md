@@ -1,6 +1,6 @@
 # Run the joined accounting examples
 
-Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and australian-accounting; the grant workpapers live in this repository at `apps/grant-acquittal-workpapers/`. The new commands are not established by older published packages. Install Python 3.11 or later, Git and uv. The driver uses Python 3.12 for each command; uv supplies it and dependencies if absent. Initial setup may download public dependencies. The calculations use local fabricated inputs.
+Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and australian-accounting; the grant workpapers live in this repository at `apps/grant-acquittal-workpapers/`. The new commands are not established by older published packages. Install Python 3.14 or later, Git and uv. The driver uses Python 3.14 for each command; uv supplies it and dependencies if absent. Initial setup may download public dependencies. The calculations use local fabricated inputs.
 
 The joined examples are available on all three repositories' `main` branches.
 The driver refuses an older WIP checkout without `examples/job_to_cash.py`
@@ -13,7 +13,7 @@ pipeline checkout:
 python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
-The setup command needs Python 3.11 or later, Git and uv on PATH. It clones the
+The setup command needs Python 3.14 or later, Git and uv on PATH. It clones the
 two companions at `main`, uses the enclosing pipeline checkout for the close
 controls, the runner and the grant workpapers, creates isolated environments and
 runs every joined example. The workspace must be new and outside existing Git checkouts.
