@@ -1071,6 +1071,28 @@ def test_blocked_pack_renders_blocked_state(tmp_path: Path) -> None:
     assert document["overall_status"] == "BLOCKED"
 
 
+@pytest.mark.parametrize("name", ["exceptions.csv", "client-queries.csv"])
+@pytest.mark.parametrize("row_number", [0, 1], ids=["header", "data-row"])
+def test_csv_parser_errors_are_named_verification_failures(
+    pack_dir: Path, capsys, name: str, row_number: int
+) -> None:
+    path = pack_dir / name
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.reader(handle))
+    rows[row_number][0] = "x" * (csv.field_size_limit() + 1)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        csv.writer(handle).writerows(rows)
+    original = {item: (pack_dir / item).read_bytes() for item in PACK_FILE_NAMES}
+
+    with pytest.raises(ControlInputError, match=rf"{re.escape(name)}:.*CSV"):
+        verify_pack(pack_dir)
+    assert main(["view", "--pack-dir", str(pack_dir)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"verification failed: {name}:" in captured.err
+    assert original == {item: (pack_dir / item).read_bytes() for item in PACK_FILE_NAMES}
+
+
 # --- malformed encodings ----------------------------------------------------
 
 
