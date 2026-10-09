@@ -28,9 +28,9 @@ flowchart LR
     Out --> Model["external model, operator's choice"]
     Model --> Answer["answer carrying placeholders"]
     Answer --> Restore["restore, local, entity map only"]
-    style Halt fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Out fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Restore fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Halt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Out fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Restore fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
 ```
 
 The operator carries the sanitised file to the model and the answer back. evatt
