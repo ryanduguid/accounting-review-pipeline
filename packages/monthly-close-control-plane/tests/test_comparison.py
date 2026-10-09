@@ -241,8 +241,8 @@ def test_cli_compare_names_csv_parser_errors(tmp_path, capsys, pack_key, name):
         args.extend(["--" + key.replace("_", "-"), str(value)])
     assert main(args) == 1
     captured = capsys.readouterr()
-    assert captured.out == ""
-    assert f"verification failed: {name}:" in captured.err
+    assert captured.out == ""  # nosec B101 - pytest outcome assertion.
+    assert f"verification failed: {name}:" in captured.err  # nosec B101 - pytest outcome assertion.
 
 
 def test_a_response_file_nested_too_deeply_is_an_input_error(tmp_path, monkeypatch):
