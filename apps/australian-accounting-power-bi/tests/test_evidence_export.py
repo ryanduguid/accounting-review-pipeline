@@ -149,7 +149,7 @@ class EvidenceExportTests(unittest.TestCase):
 
                 def opening(path, *args, **kwargs):
                     stream = original_open(path, *args, **kwargs)
-                    return Stream(stream) if path == output and args == ("xb",) else stream
+                    return Stream(stream) if path == output.resolve() and args == ("xb",) else stream
 
                 with patch.object(Path, "open", opening), \
                         patch.object(workflow.os, "fstat", side_effect=failed_identity) if failure == "fstat" else patch.object(workflow.os, "fstat", wraps=original_fstat):
