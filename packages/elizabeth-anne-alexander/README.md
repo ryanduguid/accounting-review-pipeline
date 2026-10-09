@@ -74,11 +74,11 @@ flowchart TD
     style ClientPerimeter fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style ArtifactSplit fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Governance fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Model fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Evidence fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Receipt fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Done fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Action fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Model fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Evidence fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Done fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Action fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
 ```
 
 ---

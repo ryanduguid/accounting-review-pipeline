@@ -23,9 +23,9 @@ flowchart LR
     Split -->|Redacted Values Only| ModelArtifact["model-result.json<br/><i>(Bounded Review Values)</i>"]
     Split -->|Local Evidence Only| HumanArtifact["reviewer-evidence.json<br/><i>(For Human Review)</i>"]
     Split -->|Local Checksum Binding| Receipt["receipt.json<br/><i>(Unkeyed SHA-256 Digests)</i>"]
-    style ModelArtifact fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style HumanArtifact fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Receipt fill:#7851A9,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style ModelArtifact fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style HumanArtifact fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
 ```
 
 ## 4. Receipt limitation
