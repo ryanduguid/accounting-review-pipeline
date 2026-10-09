@@ -23,7 +23,7 @@ from decimal import Context, Decimal, DecimalException, localcontext
 from pathlib import Path, PureWindowsPath
 from typing import Any, Iterator
 
-APP = Path(__file__).resolve().parents[1]
+APP = Path(__file__).resolve().parent.parent
 NAME = "australian-accounting-power-bi"
 TB_COLUMNS = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit".split(",")
 CLOSE_FILES = ("close-review-pack.json", "close-summary.md", "exceptions.csv", "client-queries.csv")
@@ -33,6 +33,14 @@ PRODUCERS = {
     "close-control": ("monthly-close-control-plane", "closecontrol", "closecontrol.cli:main"),
     "review-ready": ("review-ready-gate", "reviewready", "reviewready.cli:main"),
 }
+EXPORT_FORMAT = "australian-accounting-review-evidence-export"
+EXPORT_STATEMENT = "Unsigned internal member-byte consistency only. This does not authenticate provenance, prove producer execution, approve accounting or establish completeness of evidence or controls."
+EXPORT_SOURCES = ("sample-ato-benchmarks.csv", "sample-budgets.csv", "sample-chart-of-accounts.csv", "sample-entities.csv", "sample-general-ledger.csv", "sample-payroll-super.csv")
+EXPORT_PROJECTIONS = ("sample-review-run.csv", "sample-review-exceptions.csv", "sample-review-evidence.csv")
+# Fixed fabricated case: measured payloads are below 512 KiB in both months.
+MAX_EXPORT_BYTES = 2 * 1024 * 1024
+MAX_EXPORT_MEMBER = 512 * 1024
+MAX_EXPORT_FILES = 64
 
 
 def digest(value: bytes) -> str:
@@ -975,18 +983,216 @@ caption{{text-align:left;padding:8px 0;font-weight:650}}th,td{{padding:8px;text-
 </main></body></html>'''
 
 
+def export_inventory(receipt: dict[str, Any]) -> set[str]:
+    """Exact distribution inventory for the fixed case; free-form notes are excluded."""
+    if set(receipt["case"]["source_sha256"]) != set(EXPORT_SOURCES):
+        raise ValueError("Export source inventory differs from the fixed case.")
+    return fixed_export_inventory()
+
+
+def fixed_export_inventory() -> set[str]:
+    """Admit the run's known paths before reading even its receipt."""
+    return ({"inputs/" + name for name in EXPORT_SOURCES}
+            | {"inputs/" + name for name in ("case.json", "trial_balance.csv", "prior_trial_balance.csv", "transactions.csv", "open_items.csv", "self_review.json")}
+            | {"close/" + name for name in CLOSE_FILES}
+            | {"readiness/" + name for name in READY_FILES}
+            | {"drivers/variance-drivers.json", "drivers/variance-drivers.csv"}
+            | {f"validation/{label}.{kind}.txt" for label in ("readiness", "readiness-view", "close", "close-view", "drivers") for kind in ("stdout", "stderr")})
+
+
+def export_bytes(members: dict[str, bytes]) -> bytes:
+    """One bounded, deterministic stored-ZIP profile on Windows and Linux."""
+    if len(members) > MAX_EXPORT_FILES or any(len(data) > MAX_EXPORT_MEMBER for data in members.values()) or sum(map(len, members.values())) > MAX_EXPORT_BYTES:
+        raise ValueError("Export exceeds the fixed-case size limits.")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED, allowZip64=False) as archive:
+        for name, data in sorted(members.items()):
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = (stat.S_IFREG | 0o600) << 16
+            archive.writestr(info, data)
+    result = buffer.getvalue()
+    if len(result) > MAX_EXPORT_BYTES:
+        raise ValueError("Export archive exceeds the size limit.")
+    return result
+
+
+def check_export_tree(run: Path, expected: set[str]) -> None:
+    """Refuse unlisted physical evidence, without following directory links."""
+    run = ordinary(run)
+    files = expected | {"receipt.json", "receipt.sha256"}
+    folders = {name.split("/", 1)[0] for name in expected}
+    seen_files: set[str] = set()
+    seen_folders: set[str] = set()
+    total = 0
+
+    def visit(directory: Path) -> None:
+        nonlocal total
+        for entry in directory.iterdir():
+            name = entry.relative_to(run).as_posix()
+            metadata = entry.lstat()
+            if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise ValueError("Export run contains a linked path.")
+            if stat.S_ISDIR(metadata.st_mode) and name in folders:
+                seen_folders.add(name)
+                visit(entry)
+            elif stat.S_ISREG(metadata.st_mode) and name in files:
+                total += metadata.st_size
+                if metadata.st_size > MAX_EXPORT_MEMBER or total > MAX_EXPORT_BYTES:
+                    raise ValueError("Export run exceeds the fixed-case size limits.")
+                seen_files.add(name)
+            else:
+                raise ValueError("Export run contains an unlisted or non-regular path.")
+
+    visit(run)
+    if seen_files != files or seen_folders != folders:
+        raise ValueError("Export physical inventory differs from the fixed case.")
+
+
+def export_run(run: Path, bin_dir: Path, output: Path) -> Path:
+    run = ordinary(run)
+    output = new_output(output)
+    if output.is_relative_to(run):
+        raise ValueError("Export output must be outside the sealed run.")
+    expected = fixed_export_inventory()
+    check_export_tree(run, expected)
+    initial_receipt = receipt_document(strict_json(ordinary(run / "receipt.json").read_bytes(), "Receipt"))
+    export_inventory(initial_receipt)
+    receipt, snapshot = verify(run)
+    if receipt != initial_receipt or set(snapshot) != expected:
+        raise ValueError("Export requires the exact fixed-case inventory, without a review note or extra files.")
+    receipt_bytes = ordinary(run / "receipt.json").read_bytes()
+    receipt_hash = ordinary(run / "receipt.sha256").read_bytes()
+    if receipt_document(strict_json(receipt_bytes, "Receipt")) != receipt or receipt_hash != digest(receipt_bytes).encode("ascii"):
+        raise ValueError("Receipt changed during export.")
+    members = {"run/" + name: data for name, data in snapshot.items()}
+    members.update({"run/receipt.json": receipt_bytes, "run/receipt.sha256": receipt_hash})
+    # Render and revalidate producer packs from the captured bytes, so later
+    # reads of the caller's run cannot mix periods inside one export.
+    with tempfile.TemporaryDirectory(prefix="review-export-") as directory:
+        captured = Path(directory)
+        for name, data in members.items():
+            target = captured / name.removeprefix("run/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        members["review.html"] = render_html(captured, bin_dir).encode("utf-8")
+        projected = projection(captured)
+    if set(projected) != set(EXPORT_PROJECTIONS):
+        raise ValueError("Export projection inventory differs.")
+    members.update({"projections/" + name: data for name, data in projected.items()})
+    manifest = {"format": EXPORT_FORMAT, "schema_version": 1, "boundary": BOUNDARY,
+                "integrity_statement": EXPORT_STATEMENT,
+                "members": {name: {"size": len(data), "sha256": digest(data)} for name, data in sorted(members.items())}}
+    members["export-manifest.json"] = json_bytes(manifest)
+    payload = export_bytes(members)
+    check_export_tree(run, expected)
+    if verify(run) != (receipt, snapshot) or ordinary(run / "receipt.json").read_bytes() != receipt_bytes or ordinary(run / "receipt.sha256").read_bytes() != receipt_hash:
+        raise ValueError("Run changed during export.")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    ordinary(output)
+    created = False
+    identity = None
+    try:
+        with output.open("xb") as stream:
+            created = True
+            try:
+                identity = os.fstat(stream.fileno())
+            except OSError:
+                identity = os.stat(stream.fileno())
+                raise
+            if stream.write(payload) != len(payload):
+                raise OSError("Incomplete export write.")
+            stream.flush()
+    except BaseException:
+        if created and identity is not None and output.exists() and os.path.samestat(output.stat(), identity):
+            output.unlink()
+        raise
+    return output
+
+
+def verify_export(path: Path) -> dict[str, Any]:
+    """Verify member bytes only, with no extraction, fixtures or producer execution."""
+    path = ordinary(path)
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError("Export input must be a regular file.")
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with stream:
+            payload = stream.read(MAX_EXPORT_BYTES + 1)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(payload) > MAX_EXPORT_BYTES:
+        raise ValueError("Export archive exceeds the size limit.")
+    members: dict[str, bytes] = {}
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_EXPORT_FILES or sum(item.file_size for item in entries) > MAX_EXPORT_BYTES:
+                raise ValueError("Export exceeds inventory limits.")
+            for item in entries:
+                name = item.filename
+                if name in members or item.orig_filename != name or not re.fullmatch(r"[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*", name) or any(part in (".", "..") for part in name.split("/")):
+                    raise ValueError("Export contains an ambiguous or unsafe path.")
+                if item.compress_type != zipfile.ZIP_STORED or item.flag_bits or item.file_size > MAX_EXPORT_MEMBER or item.compress_size != item.file_size or stat.S_IFMT(item.external_attr >> 16) != stat.S_IFREG:
+                    raise ValueError("Export member is outside the stored regular-file profile.")
+                members[name] = archive.read(item)
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+        raise ValueError("Export ZIP is invalid.") from exc
+    # Canonical reconstruction also rejects extra metadata,
+    # alternate order, preambles, trailing bytes and mismatched local headers.
+    if export_bytes(members) != payload:
+        raise ValueError("Export ZIP is outside the canonical profile.")
+    manifest_data = members.get("export-manifest.json", b"")
+    manifest = strict_json(manifest_data, "Export manifest")
+    if not isinstance(manifest, dict) or set(manifest) != {"format", "schema_version", "boundary", "integrity_statement", "members"} or manifest["format"] != EXPORT_FORMAT or type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1 or manifest["boundary"] != BOUNDARY or manifest["integrity_statement"] != EXPORT_STATEMENT or json_bytes(manifest) != manifest_data:
+        raise ValueError("Unsupported export manifest.")
+    inventory = manifest["members"]
+    if not isinstance(inventory, dict) or set(inventory) != set(members) - {"export-manifest.json"}:
+        raise ValueError("Export member inventory differs.")
+    for name, record in inventory.items():
+        if not isinstance(record, dict) or set(record) != {"size", "sha256"} or type(record["size"]) is not int or record["size"] != len(members[name]) or record["sha256"] != digest(members[name]):
+            raise ValueError(f"Export member bytes differ: {name}")
+    if not {"run/receipt.json", "run/receipt.sha256"}.issubset(members):
+        raise ValueError("Export receipt is missing.")
+    receipt_data = members["run/receipt.json"]
+    if members["run/receipt.sha256"] != digest(receipt_data).encode("ascii"):
+        raise ValueError("Export receipt digest differs.")
+    receipt = receipt_document(strict_json(receipt_data, "Export receipt"))
+    expected = export_inventory(receipt)
+    if set(receipt["files"]) != expected or set(members) != {"export-manifest.json", "review.html", "run/receipt.json", "run/receipt.sha256"} | {"run/" + name for name in expected} | {"projections/" + name for name in EXPORT_PROJECTIONS}:
+        raise ValueError("Export fixed-case inventory differs.")
+    if any(digest(members["run/" + name]) != value for name, value in receipt["files"].items()):
+        raise ValueError("Export nested receipt binding differs.")
+    return {"members": len(members), "period": receipt["period"], "receipt_sha256": digest(receipt_data), "integrity_statement": EXPORT_STATEMENT}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "html", "fixtures", "verify"))
+    parser.add_argument("command", choices=("build", "html", "fixtures", "verify", "export", "verify-export"))
     parser.add_argument("--run", type=Path, required=True)
-    parser.add_argument("--bin-dir", type=Path, default=APP.parents[1] / ".venv/Scripts")
+    parser.add_argument("--bin-dir", type=Path)
     parser.add_argument("--month", type=int, default=9)
     parser.add_argument("--review-note", type=Path)
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
-        if args.command == "build":
+        if args.command == "verify-export":
+            if args.previous is not None or args.review_note is not None or args.output is not None:
+                raise ValueError("verify-export does not support --previous, --review-note or --output.")
+            print(json.dumps(verify_export(args.run), ensure_ascii=False))
+            return
+        if args.bin_dir is None:
+            args.bin_dir = APP.parent.parent / ".venv/Scripts"
+        if args.command == "export":
+            if args.output is None or args.previous is not None or args.review_note is not None:
+                raise ValueError("Export requires --output and supports one run without --previous or --review-note.")
+            export_run(args.run, args.bin_dir, args.output)
+        elif args.command == "build":
             build(args.run, args.bin_dir, args.month, args.review_note)
         elif args.command == "verify":
             verify(args.run)
