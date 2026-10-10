@@ -208,6 +208,110 @@ def _cleanup(control: Path, state: dict[str, Any]) -> None:
         raise CleanupStateUncertain("cleanup state uncertain; retain control for review") from exc
 
 
+def _initialise_control(control: Path) -> None:
+    if not (control / "state.json").exists():
+        if {path.name for path in control.iterdir()} != {"writer.lock"}:
+            raise OSError("uninitialised publication control; retain recovery evidence")
+        _write_state(control, {
+            "format": 1, "status": "settled", "revision": uuid.uuid4().hex,
+            "transaction": None, "previous": [None] * 3,
+        })
+
+
+def _backup_slots(output: Path, transaction: Path) -> list[str | None]:
+    previous: list[str | None] = []
+    for index, name in enumerate(NAMES):
+        destination = output / name
+        if _regular(destination, absent=True):
+            backup = transaction / f"backup-{index}"
+            with destination.open("rb") as source, backup.open("xb") as sink:
+                shutil.copyfileobj(source, sink)
+            previous.append(hashlib.sha256(backup.read_bytes()).hexdigest())
+        else:
+            previous.append(None)
+        _check_cancellation()
+    return previous
+
+
+def _stage_slots(transaction: Path, rendered: Sequence[tuple[Path, str, str, str | None]]) -> None:
+    for index, (_path, text, encoding, newline) in enumerate(rendered):
+        stage = transaction / f"stage-{index}"
+        with stage.open("x", encoding=encoding, newline=newline):
+            pass
+        stage.write_text(text, encoding=encoding, newline=newline)
+        _check_cancellation()
+
+
+def _restore_slots(output: Path, transaction: Path, state: dict[str, Any]) -> None:
+    for index, name in enumerate(NAMES):
+        destination = output / name
+        if state["previous"][index] is None:
+            if _regular(destination, absent=True):
+                destination.unlink()
+        else:
+            backup = transaction / f"backup-{index}"
+            _regular(backup)
+            if hashlib.sha256(backup.read_bytes()).hexdigest() != state["previous"][index]:
+                raise OSError("recovery backup differs; retain recovery evidence")
+            if _regular(destination, absent=True) and hashlib.sha256(
+                destination.read_bytes()
+            ).hexdigest() == state["previous"][index]:
+                continue
+            restore = transaction / f"restore-{index}"
+            with backup.open("rb") as source, restore.open("xb") as sink:
+                shutil.copyfileobj(source, sink)
+            os.replace(restore, destination)
+
+
+def _remove_unrecorded_transaction(transaction: Path) -> None:
+    try:
+        transaction.rmdir()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        raise OSError("unrecorded transaction remains; retain control for review") from exc
+
+
+def _recover_failed_publication(
+    control: Path, output: Path, transaction: Path, state: dict[str, Any],
+    identity: str, backups_complete: bool, commit_revision: str, failure: BaseException,
+) -> None:
+    try:
+        observed = _read_state(control)
+    except OSError as exc:
+        raise OSError("publication state uncertain; retain recovery evidence") from exc
+    if observed["status"] == "settled" and observed["revision"] == commit_revision:
+        raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from failure
+    if observed["transaction"] != identity:
+        # The in-progress state was never recorded, so no payload
+        # changed and only an empty transaction directory can exist.
+        _remove_unrecorded_transaction(transaction)
+        return
+    try:
+        if backups_complete:
+            _restore_slots(output, transaction, state)
+        settled = {**state, "status": "settled", "revision": uuid.uuid4().hex}
+        _write_state(control, settled)
+        _cleanup(control, settled)
+    except BaseException as recovery_failure:
+        raise OSError(
+            "publication or recovery incomplete; retain control and backups for review"
+        ) from recovery_failure
+
+
+def _finish_publication(control: Path, settled: dict[str, Any]) -> None:
+    try:
+        _cleanup(control, settled)
+    except CleanupStateUncertain as exc:
+        raise OSError("pack published; cleanup state uncertain, requires review") from exc
+    except BaseException as exc:
+        raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from exc
+    try:
+        _check_cancellation()
+    except PublicationCancelled as exc:
+        raise OSError("pack published; cancellation after commit") from exc
+
+
 def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]]) -> None:
     """Publish the three known slots; retain evidence when restoration is uncertain."""
     if tuple(path.name for path, *_ in rendered) != NAMES:
@@ -216,13 +320,7 @@ def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]])
         _regular(output / name, absent=True)
     control = output / CONTROL_NAME
     with _admission(control):
-        if not (control / "state.json").exists():
-            if {path.name for path in control.iterdir()} != {"writer.lock"}:
-                raise OSError("uninitialised publication control; retain recovery evidence")
-            _write_state(control, {
-                "format": 1, "status": "settled", "revision": uuid.uuid4().hex,
-                "transaction": None, "previous": [None] * 3,
-            })
+        _initialise_control(control)
         _check_cancellation()
         state = _read_state(control)
         if state["status"] != "settled":
@@ -238,23 +336,8 @@ def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]])
             transaction.mkdir()
             _write_state(control, state)
             _check_cancellation()
-            previous: list[str | None] = []
-            for index, name in enumerate(NAMES):
-                destination = output / name
-                if _regular(destination, absent=True):
-                    backup = transaction / f"backup-{index}"
-                    with destination.open("rb") as source, backup.open("xb") as sink:
-                        shutil.copyfileobj(source, sink)
-                    previous.append(hashlib.sha256(backup.read_bytes()).hexdigest())
-                else:
-                    previous.append(None)
-                _check_cancellation()
-            for index, (_path, text, encoding, newline) in enumerate(rendered):
-                stage = transaction / f"stage-{index}"
-                with stage.open("x", encoding=encoding, newline=newline):
-                    pass
-                stage.write_text(text, encoding=encoding, newline=newline)
-                _check_cancellation()
+            previous = _backup_slots(output, transaction)
+            _stage_slots(transaction, rendered)
             state = {**state, "previous": previous}
             _write_state(control, state)
             backups_complete = True
@@ -266,57 +349,9 @@ def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]])
             _write_state(control, settled)
             _check_cancellation()
         except BaseException as failure:
-            try:
-                observed = _read_state(control)
-            except OSError as exc:
-                raise OSError("publication state uncertain; retain recovery evidence") from exc
-            if observed["status"] == "settled" and observed["revision"] == commit_revision:
-                raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from failure
-            if observed["transaction"] != identity:
-                # The in-progress state was never recorded, so no payload
-                # changed and only an empty transaction directory can exist.
-                try:
-                    transaction.rmdir()
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    raise OSError("unrecorded transaction remains; retain control for review") from exc
-                raise
-            try:
-                if backups_complete:
-                    for index, name in enumerate(NAMES):
-                        destination = output / name
-                        if state["previous"][index] is None:
-                            if _regular(destination, absent=True):
-                                destination.unlink()
-                        else:
-                            backup = transaction / f"backup-{index}"
-                            _regular(backup)
-                            if hashlib.sha256(backup.read_bytes()).hexdigest() != state["previous"][index]:
-                                raise OSError("recovery backup differs; retain recovery evidence")
-                            if _regular(destination, absent=True) and hashlib.sha256(
-                                destination.read_bytes()
-                            ).hexdigest() == state["previous"][index]:
-                                continue
-                            restore = transaction / f"restore-{index}"
-                            with backup.open("rb") as source, restore.open("xb") as sink:
-                                shutil.copyfileobj(source, sink)
-                            os.replace(restore, destination)
-                settled = {**state, "status": "settled", "revision": uuid.uuid4().hex}
-                _write_state(control, settled)
-                _cleanup(control, settled)
-            except BaseException as recovery_failure:
-                raise OSError(
-                    "publication or recovery incomplete; retain control and backups for review"
-                ) from recovery_failure
+            _recover_failed_publication(
+                control, output, transaction, state, identity,
+                backups_complete, commit_revision, failure,
+            )
             raise
-        try:
-            _cleanup(control, settled)
-        except CleanupStateUncertain as exc:
-            raise OSError("pack published; cleanup state uncertain, requires review") from exc
-        except BaseException as exc:
-            raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from exc
-        try:
-            _check_cancellation()
-        except PublicationCancelled as exc:
-            raise OSError("pack published; cancellation after commit") from exc
+        _finish_publication(control, settled)
