@@ -220,6 +220,7 @@ If both the activity statement and the GST control GL are present:
 - labels `1A` and `1B` are required
 - `1A - 1B` is compared with GST-control `sum(Credit) - sum(Debit)`
 - a difference beyond `--tieout-tolerance` (default `$0.01`) is `NOT_READY`
+- when `1A` and `1B` are both whole dollars, as the ATO requires on a lodged statement, any difference under `$1` also ties: the ATO drops the cents from each label, so the statement can sit up to 99 cents either side of the control movement. A statement whose labels carry cents gets no allowance
 
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
 
