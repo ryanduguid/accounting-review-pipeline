@@ -18,11 +18,10 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned when the badge and install step named the Python 3.11 floor.
 # OAuth scope, refresh and reviewer claims are unchanged.
 README_SHA256 = "109D6FE25AA36B76283901EEBC25EAA528F2BC3B2E7BA4A11D98E5417A7F3C6F"
-# Re-pinned when main() began reporting a refused bind (PermissionError, as on
-# port 80 from a portless redirect URI) separately from a port another process
-# holds. Only that except branch and its message are new; SCOPES, the OAuth
-# endpoints, the token exchange and the callback checks are unchanged.
-AUTH_SHA256 = "4A74343C2007B9818BD3B095D87FC18BE2B4E2D077B24FE3C7349B6E1781D3B9"
+# Re-pinned when server_bind() gained a NOSONAR comment recording that its
+# plain HTTP listener is the RFC 8252 loopback redirect. The comment is the
+# only change: AUTH_AST_SHA256 below still matches the executable tree.
+AUTH_SHA256 = "C2BFD788E844655BCC0763D6B97DA21AA7586302BD59F0BE4E6D6CA35C82C9CC"
 AUTH_AST_SHA256 = "447F06AB01AC54030EB70B79EB9B748A9BDFD822C262FDF9FBD9F28D0CE83AD4"
 
 SCOPES_URL = "https://developer.xero.com/documentation/guides/oauth2/scopes/"
