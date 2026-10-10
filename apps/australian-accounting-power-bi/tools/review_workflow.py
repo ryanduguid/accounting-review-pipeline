@@ -28,6 +28,8 @@ NAME = "australian-accounting-power-bi"
 TB_COLUMNS = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit".split(",")
 CLOSE_FILES = ("close-review-pack.json", "close-summary.md", "exceptions.csv", "client-queries.csv")
 READY_FILES = ("readiness-pack.json", "readiness-summary.md", "findings.csv")
+# review-ready's publication control directory; the producer's viewer checks it.
+READY_CONTROL = "readiness/.reviewready"
 BOUNDARY = "Fabricated demonstration. Verification and acknowledgement do not approve accounting or close a period."
 PRODUCERS = {
     "close-control": ("monthly-close-control-plane", "closecontrol", "closecontrol.cli:main"),
@@ -696,7 +698,7 @@ def build(run: Path, bin_dir: Path, month: int, note: Path | None = None) -> Pat
     doc = close_document(strict_json((run / "close/close-review-pack.json").read_bytes(), "Close pack"))
     if doc["source_sha256"]["current_trial_balance"] != digest(current) or doc["source_sha256"]["prior_trial_balance"] != digest(prior) or doc["current_report_dates"] != [period] or any(r["tenant"] not in ("", case["tenant"]) for r in doc["exceptions"]):
         raise ValueError("Close provenance or context differs from the case.")
-    files = {str(path.relative_to(run)).replace("\\", "/"): digest(path.read_bytes()) for folder in ("inputs", "close", "readiness", "drivers", "validation") for path in (run / folder).iterdir()}
+    files = {name: digest(path.read_bytes()) for folder in ("inputs", "close", "readiness", "drivers", "validation") for path in (run / folder).iterdir() if (name := path.relative_to(run).as_posix()) != READY_CONTROL}
     receipt = {"schema_version": 1, "case": case, "period": period, "invocations": commands, "files": files, "boundary": BOUNDARY, "producer_manifests": manifests}
     data = json_bytes(receipt)
     (run / "receipt.json").write_bytes(data)
@@ -705,8 +707,38 @@ def build(run: Path, bin_dir: Path, month: int, note: Path | None = None) -> Pat
     return run
 
 
+def ready_revision(run: Path) -> str | None:
+    """The settled review-ready publication revision; None for a run built before it existed."""
+    control = ordinary(run / READY_CONTROL)
+    try:
+        metadata = control.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError("Readiness publication control is not a directory.")
+    path = ordinary(control / "state.json")
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise ValueError("Readiness publication state is not a regular, single-link file.")
+    state = strict_json(path.read_bytes(), "Readiness publication state")
+
+    # The same version 1 schema review-ready's own reader requires.
+    def identifier(value: Any, digits: int) -> bool:
+        return isinstance(value, str) and re.fullmatch(f"[0-9a-f]{{{digits}}}", value) is not None
+
+    if (not isinstance(state, dict) or set(state) != {"format", "status", "revision", "transaction", "previous"}
+            or type(state["format"]) is not int or state["format"] != 1 or state["status"] != "settled"
+            or not identifier(state["revision"], 32)
+            or (state["transaction"] is not None and not identifier(state["transaction"], 32))
+            or not isinstance(state["previous"], list) or len(state["previous"]) != 3
+            or any(value is not None and not identifier(value, 64) for value in state["previous"])):
+        raise ValueError("Readiness publication is unresolved or unsupported.")
+    return state["revision"]
+
+
 def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
     run = ordinary(run)
+    revision = ready_revision(run)
     data = ordinary(run / "receipt.json").read_bytes()
     if digest(data) != ordinary(run / "receipt.sha256").read_text(encoding="ascii"):
         raise ValueError("Receipt digest differs.")
@@ -768,6 +800,8 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
         hashes = {r["executable_sha256"] for r in receipt["invocations"] if r["command"] == command}
         if len(hashes) != 1 or not re.fullmatch(r"[a-f0-9]{64}", next(iter(hashes))):
             raise ValueError("Producer executable identity differs within the receipt.")
+    if ready_revision(run) != revision:
+        raise ValueError("Readiness publication changed during verification.")
     return receipt, snapshot
 
 
@@ -1036,6 +1070,8 @@ def check_export_tree(run: Path, expected: set[str]) -> None:
             if stat.S_ISDIR(metadata.st_mode) and name in folders:
                 seen_folders.add(name)
                 visit(entry)
+            elif stat.S_ISDIR(metadata.st_mode) and name == READY_CONTROL:
+                continue
             elif stat.S_ISREG(metadata.st_mode) and name in files:
                 total += metadata.st_size
                 if metadata.st_size > MAX_EXPORT_MEMBER or total > MAX_EXPORT_BYTES:

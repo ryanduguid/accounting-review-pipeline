@@ -730,5 +730,55 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertNotIn("coverage_percentage", projected["sample-review-run.csv"].decode())
 
 
+    def test_export_tree_admits_only_the_readiness_publication_control(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            expected = workflow.fixed_export_inventory()
+            for name in expected | {"receipt.json", "receipt.sha256"}:
+                (run / name).parent.mkdir(parents=True, exist_ok=True)
+                (run / name).write_bytes(b"x")
+            control = run / workflow.READY_CONTROL
+            control.mkdir()
+            (control / "state.json").write_bytes(b"{}")
+            workflow.check_export_tree(run, expected)
+            (run / "close/.reviewready").mkdir()
+            with self.assertRaisesRegex(ValueError, "unlisted"):
+                workflow.check_export_tree(run, expected)
+
+    def test_readiness_publication_must_be_settled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            self.assertIsNone(workflow.ready_revision(run))
+            control = run / workflow.READY_CONTROL
+            control.mkdir(parents=True)
+            state = {"format": 1, "status": "settled", "revision": "a" * 32, "transaction": None, "previous": [None] * 3}
+            (control / "state.json").write_text(json.dumps(state), encoding="utf-8")
+            self.assertEqual(workflow.ready_revision(run), "a" * 32)
+            (control / "state.json").write_text(json.dumps({**state, "transaction": "b" * 32, "previous": ["c" * 64, None, None]}), encoding="utf-8")
+            self.assertEqual(workflow.ready_revision(run), "a" * 32)
+            refused = [
+                {**state, "status": "in_progress", "transaction": "b" * 32},
+                {"status": "settled", "revision": "x"},
+                {**state, "extra": None},
+                {**state, "format": 2},
+                {**state, "format": True},
+                {**state, "revision": ""},
+                {**state, "revision": "A" * 32},
+                {**state, "transaction": "b" * 31},
+                {**state, "previous": [None] * 2},
+                {**state, "previous": ["c" * 63, None, None]},
+                [state],
+            ]
+            for value in refused:
+                with self.subTest(state=value):
+                    (control / "state.json").write_text(json.dumps(value), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "unresolved or unsupported"):
+                        workflow.ready_revision(run)
+            (control / "state.json").write_text(json.dumps(state), encoding="utf-8")
+            os.link(control / "state.json", run / "linked-state.json")
+            with self.assertRaisesRegex(ValueError, "single-link"):
+                workflow.ready_revision(run)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,9 +12,8 @@ Two tiers. `IDENTICAL` names definitions that are the same bytes in both
 packages and must stay that way. `SAME_LOGIC` names definitions whose prose has
 already diverged - one package keeps the reasoning in a docstring or a comment,
 the other does not - and whose fail-closed error class differs by design, so
-only the executable code is compared. The staged-write rollback inside
-`write_review_pack` is compared the same way: its destinations are named for
-each package's own pack files, everything between them is shared.
+only the executable code is compared. The pack writers are not compared:
+the Workpaper Review Gate publishes through its own `publication` module.
 
 Standard library only, and no component is imported: the files are read and
 parsed. This runs from the repository root, like the joined conformance test.
@@ -62,10 +61,6 @@ IDENTICAL = {
 SAME_LOGIC = {
     "report.py": (
         "_money",
-        "_sibling_partial",
-        "_swap_into_place",
-        "_remove_quietly",
-        "_restore_quietly",
     ),
     "loader.py": (
         "SourceSnapshot",
@@ -144,27 +139,6 @@ def _executable(source: str) -> str:
     return rendered
 
 
-def _rollback(path: Path) -> str:
-    """The staged write and its rollback, from `staged` to the statement before the return."""
-    text = path.read_text(encoding="utf-8")
-    writer = next(
-        node
-        for node in ast.parse(text).body
-        if isinstance(node, ast.FunctionDef) and node.name == "write_review_pack"
-    )
-    start = next(
-        index
-        for index, statement in enumerate(writer.body)
-        if isinstance(statement, ast.AnnAssign)
-        and isinstance(statement.target, ast.Name)
-        and statement.target.id == "staged"
-    )
-    body = writer.body[start:-1]
-    if not body:
-        raise AssertionError(f"{path} has no staged-write block to compare")
-    return "\n".join(ast.unparse(statement) for statement in body)
-
-
 class SharedBlockTests(unittest.TestCase):
     def test_a_decorator_is_part_of_the_compared_definition(self) -> None:
         plain = "class Snapshot:\n    path: str\n"
@@ -214,10 +188,6 @@ class SharedBlockTests(unittest.TestCase):
                 bodies.append(_executable(body).replace("CANONICAL_TB_COLUMNS", "CANONICAL_COLUMNS"))
             with self.subTest(name=name):
                 self.assertEqual(*bodies)
-
-    def test_the_staged_write_rollback_is_identical(self) -> None:
-        left, right = PAIRS["report.py"]
-        self.assertEqual(_rollback(left), _rollback(right))
 
 
 if __name__ == "__main__":  # pragma: no cover

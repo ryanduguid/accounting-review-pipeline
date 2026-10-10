@@ -19,6 +19,7 @@ import hashlib
 import io
 import json
 import re
+import stat
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -27,6 +28,7 @@ from typing import Any, cast
 from .engine import ReadinessPack, _overall
 from .errors import GateInputError
 from .models import ControlNotRun, Finding, ReviewerAcknowledgement, SourceEvidence
+from .publication import snapshot_revision
 from .report import (
     _ABSENT,
     ACKNOWLEDGEMENT_EFFECT,
@@ -119,6 +121,9 @@ def _load_artefact_bytes(pack_dir: Path) -> dict[str, bytes]:
     for name in PACK_FILE_NAMES:
         path = pack_dir / name
         try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise GateInputError(f"{name}: expected a regular, single-link artefact")
             payloads[name] = path.read_bytes()
         except FileNotFoundError as exc:
             raise GateInputError(f"{name}: not found in {pack_dir}") from exc
@@ -636,7 +641,13 @@ def verify_pack(pack_dir: Path) -> tuple[
     bytes under ``artefact_sha256``, so a displayed sheet can state what it
     actually read.
     """
-    payloads = _load_artefact_bytes(pack_dir)
+    try:
+        revision = snapshot_revision(pack_dir)
+        payloads = _load_artefact_bytes(pack_dir)
+        if snapshot_revision(pack_dir) != revision:
+            raise GateInputError("pack publication changed during acquisition; retry")
+    except OSError as exc:
+        raise GateInputError(str(exc)) from exc
     document = _parse_json(payloads[_JSON_NAME])
     _verify_json_schema(document)
     try:

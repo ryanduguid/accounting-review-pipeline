@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -11,12 +15,40 @@ from .documents import create_intake, load_document, render_document
 from .engine import review_pack
 from .errors import GateInputError
 from .profiles import PROFILE_NAMES
+from .publication import CONTROL_NAME, PublicationCancelled, _cancellation_check
 from .report import (
     PACK_FILE_NAMES,
     require_output_outside_repository,
     write_review_pack,
 )
 from .viewer import render_review_sheet
+
+
+@contextmanager
+def _managed_publication() -> Iterator[None]:
+    """Observe default CLI SIGTERM at safe writer checkpoints; preserve embedded policy."""
+    previous = signal.getsignal(signal.SIGTERM)
+    install = threading.current_thread() is threading.main_thread() and previous == signal.SIG_DFL
+
+    requested = False
+
+    def cancelled(_signum: int, _frame: object) -> None:
+        nonlocal requested
+        requested = True
+
+    def check() -> None:
+        if requested:
+            raise PublicationCancelled("pack publication cancelled by SIGTERM")
+
+    if install:
+        signal.signal(signal.SIGTERM, cancelled)
+    token = _cancellation_check.set(check if install else None)
+    try:
+        yield
+    finally:
+        _cancellation_check.reset(token)
+        if install:
+            signal.signal(signal.SIGTERM, previous)
 
 
 def _non_negative_decimal(value: str) -> Decimal:
@@ -152,6 +184,10 @@ def main(argv: list[str] | None = None) -> int:
         if source is None:
             continue
         resolved = source.resolve()
+        control = (args.output / CONTROL_NAME).resolve()
+        if resolved == control or control in resolved.parents:
+            print("review-ready: output error: input overlaps publication control", file=sys.stderr)
+            return 1
         if resolved in destinations:
             print(
                 f"review-ready: output error: {flag} {source} is inside --output and "
@@ -166,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"review-ready: input error: cannot inspect {flag}: {exc}", file=sys.stderr)
                 return 1
             for child in children:
-                if child.resolve() in destinations:
+                if child.resolve() in destinations or child.resolve() == control:
                     print(
                         f"review-ready: output error: {flag} contains {child.name}, which "
                         "is a generated pack file name inside --output.",
@@ -185,7 +221,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"review-ready: input error: {exc}", file=sys.stderr)
         return 1
     try:
-        outputs = write_review_pack(pack, args.output)
+        with _managed_publication():
+            outputs = write_review_pack(pack, args.output)
     except (OSError, ValueError) as exc:
         print(f"review-ready: output error: {exc}", file=sys.stderr)
         return 1
