@@ -47,6 +47,19 @@ def test_client_tfn_label_is_replaced_before_the_existing_name_halt() -> None:
     ]
 
 
+@pytest.mark.parametrize(("text", "expected"), [
+    ("Medicare: 2123456701\n1. Next item", "Medicare: MEDICARE_01\n1. Next item"),
+    ("Medicare: 2123 45670 1\n2 rows", "Medicare: MEDICARE_01\n2 rows"),
+    ("Card 2123 45670 1\n3 left", "Card MEDICARE_01\n3 left"),
+    ("TFN: 123456780\n\n1. Next item", "TFN: TFN_01\n\n1. Next item"),
+    ("TFN: 123 456 782\n1. Next item", "TFN: TFN_01\n1. Next item"),
+    ("ABN 51 824 753 556\n2 rows", "ABN ABN_01\n2 rows"),
+])
+def test_identifiers_stop_at_the_line_end(text: str, expected: str) -> None:
+    redacted, _counts = redact_module.redact(text, ())
+    assert redacted == expected
+
+
 def test_compound_tfn_label_is_replaced_before_name_triage() -> None:
     with pytest.raises(Halt) as caught:
         redact_module.redact("Tax File Number (TFN): 123 456 789", ())

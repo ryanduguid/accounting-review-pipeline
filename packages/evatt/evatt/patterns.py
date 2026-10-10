@@ -167,7 +167,10 @@ _LABEL_DIGIT_CLASS = r"[\s.,\u2010-\u2015\u2212-]"
 _LABEL_DIGIT_GAP = _LABEL_DIGIT_CLASS + r"{0,2}"
 NUMBER_SEPARATORS = " \t-/.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
 _NUMBER_CLASS = "[" + re.escape(NUMBER_SEPARATORS) + "]"
-_LABEL_PIN = r"(?![\s/.,\u2010-\u2015\u2212-]{0,2}\d)"
+# Pins and the Medicare reference look along the line only: a digit that starts
+# the next line is new content, not a continuation of this identifier.
+_LABEL_PIN = r"(?![ \t/.,\u2010-\u2015\u2212-]{0,2}\d)"
+_REFERENCE = r"(?P<reference>[ \t/-]{1,2}[1-9])?"
 # A label's own edges let an emphasis underscore touch it, so "__TFN__: ..."
 # is a label as "**TFN**: ..." already was; ``\b`` saw no edge between "_" and
 # "T". Letters on either side still make it part of a longer word.
@@ -198,9 +201,8 @@ ACN_LABELLED = re.compile(
     re.I,
 )
 MEDICARE_LABELLED = re.compile(
-    r"%sMedicare%s%s(\d(?:%s\d){9})(?P<reference>[\s/-]{1,2}[1-9])?"
-    r"(?![\s/.,\u2010-\u2015\u2212-]{0,2}\d)"
-    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_DIGIT_GAP),
+    r"%sMedicare%s%s(\d(?:%s\d){9})%s%s"
+    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_DIGIT_GAP, _REFERENCE, _LABEL_PIN),
     re.I,
 )
 BSB_LABELLED = re.compile(
@@ -233,7 +235,7 @@ _BARE_START = r"(?<![\d$])(?<!\d%s)(?<!\d%s%s)(?<!\d%s%s)" % (
     _PUNCTUATION_CONTINUATION, _PUNCTUATION_CONTINUATION, _NUMBER_CLASS,
     _NUMBER_CLASS, _PUNCTUATION_CONTINUATION,
 )
-_BARE_END = r"(?![\s-]?\d)(?!%s{0,2}\d)" % _NUMBER_CLASS
+_BARE_END = r"(?![ \t-]?\d)(?!%s{0,2}\d)" % _NUMBER_CLASS
 TFN_BARE = re.compile(_BARE_START + r"(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})" + _BARE_END)
 ABN = re.compile(
     _BARE_START + r"(\d{2}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})" + _BARE_END
@@ -241,7 +243,7 @@ ABN = re.compile(
 ACN = re.compile(_BARE_START + r"(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})" + _BARE_END)
 MEDICARE = re.compile(
     _BARE_START + r"(\d{4}[\s-]{0,2}\d{5}[\s-]{0,2}\d)"
-    r"(?P<reference>[\s/-]{1,2}[1-9])?" + _LABEL_PIN
+    + _REFERENCE + _LABEL_PIN
 )
 # No check digit exists for a BSB, so the hyphen is required. Accepting bare
 # 6-digit runs would swallow ordinary numbers with nothing to reject them on.
