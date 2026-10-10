@@ -134,9 +134,30 @@ mistyped option is never mistaken for a document that needs triage.
 
 The residual sweep stops the run when it finds a candidate neither earlier pass
 recognised. Nothing is written, and a triage file lists each candidate with its
-line and context. Add each candidate to the map, then run again. To clear a
+line and context. Classify each candidate, then run again. To clear a
 false positive, map that phrase as an `entity`; it will also be replaced and
 restored. There is no separate noise allowlist or command-line bypass.
+
+An unclassified numeric token with 8 or more digits halts with kind `number`.
+Rewrite a TFN, ABN, ACN or Medicare number in a recognised spelling so pass one
+replaces it one-way. Map any other number, such as an account or invoice
+reference, as an `entity` using its workpaper spelling. Numeric-only map values
+are accepted; restore writes the spelling held in the map. An entity match must
+cover every suspicious numeric token it overlaps in full. Mapping just `456`
+does not clear `123.456.782`; the complete number still halts.
+
+The number sweep classifies whole tokens, joining digits across at most 2
+spaces, tabs, hyphens, Unicode dashes, slashes, dots or commas, within one line.
+It removes a leading calendar-valid `yyyy-mm-dd` or `d/m/yyyy` date before
+classifying the remainder. A token with exactly one dot and no other separator,
+or comma thousands groups with an optional decimal part, is treated as an
+amount. Such an amount halts only if its 9, 10 or 11 digits pass a TFN, ACN,
+Medicare or ABN check. Other tokens of 8 or more digits halt, including dotted
+identifiers, IPv4 addresses and long version strings. Shorter runs, including
+6 and 7 digit account numbers, remain outside this sweep. Ordinary long
+references can halt too; this policy has no established workpaper false
+positive rate. The fabricated `negatives.md` sample now halts on its 8-digit
+statutory reference.
 
 This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
@@ -163,8 +184,9 @@ Detection is regular expressions and check digits. It has no idea what a
 document is about, and the trade-offs below all favour over-detection, because
 an extra placeholder costs a triage decision while a miss leaks.
 
-- **`BSB` fires on any hyphenated 3-three digit pair.** There is no check
-  digit for a BSB, so the hyphen is the only evidence there is. An Australian
+- **`BSB` fires on any hyphenated 3-three digit pair**, and accepts a space or
+  tab between the groups when labelled, as in `BSB 062 000`. There is no check
+  digit for a BSB. An Australian
   general ledger account code written `410-100` is therefore replaced with a
   BSB placeholder, and a real workpaper contains a great many of them. The
   manifest counts will look wrong until you read them that way.
@@ -240,12 +262,28 @@ an extra placeholder costs a triage decision while a miss leaks.
   `TFN: **123 456 783**`, `` TFN: `123 456 783` `` and a table cell
   `| TFN | 123 456 783 |` are all labelled identifiers. Emphasis around a
   qualifier alone, as in `Medicare __card__ number:`, breaks the label.
-- **Digit groups may be separated by up to 2 spaces or hyphens**, as PDF-to-text
-  conversion writes them, and `tax file no.` is a label beside `tax file number`
-  and `TFN`. Three or more spaces between groups, and a labelled number with
-  another digit group one space after it, as in `TFN: 123456783 2026`, are not
-  reliably redacted: they may be left in place or only partly replaced, usually
-  without a halt.
+- **Labelled TFNs, ABNs, ACNs and Medicare numbers accept dots, commas and
+  Unicode dashes between digits**, as well as up to 2 spaces, tabs or hyphens.
+  Existing wrapped identifiers still work. Labels include `tax file no.`,
+  `tax file number (TFN)`, `tax file no. (TFN)`, `Australian business number
+  (ABN)` and `Australian company number (ACN)`, with `no.` also accepted in the
+  last 2. An optional `is`, `was` or `of` can precede the digits.
+  Bare identifiers retain space/hyphen grouping; dotted and comma-grouped
+  fragments are never removed as bare TFNs, ABNs, ACNs, Medicare numbers or BSBs.
+  Slash and Unicode-dash numeric continuations likewise prevent a partial
+  one-way replacement; `123456782/00` reaches numeric triage as a whole token.
+- **Medicare replaces the card and an optional individual reference number
+  together.** A reference from 1 to 9 joined by up to 2 whitespace, slash or
+  hyphen characters is consumed, as in `2123 45670 1/1`. The ten-digit card
+  core determines its check digit and placeholder, so the same card with and
+  without a reference gets one placeholder. A malformed reference reaches triage.
+- **Three or more spaces between digit groups remain unsupported.** Short
+  groups split that way can still pass without a halt. A labelled number with
+  another digit group up to 2 spaces after it, as in `TFN: 123456783 2026`, can fail
+  structured detection and now reaches the number halt when the full token
+  meets its rules. `Client TFN is 123 456 789` replaces the TFN but still halts
+  on the name candidate `Client TFN`; `Tax File Number (TFN)` can likewise
+  report `File Number`. These name false positives need a mapped entity.
 - **A mapped name is matched through the markdown most documents put in it.**
   `_Jane Roe_`, `**Jane Roe**`, `Jane<br>Roe` in a table cell, a name wrapped
   inside a blockquote, `Jane_Roe` and a zero-width joiner between the words are

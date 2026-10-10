@@ -608,6 +608,18 @@ def test_a_value_that_merely_looks_placeholder_ish_is_still_accepted() -> None:
     assert entities.assign([], "MY_CLIENT_01", "client", "2026-09-10").value == "MY_CLIENT_01"
 
 
+@pytest.mark.parametrize("value", ["01", "12345678", "1234 5678"])
+def test_numeric_only_entities_can_be_assigned_and_loaded(tmp_path, value):
+    entity = entities.assign([], value, "entity", "2026-10-10")
+    assert entity.value == value
+    path = tmp_path / "entities.json"
+    # This unit check exercises schema validation without an unrelated Git guard.
+    path.write_text(json.dumps({"schema_version": 1, "entries": [
+        {"value": value, "placeholder": entity.placeholder, "kind": entity.kind, "added": entity.added},
+    ]}), encoding="utf-8")
+    assert entities.load(path) == (entity,)
+
+
 def test_load_rejects_two_values_that_fold_onto_one_another(tmp_path) -> None:
     """Two spellings of one name cannot hold 2 placeholders.
 

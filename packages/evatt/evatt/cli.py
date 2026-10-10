@@ -239,14 +239,19 @@ def _write_triage(path: Path, halt: Halt) -> None:
         "",
         f"{halt}.",
         "",
-        "Add every candidate to the entity map, then run redact again.",
+        "Classify every candidate, then run redact again.",
         "Map a false positive as an entity; it will also be replaced and restored.",
+        "For a number: rewrite a TFN, ABN, ACN or Medicare number in a recognised spelling",
+        "so pass one replaces it one-way; map any other number as an entity.",
         "",
     ]
+    quoted_lines: set[int] = set()
     for unknown in sorted(halt.unknowns, key=lambda u: (u.line, u.kind, u.value)):
         value = " ".join(unknown.value.split())
         lines.append(f"- **{value}** ({unknown.kind}, line {unknown.line})")
-        lines.append(f"  > {unknown.context}")
+        if unknown.line not in quoted_lines:
+            lines.append(f"  > {unknown.context}")
+            quoted_lines.add(unknown.line)
     _write(path, "\n".join(lines) + "\n")
 
 
