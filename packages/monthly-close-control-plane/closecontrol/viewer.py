@@ -244,17 +244,7 @@ def _parse_threshold(text: object, key: str) -> Decimal:
     return value
 
 
-def _verify_json_schema(document: dict[str, object]) -> None:
-    status = document["overall_status"]
-    if status not in _STATUSES:
-        raise ControlInputError(
-            f"{_JSON_NAME}: overall_status must be one of "
-            f"{', '.join(_STATUSES)}; got {status!r}"
-        )
-    _require_string_list(document, "current_report_dates")
-    _require_string_list(document, "prior_report_dates")
-
-    thresholds = document["thresholds"]
+def _verify_schema_thresholds(thresholds: object) -> None:
     if not isinstance(thresholds, dict) or set(thresholds) != set(_THRESHOLD_KEYS):
         raise ControlInputError(
             f"{_JSON_NAME}: thresholds must hold exactly "
@@ -263,7 +253,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
     for key in _THRESHOLD_KEYS:
         _parse_threshold(thresholds[key], key)
 
-    source_hashes = document["source_sha256"]
+
+def _verify_schema_sources(source_hashes: object) -> None:
     if not isinstance(source_hashes, dict) or not source_hashes:
         raise ControlInputError(f"{_JSON_NAME}: source_sha256 must be a non-empty object")
     for label, digest in source_hashes.items():
@@ -272,7 +263,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: source_sha256[{label!r}] is not a lowercase SHA-256 digest"
             )
 
-    exceptions = document["exceptions"]
+
+def _verify_schema_exceptions(exceptions: object) -> None:
     if not isinstance(exceptions, list):
         raise ControlInputError(f"{_JSON_NAME}: exceptions must be a list")
     for index, item in enumerate(exceptions):
@@ -294,52 +286,53 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: exceptions[{index}].status is not a pack status"
             )
 
+
+def _verify_schema_queries(client_queries: object) -> None:
     # A query names an account and a movement, so a malformed or duplicated
     # register has to be named here rather than reach a preparer as a question
     # they might put to a client. A pack from before the register existed
     # carries no member to check.
-    if "client_queries" in document:
-        client_queries = document["client_queries"]
-        if not isinstance(client_queries, list):
-            raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
-        seen_ids: set[str] = set()
-        for index, query in enumerate(client_queries):
-            if not isinstance(query, dict):
+    if not isinstance(client_queries, list):
+        raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
+    seen_ids: set[str] = set()
+    for index, query in enumerate(client_queries):
+        if not isinstance(query, dict):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}] must be an object"
+            )
+        # The CSV projects exactly these fields, so a member outside them is
+        # one no other file witnesses: it survives every cross-file
+        # comparison and leaves an edited pack verifying. The top-level
+        # members are held to their exact set for the same reason. The
+        # register is new, so no earlier pack carries a different shape.
+        if set(query) != set(_QUERY_CSV_FIELDS):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}] does not hold the "
+                f"fields the writer emits: holds {sorted(query)!r}, "
+                f"expected {sorted(_QUERY_CSV_FIELDS)!r}"
+            )
+        for field in _QUERY_CSV_FIELDS:
+            if not isinstance(query[field], str):
                 raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries[{index}] must be an object"
+                    f"{_JSON_NAME}: client_queries[{index}].{field} must be a string"
                 )
-            # The CSV projects exactly these fields, so a member outside them is
-            # one no other file witnesses: it survives every cross-file
-            # comparison and leaves an edited pack verifying. The top-level
-            # members are held to their exact set for the same reason. The
-            # register is new, so no earlier pack carries a different shape.
-            if set(query) != set(_QUERY_CSV_FIELDS):
-                raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries[{index}] does not hold the "
-                    f"fields the writer emits: holds {sorted(query)!r}, "
-                    f"expected {sorted(_QUERY_CSV_FIELDS)!r}"
-                )
-            for field in _QUERY_CSV_FIELDS:
-                if not isinstance(query[field], str):
-                    raise ControlInputError(
-                        f"{_JSON_NAME}: client_queries[{index}].{field} must be a string"
-                    )
-            query_id = query["query_id"]
-            if not query_id:
-                raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries[{index}].query_id must be a "
-                    "non-empty string"
-                )
-            if query_id in seen_ids:
-                raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries holds {query_id} more than once"
-                )
-            seen_ids.add(query_id)
+        query_id = query["query_id"]
+        if not query_id:
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}].query_id must be a "
+                "non-empty string"
+            )
+        if query_id in seen_ids:
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries holds {query_id} more than once"
+            )
+        seen_ids.add(query_id)
 
+
+def _verify_schema_acknowledgement(acknowledgement: object) -> None:
     # An acknowledgement records a human action, so a malformed one must be
     # named here rather than reach the sheet as a traceback or as text the
     # renderer never checked.
-    acknowledgement = document["acknowledgement"]
     if acknowledgement is not None:
         if not isinstance(acknowledgement, dict):
             raise ControlInputError(
@@ -367,6 +360,23 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: acknowledgement.effect is not the text the writer emits"
             )
 
+
+def _verify_json_schema(document: dict[str, object]) -> None:
+    status = document["overall_status"]
+    if status not in _STATUSES:
+        raise ControlInputError(
+            f"{_JSON_NAME}: overall_status must be one of "
+            f"{', '.join(_STATUSES)}; got {status!r}"
+        )
+    _require_string_list(document, "current_report_dates")
+    _require_string_list(document, "prior_report_dates")
+
+    _verify_schema_thresholds(document["thresholds"])
+    _verify_schema_sources(document["source_sha256"])
+    _verify_schema_exceptions(document["exceptions"])
+    if "client_queries" in document:
+        _verify_schema_queries(document["client_queries"])
+    _verify_schema_acknowledgement(document["acknowledgement"])
 
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:
     """Collect the summary's digest lines, rejecting a contradicted label.
