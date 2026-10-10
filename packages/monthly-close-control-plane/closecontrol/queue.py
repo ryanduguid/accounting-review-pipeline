@@ -54,16 +54,8 @@ def _verified_entry(path: Path) -> _QueueEntry:
     )
 
 
-def render_review_queue(
-    pack_dirs: Sequence[Path],
-    *,
-    period: str | None = None,
-    status: str | None = None,
-    reviewer: str | None = None,
-) -> str:
-    """Verify every supplied pack, then filter and display their recorded evidence."""
-    if not pack_dirs:
-        raise ControlInputError("Supply at least one pack directory.")
+def _validate_filters(period: str | None, status: str | None, reviewer: str | None) -> None:
+    """Reject invalid filters before resolving or reading any supplied pack."""
     if period is not None:
         try:
             if date.fromisoformat(period).isoformat() != period:
@@ -74,6 +66,19 @@ def render_review_queue(
         raise ControlInputError("Status must be PASS, REVIEW or BLOCKED.")
     if reviewer is not None and not reviewer.strip():
         raise ControlInputError("Reviewer must not be empty.")
+
+
+def render_review_queue(
+    pack_dirs: Sequence[Path],
+    *,
+    period: str | None = None,
+    status: str | None = None,
+    reviewer: str | None = None,
+) -> str:
+    """Verify every supplied pack, then filter and display their recorded evidence."""
+    if not pack_dirs:
+        raise ControlInputError("Supply at least one pack directory.")
+    _validate_filters(period, status, reviewer)
 
     try:
         paths = sorted({path.resolve() for path in pack_dirs}, key=str)
@@ -88,15 +93,12 @@ def render_review_queue(
         verified.append(entry)
 
     # Verify before filtering: a filter must not hide an invalid supplied pack.
-    selected = []
-    for entry in verified:
-        if period is not None and period not in entry.dates:
-            continue
-        if status is not None and entry.status != status:
-            continue
-        if reviewer is not None and entry.reviewer != reviewer:
-            continue
-        selected.append(entry)
+    selected = [
+        entry for entry in verified
+        if (period is None or period in entry.dates)
+        and (status is None or entry.status == status)
+        and (reviewer is None or entry.reviewer == reviewer)
+    ]
     selected.sort(key=lambda entry: (entry.dates, str(entry.path)))
 
     lines = [
