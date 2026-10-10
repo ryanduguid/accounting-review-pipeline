@@ -84,6 +84,39 @@ def test_gst_tieout_break(tmp_path: Path) -> None:
     assert any(item.code == "TIEOUT_BREAK" for item in pack.findings)
 
 
+@pytest.mark.parametrize(
+    ("labels", "postings", "breaks"),
+    [
+        # The ATO's whole-dollar 1A and 1B drop up to 99 cents each.
+        (("10000", "2500"), ("10000.85", "2500.40"), False),
+        (("10000.00", "2500.00"), ("10000.99", "2500.00"), False),
+        (("10000", "2500"), ("10000.00", "2500.99"), False),
+        (("10000", "2500"), ("10001.00", "2500.00"), True),
+        (("10000", "2500"), ("9999.00", "2500.00"), True),
+        # A statement carrying cents keeps the plain tolerance.
+        (("10000.45", "2500.00"), ("10000.00", "2500.00"), True),
+    ],
+)
+def test_gst_tieout_allows_whole_dollar_truncation(
+    tmp_path: Path, labels: tuple[str, str], postings: tuple[str, str], breaks: bool
+) -> None:
+    label_1a, label_1b = labels
+    collected, claimed = postings
+    pack_dir = copy_example_pack("bas-ready", tmp_path / "pack")
+    (pack_dir / "activity_statement.csv").write_text(
+        f"Label,Amount\n1A,{label_1a}\n1B,{label_1b}\n", encoding="utf-8"
+    )
+    (pack_dir / "gst_control_gl.csv").write_text(
+        "Date,AccountID,AccountName,Debit,Credit,Description\n"
+        f"2026-01-15,820,GST Payable,0.00,{collected},GST on sales\n"
+        f"2026-02-20,820,GST Payable,{claimed},0.00,GST on purchases\n",
+        encoding="utf-8",
+    )
+    pack = review_pack(profile="bas", pack_dir=pack_dir, tieout_tolerance=Decimal("0.01"))
+    assert any(item.code == "TIEOUT_BREAK" for item in pack.findings) is breaks
+    assert pack.status == ("NOT_READY" if breaks else "READY")
+
+
 def test_cli_ready_and_view(tmp_path: Path) -> None:
     output = tmp_path / "out"
     assert (

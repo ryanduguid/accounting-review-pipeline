@@ -29,7 +29,7 @@ import xero_client
 from xero_client import load_dotenv, save_tokens, validate_rotated_response
 
 AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
-TOKEN_URL = "https://identity.xero.com/connect/token"
+TOKEN_URL = "https://identity.xero.com/connect/token"  # nosec B105
 # Web and PKCE apps created on or after 2 March 2026 use granular scopes.
 # Existing apps using accounting.reports.read must migrate by 13 September 2027.
 # This exporter needs only offline_access and accounting.reports.trialbalance.read.
@@ -121,7 +121,7 @@ class _CallbackServer(HTTPServer):
         exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
         if os.name == "nt" and exclusive is not None:
             self.socket.setsockopt(socket.SOL_SOCKET, exclusive, 1)
-        super().server_bind()
+        super().server_bind()  # NOSONAR: RFC 8252 loopback OAuth redirect on localhost
 
 
 def wait_for_callback(server, timeout: float = CALLBACK_TIMEOUT) -> None:

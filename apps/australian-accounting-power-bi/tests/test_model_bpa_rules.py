@@ -34,7 +34,7 @@ def evaluate(expression: str, obj: dict[str, object]) -> bool:
     translated = translated.replace("&&", " and ").replace("||", " or ")
     translated = translated.replace("<>", "!=")
     translated = re.sub(r"!(?!=)", " not ", translated)
-    return bool(eval(translated, {"__builtins__": {}}, dict(obj)))
+    return bool(eval(translated, {"__builtins__": {}}, dict(obj)))  # pylint: disable=eval-used
 
 
 def shipped_measures() -> list[dict[str, object]]:

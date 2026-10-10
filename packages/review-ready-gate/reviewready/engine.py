@@ -446,7 +446,17 @@ def _apply_bas_tieout(
         Decimal("0.00"),
     )
     difference = net_statement - net_gl
-    if abs(difference) > tolerance:
+    # The ATO has 1A and 1B reported in whole dollars with the cents left off, so
+    # a lodged statement sits up to 99 cents either side of the cents-level
+    # control movement with nothing wrong. Whole-dollar labels therefore pass any
+    # difference under $1; labels that carry cents keep the plain tolerance.
+    whole_dollars = all(
+        labels[label] == labels[label].to_integral_value() for label in ("1A", "1B")
+    )
+    if abs(difference) > tolerance and not (whole_dollars and abs(difference) < 1):
+        allowance = (
+            " or the 99-cent allowance for whole-dollar 1A and 1B" if whole_dollars else ""
+        )
         findings.append(
             Finding(
                 code=FINDING_TIEOUT_BREAK,
@@ -455,7 +465,7 @@ def _apply_bas_tieout(
                 reason=(
                     f"Net GST on the activity statement ({net_statement}) does not tie to "
                     f"GST control movement ({net_gl}); difference {difference} exceeds "
-                    f"tolerance {tolerance}."
+                    f"tolerance {tolerance}{allowance}."
                 ),
                 reviewer_action="Return the pack. Complete the GST control tie-out before review.",
             )

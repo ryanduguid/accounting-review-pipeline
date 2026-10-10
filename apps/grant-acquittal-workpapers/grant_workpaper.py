@@ -265,7 +265,7 @@ def publish_directory(staged: Path, output: Path) -> None:
     """Atomically publish a complete directory without replacing any destination."""
     if sys.platform == "win32":
         # Windows rename refuses an existing destination, including an empty directory.
-        staged.rename(output)
+        staged.rename(output)  # NOSONAR: local CLI path chosen by the operator
         return
     libc = ctypes.CDLL(None, use_errno=True)
     source, destination = os.fsencode(staged), os.fsencode(output)

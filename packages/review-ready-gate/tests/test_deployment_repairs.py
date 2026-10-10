@@ -48,7 +48,7 @@ def test_managed_cancellation_at_control_and_payload_boundaries(
     mkdir, open_file, replace = Path.mkdir, os.open, os.replace
 
     def create(path, *args, **kwargs):
-        result = mkdir(path, *args, **kwargs)
+        result = mkdir(path, *args, **kwargs)  # pylint: disable=assignment-from-no-return
         if cut == 'mkdir' and path.name == '.reviewready':
             cancel()
         return result

@@ -102,7 +102,7 @@ def check_bytes(data: bytes) -> list[str]:
 
 def check_file(path: Path) -> list[str]:
     try:
-        data = path.read_bytes()
+        data = path.read_bytes()  # NOSONAR: local CLI path chosen by the operator
     except OSError as exc:
         raise EncodingCheckError("cannot read %s: %s" % (path, exc.strerror)) from exc
     return check_bytes(data)

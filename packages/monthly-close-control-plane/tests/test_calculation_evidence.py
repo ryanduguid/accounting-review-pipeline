@@ -312,7 +312,7 @@ def test_a_producer_finding_travels_with_the_file(tmp_path):
 
 def test_a_control_character_in_provider_text_is_refused(tmp_path):
     record = build_record()
-    record["calculation"]["upstream"]["advisory"]["notes"] = ["right‮to‭left"]
+    record["calculation"]["upstream"]["advisory"]["notes"] = ["right\u202eto\u202dleft"]
     record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()
     with pytest.raises(SchemaError, match="control or formatting character"):
         module.load(write(tmp_path, record))
@@ -597,7 +597,7 @@ def test_a_year_the_calendar_has_no_room_for_is_unreadable(tmp_path):
                if item.control == "calculation_evidence")
 
 
-@pytest.mark.parametrize("hidden", ["⁦", "⁩", "؜", "‮", "​"])
+@pytest.mark.parametrize("hidden", ["\u2066", "\u2069", "\u061c", "\u202e", "\u200b"])
 def test_every_directional_character_class_is_refused(tmp_path, hidden):
     record = build_record()
     record["calculation"]["upstream"]["advisory"]["notes"] = [f"levy is {hidden}192.38 payable"]
@@ -607,7 +607,7 @@ def test_every_directional_character_class_is_refused(tmp_path, hidden):
 
 
 def test_a_label_must_be_a_slug(tmp_path):
-    for bad in ("coal⁦lsl", "Coal-LSL", "coal lsl", "coal_lsl", "-coal", "coal--lsl"):
+    for bad in ("coal\u2066lsl", "Coal-LSL", "coal lsl", "coal_lsl", "-coal", "coal--lsl"):
         record = build_record()
         record["calculation"]["label"] = bad
         record["calculation_sha256"] = hashlib.sha256(canonical(record["calculation"])).hexdigest()

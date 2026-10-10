@@ -130,7 +130,7 @@ jobs:
     permissions:
       contents: read
       attestations: read
-      id-token: write
+      id-token: write  # nosemgrep: a permission name, not a token
     steps:
       - name: Verify the existing immutable release and its attested assets
         env:

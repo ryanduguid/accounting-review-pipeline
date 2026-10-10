@@ -246,7 +246,7 @@ def _check_sequence(entities: Sequence[Entity]) -> None:
 def load(path: Path) -> tuple[Entity, ...]:
     """Load and strictly validate the map. Every rejection is a hard error."""
     try:
-        document = json.loads(path.read_text(encoding="utf-8"))
+        document = json.loads(path.read_text(encoding="utf-8"))  # NOSONAR: local CLI path chosen by the operator
     except (OSError, json.JSONDecodeError) as error:
         raise EvattError(f"cannot read entity map {path}: {error}") from error
     if not isinstance(document, dict) or set(document) != {"schema_version", "entries"}:
@@ -437,7 +437,7 @@ def _git(subcommand: list[str], target: Path) -> int:
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
         environment.pop(name, None)
     try:
-        return subprocess.run(
+        return subprocess.run(  # nosemgrep
             [executable, *subcommand, "--", target.name],
             cwd=target.parent, env=environment, capture_output=True, timeout=30, check=False
         ).returncode

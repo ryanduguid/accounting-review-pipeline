@@ -37,12 +37,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Build the devcontainer and run its setup
-        run: npx --yes "$DEVCONTAINER_CLI" up --workspace-folder .
+        run: npx --yes --ignore-scripts "$DEVCONTAINER_CLI" up --workspace-folder .
       - name: Run the fabricated close review inside it (expects REVIEW, exit 2)
         run: |
           set +e
           # shellcheck disable=SC2016 # the inner script expands inside the container
-          npx --yes "$DEVCONTAINER_CLI" exec --workspace-folder . sh -c '
+          npx --yes --ignore-scripts "$DEVCONTAINER_CLI" exec --workspace-folder . sh -c '
             cd packages/monthly-close-control-plane &&
             uv run --locked --extra dev close-control review \
               --current examples/current_trial_balance.csv \

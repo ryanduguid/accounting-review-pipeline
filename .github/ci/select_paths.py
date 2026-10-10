@@ -8,7 +8,7 @@ import subprocess
 
 
 def changed_paths(base: str, head: str) -> list[str]:
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B607
         ["git", "diff", "--name-only", "--no-renames", "-z", base, head],
         check=True,
         capture_output=True,
@@ -31,7 +31,7 @@ def main() -> None:
         raise ValueError("CI_PATHS must include at least one path pattern")
     known_base = (
         bool(base)
-        and subprocess.run(
+        and subprocess.run(  # nosec B607
             ["git", "cat-file", "-e", f"{base}^{{commit}}"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
