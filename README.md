@@ -117,6 +117,10 @@ and import records. Historical releases and tags remain owned by the source repo
 
 ## Review-pack contract
 
+The [LodgeiT workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
+import, workpaper and review patterns to these existing components, with a
+checklist for using their local evidence outputs.
+
 Review packs are deterministic evidence for a human reviewer; they do not approve a close,
 post a journal, make a payment, lodge a return or lock a period. Each pack is a directory whose
 files must agree with each other: the JSON file is the machine-readable source of truth, Markdown
@@ -190,6 +194,11 @@ means malformed input, invalid configuration or an unwritable output. The read-o
 `close-control view` exits `0` only after verified display and `1` on verification failure.
 The exporter and ledger-review commands document their command-specific exits in their
 component READMEs.
+
+The read-only [close review queue](packages/monthly-close-control-plane/docs/review-queue.md)
+also exits `0` after verified display and `1` for invalid arguments or verification
+failure. It filters supplied packs by recorded period, state and reviewer without
+changing their status.
 
 ## Releases
 

@@ -12,6 +12,7 @@ from .comparison import compare_packs
 from .drivers import variance_drivers, write_drivers
 from .engine import review_close
 from .errors import ControlInputError
+from .queue import PACK_STATES, render_review_queue
 from .reconciliation import reconcile
 from .reconciliation_report import write_reconciliation
 from .report import (
@@ -80,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_close_arguments(review)
     view = commands.add_parser("view", help="display an existing review pack after verifying its four files agree")
     view.add_argument("--pack-dir", required=True, type=Path, help="directory holding close-review-pack.json, close-summary.md, exceptions.csv and client-queries.csv")
+    queue = commands.add_parser("queue", help="filter explicitly supplied close packs after verifying every pack")
+    queue.add_argument("--pack-dir", required=True, type=Path, action="append",
+                       help="pack directory; repeat to include more packs")
+    queue.add_argument("--period", help="exact current report date, YYYY-MM-DD")
+    queue.add_argument("--status", choices=PACK_STATES, help="recorded pack state")
+    queue.add_argument("--reviewer", help="exact initials from a recorded human acknowledgement")
     clearing = commands.add_parser("reconcile", help="review clearing-account transactions and carry outstanding items forward")
     clearing.add_argument("--transactions", required=True, type=Path, help="mapped transaction CSV; see docs/clearing-reconciliation.md")
     for flag in ("tenant", "account-id", "currency", "period-start", "period-end", "opening-balance", "closing-balance"):
@@ -123,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         if exc.code == 2:
             return 1
         raise
-    if args.command not in {"review", "workbench", "view", "reconcile", "drivers", "compare", "schedule", "classify"}:  # pragma: no cover - argparse validates command choices.
+    if args.command not in {"review", "workbench", "view", "queue", "reconcile", "drivers", "compare", "schedule", "classify"}:  # pragma: no cover - argparse validates command choices.
         parser.error("unknown command")
     if args.command == "classify":
         try:
@@ -183,6 +190,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"close-control reconcile: {reconciliation['status']}; {len(reconciliation['outstanding'])} outstanding items")
         print(f"  Review: {review_path}")
         return 0 if reconciliation["status"] == "PASS" else 2
+    if args.command == "queue":
+        try:
+            sheet = render_review_queue(args.pack_dir, period=args.period,
+                                        status=args.status, reviewer=args.reviewer)
+        except ControlInputError as exc:
+            diagnostic = json.dumps(str(exc), ensure_ascii=True)[1:-1]
+            print(f"close-control queue: verification failed: {diagnostic}", file=sys.stderr)
+            return 1
+        print(sheet)
+        return 0
     if args.command == "view":
         # The viewer reads only. It never writes, renames or deletes, so the
         # source/destination collision guard below does not apply to it.
