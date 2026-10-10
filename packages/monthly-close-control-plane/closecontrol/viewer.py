@@ -1405,19 +1405,22 @@ def _read_csv_rows(
     except UnicodeDecodeError as exc:
         raise ControlInputError(f"{name}: not valid UTF-8") from exc
     reader = csv.reader(io.StringIO(text, newline=""))
-    header = next(reader, None)
-    if header != list(fields):
-        raise ControlInputError(
-            f"{name}: header row does not match the written contract"
-        )
-    rows: list[dict[str, str]] = []
-    for number, cells in enumerate(reader, start=1):
-        if len(cells) != len(fields):
+    try:
+        header = next(reader, None)
+        if header != list(fields):
             raise ControlInputError(
-                f"{name}: row {number} holds {len(cells)} cells, but the header "
-                f"declares {len(fields)}"
+                f"{name}: header row does not match the written contract"
             )
-        rows.append(dict(zip(fields, cells)))
+        rows: list[dict[str, str]] = []
+        for number, cells in enumerate(reader, start=1):
+            if len(cells) != len(fields):
+                raise ControlInputError(
+                    f"{name}: row {number} holds {len(cells)} cells, but the header "
+                    f"declares {len(fields)}"
+                )
+            rows.append(dict(zip(fields, cells)))
+    except csv.Error as exc:
+        raise ControlInputError(f"{name}: not readable as CSV ({exc})") from exc
     return rows
 
 

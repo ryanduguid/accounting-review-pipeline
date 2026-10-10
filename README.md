@@ -4,6 +4,7 @@
 [![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
+[![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227?branch=main)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)
 
 Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
@@ -18,6 +19,14 @@ that does not tie is not exported, and an incomplete pack does not reach manager
 review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
 before writing its CSV (see packages/xero-trial-balance-export/README.md).
 None of them approves a close, locks a period or lodges anything.
+
+For a Xero Activity Statement transaction GST review, use the
+[BAS skill and transaction procedure](https://github.com/ryanduguid/australian-accounting-skills/blob/main/docs/bas-walkthrough.md#transaction-gst-review-in-codex-chatgpt-or-copilot).
+Account for supplied rows and establish supply treatment, buyer entitlement and
+attribution separately. The BAS readiness gate checks pack evidence and the GST
+control tie-out; it does not classify transaction tax treatment. Equal ledger
+and statement errors can still reconcile. Carry unresolved transaction findings
+to the authorised reviewer alongside the gate result.
 
 **Start here:** [review-pack contract](#review-pack-contract) ·
 [status meanings](#status-contract) ·
@@ -108,6 +117,10 @@ and import records. Historical releases and tags remain owned by the source repo
 
 ## Review-pack contract
 
+The [LodgeiT workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
+import, workpaper and review patterns to these existing components, with a
+checklist for using their local evidence outputs.
+
 Review packs are deterministic evidence for a human reviewer; they do not approve a close,
 post a journal, make a payment, lodge a return or lock a period. Each pack is a directory whose
 files must agree with each other: the JSON file is the machine-readable source of truth, Markdown
@@ -181,6 +194,11 @@ means malformed input, invalid configuration or an unwritable output. The read-o
 `close-control view` exits `0` only after verified display and `1` on verification failure.
 The exporter and ledger-review commands document their command-specific exits in their
 component READMEs.
+
+The read-only [close review queue](packages/monthly-close-control-plane/docs/review-queue.md)
+also exits `0` after verified display and `1` for invalid arguments or verification
+failure. It filters supplied packs by recorded period, state and reviewer without
+changing their status.
 
 ## Releases
 

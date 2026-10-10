@@ -1,3 +1,4 @@
+import csv
 import json
 from decimal import Decimal
 
@@ -222,6 +223,26 @@ def test_cli_prints_verified_json_and_error_is_exit_one(tmp_path, capsys):
     inputs["current_tb"].write_text("invalid", encoding="utf-8")
     assert main(args) == 1
     assert "verification failed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("pack_key", ["previous_pack", "current_pack"])
+@pytest.mark.parametrize("name", ["exceptions.csv", "client-queries.csv"])
+def test_cli_compare_names_csv_parser_errors(tmp_path, capsys, pack_key, name):
+    inputs = _pair(tmp_path)
+    path = inputs[pack_key] / name
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.reader(handle))
+    rows[1][0] = "x" * (csv.field_size_limit() + 1)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        csv.writer(handle).writerows(rows)
+
+    args = ["compare"]
+    for key, value in inputs.items():
+        args.extend(["--" + key.replace("_", "-"), str(value)])
+    assert main(args) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""  # nosec B101 - pytest outcome assertion.
+    assert f"verification failed: {name}:" in captured.err  # nosec B101 - pytest outcome assertion.
 
 
 def test_a_response_file_nested_too_deeply_is_an_input_error(tmp_path, monkeypatch):

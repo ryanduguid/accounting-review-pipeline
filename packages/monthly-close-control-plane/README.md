@@ -158,6 +158,10 @@ exports and generated packs becoming repository content.
 
 ## Viewing an existing pack
 
+For several packs, use the [local review queue](docs/review-queue.md). It verifies
+every explicitly supplied pack before filtering by report date, recorded state
+and recorded reviewer, and retains omitted-control and missing-metadata disclosures.
+
 `close-control view` is the read-only half of the workbench: it loads a
 generated pack, proves the 4 files still agree with each other, and prints
 a review sheet. It never writes, renames or deletes anything, and it cannot
