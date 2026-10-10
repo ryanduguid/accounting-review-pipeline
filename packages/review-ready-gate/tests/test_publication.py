@@ -15,6 +15,10 @@ from reviewready.errors import GateInputError
 from reviewready.report import PACK_FILE_NAMES, write_review_pack
 from tests.test_gate import _not_ready_pack, _ready_pack
 
+# Child interpreters import this package's tests module, so they start here
+# whichever directory pytest ran from.
+PACKAGE = Path(__file__).resolve().parents[1]
+
 
 class Cancelled(BaseException):
     pass
@@ -131,7 +135,7 @@ def test_second_process_cannot_publish_or_clean_live_writer(tmp_path):
             'from pathlib import Path;from reviewready.report import write_review_pack;'
             'from tests.test_gate import _not_ready_pack;import sys;'
             'write_review_pack(_not_ready_pack(),Path(sys.argv[1]))', str(output),
-        ], capture_output=True, text=True, timeout=10)
+        ], capture_output=True, text=True, timeout=10, cwd=PACKAGE)
     assert result.returncode != 0
     assert 'holds admission' in result.stderr
     assert payloads(output) == previous
@@ -162,7 +166,7 @@ publication.os.replace=cut_replace
 publication._write_state=cut_state
 write_review_pack(_not_ready_pack(),Path(sys.argv[1]))
 '''
-    result = subprocess.run([sys.executable, '-c', code, str(output), boundary], timeout=10)
+    result = subprocess.run([sys.executable, '-c', code, str(output), boundary], timeout=10, cwd=PACKAGE)
     assert result.returncode == 73
     if boundary == 'commit':
         assert viewer.verify_pack(output)[0]['overall_status'] == 'NOT_READY'
