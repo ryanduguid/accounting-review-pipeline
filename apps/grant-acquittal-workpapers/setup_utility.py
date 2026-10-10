@@ -27,7 +27,7 @@ def git_command(*arguments: str) -> list[str]:
 def replay_revisions(manifest: Path) -> dict[str, str]:
     """Read only commit identities from an all-workflow provenance manifest."""
     try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data = json.loads(manifest.read_text(encoding="utf-8"))  # NOSONAR: local CLI path chosen by the operator
         if data["schema_version"] != "utility-workflows.v2" or data["workflow"] != "all":
             raise ValueError("Replay needs an all-workflow v2 manifest")
         projects = data["projects"]

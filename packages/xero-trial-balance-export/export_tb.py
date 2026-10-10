@@ -25,8 +25,8 @@ import hashlib
 import io
 import json
 import os
-import random
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -574,7 +574,7 @@ _MKSTEMP_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789_"
 
 def _staged_name(suffix: str) -> str:
     """A name shaped like the one ``tempfile.mkstemp`` will choose."""
-    middle = "".join(random.choices(_MKSTEMP_ALPHABET, k=8))
+    middle = "".join(secrets.choice(_MKSTEMP_ALPHABET) for _ in range(8))
     return "tmp" + middle + suffix
 
 
@@ -585,8 +585,8 @@ def _probe_export_name() -> str:
     organisation and the report date, so a fixed stand-in could be ignored by
     name while the real filename was not covered at all.
     """
-    stem = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=12))
-    discriminator = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=8))
+    stem = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(12))
+    discriminator = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(8))
     return f"{stem}-{discriminator}-tb-2000-01-01-accrual.csv"
 
 

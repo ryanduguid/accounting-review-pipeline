@@ -84,7 +84,7 @@ jobs:
       # its source from the component's [tool.coverage.run] configuration, the
       # same gate ci-package.yml runs for the other components.
       - name: run tests with branch coverage
-        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+        run: uv run --locked --no-build --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: packages/monthly-close-control-plane
         env:
           UV_PYTHON: ${{ matrix.python }}
@@ -109,7 +109,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: audit the locked project environment
-        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+        run: uv run --locked --no-build --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
         working-directory: packages/monthly-close-control-plane
 
   package:
@@ -131,7 +131,7 @@ jobs:
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
-      - run: uv run --locked --extra dev --python 3.14 python -m build
+      - run: uv run --locked --no-build --extra dev --python 3.14 python -m build
         working-directory: packages/monthly-close-control-plane
       - name: Install and smoke-test the built wheel outside the checkout
         working-directory: packages/monthly-close-control-plane
@@ -164,9 +164,9 @@ jobs:
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
-      - run: uv run --locked --extra dev ruff check closecontrol tests
+      - run: uv run --locked --no-build --extra dev ruff check closecontrol tests
         working-directory: packages/monthly-close-control-plane
-      - run: uv run --locked --extra dev mypy closecontrol
+      - run: uv run --locked --no-build --extra dev mypy closecontrol
         working-directory: packages/monthly-close-control-plane
 
   windows:
@@ -204,7 +204,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: run tests with branch coverage
-        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+        run: uv run --locked --no-build --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: ${{ matrix.package_dir }}
 
   windows-workspace:
@@ -246,11 +246,11 @@ jobs:
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
       - name: lint the workspace
-        run: uv run --locked --group dev ruff check .
+        run: uv run --locked --no-build --group dev ruff check .
       - name: type-check the workspace
-        run: uv run --locked --group dev mypy
+        run: uv run --locked --no-build --group dev mypy
       - name: run the full suite
-        run: uv run --locked --group dev pytest
+        run: uv run --locked --no-build --group dev pytest
 
   pipeline-gates:
     needs: [component, test, dependency-audit, package, lint, windows, windows-workspace]

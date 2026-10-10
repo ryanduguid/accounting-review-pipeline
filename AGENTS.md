@@ -85,11 +85,11 @@ with the component directory. Run them from the component directory:
 
 ```bash
 uv lock --check
-uv run --locked --extra dev ruff check .
-uv run --locked --extra dev mypy
-uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
-uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
-uv run --locked --extra dev --python 3.14 python -m build
+uv run --locked --no-build --extra dev ruff check .
+uv run --locked --no-build --extra dev mypy
+uv run --locked --no-build --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+uv run --locked --no-build --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+uv run --locked --no-build --extra dev --python 3.14 python -m build
 ```
 
 The tests run on Python 3.11, 3.12, 3.13 and 3.14, and the build gate installs the wheel into a
