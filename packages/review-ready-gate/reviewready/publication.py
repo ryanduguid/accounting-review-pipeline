@@ -263,6 +263,15 @@ def _restore_slots(output: Path, transaction: Path, state: dict[str, Any]) -> No
             os.replace(restore, destination)
 
 
+def _remove_unrecorded_transaction(transaction: Path) -> None:
+    try:
+        transaction.rmdir()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        raise OSError("unrecorded transaction remains; retain control for review") from exc
+
+
 def _recover_failed_publication(
     control: Path, output: Path, transaction: Path, state: dict[str, Any],
     identity: str, backups_complete: bool, commit_revision: str, failure: BaseException,
@@ -276,12 +285,7 @@ def _recover_failed_publication(
     if observed["transaction"] != identity:
         # The in-progress state was never recorded, so no payload
         # changed and only an empty transaction directory can exist.
-        try:
-            transaction.rmdir()
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            raise OSError("unrecorded transaction remains; retain control for review") from exc
+        _remove_unrecorded_transaction(transaction)
         return
     try:
         if backups_complete:
@@ -293,6 +297,19 @@ def _recover_failed_publication(
         raise OSError(
             "publication or recovery incomplete; retain control and backups for review"
         ) from recovery_failure
+
+
+def _finish_publication(control: Path, settled: dict[str, Any]) -> None:
+    try:
+        _cleanup(control, settled)
+    except CleanupStateUncertain as exc:
+        raise OSError("pack published; cleanup state uncertain, requires review") from exc
+    except BaseException as exc:
+        raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from exc
+    try:
+        _check_cancellation()
+    except PublicationCancelled as exc:
+        raise OSError("pack published; cancellation after commit") from exc
 
 
 def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]]) -> None:
@@ -337,13 +354,4 @@ def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]])
                 backups_complete, commit_revision, failure,
             )
             raise
-        try:
-            _cleanup(control, settled)
-        except CleanupStateUncertain as exc:
-            raise OSError("pack published; cleanup state uncertain, requires review") from exc
-        except BaseException as exc:
-            raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from exc
-        try:
-            _check_cancellation()
-        except PublicationCancelled as exc:
-            raise OSError("pack published; cancellation after commit") from exc
+        _finish_publication(control, settled)
