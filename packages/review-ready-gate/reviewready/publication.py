@@ -129,8 +129,9 @@ def _admission(control: Path) -> Iterator[None]:
     try:
         control.mkdir()
     except FileExistsError:
-        _read_state(control)
-        _regular(control / "writer.lock")
+        # A first writer can die before writing state.json; publish decides
+        # between initialising and refusing once admission is held.
+        pass
     _directory(control)
     lock = control / "writer.lock"
     _regular(lock, absent=True)
@@ -271,6 +272,16 @@ def publish(output: Path, rendered: Sequence[tuple[Path, str, str, str | None]])
                 raise OSError("publication state uncertain; retain recovery evidence") from exc
             if observed["status"] == "settled" and observed["revision"] == commit_revision:
                 raise OSError("pack published; cleanup incomplete, inspect retained control before retry") from failure
+            if observed["transaction"] != identity:
+                # The in-progress state was never recorded, so no payload
+                # changed and only an empty transaction directory can exist.
+                try:
+                    transaction.rmdir()
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    raise OSError("unrecorded transaction remains; retain control for review") from exc
+                raise
             try:
                 if backups_complete:
                     for index, name in enumerate(NAMES):

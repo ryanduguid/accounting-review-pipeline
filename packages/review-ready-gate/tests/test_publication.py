@@ -371,3 +371,60 @@ def test_cli_signal_adapter_restores_handler_and_embedded_policy():
             assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+@pytest.mark.parametrize('point', ['transaction-mkdir', 'in-progress-state'])
+def test_failure_before_recording_a_transaction_leaves_publication_usable(
+    monkeypatch, tmp_path, point
+):
+    output = tmp_path / 'pack'
+    write_review_pack(_ready_pack(), output)
+    previous = payloads(output)
+    mkdir, write = Path.mkdir, publication._write_state
+
+    def create(path, *args, **kwargs):
+        if point == 'transaction-mkdir' and path.name.startswith('tx-'):
+            raise OSError(28, 'No space left on device')
+        return mkdir(path, *args, **kwargs)
+
+    def record(control, state):
+        if point == 'in-progress-state' and state['status'] == 'in_progress':
+            raise OSError(28, 'No space left on device')
+        write(control, state)
+
+    with monkeypatch.context() as inner:
+        inner.setattr(Path, 'mkdir', create)
+        inner.setattr(publication, '_write_state', record)
+        with pytest.raises(OSError, match='No space left'):
+            write_review_pack(_not_ready_pack(), output)
+    assert payloads(output) == previous
+    assert_clean(output)
+    write_review_pack(_not_ready_pack(), output)
+    assert viewer.verify_pack(output)[0]['overall_status'] == 'NOT_READY'
+    assert_clean(output)
+
+
+@pytest.mark.parametrize('leftover', [(), ('writer.lock',)])
+def test_first_publication_cut_before_state_is_initialised_next_time(tmp_path, leftover):
+    output = tmp_path / 'pack'
+    write_review_pack(_ready_pack(), output)
+    control = output / '.reviewready'
+    shutil.rmtree(control)
+    control.mkdir()
+    for name in leftover:
+        (control / name).write_bytes(b'1')
+    write_review_pack(_not_ready_pack(), output)
+    assert viewer.verify_pack(output)[0]['overall_status'] == 'NOT_READY'
+    assert_clean(output)
+
+
+def test_uninitialised_control_with_unknown_entries_is_refused(tmp_path):
+    output = tmp_path / 'pack'
+    output.mkdir()
+    control = output / '.reviewready'
+    control.mkdir()
+    (control / 'stray').write_bytes(b'keep')
+    with pytest.raises(OSError, match='uninitialised publication control'):
+        write_review_pack(_ready_pack(), output)
+    assert (control / 'stray').read_bytes() == b'keep'
+    assert payloads(output) == {}
