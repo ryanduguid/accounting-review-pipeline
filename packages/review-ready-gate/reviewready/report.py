@@ -150,6 +150,14 @@ def _as_markdown(pack: ReadinessPack) -> str:
         "## Source evidence",
         "",
     ]
+    _append_source_sections(pack, lines)
+    _append_findings_section(pack, lines)
+    _append_acknowledgement_section(pack, lines)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _append_source_sections(pack: ReadinessPack, lines: list[str]) -> None:
     if not pack.source_evidence:
         lines.append("No source files were present in the pack directory.")
     else:
@@ -166,6 +174,9 @@ def _as_markdown(pack: ReadinessPack) -> str:
             )
             for control in pack.controls_not_run:
                 lines.append(f"- `{control.slot}` (`{control.filename}`): {control.reason}")
+
+
+def _append_findings_section(pack: ReadinessPack, lines: list[str]) -> None:
     lines += ["", "## Findings", ""]
     if not pack.findings:
         lines.append(
@@ -181,6 +192,9 @@ def _as_markdown(pack: ReadinessPack) -> str:
                 f"| {finding.status} | {finding.code} | {_md_cell(finding.slot)} | "
                 f"{'yes' if finding.repeat else 'no'} | {_md_cell(finding.reason)} |"
             )
+
+
+def _append_acknowledgement_section(pack: ReadinessPack, lines: list[str]) -> None:
     lines += ["", "## Human acknowledgement", ""]
     if pack.acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
@@ -191,8 +205,6 @@ def _as_markdown(pack: ReadinessPack) -> str:
             *_md_note_lines(pack.acknowledgement.comment),
             "- Effect: acknowledgement records a human action only; it does not change readiness or approve a file.",
         ]
-    lines.append("")
-    return "\n".join(lines)
 
 
 def _as_csv(pack: ReadinessPack) -> str:

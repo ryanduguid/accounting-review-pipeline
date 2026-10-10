@@ -1,5 +1,10 @@
 # Unreleased
 
+- Halt on TFN, ABN, ACN and Medicare digits that continue into a next-line
+  numbered-list marker, including short fragments and candidates hidden by
+  trailing digit pins. Keep genuine hard wraps and index ambiguous `verify`
+  locations once. Document the accepted next-line Medicare reference limit in
+  README.md and DECISIONS.md rulings 47 and 48.
 - Tighten `redact` and `verify` for dotted, comma-separated and Unicode-dash
   labelled identifiers, compound labels, labelled space-separated BSBs and
   Medicare individual reference numbers. Unclassified numeric tokens of 8 or
