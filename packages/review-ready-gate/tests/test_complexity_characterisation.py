@@ -159,3 +159,91 @@ def test_corrupt_backup_is_retained_on_failed_recovery(monkeypatch, tmp_path: Pa
     assert state["status"] == "in_progress"
     transaction = output / publication.CONTROL_NAME / ("tx-" + state["transaction"])
     assert (transaction / "backup-0").read_bytes() == b"changed backup"
+
+
+def test_publication_checkpoint_order(monkeypatch, tmp_path: Path) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_ready_pack(), output)
+    checkpoints = []
+
+    def observe():
+        state = publication._read_state(output / publication.CONTROL_NAME)
+        entries = [] if state["transaction"] is None else list(
+            (output / publication.CONTROL_NAME / ("tx-" + state["transaction"])).iterdir()
+        )
+        checkpoints.append((
+            state["status"], state["transaction"] is None,
+            sum(path.name.startswith("backup-") for path in entries),
+            sum(path.name.startswith("stage-") for path in entries),
+            sum(value is not None for value in state["previous"]),
+        ))
+
+    monkeypatch.setattr(publication, "_check_cancellation", observe)
+    write_review_pack(_not_ready_pack(), output)
+    assert checkpoints == [
+        ("settled", True, 0, 0, 0), ("settled", True, 0, 0, 0),
+        ("in_progress", False, 0, 0, 0), ("in_progress", False, 1, 0, 0),
+        ("in_progress", False, 2, 0, 0), ("in_progress", False, 3, 0, 0),
+        ("in_progress", False, 3, 1, 0), ("in_progress", False, 3, 2, 0),
+        ("in_progress", False, 3, 3, 0), ("in_progress", False, 3, 3, 3),
+        ("in_progress", False, 3, 2, 3), ("in_progress", False, 3, 1, 3),
+        ("in_progress", False, 3, 0, 3), ("settled", False, 3, 0, 3),
+        ("settled", True, 0, 0, 0),
+    ]
+
+
+def test_prepared_state_write_that_commits_then_raises(monkeypatch, tmp_path: Path) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_ready_pack(), output)
+    before, revision = payloads(output), publication.snapshot_revision(output)
+    write = publication._write_state
+
+    def interrupt(control, state):
+        write(control, state)
+        if state["status"] == "in_progress" and all(state["previous"]):
+            raise Cancelled("prepared state interrupted")
+
+    monkeypatch.setattr(publication, "_write_state", interrupt)
+    with pytest.raises(Cancelled, match="prepared state interrupted"):
+        write_review_pack(_not_ready_pack(), output)
+    assert payloads(output) == before
+    assert publication.snapshot_revision(output) != revision
+    assert_clean(output)
+
+
+@pytest.mark.parametrize("absent", publication.NAMES)
+def test_rollback_restores_each_previously_absent_slot(monkeypatch, tmp_path: Path, absent: str) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_ready_pack(), output)
+    (output / absent).unlink()
+    before = payloads(output)
+    replace = publication.os.replace
+
+    def interrupt(source, destination):
+        replace(source, destination)
+        if Path(source).name == "stage-2":
+            raise Cancelled()
+
+    monkeypatch.setattr(publication.os, "replace", interrupt)
+    with pytest.raises(Cancelled):
+        write_review_pack(_not_ready_pack(), output)
+    assert payloads(output) == before
+    assert not (output / absent).exists()
+    assert publication._read_state(output / publication.CONTROL_NAME)["transaction"] is None
+
+
+@pytest.mark.parametrize("command", ["view", "compare"])
+def test_display_commands_preserve_all_publication_bytes(tmp_path: Path, command: str) -> None:
+    output = tmp_path / "pack"
+    write_review_pack(_ready_pack(), output)
+
+    def snapshot():
+        return {path.relative_to(output): (path.read_bytes(), path.stat().st_mtime_ns)
+                for path in output.rglob("*") if path.is_file()}
+
+    before = snapshot()
+    argv = ["view", "--pack-dir", str(output)] if command == "view" else [
+        "compare", "--previous-pack-dir", str(output), "--current-pack-dir", str(output),
+    ]
+    assert cli.main(argv) == 0
+    assert snapshot() == before
