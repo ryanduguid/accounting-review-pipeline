@@ -1,10 +1,13 @@
 """Characterise validation order and diagnostics before helper extraction."""
 import copy
 import json
+import runpy
+import sys
 from pathlib import Path
 
 import pytest
 from closecontrol.calculation_evidence import load
+from closecontrol.cli import main
 from closecontrol.engine import review_close
 from closecontrol.errors import ControlInputError, SchemaError
 from closecontrol.report import _as_json
@@ -97,3 +100,55 @@ def test_evidence_required_type_precedes_effect_and_summary():
     with pytest.raises(ControlInputError) as caught:
         _verify_calculation_evidence({"supplied": [], "required": [1], "effect": "wrong"}, "", {})
     assert str(caught.value) == "close-review-pack.json: calculation_evidence.required must be a list of strings"
+
+
+@pytest.mark.parametrize("value,message", [
+    ("bad", "not a decimal: 'bad'"),
+    ("-1", "must be a finite non-negative decimal"),
+    ("NaN", "must be a finite non-negative decimal"),
+])
+def test_invalid_cli_money_is_a_usage_error(tmp_path, capsys, value, message):
+    assert main(["review", "--current", str(EXAMPLES / "current_trial_balance.csv"),
+                 "--prior", str(EXAMPLES / "prior_trial_balance.csv"),
+                 "--output", str(tmp_path / "pack"), "--absolute-threshold", value]) == 1
+    assert message in capsys.readouterr().err
+    assert not (tmp_path / "pack").exists()
+
+
+@pytest.mark.parametrize("command", ["review", "workbench"])
+def test_quiet_pass_prints_the_existing_banner(tmp_path, capsys, command):
+    header = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n"
+    paths = []
+    for month in (7, 8):
+        path = tmp_path / f"tb-{month}.csv"
+        path.write_text(header + f"2026-{month:02}-31,Synthetic,Assets,A,Bank,090,100,0,100,0\n"
+                        + f"2026-{month:02}-31,Synthetic,Equity,E,Capital,300,0,100,0,100\n",
+                        encoding="utf-8")
+        paths.append(path)
+    assert main([command, "--current", str(paths[1]), "--prior", str(paths[0]),
+                 "--output", str(tmp_path / "pack")]) == 0
+    prefix = "close-control workbench" if command == "workbench" else "close-control"
+    assert f"{prefix}: PASS; 0 exception(s); 0 client query(ies) drafted\n" in capsys.readouterr().out
+
+
+def test_driver_cli_explains_the_financial_year_reset(tmp_path, capsys):
+    prior = tmp_path / "prior.csv"
+    prior.write_text((EXAMPLES / "prior_trial_balance.csv").read_text().replace(
+        "2026-07-31", "2026-06-30"), encoding="utf-8")
+    pack = tmp_path / "pack"
+    assert main(["review", "--current", str(EXAMPLES / "current_trial_balance.csv"),
+                 "--prior", str(prior), "--output", str(pack)]) == 2
+    capsys.readouterr()
+    assert main(["drivers", "--pack-dir", str(pack), "--transactions",
+                 str(EXAMPLES / "variance_transactions.csv"), "--currency", "AUD",
+                 "--output", str(tmp_path / "drivers")]) == 2
+    assert "The pack crosses a 30 June reset; profit-and-loss movements are not comparable." in capsys.readouterr().out
+
+
+@pytest.mark.filterwarnings("ignore:.*found in sys.modules.*:RuntimeWarning")
+def test_module_entrypoint_preserves_help_exit(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["close-control", "--help"])
+    with pytest.raises(SystemExit) as caught:
+        runpy.run_module("closecontrol.cli", run_name="__main__")
+    assert caught.value.code == 0
+    assert "Create a review-first monthly close control pack" in capsys.readouterr().out
