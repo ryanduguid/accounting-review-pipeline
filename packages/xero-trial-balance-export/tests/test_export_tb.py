@@ -2018,6 +2018,21 @@ class AbsurdMagnitudeTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             export_tb.to_number("9" * 1000001)
 
+    def test_a_million_digit_cell_is_refused_by_the_pure_python_decimal(self):
+        """Where the C decimal module is unavailable, decimal is _pydecimal,
+        which converts the digits through int() and raises ValueError past
+        sys.get_int_max_str_digits() instead of parsing them."""
+        import _pydecimal
+
+        with patch.object(export_tb, "Decimal", _pydecimal.Decimal), \
+                patch.object(export_tb, "InvalidOperation", _pydecimal.InvalidOperation):
+            with self.assertRaises(SystemExit) as ctx:
+                export_tb.to_number("9" * 1000001)
+        self.assertEqual(
+            str(ctx.exception).split(", which")[0],
+            f'error: report cell "{"9" * 40}" is 1000001 digits long',
+        )
+
     def test_the_cell_is_stripped_before_it_reaches_the_terminal(self):
         with self.assertRaises(SystemExit) as ctx:
             export_tb.to_number("1E1000000\x1b[2J\nWARNING: fake")
