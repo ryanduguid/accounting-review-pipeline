@@ -10,7 +10,7 @@ from pathlib import Path
 from .classification import classify
 from .comparison import compare_packs
 from .drivers import variance_drivers, write_drivers
-from .engine import review_close
+from .engine import CloseReviewPack, review_close
 from .errors import ControlInputError
 from .queue import PACK_STATES, render_review_queue
 from .reconciliation import reconcile
@@ -118,102 +118,103 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+def _run_classify(args: argparse.Namespace) -> int:
     try:
-        args = parser.parse_args(argv)
-    except SystemExit as exc:
-        # argparse exits with 2 on usage errors, but this tool's exit contract
-        # reserves 2 for a pack needing review; remap usage errors to 1.
-        # --help and -h exit with 0 and must keep doing so, so re-raise
-        # anything that is not a usage error.
-        if exc.code == 2:
-            return 1
-        raise
-    if args.command not in {"review", "workbench", "view", "queue", "reconcile", "drivers", "compare", "schedule", "classify"}:  # pragma: no cover - argparse validates command choices.
-        parser.error("unknown command")
-    if args.command == "classify":
-        try:
-            result = classify(args.original_transactions, args.current_transactions,
-                              args.coding_evidence, currency=args.currency)
-        except (ControlInputError, ValueError, OSError, csv.Error) as exc:
-            print(f"close-control classify: {exc}", file=sys.stderr)
-            return 1
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return 0 if result["status"] == "PASS" else 2
-    if args.command == "schedule":
-        try:
-            result = review_schedule(args.input, kind=args.kind)
-        except (ControlInputError, ValueError, OSError) as exc:
-            print(f"close-control schedule: {exc}", file=sys.stderr)
-            return 1
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return 0 if result["status"] == "PASS" else 2
-    if args.command == "compare":
-        try:
-            result = compare_packs(previous_pack=args.previous_pack, current_pack=args.current_pack,
-                                   previous_tb=args.previous_tb, current_tb=args.current_tb,
-                                   responses=args.responses)
-        except (ControlInputError, ValueError, OSError) as exc:
-            print(f"close-control compare: verification failed: {exc}", file=sys.stderr)
-            return 1
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return 0
-    if args.command == "drivers":
-        try:
-            drivers_result = variance_drivers(args.pack_dir, args.transactions, currency=args.currency, top=args.top)
-            drivers_path = write_drivers(drivers_result, args.output)
-        except (ControlInputError, OSError, ValueError, csv.Error) as exc:
-            print(f"close-control drivers: {exc}", file=sys.stderr)
-            return 1
-        unexplained = sum(1 for item in drivers_result["accounts"] if Decimal(item["unexplained"]) != 0)
-        print(f"close-control drivers: {drivers_result['status']}; {len(drivers_result['accounts'])} "
-              f"variance(s), {unexplained} not fully covered by the supplied transactions")
-        if drivers_result["financial_year_reset"]:
-            print("  The pack crosses a 30 June reset; profit-and-loss movements are not comparable.")
-        print(f"  CSV: {drivers_path}")
-        return 0 if drivers_result["status"] == "PASS" else 2
-    if args.command == "reconcile":
-        try:
-            destination = require_output_outside_repository(args.output)
-            if destination.exists():
-                raise ControlInputError("Output already exists; use a new directory for each run.")
-            reconciliation = reconcile(args.transactions, tenant=args.tenant, account_id=args.account_id,
-                             currency=args.currency, period_start=args.period_start,
-                             period_end=args.period_end, opening_balance=args.opening_balance,
-                             closing_balance=args.closing_balance, opening_items=args.opening_items,
-                             decisions=args.decisions, decisions_escaped=args.decisions_escaped)
-            review_path = write_reconciliation(reconciliation, destination)
-        except (ControlInputError, OSError, ValueError, csv.Error) as exc:
-            print(f"close-control reconcile: {exc}", file=sys.stderr)
-            return 1
-        print(f"close-control reconcile: {reconciliation['status']}; {len(reconciliation['outstanding'])} outstanding items")
-        print(f"  Review: {review_path}")
-        return 0 if reconciliation["status"] == "PASS" else 2
-    if args.command == "queue":
-        try:
-            sheet = render_review_queue(args.pack_dir, period=args.period,
-                                        status=args.status, reviewer=args.reviewer)
-        except ControlInputError as exc:
-            diagnostic = json.dumps(str(exc), ensure_ascii=True)[1:-1]
-            print(f"close-control queue: verification failed: {diagnostic}", file=sys.stderr)
-            return 1
-        print(sheet)
-        return 0
-    if args.command == "view":
-        # The viewer reads only. It never writes, renames or deletes, so the
-        # source/destination collision guard below does not apply to it.
-        try:
-            sheet, _ = render_review_sheet(args.pack_dir)
-        except ControlInputError as exc:
-            print(f"close-control view: verification failed: {exc}", file=sys.stderr)
-            return 1
-        print(sheet)
-        print(
-            "close-control view: display is a review aid; it does not approve "
-            "a close or change any computed status."
-        )
-        return 0
+        result = classify(args.original_transactions, args.current_transactions,
+                          args.coding_evidence, currency=args.currency)
+    except (ControlInputError, ValueError, OSError, csv.Error) as exc:
+        print(f"close-control classify: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["status"] == "PASS" else 2
+
+
+def _run_schedule(args: argparse.Namespace) -> int:
+    try:
+        result = review_schedule(args.input, kind=args.kind)
+    except (ControlInputError, ValueError, OSError) as exc:
+        print(f"close-control schedule: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["status"] == "PASS" else 2
+
+
+def _run_compare(args: argparse.Namespace) -> int:
+    try:
+        result = compare_packs(previous_pack=args.previous_pack, current_pack=args.current_pack,
+                               previous_tb=args.previous_tb, current_tb=args.current_tb,
+                               responses=args.responses)
+    except (ControlInputError, ValueError, OSError) as exc:
+        print(f"close-control compare: verification failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _run_drivers(args: argparse.Namespace) -> int:
+    try:
+        drivers_result = variance_drivers(args.pack_dir, args.transactions, currency=args.currency, top=args.top)
+        drivers_path = write_drivers(drivers_result, args.output)
+    except (ControlInputError, OSError, ValueError, csv.Error) as exc:
+        print(f"close-control drivers: {exc}", file=sys.stderr)
+        return 1
+    unexplained = sum(1 for item in drivers_result["accounts"] if Decimal(item["unexplained"]) != 0)
+    print(f"close-control drivers: {drivers_result['status']}; {len(drivers_result['accounts'])} "
+          f"variance(s), {unexplained} not fully covered by the supplied transactions")
+    if drivers_result["financial_year_reset"]:
+        print("  The pack crosses a 30 June reset; profit-and-loss movements are not comparable.")
+    print(f"  CSV: {drivers_path}")
+    return 0 if drivers_result["status"] == "PASS" else 2
+
+
+def _run_reconcile(args: argparse.Namespace) -> int:
+    try:
+        destination = require_output_outside_repository(args.output)
+        if destination.exists():
+            raise ControlInputError("Output already exists; use a new directory for each run.")
+        reconciliation = reconcile(args.transactions, tenant=args.tenant, account_id=args.account_id,
+                         currency=args.currency, period_start=args.period_start,
+                         period_end=args.period_end, opening_balance=args.opening_balance,
+                         closing_balance=args.closing_balance, opening_items=args.opening_items,
+                         decisions=args.decisions, decisions_escaped=args.decisions_escaped)
+        review_path = write_reconciliation(reconciliation, destination)
+    except (ControlInputError, OSError, ValueError, csv.Error) as exc:
+        print(f"close-control reconcile: {exc}", file=sys.stderr)
+        return 1
+    print(f"close-control reconcile: {reconciliation['status']}; {len(reconciliation['outstanding'])} outstanding items")
+    print(f"  Review: {review_path}")
+    return 0 if reconciliation["status"] == "PASS" else 2
+
+
+def _run_queue(args: argparse.Namespace) -> int:
+    try:
+        sheet = render_review_queue(args.pack_dir, period=args.period,
+                                    status=args.status, reviewer=args.reviewer)
+    except ControlInputError as exc:
+        diagnostic = json.dumps(str(exc), ensure_ascii=True)[1:-1]
+        print(f"close-control queue: verification failed: {diagnostic}", file=sys.stderr)
+        return 1
+    print(sheet)
+    return 0
+
+
+def _run_view(args: argparse.Namespace) -> int:
+    # The viewer reads only. It never writes, renames or deletes, so the
+    # source/destination collision guard below does not apply to it.
+    try:
+        sheet, _ = render_review_sheet(args.pack_dir)
+    except ControlInputError as exc:
+        print(f"close-control view: verification failed: {exc}", file=sys.stderr)
+        return 1
+    print(sheet)
+    print(
+        "close-control view: display is a review aid; it does not approve "
+        "a close or change any computed status."
+    )
+    return 0
+
+
+def _check_review_output(args: argparse.Namespace) -> bool:
     # Both output guards run before any client file is opened. write_review_pack
     # repeats this one so a library caller cannot get past it, but a reviewer who
     # mistyped --output should hear about it before the run reads a trial
@@ -222,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
         require_output_outside_repository(args.output)
     except ControlInputError as exc:
         print(f"close-control: output error: {exc}", file=sys.stderr)
-        return 1
+        return False
     # write_review_pack replaces its 4 destinations and deletes what it
     # parked aside. If a source file IS one of those destinations, that source
     # is destroyed and the pack still records a source_sha256 for it, so the
@@ -248,14 +249,20 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RuntimeError, ValueError) as exc:
             print(f"close-control: output error: cannot resolve {flag} {source}: {exc}",
                   file=sys.stderr)
-            return 1
+            return False
         if resolved_source in destinations:
             print(
                 f"close-control: output error: {flag} {source} is inside --output and "
                 f"shares a generated pack file name; the run would destroy it.",
                 file=sys.stderr,
             )
-            return 1
+            return False
+    return True
+
+
+def _run_review(args: argparse.Namespace) -> int:
+    if not _check_review_output(args):
+        return 1
     try:
         pack = review_close(
             current_path=args.current,
@@ -277,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
     except (ControlInputError, ValueError) as exc:
         print(f"close-control: input error: {exc}", file=sys.stderr)
         return 1
+    return _write_close_review(args, pack)
+
+
+def _write_close_review(args: argparse.Namespace, pack: CloseReviewPack) -> int:
     try:
         outputs = write_review_pack(pack, args.output)
     except (OSError, ValueError) as exc:
@@ -300,6 +311,34 @@ def main(argv: list[str] | None = None) -> int:
         print("This pack records review evidence only; it does not approve or close a period.")
         print("client-queries.csv holds draft questions; nothing has been sent to a client.")
     return 0 if pack.status == "PASS" else 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        # argparse exits with 2 on usage errors, but this tool's exit contract
+        # reserves 2 for a pack needing review; remap usage errors to 1.
+        # --help and -h exit with 0 and must keep doing so, so re-raise
+        # anything that is not a usage error.
+        if exc.code == 2:
+            return 1
+        raise
+    if args.command not in {"review", "workbench", "view", "queue", "reconcile", "drivers", "compare", "schedule", "classify"}:  # pragma: no cover - argparse validates command choices.
+        parser.error("unknown command")
+    handlers = {
+        "classify": _run_classify,
+        "schedule": _run_schedule,
+        "compare": _run_compare,
+        "drivers": _run_drivers,
+        "reconcile": _run_reconcile,
+        "queue": _run_queue,
+        "view": _run_view,
+        "review": _run_review,
+        "workbench": _run_review,
+    }
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":

@@ -70,6 +70,151 @@ def test_redact_writes_output_and_manifest(tmp_path) -> None:
     assert "values" not in manifest
 
 
+@pytest.mark.parametrize("source,kind,value", [
+    ("TFN: 123.456.782", "tfn", "123.456.782"),
+    ("TFN 123\u2013456\u2013789", "tfn", "123\u2013456\u2013789"),
+    ("TFN: 123,456,782", "tfn", "123,456,782"),
+    ("Tax File Number (TFN): 123 456 789", "tfn", "123 456 789"),
+    ("Client TFN is 123 456 789", "tfn", "123 456 789"),
+    ("ABN 51.824.753.556", "abn", "51.824.753.556"),
+    ("BSB 062 000", "bsb", "062 000"),
+    ("Medicare: 2123 45670 1 1", "medicare", "2123 45670 1 1"),
+    ("Medicare no. 2123 45670 1-1", "medicare", "2123 45670 1-1"),
+    ("Medicare: 2123 45670 1/1", "medicare", "2123 45670 1/1"),
+    ("Account 062-000 1234 5678", "number", "1234 5678"),
+    ("123.456.782", "number", "123.456.782"),
+    ("TFN: 123.456.782.00", "number", "123.456.782.00"),
+    ("TFN: 123.456.782..00", "number", "123.456.782..00"),
+    ("192.168.100.107", "number", "192.168.100.107"),
+    ("version 123.456.782.00", "number", "123.456.782.00"),
+])
+def test_verify_reports_literal_legacy_identifier_leaks(tmp_path, capsys, source, kind, value):
+    root = workspace(tmp_path)
+    (root / "entities.json").write_text('{"schema_version": 1, "entries": []}', encoding="utf-8")
+    # Written from test vectors, independently of the redactor under test.
+    legacy = root / "legacy.md"
+    legacy.write_text("TFN_01 was replaced.\n" + source + "\n", encoding="utf-8")
+    assert main(["verify", "--in", str(legacy), "--map", str(root / "entities.json")]) == 2
+    console = capsys.readouterr()
+    assert kind + ":" in console.out
+    assert value not in console.out + console.err
+    assert not any(char.isdecimal() for char in console.out.split(":", 1)[0])
+
+
+@pytest.mark.parametrize("source", [
+    "Client TFN is 123 456 789", "Account 062-000 1234 5678", "123.456.782",
+    "TFN: 123.456.782.00", "192.168.100.107", "version 123.456.782.00",
+    "Tax File Number (TFN): 123 456 789",
+])
+@pytest.mark.parametrize("stale", [False, True])
+def test_identifier_halts_remove_output_and_manifest(tmp_path, source, stale):
+    root = workspace(tmp_path)
+    entity_map, original, output = root / "entities.json", root / "in.md", root / "out.md"
+    entity_map.write_text('{"schema_version": 1, "entries": []}', encoding="utf-8")
+    original.write_text(source, encoding="utf-8")
+    manifest = root / "out.md.manifest.json"
+    if stale:
+        output.write_text("fabricated stale output", encoding="utf-8")
+        manifest.write_text('{"schema_version": 1, "counts": {}}', encoding="utf-8")
+    assert main(["redact", "--in", str(original), "--map", str(entity_map),
+                 "--out", str(output)]) == 2
+    assert not output.exists()
+    assert not manifest.exists()
+    assert original.read_text(encoding="utf-8") == source
+
+
+def test_number_triage_explains_one_way_identifier_and_entity_remedies(tmp_path):
+    root = workspace(tmp_path)
+    source, output = root / "in.md", root / "out.md"
+    source.write_text("account 1234 5678", encoding="utf-8")
+    assert main(["redact", "--in", str(source), "--map", str(root / "entities.json"),
+                 "--out", str(output)]) == 2
+    triage = cli._triage_path(output).read_text(encoding="utf-8")
+    assert "(number, line 1)" in triage
+    assert "TFN, ABN, ACN or Medicare" in triage
+    assert "one-way" in triage
+    assert "map any other number as an entity" in triage
+
+
+def test_numeric_entity_cli_round_trip_keeps_the_bsb_one_way(tmp_path, capsys):
+    root = workspace(tmp_path)
+    entity_map, original, output = root / "entities.json", root / "in.md", root / "out.md"
+    entity_map.write_text(json.dumps({"schema_version": 1, "entries": [
+        {"value": "1234 5678", "placeholder": "ENTITY_01", "kind": "entity", "added": "2026-10-10"},
+    ]}), encoding="utf-8")
+    original.write_text("account 062-000 1234 5678", encoding="utf-8")
+    assert main(["redact", "--in", str(original), "--map", str(entity_map),
+                 "--out", str(output)]) == 0
+    assert output.read_text(encoding="utf-8") == "account BSB_01 ENTITY_01"
+    capsys.readouterr()
+    assert main(["verify", "--in", str(output), "--map", str(entity_map)]) == 0
+    restored = root / "restored.md"
+    assert main(["restore", "--in", str(output), "--map", str(entity_map),
+                 "--out", str(restored)]) == 0
+    assert restored.read_text(encoding="utf-8") == "account BSB_01 1234 5678"
+
+
+@pytest.mark.parametrize("source", ["123.456.782", "TFN: 123.456.782.00",
+                                    "Account 123.456.782", "123456782/00",
+                                    "123456782\u201300", "TFN: 123.456.782/00"])
+@pytest.mark.parametrize("mapped", [None, "456", "Account 123"])
+def test_review_numeric_counterexamples_halt_and_refuse_disclosure(tmp_path, capsys, source, mapped):
+    root = workspace(tmp_path, "entities.json\n*.triage.md\n*.disclosure.json\n")
+    mapping, original, output = root / "entities.json", root / "in.md", root / "out.md"
+    entries = [] if mapped is None else [
+        {"value": mapped, "placeholder": "ENTITY_01", "kind": "entity", "added": "2026-10-10"},
+    ]
+    mapping.write_text(json.dumps({"schema_version": 1, "entries": entries}), encoding="utf-8")
+    original.write_text(source, encoding="utf-8")
+    output.write_text("fabricated stale output", encoding="utf-8")
+    manifest = root / "out.md.manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+    assert main(["redact", "--in", str(original), "--map", str(mapping), "--out", str(output)]) == 2
+    assert not output.exists()
+    assert not manifest.exists()
+    assert main(["verify", "--in", str(original), "--map", str(mapping)]) == 2
+    console = capsys.readouterr()
+    assert source not in console.out + console.err
+    record = root / "out.disclosure.json"
+    assert main(["disclosure-record", "--in", str(original), "--map", str(mapping),
+                 "--out", str(record), "--destination", "model:sample:project",
+                 "--decision-ref", "sample:42"]) == 2
+    assert not record.exists()
+
+
+@pytest.mark.parametrize("source", ["1-123456782", "1--123456782", "12- 062-000",
+                                   "1-51824753556", "1-000000019", "1-2123456701"])
+def test_digit_hyphen_prefix_halt_removes_stale_files_and_verify_hides_values(tmp_path, capsys, source):
+    root = workspace(tmp_path)
+    mapping, original, output = root / "entities.json", root / "in.md", root / "out.md"
+    mapping.write_text('{"schema_version": 1, "entries": []}', encoding="utf-8")
+    original.write_text(source, encoding="utf-8")
+    output.write_text("fabricated stale output", encoding="utf-8")
+    manifest = root / "out.md.manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+    assert main(["redact", "--in", str(original), "--map", str(mapping), "--out", str(output)]) == 2
+    assert not output.exists()
+    assert not manifest.exists()
+    assert main(["verify", "--in", str(original), "--map", str(mapping)]) == 2
+    console = capsys.readouterr()
+    assert "number:" in console.out
+    assert source not in console.out + console.err
+
+
+@pytest.mark.parametrize("size", [500, 1_000, 2_000])
+def test_numeric_triage_quotes_each_wide_line_once(tmp_path, size):
+    from evatt.errors import Halt
+    from evatt.redact import residual
+
+    source = ";".join(str(10_000_000 + index) for index in range(size)) + "\n"
+    path = tmp_path / "wide.triage.md"
+    cli._write_triage(path, Halt(residual(source)))
+    triage = path.read_text(encoding="utf-8")
+    assert triage.count("  > " + source.strip()) == 1
+    assert triage.count("(number, line 1)") == size
+    assert len(triage) < len(source) * 8 + 2_000
+
+
 @pytest.mark.parametrize('label,kind,value', [
     ('TFN', 'tfn', '123 456 783'),
     ('ABN', 'abn', '51 824 753 557'),

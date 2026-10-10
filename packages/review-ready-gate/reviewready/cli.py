@@ -130,43 +130,93 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         raise
     if args.command == "intake":
-        try:
-            output = create_intake(source_path=args.source, text_path=args.text,
-                                   output_dir=args.output, entity=args.entity,
-                                   period_end=args.period_end, text_origin=args.text_origin,
-                                   text_version=args.text_version)
-        except (GateInputError, OSError, ValueError) as exc:
-            print(f"review-ready intake: {exc}", file=sys.stderr)
-            return 1
-        print(f"review-ready intake: proposed fields written to {output}; human review required.")
-        return 0
+        return _handle_intake(args)
     if args.command == "view-document":
-        try:
-            print(render_document(load_document(args.bundle)))
-        except GateInputError as exc:
-            print(f"review-ready view-document: verification failed: {exc}", file=sys.stderr)
-            return 1
-        return 0
+        return _handle_view_document(args)
     if args.command == "compare":
-        try:
-            comparison = compare_packs(args.previous_pack_dir, args.current_pack_dir)
-        except GateInputError as exc:
-            print(f"review-ready compare: verification failed: {exc}", file=sys.stderr)
-            return 1
-        print(json.dumps(comparison, indent=2, sort_keys=True))
-        return 0
+        return _handle_compare(args)
     if args.command == "view":
-        try:
-            sheet, _ = render_review_sheet(args.pack_dir, document_paths=tuple(args.document))
-        except GateInputError as exc:
-            print(f"review-ready view: verification failed: {exc}", file=sys.stderr)
-            return 1
-        print(sheet)
+        return _handle_view(args)
+    return _handle_gate(args)
+
+
+def _handle_intake(args: argparse.Namespace) -> int:
+    try:
+        output = create_intake(source_path=args.source, text_path=args.text,
+                               output_dir=args.output, entity=args.entity,
+                               period_end=args.period_end, text_origin=args.text_origin,
+                               text_version=args.text_version)
+    except (GateInputError, OSError, ValueError) as exc:
+        print(f"review-ready intake: {exc}", file=sys.stderr)
+        return 1
+    print(f"review-ready intake: proposed fields written to {output}; human review required.")
+    return 0
+
+
+def _handle_view_document(args: argparse.Namespace) -> int:
+    try:
+        print(render_document(load_document(args.bundle)))
+    except GateInputError as exc:
+        print(f"review-ready view-document: verification failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _handle_compare(args: argparse.Namespace) -> int:
+    try:
+        comparison = compare_packs(args.previous_pack_dir, args.current_pack_dir)
+    except GateInputError as exc:
+        print(f"review-ready compare: verification failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(comparison, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_view(args: argparse.Namespace) -> int:
+    try:
+        sheet, _ = render_review_sheet(args.pack_dir, document_paths=tuple(args.document))
+    except GateInputError as exc:
+        print(f"review-ready view: verification failed: {exc}", file=sys.stderr)
+        return 1
+    print(sheet)
+    print(
+        "review-ready view: display is a review aid; it does not approve a file "
+        "or change any computed status."
+    )
+    return 0
+
+
+def _source_is_safe(flag: str, source: Path, output: Path, destinations: set[Path]) -> bool:
+    resolved = source.resolve()
+    control = (output / CONTROL_NAME).resolve()
+    if resolved == control or control in resolved.parents:
+        print("review-ready: output error: input overlaps publication control", file=sys.stderr)
+        return False
+    if resolved in destinations:
         print(
-            "review-ready view: display is a review aid; it does not approve a file "
-            "or change any computed status."
+            f"review-ready: output error: {flag} {source} is inside --output and "
+            "shares a generated pack file name; the run would destroy it.",
+            file=sys.stderr,
         )
-        return 0
+        return False
+    if source.is_dir():
+        try:
+            children = list(source.iterdir())
+        except OSError as exc:
+            print(f"review-ready: input error: cannot inspect {flag}: {exc}", file=sys.stderr)
+            return False
+        for child in children:
+            if child.resolve() in destinations or child.resolve() == control:
+                print(
+                    f"review-ready: output error: {flag} contains {child.name}, which "
+                    "is a generated pack file name inside --output.",
+                    file=sys.stderr,
+                )
+                return False
+    return True
+
+
+def _gate_output_is_safe(args: argparse.Namespace) -> bool:
     # Both output guards run before any client file is opened. write_review_pack
     # repeats this one so a library caller cannot get past it, but a reviewer who
     # mistyped --output should hear about it before the run reads a workpaper
@@ -175,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         require_output_outside_repository(args.output)
     except GateInputError as exc:
         print(f"review-ready: output error: {exc}", file=sys.stderr)
-        return 1
+        return False
     destinations = {(args.output / name).resolve() for name in PACK_FILE_NAMES}
     for flag, source in (
         ("--pack", args.pack), ("--review-note", args.review_note),
@@ -183,32 +233,14 @@ def main(argv: list[str] | None = None) -> int:
     ):
         if source is None:
             continue
-        resolved = source.resolve()
-        control = (args.output / CONTROL_NAME).resolve()
-        if resolved == control or control in resolved.parents:
-            print("review-ready: output error: input overlaps publication control", file=sys.stderr)
-            return 1
-        if resolved in destinations:
-            print(
-                f"review-ready: output error: {flag} {source} is inside --output and "
-                "shares a generated pack file name; the run would destroy it.",
-                file=sys.stderr,
-            )
-            return 1
-        if source.is_dir():
-            try:
-                children = list(source.iterdir())
-            except OSError as exc:
-                print(f"review-ready: input error: cannot inspect {flag}: {exc}", file=sys.stderr)
-                return 1
-            for child in children:
-                if child.resolve() in destinations or child.resolve() == control:
-                    print(
-                        f"review-ready: output error: {flag} contains {child.name}, which "
-                        "is a generated pack file name inside --output.",
-                        file=sys.stderr,
-                    )
-                    return 1
+        if not _source_is_safe(flag, source, args.output, destinations):
+            return False
+    return True
+
+
+def _handle_gate(args: argparse.Namespace) -> int:
+    if not _gate_output_is_safe(args):
+        return 1
     try:
         pack = review_pack(
             profile=args.profile,

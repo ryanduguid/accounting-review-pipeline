@@ -179,6 +179,15 @@ def _parse_threshold(text: object, key: str) -> Decimal:
 
 
 def _verify_json_schema(document: dict[str, object]) -> None:
+    _verify_json_identity(document)
+    _verify_json_thresholds(document)
+    _verify_json_sources(document)
+    _verify_json_acknowledgement(document)
+    _verify_json_findings(document)
+    _verify_json_controls(document)
+
+
+def _verify_json_identity(document: dict[str, object]) -> None:
     status = document["overall_status"]
     if status not in _STATUSES:
         raise GateInputError(
@@ -199,6 +208,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
             f"{_JSON_NAME}: review_boundary does not match the written contract"
         )
 
+
+def _verify_json_thresholds(document: dict[str, object]) -> None:
     thresholds = document["thresholds"]
     if not isinstance(thresholds, dict) or set(thresholds) != set(_THRESHOLD_KEYS):
         raise GateInputError(
@@ -208,6 +219,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
     for key in _THRESHOLD_KEYS:
         _parse_threshold(thresholds[key], key)
 
+
+def _verify_json_sources(document: dict[str, object]) -> None:
     source_hashes = document["source_sha256"]
     if not isinstance(source_hashes, dict):
         raise GateInputError(f"{_JSON_NAME}: source_sha256 must be an object")
@@ -228,6 +241,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: source_sha256[{label!r}].sha256 is not a lowercase SHA-256 digest"
             )
 
+
+def _verify_json_acknowledgement(document: dict[str, object]) -> None:
     acknowledgement = document["acknowledgement"]
     if acknowledgement is not None:
         if not isinstance(acknowledgement, dict) or set(acknowledgement) != _ACK_MEMBERS:
@@ -247,6 +262,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: acknowledgement.effect disagrees with the written contract"
             )
 
+
+def _verify_json_findings(document: dict[str, object]) -> None:
     findings = document["findings"]
     if not isinstance(findings, list):
         raise GateInputError(f"{_JSON_NAME}: findings must be a list")
@@ -269,6 +286,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: findings[{index}].status is not a finding status"
             )
 
+
+def _verify_json_controls(document: dict[str, object]) -> None:
     # The summary renders one line per entry, so an added member here would be
     # one no other file witnesses, as with the findings above.
     controls = document.get("controls_not_run", [])

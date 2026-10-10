@@ -297,6 +297,14 @@ def _shown(text: object) -> str:
     return "".join(ch for ch in str(text)[:40] if ch.isprintable())
 
 
+def _too_long(text: str, digits: int) -> SystemExit:
+    return SystemExit(
+        f'error: report cell "{_shown(text)}" is {digits} digits '
+        "long, which is not a ledger balance. The API shape may have changed, "
+        "or this is not a trial balance report."
+    )
+
+
 def to_number(value: object) -> Decimal:
     """Parse a report cell into an exact Decimal.
 
@@ -314,6 +322,12 @@ def to_number(value: object) -> Decimal:
         amount = Decimal(text)
     except InvalidOperation:
         amount = None
+    except ValueError:
+        # Where the C decimal module is unavailable, decimal is _pydecimal,
+        # which converts the digits through int() and raises ValueError past
+        # sys.get_int_max_str_digits() (4300 by default). No ledger balance
+        # has that many digits.
+        raise _too_long(text, sum(ch.isdigit() for ch in text)) from None
     # Finite is not the same as usable. Decimal's default context stops at
     # Emax 999999, so a cell of "1E1000000" parses and is finite, then the
     # first total_debit += debit raises decimal.Overflow - an ArithmeticError,
@@ -327,11 +341,7 @@ def to_number(value: object) -> Decimal:
     # ledger holds them, and format_amount would build the same absurd field.
     if amount is not None and amount.is_finite():
         if amount.adjusted() > MAX_EXPONENT:
-            raise SystemExit(
-                f'error: report cell "{_shown(text)}" is {amount.adjusted() + 1} digits '
-                "long, which is not a ledger balance. The API shape may have changed, "
-                "or this is not a trial balance report."
-            )
+            raise _too_long(text, amount.adjusted() + 1)
         if amount.adjusted() < -MAX_EXPONENT:
             raise SystemExit(
                 f'error: report cell "{_shown(text)}" is smaller than any ledger '
