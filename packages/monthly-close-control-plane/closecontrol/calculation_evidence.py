@@ -167,11 +167,7 @@ def _array(value: object, field: str, path: Path) -> list:
     return value
 
 
-def load(path: Path | SourceSnapshot) -> CalculationEvidence:
-    """Read and validate one evidence file. Raises on anything unreadable."""
-    snapshot = path if isinstance(path, SourceSnapshot) else SourceSnapshot.capture(
-        path, label="Calculation-evidence file",
-    )
+def _read_record(snapshot: SourceSnapshot) -> dict:
     source = snapshot.path
     if len(snapshot.content) > MAX_EVIDENCE_BYTES:
         raise SchemaError(f"{source}: evidence file exceeds {MAX_EVIDENCE_BYTES} bytes.")
@@ -192,6 +188,10 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     if not isinstance(record, dict):
         raise SchemaError(f"{source}: evidence must be a JSON object.")
 
+    return record
+
+
+def _validate_record(record: dict, source: Path) -> tuple[str, dict, bool, str, list[str]]:
     schema = _text(record.get("schema"), "schema", source, limit=120)
     if schema not in SUPPORTED_SCHEMAS:
         raise SchemaError(
@@ -219,23 +219,10 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
             f"({actual_digest}). The file has been changed since it was produced."
         )
 
-    call = _block(calculation, "call")
-    provider = _block(calculation, "provider")
-    upstream = _block(calculation, "upstream")
-    engine = _block(calculation, "engine")
-    normalised = _block(calculation, "normalised")
+    return schema, calculation, synthetic_input, recorded_digest, findings
 
-    label = _label(calculation.get("label", source.stem), source)
-    status = _text(call.get("status", "UNKNOWN"), "call.status", source, limit=60)
-    calculator = _text(call.get("calculator") or "", "call.calculator", source, limit=200)
-    period = _text(call.get("period") or "", "call.period", source, limit=200)
-    provider_name = _text(provider.get("name") or "", "provider.name", source, limit=120)
-    engine_name = _text(
-        engine.get("name") or provider.get("contract_snapshot") or "", "engine", source, limit=200,
-    )
 
-    manifest = upstream.get("manifest")
-    advisory = upstream.get("advisory")
+def _read_rate_tables(manifest: object, status: str, source: Path, findings: list[str]) -> list[str]:
     if status in COMPUTED_STATUSES:
         if not isinstance(manifest, dict) or not manifest:
             findings.append(
@@ -265,6 +252,10 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
                 )
                 continue
             rate_tables.append(_text(uri, f"{where}.uri", source))
+    return rate_tables
+
+
+def _read_advisory_notes(advisory: object, status: str, source: Path, findings: list[str]) -> list[str]:
     notes: list[str] = []
     if isinstance(advisory, dict):
         entries = _array(advisory.get("notes"), "advisory.notes", source)
@@ -284,19 +275,20 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
             "own boundary statement is missing"
         )
 
+    return notes
+
+
+def _read_values(normalised: dict, source: Path) -> dict[str, Decimal]:
     values: dict[str, Decimal] = {}
     raw_values = _block(normalised, "values")
     for name, amount in sorted(raw_values.items()):
         key = _text(name, "normalised.values key", source, limit=80)
         values[key] = _decimal(amount, f"normalised.values.{key}", source)
 
-    if status in COMPUTED_STATUSES and not values:
-        findings.append(
-            "the evidence records a computed figure and carries no normalised value, so there "
-            "is no figure in it. A label alone does not satisfy a required calculation."
-        )
+    return values
 
-    validation = _block(calculation, "validation")
+
+def _validate_producer(validation: dict, status: str, source: Path, findings: list[str]) -> None:
     if "accepted" in validation:
         accepted = validation["accepted"]
         if type(accepted) is not bool:
@@ -317,6 +309,43 @@ def load(path: Path | SourceSnapshot) -> CalculationEvidence:
                 "the producer recorded a validation finding: "
                 + _text(finding, where, source, limit=600)
             )
+
+
+def load(path: Path | SourceSnapshot) -> CalculationEvidence:
+    """Read and validate one evidence file. Raises on anything unreadable."""
+    snapshot = path if isinstance(path, SourceSnapshot) else SourceSnapshot.capture(
+        path, label="Calculation-evidence file",
+    )
+    source = snapshot.path
+    record = _read_record(snapshot)
+    schema, calculation, synthetic_input, recorded_digest, findings = _validate_record(record, source)
+    call = _block(calculation, "call")
+    provider = _block(calculation, "provider")
+    upstream = _block(calculation, "upstream")
+    engine = _block(calculation, "engine")
+    normalised = _block(calculation, "normalised")
+
+    label = _label(calculation.get("label", source.stem), source)
+    status = _text(call.get("status", "UNKNOWN"), "call.status", source, limit=60)
+    calculator = _text(call.get("calculator") or "", "call.calculator", source, limit=200)
+    period = _text(call.get("period") or "", "call.period", source, limit=200)
+    provider_name = _text(provider.get("name") or "", "provider.name", source, limit=120)
+    engine_name = _text(
+        engine.get("name") or provider.get("contract_snapshot") or "", "engine", source, limit=200,
+    )
+
+    manifest = upstream.get("manifest")
+    advisory = upstream.get("advisory")
+    rate_tables = _read_rate_tables(manifest, status, source, findings)
+    notes = _read_advisory_notes(advisory, status, source, findings)
+    values = _read_values(normalised, source)
+    if status in COMPUTED_STATUSES and not values:
+        findings.append(
+            "the evidence records a computed figure and carries no normalised value, so there "
+            "is no figure in it. A label alone does not satisfy a required calculation."
+        )
+
+    _validate_producer(_block(calculation, "validation"), status, source, findings)
 
     return CalculationEvidence(
         label=label,
