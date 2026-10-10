@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,219 @@ PARENTHESISED = (
 )
 ENTITY_ONLY = "Jane Roe of Sample Holdings Pty Ltd lodged on time"
 STRUCTURED = "Jane Roe, TFN 123 456 782, ABN 51 824 753 556, BSB 062-000"
+
+
+@pytest.mark.parametrize("source,expected,counts", [
+    ("TFN: 123.456.782", "TFN: TFN_01", {"tfn": 1}),
+    ("TFN 123\u2013456\u2013789", "TFN TFN_01", {"tfn": 1}),
+    ("TFN: 123,456,782", "TFN: TFN_01", {"tfn": 1}),
+    ("ABN 51.824.753.556", "ABN ABN_01", {"abn": 1}),
+    ("BSB 062 000", "BSB BSB_01", {"bsb": 1}),
+    ("Medicare: 2123 45670 1 1", "Medicare: MEDICARE_01", {"medicare": 1}),
+    ("Medicare no. 2123 45670 1-1", "Medicare no. MEDICARE_01", {"medicare": 1}),
+    ("Medicare: 2123 45670 1/1", "Medicare: MEDICARE_01", {"medicare": 1}),
+])
+def test_strict_redact_removes_new_identifier_spellings(source, expected, counts) -> None:
+    assert redact_module.redact(source, ()) == (expected, counts)
+
+
+def test_client_tfn_label_is_replaced_before_the_existing_name_halt() -> None:
+    source = "Client TFN is 123 456 789"
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(source, ())
+    assert [(u.kind, u.value, u.context) for u in caught.value.unknowns] == [
+        ("name", "Client TFN", "Client TFN is TFN_01"),
+    ]
+
+
+def test_compound_tfn_label_is_replaced_before_name_triage() -> None:
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("Tax File Number (TFN): 123 456 789", ())
+    assert [(u.kind, u.value, u.context) for u in caught.value.unknowns] == [
+        ("name", "File Number", "Tax File Number (TFN): TFN_01"),
+    ]
+
+
+@pytest.mark.parametrize("source,value", [
+    ("Account 062-000 1234 5678", "1234 5678"),
+    ("123.456.782", "123.456.782"),
+    ("TFN: 123.456.782.00", "123.456.782.00"),
+    ("TFN: 123.456.782..00", "123.456.782..00"),
+    ("123456782..00", "123456782..00"),
+    ("192.168.100.107", "192.168.100.107"),
+    ("version 123.456.782.00", "123.456.782.00"),
+])
+def test_strict_redact_halts_on_a_whole_unclassified_number(source, value) -> None:
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(source, ())
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("number", value)]
+    if source.startswith("Account"):
+        assert caught.value.unknowns[0].context == "Account BSB_01 1234 5678"
+
+
+def test_a_dotted_amount_is_never_partly_replaced() -> None:
+    source = "amount 123456782.00"
+    assert redact_module.redact(source, ()) == (source, {})
+
+
+@pytest.mark.parametrize("source,value", [
+    ("123.456.782", "123.456.782"),
+    ("TFN: 123.456.782.00", "123.456.782.00"),
+    ("Account 123.456.782", "123.456.782"),
+])
+@pytest.mark.parametrize("mapped", ["456", "Account 123"])
+def test_partial_entities_cannot_split_a_numeric_halt(source, value, mapped):
+    mapping = (Entity(mapped, "ENTITY_01", "entity", "2026-10-10"),)
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(source, mapping)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("number", value)]
+    sanitised, counts = redact_module.redact(source, mapping, strict=False)
+    assert sanitised == source
+    assert counts == {}
+    assert any(f.kind == "number" for f in verify_module.findings(sanitised, mapping))
+
+
+@pytest.mark.parametrize("value", ["123456782/00", "123456782\u201300", "TFN: 123.456.782/00",
+                                  "00/123456782", "00\u2013123456782"])
+def test_structured_replacement_does_not_destroy_numeric_continuations(value):
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(value, ())
+    expected = value.removeprefix("TFN: ")
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("number", expected)]
+
+
+@pytest.mark.parametrize("value", ["1-123456782", "1--123456782", "12- 062-000",
+                                  "1-51824753556", "1-000000019", "1-2123456701"])
+def test_digit_hyphen_prefixes_halt_on_the_whole_token(value):
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(value, ())
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("number", value)]
+
+
+@pytest.mark.parametrize("source,expected", [("123-456-782", "TFN_01"),
+                                            ("row 7 123456782", "row 7 TFN_01")])
+def test_internal_hyphens_and_table_row_prefixes_keep_structured_detection(source, expected):
+    assert redact_module.redact(source, ()) == (expected, {"tfn": 1})
+
+
+@pytest.mark.parametrize("size", [500, 1_000, 2_000])
+def test_numeric_findings_share_one_context_per_wide_line(size):
+    source = ";".join(str(10_000_000 + index) for index in range(size)) + "\n"
+    findings = redact_module.residual(source)
+    assert len(findings) == size
+    assert [u.value for u in findings] == [str(10_000_000 + index) for index in range(size)]
+    assert len({id(u.context) for u in findings}) == 1
+
+
+@pytest.mark.parametrize("mapped", ["1234 5678;1234", "5678;1234.5679.00"])
+def test_an_entity_must_contain_every_numeric_token_it_overlaps(mapped):
+    source = "1234 5678;1234.5679.00"
+    mapping = (Entity(mapped, "ENTITY_01", "entity", "2026-10-10"),)
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(source, mapping)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [
+        ("number", "1234 5678"), ("number", "1234.5679.00"),
+    ]
+
+
+@pytest.mark.parametrize("value", ["account 1234 5678", "123.456.782"])
+def test_an_entity_containing_the_complete_numeric_token_remains_reversible(value):
+    mapping = (Entity(value, "ENTITY_01", "entity", "2026-10-10"),)
+    output, counts = redact_module.redact(value, mapping)
+    assert (output, counts) == ("ENTITY_01", {"entity": 1})
+    assert verify_module.findings(output, mapping) == ()
+    assert restore(output, mapping) == value
+
+
+def test_medicare_with_and_without_reference_uses_one_core_placeholder() -> None:
+    source = "Medicare: 2123 45670 1; 2123456701/1; Medicare: 2123.45670.1-2"
+    assert redact_module.redact(source, ()) == (
+        "Medicare: MEDICARE_01; MEDICARE_01; Medicare: MEDICARE_01", {"medicare": 3},
+    )
+
+
+@pytest.mark.parametrize("value", [
+    "1234567.82", "1234567.80", "21234567.01", "518247535.56", "123,456,782",
+    "123,456,780", "2,123,456,701", "51,824,753,556", "123.456.782.00",
+    "1234 5678", "1234\t5678", "1234\u22125678", "1234/5678", "1234--5678",
+])
+def test_number_sweep_reports_complete_tokens_including_checksum_amounts(value):
+    source = "$" + value
+    assert [(u.kind, u.value, u.line, u.context) for u in redact_module.residual(source)] == [
+        ("number", value, 1, source),
+    ]
+
+
+@pytest.mark.parametrize("value", [
+    "1234567.83", "12345678.00", "123456782.00", "1,234,567", "12,345,678",
+    "123,456,783", "2026-10-10", "2024-02-29", "1234\n5678", "1234\r5678",
+    "1234\u20285678", "1234   5678", "1234---5678", "1234567", "1.2.3",
+])
+def test_number_sweep_keeps_the_bounded_amount_date_and_gap_exclusions(value):
+    assert redact_module.residual(value) == ()
+
+
+@pytest.mark.parametrize("source,expected", [
+    ("2026-10-10 1234 5678", [("number", "1234 5678")]),
+    ("2026-02-30", [("number", "2026-02-30")]),
+    ("01/10/2026 1234 5678", [("date", "01/10/2026"), ("number", "1234 5678")]),
+    ("12 Hunter Street 1234 5678", [("address", "12 Hunter Street"), ("number", "1234 5678")]),
+    ("TFN_01 1234 5678", [("number", "1234 5678")]),
+    ("ENTITY_12345678 1234 5678", [("number", "1234 5678")]),
+])
+def test_number_sweep_masks_other_candidates_and_classifies_the_date_remainder(source, expected):
+    assert [(u.kind, u.value) for u in redact_module.residual(source)] == expected
+
+
+def test_number_sweep_deduplicates_per_line_and_value_and_keeps_context():
+    source = "1234 5678; 1234 5678\n1234 5678; 8765 4321"
+    assert [(u.value, u.line, u.context) for u in redact_module.residual(source)] == [
+        ("1234 5678", 1, "1234 5678; 1234 5678"),
+        ("1234 5678", 2, "1234 5678; 8765 4321"),
+        ("8765 4321", 2, "1234 5678; 8765 4321"),
+    ]
+
+
+@pytest.mark.parametrize("unit", ["9", "9-", "9.,", "9\t ", "-", " "])
+def test_number_sweep_scales_on_long_digits_and_separator_runs(unit):
+    def elapsed(size):
+        source = unit * size
+        best = float("inf")
+        for _ in range(3):
+            started = time.perf_counter()
+            result = redact_module.residual(source)
+            if unit.startswith("9"):
+                assert [(u.kind, u.value) for u in result] == [("number", source.rstrip("-.,\t "))]
+            else:
+                assert result == ()
+            best = min(best, time.perf_counter() - started)
+        return best
+
+    small = elapsed(5_000)
+    assert small < 0.1
+    large = elapsed(20_000)
+    assert large < small * 8 + 0.010
+
+
+def test_numeric_entity_loads_replaces_verifies_and_restores(tmp_path):
+    import json
+
+    path = tmp_path / "entities.json"
+    document = {"schema_version": 1, "entries": [
+        {"value": "1234 5678", "placeholder": "ENTITY_01", "kind": "entity", "added": "2026-10-10"},
+    ]}
+    path.write_text(json.dumps(document), encoding="utf-8")
+    loaded = entities_module.load(path)
+    for source in ("account 1234 5678", "account 1234  5678", "account 1234\t5678"):
+        output, counts = redact_module.redact(source, loaded)
+        assert (output, counts) == ("account ENTITY_01", {"entity": 1})
+        assert verify_module.findings(output, loaded) == ()
+        assert restore(output, loaded) == "account 1234 5678"
+        assert [(f.kind, f.value) for f in verify_module.findings(source, loaded)] == [
+            ("entity", "1234 5678"),
+        ]
+    with pytest.raises(Halt):
+        redact_module.redact("account 12345678", loaded)
 
 
 def redact(text, entities=MAP):
@@ -684,10 +898,17 @@ def test_unmapped_name_sample_halts() -> None:
         redact_module.redact(sample("unmapped-name.md"), SAMPLE_MAP)
 
 
-def test_negatives_sample_is_left_untouched() -> None:
-    text, counts = redact_module.redact(sample("negatives.md"), SAMPLE_MAP)
-    assert text == sample("negatives.md")
+def test_negatives_sample_has_no_structured_replacements_but_halts_on_its_reference() -> None:
+    original = sample("negatives.md")
+    text, counts = redact_module.redact(original, SAMPLE_MAP, strict=False)
+    assert text == original
     assert counts == {}
+    with pytest.raises(Halt) as caught:
+        redact_module.redact(original, SAMPLE_MAP)
+    assert [(u.kind, u.value) for u in caught.value.unknowns] == [("number", "12345678")]
+    assert [(f.kind, f.value) for f in verify_module.findings(original, SAMPLE_MAP)] == [
+        ("number", "12345678"),
+    ]
 
 
 def test_unicode_names_sample_is_recognised() -> None:
@@ -698,7 +919,7 @@ def test_unicode_names_sample_is_recognised() -> None:
 
 def test_verify_is_clean_on_every_redactable_sample() -> None:
     for name in ("clean.md", "entities-only.md", "identifiers.md",
-                 "negatives.md", "unicode-names.md"):
+                 "unicode-names.md"):
         text, _counts = redact_module.redact(sample(name), SAMPLE_MAP)
         assert verify_module.findings(text, SAMPLE_MAP) == (), name
 

@@ -26,7 +26,7 @@ since nothing but the check digit separates one from an ordinary number. The
 origin module splits it the same way, applying its plausibility test inside
 ``if pattern is TFN_BARE`` and admitting the labelled pattern unconditionally.
 
-Six deliberate divergences from the origin:
+Deliberate divergences from the origin:
 
 * The twelve month names are not in ``_STATUTORY_WORDS`` here. Over Register
   text they filter citation noise; over a workpaper they suppress ``June
@@ -52,6 +52,13 @@ Six deliberate divergences from the origin:
   the origin takes one (``[\\s-]?``). PDF-to-text output doubles spaces. A
   bare TFN's 2 gaps need not match, where the origin required the second to
   repeat the first.
+* Labelled identifiers also accept dots, commas and Unicode dashes, explicit
+  long-name/acronym compound labels and bounded connector words. Labelled BSBs
+  accept a space. Bare patterns refuse numeric fragments beside dots, commas,
+  slashes and dashes, keeping their original interior digit separators so an
+  IPv4 suffix cannot be removed as a TFN.
+* Medicare spans consume an optional individual reference number but validate
+  only the ten-digit core. The redactor also keys the placeholder on that core.
 """
 from __future__ import annotations
 
@@ -98,7 +105,7 @@ PHONE = re.compile(
     r")(?!\d)"
 )
 # Every labelled pattern is built from the same gap expression and ends with
-# the same trailing ``(?![\s-]?\d)`` digit-count pin. The TFN label alone
+# the same separator alphabet in its trailing digit-count pin. The TFN label alone
 # accepts 8 digits as well as 9, because TFNs issued before 1988 were
 # 8.
 #
@@ -142,46 +149,63 @@ _WORD = r"(?:number|no|card(?:holder)?)(?![^\W_])\.?"
 _QUALIFIER = r"(?:%s\s*){0,2}" % _WORD
 _SEP = r"(?:[.:#,(|;/=\u2013-]\s*)?"
 _MARKUP = r"(?:[*_`][*_`\s]*(?![*_`\s]))?"
+# A mandatory connector word owns its following whitespace. It cannot split
+# the leading whitespace run in _GAP on a failing scan.
+_CONNECTOR = r"(?:(?:is|was|of)(?![^\W_])\s*)?"
 # A qualifier can close its own emphasis before the separator, as in
 # "**ABN no.**: 51 824 753 557", so a third _MARKUP sits between the first
 # qualifier and _SEP. Each _MARKUP takes a whole run or nothing, because of its
 # final lookahead, so 2 of them meeting across an empty qualifier give 2 parses
 # of a run, not one per split point.
-_GAP = r"\s*%s%s%s%s%s%s" % (_MARKUP, _QUALIFIER, _MARKUP, _SEP, _QUALIFIER, _MARKUP)
-# Digit groups inside an identifier may be separated by up to 2 spaces or
-# hyphens: PDF-to-text conversion doubles spaces, and "tfn:  123  456  782"
-# came back whole with a clean verify. Only the interior gap is widened. The
-# trailing pin stays one character, so "TFN: 123 456 782  2026" still takes the
-# identifier and leaves the year, where a 2-character pin would have lost the
-# identifier altogether. Mandatory digits separate every gap run, so the scan
-# stays linear.
-_DIGIT_GAP = r"[\s-]{0,2}"
+_GAP = r"\s*%s%s%s%s%s%s%s%s" % (
+    _MARKUP, _QUALIFIER, _MARKUP, _SEP, _QUALIFIER, _MARKUP, _CONNECTOR, _MARKUP,
+)
+# Keep wrapped structured identifiers working, while extending only labelled
+# digit gaps. Pins also recognise the number sweep's continuations, including
+# slashes, so a malformed suffix cannot leave short digits beside a placeholder.
+_LABEL_DIGIT_CLASS = r"[\s.,\u2010-\u2015\u2212-]"
+_LABEL_DIGIT_GAP = _LABEL_DIGIT_CLASS + r"{0,2}"
+NUMBER_SEPARATORS = " \t-/.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
+_NUMBER_CLASS = "[" + re.escape(NUMBER_SEPARATORS) + "]"
+_LABEL_PIN = r"(?![\s/.,\u2010-\u2015\u2212-]{0,2}\d)"
 # A label's own edges let an emphasis underscore touch it, so "__TFN__: ..."
 # is a label as "**TFN**: ..." already was; ``\b`` saw no edge between "_" and
 # "T". Letters on either side still make it part of a longer word.
 _LABEL_START = r"(?<![^\W_])"
-_LABEL_END = r"(?![^\W\d_])"
+# Minted placeholders such as TFN_01 are never labels. Otherwise their ordinal
+# and a following amount could be admitted as a new labelled identifier.
+_LABEL_END = r"(?![^\W\d_])(?!_\d)"
 # "tax file no." is as common as "tax file number". The qualifier stays
 # mandatory, so "tax file 2026-2027" is not a label.
 TFN_LABELLED = re.compile(
-    r"%s(?:tax file (?:number|no(?![^\W_])\.?)|TFN)%s%s(\d(?:%s\d){7,8})(?![\s-]?\d)"
-    % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
+    r"%s(?:tax file (?:number|no(?![^\W_])\.?)(?:[ \t]*\(TFN\))?|TFN)%s%s"
+    r"(\d(?:%s\d){7,8})%s"
+    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_DIGIT_GAP, _LABEL_PIN),
     re.I,
 )
 # The trailing dot of the spaced-out form is optional: "A.B.N 51 824 753 556"
 # is written as often as "A.B.N.", and the label is the evidence either way.
 ABN_LABELLED = re.compile(
-    r"%s(?:ABN%s|A\.B\.N\.?)%s(\d(?:%s\d){10})(?![\s-]?\d)"
-    % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
+    r"%s(?:Australian business (?:number|no(?![^\W_])\.?)(?:[ \t]*\(ABN\))?"
+    r"|ABN|A\.B\.N\.?)%s%s(\d(?:%s\d){10})%s"
+    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_DIGIT_GAP, _LABEL_PIN),
     re.I,
 )
 ACN_LABELLED = re.compile(
-    r"%s(?:ACN%s|A\.C\.N\.?)%s(\d(?:%s\d){8})(?![\s-]?\d)"
-    % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
+    r"%s(?:Australian company (?:number|no(?![^\W_])\.?)(?:[ \t]*\(ACN\))?"
+    r"|ACN|A\.C\.N\.?)%s%s(\d(?:%s\d){8})%s"
+    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_DIGIT_GAP, _LABEL_PIN),
     re.I,
 )
 MEDICARE_LABELLED = re.compile(
-    r"%sMedicare%s%s(\d(?:%s\d){9})(?![\s-]?\d)" % (_LABEL_START, _LABEL_END, _GAP, _DIGIT_GAP),
+    r"%sMedicare%s%s(\d(?:%s\d){9})(?P<reference>[\s/-]{1,2}[1-9])?"
+    r"(?![\s/.,\u2010-\u2015\u2212-]{0,2}\d)"
+    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_DIGIT_GAP),
+    re.I,
+)
+BSB_LABELLED = re.compile(
+    r"%sBSB%s%s(\d{3}[ \t-]\d{3})%s"
+    % (_LABEL_START, _LABEL_END, _GAP, _LABEL_PIN),
     re.I,
 )
 # All 4 bare runs take the same one-character money guard, ``(?<![\d$])``,
@@ -201,13 +225,32 @@ MEDICARE_LABELLED = re.compile(
 # The 2 gaps of a bare TFN are independent. The origin required the second to
 # repeat the first, so a valid TFN written "123  456 782" passed with no halt;
 # the check digit, not the spacing, is what separates a TFN from a number.
-TFN_BARE = re.compile(r"(?<![\d$])(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
-ABN = re.compile(r"(?<![\d$])(\d{2}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
-ACN = re.compile(r"(?<![\d$])(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})(?![\s-]?\d)")
-MEDICARE = re.compile(r"(?<![\d$])(\d{4}[\s-]{0,2}\d{5}[\s-]{0,2}\d)(?![\s-]?\d)")
+# Dots, commas, slashes and Unicode dashes stay outside bare digit gaps.
+# Both edges refuse fragments beside those separators, even with valid checksums.
+# Leading spaces still admit table-row identifiers under the existing money rule.
+_PUNCTUATION_CONTINUATION = r"[.,/\u2010-\u2015\u2212-]"
+_BARE_START = r"(?<![\d$])(?<!\d%s)(?<!\d%s%s)(?<!\d%s%s)" % (
+    _PUNCTUATION_CONTINUATION, _PUNCTUATION_CONTINUATION, _NUMBER_CLASS,
+    _NUMBER_CLASS, _PUNCTUATION_CONTINUATION,
+)
+_BARE_END = r"(?![\s-]?\d)(?!%s{0,2}\d)" % _NUMBER_CLASS
+TFN_BARE = re.compile(_BARE_START + r"(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})" + _BARE_END)
+ABN = re.compile(
+    _BARE_START + r"(\d{2}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})" + _BARE_END
+)
+ACN = re.compile(_BARE_START + r"(\d{3}[\s-]{0,2}\d{3}[\s-]{0,2}\d{3})" + _BARE_END)
+MEDICARE = re.compile(
+    _BARE_START + r"(\d{4}[\s-]{0,2}\d{5}[\s-]{0,2}\d)"
+    r"(?P<reference>[\s/-]{1,2}[1-9])?" + _LABEL_PIN
+)
 # No check digit exists for a BSB, so the hyphen is required. Accepting bare
 # 6-digit runs would swallow ordinary numbers with nothing to reject them on.
-BSB = re.compile(r"(?<![\d$-])(\d{3}-\d{3})(?![\d-])")
+_PUNCTUATION_END = r"(?!%s?%s\d|%s%s?\d)" % (
+    _NUMBER_CLASS, _PUNCTUATION_CONTINUATION, _PUNCTUATION_CONTINUATION, _NUMBER_CLASS,
+)
+# A space after a bare BSB can start a separate account number. Punctuation
+# continuations are ambiguous and must reach numeric triage as a whole token.
+BSB = re.compile(_BARE_START + r"(?<!-)(\d{3}-\d{3})(?![\d-])" + _PUNCTUATION_END)
 
 # The street-name tokens take the same accented letters as ``_TOKEN``. While
 # they were ASCII-only, "12 Gr\u00fcner Street" missed ADDRESS and reached the
@@ -463,6 +506,7 @@ _STRUCTURED: tuple[tuple[str, re.Pattern[str], Callable[[str], bool]], ...] = (
     ("medicare", MEDICARE_LABELLED, _always),
     ("tfn", TFN_LABELLED, _always),
     ("acn", ACN_LABELLED, _always),
+    ("bsb", BSB_LABELLED, _always),
     ("abn", ABN, valid_abn),
     ("medicare", MEDICARE, valid_medicare),
     ("tfn", TFN_BARE, valid_tfn),
@@ -567,6 +611,9 @@ def structured_spans(text: str) -> list[tuple[int, int, str, str]]:
             if kind not in {"email", "phone"} and not validator(digits):
                 continue
             start, end = match.span(group)
+            if kind == "medicare" and match.group("reference") is not None:
+                end = match.end("reference")
+                value = text[start:end]
             found.append((start, end, kind, value, priority))
     # Leftmost wins; at one start the longest wins; on an exact tie the kind
     # listed first in _STRUCTURED wins. A candidate wholly inside what is

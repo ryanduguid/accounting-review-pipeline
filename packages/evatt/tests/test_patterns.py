@@ -8,6 +8,7 @@ that is not a fiction, the BSB, for which no reserved range is published.
 import re
 import time
 
+import pytest
 from evatt import entities, patterns
 from evatt import redact as redact_module
 
@@ -15,6 +16,118 @@ VALID_TFN = "123456782"
 VALID_ABN = "51824753556"
 VALID_ACN = "000000019"
 VALID_MEDICARE = "2123456701"
+
+
+@pytest.mark.parametrize("source,expected", [
+    ("TFN: 123.456.782", [("tfn", "123.456.782")]),
+    ("TFN 123\u2013456\u2013789", [("tfn", "123\u2013456\u2013789")]),
+    ("TFN: 123,456,782", [("tfn", "123,456,782")]),
+    ("Tax File Number (TFN): 123 456 789", [("tfn", "123 456 789")]),
+    ("Client TFN is 123 456 789", [("tfn", "123 456 789")]),
+    ("ABN 51.824.753.556", [("abn", "51.824.753.556")]),
+    ("BSB 062 000", [("bsb", "062 000")]),
+    ("Medicare: 2123 45670 1 1", [("medicare", "2123 45670 1 1")]),
+    ("Medicare no. 2123 45670 1-1", [("medicare", "2123 45670 1-1")]),
+    ("Medicare: 2123 45670 1/1", [("medicare", "2123 45670 1/1")]),
+    ("Account 062-000 1234 5678", [("bsb", "062-000")]),
+    ("123.456.782", []),
+    ("TFN: 123.456.782.00", []),
+    ("TFN: 123.456.782..00", []),
+    ("192.168.100.107", []),
+    ("version 123.456.782.00", []),
+    ("amount 123456782.00", []),
+])
+def test_identifier_leak_spans_cover_the_expected_digits(source, expected) -> None:
+    spans = patterns.structured_spans(source)
+    assert [(kind, value) for _, _, kind, value in spans] == expected
+    assert all(source[start:end] == value for start, end, _, value in spans)
+
+
+@pytest.mark.parametrize("label,kind,digits", [
+    ("tax file number (TFN)", "tfn", "123456783"),
+    ("tax file no. (TFN)", "tfn", "123456783"),
+    ("Australian business number (ABN)", "abn", "51824753557"),
+    ("Australian business no. (ABN)", "abn", "51824753557"),
+    ("Australian company number (ACN)", "acn", "123456781"),
+    ("Australian company no. (ACN)", "acn", "123456781"),
+    ("Medicare", "medicare", "2123456711"),
+])
+@pytest.mark.parametrize("connector", [": ", " is ", " was ", " of "])
+@pytest.mark.parametrize("gap", [".", ",", "\t", "\u2010", "\u2011", "\u2012",
+                                 "\u2013", "\u2014", "\u2015", "\u2212"])
+def test_expanded_labelled_grammar_admits_failed_checksums(label, kind, digits, connector, gap):
+    value = gap.join(digits)
+    source = label + connector + value
+    assert [(k, v) for _, _, k, v in patterns.structured_spans(source)] == [(kind, value)]
+
+
+@pytest.mark.parametrize("value", [
+    "2123 45670 1 1", "2123 45670 1-1", "2123 45670 1/1", "2123 45670 1 /1",
+])
+def test_bare_medicare_validates_its_core_and_consumes_the_reference(value):
+    assert patterns.structured_spans(value) == [(0, len(value), "medicare", value)]
+
+
+@pytest.mark.parametrize("tail", [" 0", " 10", "/12", "-10", ".00", ",12"])
+def test_a_malformed_medicare_reference_does_not_leave_a_partial_core(tail):
+    source = "Medicare: 2123 45670 1" + tail
+    assert patterns.MEDICARE_LABELLED.search(source) is None
+    assert patterns.MEDICARE.search(source) is None
+    assert patterns.structured_spans(source) == []
+
+
+@pytest.mark.parametrize("source", [
+    "1.123456782", "123456782.00", "1,123456782", "123456782,00",
+    "192.168.100.107", "1.51824753556", "2123456701.00", "1,123456780",
+    "1.062-000", "062-000.12",
+    "1..123456782", "123456782..00", "1,.123456782", "123456782,.00",
+])
+def test_bare_numeric_patterns_never_remove_dotted_or_comma_fragments(source):
+    assert patterns.structured_spans(source) == []
+
+
+@pytest.mark.parametrize("source", ["123456782/00", "123456782\u201300", "TFN: 123.456.782/00",
+                                   "00/123456782", "00\u2013123456782"])
+def test_numeric_continuations_prevent_partial_structured_spans(source):
+    assert patterns.structured_spans(source) == []
+
+
+@pytest.mark.parametrize("value", ["123456782", "51824753556", "000000019", "2123456701", "062-000"])
+@pytest.mark.parametrize("separator", ["/", "\u2013", " /", "\u2013 "])
+def test_all_numeric_kinds_refuse_ambiguous_punctuation_continuations(value, separator):
+    assert patterns.structured_spans(value + separator + "00") == []
+
+
+@pytest.mark.parametrize("value", ["123456782", "51824753556", "000000019", "2123456701", "062-000"])
+@pytest.mark.parametrize("separator", ["-", "--", "- ", " -"])
+def test_digit_hyphen_prefixes_cannot_remove_a_structured_suffix(value, separator):
+    assert patterns.structured_spans("12" + separator + value) == []
+
+
+@pytest.mark.parametrize("prefix", ["TFN", "ABN", "ACN", "MEDICARE", "BSB"])
+def test_structured_placeholders_are_not_labels_for_following_amounts(prefix):
+    assert patterns.structured_spans(f"{prefix}_01  45,000.00") == []
+
+
+@pytest.mark.parametrize("unit", [
+    "tax file no. (TFN): is ", "Australian business number (ABN): of ",
+    "Australian company number (ACN): was ", "Medicare: is ", "BSB: was ",
+])
+@pytest.mark.parametrize("run", [" ", "\t", "-", ".,", "\u2013", "*_` "])
+def test_new_label_scans_have_bounded_growth(unit, run):
+    def elapsed(size):
+        source = unit + run * size + "x"
+        best = float("inf")
+        for _ in range(3):
+            start = time.perf_counter()
+            assert patterns.structured_spans(source) == []
+            best = min(best, time.perf_counter() - start)
+        return best
+
+    small = elapsed(2_000)
+    assert small < 0.1
+    large = elapsed(8_000)
+    assert large < small * 8 + 0.010
 
 
 def test_valid_check_digits_are_accepted() -> None:
