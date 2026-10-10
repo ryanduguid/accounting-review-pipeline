@@ -311,7 +311,6 @@ def _validate_producer(validation: dict, status: str, source: Path, findings: li
             )
 
 
-
 def load(path: Path | SourceSnapshot) -> CalculationEvidence:
     """Read and validate one evidence file. Raises on anything unreadable."""
     snapshot = path if isinstance(path, SourceSnapshot) else SourceSnapshot.capture(

@@ -378,6 +378,7 @@ def _verify_json_schema(document: dict[str, object]) -> None:
         _verify_schema_queries(document["client_queries"])
     _verify_schema_acknowledgement(document["acknowledgement"])
 
+
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:
     """Collect the summary's digest lines, rejecting a contradicted label.
 
@@ -1270,6 +1271,7 @@ def _verify_calculation_evidence(
             f"calculation evidence disagrees: {_JSON_NAME} and {_SUMMARY_NAME} state "
             "different calculations, figures or relied-on flags"
         )
+
 
 def _verify_summary_holds_no_register(summary_text: str) -> None:
     """A pack without the register must not have a summary that shows one.
