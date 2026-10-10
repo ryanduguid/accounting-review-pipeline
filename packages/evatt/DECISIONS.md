@@ -86,6 +86,26 @@ The former fallback that replaced a TFN before a year or amount separated by 2
 spaces now leaves the full ambiguous numeric token for triage. Interior grouped
 identifiers and table-row prefixes still retain their existing detection.
 
+47. (11 October 2026) a Medicare individual reference number written alone on
+the line after a complete ten-digit card number remains in the output. Ryan
+accepted this limit: `Medicare: 2123456701` followed by a line containing `1`
+becomes `Medicare: MEDICARE_01` followed by that same `1`. The card is replaced
+one-way; the reference alone is below the number sweep's 8-digit floor. Keep
+same-line references supported and do not consume a reference across a line
+break. Cost: the isolated reference can survive both strict redaction and
+verification, so read the output before sending it.
+
+48. (11 October 2026) refuse a TFN, ABN, ACN or Medicare candidate whose digits
+cross a line break into a numbered-list marker. Index complete markers once,
+including long indices and Unicode horizontal whitespace. A bounded probe also
+reports candidates that ordinary trailing pins hide, such as
+`TFN: 1234567` followed by `82. 3 next`. Protect the whole candidate, including
+its label, from intersecting structured and entity replacements, then report
+its digits as an unclassified number even below the per-line 8-digit floor.
+Keep bare checksum validation and genuine hard wraps. Cost: a genuine wrapped
+identifier followed by list-shaped punctuation also needs triage. This ruling
+covers these four identifier families; phone-only collisions remain outside it.
+
 ## Deferred minors, shipped as they are (28)
 
 - RED evidence was a single collection error, so the gitignore assertion was never observed failing on its own condition before implementation.

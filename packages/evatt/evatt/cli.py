@@ -41,6 +41,7 @@ import json
 import os
 import stat
 import sys
+from collections import deque
 from pathlib import Path
 from typing import NoReturn
 
@@ -48,8 +49,8 @@ from . import disclosure
 from . import entities as entities_module
 from . import verify as verify_module
 from .errors import EvattError, Halt
-from .patterns import value_pattern
-from .redact import redact
+from .patterns import _ambiguous_identifiers, value_pattern
+from .redact import _lines_and_starts, _locate, redact
 from .restore import restore
 from .version import __version__
 
@@ -452,9 +453,25 @@ def main(argv: list[str] | None = None) -> int:
 
     found = verify_module.findings(text, entity_map)
     if found:
+        # Index rejected captures once. Searching from the start for every
+        # finding mislocates repeated values and scales with document length.
+        lines, starts = _lines_and_starts(text)
+        ambiguous_locations: dict[str, deque[int]] = {}
+        seen: set[tuple[int, str]] = set()
+        for candidate in _ambiguous_identifiers(text):
+            line, _context = _locate(lines, starts, candidate.digit_start)
+            key = line, candidate.value
+            if key not in seen:
+                seen.add(key)
+                ambiguous_locations.setdefault(candidate.value, deque()).append(line)
         for finding in found:
-            match = value_pattern(finding.value).search(text)
-            location = f"line {text.count(chr(10), 0, match.start()) + 1}" if match else "detected in input"
+            locations = ambiguous_locations.get(finding.value) if finding.kind == "number" else None
+            if locations:
+                location = f"line {locations.popleft()}"
+            else:
+                match = value_pattern(finding.value).search(text)
+                location = (f"line {text.count(chr(10), 0, match.start()) + 1}"
+                            if match else "detected in input")
             print(f"{finding.kind}: {location}")
         print(f"{len(found)} finding(s); this file is not ready to send")
         return 2
