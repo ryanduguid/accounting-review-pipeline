@@ -18,10 +18,11 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned when the badge and install step named the Python 3.11 floor.
 # OAuth scope, refresh and reviewer claims are unchanged.
 README_SHA256 = "109D6FE25AA36B76283901EEBC25EAA528F2BC3B2E7BA4A11D98E5417A7F3C6F"
-# Re-pinned when server_bind() gained a NOSONAR comment recording that its
-# plain HTTP listener is the RFC 8252 loopback redirect. The comment is the
-# only change: AUTH_AST_SHA256 below still matches the executable tree.
-AUTH_SHA256 = "C2BFD788E844655BCC0763D6B97DA21AA7586302BD59F0BE4E6D6CA35C82C9CC"
+# Re-pinned when TOKEN_URL gained a Bandit "nosec B105" comment (the token
+# endpoint URL is not a password) after server_bind() gained its RFC 8252
+# loopback NOSONAR comment. Comments are the only change: AUTH_AST_SHA256
+# below still matches the executable tree.
+AUTH_SHA256 = "768EF89AA828819CD9665D44C985B4C8F4AEF7D162EC2DB0C09A7F3683C30939"
 AUTH_AST_SHA256 = "447F06AB01AC54030EB70B79EB9B748A9BDFD822C262FDF9FBD9F28D0CE83AD4"
 
 SCOPES_URL = "https://developer.xero.com/documentation/guides/oauth2/scopes/"

@@ -101,7 +101,7 @@ def test_gst_tieout_allows_whole_dollar_truncation(
     tmp_path: Path, labels: tuple[str, str], postings: tuple[str, str], breaks: bool
 ) -> None:
     label_1a, label_1b = labels
-    collected, credits = postings
+    collected, claimed = postings
     pack_dir = copy_example_pack("bas-ready", tmp_path / "pack")
     (pack_dir / "activity_statement.csv").write_text(
         f"Label,Amount\n1A,{label_1a}\n1B,{label_1b}\n", encoding="utf-8"
@@ -109,7 +109,7 @@ def test_gst_tieout_allows_whole_dollar_truncation(
     (pack_dir / "gst_control_gl.csv").write_text(
         "Date,AccountID,AccountName,Debit,Credit,Description\n"
         f"2026-01-15,820,GST Payable,0.00,{collected},GST on sales\n"
-        f"2026-02-20,820,GST Payable,{credits},0.00,GST on purchases\n",
+        f"2026-02-20,820,GST Payable,{claimed},0.00,GST on purchases\n",
         encoding="utf-8",
     )
     pack = review_pack(profile="bas", pack_dir=pack_dir, tieout_tolerance=Decimal("0.01"))

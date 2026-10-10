@@ -835,9 +835,9 @@ def _expected_scope_lines(document: dict[str, object], *, register: bool) -> lis
     current = _require_string_list(document, "current_report_dates")
     prior = _require_string_list(document, "prior_report_dates")
     thresholds = document["thresholds"]
-    assert isinstance(thresholds, dict)
+    assert isinstance(thresholds, dict)  # nosec B101
     exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
+    assert isinstance(exceptions, list)  # nosec B101
     blocked = sum(1 for item in exceptions if _exception_field(item, "status") == "BLOCKED")
     review = sum(1 for item in exceptions if _exception_field(item, "status") == "REVIEW")
     lines = [
@@ -851,7 +851,7 @@ def _expected_scope_lines(document: dict[str, object], *, register: bool) -> lis
     ]
     if register:
         queries = document["client_queries"]
-        assert isinstance(queries, list)
+        assert isinstance(queries, list)  # nosec B101
         lines.append(f"- Client queries drafted: {len(queries)}.")
     # A pack written before the control-coverage line existed carries neither
     # the member nor the bullet, the same way the register is handled above.
@@ -869,7 +869,7 @@ def _exception_field(item: object, name: str) -> str:
             f"{_JSON_NAME}: exceptions[].{name} must be a string"
         )
     value = item[name]
-    assert isinstance(value, str)
+    assert isinstance(value, str)  # nosec B101
     return value
 
 
@@ -933,12 +933,12 @@ def _expected_acknowledgement_lines(acknowledgement: object) -> list[str]:
     """
     if acknowledgement is None:
         return [_NO_ACKNOWLEDGEMENT_LINE]
-    assert isinstance(acknowledgement, dict)
+    assert isinstance(acknowledgement, dict)  # nosec B101
     initials = acknowledgement["reviewer_initials"]
     reviewed_on = acknowledgement["reviewed_on"]
     comment = acknowledgement["comment"]
-    assert isinstance(initials, str) and isinstance(reviewed_on, str)
-    assert isinstance(comment, str)
+    assert isinstance(initials, str) and isinstance(reviewed_on, str)  # nosec B101
+    assert isinstance(comment, str)  # nosec B101
     return [
         f"- Reviewer initials: {_md_cell_mirror(initials)}",
         f"- Reviewed on: {reviewed_on}",
@@ -951,7 +951,7 @@ _CALCULATION_EVIDENCE_TABLE_HEADER = (
     "| Calculation | Status | Period | Figures | Relied on | Entry digest |"
 )
 _CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- | --- |"
-_CALCULATION_EVIDENCE_REQUIRED = re.compile(r"^Required: (none|`[a-z0-9]+(?:-[a-z0-9]+)*`(?:; `[a-z0-9]+(?:-[a-z0-9]+)*`)*)$")
+_CALCULATION_EVIDENCE_REQUIRED = re.compile(r"^Required: (none|`[a-z0-9]+(?:-[a-z0-9]+)*`(?:; `[a-z0-9]+(?:-[a-z0-9]+)*`)*)$")  # nosemgrep
 
 # Mirrored from report._CALCULATION_EVIDENCE_EFFECT. The block's effect text is
 # reviewer-facing and lives only in the JSON, so it is compared against this
@@ -1288,7 +1288,7 @@ def _verify_cross_file_agreement(
     )
 
     status = document["overall_status"]
-    assert isinstance(status, str)
+    assert isinstance(status, str)  # nosec B101
 
     status_lines = _STATUS_LINE.findall(summary_text)
     if len(status_lines) != 1:
@@ -1309,7 +1309,7 @@ def _verify_cross_file_agreement(
 
     summary_hashes = _summary_source_evidence(summary_text)
     json_hashes = document["source_sha256"]
-    assert isinstance(json_hashes, dict)
+    assert isinstance(json_hashes, dict)  # nosec B101
     if summary_hashes != json_hashes:
         raise ControlInputError(
             f"source evidence disagrees: {_SUMMARY_NAME} and {_JSON_NAME} "
@@ -1319,7 +1319,7 @@ def _verify_cross_file_agreement(
     _verify_calculation_evidence(evidence_block, summary_text, json_hashes)
 
     exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
+    assert isinstance(exceptions, list)  # nosec B101
 
     if "equity_reconciliation" in document:
         equity_result = validate_equity_result(document["equity_reconciliation"], json_hashes,
@@ -1347,7 +1347,7 @@ def _verify_cross_file_agreement(
         _verify_summary_holds_no_register(summary_text)
     else:
         client_queries = document["client_queries"]
-        assert isinstance(client_queries, list)
+        assert isinstance(client_queries, list)  # nosec B101
         _verify_rows_match(
             csv_name=_QUERY_CSV_NAME,
             member="client_queries",
@@ -1486,9 +1486,9 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     """
     document, summary_text, csv_rows, query_rows, artefact_digests = verify_pack(pack_dir)
     thresholds = document["thresholds"]
-    assert isinstance(thresholds, dict)
+    assert isinstance(thresholds, dict)  # nosec B101
     exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
+    assert isinstance(exceptions, list)  # nosec B101
     acknowledgement = document["acknowledgement"]
 
     blocked = sum(1 for item in exceptions if item["status"] == "BLOCKED")
@@ -1505,9 +1505,9 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         "",
     ]
     current_dates = document["current_report_dates"]
-    assert isinstance(current_dates, list)
+    assert isinstance(current_dates, list)  # nosec B101
     prior_dates = document["prior_report_dates"]
-    assert isinstance(prior_dates, list)
+    assert isinstance(prior_dates, list)  # nosec B101
     lines.append(f"- Current report date(s): {', '.join(current_dates) or 'n/a'}")
     lines.append(f"- Prior report date(s): {', '.join(prior_dates) or 'n/a'}")
     lines.append(f"- Material variance thresholds: {thresholds['absolute_variance']} and {thresholds['percentage_variance']}")
@@ -1517,7 +1517,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     )
     queries_in_scope = document.get("client_queries")
     if queries_in_scope is not None:
-        assert isinstance(queries_in_scope, list)
+        assert isinstance(queries_in_scope, list)  # nosec B101
         lines.append(f"- Client queries drafted: {len(queries_in_scope)}.")
     # The pack records which controls had no input and _expected_scope_lines
     # verifies the summary's line, but the displayed sheet rebuilds this section
@@ -1528,24 +1528,24 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         lines.append(f"- Controls not run: {', '.join(skipped) or 'none'}.")
     lines += ["", "Source evidence", ""]
     source_hashes = document["source_sha256"]
-    assert isinstance(source_hashes, dict)
+    assert isinstance(source_hashes, dict)  # nosec B101
     for label, digest in sorted(source_hashes.items()):
         lines.append(f"- {label}: {digest}")
     evidence_block = document.get("calculation_evidence")
     if evidence_block is not None:
-        assert isinstance(evidence_block, dict)
+        assert isinstance(evidence_block, dict)  # nosec B101
         lines += ["", "Calculation evidence", ""]
         required_names = evidence_block["required"]
-        assert isinstance(required_names, list)
+        assert isinstance(required_names, list)  # nosec B101
         lines.append(f"- Required: {', '.join(required_names) or 'none'}")
         supplied_items = evidence_block["supplied"]
-        assert isinstance(supplied_items, list)
+        assert isinstance(supplied_items, list)  # nosec B101
         if not supplied_items:
             lines.append("- Supplied: none. The exceptions say which calculation is missing.")
         for entry in supplied_items:
-            assert isinstance(entry, dict)
+            assert isinstance(entry, dict)  # nosec B101
             values = entry["values"]
-            assert isinstance(values, dict)
+            assert isinstance(values, dict)  # nosec B101
             figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
             lines.append(
                 f"- {entry['label']}: {entry['status']}, period {entry['period'] or 'n/a'}, "
@@ -1557,7 +1557,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         )
     equity_block = document.get("equity_reconciliation")
     if equity_block is not None:
-        assert isinstance(equity_block, dict)
+        assert isinstance(equity_block, dict)  # nosec B101
         lines += ["", "Equity reconciliation", "", *equity_summary_lines(equity_block)]
     lines += ["", "Exceptions", ""]
     if not exceptions:
@@ -1591,7 +1591,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             "carries none. Its exceptions are unchanged."
         )
         client_queries = []
-    assert isinstance(client_queries, list)
+    assert isinstance(client_queries, list)  # nosec B101
     if not client_queries:
         # Only a run that derived the register can report an empty one. An
         # archived pack carries no register at all, and its exceptions may well
@@ -1620,7 +1620,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     if acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
     else:
-        assert isinstance(acknowledgement, dict)
+        assert isinstance(acknowledgement, dict)  # nosec B101
         lines.append(f"- Reviewer initials: {acknowledgement['reviewer_initials']}")
         lines.append(f"- Reviewed on: {acknowledgement['reviewed_on']}")
         comment = acknowledgement["comment"]

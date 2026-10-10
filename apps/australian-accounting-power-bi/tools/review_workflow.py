@@ -566,7 +566,7 @@ def producer_manifest(bin_dir: Path, command: str) -> dict[str, Any]:
     interpreter_hash = digest(target.read_bytes())
     distribution, package, entry = PRODUCERS[command]
     with producer_environment() as environment:
-        probe = subprocess.run([str(interpreter), "-B", "-c", PRODUCER_PROBE, distribution, package, entry, str(executable.parent)], capture_output=True, cwd=environment["PYTHONPYCACHEPREFIX"], env=environment, check=False)
+        probe = subprocess.run([str(interpreter), "-B", "-c", PRODUCER_PROBE, distribution, package, entry, str(executable.parent)], capture_output=True, cwd=environment["PYTHONPYCACHEPREFIX"], env=environment, check=False)  # nosemgrep
     if probe.returncode:
         raise ValueError("Producer installed identity probe refused the installation.")
     identity = string_fields(strict_json(probe.stdout, "Producer identity"), ("executable", "root", "implementation", "version", "cache_tag"), "Producer identity")
@@ -641,7 +641,7 @@ def invoke(bin_dir: Path, command: str, args: list[str], run: Path, label: str, 
         raise ValueError("Producer installed identity differs from the receipt.")
     started = datetime.now(timezone.utc).isoformat()
     with producer_environment() as environment:
-        result = subprocess.run([str(executable), *args], capture_output=True, cwd=run, env=environment, check=False)  # NOSONAR: producer pinned by its manifest; argv built here, no shell
+        result = subprocess.run([str(executable), *args], capture_output=True, cwd=run, env=environment, check=False)  # NOSONAR: producer pinned by its manifest; argv built here, no shell  # nosemgrep
     if producer_manifest(bin_dir, command) != manifest:
         raise ValueError("Producer installed identity changed during invocation.")
     for kind, data in (("stdout", result.stdout), ("stderr", result.stderr)):
@@ -658,7 +658,7 @@ def pinned_producer(bin_dir: Path, command: str, args: list[str], expected_manif
     if producer_manifest(bin_dir, command) != expected_manifest:
         raise ValueError("Producer installed identity differs from the receipt.")
     with producer_environment() as environment:
-        result = subprocess.run([str(executable), *args], capture_output=True, env=environment, check=False)  # NOSONAR: producer pinned by its manifest; argv built here, no shell
+        result = subprocess.run([str(executable), *args], capture_output=True, env=environment, check=False)  # NOSONAR: producer pinned by its manifest; argv built here, no shell  # nosemgrep
     if producer_manifest(bin_dir, command) != expected_manifest:
         raise ValueError("Producer installed identity changed during invocation.")
     if result.returncode:

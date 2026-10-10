@@ -783,7 +783,7 @@ def test_a_review_artefact_not_marked_synthetic_is_refused(artefact: str, tmp_pa
         payload["mode"] = "live"
 
     with pytest.raises(GatewayError, match="Only synthetic review artefacts"):
-        _validate(_resealed_run(tmp_path, **{f"{artefact}_edit": relabel}))
+        _validate(_resealed_run(tmp_path, **{f"{artefact}_edit": relabel}))  # pylint: disable=unexpected-keyword-arg
 
 
 @pytest.mark.parametrize("artefact", ["evidence", "receipt", "decision"])
@@ -804,7 +804,7 @@ def test_a_run_id_that_disagrees_across_the_pack_is_refused(
         payload["run_id"] = "sha256:some-other-run"
 
     with pytest.raises(GatewayError, match="must refer to the same run_id"):
-        _validate(_resealed_run(tmp_path, **{f"{artefact}_edit": restamp}))
+        _validate(_resealed_run(tmp_path, **{f"{artefact}_edit": restamp}))  # pylint: disable=unexpected-keyword-arg
 
 
 def test_reviewer_evidence_carrying_one_finding_twice_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -44,7 +44,7 @@ def run(output: Path) -> None:
     pack = review_close(current_path=paths["current"], prior_path=paths["prior"],
                         equity_schedule_path=schedule_path, equity_currency="AUD",
                         equity_currency_evidence="Fabricated report metadata: AUD")
-    assert pack.equity_reconciliation["total"]["unexplained"] == "-250"
+    assert pack.equity_reconciliation["total"]["unexplained"] == "-250"  # nosec B101
     write_review_pack(pack, output / "pack")
     verify_pack(output / "pack")
     print(f"Equity example verified: -250 unexplained. Pack: {output / 'pack'}")
