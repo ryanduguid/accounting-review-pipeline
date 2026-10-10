@@ -83,7 +83,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
 
       - name: Install pinned lint tools
         run: |
@@ -107,7 +108,7 @@ jobs:
           - adapters/accounting-excel-toolkit
           - apps/australian-accounting-power-bi
           - apps/grant-acquittal-workpapers
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -121,6 +122,7 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
+          allow-prereleases: true
 
       - name: Run the component's standard-library suite
         run: python -B -m unittest discover -s tests -v
@@ -154,7 +156,7 @@ jobs:
       matrix:
         component:
           - apps/grant-acquittal-workpapers
-        python: ["3.11", "3.14"]
+        python: ["3.11", "3.14", "3.15"]
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -168,6 +170,7 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
+          allow-prereleases: true
 
       - name: Run the component's standard-library suite
         run: python -B -m unittest discover -s tests -v
