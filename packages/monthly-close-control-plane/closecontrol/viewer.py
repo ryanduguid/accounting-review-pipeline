@@ -1092,39 +1092,30 @@ def _evidence_summary_rows(
     return required, rows
 
 
-def _verify_calculation_evidence(
-    block: object,
-    summary_text: str,
-    json_hashes: dict[str, object],
-) -> None:
-    """Check the evidence block's shape, and that the summary says the same.
-
-    Every other member a reviewer acts on is witnessed by a second artefact.
-    This one carried the figures and the relied-on flag in the JSON alone, so
-    editing a figure there left the pack verifying and the review sheet
-    displaying the edited number.
-    """
-    if block is None:
-        if _CALCULATION_EVIDENCE_TABLE_HEADER in {
-            line.strip() for line in summary_text.splitlines()
-        }:
-            raise ControlInputError(
-                f"{_SUMMARY_NAME}: a calculation-evidence table is present while "
-                f"{_JSON_NAME} carries no calculation_evidence member"
-            )
-        # The witnessed source list is the one thing that survives removing
-        # the block and its section together. A pack that read an evidence
-        # file and no longer says what it found is half removed, not absent.
-        orphaned = sorted(
-            key for key in json_hashes if str(key).startswith("calculation_evidence:")
+def _verify_absent_calculation_evidence(summary_text: str, json_hashes: dict[str, object]) -> None:
+    if _CALCULATION_EVIDENCE_TABLE_HEADER in {
+        line.strip() for line in summary_text.splitlines()
+    }:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: a calculation-evidence table is present while "
+            f"{_JSON_NAME} carries no calculation_evidence member"
         )
-        if orphaned:
-            raise ControlInputError(
-                f"{_JSON_NAME}: source_sha256 records calculation evidence "
-                f"({', '.join(orphaned)}) while the pack carries no calculation_evidence "
-                "member; the evidence is half removed, not absent"
-            )
-        return
+    # The witnessed source list is the one thing that survives removing
+    # the block and its section together. A pack that read an evidence
+    # file and no longer says what it found is half removed, not absent.
+    orphaned = sorted(
+        key for key in json_hashes if str(key).startswith("calculation_evidence:")
+    )
+    if orphaned:
+        raise ControlInputError(
+            f"{_JSON_NAME}: source_sha256 records calculation evidence "
+            f"({', '.join(orphaned)}) while the pack carries no calculation_evidence "
+            "member; the evidence is half removed, not absent"
+        )
+    return
+
+
+def _evidence_block_lists(block: object) -> tuple[list, list]:
     if not isinstance(block, dict):
         raise ControlInputError(f"{_JSON_NAME}: calculation_evidence must be an object")
     unknown = sorted(set(block) - _EVIDENCE_BLOCK_MEMBERS)
@@ -1150,73 +1141,71 @@ def _verify_calculation_evidence(
         raise ControlInputError(
             f"{_JSON_NAME}: calculation_evidence.effect is not the text the writer emits"
         )
-    summary_required, summary_rows = _evidence_summary_rows(summary_text)
-    if list(required) != summary_required:
-        raise ControlInputError(
-            f"calculation evidence disagrees: {_JSON_NAME} requires {required!r}, "
-            f"{_SUMMARY_NAME} states {summary_required!r}"
-        )
-    json_rows: dict[str, tuple[str, str, str, str, str]] = {}
-    for item in supplied:
-        if not isinstance(item, dict):
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence.supplied holds a non-object entry"
-            )
-        item_unknown = sorted(set(item) - _EVIDENCE_ITEM_MEMBERS)
-        item_missing = sorted(_EVIDENCE_ITEM_MEMBERS - set(item))
-        if item_unknown or item_missing:
-            raise ControlInputError(
-                f"{_JSON_NAME}: a calculation_evidence entry has the wrong members "
-                f"(unknown: {', '.join(item_unknown) or 'none'}; "
-                f"missing: {', '.join(item_missing) or 'none'})"
-            )
-        label = item["label"]
-        values = item["values"]
-        usable = item["usable"]
-        if isinstance(label, str) and _md_cell_mirror(label) in json_rows:
-            # A dict keyed by label kept the last of two entries and the
-            # summary witnessed only that one, while the sheet rendered both.
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence.supplied lists {label!r} twice"
-            )
-        if not isinstance(label, str) or not isinstance(usable, bool):
-            raise ControlInputError(
-                f"{_JSON_NAME}: a calculation_evidence entry has a non-string label or a "
-                "non-boolean usable flag"
-            )
-        if not isinstance(values, dict) or not all(
-            isinstance(name, str) and isinstance(amount, str) for name, amount in values.items()
-        ):
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence[{label!r}].values must map names to "
-                "decimal strings"
-            )
-        # The digest the pack quotes for this file has to be the one the
-        # witnessed source list carries, or the provenance names another file.
-        witnessed = json_hashes.get(f"calculation_evidence:{label}")
-        if witnessed != item["file_sha256"]:
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence[{label!r}] quotes file digest "
-                f"{item['file_sha256']!r}, which is not the digest source_sha256 records"
-            )
-        figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
-        # Mirrored through the same escaping the writer applies, so the
-        # comparison is against what the summary renders rather than against
-        # what the JSON happens to spell.
-        json_rows[_md_cell_mirror(label)] = (
-            _md_cell_mirror(str(item["status"])),
-            _md_cell_mirror(str(item["period"]) or _ABSENT),
-            _md_cell_mirror(figures or _ABSENT),
-            "yes" if usable else "no",
-            # Every member, printed or not, is inside this digest.
-            _entry_digest_mirror(item),
-        )
+    return supplied, required
 
-    if not supplied and summary_rows:
+
+def _evidence_entry_fields(item: object, json_rows: dict) -> tuple[dict, str, dict, bool]:
+    if not isinstance(item, dict):
         raise ControlInputError(
-            f"{_SUMMARY_NAME}: holds a calculation-evidence table while {_JSON_NAME} "
-            "records no supplied evidence"
+            f"{_JSON_NAME}: calculation_evidence.supplied holds a non-object entry"
         )
+    item_unknown = sorted(set(item) - _EVIDENCE_ITEM_MEMBERS)
+    item_missing = sorted(_EVIDENCE_ITEM_MEMBERS - set(item))
+    if item_unknown or item_missing:
+        raise ControlInputError(
+            f"{_JSON_NAME}: a calculation_evidence entry has the wrong members "
+            f"(unknown: {', '.join(item_unknown) or 'none'}; "
+            f"missing: {', '.join(item_missing) or 'none'})"
+        )
+    label = item["label"]
+    values = item["values"]
+    usable = item["usable"]
+    if isinstance(label, str) and _md_cell_mirror(label) in json_rows:
+        # A dict keyed by label kept the last of two entries and the
+        # summary witnessed only that one, while the sheet rendered both.
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence.supplied lists {label!r} twice"
+        )
+    if not isinstance(label, str) or not isinstance(usable, bool):
+        raise ControlInputError(
+            f"{_JSON_NAME}: a calculation_evidence entry has a non-string label or a "
+            "non-boolean usable flag"
+        )
+    if not isinstance(values, dict) or not all(
+        isinstance(name, str) and isinstance(amount, str) for name, amount in values.items()
+    ):
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence[{label!r}].values must map names to "
+            "decimal strings"
+        )
+    return item, label, values, usable
+
+
+def _add_evidence_entry_row(item: object, json_hashes: dict[str, object], json_rows: dict) -> None:
+    item, label, values, usable = _evidence_entry_fields(item, json_rows)
+    # The digest the pack quotes for this file has to be the one the
+    # witnessed source list carries, or the provenance names another file.
+    witnessed = json_hashes.get(f"calculation_evidence:{label}")
+    if witnessed != item["file_sha256"]:
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence[{label!r}] quotes file digest "
+            f"{item['file_sha256']!r}, which is not the digest source_sha256 records"
+        )
+    figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
+    # Mirrored through the same escaping the writer applies, so the
+    # comparison is against what the summary renders rather than against
+    # what the JSON happens to spell.
+    json_rows[_md_cell_mirror(label)] = (
+        _md_cell_mirror(str(item["status"])),
+        _md_cell_mirror(str(item["period"]) or _ABSENT),
+        _md_cell_mirror(figures or _ABSENT),
+        "yes" if usable else "no",
+        # Every member, printed or not, is inside this digest.
+        _entry_digest_mirror(item),
+    )
+
+
+def _verify_evidence_sources(supplied: list, json_hashes: dict[str, object]) -> None:
     # The writer records one source digest per evidence file it read, keyed
     # by that file's label, and one supplied entry per file. The two sets are
     # the same set or the pack was edited: an entry deleted while its digest
@@ -1232,12 +1221,45 @@ def _verify_calculation_evidence(
             f"{witnessed_labels!r} while calculation_evidence.supplied describes "
             f"{supplied_labels!r}; the evidence is half removed, not absent"
         )
+
+
+def _verify_calculation_evidence(
+    block: object,
+    summary_text: str,
+    json_hashes: dict[str, object],
+) -> None:
+    """Check the evidence block's shape, and that the summary says the same.
+
+    Every other member a reviewer acts on is witnessed by a second artefact.
+    This one carried the figures and the relied-on flag in the JSON alone, so
+    editing a figure there left the pack verifying and the review sheet
+    displaying the edited number.
+    """
+    if block is None:
+        _verify_absent_calculation_evidence(summary_text, json_hashes)
+        return
+    supplied, required = _evidence_block_lists(block)
+    summary_required, summary_rows = _evidence_summary_rows(summary_text)
+    if list(required) != summary_required:
+        raise ControlInputError(
+            f"calculation evidence disagrees: {_JSON_NAME} requires {required!r}, "
+            f"{_SUMMARY_NAME} states {summary_required!r}"
+        )
+    json_rows: dict[str, tuple[str, str, str, str, str]] = {}
+    for item in supplied:
+        _add_evidence_entry_row(item, json_hashes, json_rows)
+
+    if not supplied and summary_rows:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: holds a calculation-evidence table while {_JSON_NAME} "
+            "records no supplied evidence"
+        )
+    _verify_evidence_sources(supplied, json_hashes)
     if json_rows != summary_rows:
         raise ControlInputError(
             f"calculation evidence disagrees: {_JSON_NAME} and {_SUMMARY_NAME} state "
             "different calculations, figures or relied-on flags"
         )
-
 
 def _verify_summary_holds_no_register(summary_text: str) -> None:
     """A pack without the register must not have a summary that shows one.
