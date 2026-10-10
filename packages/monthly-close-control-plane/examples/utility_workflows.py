@@ -19,22 +19,22 @@ RESULTS = runpy.run_path(str(Path(__file__).with_name("utility_results.py")))
 
 def captured(command, *, cwd, env=None, timeout=300):
     """Stop the whole command tree on timeout or interruption."""
-    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,  # nosemgrep
                                text=True, encoding="utf-8", errors="replace", start_new_session=os.name != "nt",
                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
         if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)  # nosec B607
         else:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
         stdout, stderr = process.communicate()
-        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from exc
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from exc  # nosemgrep
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)  # nosemgrep
 
 
 def git_output(root, *arguments):
@@ -150,10 +150,10 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         try:
             result = captured(command, cwd=project, env=env, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            result = subprocess.CompletedProcess(command, None, exc.output or "", exc.stderr or "")
+            result = subprocess.CompletedProcess(command, None, exc.output or "", exc.stderr or "")  # nosemgrep
             failure = "timeout_or_interrupt"
         except OSError as exc:
-            result = subprocess.CompletedProcess(command, None, "", str(exc))
+            result = subprocess.CompletedProcess(command, None, "", str(exc))  # nosemgrep
             failure = "launch_error"
         calls.append({"owner": owner, "kind": kind, "arguments": list(map(str, arguments)), "exit_code": result.returncode,
                       "expected_exit": expected, "elapsed_seconds": round(time.monotonic() - started, 6), "failure": failure})

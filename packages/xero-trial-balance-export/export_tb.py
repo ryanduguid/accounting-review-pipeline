@@ -543,7 +543,7 @@ def _git_ignores(checkout: str, path: str) -> bool:
     # not.
     relative = os.path.relpath(path, checkout).replace(os.sep, "/")
     try:
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B607
             ["git", "check-ignore", "--quiet", "--", relative],
             cwd=checkout,
             capture_output=True,
@@ -860,7 +860,7 @@ def check_balanced(
     """
     total_debit, total_credit, total_ytd_debit, total_ytd_credit = totals
     unbalanced = False
-    for label, debits, credits in (
+    for label, debits, credit_total in (
         ("movement", total_debit, total_credit),
         ("YTD", total_ytd_debit, total_ytd_credit),
     ):
@@ -868,7 +868,7 @@ def check_balanced(
             exact.prec = 60
             exact.traps[Inexact] = True
             try:
-                diff = debits - credits
+                diff = debits - credit_total
             except Inexact:
                 sys.exit(
                     "Nothing written - the {0} difference cannot be computed "

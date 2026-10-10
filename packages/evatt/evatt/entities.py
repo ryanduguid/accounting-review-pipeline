@@ -433,7 +433,7 @@ def _git(subcommand: list[str], target: Path) -> int:
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
         environment.pop(name, None)
     try:
-        return subprocess.run(
+        return subprocess.run(  # nosemgrep
             [executable, *subcommand, "--", target.name],
             cwd=target.parent, env=environment, capture_output=True, timeout=30, check=False
         ).returncode

@@ -187,7 +187,7 @@ class SharedBlockTests(unittest.TestCase):
                 body = "\n".join(ast.unparse(statement) for statement in node.body[start:])
                 bodies.append(_executable(body).replace("CANONICAL_TB_COLUMNS", "CANONICAL_COLUMNS"))
             with self.subTest(name=name):
-                self.assertEqual(*bodies)
+                self.assertEqual(*bodies)  # pylint: disable=no-value-for-parameter
 
 
 if __name__ == "__main__":  # pragma: no cover

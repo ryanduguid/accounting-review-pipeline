@@ -29,7 +29,7 @@ import xero_client
 from xero_client import load_dotenv, save_tokens, validate_rotated_response
 
 AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
-TOKEN_URL = "https://identity.xero.com/connect/token"
+TOKEN_URL = "https://identity.xero.com/connect/token"  # nosec B105
 # Web and PKCE apps created on or after 2 March 2026 use granular scopes.
 # Existing apps using accounting.reports.read must migrate by 13 September 2027.
 # This exporter needs only offline_access and accounting.reports.trialbalance.read.

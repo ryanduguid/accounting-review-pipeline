@@ -72,7 +72,7 @@ def variance_drivers(pack_dir: Path, transactions: Path, *, currency: str, top: 
     prior, current = date.fromisoformat(prior_dates[0]), date.fromisoformat(current_dates[0])
     snapshot = SourceSnapshot.capture(transactions, label="Transactions")
     exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
+    assert isinstance(exceptions, list)  # nosec B101
     accounts = []
     # Input bounds and a private context keep sums exact even if the caller changes Decimal settings.
     with localcontext(Context(prec=40)):

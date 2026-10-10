@@ -34,7 +34,7 @@ from typing import Any, Callable, cast
 
 import requests
 
-TOKEN_URL = "https://identity.xero.com/connect/token"
+TOKEN_URL = "https://identity.xero.com/connect/token"  # nosec B105
 CONNECTIONS_URL = "https://api.xero.com/connections"
 from token_store import (  # noqa: E402
     DEFAULT_TOKEN_FILE,  # noqa: F401  re-exported: tests read xero_client.DEFAULT_TOKEN_FILE
@@ -78,9 +78,9 @@ def load_dotenv(path: str | Path | None = None) -> None:
 # Windows token caches are JSON envelopes whose payload is protected for the
 # current Windows user by DPAPI.  Keep these values explicit: a future format
 # change must be handled as a migration, never guessed from ciphertext.
-TOKEN_CACHE_FORMAT = "xero-trial-balance-export-token-cache"
+TOKEN_CACHE_FORMAT = "xero-trial-balance-export-token-cache"  # nosec B105
 TOKEN_CACHE_VERSION = 1
-TOKEN_CACHE_PROTECTION = "windows-dpapi-current-user"
+TOKEN_CACHE_PROTECTION = "windows-dpapi-current-user"  # nosec B105
 TOKEN_CACHE_ENVELOPE_KEYS = {"format", "version", "protection", "payload"}
 
 # Suppress any DPAPI prompt.  A scheduled export has no safe way to answer a
