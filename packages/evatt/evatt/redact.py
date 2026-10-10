@@ -31,6 +31,9 @@ from .patterns import (
     NUMBER_SEPARATORS,
     PLACEHOLDER,
     PLACEHOLDER_CI,
+    _ambiguous_identifiers,
+    _AmbiguousIdentifier,
+    _merge_intervals,
     person_name_spans,
     structured_spans,
     valid_abn,
@@ -227,6 +230,8 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
     numbers = [(start, end) for start, end, _value in _number_candidates(numeric_text)]
     number_starts = [start for start, _end in numbers]
     number_ends = [end for _start, end in numbers]
+    ambiguous = _merge_intervals([(a.start, a.end) for a in _ambiguous_identifiers(text)])
+    ambiguous_starts = [start for start, _end in ambiguous]
     counts: Counter = Counter()
     pieces: list[str] = []
     cursor = 0
@@ -236,6 +241,11 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
             continue
         nearest = bisect.bisect_right(protected_starts, end - 1) - 1
         if nearest >= 0 and protected[nearest][1] > start:
+            continue
+        # Even a complete mapped collision would consume the list marker.
+        # Keep its label and digits available to the residual sweep instead.
+        nearest = bisect.bisect_left(ambiguous_starts, end) - 1
+        if nearest >= 0 and ambiguous[nearest][1] > start:
             continue
         first = bisect.bisect_right(number_ends, start)
         last = bisect.bisect_left(number_starts, end) - 1
@@ -314,9 +324,20 @@ def _number_candidates(text: str) -> Iterator[tuple[int, int, str]]:
         yield start, cursor, value
 
 
-def _number_unknowns(text: str, lines: list[str], starts: list[int]) -> tuple[Unknown, ...]:
+def _number_unknowns(
+    text: str, lines: list[str], starts: list[int], ambiguous: list[_AmbiguousIdentifier]
+) -> tuple[Unknown, ...]:
     found: dict[tuple[int, str], Unknown] = {}
-    for start, _end, value in _number_candidates(text):
+    protected = _merge_intervals([(a.digit_start, a.end) for a in ambiguous])
+    protected_starts = [start for start, _end in protected]
+    for candidate in ambiguous:
+        number, context = _locate(lines, starts, candidate.digit_start)
+        found.setdefault((number, candidate.value),
+                         Unknown("number", candidate.value, number, context))
+    for start, end, value in _number_candidates(text):
+        nearest = bisect.bisect_left(protected_starts, end) - 1
+        if nearest >= 0 and protected[nearest][1] > start:
+            continue
         number, context = _locate(lines, starts, start)
         found.setdefault((number, value), Unknown("number", value, number, context))
     return tuple(found.values())
@@ -354,7 +375,10 @@ def residual(text: str) -> tuple[Unknown, ...]:
     masked = DOB.sub(_blank, ADDRESS.sub(_blank, text))
     # Placeholder ordinals must not join a following account/reference number.
     numeric_text = CARRIED_PLACEHOLDER.sub(_blank, masked)
-    found.extend(_number_unknowns(numeric_text, lines, starts))
+    # Date/address masking must not erase a rejected identifier's evidence.
+    ambiguous_text = CARRIED_PLACEHOLDER.sub(_blank, text)
+    found.extend(_number_unknowns(numeric_text, lines, starts,
+                                 _ambiguous_identifiers(ambiguous_text)))
     # One report per name per line, which is what the line-by-line set gave and
     # what keeps a name repeated down a page from filling the triage file.
     names: dict[tuple[int, str], Unknown] = {}

@@ -272,11 +272,24 @@ an extra placeholder costs a triage decision while a miss leaks.
   fragments are never removed as bare TFNs, ABNs, ACNs, Medicare numbers or BSBs.
   Slash and Unicode-dash numeric continuations likewise prevent a partial
   one-way replacement; `123456782/00` reaches numeric triage as a whole token.
+- **TFN, ABN, ACN and Medicare digit continuations that look like numbered
+  list markers halt.** `TFN: 12345678` followed by `1. Next item`, or
+  `TFN: 1234567` followed by `82) next`, reaches numeric triage. Longer list
+  indices and Unicode spaces around the marker also reach triage. The ambiguity
+  halts when each line has fewer than 8 digits or an entity map targets
+  the label or digits. Genuine hard wraps such as `TFN: 123` followed by
+  `456 782` still replace. This guard covers these four identifier families;
+  phone numbers retain their existing detection rules.
 - **Medicare replaces the card and an optional individual reference number
-  together.** A reference from 1 to 9 joined by up to 2 whitespace, slash or
-  hyphen characters is consumed, as in `2123 45670 1/1`. The ten-digit card
+  together on the same line.** A reference from 1 to 9 joined by up to 2 spaces,
+  tabs, slashes or hyphens is consumed, as in `2123 45670 1/1`. The ten-digit card
   core determines its check digit and placeholder, so the same card with and
   without a reference gets one placeholder. A malformed reference reaches triage.
+  **Accepted limit:** an individual reference written alone on the next line
+  remains in the output. `Medicare: 2123456701` followed by a line containing `1`
+  becomes `Medicare: MEDICARE_01` followed by that same `1`. The ten-digit card
+  is replaced; the reference alone is below the number sweep's 8-digit floor.
+  Ryan accepted this limit on 11 October 2026 (DECISIONS.md ruling 47).
 - **Three or more spaces between digit groups remain unsupported.** Short
   groups split that way can still pass without a halt. A labelled number with
   another digit group up to 2 spaces after it, as in `TFN: 123456783 2026`, can fail
