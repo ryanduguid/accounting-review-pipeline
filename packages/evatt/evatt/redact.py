@@ -1,8 +1,9 @@
 """The redaction passes.
 
-Pass one replaces structured identifiers, confirmed by check digit, one-way.
+Pass one replaces labelled or check-digit-confirmed structured identifiers one-way.
 Pass 2 replaces known entities from the map. Pass 3 sweeps for anything
-left that looks like a person, an address or a date of birth, and halts rather
+left that looks like a person, an address, a date of birth or an unclassified
+number, and halts rather
 than guessing.
 
 Structured identifiers are one-way on purpose. Nothing records what TFN_01
@@ -16,7 +17,9 @@ import bisect
 import re
 import unicodedata
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import date
 from typing import Sequence
 
 from .entities import _PREFIX, Entity
@@ -25,10 +28,15 @@ from .patterns import (
     ADDRESS,
     CARRIED_PLACEHOLDER,
     DOB,
+    NUMBER_SEPARATORS,
     PLACEHOLDER,
     PLACEHOLDER_CI,
     person_name_spans,
     structured_spans,
+    valid_abn,
+    valid_acn,
+    valid_medicare,
+    valid_tfn,
     value_pattern,
 )
 
@@ -55,12 +63,15 @@ def _lines_and_starts(text: str) -> tuple[list[str], list[int]]:
     which is what lets a match found over the whole text be mapped back to a
     line without rescanning anything.
     """
-    lines = text.splitlines(keepends=True)
+    raw_lines = text.splitlines(keepends=True)
+    lines: list[str] = []
     starts: list[int] = []
     offset = 0
-    for line in lines:
+    for line in raw_lines:
         starts.append(offset)
         offset += len(line)
+        # Store one stripped context per line, shared by every finding there.
+        lines.append(line.strip())
     return lines, starts
 
 
@@ -69,7 +80,7 @@ def _locate(lines: list[str], starts: list[int], position: int) -> tuple[int, st
     if not starts:
         return 1, ""
     index = bisect.bisect_right(starts, position) - 1
-    return index + 1, lines[index].strip()
+    return index + 1, lines[index]
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -81,7 +92,8 @@ def _normalise(kind: str, value: str) -> str:
     """Collapse spelling differences so one identifier gets one placeholder."""
     if kind == "email":
         return value.strip().casefold()
-    return "".join(c for c in value if c.isdigit())
+    digits = "".join(c for c in value if c.isdigit())
+    return digits[:10] if kind == "medicare" else digits
 
 
 def _replace_structured(text: str) -> tuple[str, Counter]:
@@ -209,6 +221,12 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
     # "XCLIENT 01" still replaces "XCLIENT_01".
     protected = [m.span("token") for m in CARRIED_PLACEHOLDER.finditer(text)]
     protected_starts = [start for start, _end in protected]
+    # Partial entity matches must not split a suspicious numeric token into
+    # short remnants. A match containing the whole token remains reversible.
+    numeric_text = CARRIED_PLACEHOLDER.sub(_blank, DOB.sub(_blank, ADDRESS.sub(_blank, text)))
+    numbers = [(start, end) for start, end, _value in _number_candidates(numeric_text)]
+    number_starts = [start for start, _end in numbers]
+    number_ends = [end for _start, end in numbers]
     counts: Counter = Counter()
     pieces: list[str] = []
     cursor = 0
@@ -218,6 +236,10 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
             continue
         nearest = bisect.bisect_right(protected_starts, end - 1) - 1
         if nearest >= 0 and protected[nearest][1] > start:
+            continue
+        first = bisect.bisect_right(number_ends, start)
+        last = bisect.bisect_left(number_starts, end) - 1
+        if first <= last and (start > numbers[first][0] or end < numbers[last][1]):
             continue
         counts[entity.kind] += 1
         # Touching accepted values need separate tokens for restore. Emphasis
@@ -235,6 +257,69 @@ def _replace_entities(text: str, entities: Sequence[Entity]) -> tuple[str, Count
         cursor = end
     pieces.append(text[cursor:])
     return "".join(pieces), counts
+
+
+_NUMBER_SEPARATORS = frozenset(NUMBER_SEPARATORS)
+_DATE_LEAD = re.compile(r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})/(\d{1,2})/(\d{4}))(?!\d)")
+_AMOUNT = re.compile(r"(?:\d+\.\d+|\d{1,3}(?:,\d{3})+(?:\.\d+)?)")
+
+
+def _number_candidates(text: str) -> Iterator[tuple[int, int, str]]:
+    """Classify maximal numeric tokens once, without searching their substrings.
+
+    Only horizontal separators join digits, with at most 2 between digits.
+    The cursor always advances and examines each character a bounded number
+    of times. Regexes classify whole tokens after this scan, never suffixes.
+    """
+    cursor = 0
+    while cursor < len(text):
+        if not text[cursor].isdecimal():
+            cursor += 1
+            continue
+        start = cursor
+        cursor += 1
+        while cursor < len(text):
+            if text[cursor].isdecimal():
+                cursor += 1
+                continue
+            following = cursor
+            while (following < len(text) and following - cursor < 2
+                   and text[following] in _NUMBER_SEPARATORS):
+                following += 1
+            if following == cursor or following == len(text) or not text[following].isdecimal():
+                break
+            cursor = following + 1
+        value = text[start:cursor]
+        leading_date = _DATE_LEAD.match(value)
+        if leading_date:
+            iso_year, iso_month, iso_day, day, month, year = leading_date.groups()
+            try:
+                if iso_year is not None:
+                    date(int(iso_year), int(iso_month), int(iso_day))
+                else:
+                    date(int(year), int(month), int(day))
+            except ValueError:
+                pass
+            else:
+                remainder = value[leading_date.end():].lstrip("".join(_NUMBER_SEPARATORS))
+                start += len(value) - len(remainder)
+                value = remainder
+        digits = "".join(c for c in value if c.isdecimal())
+        if len(digits) < 8:
+            continue
+        if _AMOUNT.fullmatch(value) and not any(
+            validator(digits) for validator in (valid_tfn, valid_acn, valid_medicare, valid_abn)
+        ):
+            continue
+        yield start, cursor, value
+
+
+def _number_unknowns(text: str, lines: list[str], starts: list[int]) -> tuple[Unknown, ...]:
+    found: dict[tuple[int, str], Unknown] = {}
+    for start, _end, value in _number_candidates(text):
+        number, context = _locate(lines, starts, start)
+        found.setdefault((number, value), Unknown("number", value, number, context))
+    return tuple(found.values())
 
 
 def residual(text: str) -> tuple[Unknown, ...]:
@@ -267,6 +352,9 @@ def residual(text: str) -> tuple[Unknown, ...]:
             number, context = _locate(lines, starts, match.start())
             found.append(Unknown(kind, match.group(0), number, context))
     masked = DOB.sub(_blank, ADDRESS.sub(_blank, text))
+    # Placeholder ordinals must not join a following account/reference number.
+    numeric_text = CARRIED_PLACEHOLDER.sub(_blank, masked)
+    found.extend(_number_unknowns(numeric_text, lines, starts))
     # One report per name per line, which is what the line-by-line set gave and
     # what keeps a name repeated down a page from filling the triage file.
     names: dict[tuple[int, str], Unknown] = {}

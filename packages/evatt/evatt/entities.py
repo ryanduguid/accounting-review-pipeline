@@ -155,10 +155,14 @@ def _check_fields(
     # "<br>Jane" stays in the document and restore would write it a second time.
     if JOIN_EDGE.search(value):
         raise EvattError(f"entity value {value!r} starts or ends with whitespace or markup")
-    # A value made only of placeholder parts ("TFN", "01", "Medicare", "TFN 01")
-    # names nothing a client could be, and pass two joins tokens across "_", so
-    # it would read the placeholders pass one writes as mentions.
-    if all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in value_parts(value)):
+    # A prefix plus only placeholder parts ("TFN", "Medicare", "TFN 01")
+    # could read pass one's placeholders as mentions. Numeric-only values are
+    # ordinary account/reference entities; pass two protects placeholder spans.
+    parts = value_parts(value)
+    if not parts or (
+        any(part.upper() in PLACEHOLDER_PREFIXES for part in parts)
+        and all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in parts)
+    ):
         raise EvattError(f"entity value {value!r} is made only of placeholder parts")
     if not isinstance(kind, str) or kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")
