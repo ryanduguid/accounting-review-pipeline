@@ -1477,20 +1477,7 @@ def verify_pack(pack_dir: Path) -> tuple[
     return document, summary_text, csv_rows, query_rows, artefact_digests
 
 
-def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
-    """Verify a pack and render it as a plain-text review sheet.
-
-    Returns the sheet and the per-artefact digests it displays. Raises
-    ``ControlInputError`` instead of rendering whenever any artefact is
-    missing, malformed or inconsistent with its siblings.
-    """
-    document, summary_text, csv_rows, query_rows, artefact_digests = verify_pack(pack_dir)
-    thresholds = document["thresholds"]
-    assert isinstance(thresholds, dict)  # nosec B101
-    exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)  # nosec B101
-    acknowledgement = document["acknowledgement"]
-
+def _sheet_scope(document: dict[str, object], thresholds: dict, exceptions: list) -> list[str]:
     blocked = sum(1 for item in exceptions if item["status"] == "BLOCKED")
     review = sum(1 for item in exceptions if item["status"] == "REVIEW")
 
@@ -1526,12 +1513,20 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     if "controls_not_run" in document:
         skipped = _require_string_list(document, "controls_not_run")
         lines.append(f"- Controls not run: {', '.join(skipped) or 'none'}.")
-    lines += ["", "Source evidence", ""]
+    return lines
+
+
+def _sheet_source_evidence(document: dict[str, object]) -> list[str]:
+    lines = ["", "Source evidence", ""]
     source_hashes = document["source_sha256"]
     assert isinstance(source_hashes, dict)  # nosec B101
     for label, digest in sorted(source_hashes.items()):
         lines.append(f"- {label}: {digest}")
-    evidence_block = document.get("calculation_evidence")
+    return lines
+
+
+def _sheet_calculation_evidence(evidence_block: object) -> list[str]:
+    lines: list[str] = []
     if evidence_block is not None:
         assert isinstance(evidence_block, dict)  # nosec B101
         lines += ["", "Calculation evidence", ""]
@@ -1555,11 +1550,11 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             "- A figure here supports review. It approves nothing, and the "
             "calculation-evidence exceptions say why one is not relied on."
         )
-    equity_block = document.get("equity_reconciliation")
-    if equity_block is not None:
-        assert isinstance(equity_block, dict)  # nosec B101
-        lines += ["", "Equity reconciliation", "", *equity_summary_lines(equity_block)]
-    lines += ["", "Exceptions", ""]
+    return lines
+
+
+def _sheet_exceptions(exceptions: list) -> list[str]:
+    lines = ["", "Exceptions", ""]
     if not exceptions:
         lines.append("No exceptions were raised. A human must still decide whether the close is appropriate.")
     else:
@@ -1577,7 +1572,11 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             )
             lines.append(f"     reason: {item['reason']}")
             lines.append(f"     action: {item['reviewer_action']}")
-    lines += ["", "Client queries", ""]
+    return lines
+
+
+def _sheet_client_queries(document: dict[str, object]) -> list[str]:
+    lines = ["", "Client queries", ""]
     lines.append(
         "Draft questions for the preparer. Nothing has been sent. Edit them before "
         "they reach a client and record answers in the firm's own tracker."
@@ -1616,7 +1615,11 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             )
             lines.append(f"     ask: {query['question']}")
             lines.append(f"     evidence: {query['evidence_requested']}")
-    lines += ["", "Human acknowledgement", ""]
+    return lines
+
+
+def _sheet_acknowledgement(acknowledgement: object) -> list[str]:
+    lines = ["", "Human acknowledgement", ""]
     if acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
     else:
@@ -1629,6 +1632,33 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         lines.append(
             "- Effect: acknowledgement records a human action only; it does not change the control status or approve a close."
         )
+    return lines
+
+
+def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
+    """Verify a pack and render it as a plain-text review sheet.
+
+    Returns the sheet and the per-artefact digests it displays. Raises
+    ``ControlInputError`` instead of rendering whenever any artefact is
+    missing, malformed or inconsistent with its siblings.
+    """
+    document, summary_text, csv_rows, query_rows, artefact_digests = verify_pack(pack_dir)
+    thresholds = document["thresholds"]
+    assert isinstance(thresholds, dict)  # nosec B101
+    exceptions = document["exceptions"]
+    assert isinstance(exceptions, list)  # nosec B101
+    acknowledgement = document["acknowledgement"]
+
+    lines = _sheet_scope(document, thresholds, exceptions)
+    lines += _sheet_source_evidence(document)
+    lines += _sheet_calculation_evidence(document.get("calculation_evidence"))
+    equity_block = document.get("equity_reconciliation")
+    if equity_block is not None:
+        assert isinstance(equity_block, dict)  # nosec B101
+        lines += ["", "Equity reconciliation", "", *equity_summary_lines(equity_block)]
+    lines += _sheet_exceptions(exceptions)
+    lines += _sheet_client_queries(document)
+    lines += _sheet_acknowledgement(acknowledgement)
     lines += ["", "Artefacts verified", ""]
     for name in PACK_FILE_NAMES:
         if name in artefact_digests:
