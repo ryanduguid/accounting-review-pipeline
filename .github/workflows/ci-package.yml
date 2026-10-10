@@ -136,9 +136,7 @@ jobs:
       # leaves every leg green. --cov takes its source from the component's
       # [tool.coverage.run] configuration.
       - name: run tests with branch coverage
-        run: >-
-          uv run --locked --no-build --extra dev pytest
-          --cov --cov-branch --cov-report=term-missing --cov-report=xml
+        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         env:
           UV_PYTHON: ${{ matrix.python }}
 
@@ -187,9 +185,9 @@ jobs:
             diff -u requirements.lock "${standalone}/requirements.lock"
           fi
       - name: ruff
-        run: uv run --locked --no-build --extra dev ruff check .
+        run: uv run --locked --extra dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: mypy
-        run: uv run --locked --no-build --extra dev mypy
+        run: uv run --locked --extra dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   dependency-audit:
     needs: changes
@@ -216,13 +214,13 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: audit the locked project environment
-        run: uv run --locked --no-build --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: audit the hash-locked runtime
         # The README installs from requirements.lock, not from the environment
         # audited above, so an advisory against a version pinned only there
         # went unreported.
         if: hashFiles(format('{0}/requirements.lock', inputs.package_dir)) != ''
-        run: uv run --locked --no-build --extra dev --with "pip-audit==2.10.1" pip-audit --strict --require-hashes --disable-pip -r requirements.lock
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --strict --require-hashes --disable-pip -r requirements.lock  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   build:
     needs: changes
@@ -249,7 +247,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: build the distribution
-        run: uv run --locked --no-build --extra dev --python 3.14 python -m build
+        run: uv run --locked --extra dev --python 3.14 python -m build  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: install the wheel into a clean environment, import it and run the smoke
         # Exactly one wheel, installed by path with --no-index, or pip is free
         # to resolve the name from PyPI and test a release nobody built in this

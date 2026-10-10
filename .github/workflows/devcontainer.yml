@@ -44,7 +44,7 @@ jobs:
           # shellcheck disable=SC2016 # the inner script expands inside the container
           npx --yes --ignore-scripts "$DEVCONTAINER_CLI" exec --workspace-folder . sh -c '
             cd packages/monthly-close-control-plane &&
-            uv run --locked --no-build --extra dev close-control review \
+            uv run --locked --extra dev close-control review \
               --current examples/current_trial_balance.csv \
               --prior examples/prior_trial_balance.csv \
               --mapping examples/account_mapping.csv \
