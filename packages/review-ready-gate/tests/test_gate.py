@@ -85,21 +85,23 @@ def test_gst_tieout_break(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("label_1a", "label_1b", "collected", "credits", "breaks"),
+    ("labels", "postings", "breaks"),
     [
         # The ATO's whole-dollar 1A and 1B drop up to 99 cents each.
-        ("10000", "2500", "10000.85", "2500.40", False),
-        ("10000.00", "2500.00", "10000.99", "2500.00", False),
-        ("10000", "2500", "10000.00", "2500.99", False),
-        ("10000", "2500", "10001.00", "2500.00", True),
-        ("10000", "2500", "9999.00", "2500.00", True),
+        (("10000", "2500"), ("10000.85", "2500.40"), False),
+        (("10000.00", "2500.00"), ("10000.99", "2500.00"), False),
+        (("10000", "2500"), ("10000.00", "2500.99"), False),
+        (("10000", "2500"), ("10001.00", "2500.00"), True),
+        (("10000", "2500"), ("9999.00", "2500.00"), True),
         # A statement carrying cents keeps the plain tolerance.
-        ("10000.45", "2500.00", "10000.00", "2500.00", True),
+        (("10000.45", "2500.00"), ("10000.00", "2500.00"), True),
     ],
 )
 def test_gst_tieout_allows_whole_dollar_truncation(
-    tmp_path: Path, label_1a: str, label_1b: str, collected: str, credits: str, breaks: bool
+    tmp_path: Path, labels: tuple[str, str], postings: tuple[str, str], breaks: bool
 ) -> None:
+    label_1a, label_1b = labels
+    collected, credits = postings
     pack_dir = copy_example_pack("bas-ready", tmp_path / "pack")
     (pack_dir / "activity_statement.csv").write_text(
         f"Label,Amount\n1A,{label_1a}\n1B,{label_1b}\n", encoding="utf-8"
