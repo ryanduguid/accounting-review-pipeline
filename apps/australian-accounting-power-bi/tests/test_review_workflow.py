@@ -745,6 +745,19 @@ class ReviewWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unlisted"):
                 workflow.check_export_tree(run, expected)
 
+    def test_readiness_publication_must_be_settled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            self.assertIsNone(workflow.ready_revision(run))
+            control = run / workflow.READY_CONTROL
+            control.mkdir(parents=True)
+            state = {"format": 1, "status": "settled", "revision": "a" * 32, "transaction": None, "previous": [None] * 3}
+            (control / "state.json").write_text(json.dumps(state), encoding="utf-8")
+            self.assertEqual(workflow.ready_revision(run), "a" * 32)
+            (control / "state.json").write_text(json.dumps({**state, "status": "in_progress", "transaction": "b" * 32}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unresolved"):
+                workflow.ready_revision(run)
+
 
 if __name__ == "__main__":
     unittest.main()

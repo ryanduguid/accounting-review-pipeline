@@ -707,8 +707,24 @@ def build(run: Path, bin_dir: Path, month: int, note: Path | None = None) -> Pat
     return run
 
 
+def ready_revision(run: Path) -> str | None:
+    """The settled review-ready publication revision; None for a run built before it existed."""
+    control = ordinary(run / READY_CONTROL)
+    try:
+        metadata = control.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError("Readiness publication control is not a directory.")
+    state = strict_json(ordinary(control / "state.json").read_bytes(), "Readiness publication state")
+    if not isinstance(state, dict) or state.get("status") != "settled" or not isinstance(state.get("revision"), str):
+        raise ValueError("Readiness publication is unresolved.")
+    return state["revision"]
+
+
 def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
     run = ordinary(run)
+    revision = ready_revision(run)
     data = ordinary(run / "receipt.json").read_bytes()
     if digest(data) != ordinary(run / "receipt.sha256").read_text(encoding="ascii"):
         raise ValueError("Receipt digest differs.")
@@ -770,6 +786,8 @@ def verify(run: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
         hashes = {r["executable_sha256"] for r in receipt["invocations"] if r["command"] == command}
         if len(hashes) != 1 or not re.fullmatch(r"[a-f0-9]{64}", next(iter(hashes))):
             raise ValueError("Producer executable identity differs within the receipt.")
+    if ready_revision(run) != revision:
+        raise ValueError("Readiness publication changed during verification.")
     return receipt, snapshot
 
 
