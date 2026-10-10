@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import sys
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
@@ -86,6 +87,13 @@ def _stable_ast(value: Any) -> Any:
             # ``type_params`` was added in Python 3.12. Empty/None fields do not
             # affect this module's executable tree and can vary by Python minor.
             if name == "type_params" or item is None or item == []:
+                continue
+            # Python 3.15 adds the default eager-import flag. Keep lazy flags.
+            if (
+                name == "is_lazy"
+                and isinstance(value, (ast.Import, ast.ImportFrom))
+                and item == 0
+            ):
                 continue
             fields.append((name, _stable_ast(item)))
         return type(value).__name__, tuple(fields)
@@ -183,6 +191,111 @@ class XeroAuthProvenanceTests(unittest.TestCase):
             with self.subTest(variant=label):
                 with self.assertRaises(AssertionError):
                     validator(source)
+
+    def test_approved_auth_recovers_both_provenance_digests(self) -> None:
+        self.assertEqual(_sha256(self.auth), AUTH_SHA256)
+        tree = ast.parse(self.auth_text)
+        self.assertEqual(_sha256(repr(_stable_ast(tree)).encode()), AUTH_AST_SHA256)
+
+    def test_eager_import_projection_preserves_names_and_aliases(self) -> None:
+        for source in ("import fabricated_probe", "from fabricated_probe import member"):
+            with self.subTest(source=source):
+                node = ast.parse(source).body[0]
+                projection = _stable_ast(node)
+                self.assertNotIn("is_lazy", dict(projection[1]))
+                renamed = ast.parse(source.replace("fabricated_probe", "other_probe")).body[0]
+                aliased = ast.parse(source + " as alias").body[0]
+                self.assertNotEqual(projection, _stable_ast(renamed))
+                self.assertNotEqual(projection, _stable_ast(aliased))
+
+    def test_unrelated_zero_fields_remain_in_the_projection(self) -> None:
+        node = ast.parse("from fabricated_probe import member").body[0]
+        self.assertEqual(dict(_stable_ast(node)[1])["level"], 0)
+        self.assertEqual(dict(_stable_ast(ast.Constant(value=0))[1])["value"], 0)
+        self.assertIs(dict(_stable_ast(ast.Constant(value=False))[1])["value"], False)
+
+    @unittest.skipIf(sys.version_info < (3, 15), "import laziness requires Python 3.15")
+    def test_nonzero_import_flags_are_preserved(self) -> None:
+        for source in ("import fabricated_probe", "from fabricated_probe import member"):
+            for flag in (1, 2):
+                with self.subTest(source=source, synthetic_flag=flag):
+                    node = ast.parse(source).body[0]
+                    self.assertIn("is_lazy", type(node)._fields)
+                    self.assertEqual(dict(ast.iter_fields(node))["is_lazy"], 0)
+                    eager = repr(_stable_ast(node))
+                    node.is_lazy = flag
+                    self.assertEqual(dict(_stable_ast(node)[1])["is_lazy"], flag)
+                    self.assertNotEqual(eager, repr(_stable_ast(node)))
+
+    @unittest.skipIf(sys.version_info < (3, 15), "import laziness requires Python 3.15")
+    def test_each_auth_import_flag_changes_the_ast_digest(self) -> None:
+        for index in range(14):
+            with self.subTest(import_index=index):
+                tree = ast.parse(self.auth_text)
+                imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
+                self.assertEqual(len(imports), 14)
+                node = imports[index]
+                self.assertIn("is_lazy", type(node)._fields)
+                self.assertEqual(dict(ast.iter_fields(node))["is_lazy"], 0)
+                node.is_lazy = 1
+                self.assertNotEqual(_sha256(repr(_stable_ast(tree)).encode()), AUTH_AST_SHA256)
+
+    @unittest.skipIf(sys.version_info < (3, 15), "lazy syntax requires Python 3.15")
+    def test_parser_lazy_imports_reach_the_executable_guard(self) -> None:
+        for source in ("import argparse", "from http.server import BaseHTTPRequestHandler, HTTPServer"):
+            with self.subTest(source=source):
+                eager = ast.parse(source).body[0]
+                lazy = ast.parse("lazy " + source).body[0]
+                self.assertIs(type(lazy), type(eager))
+                self.assertIn("is_lazy", type(lazy)._fields)
+                flag = dict(ast.iter_fields(lazy))["is_lazy"]
+                self.assertNotEqual(flag, 0)
+                self.assertEqual(dict(_stable_ast(lazy)[1])["is_lazy"], flag)
+                self.assertNotEqual(repr(_stable_ast(eager)), repr(_stable_ast(lazy)))
+                lazy.is_lazy = 0
+                self.assertEqual(repr(_stable_ast(eager)), repr(_stable_ast(lazy)))
+                changed = _replace_once(self.auth_text, source + "\n", "lazy " + source + "\n")
+                self.assertEqual(_scopes_assignment(ast.parse(changed)), RUNTIME_SCOPES)
+                with self.assertRaisesRegex(AssertionError, "^auth.py executable AST changed$"):
+                    _validate_auth(changed.encode())
+
+    def test_scope_mutations_reach_the_scope_guard(self) -> None:
+        assignment = f'SCOPES = "{RUNTIME_SCOPES}"'
+        for source, message in (
+            (
+                _replace_once(self.auth_text, assignment, 'SCOPES = "accounting.reports.read"'),
+                "^runtime SCOPES changed:",
+            ),
+            (
+                _replace_once(
+                    self.auth_text,
+                    assignment,
+                    'SCOPES = "offline_access " + "accounting.reports.trialbalance.read"',
+                ),
+                "^SCOPES must remain a literal string$",
+            ),
+            (self.auth_text + "\n" + assignment, "^expected one top-level SCOPES assignment, found 2$"),
+        ):
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(AssertionError, message):
+                    _validate_auth(source.encode())
+
+    def test_executable_and_byte_mutations_reach_their_own_guards(self) -> None:
+        changed = _replace_once(self.auth_text, "server.timeout = 1", "server.timeout = 2")
+        self.assertEqual(_scopes_assignment(ast.parse(changed)), RUNTIME_SCOPES)
+        self.assertNotEqual(_sha256(repr(_stable_ast(ast.parse(changed))).encode()), AUTH_AST_SHA256)
+        with self.assertRaisesRegex(AssertionError, "^auth.py executable AST changed$"):
+            _validate_auth(changed.encode())
+        for suffix in ("\n", "# fabricated comment\n"):
+            with self.subTest(suffix=suffix):
+                changed = self.auth_text + suffix
+                self.assertEqual(
+                    _sha256(repr(_stable_ast(ast.parse(changed))).encode()), AUTH_AST_SHA256
+                )
+                with self.assertRaisesRegex(
+                    AssertionError, "^auth.py changed: expected canonical SHA-256"
+                ):
+                    _validate_auth(changed.encode())
 
     def test_exact_documents_accept_lf_crlf_and_an_unrelated_file_change(self) -> None:
         for label, newline in (("LF", b"\n"), ("CRLF", b"\r\n")):
