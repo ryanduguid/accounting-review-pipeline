@@ -594,7 +594,7 @@ def test_a_failed_pack_write_rolls_back_to_the_previous_run(tmp_path: Path, bloc
     # staging exists to prevent, and the CLI reports only the OSError.
     for name, content in survivors.items():
         assert (output / name).read_bytes() == content
-    assert sorted(item.name for item in output.iterdir()) == sorted(PACK_FILE_NAMES)
+    assert sorted(item.name for item in output.iterdir()) == sorted((*PACK_FILE_NAMES, ".reviewready"))
 
 
 def test_a_failed_write_removes_a_pack_file_that_had_no_previous_version(tmp_path: Path) -> None:
@@ -616,6 +616,7 @@ def test_a_failed_write_removes_a_pack_file_that_had_no_previous_version(tmp_pat
     assert not (output / "readiness-pack.json").exists()
     assert (output / "readiness-summary.md").read_bytes() == survivor
     assert sorted(item.name for item in output.iterdir()) == [
+        ".reviewready",
         "findings.csv",
         "readiness-summary.md",
     ]
@@ -642,7 +643,10 @@ def test_a_staging_write_that_dies_part_way_leaves_no_orphan(
 
     # A staged file the run could not finish writing must go with the rest, not
     # sit in the output directory as a truncated fragment of a pack.
-    assert list(output.iterdir()) == []
+    assert [item.name for item in output.iterdir()] == [".reviewready"]
+    assert sorted(item.name for item in (output / ".reviewready").iterdir()) == [
+        "state.json", "writer.lock",
+    ]
 
 
 def _bas_ready_with_bank_row(tmp_path: Path, replacement: str) -> Path:

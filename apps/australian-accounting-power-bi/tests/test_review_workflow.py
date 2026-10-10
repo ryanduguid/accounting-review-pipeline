@@ -730,5 +730,21 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertNotIn("coverage_percentage", projected["sample-review-run.csv"].decode())
 
 
+    def test_export_tree_admits_only_the_readiness_publication_control(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            expected = workflow.fixed_export_inventory()
+            for name in expected | {"receipt.json", "receipt.sha256"}:
+                (run / name).parent.mkdir(parents=True, exist_ok=True)
+                (run / name).write_bytes(b"x")
+            control = run / workflow.READY_CONTROL
+            control.mkdir()
+            (control / "state.json").write_bytes(b"{}")
+            workflow.check_export_tree(run, expected)
+            (run / "close/.reviewready").mkdir()
+            with self.assertRaisesRegex(ValueError, "unlisted"):
+                workflow.check_export_tree(run, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

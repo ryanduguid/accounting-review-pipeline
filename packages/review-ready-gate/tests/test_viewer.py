@@ -386,7 +386,7 @@ def test_viewer_imports_nothing_that_can_touch_a_network_or_ledger() -> None:
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             imported.add(node.module.split(".")[0])
-    allowed = {"__future__", "csv", "hashlib", "io", "json", "re", "decimal", "pathlib", "datetime", "typing"}
+    allowed = {"__future__", "csv", "hashlib", "io", "json", "re", "stat", "decimal", "pathlib", "datetime", "typing"}
     assert imported <= allowed, f"viewer gained imports outside its sandbox: {sorted(imported - allowed)}"
 
 

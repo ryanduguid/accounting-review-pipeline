@@ -28,6 +28,8 @@ NAME = "australian-accounting-power-bi"
 TB_COLUMNS = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit".split(",")
 CLOSE_FILES = ("close-review-pack.json", "close-summary.md", "exceptions.csv", "client-queries.csv")
 READY_FILES = ("readiness-pack.json", "readiness-summary.md", "findings.csv")
+# review-ready's publication control directory; the producer's viewer checks it.
+READY_CONTROL = "readiness/.reviewready"
 BOUNDARY = "Fabricated demonstration. Verification and acknowledgement do not approve accounting or close a period."
 PRODUCERS = {
     "close-control": ("monthly-close-control-plane", "closecontrol", "closecontrol.cli:main"),
@@ -696,7 +698,7 @@ def build(run: Path, bin_dir: Path, month: int, note: Path | None = None) -> Pat
     doc = close_document(strict_json((run / "close/close-review-pack.json").read_bytes(), "Close pack"))
     if doc["source_sha256"]["current_trial_balance"] != digest(current) or doc["source_sha256"]["prior_trial_balance"] != digest(prior) or doc["current_report_dates"] != [period] or any(r["tenant"] not in ("", case["tenant"]) for r in doc["exceptions"]):
         raise ValueError("Close provenance or context differs from the case.")
-    files = {str(path.relative_to(run)).replace("\\", "/"): digest(path.read_bytes()) for folder in ("inputs", "close", "readiness", "drivers", "validation") for path in (run / folder).iterdir()}
+    files = {name: digest(path.read_bytes()) for folder in ("inputs", "close", "readiness", "drivers", "validation") for path in (run / folder).iterdir() if (name := path.relative_to(run).as_posix()) != READY_CONTROL}
     receipt = {"schema_version": 1, "case": case, "period": period, "invocations": commands, "files": files, "boundary": BOUNDARY, "producer_manifests": manifests}
     data = json_bytes(receipt)
     (run / "receipt.json").write_bytes(data)
@@ -1036,6 +1038,8 @@ def check_export_tree(run: Path, expected: set[str]) -> None:
             if stat.S_ISDIR(metadata.st_mode) and name in folders:
                 seen_folders.add(name)
                 visit(entry)
+            elif stat.S_ISDIR(metadata.st_mode) and name == READY_CONTROL:
+                continue
             elif stat.S_ISREG(metadata.st_mode) and name in files:
                 total += metadata.st_size
                 if metadata.st_size > MAX_EXPORT_MEMBER or total > MAX_EXPORT_BYTES:
