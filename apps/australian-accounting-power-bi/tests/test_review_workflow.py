@@ -754,8 +754,29 @@ class ReviewWorkflowTests(unittest.TestCase):
             state = {"format": 1, "status": "settled", "revision": "a" * 32, "transaction": None, "previous": [None] * 3}
             (control / "state.json").write_text(json.dumps(state), encoding="utf-8")
             self.assertEqual(workflow.ready_revision(run), "a" * 32)
-            (control / "state.json").write_text(json.dumps({**state, "status": "in_progress", "transaction": "b" * 32}), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "unresolved"):
+            (control / "state.json").write_text(json.dumps({**state, "transaction": "b" * 32, "previous": ["c" * 64, None, None]}), encoding="utf-8")
+            self.assertEqual(workflow.ready_revision(run), "a" * 32)
+            refused = [
+                {**state, "status": "in_progress", "transaction": "b" * 32},
+                {"status": "settled", "revision": "x"},
+                {**state, "extra": None},
+                {**state, "format": 2},
+                {**state, "format": True},
+                {**state, "revision": ""},
+                {**state, "revision": "A" * 32},
+                {**state, "transaction": "b" * 31},
+                {**state, "previous": [None] * 2},
+                {**state, "previous": ["c" * 63, None, None]},
+                [state],
+            ]
+            for value in refused:
+                with self.subTest(state=value):
+                    (control / "state.json").write_text(json.dumps(value), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "unresolved or unsupported"):
+                        workflow.ready_revision(run)
+            (control / "state.json").write_text(json.dumps(state), encoding="utf-8")
+            os.link(control / "state.json", run / "linked-state.json")
+            with self.assertRaisesRegex(ValueError, "single-link"):
                 workflow.ready_revision(run)
 
 

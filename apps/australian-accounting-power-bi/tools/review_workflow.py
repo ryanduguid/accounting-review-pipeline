@@ -716,9 +716,23 @@ def ready_revision(run: Path) -> str | None:
         return None
     if not stat.S_ISDIR(metadata.st_mode):
         raise ValueError("Readiness publication control is not a directory.")
-    state = strict_json(ordinary(control / "state.json").read_bytes(), "Readiness publication state")
-    if not isinstance(state, dict) or state.get("status") != "settled" or not isinstance(state.get("revision"), str):
-        raise ValueError("Readiness publication is unresolved.")
+    path = ordinary(control / "state.json")
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise ValueError("Readiness publication state is not a regular, single-link file.")
+    state = strict_json(path.read_bytes(), "Readiness publication state")
+
+    # The same version 1 schema review-ready's own reader requires.
+    def identifier(value: Any, digits: int) -> bool:
+        return isinstance(value, str) and re.fullmatch(f"[0-9a-f]{{{digits}}}", value) is not None
+
+    if (not isinstance(state, dict) or set(state) != {"format", "status", "revision", "transaction", "previous"}
+            or type(state["format"]) is not int or state["format"] != 1 or state["status"] != "settled"
+            or not identifier(state["revision"], 32)
+            or (state["transaction"] is not None and not identifier(state["transaction"], 32))
+            or not isinstance(state["previous"], list) or len(state["previous"]) != 3
+            or any(value is not None and not identifier(value, 64) for value in state["previous"])):
+        raise ValueError("Readiness publication is unresolved or unsupported.")
     return state["revision"]
 
 
