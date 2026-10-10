@@ -64,6 +64,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from bisect import bisect_left
+from dataclasses import dataclass
 from typing import Callable
 
 # The token class carries the Latin-1 accented letters as well as A-Z. Without
@@ -518,6 +520,60 @@ _STRUCTURED: tuple[tuple[str, re.Pattern[str], Callable[[str], bool]], ...] = (
     ("phone", PHONE, _always),
 )
 
+# These probes share the identifier grammar but omit its terminal pin. A pin
+# can hide "TFN: 1234567\n82. 3 next" before a post-match check sees it.
+# Probes only refuse ambiguous input; they never authorise a replacement.
+_IDENTIFIER_PROBES = tuple(
+    (re.compile(pattern.pattern.removesuffix(
+        _BARE_END if pattern in (TFN_BARE, ABN, ACN) else _LABEL_PIN
+    ), pattern.flags), validator)
+    for kind, pattern, validator in _STRUCTURED
+    if kind in {"tfn", "abn", "acn", "medicare"}
+)
+_LINE_BREAKS = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
+_LINE_LIST_MARKER = re.compile(
+    r"[%s][^\S%s]*\d+[.)](?=\s|$)" % (_LINE_BREAKS, _LINE_BREAKS)
+)
+
+
+@dataclass(frozen=True)
+class _AmbiguousIdentifier:
+    start: int  # Protect the label too, so mapping it cannot erase the evidence.
+    digit_start: int
+    end: int
+    value: str
+
+
+def _ambiguous_identifiers(text: str) -> list[_AmbiguousIdentifier]:
+    """Find marker collisions, including candidates hidden by terminal pins."""
+    # Index complete markers once: their digits can extend beyond the bounded
+    # identifier capture. Horizontal Unicode whitespace is supported too.
+    marker_starts = [match.start() for match in _LINE_LIST_MARKER.finditer(text)]
+    found: dict[tuple[int, int, int], _AmbiguousIdentifier] = {}
+    for pattern, validator in _IDENTIFIER_PROBES:
+        for match in pattern.finditer(text):
+            start, end = match.span(1)
+            value = match.group(1)
+            nearest = bisect_left(marker_starts, start)
+            if nearest == len(marker_starts) or marker_starts[nearest] >= end:
+                continue
+            if not validator("".join(c for c in value if c.isdigit())):
+                continue
+            key = match.start(), start, end
+            found[key] = _AmbiguousIdentifier(*key, value)
+    return sorted(found.values(), key=lambda candidate: (candidate.start, candidate.end))
+
+
+def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Merge overlapping intervals so both starts and ends are ordered."""
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = merged[-1][0], max(end, merged[-1][1])
+        else:
+            merged.append((start, end))
+    return merged
+
 
 def is_statutory(candidate: str) -> bool:
     """True when a NAME match is legislative vocabulary rather than a person."""
@@ -604,6 +660,8 @@ def structured_spans(text: str) -> list[tuple[int, int, str, str]]:
     address. Keeping the tail replaces every character any pattern matched;
     the shared characters stay with the span that starts first.
     """
+    ambiguous = _merge_intervals([(a.start, a.end) for a in _ambiguous_identifiers(text)])
+    ambiguous_starts = [start for start, _end in ambiguous]
     found: list[tuple[int, int, str, str, int]] = []
     for priority, (kind, pattern, validator) in enumerate(_STRUCTURED):
         for match in pattern.finditer(text):
@@ -616,6 +674,9 @@ def structured_spans(text: str) -> list[tuple[int, int, str, str]]:
             if kind == "medicare" and match.group("reference") is not None:
                 end = match.end("reference")
                 value = text[start:end]
+            nearest = bisect_left(ambiguous_starts, end) - 1
+            if nearest >= 0 and ambiguous[nearest][1] > start:
+                continue
             found.append((start, end, kind, value, priority))
     # Leftmost wins; at one start the longest wins; on an exact tie the kind
     # listed first in _STRUCTURED wins. A candidate wholly inside what is
