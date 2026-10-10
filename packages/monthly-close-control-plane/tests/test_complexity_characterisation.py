@@ -131,10 +131,12 @@ def test_quiet_pass_prints_the_existing_banner(tmp_path, capsys, command):
     assert f"{prefix}: PASS; 0 exception(s); 0 client query(ies) drafted\n" in capsys.readouterr().out
 
 
-def test_driver_cli_explains_the_financial_year_reset(tmp_path, capsys):
+@pytest.mark.parametrize("prior_date,reset", [("2026-06-30", True), ("2026-07-30", False)])
+def test_driver_cli_explains_the_financial_year_reset(tmp_path, capsys, prior_date, reset):
     prior = tmp_path / "prior.csv"
-    prior.write_text((EXAMPLES / "prior_trial_balance.csv").read_text().replace(
-        "2026-07-31", "2026-06-30"), encoding="utf-8")
+    source = (EXAMPLES / "prior_trial_balance.csv").read_text()
+    original_date = source.splitlines()[1].split(",")[0]
+    prior.write_text(source.replace(original_date, prior_date), encoding="utf-8")
     pack = tmp_path / "pack"
     assert main(["review", "--current", str(EXAMPLES / "current_trial_balance.csv"),
                  "--prior", str(prior), "--output", str(pack)]) == 2
@@ -142,7 +144,8 @@ def test_driver_cli_explains_the_financial_year_reset(tmp_path, capsys):
     assert main(["drivers", "--pack-dir", str(pack), "--transactions",
                  str(EXAMPLES / "variance_transactions.csv"), "--currency", "AUD",
                  "--output", str(tmp_path / "drivers")]) == 2
-    assert "The pack crosses a 30 June reset; profit-and-loss movements are not comparable." in capsys.readouterr().out
+    message = "The pack crosses a 30 June reset; profit-and-loss movements are not comparable."
+    assert (message in capsys.readouterr().out) is reset
 
 
 @pytest.mark.filterwarnings("ignore:.*found in sys.modules.*:RuntimeWarning")
