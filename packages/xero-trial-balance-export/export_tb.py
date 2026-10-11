@@ -1131,15 +1131,7 @@ def write_manifest(out_path: str, digest: str, tenant: dict, report_date: str, b
     return manifest_path
 
 
-def main() -> None:
-    # Non-console stdout on Windows is cp1252, not UTF-8 (PEP 528). A macron
-    # or CJK character in an org name must not abort a redirected or piped run
-    # before the report is ever fetched.
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if callable(reconfigure):
-            reconfigure(encoding="utf-8", errors="replace")
-
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Export a Xero Trial Balance to CSV.")
     parser.add_argument("--date", type=iso_date, default=date.today().isoformat(), help="Report date YYYY-MM-DD")
     parser.add_argument(
@@ -1176,13 +1168,10 @@ def main() -> None:
             "the default is the per-user state directory (or a leftover module-adjacent token.json)."
         ),
     )
-    args = parser.parse_args()
-    # Module state, like xero_client.TOKEN_FILE below: the write and manifest
-    # helpers build their own messages, and threading a flag through all of them
-    # and their error closures would say the same thing 5 times over.
-    global QUIET
-    QUIET = bool(args.quiet)
+    return parser
 
+
+def _preflight_output(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     # Reject an unusable destination before looking up credentials or calling
     # Xero, whether or not --out was given. For a supplied value the real names
     # are known now and the default fallback is never used. Without one the
@@ -1203,28 +1192,10 @@ def main() -> None:
     except ValueError as exc:
         parser.error(str(exc))
 
-    load_dotenv()
-    # Re-resolve after load_dotenv: a XERO_TOKEN_FILE set in .env is not in
-    # the environment when xero_client is imported, and --token-file is only
-    # known now.
-    xero_client.TOKEN_FILE = xero_client.resolve_token_file(args.token_file)
-    client_id = os.environ.get("XERO_CLIENT_ID")
-    client_secret = os.environ.get("XERO_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        sys.exit("Set XERO_CLIENT_ID and XERO_CLIENT_SECRET in .env (see .env.example).")
 
-    # api_get looks the access token up fresh per call. No token is held
-    # here, so a mid-run refresh can never leave a later call using the
-    # stale one; the creds also cover the surprise-401 forced refresh
-    creds = (client_id, client_secret)
-
-    connections = validated_connections(get_connections(creds))
-    if not connections:
-        sys.exit("No Xero organisations authorised for this app - run auth.py again.")
-    tenant = select_tenant(connections, args.tenant)
-    if not args.quiet:
-        print(f"Tenant: {tenant['tenantName']}")
-
+def _fetch_validated_rows(
+    args: argparse.Namespace, creds: tuple[str, str], tenant: dict
+) -> list[dict]:
     params = {"date": args.date}
     if args.payments_only:
         params["paymentsOnly"] = "true"
@@ -1251,14 +1222,12 @@ def main() -> None:
     missing = {"Account", "Debit", "Credit", "YTD Debit", "YTD Credit"} - set(column_titles)
     if missing:
         sys.exit(f"Unexpected report columns - missing {sorted(missing)}. Has the API shape changed?")
+    return rows
 
-    basis = "cash" if args.payments_only else "accrual"
-    try:
-        out_path = output_path(args.out, default_output_filename(tenant, args.date, basis))
-        require_output_outside_checkout(out_path, with_manifest=not args.no_manifest)
-    except ValueError as exc:
-        parser.error(str(exc))
 
+def _publish_checked_export(
+    args: argparse.Namespace, rows: list[dict], tenant: dict, out_path: str, basis: str
+) -> None:
     # Build everything in memory and balance-check BEFORE any file exists:
     # a scheduled Power BI refresh reads the path, not the exit code, so an
     # unbalanced export must never reach disk.
@@ -1292,6 +1261,59 @@ def main() -> None:
             print("Wrote manifest beside the export (filename withheld under --quiet)")
         else:
             print(f"Wrote manifest {manifest_path}")
+
+
+def main() -> None:
+    # Non-console stdout on Windows is cp1252, not UTF-8 (PEP 528). A macron
+    # or CJK character in an org name must not abort a redirected or piped run
+    # before the report is ever fetched.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
+    parser = _build_parser()
+    args = parser.parse_args()
+    # Module state, like xero_client.TOKEN_FILE below: the write and manifest
+    # helpers build their own messages, and threading a flag through all of them
+    # and their error closures would say the same thing 5 times over.
+    global QUIET
+    QUIET = bool(args.quiet)
+
+    _preflight_output(parser, args)
+
+    load_dotenv()
+    # Re-resolve after load_dotenv: a XERO_TOKEN_FILE set in .env is not in
+    # the environment when xero_client is imported, and --token-file is only
+    # known now.
+    xero_client.TOKEN_FILE = xero_client.resolve_token_file(args.token_file)
+    client_id = os.environ.get("XERO_CLIENT_ID")
+    client_secret = os.environ.get("XERO_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        sys.exit("Set XERO_CLIENT_ID and XERO_CLIENT_SECRET in .env (see .env.example).")
+
+    # api_get looks the access token up fresh per call. No token is held
+    # here, so a mid-run refresh can never leave a later call using the
+    # stale one; the creds also cover the surprise-401 forced refresh
+    creds = (client_id, client_secret)
+
+    connections = validated_connections(get_connections(creds))
+    if not connections:
+        sys.exit("No Xero organisations authorised for this app - run auth.py again.")
+    tenant = select_tenant(connections, args.tenant)
+    if not args.quiet:
+        print(f"Tenant: {tenant['tenantName']}")
+
+    rows = _fetch_validated_rows(args, creds, tenant)
+
+    basis = "cash" if args.payments_only else "accrual"
+    try:
+        out_path = output_path(args.out, default_output_filename(tenant, args.date, basis))
+        require_output_outside_checkout(out_path, with_manifest=not args.no_manifest)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    _publish_checked_export(args, rows, tenant, out_path, basis)
 
 
 def run() -> None:
