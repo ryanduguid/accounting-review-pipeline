@@ -2,7 +2,9 @@
 //! `Path.resolve()` (which is `os.path.realpath`), and containment.
 
 use std::io;
-use std::path::{Component, Path, PathBuf};
+#[cfg(not(windows))]
+use std::path::Component;
+use std::path::{Path, PathBuf};
 
 /// `str(Path(raw))`: separators collapsed and `.` parts dropped, `..` kept.
 pub fn display(raw: &str) -> String {
@@ -90,28 +92,52 @@ pub fn resolve(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> {
 fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> {
     // ntpath.realpath: normpath (std::path::absolute already did it), then the
     // final path of the longest existing prefix with the missing tail appended.
-    match std::fs::canonicalize(path) {
-        Ok(found) => Ok(strip_verbatim(found)),
-        Err(error) if strict => Err(classify(&error)),
-        Err(_) => {
-            let mut existing = path.to_path_buf();
-            let mut tail = Vec::new();
-            loop {
-                let Some(name) = existing.file_name().map(|n| n.to_owned()) else {
-                    return Ok(path.to_path_buf());
-                };
-                tail.push(name);
-                existing.pop();
-                if let Ok(found) = std::fs::canonicalize(&existing) {
-                    let mut result = strip_verbatim(found);
-                    for name in tail.iter().rev() {
-                        result.push(name);
-                    }
-                    return Ok(result);
-                }
-            }
-        }
+    if strict {
+        return std::fs::canonicalize(path)
+            .map(strip_verbatim)
+            .map_err(|e| classify(&e));
     }
+    // _getfinalpathname_nonstrict: when Windows cannot resolve a prefix, follow
+    // a link by reading it (as _readlink_deep does), else drop to the parent.
+    let mut current = path.to_path_buf();
+    let mut tail = Vec::new();
+    loop {
+        let base = match std::fs::canonicalize(&current) {
+            Ok(found) => Some(strip_verbatim(found)),
+            Err(_) => read_link_deep(&current).filter(|followed| *followed != current),
+        };
+        if let Some(mut result) = base {
+            for name in tail.iter().rev() {
+                result.push(name);
+            }
+            return Ok(result);
+        }
+        let Some(name) = current.file_name().map(|n| n.to_owned()) else {
+            return Ok(path.to_path_buf());
+        };
+        tail.push(name);
+        current.pop();
+    }
+}
+
+/// ntpath._readlink_deep: follow links by reading them, resolving relative
+/// targets against the link's own directory.
+#[cfg(windows)]
+fn read_link_deep(path: &Path) -> Option<PathBuf> {
+    let mut current = path.to_path_buf();
+    let mut seen = std::collections::HashSet::new();
+    while seen.insert(current.to_string_lossy().to_lowercase()) {
+        let Ok(target) = std::fs::read_link(&current) else {
+            break;
+        };
+        let joined = if target.is_absolute() {
+            target
+        } else {
+            current.parent()?.join(target)
+        };
+        current = std::path::absolute(joined).ok()?;
+    }
+    Some(current)
 }
 
 #[cfg(windows)]

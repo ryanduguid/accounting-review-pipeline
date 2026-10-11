@@ -31,6 +31,28 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 /// package printed its install directory here.
 pub const BUNDLE_ROOT: &str = "<bundled>";
 
+/// A path below the bundled data as CPython printed it: `root / rel`, with
+/// backslashes on Windows.
+pub fn bundled(rel: &str) -> String {
+    let sep = if cfg!(windows) { "\\" } else { "/" };
+    format!("{BUNDLE_ROOT}{sep}{}", rel.replace('/', sep))
+}
+
+/// `package_root / text` for an anchored path. On Windows a rooted path with
+/// no drive takes the package's drive, which is the drive this binary runs from.
+fn anchored(text: &str) -> String {
+    let bare_root = text.starts_with(['/', '\\']) && !text.starts_with("\\\\") && !text.starts_with("//");
+    if !cfg!(windows) || !bare_root {
+        return text.to_string();
+    }
+    let drive = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.to_str().and_then(|s| s.get(..2)).map(str::to_string))
+        .filter(|d| d.ends_with(':'))
+        .unwrap_or_else(|| "C:".to_string());
+    format!("{drive}{text}")
+}
+
 /// The policy and sample files shipped inside the binary, keyed by their
 /// `/`-separated path below the package root (`samples/...`, `policy/...`).
 #[derive(Clone)]
@@ -112,7 +134,7 @@ pub enum Location {
 impl Location {
     pub fn display(&self) -> String {
         match self {
-            Location::Bundled(rel) => format!("{BUNDLE_ROOT}/{rel}"),
+            Location::Bundled(rel) => bundled(rel),
             Location::Disk(path) => path.display().to_string(),
         }
     }
@@ -158,9 +180,10 @@ impl Env {
         };
         if pypath::has_anchor(&text) {
             // root / absolute discards root, so CPython resolved the absolute path itself.
+            let text = anchored(&text);
             let shown = pypath::display(&text);
             return match pypath::resolve(Path::new(&text), true) {
-                Ok(_) => refuse(format!("{label} must stay within {BUNDLE_ROOT}/{subdir}.")),
+                Ok(_) => refuse(format!("{label} must stay within {}.", bundled(subdir))),
                 Err(ResolveError::NotFound) => refuse(format!("{label} does not exist: {shown}.")),
                 Err(ResolveError::Unusable) => refuse(format!("{label} is not a usable path: {shown}.")),
             };
@@ -182,19 +205,19 @@ impl Env {
         let rel = parts.join("/");
         if rel.is_empty() {
             // The package directory itself: it exists, outside every data subdirectory.
-            return refuse(format!("{label} must stay within {BUNDLE_ROOT}/{subdir}."));
+            return refuse(format!("{label} must stay within {}.", bundled(subdir)));
         }
         let Some(found) = self.bundle.lookup(&rel) else {
             return refuse(format!("{label} does not exist: {}.", self.bundle_display(raw)));
         };
         if found != subdir && !found.starts_with(&format!("{subdir}/")) {
-            return refuse(format!("{label} must stay within {BUNDLE_ROOT}/{subdir}."));
+            return refuse(format!("{label} must stay within {}.", bundled(subdir)));
         }
         Ok(Location::Bundled(found))
     }
 
     fn bundle_display(&self, raw: &PyStr) -> String {
-        format!("{BUNDLE_ROOT}/{}", pypath::display(&render(raw)))
+        bundled(&pypath::display(&render(raw)))
     }
 }
 

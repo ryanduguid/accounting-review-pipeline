@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -492,6 +493,15 @@ def validate_case(rng, env, case):
 
 # ------------------------------------------------------------------- running
 
+def child_env(**extra):
+    """A minimal environment for both implementations; Windows needs its system variables."""
+    keep = ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP") if os.name == "nt" else ()
+    base = {name: os.environ[name] for name in keep if name in os.environ}
+    if os.name != "nt":
+        base["PATH"] = "/usr/bin:/bin"
+    return {**base, "LANG": "C.UTF-8", **extra}
+
+
 class Env:
     def __init__(self, args):
         self.python = args.python
@@ -513,11 +523,11 @@ class Env:
 
     def run_python(self, pkg, cwd, argv):
         return subprocess.run([self.python, "-I", "-B", str(self.runner), str(pkg), *argv], cwd=cwd, capture_output=True,
-                              timeout=120, env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "PYTHONUTF8": "1"})
+                              timeout=120, env=child_env(PYTHONUTF8="1"))
 
     def run_rust(self, bundle, cwd, argv):
         return subprocess.run([str(self.binary), *argv], cwd=cwd, capture_output=True, timeout=120,
-                              env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "EAA_DIFFERENTIAL_BUNDLE": str(bundle)})
+                              env=child_env(EAA_DIFFERENTIAL_BUNDLE=str(bundle)))
 
 
 def place(cwd, files):
@@ -525,7 +535,10 @@ def place(cwd, files):
         path = cwd / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(data, tuple):
-            path.symlink_to(data[1])
+            try:
+                path.symlink_to(data[1])
+            except OSError:
+                pass  # Windows without symbolic link privilege: both sides lack the link
         else:
             path.write_bytes(data)
 
@@ -545,8 +558,11 @@ def snapshot(cwd):
 
 def normalise(text, replacements):
     for old, new in replacements:
-        text = text.replace(old.encode(), new.encode())
-    return text
+        # Paths also appear inside repr() in OS error text, with doubled backslashes.
+        for form in (old, old.replace("\\", "\\\\")):
+            text = text.replace(form.encode(), new.encode())
+    # Staging files carry random names in both implementations.
+    return re.sub(rb"\.[A-Za-z0-9_]{8}\.partial", b".<random>.partial", text)
 
 
 def compare(env, case, keep):

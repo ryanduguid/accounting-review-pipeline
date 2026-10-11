@@ -79,6 +79,7 @@ fn unique_name(prefix: &str, suffix: &str, attempt: u32) -> String {
 fn make_temp_dir(parent: &Path, prefix: &str) -> io::Result<PathBuf> {
     for attempt in 0..100 {
         let candidate = parent.join(unique_name(prefix, "", attempt));
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);

@@ -1,7 +1,5 @@
 //! Port of tests/test_util.py.
 
-use std::path::Path;
-
 use super::*;
 use crate::util::{Location, load_json_exact, load_json_object};
 
@@ -111,7 +109,7 @@ fn test_a_name_the_operating_system_refuses_is_blocked_not_a_traceback() {
     // An embedded NUL is the name every platform refuses outright.
     let dir = TempDir::new();
     let env = env(dir.path());
-    let target = Path::new(std::ffi::OsStr::from_bytes(b"build/de\0mo/decision.json"));
+    let target = std::path::Path::new(std::ffi::OsStr::from_bytes(b"build/de\0mo/decision.json"));
     assert_refused(env.within_build(target, "test artefact", true), "not a usable path");
 }
 
