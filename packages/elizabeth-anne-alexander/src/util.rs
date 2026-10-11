@@ -208,17 +208,34 @@ impl Env {
             };
         }
         let separators: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
+        let missing = || refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(&text))));
+        let steps: Vec<&str> = text
+            .split(separators)
+            .filter(|part| !matches!(*part, "" | "."))
+            .collect();
         let mut parts: Vec<&str> = Vec::new();
-        for part in text.split(separators) {
-            match part {
-                "" | "." => {}
-                ".." => {
-                    // Above the package directory CPython found nothing to resolve.
-                    if parts.pop().is_none() {
-                        return refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(&text))));
-                    }
+        for (index, step) in steps.iter().enumerate() {
+            if *step == ".." {
+                // Above the package directory CPython found nothing to resolve.
+                if parts.pop().is_none() {
+                    return missing();
                 }
-                other => parts.push(other),
+                continue;
+            }
+            parts.push(step);
+            // POSIX strict realpath visits every part in order, so a missing
+            // directory or a file used as one is refused even when a later ".."
+            // would leave it. Windows normalises ".." away before resolving.
+            if cfg!(not(windows)) {
+                let Some(found) = self.bundle.lookup(&parts.join("/")) else {
+                    return missing();
+                };
+                if index + 1 < steps.len() && self.bundle.files.contains_key(&found) {
+                    return refuse(format!(
+                        "{label} is not a usable path: {}.",
+                        bundled(&pypath::display(&text))
+                    ));
+                }
             }
         }
         let rel = parts.join("/");

@@ -127,3 +127,25 @@ fn test_a_name_that_cannot_be_encoded_for_the_filesystem_is_blocked_not_a_traceb
     };
     assert_refused(env.within_bundle(&name, "samples", "x"), expected);
 }
+
+#[cfg(not(windows))]
+#[test]
+fn test_bundled_paths_through_missing_or_file_parts_are_refused_as_posix_resolve_does() {
+    // POSIX strict resolve visits every part, so a later ".." cannot excuse a
+    // missing directory or a file used as one. Windows normalises ".." first.
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let missing = PyStr::from("samples/nonexistent/../contexts/sample-monthly-variance.context.json");
+    assert_refused(
+        env.within_bundle(&missing, "samples", "context"),
+        "context does not exist",
+    );
+    let through_file =
+        PyStr::from("samples/contexts/sample-monthly-variance.context.json/../sample-monthly-variance.context.json");
+    assert_refused(
+        env.within_bundle(&through_file, "samples", "context"),
+        "context is not a usable path",
+    );
+    let back_and_forth = PyStr::from("samples/contexts/../contexts/sample-monthly-variance.context.json");
+    assert!(env.within_bundle(&back_and_forth, "samples", "context").is_ok());
+}

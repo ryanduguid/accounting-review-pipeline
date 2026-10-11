@@ -372,7 +372,9 @@ PATH_VARIANTS = ["build/demo", "build", "build/a/b/c", "build/../build/x", "out"
                  "build/./x", "", "build/été", "build/x\x7fy"]
 INPUT_VARIANTS = [CONTEXT, "./" + CONTEXT, "samples//contexts/sample-monthly-variance.context.json", "samples/contexts",
                   "samples/contexts/missing.json", "../samples/x.json", "/etc/hostname", "/nonexistent/x.json",
-                  POLICY, "samples/requests/../requests/sample-revenue-variance.request.json"]
+                  POLICY, "samples/requests/../requests/sample-revenue-variance.request.json",
+                  "samples/nonexistent/../contexts/sample-monthly-variance.context.json",
+                  CONTEXT + "/../sample-monthly-variance.context.json"]
 # Names Python decodes with surrogateescape (POSIX bytes) or keeps as lone
 # surrogates (Windows UTF-16), and root forms pathlib prints its own way.
 if os.name != "nt":
@@ -395,7 +397,11 @@ def evaluate_argv(rng, case):
         policy = rng.choice(INPUT_VARIANTS + ["policy//demo-policy-v1.json"])
     if rng.random() < 0.15:
         out = rng.choice(PATH_VARIANTS)
-    if rng.random() < 0.1:
+    if rng.random() < 0.05:
+        # A symlink reached only after a missing part and "..": resolve must still follow it.
+        case.cwd_files["build/escape"] = ("symlink", "/nonexistent-outside")
+        out = "build/nonexistent/../escape/pack"
+    elif rng.random() < 0.1:
         case.cwd_files["build"] = b"not a directory"
     elif rng.random() < 0.1:
         case.cwd_files["build/demo/receipt.json"] = b"old"

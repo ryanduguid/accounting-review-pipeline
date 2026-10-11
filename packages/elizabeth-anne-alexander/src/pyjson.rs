@@ -22,21 +22,18 @@ impl From<&str> for PyStr {
 
 impl PyStr {
     /// A str from an OS string's text, with carried code points back as the
-    /// lone surrogates Python held (see `pytext::carried`).
+    /// lone surrogates Python held (see `pytext::push_code_point`).
     pub fn from_os_text(text: &str) -> PyStr {
-        PyStr(
-            text.chars()
-                .map(|ch| crate::pytext::surrogate_of(ch).unwrap_or(ch as u32))
-                .collect(),
-        )
+        PyStr(crate::pytext::code_points(text).collect())
     }
 
     /// The reverse of `from_os_text`: lone surrogates as carried code points.
     pub fn os_text(&self) -> String {
+        let mut out = String::new();
         self.0
             .iter()
-            .map(|&cp| char::from_u32(cp).unwrap_or_else(|| crate::pytext::carried(cp)))
-            .collect()
+            .for_each(|&cp| crate::pytext::push_code_point(&mut out, cp));
+        out
     }
 
     /// The text, or `None` when it holds a lone surrogate (not encodable as UTF-8).

@@ -5,8 +5,6 @@ use crate::pytext;
 
 use std::ffi::{OsStr, OsString};
 use std::io;
-#[cfg(not(windows))]
-use std::path::Component;
 use std::path::{Path, PathBuf};
 
 const SEP: char = if cfg!(windows) { '\\' } else { '/' };
@@ -95,31 +93,33 @@ pub fn display(raw: &str) -> String {
 
 /// `os.fsdecode` of an OS string as Python holds it: undecodable bytes (Unix)
 /// or unpaired UTF-16 surrogates (Windows) become lone surrogates, which a
-/// Rust string carries as `pytext::carried` code points.
+/// Rust string carries as `pytext::push_code_point` escapes.
 pub fn decode_os(text: &OsStr) -> String {
+    let mut out = String::new();
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        let mut out = String::new();
         for chunk in text.as_bytes().utf8_chunks() {
-            out.push_str(chunk.valid());
+            chunk
+                .valid()
+                .chars()
+                .for_each(|ch| pytext::push_code_point(&mut out, ch as u32));
             // surrogateescape: each undecodable byte becomes U+DC00 + byte.
-            out.extend(
-                chunk
-                    .invalid()
-                    .iter()
-                    .map(|&byte| pytext::carried(0xDC00 + byte as u32)),
-            );
+            chunk
+                .invalid()
+                .iter()
+                .for_each(|&byte| pytext::push_code_point(&mut out, 0xDC00 + byte as u32));
         }
-        out
     }
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
-        char::decode_utf16(text.encode_wide())
-            .map(|unit| unit.unwrap_or_else(|error| pytext::carried(error.unpaired_surrogate() as u32)))
-            .collect()
+        for unit in char::decode_utf16(text.encode_wide()) {
+            let cp = unit.map_or_else(|error| error.unpaired_surrogate() as u32, |ch| ch as u32);
+            pytext::push_code_point(&mut out, cp);
+        }
     }
+    out
 }
 
 /// `os.fsencode`: the OS string a Python str names, reversing `decode_os`.
@@ -128,10 +128,12 @@ pub fn encode_os(text: &str) -> OsString {
     {
         use std::os::unix::ffi::OsStringExt;
         let mut bytes = Vec::with_capacity(text.len());
-        for ch in text.chars() {
-            match pytext::surrogate_of(ch) {
-                Some(surrogate @ 0xDC80..=0xDCFF) => bytes.push((surrogate - 0xDC00) as u8),
-                _ => bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+        for cp in pytext::code_points(text) {
+            match (cp, char::from_u32(cp)) {
+                (0xDC80..=0xDCFF, _) => bytes.push((cp - 0xDC00) as u8),
+                (_, Some(ch)) => bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+                // Python's fsencode refuses any other surrogate; callers check first.
+                (_, None) => bytes.extend_from_slice("\u{FFFD}".as_bytes()),
             }
         }
         OsString::from_vec(bytes)
@@ -140,10 +142,10 @@ pub fn encode_os(text: &str) -> OsString {
     {
         use std::os::windows::ffi::OsStringExt;
         let mut units = Vec::with_capacity(text.len());
-        for ch in text.chars() {
-            match pytext::surrogate_of(ch) {
-                Some(surrogate) => units.push(surrogate as u16),
-                None => units.extend_from_slice(ch.encode_utf16(&mut [0; 2])),
+        for cp in pytext::code_points(text) {
+            match char::from_u32(cp) {
+                Some(ch) => units.extend_from_slice(ch.encode_utf16(&mut [0; 2])),
+                None => units.push(cp as u16),
             }
         }
         OsString::from_wide(&units)
@@ -226,7 +228,7 @@ fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> 
 fn read_link_deep(path: &Path) -> Option<PathBuf> {
     let mut current = path.to_path_buf();
     let mut seen = std::collections::HashSet::new();
-    while seen.insert(current.to_string_lossy().to_lowercase()) {
+    while seen.insert(fold(current.as_os_str())) {
         let Ok(target) = std::fs::read_link(&current) else {
             break;
         };
@@ -242,11 +244,16 @@ fn read_link_deep(path: &Path) -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn strip_verbatim(path: PathBuf) -> PathBuf {
-    let text = path.to_string_lossy();
-    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
-        PathBuf::from(format!(r"\\{unc}"))
-    } else if let Some(local) = text.strip_prefix(r"\\?\") {
-        PathBuf::from(local)
+    // On UTF-16 units, so an unpaired surrogate in the name survives.
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    let units = |text: &str| text.encode_utf16().collect::<Vec<u16>>();
+    if let Some(unc) = wide.strip_prefix(units(r"\\?\UNC\").as_slice()) {
+        let mut out = units(r"\\");
+        out.extend_from_slice(unc);
+        PathBuf::from(OsString::from_wide(&out))
+    } else if let Some(local) = wide.strip_prefix(units(r"\\?\").as_slice()) {
+        PathBuf::from(OsString::from_wide(local))
     } else {
         path
     }
@@ -254,65 +261,85 @@ fn strip_verbatim(path: PathBuf) -> PathBuf {
 
 #[cfg(not(windows))]
 fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> {
-    // posixpath.realpath: walk the components, following symbolic links of
-    // the parts that exist and joining the rest lexically.
-    let mut pending: Vec<std::ffi::OsString> = path
-        .components()
-        .rev()
-        .filter_map(|c| match c {
-            Component::Normal(name) => Some(name.to_owned()),
-            Component::ParentDir => Some("..".into()),
-            _ => None,
-        })
-        .collect();
-    let mut resolved = PathBuf::from("/");
-    let mut hops = 0;
-    let mut missing = false;
-    while let Some(name) = pending.pop() {
-        if name == ".." {
-            resolved.pop();
+    // A line-by-line port of Python 3.15's posixpath.realpath on bytes. Every
+    // component is examined, including those after a missing one, so a later
+    // `..` that returns to an existing directory still follows its symlinks.
+    use std::collections::HashMap;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let filename = path.as_os_str().as_bytes();
+    // pathlib's str(path) never ends in a separator.
+    let trimmed = &filename[..filename.len() - filename.iter().rev().take_while(|&&b| b == b'/').count()];
+    // None marks a resolved symlink target; the link's own path is popped next.
+    let mut rest: Vec<Option<Vec<u8>>> = trimmed.split(|&b| b == b'/').rev().map(|p| Some(p.to_vec())).collect();
+    let mut part_count = rest.len();
+    let mut current: Vec<u8> = b"/".to_vec();
+    let mut seen: HashMap<Vec<u8>, Option<Vec<u8>>> = HashMap::new();
+    let os = |bytes: &[u8]| PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()));
+    while part_count > 0 {
+        let Some(name) = rest.pop().expect("part_count counts the entries left") else {
+            let link = rest.pop().flatten().expect("a link path follows its marker");
+            seen.insert(link, Some(current.clone()));
+            continue;
+        };
+        part_count -= 1;
+        if name.is_empty() || name == b"." {
             continue;
         }
-        let candidate = resolved.join(&name);
-        if missing {
-            resolved = candidate;
+        if name == b".." {
+            let cut = current.iter().rposition(|&b| b == b'/').unwrap_or(0);
+            current.truncate(cut.max(1));
             continue;
         }
-        match std::fs::symlink_metadata(&candidate) {
-            Ok(meta) if meta.file_type().is_symlink() => {
-                hops += 1;
-                if hops > 40 {
+        let mut newpath = current.clone();
+        if newpath != b"/" {
+            newpath.push(b'/');
+        }
+        newpath.extend_from_slice(&name);
+        let target = match std::fs::symlink_metadata(os(&newpath)) {
+            Ok(meta) if !meta.file_type().is_symlink() => {
+                if strict && part_count > 0 && !meta.is_dir() {
+                    // ENOTDIR: an OSError other than FileNotFoundError.
+                    return Err(ResolveError::Unusable);
+                }
+                current = newpath;
+                continue;
+            }
+            Ok(_) => match seen.get(&newpath) {
+                Some(Some(resolved)) => {
+                    current = resolved.clone();
+                    continue;
+                }
+                Some(None) => {
+                    // A symlink loop: ELOOP when strict, else the link path itself.
                     if strict {
                         return Err(ResolveError::Unusable);
                     }
-                    resolved = candidate;
-                    missing = true;
+                    current = newpath;
                     continue;
                 }
-                let target = std::fs::read_link(&candidate).map_err(|e| classify(&e))?;
-                if target.is_absolute() {
-                    resolved = PathBuf::from("/");
+                None => std::fs::read_link(os(&newpath)),
+            },
+            Err(error) => Err(error),
+        };
+        match target {
+            Ok(target) => {
+                let target = target.into_os_string().into_vec();
+                if target.starts_with(b"/") {
+                    current = b"/".to_vec();
                 }
-                for component in target.components().rev() {
-                    match component {
-                        Component::Normal(part) => pending.push(part.to_owned()),
-                        Component::ParentDir => pending.push("..".into()),
-                        _ => {}
-                    }
-                }
+                seen.insert(newpath.clone(), None);
+                rest.push(Some(newpath));
+                rest.push(None);
+                let parts: Vec<&[u8]> = target.split(|&b| b == b'/').collect();
+                part_count += parts.len();
+                rest.extend(parts.into_iter().rev().map(|p| Some(p.to_vec())));
             }
-            Ok(_) => resolved = candidate,
-            Err(error) => {
-                // Python 3.13+ realpath treats every lstat failure as missing unless strict.
-                if strict {
-                    return Err(classify(&error));
-                }
-                resolved = candidate;
-                missing = true;
-            }
+            // Non-strict realpath ignores every OSError and keeps the name.
+            Err(error) if strict => return Err(classify(&error)),
+            Err(_) => current = newpath,
         }
     }
-    Ok(resolved)
+    Ok(os(&current))
 }
 
 fn classify(error: &io::Error) -> ResolveError {
@@ -323,24 +350,38 @@ fn classify(error: &io::Error) -> ResolveError {
     }
 }
 
-/// `resolved.relative_to(root)` succeeds: lexical containment, case-insensitive on Windows.
-pub fn is_within(resolved: &Path, root: &Path) -> bool {
-    let fold = |p: &Path| -> Vec<String> {
-        p.components()
-            .map(|c| {
-                let text = c.as_os_str().to_string_lossy().into_owned();
-                if cfg!(windows) { text.to_lowercase() } else { text }
+/// The key pathlib compares a path part by: the exact OS string on POSIX,
+/// `str.lower()` on Windows, with unpaired surrogates kept distinct. Never
+/// lossy, so two different names can never compare equal.
+fn fold(text: &OsStr) -> Vec<u32> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        char::decode_utf16(text.encode_wide())
+            .flat_map(|unit| match unit {
+                Ok(ch) => ch.to_lowercase().map(|c| c as u32).collect::<Vec<_>>(),
+                Err(error) => vec![error.unpaired_surrogate() as u32],
             })
             .collect()
-    };
-    let (inner, outer) = (fold(resolved), fold(root));
+    }
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        text.as_bytes().iter().map(|&b| b as u32).collect()
+    }
+}
+
+/// `resolved.relative_to(root)` succeeds: lexical containment, case-insensitive on Windows.
+pub fn is_within(resolved: &Path, root: &Path) -> bool {
+    let parts = |p: &Path| -> Vec<Vec<u32>> { p.components().map(|c| fold(c.as_os_str())).collect() };
+    let (inner, outer) = (parts(resolved), parts(root));
     inner.len() >= outer.len() && inner[..outer.len()] == outer[..]
 }
 
 /// `Path.__eq__`, which is case-insensitive for Windows paths.
 pub fn same_path(a: &Path, b: &Path) -> bool {
     if cfg!(windows) {
-        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+        fold(a.as_os_str()) == fold(b.as_os_str())
     } else {
         a == b
     }
@@ -414,6 +455,40 @@ mod tests {
         assert_eq!(encode_os(&text), raw);
         assert_eq!(display("//x/./y"), "//x/y");
         assert_eq!(display("///etc"), "/etc");
+        // A genuine private-use character from the carrier's range stays itself,
+        // distinct from the surrogate an undecodable byte becomes.
+        let genuine = OsStr::from_bytes("build/out\u{10FCFF}\u{10F7FF}".as_bytes());
+        let genuine_text = decode_os(genuine);
+        assert_ne!(genuine_text, text);
+        assert_eq!(encode_os(&genuine_text), genuine);
+        assert_eq!(pytext::repr(&genuine_text), "'build/out\\U0010fcff\\U0010f7ff'");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn containment_never_equates_two_different_names() {
+        use std::os::unix::ffi::OsStrExt;
+        let inner = Path::new(OsStr::from_bytes(b"/w/review-\xfe/build/out"));
+        let root = Path::new(OsStr::from_bytes(b"/w/review-\xff/build"));
+        assert!(!is_within(inner, root));
+        assert!(is_within(
+            Path::new(OsStr::from_bytes(b"/w/review-\xff/build/out")),
+            root
+        ));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn resolve_follows_a_symlink_reached_after_a_missing_part() {
+        let dir = std::env::temp_dir().join(format!("eaa-realpath-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("build")).unwrap();
+        std::fs::create_dir_all(dir.join("outside")).unwrap();
+        std::os::unix::fs::symlink(dir.join("outside"), dir.join("build/escape")).unwrap();
+        let resolved = resolve(&dir.join("build/nonexistent/../escape/pack"), false).unwrap();
+        let outside = resolve(&dir.join("outside"), true).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(resolved, outside.join("pack"));
     }
 
     #[cfg(not(windows))]
