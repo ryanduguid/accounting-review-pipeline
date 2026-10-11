@@ -115,9 +115,15 @@ fn test_a_name_the_operating_system_refuses_is_blocked_not_a_traceback() {
 
 #[test]
 fn test_a_name_that_cannot_be_encoded_for_the_filesystem_is_blocked_not_a_traceback() {
-    // A lone surrogate reaches a path only through JSON; the bundled-path guard refuses it.
+    // POSIX resolve refuses a lone surrogate with UnicodeEncodeError; Windows
+    // passes it to the filesystem, which reports a missing file.
     let dir = TempDir::new();
     let env = env(dir.path());
     let name = crate::pyjson::PyStr(vec!['a' as u32, 0xD800, 'b' as u32]);
-    assert_refused(env.within_bundle(&name, "samples", "x"), "not a usable path");
+    let expected = if cfg!(windows) {
+        "does not exist"
+    } else {
+        "not a usable path"
+    };
+    assert_refused(env.within_bundle(&name, "samples", "x"), expected);
 }

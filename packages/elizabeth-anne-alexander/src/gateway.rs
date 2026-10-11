@@ -606,7 +606,7 @@ pub struct Evaluation {
 
 /// Resolve the context, request and policy paths against the bundled data.
 fn resolve_bundled(env: &Env, path: &Path, subdir: &str, label: &str) -> Result<Location> {
-    env.within_bundle(&PyStr::from(path.to_string_lossy().as_ref()), subdir, label)
+    env.within_bundle(&PyStr::from_os_text(&crate::pypath::text(path)), subdir, label)
 }
 
 /// The variance calculation `evaluate` runs; tests substitute their own.
@@ -818,8 +818,8 @@ pub struct ReviewInputs {
 
 /// Human decisions may sit with the bundled samples or beside run outputs under CWD build/.
 fn resolve_decision(env: &Env, path: &Path) -> Result<Location> {
-    let raw = path.to_string_lossy();
-    if let Ok(found) = env.within_bundle(&PyStr::from(raw.as_ref()), "samples", "human decision") {
+    let raw = crate::pypath::text(path);
+    if let Ok(found) = env.within_bundle(&PyStr::from_os_text(&raw), "samples", "human decision") {
         return Ok(found);
     }
     if let Ok(found) = env.within_build(path, "human decision", true) {

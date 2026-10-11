@@ -1,59 +1,158 @@
 //! The `pathlib` behaviour the gateway's guards rely on: how a path prints,
 //! `Path.resolve()` (which is `os.path.realpath`), and containment.
 
+use crate::pytext;
+
+use std::ffi::{OsStr, OsString};
 use std::io;
 #[cfg(not(windows))]
 use std::path::Component;
 use std::path::{Path, PathBuf};
 
-/// `str(Path(raw))`: separators collapsed and `.` parts dropped, `..` kept.
-pub fn display(raw: &str) -> String {
-    if cfg!(windows) {
-        let text = raw.replace('/', "\\");
-        let (anchor, rest) = split_windows_anchor(&text);
-        let parts: Vec<&str> = rest.split('\\').filter(|p| !p.is_empty() && *p != ".").collect();
-        let joined = format!("{anchor}{}", parts.join("\\"));
-        if joined.is_empty() { ".".into() } else { joined }
-    } else {
-        let root = if raw.starts_with("//") && !raw.starts_with("///") {
-            "//"
-        } else if raw.starts_with('/') {
-            "/"
+const SEP: char = if cfg!(windows) { '\\' } else { '/' };
+
+/// `os.path.splitroot(p)` (Python 3.15) for a path already using `SEP`.
+pub fn splitroot(p: &str) -> (&str, &str, &str) {
+    if !cfg!(windows) {
+        return if !p.starts_with('/') {
+            ("", "", p)
+        } else if !p[1..].starts_with('/') || p[2..].starts_with('/') {
+            ("", "/", &p[1..])
         } else {
-            ""
+            ("", "//", &p[2..])
         };
-        let parts: Vec<&str> = raw.split('/').filter(|p| !p.is_empty() && *p != ".").collect();
-        let joined = format!("{root}{}", parts.join("/"));
-        if joined.is_empty() { ".".into() } else { joined }
+    }
+    if let Some(rest) = p.strip_prefix('\\') {
+        if !rest.starts_with('\\') {
+            // Relative path with root, e.g. \Windows
+            return ("", "\\", rest);
+        }
+        // UNC drives, e.g. \\server\share or \\?\UNC\server\share; device drives, e.g. \\.\device
+        let start = if p.get(..8).is_some_and(|head| head.eq_ignore_ascii_case("\\\\?\\UNC\\")) {
+            8
+        } else {
+            2
+        };
+        let Some(index) = p[start..].find('\\').map(|i| i + start) else {
+            return (p, "", "");
+        };
+        let Some(index2) = p[index + 1..].find('\\').map(|i| i + index + 1) else {
+            return (p, "", "");
+        };
+        return (&p[..index2], &p[index2..index2 + 1], &p[index2 + 1..]);
+    }
+    let mut chars = p.char_indices();
+    match (chars.next(), chars.next()) {
+        (Some(_), Some((colon, ':'))) => {
+            let (drive, rest) = p.split_at(colon + 1);
+            match rest.strip_prefix('\\') {
+                // Absolute drive-letter path, e.g. X:\Windows
+                Some(tail) => (drive, "\\", tail),
+                // Relative path with drive, e.g. X:Windows
+                None => (drive, "", rest),
+            }
+        }
+        _ => ("", "", p),
     }
 }
 
-/// Drive and root of a backslash-separated Windows path, as `PureWindowsPath` splits it.
-fn split_windows_anchor(text: &str) -> (String, &str) {
-    let bytes = text.as_bytes();
-    if text.starts_with("\\\\") && !text.starts_with("\\\\\\") {
-        // UNC: \\server\share is the drive.
-        let rest = &text[2..];
-        let mut pieces = rest.splitn(3, '\\');
-        let server = pieces.next().unwrap_or("");
-        let share = pieces.next().unwrap_or("");
-        let tail = pieces.next();
-        let drive = format!("\\\\{server}\\{share}");
-        return match tail {
-            Some(tail) => (format!("{drive}\\"), tail),
-            None => (drive, ""),
-        };
+/// `str(PurePath(path))`: `_parse_path` then `_format_parsed_parts`.
+fn parse_and_format(path: &str) -> String {
+    if path.is_empty() {
+        return ".".into();
     }
-    let (drive, rest) = if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
-        (&text[..2], &text[2..])
+    let path = if cfg!(windows) {
+        path.replace('/', "\\")
     } else {
-        ("", text)
+        path.to_string()
     };
-    if let Some(stripped) = rest.strip_prefix('\\') {
-        (format!("{drive}\\"), stripped.trim_start_matches('\\'))
-    } else {
-        (drive.to_string(), rest)
+    let (drive, mut root, rel) = splitroot(&path);
+    if root.is_empty() && drive.starts_with(SEP) && !drive.ends_with(SEP) {
+        let parts: Vec<&str> = drive.split(SEP).collect();
+        // e.g. //server/share, or //?/unc/server/share
+        if (parts.len() == 4 && !matches!(parts[2], "" | "?" | "." | "?.")) || parts.len() == 6 {
+            root = if cfg!(windows) { "\\" } else { "/" };
+        }
     }
+    let mut tail: Vec<&str> = rel.split(SEP).filter(|part| !part.is_empty() && *part != ".").collect();
+    let sep = SEP.to_string();
+    let text = if !drive.is_empty() || !root.is_empty() {
+        format!("{drive}{root}{}", tail.join(&sep))
+    } else {
+        // A first part that reads as a drive keeps a leading "." so it stays relative.
+        if cfg!(windows) && tail.first().is_some_and(|first| !splitroot(first).0.is_empty()) {
+            tail.insert(0, ".");
+        }
+        tail.join(&sep)
+    };
+    if text.is_empty() { ".".into() } else { text }
+}
+
+/// `str(Path(raw))`: separators collapsed and `.` parts dropped, `..` kept.
+pub fn display(raw: &str) -> String {
+    parse_and_format(raw)
+}
+
+/// `os.fsdecode` of an OS string as Python holds it: undecodable bytes (Unix)
+/// or unpaired UTF-16 surrogates (Windows) become lone surrogates, which a
+/// Rust string carries as `pytext::carried` code points.
+pub fn decode_os(text: &OsStr) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let mut out = String::new();
+        for chunk in text.as_bytes().utf8_chunks() {
+            out.push_str(chunk.valid());
+            // surrogateescape: each undecodable byte becomes U+DC00 + byte.
+            out.extend(
+                chunk
+                    .invalid()
+                    .iter()
+                    .map(|&byte| pytext::carried(0xDC00 + byte as u32)),
+            );
+        }
+        out
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        char::decode_utf16(text.encode_wide())
+            .map(|unit| unit.unwrap_or_else(|error| pytext::carried(error.unpaired_surrogate() as u32)))
+            .collect()
+    }
+}
+
+/// `os.fsencode`: the OS string a Python str names, reversing `decode_os`.
+pub fn encode_os(text: &str) -> OsString {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        let mut bytes = Vec::with_capacity(text.len());
+        for ch in text.chars() {
+            match pytext::surrogate_of(ch) {
+                Some(surrogate @ 0xDC80..=0xDCFF) => bytes.push((surrogate - 0xDC00) as u8),
+                _ => bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+            }
+        }
+        OsString::from_vec(bytes)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        let mut units = Vec::with_capacity(text.len());
+        for ch in text.chars() {
+            match pytext::surrogate_of(ch) {
+                Some(surrogate) => units.push(surrogate as u16),
+                None => units.extend_from_slice(ch.encode_utf16(&mut [0; 2])),
+            }
+        }
+        OsString::from_wide(&units)
+    }
+}
+
+/// `str(path)` for a path Rust holds: the inverse of `encode_os`.
+pub fn text(path: &Path) -> String {
+    decode_os(path.as_os_str())
 }
 
 /// Is the path absolute in `pathlib`'s sense (POSIX root, or Windows drive and root, or UNC)?
@@ -65,7 +164,8 @@ pub fn is_absolute(raw: &str) -> bool {
 pub fn has_anchor(raw: &str) -> bool {
     if cfg!(windows) {
         let text = raw.replace('/', "\\");
-        !split_windows_anchor(&text).0.is_empty()
+        let (drive, root, _) = splitroot(&text);
+        !drive.is_empty() || !root.is_empty()
     } else {
         raw.starts_with('/')
     }
@@ -303,6 +403,18 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn undecodable_arguments_round_trip_like_surrogateescape() {
+        use std::os::unix::ffi::OsStrExt;
+        let raw = OsStr::from_bytes(b"build/out\xff");
+        let text = decode_os(raw);
+        assert_eq!(pytext::repr(&text), "'build/out\\udcff'");
+        assert_eq!(encode_os(&text), raw);
+        assert_eq!(display("//x/./y"), "//x/y");
+        assert_eq!(display("///etc"), "/etc");
+    }
 
     #[cfg(not(windows))]
     #[test]

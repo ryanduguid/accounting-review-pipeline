@@ -373,6 +373,16 @@ PATH_VARIANTS = ["build/demo", "build", "build/a/b/c", "build/../build/x", "out"
 INPUT_VARIANTS = [CONTEXT, "./" + CONTEXT, "samples//contexts/sample-monthly-variance.context.json", "samples/contexts",
                   "samples/contexts/missing.json", "../samples/x.json", "/etc/hostname", "/nonexistent/x.json",
                   POLICY, "samples/requests/../requests/sample-revenue-variance.request.json"]
+# Names Python decodes with surrogateescape (POSIX bytes) or keeps as lone
+# surrogates (Windows UTF-16), and root forms pathlib prints its own way.
+if os.name != "nt":
+    ODD_INPUTS = [b"samples/x\xff.json", b"\xe9t\xe9.json", "//etc/hostname", "///etc/hostname", "//x/./y.json"]
+    ODD_OUTPUTS = [b"build/out\xff", b"build/\x80/v"]
+else:
+    ODD_INPUTS = ["samples/x\ud800.json", "\udc80.json", "C:", "C:x.json", "\\x.json"]
+    ODD_OUTPUTS = ["build/out\udcff", "build/\ud800/v"]
+PATH_VARIANTS += ODD_OUTPUTS
+INPUT_VARIANTS += ODD_INPUTS
 
 
 def evaluate_argv(rng, case):
@@ -396,7 +406,7 @@ def argv_fuzz(rng, case):
     tokens = ["evaluate", "validate-review", "evalute", "valid", "-h", "--help", "--he", "--context", "--cont", "--context=" + CONTEXT,
               CONTEXT, REQUEST, POLICY, "--request", "--policy", "--out", "build/x", "--evidence", "--receipt", "--decision",
               "--bogus", "-x", "-1", "-1.5", "--", "-", "", "a b", "--cont=a b", "--o", "--version", DECISION]
-    case.argv = [rng.choice(tokens) for _ in range(rng.randint(0, 9))]
+    case.argv = [rng.choice(tokens + ODD_INPUTS) for _ in range(rng.randint(0, 9))]
 
 
 # ------------------------------------------------------------- validate-review
@@ -485,7 +495,7 @@ def validate_case(rng, env, case):
     if rng.random() < 0.5:
         case.argv += ["--out", rng.choice(["build/validation.json", "build/out/v.json", "build/decision.json",
                                            "build/demo/receipt.json", "build/demo/model-result.json", "validation.json",
-                                           "build/demo", "build/./demo/../v.json", "build/link.json"])]
+                                           "build/demo", "build/./demo/../v.json", "build/link.json"] + ODD_OUTPUTS)]
         if "build/link.json" in case.argv and rng.random() < 0.5:
             case.cwd_files["build/link.json"] = ("symlink", "demo/reviewer-evidence.json")
     return True

@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::pyjson::{self, Json};
+use crate::pypath;
 use crate::pytext;
 use crate::util::{Env, Failure, Location, Result, refuse};
 
@@ -36,7 +37,7 @@ pub fn os_error(error: &io::Error, filename: Option<&Path>, other: Option<&Path>
         Some(code) => format!("[Errno {code}] "),
         None => String::new(),
     };
-    let quoted = |p: &Path| pytext::repr(&p.to_string_lossy());
+    let quoted = |p: &Path| pytext::repr(&pypath::text(p));
     match (filename, other) {
         (Some(a), Some(b)) => format!("{tag}{message}: {} -> {}", quoted(a), quoted(b)),
         (Some(a), None) => format!("{tag}{message}: {}", quoted(a)),
@@ -151,7 +152,7 @@ pub(crate) fn write_evaluation_with(
     let fail = |message: String| -> Failure {
         Failure::Gateway(format!(
             "run output cannot be written to {}: {message}.",
-            output_dir.display()
+            pypath::text(&output_dir)
         ))
     };
     mkdir_parents(&output_dir).map_err(|(error, at)| fail(os_error(&error, Some(&at), None)))?;
@@ -191,14 +192,14 @@ fn refuse_protected(destination: Option<(u64, u64)>, protected: &[Location]) -> 
             Err(error) => {
                 return refuse(format!(
                     "validation output cannot be checked against {}: {}.",
-                    path.display(),
+                    pypath::text(path),
                     os_error(&error, Some(path), None)
                 ));
             }
             Ok(id) if id == destination => {
                 return refuse(format!(
                     "validation output must not overwrite a review input: {}.",
-                    path.display()
+                    pypath::text(path)
                 ));
             }
             Ok(_) => {}
@@ -212,7 +213,7 @@ pub fn write_validation(payload: &Json, output: &Path, protected: &[Location]) -
     let fail = |message: String| -> Failure {
         Failure::Gateway(format!(
             "validation output cannot be written to {}: {message}.",
-            output.display()
+            pypath::text(output)
         ))
     };
     let parent = output.parent().unwrap_or(output);
@@ -242,8 +243,8 @@ fn write_staged(
         return Err(fail(os_error(&io::Error::last_os_error(), Some(parent), None)));
     }
     let name = output.file_name().expect("output names a file");
-    let temporary = format!(".{}.partial", name.to_string_lossy());
-    let temporary_c = CString::new(temporary.as_bytes()).expect("no NUL in a file name");
+    let temporary = format!(".{}.partial", pypath::text(Path::new(name)));
+    let temporary_c = CString::new(pypath::encode_os(&temporary).as_bytes()).expect("no NUL in a file name");
     let name_c = CString::new(name.as_bytes()).expect("no NUL in a file name");
     let mut created = false;
     let result = (|| -> Result<()> {
@@ -326,7 +327,7 @@ pub(crate) fn write_validation_by_path(payload: &Json, output: &Path, protected:
     let fail = |message: String| -> Failure {
         Failure::Gateway(format!(
             "validation output cannot be written to {}: {message}.",
-            output.display()
+            pypath::text(output)
         ))
     };
     let parent = output.parent().unwrap_or(output);
@@ -348,11 +349,11 @@ fn write_staged_by_path(
     // NT APIs, which the synthetic-only scope does not justify.
     let mut temporary = None;
     for attempt in 0..100 {
-        let candidate = parent.join(unique_name(
-            &format!(".{}.", output.file_name().unwrap().to_string_lossy()),
+        let candidate = parent.join(pypath::encode_os(&unique_name(
+            &format!(".{}.", pypath::text(Path::new(output.file_name().unwrap()))),
             ".partial",
             attempt,
-        ));
+        )));
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)

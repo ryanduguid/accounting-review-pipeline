@@ -533,7 +533,11 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
     if !extras.is_empty() {
         return Err(main_error(format!("unrecognized arguments: {}", extras.join(" "))));
     }
-    let path = |flag: &str| values.get(flag).map(PathBuf::from);
+    let path = |flag: &str| {
+        values
+            .get(flag)
+            .map(|value| PathBuf::from(crate::pypath::encode_os(value)))
+    };
     Ok(match command.name {
         "evaluate" => Parsed::Evaluate {
             context: path("--context").unwrap(),
@@ -571,7 +575,7 @@ fn refuse_input_collision(out: &Path, inputs: &gateway::ReviewInputs) -> Result<
                     Err(error) => {
                         return Err(Failure::Gateway(format!(
                             "validation output cannot be checked against {}: {}.",
-                            path.display(),
+                            crate::pypath::text(path),
                             persist::os_error(&error, Some(path), None)
                         )));
                     }
@@ -580,7 +584,7 @@ fn refuse_input_collision(out: &Path, inputs: &gateway::ReviewInputs) -> Result<
         if same {
             return Err(Failure::Gateway(format!(
                 "validation output must not overwrite a review input: {}.",
-                path.display()
+                crate::pypath::text(path)
             )));
         }
     }
@@ -630,7 +634,7 @@ fn run(env: &Env, parsed: Parsed, stdout: &mut dyn Write) -> Result<(), Failure>
                 ("evidence", &outputs.evidence),
                 ("receipt", &outputs.receipt),
             ] {
-                emit(stdout, &format!("  {name}: {}", path.display()));
+                emit(stdout, &format!("  {name}: {}", crate::pypath::text(path)));
             }
             Ok(())
         }
