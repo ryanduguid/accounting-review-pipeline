@@ -26,11 +26,11 @@ Issues = "https://github.com/ryanduguid/accounting-review-pipeline/issues"
 
 [project.optional-dependencies]
 dev = [
-    "ruff==0.16.9",
-    "mypy==2.3.1",
+    "ruff==0.16.10",
+    "mypy==2.4.0",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
-    "coverage==7.16.1",
+    "coverage==7.16.2",
     "build>=1.6.1",
     "PyYAML>=6.0.3,<7",
     # release-python builds without isolation, so the backend comes from this
