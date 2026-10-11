@@ -7,6 +7,7 @@ import json
 import re
 import unicodedata
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -102,11 +103,20 @@ def _require_columns(
         raise SchemaError(f"{path}: canonical schema mismatch ({'; '.join(detail)}).")
 
 
+@contextmanager
+def _csv_source(snapshot: SourceSnapshot, *, label: str) -> Iterator[io.StringIO]:
+    with io.StringIO(snapshot.text(label=label, encoding="utf-8-sig"), newline="") as source:
+        try:
+            yield source
+        except csv.Error as exc:
+            raise SchemaError(f"{snapshot.path}: {label} is not valid CSV: {exc}.") from exc
+
+
 def _read_csv_rows(
     snapshot: SourceSnapshot, required: tuple[str, ...], *, label: str
 ) -> Iterator[tuple[int, dict[str, str | None]]]:
     path = snapshot.path
-    with io.StringIO(snapshot.text(label=label, encoding="utf-8-sig"), newline="") as source:
+    with _csv_source(snapshot, label=label) as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, required, path)
         for values in reader:
