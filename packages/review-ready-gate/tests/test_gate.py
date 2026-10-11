@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import os
 import re
 import shutil
@@ -218,6 +219,27 @@ def test_bank_rec_break(tmp_path: Path) -> None:
     pack = review_pack(profile="month_end", pack_dir=pack_dir)
     assert pack.status == "NOT_READY"
     assert any(item.code == "BANK_REC_BREAK" for item in pack.findings)
+
+
+@pytest.mark.parametrize("in_header", [True, False])
+def test_cli_reports_source_csv_parser_error(tmp_path: Path, capsys, in_header: bool) -> None:
+    pack = copy_example_pack("bas-ready", tmp_path / "pack")
+    path = pack / "trial_balance.csv"
+    oversized = "x" * (csv.field_size_limit() + 1)
+    header = path.read_text().splitlines()[0]
+    path.write_text(oversized + "\n" if in_header else header + "\n" + oversized + "\n",
+                    encoding="utf-8")
+    output = tmp_path / "out"
+
+    code = main(["gate", "--profile", "bas", "--pack", str(pack), "--output", str(output)])
+
+    assert code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("review-ready: input error:")
+    assert str(path) in captured.err
+    assert "not valid CSV" in captured.err
+    assert not (output / "readiness-pack.json").exists()
 
 
 def test_usage_error_is_exit_one() -> None:
