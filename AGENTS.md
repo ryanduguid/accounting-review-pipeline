@@ -76,7 +76,7 @@ Run every check from the owning component directory with its documented commands
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
-| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `python -B -m unittest discover -s tests -v`, on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked` for the Rust workpaper; `python -B -m unittest discover -s tests -v` for the setup and replay utility; both on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
@@ -103,6 +103,8 @@ one component runs that component alone. Monthly Close Controls keeps its own `t
 name. The Excel adapter, the Power BI application and the grant workpapers application are
 not workspace members, so their root workflow runs ruff and mypy from their own settings and
 their unittest suites on the same Python matrix, with a Windows leg for the grant application.
+The grant workpaper is a Rust crate from 0.2.0; the same workflow's `rust` job checks it on
+Linux and Windows.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change

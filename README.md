@@ -88,7 +88,7 @@ It holds 8 independently versioned components joined only by local files and com
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.6 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.7 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
-| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | command-line script `grant_workpaper.py`, standard library only, no release | 0.1.0 |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release | 0.2.0 |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.2.0 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column

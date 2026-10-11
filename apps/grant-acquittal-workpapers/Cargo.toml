@@ -1,0 +1,24 @@
+[package]
+name = "grant-acquittal-workpapers"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.99"
+description = "Local evidence schedules for reviewed grant allocations"
+license = "MIT"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+readme = "README.md"
+publish = false
+
+[[bin]]
+name = "grant-workpaper"
+path = "src/main.rs"
+
+[dependencies]
+sha2 = "0.11"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+lto = true
+codegen-units = 1

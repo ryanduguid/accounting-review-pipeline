@@ -110,7 +110,7 @@ class SetupUtilityTests(unittest.TestCase):
                 self.assertFalse(target.exists())
 
     def test_missing_tools_do_not_create_workspace(self):
-        for missing in ("git", "uv"):
+        for missing in ("git", "uv", "cargo"):
             with self.subTest(tool=missing), patch.object(setup_utility.shutil, "which", side_effect=lambda name: None if name == missing else name):
                 with self.assertRaisesRegex(ValueError, missing):
                     setup_utility.setup(self.workspace)

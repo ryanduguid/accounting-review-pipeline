@@ -5,12 +5,13 @@
 # and CI runs those commands per component; the recipes here loop over the same
 # commands so a fresh clone can be verified from the top.
 #
-# Requires just and uv:
+# Requires just, uv and cargo:
 #     uv tool install rust-just
 #
 # The five Python distributions are uv workspace members. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
-# application is not a member; their standard-library unittest suites run from
+# application is not a member; its workpaper is a Rust crate run with cargo from
+# its directory. Their standard-library unittest suites run from
 # the same .venv. Adding a component means adding it to
 # the matching list below and to the root pyproject.toml workspace members.
 
@@ -29,6 +30,9 @@ adapters/accounting-excel-toolkit
 apps/australian-accounting-power-bi
 apps/grant-acquittal-workpapers
 ''', "\n", " "))
+
+# cargo components: directory only
+rust_components := "apps/grant-acquittal-workpapers"
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
 exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"
@@ -61,6 +65,10 @@ test: setup
         echo "==> ${directory}"
         (cd "${directory}" && uv run --no-sync python -B -m unittest discover -s tests -v)
     done
+    for directory in {{ rust_components }}; do
+        echo "==> ${directory}"
+        (cd "${directory}" && cargo test --locked)
+    done
     echo "==> joined conformance"
     uv run --no-sync python -B -m unittest tests.test_xero_trial_balance_contract -v
     echo "==> shared blocks"
@@ -78,6 +86,10 @@ lint: setup
     done
     echo "==> packages/xero-trial-balance-export"
     (cd packages/xero-trial-balance-export && uv run --no-sync ruff check {{ exporter_modules }})
+    for directory in {{ rust_components }}; do
+        echo "==> ${directory}"
+        (cd "${directory}" && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings)
+    done
 
 # Type-check every Python component with mypy.
 typecheck: setup
