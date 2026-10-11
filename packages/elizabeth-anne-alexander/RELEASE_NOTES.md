@@ -5,7 +5,7 @@ Breaking changes:
 - The gate is a standalone Rust binary. The `elizabeth_anne_alexander` Python import is removed; call the `elizabeth-anne-alexander` command, whose subcommands and flags are unchanged.
 - There is no release workflow for 1.0.0 yet, so it cannot be installed with `pip`. Build it with `cargo build --release`. PyPI keeps 0.2.6.
 
-Unchanged: exit codes, stdout and stderr lines, output file bytes, and the `run_id`, `finding_id` and receipt digests, so packs written by 0.2.6 still validate. The receipt's `code_version` is now `1.0.0`. `tests/differential/differential.py` runs the 0.2.6 package and the binary on the same generated inputs; against Python 3.15 it found no differences in 1,412 cases on Linux and 1,412 on Windows, and the decimal module matched Python 3.11, 3.13, 3.14 and 3.15 on more than 1.2 million operations.
+Unchanged: exit codes, stdout and stderr lines, and the `run_id`, `finding_id` and receipt digests, so packs written by 0.2.6 still validate. Output files are byte-identical except the receipt's `code_version` field, which now reads `1.0.0`; validation does not compare it. `tests/differential/differential.py` runs the 0.2.6 package and the binary on the same generated inputs; against Python 3.15 it found no differences in 1,412 cases on Linux and 1,412 on Windows, and the decimal module matched Python 3.11, 3.13, 3.14 and 3.15 on more than 1.2 million operations.
 
 Differences from 0.2.6:
 
