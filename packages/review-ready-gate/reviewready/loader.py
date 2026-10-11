@@ -134,16 +134,13 @@ def _read_csv_rows(
 ) -> Iterator[tuple[int, dict[str, str | None]]]:
     path = snapshot.path
     with io.StringIO(snapshot.text(label=label, encoding="utf-8-sig"), newline="") as source:
-        try:
-            reader = csv.DictReader(source)
-            _require_columns(reader.fieldnames, required, path)
-            for values in reader:
-                row_number = reader.line_num
-                if None in values:
-                    raise SchemaError(f"{path}: row {row_number} has more fields than its header.")
-                yield row_number, values
-        except csv.Error as exc:
-            raise SchemaError(f"{path}: {label} is not valid CSV: {exc}.") from exc
+        reader = csv.DictReader(source)
+        _require_columns(reader.fieldnames, required, path)
+        for values in reader:
+            row_number = reader.line_num
+            if None in values:
+                raise SchemaError(f"{path}: row {row_number} has more fields than its header.")
+            yield row_number, values
 
 
 def _has_control_or_format_character(text: str, *, allow_line_breaks: bool = False) -> bool:

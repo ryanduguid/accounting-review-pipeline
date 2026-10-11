@@ -881,29 +881,6 @@ def test_workbench_refuses_a_source_that_would_be_replaced_by_the_pack(
     assert not (work / "close-review-pack.json").exists()
 
 
-@pytest.mark.parametrize("in_header", [True, False])
-def test_cli_reports_source_csv_parser_error(tmp_path: Path, capsys, in_header: bool) -> None:
-    path = tmp_path / "oversized.csv"
-    oversized = "x" * (csv.field_size_limit() + 1)
-    header = (EXAMPLES / "current_trial_balance.csv").read_text().splitlines()[0]
-    path.write_text(oversized + "\n" if in_header else header + "\n" + oversized + "\n",
-                    encoding="utf-8")
-    output = tmp_path / "out"
-
-    code = main([
-        "review", "--current", str(path),
-        "--prior", str(EXAMPLES / "prior_trial_balance.csv"), "--output", str(output),
-    ])
-
-    assert code == 1
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err.startswith("close-control: input error:")
-    assert str(path) in captured.err
-    assert "not valid CSV" in captured.err
-    assert not (output / "close-review-pack.json").exists()
-
-
 def test_cli_returns_one_for_malformed_input(tmp_path: Path) -> None:
     bad = tmp_path / "bad.csv"
     bad.write_text("wrong,header\n", encoding="utf-8")

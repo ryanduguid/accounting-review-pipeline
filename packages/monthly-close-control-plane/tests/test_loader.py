@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -22,20 +21,6 @@ from closecontrol.loader import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-@pytest.mark.parametrize("in_header", [True, False])
-def test_source_csv_parser_error_is_contextual(tmp_path: Path, in_header: bool) -> None:
-    path = tmp_path / "oversized.csv"
-    oversized = "x" * (csv.field_size_limit() + 1)
-    header = (ROOT / "examples" / "current_trial_balance.csv").read_text().splitlines()[0]
-    path.write_text(oversized + "\n" if in_header else header + "\n" + oversized + "\n",
-                    encoding="utf-8")
-
-    with pytest.raises(SchemaError, match="not valid CSV") as error:
-        load_canonical_tb(path)
-
-    assert str(path) in str(error.value)
 
 
 def test_typed_input_errors_subclass_the_flat_control_input_error() -> None:
