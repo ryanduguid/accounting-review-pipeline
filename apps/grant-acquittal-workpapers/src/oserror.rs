@@ -118,31 +118,33 @@ pub fn join(raw: &str, name: &str) -> String {
 
 /// `os.fsdecode` of an OS string as Python holds it: undecodable bytes (Unix)
 /// or unpaired UTF-16 surrogates (Windows) become lone surrogates, which a
-/// Rust string carries as `pytext::carried` code points.
+/// Rust string carries as `pytext::push_code_point` escapes.
 pub fn decode_os(text: &OsStr) -> String {
+    let mut out = String::new();
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        let mut out = String::new();
         for chunk in text.as_bytes().utf8_chunks() {
-            out.push_str(chunk.valid());
+            chunk
+                .valid()
+                .chars()
+                .for_each(|ch| pytext::push_code_point(&mut out, ch as u32));
             // surrogateescape: each undecodable byte becomes U+DC00 + byte.
-            out.extend(
-                chunk
-                    .invalid()
-                    .iter()
-                    .map(|&byte| pytext::carried(0xDC00 + byte as u32)),
-            );
+            chunk
+                .invalid()
+                .iter()
+                .for_each(|&byte| pytext::push_code_point(&mut out, 0xDC00 + byte as u32));
         }
-        out
     }
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
-        char::decode_utf16(text.encode_wide())
-            .map(|unit| unit.unwrap_or_else(|error| pytext::carried(error.unpaired_surrogate() as u32)))
-            .collect()
+        for unit in char::decode_utf16(text.encode_wide()) {
+            let cp = unit.map_or_else(|error| error.unpaired_surrogate() as u32, |ch| ch as u32);
+            pytext::push_code_point(&mut out, cp);
+        }
     }
+    out
 }
 
 /// `os.fsencode`: the OS string a Python str names, reversing `decode_os`.
@@ -151,10 +153,12 @@ pub fn encode_os(text: &str) -> OsString {
     {
         use std::os::unix::ffi::OsStringExt;
         let mut bytes = Vec::with_capacity(text.len());
-        for ch in text.chars() {
-            match pytext::surrogate_of(ch) {
-                Some(surrogate @ 0xDC80..=0xDCFF) => bytes.push((surrogate - 0xDC00) as u8),
-                _ => bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+        for cp in pytext::code_points(text) {
+            match (cp, char::from_u32(cp)) {
+                (0xDC80..=0xDCFF, _) => bytes.push((cp - 0xDC00) as u8),
+                (_, Some(ch)) => bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+                // Python's fsencode refuses any other surrogate; callers check first.
+                (_, None) => bytes.extend_from_slice("\u{FFFD}".as_bytes()),
             }
         }
         OsString::from_vec(bytes)
@@ -163,10 +167,10 @@ pub fn encode_os(text: &str) -> OsString {
     {
         use std::os::windows::ffi::OsStringExt;
         let mut units = Vec::with_capacity(text.len());
-        for ch in text.chars() {
-            match pytext::surrogate_of(ch) {
-                Some(surrogate) => units.push(surrogate as u16),
-                None => units.extend_from_slice(ch.encode_utf16(&mut [0; 2])),
+        for cp in pytext::code_points(text) {
+            match char::from_u32(cp) {
+                Some(ch) => units.extend_from_slice(ch.encode_utf16(&mut [0; 2])),
+                None => units.push(cp as u16),
             }
         }
         OsString::from_wide(&units)
@@ -261,6 +265,12 @@ mod tests {
         let text = decode_os(raw);
         assert_eq!(pytext::repr(&text), "'in\\udcff'");
         assert_eq!(encode_os(&text), raw);
+        // A genuine private-use character from the carrier's range stays itself.
+        let genuine = OsStr::from_bytes("in\u{10FCFF}\u{10F7FF}".as_bytes());
+        let genuine_text = decode_os(genuine);
+        assert_ne!(genuine_text, text);
+        assert_eq!(encode_os(&genuine_text), genuine);
+        assert_eq!(pytext::repr(&genuine_text), "'in\\U0010fcff\\U0010f7ff'");
     }
 
     #[test]

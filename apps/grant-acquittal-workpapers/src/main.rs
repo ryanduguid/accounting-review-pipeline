@@ -13,12 +13,12 @@ impl<W: std::io::Write> std::io::Write for PythonText<W> {
         // Every write comes from a formatted &str, so it is whole UTF-8.
         let text = String::from_utf8_lossy(buf);
         let mut out = Vec::with_capacity(buf.len());
-        for ch in text.chars() {
-            match pytext::surrogate_of(ch) {
-                Some(surrogate @ 0xDC80..=0xDCFF) if !self.stderr => out.push((surrogate - 0xDC00) as u8),
-                Some(surrogate) => out.extend_from_slice(format!("\\u{surrogate:04x}").as_bytes()),
-                None if ch == '\n' && cfg!(windows) => out.extend_from_slice(b"\r\n"),
-                None => out.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+        for cp in pytext::code_points(&text) {
+            match char::from_u32(cp) {
+                None if (0xDC80..=0xDCFF).contains(&cp) && !self.stderr => out.push((cp - 0xDC00) as u8),
+                None => out.extend_from_slice(format!("\\u{cp:04x}").as_bytes()),
+                Some('\n') if cfg!(windows) => out.extend_from_slice(b"\r\n"),
+                Some(ch) => out.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
             }
         }
         self.inner.write_all(&out)?;
