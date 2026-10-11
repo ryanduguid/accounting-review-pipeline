@@ -1,57 +1,176 @@
 //! How CPython prints a path and an `OSError` raised for it.
 
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::Path;
 
 use crate::pytext;
 
+const SEP: char = if cfg!(windows) { '\\' } else { '/' };
+
+/// `os.path.splitroot(p)` (Python 3.15) for a path already using `SEP`.
+fn splitroot(p: &str) -> (&str, &str, &str) {
+    if !cfg!(windows) {
+        return if !p.starts_with('/') {
+            ("", "", p)
+        } else if !p[1..].starts_with('/') || p[2..].starts_with('/') {
+            ("", "/", &p[1..])
+        } else {
+            ("", "//", &p[2..])
+        };
+    }
+    if let Some(rest) = p.strip_prefix('\\') {
+        if !rest.starts_with('\\') {
+            // Relative path with root, e.g. \Windows
+            return ("", "\\", rest);
+        }
+        // UNC drives, e.g. \\server\share or \\?\UNC\server\share; device drives, e.g. \\.\device
+        let start = if p.get(..8).is_some_and(|head| head.eq_ignore_ascii_case("\\\\?\\UNC\\")) {
+            8
+        } else {
+            2
+        };
+        let Some(index) = p[start..].find('\\').map(|i| i + start) else {
+            return (p, "", "");
+        };
+        let Some(index2) = p[index + 1..].find('\\').map(|i| i + index + 1) else {
+            return (p, "", "");
+        };
+        return (&p[..index2], &p[index2..index2 + 1], &p[index2 + 1..]);
+    }
+    let mut chars = p.char_indices();
+    match (chars.next(), chars.next()) {
+        (Some(_), Some((colon, ':'))) => {
+            let (drive, rest) = p.split_at(colon + 1);
+            match rest.strip_prefix('\\') {
+                // Absolute drive-letter path, e.g. X:\Windows
+                Some(tail) => (drive, "\\", tail),
+                // Relative path with drive, e.g. X:Windows
+                None => (drive, "", rest),
+            }
+        }
+        _ => ("", "", p),
+    }
+}
+
+/// `str(PurePath(path))`: `_parse_path` then `_format_parsed_parts`.
+fn parse_and_format(path: &str) -> String {
+    if path.is_empty() {
+        return ".".into();
+    }
+    let path = if cfg!(windows) {
+        path.replace('/', "\\")
+    } else {
+        path.to_string()
+    };
+    let (drive, mut root, rel) = splitroot(&path);
+    if root.is_empty() && drive.starts_with(SEP) && !drive.ends_with(SEP) {
+        let parts: Vec<&str> = drive.split(SEP).collect();
+        // e.g. //server/share, or //?/unc/server/share
+        if (parts.len() == 4 && !matches!(parts[2], "" | "?" | "." | "?.")) || parts.len() == 6 {
+            root = if cfg!(windows) { "\\" } else { "/" };
+        }
+    }
+    let mut tail: Vec<&str> = rel.split(SEP).filter(|part| !part.is_empty() && *part != ".").collect();
+    let sep = SEP.to_string();
+    let text = if !drive.is_empty() || !root.is_empty() {
+        format!("{drive}{root}{}", tail.join(&sep))
+    } else {
+        // A first part that reads as a drive keeps a leading "." so it stays relative.
+        if cfg!(windows) && tail.first().is_some_and(|first| !splitroot(first).0.is_empty()) {
+            tail.insert(0, ".");
+        }
+        tail.join(&sep)
+    };
+    if text.is_empty() { ".".into() } else { text }
+}
+
 /// `str(Path(raw))`: separators collapsed and `.` parts dropped, `..` kept.
 pub fn display(raw: &str) -> String {
-    if cfg!(windows) {
-        let text = raw.replace('/', "\\");
-        let (anchor, rest) = windows_anchor(&text);
-        let parts: Vec<&str> = rest.split('\\').filter(|p| !p.is_empty() && *p != ".").collect();
-        let joined = format!("{anchor}{}", parts.join("\\"));
-        if joined.is_empty() { ".".into() } else { joined }
-    } else {
-        let root = if raw.starts_with("//") && !raw.starts_with("///") {
-            "//"
-        } else if raw.starts_with('/') {
-            "/"
-        } else {
-            ""
-        };
-        let parts: Vec<&str> = raw.split('/').filter(|p| !p.is_empty() && *p != ".").collect();
-        let joined = format!("{root}{}", parts.join("/"));
-        if joined.is_empty() { ".".into() } else { joined }
-    }
+    parse_and_format(raw)
 }
 
-fn windows_anchor(text: &str) -> (String, &str) {
-    if text.starts_with("\\\\") && !text.starts_with("\\\\\\") {
-        let mut pieces = text[2..].splitn(3, '\\');
-        let drive = format!("\\\\{}\\{}", pieces.next().unwrap_or(""), pieces.next().unwrap_or(""));
-        return match pieces.next() {
-            Some(tail) => (format!("{drive}\\"), tail),
-            None => (drive, ""),
-        };
-    }
-    let bytes = text.as_bytes();
-    let (drive, rest) = if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
-        (&text[..2], &text[2..])
-    } else {
-        ("", text)
-    };
-    match rest.strip_prefix('\\') {
-        Some(stripped) => (format!("{drive}\\"), stripped.trim_start_matches('\\')),
-        None => (drive.to_string(), rest),
-    }
-}
-
-/// `str(Path(raw) / name)`.
+/// `str(Path(raw) / name)` for a plain file name: `os.path.join(raw, name)`, then parsed.
 pub fn join(raw: &str, name: &str) -> String {
-    let sep = if cfg!(windows) { "\\" } else { "/" };
-    display(&format!("{raw}{sep}{name}"))
+    if !cfg!(windows) {
+        let joined = if raw.is_empty() || raw.ends_with('/') {
+            format!("{raw}{name}")
+        } else {
+            format!("{raw}/{name}")
+        };
+        return parse_and_format(&joined);
+    }
+    let raw = raw.replace('/', "\\");
+    let (drive, root, path) = splitroot(&raw);
+    let mut path = path.to_string();
+    if !path.is_empty() && !path.ends_with('\\') {
+        path.push('\\');
+    }
+    path.push_str(name);
+    // ntpath.join adds a separator between a UNC drive and a relative path.
+    let joined = if root.is_empty() && !drive.is_empty() && !drive.ends_with([':', '\\']) {
+        format!("{drive}\\{path}")
+    } else {
+        format!("{drive}{root}{path}")
+    };
+    parse_and_format(&joined)
+}
+
+/// `os.fsdecode` of an OS string as Python holds it: undecodable bytes (Unix)
+/// or unpaired UTF-16 surrogates (Windows) become lone surrogates, which a
+/// Rust string carries as `pytext::carried` code points.
+pub fn decode_os(text: &OsStr) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let mut out = String::new();
+        for chunk in text.as_bytes().utf8_chunks() {
+            out.push_str(chunk.valid());
+            // surrogateescape: each undecodable byte becomes U+DC00 + byte.
+            out.extend(
+                chunk
+                    .invalid()
+                    .iter()
+                    .map(|&byte| pytext::carried(0xDC00 + byte as u32)),
+            );
+        }
+        out
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        char::decode_utf16(text.encode_wide())
+            .map(|unit| unit.unwrap_or_else(|error| pytext::carried(error.unpaired_surrogate() as u32)))
+            .collect()
+    }
+}
+
+/// `os.fsencode`: the OS string a Python str names, reversing `decode_os`.
+pub fn encode_os(text: &str) -> OsString {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        let mut bytes = Vec::with_capacity(text.len());
+        for ch in text.chars() {
+            match pytext::surrogate_of(ch) {
+                Some(surrogate @ 0xDC80..=0xDCFF) => bytes.push((surrogate - 0xDC00) as u8),
+                _ => bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+            }
+        }
+        OsString::from_vec(bytes)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        let mut units = Vec::with_capacity(text.len());
+        for ch in text.chars() {
+            match pytext::surrogate_of(ch) {
+                Some(surrogate) => units.push(surrogate as u16),
+                None => units.extend_from_slice(ch.encode_utf16(&mut [0; 2])),
+            }
+        }
+        OsString::from_wide(&units)
+    }
 }
 
 fn quoted(path: &str) -> String {
@@ -109,7 +228,7 @@ pub fn os_error(error: &io::Error, path: &str, other: Option<&str>) -> String {
 }
 
 pub fn path_text(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
+    decode_os(path.as_os_str())
 }
 
 #[cfg(all(test, not(windows)))]
@@ -122,6 +241,26 @@ mod tests {
         assert_eq!(join("in/", "agreements.json"), "in/agreements.json");
         assert_eq!(join(".", "x"), "x");
         assert_eq!(display(""), ".");
+        // Roots, from Python 3.15's pathlib on Linux.
+        for (raw, shown, joined) in [
+            ("/", "/", "/agreements.json"),
+            ("//", "//", "//agreements.json"),
+            ("///", "/", "/agreements.json"),
+            ("//x/./y", "//x/y", "//x/y/agreements.json"),
+            ("..", "..", "../agreements.json"),
+        ] {
+            assert_eq!(display(raw), shown, "{raw}");
+            assert_eq!(join(raw, "agreements.json"), joined, "{raw}");
+        }
+    }
+
+    #[test]
+    fn undecodable_arguments_round_trip_like_surrogateescape() {
+        use std::os::unix::ffi::OsStrExt;
+        let raw = OsStr::from_bytes(b"in\xff");
+        let text = decode_os(raw);
+        assert_eq!(pytext::repr(&text), "'in\\udcff'");
+        assert_eq!(encode_os(&text), raw);
     }
 
     #[test]
@@ -133,5 +272,37 @@ mod tests {
         );
         let exists = io::Error::from_raw_os_error(17);
         assert_eq!(os_error(&exists, "out", None), "[Errno 17] File exists: 'out'");
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn paths_print_like_pathlib() {
+        // From Python 3.15's pathlib on Windows.
+        for (raw, shown, joined) in [
+            ("/", r"\", r"\agreements.json"),
+            ("C:", "C:", "C:agreements.json"),
+            ("C:/", r"C:\", r"C:\agreements.json"),
+            ("C:x", "C:x", r"C:x\agreements.json"),
+            ("//server/share", r"\\server\share\", r"\\server\share\agreements.json"),
+            ("//server", r"\\server", r"\\server\agreements.json\"),
+            ("a/", "a", r"a\agreements.json"),
+            ("/a//b/.", r"\a\b", r"\a\b\agreements.json"),
+        ] {
+            assert_eq!(display(raw), shown, "{raw}");
+            assert_eq!(join(raw, "agreements.json"), joined, "{raw}");
+        }
+    }
+
+    #[test]
+    fn unpaired_surrogates_round_trip() {
+        use std::os::windows::ffi::OsStringExt;
+        let raw = OsString::from_wide(&[0x69, 0x6E, 0xD800]);
+        let text = decode_os(&raw);
+        assert_eq!(pytext::repr(&text), r"'in\ud800'");
+        assert_eq!(encode_os(&text), raw);
     }
 }

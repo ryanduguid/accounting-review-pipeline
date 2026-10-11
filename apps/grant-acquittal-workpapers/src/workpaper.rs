@@ -220,7 +220,7 @@ const NAMES: [&str; 4] = ["agreements.json", "ledger.csv", "allocations.csv", "r
 
 /// `review(source)`.
 pub fn review(source: &str, cwd: &Path) -> Result<Json> {
-    let root = cwd.join(source);
+    let root = cwd.join(oserror::encode_os(source));
     let mut content: Vec<(&'static str, Vec<u8>)> = Vec::new();
     for name in NAMES {
         let shown = oserror::join(source, name);
@@ -969,7 +969,7 @@ fn mkdir_parents(path: &Path) -> std::result::Result<(), (std::io::Error, PathBu
 pub fn write(result: &Json, output_raw: &str, cwd: &Path) -> Result<()> {
     let output_shown = display(output_raw);
     // Path(output) drops a trailing separator and `.` parts before any check.
-    let output = cwd.join(&output_shown);
+    let output = cwd.join(oserror::encode_os(&output_shown));
     if output.exists() || output.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) {
         return fail(output_shown);
     }

@@ -17,6 +17,25 @@ fn in_ranges(table: &[(u32, u32)], cp: u32) -> bool {
         .is_ok()
 }
 
+/// Rust strings cannot hold the lone surrogates a Python str can (command-line
+/// bytes decoded with surrogateescape, or unpaired UTF-16 on Windows). They
+/// are carried as the last 2,048 code points of plane 16's private use area,
+/// U+10F800 + (surrogate - U+D800).
+/// shortcut: an argument that already holds one of those private-use code
+/// points prints as a surrogate, where Python would print it as `\U0010f...`.
+const CARRY_OFFSET: u32 = 0x10_F800 - 0xD800;
+
+pub fn carried(surrogate: u32) -> char {
+    char::from_u32(surrogate + CARRY_OFFSET).expect("U+10F800..U+10FFFF are scalar values")
+}
+
+/// The surrogate a carried code point stands for.
+pub fn surrogate_of(ch: char) -> Option<u32> {
+    (0x10_F800..=0x10_FFFF)
+        .contains(&(ch as u32))
+        .then(|| ch as u32 - CARRY_OFFSET)
+}
+
 pub fn is_space(cp: u32) -> bool {
     in_ranges(PY_SPACE, cp)
 }
@@ -78,7 +97,7 @@ pub fn repr_code_points(cps: &[u32]) -> String {
 }
 
 pub fn repr(text: &str) -> String {
-    let cps: Vec<u32> = text.chars().map(|ch| ch as u32).collect();
+    let cps: Vec<u32> = text.chars().map(|ch| surrogate_of(ch).unwrap_or(ch as u32)).collect();
     repr_code_points(&cps)
 }
 

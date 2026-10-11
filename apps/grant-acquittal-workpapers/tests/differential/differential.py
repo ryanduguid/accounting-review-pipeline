@@ -68,6 +68,7 @@ class Case:
         self.extra = {}
         self.argv = ["--input", "in", "--output", "out"]
         self.label = ""
+        self.input_name = None  # the input directory's name when it is not "in"
 
 
 def mutate_cells(rng, case):
@@ -173,8 +174,15 @@ def mutate_json_text(rng, case):
     case.files["agreements.json"] = data.encode("utf-8")
 
 
+# Names Python decodes with surrogateescape (POSIX bytes) or keeps as lone
+# surrogates (Windows UTF-16), so the filesystem sees the original name.
+ODD_NAMES = [b"in\xff", b"\xe9t\xe9", b"a\x80b"] if os.name != "nt" else ["in\ud800", "\udc80x", "a\udfffb"]
+# Root and drive inputs, read only. UNC forms are left out on Windows: they would contact a server.
+ROOT_INPUTS = ["/", "//", "///", "//x/./y"] if os.name != "nt" else ["C:", "\\", "C:x", "\\\\?\\C:", "/"]
+
+
 def output_variant(rng, case):
-    choice = rng.randrange(8)
+    choice = rng.randrange(12)
     if choice == 0:
         case.extra["out"] = b"existing file"
     elif choice == 1:
@@ -190,8 +198,16 @@ def output_variant(rng, case):
         case.argv[1] = rng.choice(["missing", "in/agreements.json", ".", ""])
     elif choice == 6:
         case.extra["in/contributions.csv/"] = None
-    else:
+    elif choice == 7:
         case.argv[3] = "outé"
+    elif choice == 8:
+        case.argv[1] = rng.choice(ROOT_INPUTS)
+    elif choice == 9:
+        case.input_name = case.argv[1] = rng.choice(ODD_NAMES)
+    elif choice == 10:
+        case.argv[3] = rng.choice(ODD_NAMES)
+    else:
+        case.argv.insert(rng.randrange(len(case.argv) + 1), rng.choice(ODD_NAMES))
 
 
 def argv_fuzz(rng, case):
@@ -208,6 +224,8 @@ def place(cwd, case):
     (cwd / "in").mkdir()
     for name, data in case.files.items():
         (cwd / "in" / name).write_bytes(data)
+    if case.input_name is not None:
+        (cwd / "in").rename(cwd / os.fsdecode(case.input_name))
     for rel, data in case.extra.items():
         path = cwd / rel
         if data is None:
