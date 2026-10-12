@@ -121,7 +121,8 @@ class _CallbackServer(HTTPServer):
         exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
         if os.name == "nt" and exclusive is not None:
             self.socket.setsockopt(socket.SOL_SOCKET, exclusive, 1)
-        super().server_bind()  # NOSONAR: RFC 8252 loopback OAuth redirect on localhost
+        # RFC 8252 loopback OAuth redirect on localhost.
+        super().server_bind()  # NOSONAR
 
 
 def wait_for_callback(server, timeout: float = CALLBACK_TIMEOUT) -> None:
