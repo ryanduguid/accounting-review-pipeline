@@ -36,9 +36,9 @@ fn d(text: &str) -> Decimal {
     Decimal::parse(text)
 }
 
+/// `date.fromisoformat`, failing as Python's ValueError did.
 fn date(text: &str) -> Date {
-    let parts: Vec<u32> = text.split('-').map(|part| part.parse().unwrap()).collect();
-    Date::new(parts[0] as i32, parts[1], parts[2])
+    fromisoformat(text).unwrap_or_else(|| panic!("Invalid isoformat string: {text:?}"))
 }
 
 fn ymd(day: (i32, u32, u32)) -> Date {

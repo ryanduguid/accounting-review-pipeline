@@ -141,6 +141,8 @@ python -B -m unittest discover -s tests -v
 
 Regenerate the fixtures with `cargo run --locked --bin generate-fixtures`; it rewrites `samples/` and should leave Git with no changes.
 
+The generator replaced `tools/generate_fixtures.py` with the same successful output: the six files byte for byte and the same confirmation line, with CRLF on Windows as Python's stdout wrote it. It ignores arguments, as the script did. Three differences are deliberate. It writes to the `samples/` directory of the checkout it was built from, where the script used its own location; both are this directory when run from the checkout. A failed directory creation or file write prints one `OSError: ...` line and exits 1 where Python printed a traceback and exited 1. A failed write of the confirmation line exits 1 without a message.
+
 With Node.js 24 available, run Microsoft's PBIR validator from the reviewed, lockfile-pinned dependency tree beside the report:
 
 ```bash

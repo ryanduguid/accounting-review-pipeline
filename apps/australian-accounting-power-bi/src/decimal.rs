@@ -51,20 +51,35 @@ fn round_half_even(magnitude: &BigInt, drop: u64, sticky: bool) -> BigInt {
 }
 
 impl Decimal {
-    /// `Decimal(text)` for plain decimal literals such as `-350000.0`. Like CPython's
-    /// constructor it is exact: rounding happens only in arithmetic.
+    /// `Decimal(text)` for finite values. Like CPython's constructor it is exact, strips
+    /// surrounding whitespace, drops every underscore and reads an optional sign, digits
+    /// with an optional point, and an optional exponent. Infinities, NaNs, non-ASCII
+    /// digits and exponents beyond 10,000 are outside this module and panic.
     pub fn parse(text: &str) -> Decimal {
-        let (negative, unsigned) = text.strip_prefix('-').map_or((false, text), |rest| (true, rest));
-        let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
-        let all = format!("{whole}{fraction}");
-        assert!(
-            !all.is_empty() && all.bytes().all(|b| b.is_ascii_digit()),
-            "not a decimal literal: {text}"
-        );
-        let exponent = -i64::try_from(fraction.len()).expect("short literal");
+        let refuse = || -> ! { panic!("InvalidOperation: not a supported decimal literal: {text:?}") };
+        let python_space = |c: char| c.is_whitespace() || ('\x1c'..='\x1f').contains(&c);
+        let cleaned: String = text.trim_matches(python_space).chars().filter(|&c| c != '_').collect();
+        let (negative, unsigned) = match cleaned.as_bytes().first() {
+            Some(b'-') => (true, &cleaned[1..]),
+            Some(b'+') => (false, &cleaned[1..]),
+            _ => (false, cleaned.as_str()),
+        };
+        let (mantissa, exponent) = match unsigned.find(['e', 'E']) {
+            Some(at) => (
+                &unsigned[..at],
+                parse_exponent(&unsigned[at + 1..]).unwrap_or_else(|| refuse()),
+            ),
+            None => (unsigned, 0),
+        };
+        let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+        let digits = format!("{whole}{fraction}");
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            refuse();
+        }
+        let exponent = exponent - i64::try_from(fraction.len()).expect("short literal");
         Decimal {
             negative,
-            magnitude: all.parse().expect("digits"),
+            magnitude: digits.parse().expect("digits"),
             exponent,
         }
     }
@@ -184,18 +199,14 @@ impl Decimal {
         Decimal::rounded(negative, self.magnitude.clone(), self.exponent, false)
     }
 
-    /// `round(value, places)`: quantize to `places` decimals, half to even, keeping the
-    /// sign even when the result is zero.
-    pub fn round(&self, places: u32) -> Decimal {
+    /// `value` at exactly `places` decimals, half to even, keeping the sign.
+    fn rescale(&self, places: u32) -> Decimal {
         let target = -i64::from(places);
-        if self.exponent >= target {
-            return self.clone();
-        }
-        let magnitude = round_half_even(&self.magnitude, (target - self.exponent) as u64, false);
-        assert!(
-            digits(&magnitude) <= u64::from(PRECISION),
-            "quantize result exceeds the context precision"
-        );
+        let magnitude = if self.exponent >= target {
+            &self.magnitude * pow10((self.exponent - target) as u64)
+        } else {
+            round_half_even(&self.magnitude, (target - self.exponent) as u64, false)
+        };
         Decimal {
             negative: self.negative,
             magnitude,
@@ -203,11 +214,22 @@ impl Decimal {
         }
     }
 
-    /// `format(value, f".{places}f")`, sign included for a negative zero.
+    /// `round(value, places)`: quantize to `places` decimals, half to even, keeping the
+    /// sign even when the result is zero. Like quantize it refuses a result longer than
+    /// the context precision.
+    pub fn round(&self, places: u32) -> Decimal {
+        let result = self.rescale(places);
+        assert!(
+            digits(&result.magnitude) <= u64::from(PRECISION),
+            "InvalidOperation: quantize result exceeds the context precision"
+        );
+        result
+    }
+
+    /// `format(value, f".{places}f")`, sign included for a negative zero. Formatting has
+    /// no precision limit.
     pub fn to_fixed(&self, places: u32) -> String {
-        let rounded = self.round(places);
-        let scale = u64::try_from(rounded.exponent + i64::from(places)).expect("rounded to the requested places");
-        let text = (&rounded.magnitude * pow10(scale)).to_str_radix(10);
+        let text = self.rescale(places).magnitude.to_str_radix(10);
         let width = places as usize + 1;
         let padded = format!("{text:0>width$}");
         let (whole, fraction) = padded.split_at(padded.len() - places as usize);
@@ -218,6 +240,24 @@ impl Decimal {
             format!("{sign}{whole}.{fraction}")
         }
     }
+}
+
+/// A decimal exponent: optional sign, then digits; `None` if malformed or beyond 10,000.
+fn parse_exponent(text: &str) -> Option<i64> {
+    let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let significant = digits.trim_start_matches('0');
+    if significant.len() > 5 {
+        return None;
+    }
+    let value: i64 = if significant.is_empty() {
+        0
+    } else {
+        significant.parse().ok()?
+    };
+    (value <= 10_000).then_some(if text.starts_with('-') { -value } else { value })
 }
 
 impl PartialEq for Decimal {

@@ -6,9 +6,9 @@
 
 mod common;
 
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
+use common::bpa::{Datum, Object, evaluate, text};
 use common::*;
 use regex::Regex;
 use serde_json::Value;
@@ -29,179 +29,6 @@ const TEXT_MEASURES: [&str; 12] = [
     "Finding Evidence requested",
     "Finding Evidence state",
 ];
-
-/// A value under Python's semantics, which the earlier suite evaluated the rules with.
-/// `Missing` is an undefined property; like a Python NameError it fails only when the
-/// short-circuit evaluation reaches it.
-#[derive(Clone, Debug, PartialEq)]
-enum Datum {
-    Text(String),
-    Int(i64),
-    Bool(bool),
-    Missing(String),
-}
-
-impl Datum {
-    fn truthy(&self) -> bool {
-        match self {
-            Datum::Text(text) => !text.is_empty(),
-            Datum::Int(number) => *number != 0,
-            Datum::Bool(flag) => *flag,
-            Datum::Missing(name) => panic!("NameError: name '{name}' is not defined"),
-        }
-    }
-
-    fn present(self) -> Datum {
-        if let Datum::Missing(name) = &self {
-            panic!("NameError: name '{name}' is not defined");
-        }
-        self
-    }
-
-    fn number(&self) -> Option<i64> {
-        match self {
-            Datum::Int(number) => Some(*number),
-            Datum::Bool(flag) => Some(i64::from(*flag)),
-            _ => None,
-        }
-    }
-}
-
-type Object = HashMap<&'static str, Datum>;
-
-fn text(value: &str) -> Datum {
-    Datum::Text(value.to_owned())
-}
-
-/// A recursive-descent reader for the Dynamic LINQ subset the rules use: `||`, `&&`,
-/// `!`, comparisons (`<>` is `!=`), string and integer literals, property names and
-/// `string.IsNullOrEmpty(Property)`. `&&` and `||` return an operand and short-circuit;
-/// unequal kinds compare unequal and cannot be ordered.
-struct Evaluator<'a> {
-    tokens: Vec<String>,
-    at: usize,
-    object: &'a Object,
-}
-
-fn tokens(expression: &str) -> Vec<String> {
-    let token =
-        Regex::new(r#"(?i:string\.IsNullOrEmpty)|"[^"]*"|\d+|[A-Za-z_]\w*|&&|\|\||<>|!=|==|<=|>=|[!<>()]|\S"#).unwrap();
-    token.find_iter(expression).map(|m| m.as_str().to_owned()).collect()
-}
-
-impl Evaluator<'_> {
-    fn peek(&self) -> Option<&str> {
-        self.tokens.get(self.at).map(String::as_str)
-    }
-
-    fn take(&mut self) -> String {
-        let token = self.tokens.get(self.at).cloned().expect("unexpected end of expression");
-        self.at += 1;
-        token
-    }
-
-    fn expect(&mut self, wanted: &str) {
-        let found = self.take();
-        assert_eq!(found, wanted, "malformed rule expression");
-    }
-
-    fn or(&mut self) -> Datum {
-        let mut value = self.and();
-        while self.peek() == Some("||") {
-            self.take();
-            let right = self.and();
-            value = if value.truthy() { value } else { right };
-        }
-        value
-    }
-
-    fn and(&mut self) -> Datum {
-        let mut value = self.not();
-        while self.peek() == Some("&&") {
-            self.take();
-            let right = self.not();
-            value = if value.truthy() { right } else { value };
-        }
-        value
-    }
-
-    fn not(&mut self) -> Datum {
-        if self.peek() == Some("!") {
-            self.take();
-            return Datum::Bool(!self.not().truthy());
-        }
-        self.comparison()
-    }
-
-    fn comparison(&mut self) -> Datum {
-        let left = self.primary();
-        let Some(op) = self
-            .peek()
-            .filter(|t| ["==", "!=", "<>", "<", "<=", ">", ">="].contains(t))
-            .map(str::to_owned)
-        else {
-            return left;
-        };
-        self.take();
-        let (left, right) = (left.present(), self.primary().present());
-        let order = || match (&left, &right) {
-            (Datum::Text(a), Datum::Text(b)) => a.cmp(b),
-            _ => match (left.number(), right.number()) {
-                (Some(a), Some(b)) => a.cmp(&b),
-                _ => panic!("TypeError: '{op}' not supported between {left:?} and {right:?}"),
-            },
-        };
-        let equal = left == right || matches!((left.number(), right.number()), (Some(a), Some(b)) if a == b);
-        Datum::Bool(match op.as_str() {
-            "==" => equal,
-            "!=" | "<>" => !equal,
-            "<" => order() == Ordering::Less,
-            "<=" => order() != Ordering::Greater,
-            ">" => order() == Ordering::Greater,
-            _ => order() != Ordering::Less,
-        })
-    }
-
-    fn primary(&mut self) -> Datum {
-        let token = self.take();
-        if token.eq_ignore_ascii_case("string.IsNullOrEmpty") {
-            self.expect("(");
-            let value = self.property();
-            self.expect(")");
-            return Datum::Bool(!value.truthy());
-        }
-        if token == "(" {
-            let value = self.or();
-            self.expect(")");
-            return value;
-        }
-        if let Some(literal) = token.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
-            return text(literal);
-        }
-        if let Ok(number) = token.parse() {
-            return Datum::Int(number);
-        }
-        self.at -= 1;
-        self.property()
-    }
-
-    fn property(&mut self) -> Datum {
-        let name = self.take();
-        self.object.get(name.as_str()).cloned().unwrap_or(Datum::Missing(name))
-    }
-}
-
-/// Evaluate one Dynamic LINQ rule expression against a single object's properties.
-fn evaluate(expression: &str, object: &Object) -> bool {
-    let mut reader = Evaluator {
-        tokens: tokens(expression),
-        at: 0,
-        object,
-    };
-    let value = reader.or();
-    assert!(reader.peek().is_none(), "trailing tokens in {expression}");
-    value.truthy()
-}
 
 fn shipped_measures() -> Vec<Object> {
     let format = Regex::new(r"(?m)^\t\tformatString: (.+)$").unwrap();
@@ -412,7 +239,15 @@ fn evaluator_follows_the_rule_grammar() {
         ("N <= 0 || A <> \"x\"", false),
         ("(N >= 3) && !(B != \"\")", true),
         ("A == 3", false),
+        // Python skips the right operand once the left decides, so these never reach Unknown.
+        ("A == \"never\" && string.IsNullOrEmpty(Unknown)", false),
+        ("N > 2 || Unknown == 1", true),
+        ("!(F || (A == \"y\" && Unknown < 3))", true),
     ] {
         assert_eq!(evaluate(expression, &object), expected, "{expression}");
+    }
+    for reached in ["A == \"x\" && string.IsNullOrEmpty(Unknown)", "F || Unknown"] {
+        let outcome = std::panic::catch_unwind(|| evaluate(reached, &object));
+        assert!(outcome.is_err(), "{reached} must reach the undefined property");
     }
 }

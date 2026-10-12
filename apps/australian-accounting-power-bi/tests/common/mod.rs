@@ -6,8 +6,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use australian_accounting_power_bi::date::Date;
 use regex::Regex;
 use serde_json::Value;
+
+pub mod bpa;
 
 pub const NAME: &str = "australian-accounting-power-bi";
 
@@ -224,11 +227,13 @@ impl std::ops::Index<&str> for Row {
     }
 }
 
-/// `csv.DictReader` rows of text: the first row names the columns and empty rows are skipped.
+/// `csv.DictReader` rows of text: the first record names the columns, even when it is
+/// empty, and empty data records are skipped.
 pub fn dict_rows(text: &str) -> (Vec<String>, Vec<Row>) {
-    let mut records = parse_csv(text).into_iter().filter(|record| !record.is_empty());
+    let mut records = parse_csv(text).into_iter();
     let header = records.next().unwrap_or_default();
     let rows = records
+        .filter(|record| !record.is_empty())
         .map(|record| {
             let mut values = record.into_iter();
             Row(header.iter().map(|name| (name.clone(), values.next())).collect())
@@ -247,6 +252,65 @@ pub fn csv_rows(path: &Path) -> Vec<Row> {
 pub fn csv_records(path: &Path) -> Vec<Vec<String>> {
     let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
     parse_csv(&String::from_utf8(bytes).expect("UTF-8 fixture"))
+}
+
+/// `count` ASCII digits at the start of `text`, as CPython's parse_digits reads them.
+fn leading_number(text: &[u8], count: usize) -> Option<(u32, &[u8])> {
+    let digits = text.get(..count)?;
+    digits.iter().all(u8::is_ascii_digit).then(|| {
+        let value = digits
+            .iter()
+            .fold(0, |total, digit| total * 10 + u32::from(digit - b'0'));
+        (value, &text[count..])
+    })
+}
+
+/// The date of ISO `week` and `weekday` (1 is Monday) in ISO `year`, if the week exists.
+fn iso_week_date(year: u32, week: u32, weekday: u32) -> Option<Date> {
+    use australian_accounting_power_bi::date::is_leap;
+    let year = i32::try_from(year).ok().filter(|y| (1..=9999).contains(y))?;
+    let first = Date::new(year, 1, 1).weekday();
+    let long_year = first == 3 || (first == 2 && is_leap(year));
+    if week == 0 || week > 53 || (week == 53 && !long_year) || !(1..=7).contains(&weekday) {
+        return None;
+    }
+    let january_fourth = Date::new(year, 1, 4);
+    let monday = january_fourth.add_days(-i64::from(january_fourth.weekday()));
+    let day = monday.add_days(i64::from((week - 1) * 7 + weekday - 1));
+    (1..=9999).contains(&day.year()).then_some(day)
+}
+
+/// `datetime.date.fromisoformat` (CPython 3.11+): `YYYY-MM-DD`, `YYYYMMDD` and the ISO
+/// week forms `YYYY-Www[-D]` and `YYYYWww[D]`; `None` where Python raises ValueError.
+pub fn fromisoformat(text: &str) -> Option<Date> {
+    use australian_accounting_power_bi::date::days_in_month;
+    let bytes = text.as_bytes();
+    if ![7, 8, 10].contains(&bytes.len()) {
+        return None;
+    }
+    let (year, rest) = leading_number(bytes, 4)?;
+    let separated = rest.first() == Some(&b'-');
+    let rest = if separated { &rest[1..] } else { rest };
+    if let Some(week_part) = rest.strip_prefix(b"W") {
+        let (week, rest) = leading_number(week_part, 2)?;
+        // CPython stops after the weekday digit and ignores anything that follows it.
+        let weekday = match rest {
+            [] => 1,
+            [b'-', tail @ ..] if separated => leading_number(tail, 1)?.0,
+            _ if separated => return None,
+            _ => leading_number(rest, 1)?.0,
+        };
+        return iso_week_date(year, week, weekday);
+    }
+    let (month, rest) = leading_number(rest, 2)?;
+    let rest = match (separated, rest) {
+        (true, [b'-', tail @ ..]) => tail,
+        (true, _) => return None,
+        (false, _) => rest,
+    };
+    let (day, _) = leading_number(rest, 2)?;
+    let year = i32::try_from(year).ok().filter(|y| (1..=9999).contains(y))?;
+    ((1..=12).contains(&month) && (1..=days_in_month(year, month)).contains(&day)).then(|| Date::new(year, month, day))
 }
 
 /// The name in a `\tmeasure Name = ...` line, quotes stripped.
@@ -381,7 +445,18 @@ pub fn literal(node: &Value) -> &str {
         .expect("literal value")
 }
 
-pub fn int(node: &Value) -> i64 {
-    node.as_i64()
-        .unwrap_or_else(|| panic!("integer expected, found {node}"))
+/// A JSON number as Python compares it: ints, floats and bools (an int subclass) by
+/// value. Integers beyond 2^53 lose the exactness Python keeps; PBIR values are small.
+pub fn num(node: &Value) -> f64 {
+    match node {
+        Value::Bool(flag) => f64::from(u8::from(*flag)),
+        other => other
+            .as_f64()
+            .unwrap_or_else(|| panic!("TypeError: number expected, found {other}")),
+    }
+}
+
+/// Python's `sorted` key comparison for numbers and tuples of numbers.
+pub fn order<T: PartialOrd>(a: &T, b: &T) -> std::cmp::Ordering {
+    a.partial_cmp(b).expect("comparable numbers")
 }

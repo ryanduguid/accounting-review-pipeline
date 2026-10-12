@@ -1,28 +1,35 @@
-//! Reads `op a b` lines, applies the generator's decimal module and prints each result
-//! at 60 places. tests/differential/decimal_differential.py compares it with CPython.
+//! Reads one JSON array per line, `["op", "a", "b"]`, applies the generator's decimal
+//! module and prints each result at 60 places, or `error` where it refuses.
+//! tests/differential/decimal_differential.py compares it with CPython.
 
 use std::io::{BufRead, Write};
+use std::panic::catch_unwind;
 
 use australian_accounting_power_bi::decimal::Decimal;
 
+fn answer(op: &str, a: &str, b: &str) -> String {
+    let (x, y) = (Decimal::parse(a), || Decimal::parse(b));
+    match op {
+        "parse" => x.to_fixed(60),
+        "add" => x.add(&y()).to_fixed(60),
+        "sub" => x.sub(&y()).to_fixed(60),
+        "mul" => x.mul(&y()).to_fixed(60),
+        "div" => x.div(&y()).to_fixed(60),
+        "round2" => x.round(2).to_fixed(60),
+        "neg" => x.neg().to_fixed(60),
+        "fixed2" => x.to_fixed(2),
+        "cmp" => format!("{:?}", x.cmp(&y())),
+        other => panic!("unknown operation {other}"),
+    }
+}
+
 fn main() {
+    std::panic::set_hook(Box::new(|_| {}));
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for line in std::io::stdin().lock().lines() {
-        let line = line.expect("readable input");
-        let parts: Vec<&str> = line.split(' ').collect();
-        let a = Decimal::parse(parts[1]);
-        let b = || Decimal::parse(parts[2]);
-        let result = match parts[0] {
-            "add" => a.add(&b()).to_fixed(60),
-            "sub" => a.sub(&b()).to_fixed(60),
-            "mul" => a.mul(&b()).to_fixed(60),
-            "div" => a.div(&b()).to_fixed(60),
-            "round2" => a.round(2).to_fixed(60),
-            "neg" => a.neg().to_fixed(60),
-            "fixed2" => a.to_fixed(2),
-            "cmp" => format!("{:?}", a.cmp(&b())),
-            other => panic!("unknown operation {other}"),
-        };
+        let request: Vec<String> = serde_json::from_str(&line.expect("readable input")).expect("a JSON array");
+        let result =
+            catch_unwind(|| answer(&request[0], &request[1], &request[2])).unwrap_or_else(|_| "error".to_owned());
         writeln!(out, "{result}").expect("writable output");
     }
 }

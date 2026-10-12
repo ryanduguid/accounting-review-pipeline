@@ -91,8 +91,8 @@ fn visuals_of(page: &Path) -> Vec<Value> {
     visual_files(page).iter().map(|path| read_json(path)).collect()
 }
 
-fn position(visual: &Value, key: &str) -> i64 {
-    int(visual.at("position").at(key))
+fn position(visual: &Value, key: &str) -> f64 {
+    num(visual.at("position").at(key))
 }
 
 fn name_of(visual: &Value) -> String {
@@ -269,7 +269,7 @@ fn all_pages_and_review_visuals_are_materialised() {
         let directory = report_definition().join("pages").join(name.as_str().unwrap());
         let page = read_json(&directory.join("page.json"));
         assert_eq!(page.at("name"), name);
-        assert_eq!((int(page.at("width")), int(page.at("height"))), (1280, 720));
+        assert_eq!((num(page.at("width")), num(page.at("height"))), (1280.0, 720.0));
         for path in visual_files(&directory) {
             let document = read_json(&path);
             assert_eq!(
@@ -313,24 +313,28 @@ fn pages_have_selectors_alt_text_and_unique_keyboard_order() {
             required.iter().all(|field| bindings.contains(*field)),
             "{name}: {required:?}"
         );
-        let orders: Vec<i64> = visuals.iter().map(|obj| position(obj, "tabOrder")).collect();
-        assert_eq!(
-            orders.iter().collect::<HashSet<_>>().len(),
-            orders.len(),
-            "{name}: duplicate tabOrder"
-        );
+        let mut orders: Vec<f64> = visuals.iter().map(|obj| position(obj, "tabOrder")).collect();
+        let count = orders.len();
+        orders.sort_by(order);
+        orders.dedup();
+        assert_eq!(orders.len(), count, "{name}: duplicate tabOrder");
         // Native Desktop visits the higher tabOrder values first.
         let mut keyboard: Vec<&Value> = visuals.iter().collect();
-        keyboard.sort_by_key(|obj| std::cmp::Reverse(position(obj, "tabOrder")));
+        keyboard.sort_by(|a, b| order(&position(b, "tabOrder"), &position(a, "tabOrder")));
         let mut reading: Vec<&Value> = visuals.iter().collect();
-        reading.sort_by_key(|obj| (position(obj, "y"), position(obj, "x")));
+        reading.sort_by(|a, b| {
+            order(
+                &(position(a, "y"), position(a, "x")),
+                &(position(b, "y"), position(b, "x")),
+            )
+        });
         let names = |list: &[&Value]| list.iter().map(|obj| name_of(obj)).collect::<Vec<_>>();
         assert_eq!(names(&keyboard), names(&reading), "{name}");
         for obj in &visuals {
             let page = read_json(&page_dir.join("page.json"));
-            assert!(position(obj, "x") >= 0 && position(obj, "y") >= 0);
-            assert!(position(obj, "x") + position(obj, "width") <= int(page.at("width")));
-            assert!(position(obj, "y") + position(obj, "height") <= int(page.at("height")));
+            assert!(position(obj, "x") >= 0.0 && position(obj, "y") >= 0.0);
+            assert!(position(obj, "x") + position(obj, "width") <= num(page.at("width")));
+            assert!(position(obj, "y") + position(obj, "height") <= num(page.at("height")));
             let general = obj.at("visual").at("visualContainerObjects").at("general").at(0);
             let alt = literal(general.at("properties").at("altText"));
             let label = name_of(obj);
@@ -343,7 +347,12 @@ fn pages_have_selectors_alt_text_and_unique_keyboard_order() {
 fn phone_layouts_preserve_reading_order_and_touch_spacing() {
     for page_dir in page_dirs() {
         let mut expected = visuals_of(&page_dir);
-        expected.sort_by_key(|obj| (position(obj, "y"), position(obj, "x")));
+        expected.sort_by(|a, b| {
+            order(
+                &(position(a, "y"), position(a, "x")),
+                &(position(b, "y"), position(b, "x")),
+            )
+        });
         let mobile: Vec<Value> = expected
             .iter()
             .map(|obj| {
@@ -355,7 +364,7 @@ fn phone_layouts_preserve_reading_order_and_touch_spacing() {
                 )
             })
             .collect();
-        let mut last_bottom = -8;
+        let mut last_bottom = -8.0;
         for (index, (visual, portrait)) in expected.iter().zip(&mobile).enumerate() {
             let context = format!("{}/{}", file_name(&page_dir), name_of(visual));
             assert!(
@@ -366,19 +375,19 @@ fn phone_layouts_preserve_reading_order_and_touch_spacing() {
                     .contains("visualContainerMobileState/2.4.0/schema.json"),
                 "{context}"
             );
-            let pos = |key: &str| int(portrait.at("position").at(key));
-            assert_eq!((pos("x"), pos("width")), (0, 324), "{context}");
-            assert!(pos("y") >= last_bottom + 8, "{context}");
-            assert!(pos("height") >= 56, "{context}");
-            assert_eq!(pos("tabOrder"), (expected.len() - index - 1) as i64, "{context}");
-            assert_eq!(pos("y") % 4, 0, "{context}");
-            assert_eq!(pos("height") % 4, 0, "{context}");
+            let pos = |key: &str| num(portrait.at("position").at(key));
+            assert_eq!((pos("x"), pos("width")), (0.0, 324.0), "{context}");
+            assert!(pos("y") >= last_bottom + 8.0, "{context}");
+            assert!(pos("height") >= 56.0, "{context}");
+            assert_eq!(pos("tabOrder"), (expected.len() - index - 1) as f64, "{context}");
+            assert_eq!(pos("y") % 4.0, 0.0, "{context}");
+            assert_eq!(pos("height") % 4.0, 0.0, "{context}");
             last_bottom = pos("y") + pos("height");
             if visual.at("visual").at("visualType") == "pageNavigator" {
                 let layout = portrait.at("objects").at("layout").at(0).at("properties");
                 assert_eq!(literal(layout.at("rowCount")), "3D", "{context}");
                 assert_eq!(literal(layout.at("columnCount")), "2D", "{context}");
-                assert!((pos("height") - 16) as f64 / 3.0 >= 44.0, "{context}");
+                assert!((pos("height") - 16.0) / 3.0 >= 44.0, "{context}");
             }
         }
     }
@@ -403,7 +412,7 @@ fn phone_selected_finding_details_fit_the_canvas() {
             .at("defaultColumnWidth"),
     );
     let value = number_literal(objects.at("columnWidth").at(0).at("properties").at("value"));
-    assert!(label + value <= (int(portrait.at("position").at("width")) - 16) as f64);
+    assert!(label + value <= num(portrait.at("position").at("width")) - 16.0);
     assert!(value >= 150.0);
 }
 
@@ -422,9 +431,9 @@ fn phone_results_use_the_native_vertical_card_layout() {
         assert!(!py_in("selector", layout), "{}", path.display());
         assert_eq!(literal(layout.at("properties").at("orientation")), "1D");
         let projections = visual.at("query").at("queryState").at("Data").at("projections");
-        let count = projections.as_array().unwrap().len() as i64;
+        let count = projections.as_array().unwrap().len() as f64;
         assert!(
-            int(portrait.at("position").at("height")) >= count * 100,
+            num(portrait.at("position").at("height")) >= count * 100.0,
             "{}",
             path.display()
         );
@@ -629,7 +638,7 @@ fn visuals_follow_the_shared_grid_and_do_not_overlap() {
             visual.at("position");
             for key in ["x", "y", "width", "height"] {
                 let label = (name_of(visual), key);
-                assert_eq!(position(visual, key) % 4, 0, "{label:?}");
+                assert_eq!(position(visual, key) % 4.0, 0.0, "{label:?}");
             }
             let (x, y, w, h) = (
                 position(visual, "x"),
@@ -637,7 +646,7 @@ fn visuals_follow_the_shared_grid_and_do_not_overlap() {
                 position(visual, "width"),
                 position(visual, "height"),
             );
-            assert!(x >= 20 && x + w <= 1260 && y + h <= 700, "{}", name_of(visual));
+            assert!(x >= 20.0 && x + w <= 1260.0 && y + h <= 700.0, "{}", name_of(visual));
             for other in &visuals[index + 1..] {
                 let corner = |key| position(other, key);
                 let overlap = x < corner("x") + corner("width")
@@ -669,16 +678,16 @@ fn navigation_and_filters_keep_shared_geometry_and_style() {
                 literal(alt),
                 "'Navigate report pages. Each page retains its own selections.'"
             );
-            let geometry: Vec<i64> = ["x", "y", "width", "height"]
+            let geometry: Vec<f64> = ["x", "y", "width", "height"]
                 .iter()
-                .map(|key| int(place.at(*key)))
+                .map(|key| num(place.at(*key)))
                 .collect();
-            assert_eq!(geometry, [520, 8, 740, 40]);
+            assert_eq!(geometry, [520.0, 8.0, 740.0, 40.0]);
             navigators.push(visual.at("objects").clone());
         } else if visual.at("visualType") == "slicer" {
-            let height = int(place.at("height"));
+            let height = num(place.at("height"));
             let label = name_of(&document);
-            assert_eq!(height, 60, "{label}");
+            assert_eq!(height, 60.0, "{label}");
             assert_eq!(
                 literal(visual.at("objects").at("header").at(0).at("properties").at("show")),
                 "false"

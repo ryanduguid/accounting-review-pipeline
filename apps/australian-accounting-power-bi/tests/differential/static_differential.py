@@ -1,17 +1,22 @@
 """Mutation differential: the Python static suites against their Rust ports.
 
     python static_differential.py --python-tests <tests directory from the Python base> \
-        [--cases N] [--seed S]
+        --python-generator <tools/generate_fixtures.py from the Python base> [--cases N] [--seed S]
 
 Each case copies the application and the shared trial-balance contract into a
 scratch tree, applies one or two seeded mutations to the committed artefacts
 (TMDL, PBIR JSON, fixtures, documentation, BPA rules, contract fixtures), then
-runs the five Python static suites and the matching Rust test binaries against
-that tree. It reports every case where a test passes in one implementation and
-fails in the other.
+runs the seven Python suites and the matching Rust test binaries against that
+tree. Besides random damage, a third of the mutations rewrite a value in a form
+Python reads the same way: decimals in another constructor spelling, dates in
+compact or ISO week form, JSON integers as floats, a leading blank CSV line, and
+BPA expressions extended with an undefined property that short-circuiting skips.
+It reports every case where a test passes in one implementation and fails in the
+other.
 """
 
 import argparse
+import datetime
 import json
 import os
 import random
@@ -21,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 APP = Path(__file__).resolve().parents[2]
 REPO = APP.parents[1]
@@ -32,6 +38,8 @@ MODULES = {
     "test_powerquery_m": "powerquery_m",
     "test_model_bpa_rules": "model_bpa_rules",
     "test_xero_trial_balance_contract": "xero_trial_balance_contract",
+    "test_fixtures_balance": "fixtures_balance",
+    "test_payday_super_rules": "payday_super_rules",
 }
 RENAMED = {"all_four_pages_and_review_visuals_are_materialised": "all_pages_and_review_visuals_are_materialised"}
 RUST_ONLY = {"evaluator_follows_the_rule_grammar", "decimal_grammar_matches_python_conversion"}
@@ -151,6 +159,80 @@ def mutate_text(text: str, rng: random.Random) -> str:
     return "\n".join(lines)
 
 
+def respell_decimal(text: str, rng: random.Random) -> str:
+    """One two-place amount written another way Decimal() reads as the same value."""
+    spots = list(re.finditer(r"(?<![\w.])(-?)(\d+)\.(\d\d)(?![\w.])", text))
+    if not spots:
+        return text
+    spot = rng.choice(spots)
+    sign, whole, cents = spot.groups()
+    digits = (whole + cents).lstrip("0") or "0"
+    form = rng.choice([f"{sign}{digits}E-2", f"{sign or '+'}{whole}.{cents}", f"{sign}{whole[:1]}_{whole[1:]}.{cents}",
+                       f" {sign}{whole}.{cents} ", f"{sign}{whole}.{cents}000"])
+    return text[:spot.start()] + form + text[spot.end():]
+
+
+def respell_date(text: str, rng: random.Random) -> str:
+    """One ISO date written in compact or ISO week form."""
+    spots = list(re.finditer(r"(?<!\d)(\d{4})-(\d\d)-(\d\d)(?!\d)", text))
+    if not spots:
+        return text
+    spot = rng.choice(spots)
+    day = datetime.date(*map(int, spot.groups()))
+    year, week, weekday = day.isocalendar()
+    form = rng.choice([day.strftime("%Y%m%d"), f"{year:04d}-W{week:02d}-{weekday}", f"{year:04d}W{week:02d}{weekday}"])
+    return text[:spot.start()] + form + text[spot.end():]
+
+
+def floats_for_ints(text: str, rng: random.Random) -> str:
+    """One JSON integer rewritten as the equal float."""
+    document = json.loads(text)
+    places: list[tuple[Any, Any]] = []
+
+    def walk(node: Any) -> None:
+        items = node.items() if isinstance(node, dict) else enumerate(node) if isinstance(node, list) else ()
+        for key, value in items:
+            if isinstance(value, int) and not isinstance(value, bool):
+                places.append((node, key))
+            walk(value)
+
+    walk(document)
+    if not places:
+        return text
+    parent, key = rng.choice(places)
+    parent[key] = float(parent[key])
+    return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+
+
+def skipped_property(text: str, rng: random.Random) -> str:
+    """A BPA expression extended so an undefined property sits on a skipped branch."""
+    rules = json.loads(text)
+    rule = rng.choice(rules)
+    rule["Expression"] = rng.choice([f"({rule['Expression']}) && Name == \"\" && string.IsNullOrEmpty(Unknown)",
+                                     f"Name <> \"\" || Unknown == 1 || ({rule['Expression']})",
+                                     f"({rule['Expression']}) || Unknown"])
+    return json.dumps(rules, indent=2) + "\n"
+
+
+def equivalent(path: Path, text: str, rng: random.Random) -> tuple[str, str]:
+    """A rewrite Python reads as the same value, where the file has one."""
+    if path.name == "model_bpa_rules.json":
+        return skipped_property(text, rng), "skipped property"
+    if path.suffix == ".csv":
+        choice = rng.randrange(3)
+        if choice == 0:
+            return "\n" + text, "leading blank line"
+        if choice == 1:
+            return respell_decimal(text, rng), "decimal spelling"
+        return respell_date(text, rng), "date spelling"
+    if path.suffix in (".json", ".pbir", ".pbism", ".pbip") or path.name == ".platform":
+        try:
+            return floats_for_ints(text, rng), "int as float"
+        except ValueError:
+            pass
+    return mutate_text(text, rng), "text"
+
+
 def mutate(root: Path, rng: random.Random) -> str:
     path = rng.choice(artefacts(root))
     label = path.relative_to(root).as_posix()
@@ -159,7 +241,9 @@ def mutate(root: Path, rng: random.Random) -> str:
         return f"{label}: deleted"
     text = path.read_bytes().decode("utf-8")
     structured = path.suffix in (".json", ".pbir", ".pbism", ".pbip") or path.name == ".platform"
-    if structured and rng.random() < 0.6:
+    if rng.random() < 1 / 3:
+        changed, how = equivalent(path, text, rng)
+    elif structured and rng.random() < 0.6:
         try:
             changed, how = mutate_json(text, rng), "json value"
         except ValueError:
@@ -203,26 +287,28 @@ def run_python(tests: Path) -> dict[str, bool]:
     return {RENAMED.get(name[5:], name[5:]): ok for name, ok in raw.items() if ok is not None}
 
 
-def prepare(scratch: Path, python_tests: Path) -> Path:
+def prepare(scratch: Path, python_tests: Path, generator: Path) -> Path:
     root = scratch / "repo"
     ignore = shutil.ignore_patterns("target", "node_modules", "__pycache__", ".venv")
     shutil.copytree(APP, root / APP_PATH, ignore=ignore)
     shutil.copytree(REPO / CONTRACT, root / CONTRACT)
     for module in MODULES:
         shutil.copy2(python_tests / f"{module}.py", root / APP_PATH / "tests" / f"{module}.py")
+    shutil.copy2(generator, root / APP_PATH / "tools" / "generate_fixtures.py")
     return root
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--python-tests", type=Path, required=True)
+    parser.add_argument("--python-generator", type=Path, required=True)
     parser.add_argument("--cases", type=int, default=200)
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
     binaries = build_rust()
     differences = failing = 0
     with tempfile.TemporaryDirectory(prefix="pbi-static-") as scratch:
-        pristine = prepare(Path(scratch), args.python_tests.resolve())
+        pristine = prepare(Path(scratch), args.python_tests.resolve(), args.python_generator.resolve())
         baseline_python = run_python(pristine / APP_PATH / "tests")
         baseline_rust = run_rust(binaries, pristine / APP_PATH)
         if set(baseline_python) != set(baseline_rust) or not all(baseline_python.values()) or not all(baseline_rust.values()):
