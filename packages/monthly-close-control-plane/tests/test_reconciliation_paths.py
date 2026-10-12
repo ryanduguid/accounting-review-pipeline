@@ -32,7 +32,7 @@ def test_currency_must_be_an_uppercase_code(tmp_path):
 def test_csv_parser_error_is_an_input_error(tmp_path):
     source = write_transactions(tmp_path / "transactions.csv",
                                 [f"s1,2026-07-03,{'x' * (csv.field_size_limit() + 1)},Sale,60,0"])
-    with pytest.raises(ControlInputError, match="Invalid transaction CSV: field larger than field limit"):
+    with pytest.raises(ControlInputError, match="Transactions is not valid CSV: field larger than field limit"):
         compute(source)
 
 

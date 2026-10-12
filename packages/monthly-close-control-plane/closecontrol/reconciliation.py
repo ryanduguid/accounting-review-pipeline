@@ -1,7 +1,6 @@
 """Local transaction matching; a suggested allocation never clears an item."""
 from __future__ import annotations
 
-import csv
 import json
 import re
 from collections import defaultdict
@@ -159,14 +158,11 @@ def _reconcile(transactions: Path, tenant: str, account_id: str, currency: str,
         snapshots["decisions"] = SourceSnapshot.capture(decisions, label="Decisions")
     old, notes = _opening(snapshots["opening_items"], identity, start) if opening_items else ([], {})
     current = []
-    try:
-        for row, values in _read_csv_rows(snapshots["transactions"], COLUMNS, label="Transactions"):
-            item = _item(values, identity, transactions, row)
-            if not start <= _date(item["Date"]) <= end:
-                raise ControlInputError(f"{transactions}: row {row} falls outside the reporting period.")
-            current.append(item)
-    except csv.Error as exc:
-        raise ControlInputError(f"Invalid transaction CSV: {exc}") from exc
+    for row, values in _read_csv_rows(snapshots["transactions"], COLUMNS, label="Transactions"):
+        item = _item(values, identity, transactions, row)
+        if not start <= _date(item["Date"]) <= end:
+            raise ControlInputError(f"{transactions}: row {row} falls outside the reporting period.")
+        current.append(item)
     ordered = sorted(old + current, key=lambda item: (item["Date"], item["TransactionID"]))
     if len(ordered) > 100000:
         raise ControlInputError("A reconciliation supports at most 100,000 outstanding and current items.")
