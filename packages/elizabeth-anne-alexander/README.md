@@ -76,7 +76,7 @@ flowchart TD
     style Model fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Evidence fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Done fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Done fill:#0F4B32,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Action fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
     class Raw,LLM external
