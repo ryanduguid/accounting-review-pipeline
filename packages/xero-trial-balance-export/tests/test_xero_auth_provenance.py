@@ -18,11 +18,11 @@ RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned when the licence badge and statement changed from MIT to Apache-2.0.
 # OAuth scope, refresh and reviewer claims are unchanged.
 README_SHA256 = "01D760E94CEBB1B55B29EF139EB83E647932CBAB79ADB3026B219526F2121573"
-# Re-pinned when TOKEN_URL gained a Bandit "nosec B105" comment (the token
-# endpoint URL is not a password) after server_bind() gained its RFC 8252
-# loopback NOSONAR comment. Comments are the only change: AUTH_AST_SHA256
+# Re-pinned when server_bind()'s RFC 8252 loopback NOSONAR comment dropped
+# the colon after NOSONAR, which SonarCloud's Python analyser requires to
+# honour the suppression. Comments are the only change: AUTH_AST_SHA256
 # below still matches the executable tree.
-AUTH_SHA256 = "768EF89AA828819CD9665D44C985B4C8F4AEF7D162EC2DB0C09A7F3683C30939"
+AUTH_SHA256 = "3FEB511DC5181E04B0987FC64AB0D2770506EF05DC0F1ED8CED6C6E95767E97C"
 AUTH_AST_SHA256 = "447F06AB01AC54030EB70B79EB9B748A9BDFD822C262FDF9FBD9F28D0CE83AD4"
 
 SCOPES_URL = "https://developer.xero.com/documentation/guides/oauth2/scopes/"
