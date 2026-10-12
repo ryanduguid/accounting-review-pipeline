@@ -79,7 +79,7 @@ Run every check from the owning component directory with its documented commands
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates, which are the `test`, `dependency-audit`, `package` and `lint` jobs `ci.yml` keeps for this component; the package job and manual Windows recipe run the same installed-command smoke helper |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked`, on Linux and Windows; `tests/differential/differential.py` compares the binary with the 0.2.6 Python release |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
-| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
+| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked`; `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked` for the Rust workpaper; `python -B -m unittest discover -s tests -v` for the setup and replay utility; both on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
 
@@ -108,7 +108,9 @@ name. The Excel adapter, the Power BI application and the grant workpapers appli
 not workspace members, so their root workflow runs ruff and mypy from their own settings and
 their unittest suites on the same Python matrix, with a Windows leg for the grant application.
 The grant workpaper is a Rust crate from 0.2.0; the same workflow's `rust` job checks it on
-Linux and Windows.
+Linux and Windows. The Power BI application's fixture generator and structural checks are a
+Rust crate that the same job checks; its review workflow and that workflow's tests stay Python
+until the close-control and review-ready producers it inspects are Rust.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change

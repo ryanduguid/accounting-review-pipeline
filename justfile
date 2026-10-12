@@ -32,7 +32,7 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander"
+rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander"
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
 exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"
