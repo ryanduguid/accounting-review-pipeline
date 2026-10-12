@@ -19,7 +19,12 @@ use, and `Cargo.lock` pins the one dependency, `sha2`. From 0.2.0 the Python
 script `grant_workpaper.py` is gone. The Rust command reads the same inputs and
 writes byte-identical files, exit codes and messages, matching the script under
 Python 3.15 (a date outside the calendar reports the range error that version's
-`date.fromisoformat` gives). The Python `pyproject.toml` and its `uv.lock` remain
+`date.fromisoformat` gives). One exception: the command refuses `agreements.json`
+nested more than 10,000 levels deep (`agreements.json is nested too deeply to
+read`). The script's
+limit came from the C stack, so it varied by platform and stack size: under
+Python 3.15 it read about 13,800 nested arrays on Windows and 65,000 on Linux
+with an 8 MiB stack. The Python `pyproject.toml` and its `uv.lock` remain
 for the setup and replay utility below, which has no runtime dependencies.
 
 ## Run all joined accounting examples
