@@ -36,6 +36,8 @@ fn main() {
         eprintln!("grant-workpaper: internal error: {info}");
         std::process::exit(1);
     }));
+    // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let mut argv = std::env::args_os();
     // argparse names the program after the basename of argv[0].
     let prog = argv

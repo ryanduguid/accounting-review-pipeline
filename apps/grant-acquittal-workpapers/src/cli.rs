@@ -148,34 +148,11 @@ fn classify(token: &str) -> Result<Class, String> {
     {
         return Ok(Class::Flag(exact, Some((value.to_string(), true))));
     }
-    let found: Vec<(&'static str, Option<(String, bool)>)> = if token.starts_with("--") {
-        let (prefix, explicit) = match token.split_once('=') {
-            Some((name, value)) => (name, Some((value.to_string(), true))),
-            None => (token, None),
-        };
-        FLAGS
-            .iter()
-            .filter(|f| f.starts_with(prefix))
-            .map(|f| (*f, explicit.clone()))
-            .collect()
-    } else {
-        let short: String = token.chars().take(2).collect();
-        let rest: String = token.chars().skip(2).collect();
-        FLAGS
-            .iter()
-            .filter_map(|f| {
-                if *f == short {
-                    Some((*f, Some((rest.clone(), false))))
-                } else {
-                    f.starts_with(token).then_some((*f, None))
-                }
-            })
-            .collect()
-    };
+    let mut found = option_prefix_matches(token);
     match found.len() {
         0 => {}
         1 => {
-            let (flag, explicit) = found.into_iter().next().expect("one match");
+            let (flag, explicit) = found.remove(0);
             return Ok(Class::Flag(flag, explicit));
         }
         _ => {
@@ -183,16 +160,48 @@ fn classify(token: &str) -> Result<Class, String> {
             return Err(format!("ambiguous option: {token} could match {}", names.join(", ")));
         }
     }
-    let body = &token[1..];
-    let digit = |c: char| pytext::decimal_value(c as u32).is_some();
-    let negative_number = (!body.is_empty() && body.chars().all(digit))
-        || body
-            .split_once('.')
-            .is_some_and(|(int, frac)| int.chars().all(digit) && !frac.is_empty() && frac.chars().all(digit));
-    if negative_number || token.contains(' ') {
+    if looks_like_negative_number(&token[1..]) || token.contains(' ') {
         return Ok(Class::Positional);
     }
     Ok(Class::UnknownOption)
+}
+
+type PrefixMatch = (&'static str, Option<(String, bool)>);
+
+/// argparse's `_get_option_tuples`: the flags a token abbreviates, with any explicit value.
+fn option_prefix_matches(token: &str) -> Vec<PrefixMatch> {
+    if token.starts_with("--") {
+        let (prefix, explicit) = match token.split_once('=') {
+            Some((name, value)) => (name, Some((value.to_string(), true))),
+            None => (token, None),
+        };
+        return FLAGS
+            .iter()
+            .filter(|f| f.starts_with(prefix))
+            .map(|f| (*f, explicit.clone()))
+            .collect();
+    }
+    let short: String = token.chars().take(2).collect();
+    let rest: String = token.chars().skip(2).collect();
+    FLAGS
+        .iter()
+        .filter_map(|f| {
+            if *f == short {
+                Some((*f, Some((rest.clone(), false))))
+            } else {
+                f.starts_with(token).then_some((*f, None))
+            }
+        })
+        .collect()
+}
+
+/// argparse's `_negative_number_matcher` on the text after the leading '-'.
+fn looks_like_negative_number(body: &str) -> bool {
+    let digit = |c: char| pytext::decimal_value(c as u32).is_some();
+    (!body.is_empty() && body.chars().all(digit))
+        || body
+            .split_once('.')
+            .is_some_and(|(int, frac)| int.chars().all(digit) && !frac.is_empty() && frac.chars().all(digit))
 }
 
 enum Exit {
@@ -219,18 +228,7 @@ fn parse(args: &[String]) -> Result<(String, String), Exit> {
             }
         };
         if flag == "-h" || flag == "--help" {
-            match explicit {
-                None => return Err(Exit::Help),
-                Some((rest, false)) if flag == "-h" && !rest.is_empty() && !rest.starts_with('-') => {
-                    return Err(Exit::Help);
-                }
-                Some((rest, _)) => {
-                    return Err(Exit::Error(format!(
-                        "argument -h/--help: ignored explicit argument {}",
-                        pytext::repr(&rest)
-                    )));
-                }
-            }
+            return Err(help_exit(flag, explicit));
         }
         let value = match explicit {
             Some((value, _)) => value,
@@ -248,21 +246,33 @@ fn parse(args: &[String]) -> Result<(String, String), Exit> {
             output = Some(value);
         }
     }
-    let missing: Vec<&str> = [("--input", &input), ("--output", &output)]
-        .into_iter()
-        .filter(|(_, value)| value.is_none())
-        .map(|(flag, _)| flag)
-        .collect();
-    if !missing.is_empty() {
-        return Err(Exit::Error(format!(
-            "the following arguments are required: {}",
-            missing.join(", ")
-        )));
+    match (input, output) {
+        (Some(input), Some(output)) if extras.is_empty() => Ok((input, output)),
+        (Some(_), Some(_)) => Err(Exit::Error(format!("unrecognized arguments: {}", extras.join(" ")))),
+        (input, output) => {
+            let missing: Vec<&str> = [("--input", input.is_none()), ("--output", output.is_none())]
+                .into_iter()
+                .filter_map(|(flag, absent)| absent.then_some(flag))
+                .collect();
+            Err(Exit::Error(format!(
+                "the following arguments are required: {}",
+                missing.join(", ")
+            )))
+        }
     }
-    if !extras.is_empty() {
-        return Err(Exit::Error(format!("unrecognized arguments: {}", extras.join(" "))));
+}
+
+/// `-h`/`--help`: print help, unless it was given an explicit value argparse refuses.
+fn help_exit(flag: &str, explicit: Option<(String, bool)>) -> Exit {
+    match explicit {
+        None => Exit::Help,
+        // `-hX` is `-h` followed by the short flags in X, so help still wins.
+        Some((rest, false)) if flag == "-h" && !rest.is_empty() && !rest.starts_with('-') => Exit::Help,
+        Some((rest, _)) => Exit::Error(format!(
+            "argument -h/--help: ignored explicit argument {}",
+            pytext::repr(&rest)
+        )),
     }
-    Ok((input.expect("checked"), output.expect("checked")))
 }
 
 /// `main(argv)`: the process exit code.

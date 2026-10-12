@@ -39,10 +39,13 @@ print()
 emit("PY_SPACE", ranges(str.isspace))
 print()
 zeros = [cp for cp in range(0x110000) if unicodedata.decimal(chr(cp), None) == 0]
+# The tables assume every decimal digit sits in a run of ten from its zero.
 for zero in zeros:
-    assert all(unicodedata.decimal(chr(zero + d), None) == d for d in range(10)), hex(zero)
+    if not all(unicodedata.decimal(chr(zero + d), None) == d for d in range(10)):
+        raise SystemExit(f"decimal digits do not run 0 to 9 from {zero:#x}")
 digits = {zero + d for zero in zeros for d in range(10)}
-assert digits == {cp for cp in range(0x110000) if chr(cp).isdecimal()}
+if digits != {cp for cp in range(0x110000) if chr(cp).isdecimal()}:
+    raise SystemExit("decimal digit runs do not cover every str.isdecimal() code point")
 print("pub const DECIMAL_ZEROS: &[u32] = &[")
 for zero in zeros:
     print(f"    0x{zero:04X},")

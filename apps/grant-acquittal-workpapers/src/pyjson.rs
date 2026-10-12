@@ -329,6 +329,29 @@ impl<'a> Parser<'a> {
     }
 
     fn number(&self, start: usize) -> Result<(Json, usize), LoadError> {
+        let (idx, is_float) = self.scan_number(start)?;
+        let numstr: String = self.text[start..idx]
+            .iter()
+            .map(|&c| char::from_u32(c).unwrap())
+            .collect();
+        if is_float {
+            return Ok((Json::Float(numstr.parse().expect("JSON float grammar")), idx));
+        }
+        let digits = numstr.trim_start_matches('-').len();
+        if digits > MAX_INT_DIGITS {
+            return Err(LoadError::Value(format!(
+                "Exceeds the limit ({MAX_INT_DIGITS} digits) for integer string conversion: value has {digits} digits; use sys.set_int_max_str_digits() to increase the limit"
+            )));
+        }
+        let normalised = match numstr.strip_prefix('-') {
+            Some("0") => "0".to_string(),
+            _ => numstr,
+        };
+        Ok((Json::Int(normalised), idx))
+    }
+
+    /// The scanner's NUMBER_RE: where the number ends and whether it is a float.
+    fn scan_number(&self, start: usize) -> Result<(usize, bool), LoadError> {
         let digit = |idx: usize| self.at(idx).is_some_and(|c| (0x30..=0x39).contains(&c));
         let mut idx = start;
         if self.at(idx) == Some('-' as u32) {
@@ -367,29 +390,11 @@ impl<'a> Parser<'a> {
                 idx = e_start;
             }
         }
-        let numstr: String = self.text[start..idx]
-            .iter()
-            .map(|&c| char::from_u32(c).unwrap())
-            .collect();
-        if is_float {
-            return Ok((Json::Float(numstr.parse().expect("JSON float grammar")), idx));
-        }
-        let digits = numstr.trim_start_matches('-').len();
-        if digits > MAX_INT_DIGITS {
-            return Err(LoadError::Value(format!(
-                "Exceeds the limit ({MAX_INT_DIGITS} digits) for integer string conversion: value has {digits} digits; use sys.set_int_max_str_digits() to increase the limit"
-            )));
-        }
-        let normalised = match numstr.strip_prefix('-') {
-            Some("0") => "0".to_string(),
-            _ => numstr,
-        };
-        Ok((Json::Int(normalised), idx))
+        Ok((idx, is_float))
     }
 
     fn string(&self, end: usize) -> Result<(PyStr, usize), LoadError> {
         let begin = end - 1;
-        let len = self.text.len();
         let mut out = Vec::new();
         let mut next = end;
         loop {
@@ -413,46 +418,55 @@ impl<'a> Parser<'a> {
             let Some(escape) = self.at(next) else {
                 return Err(self.error("Unterminated string starting at", begin));
             };
-            if escape != 'u' as u32 {
-                let value = match char::from_u32(escape) {
-                    Some('"') => 0x22,
-                    Some('\\') => 0x5C,
-                    Some('/') => 0x2F,
-                    Some('b') => 0x08,
-                    Some('f') => 0x0C,
-                    Some('n') => 0x0A,
-                    Some('r') => 0x0D,
-                    Some('t') => 0x09,
-                    _ => return Err(self.error("Invalid \\escape", next - 1)),
-                };
-                out.push(value);
-                next += 1;
-                continue;
-            }
-            next += 1;
-            let mut end = next + 4;
-            if end >= len {
-                return Err(self.error("Invalid \\uXXXX escape", next - 1));
-            }
-            let mut unit = self
-                .hex4(next)
-                .ok_or_else(|| self.error("Invalid \\uXXXX escape", end - 5))?;
-            if (0xD800..=0xDBFF).contains(&unit)
-                && end + 6 < len
-                && self.at(end) == Some(0x5C)
-                && self.at(end + 1) == Some('u' as u32)
-            {
-                let low = self
-                    .hex4(end + 2)
-                    .ok_or_else(|| self.error("Invalid \\uXXXX escape", end + 1))?;
-                if (0xDC00..=0xDFFF).contains(&low) {
-                    unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
-                    end += 6;
-                }
-            }
+            let (unit, after) = if escape == 'u' as u32 {
+                self.unicode_escape(next + 1)?
+            } else {
+                (self.simple_escape(escape, next)?, next + 1)
+            };
             out.push(unit);
-            next = end;
+            next = after;
         }
+    }
+
+    /// A backslash escape other than `\u`, at `idx` (just after the backslash).
+    fn simple_escape(&self, escape: u32, idx: usize) -> Result<u32, LoadError> {
+        match char::from_u32(escape) {
+            Some('"') => Ok(0x22),
+            Some('\\') => Ok(0x5C),
+            Some('/') => Ok(0x2F),
+            Some('b') => Ok(0x08),
+            Some('f') => Ok(0x0C),
+            Some('n') => Ok(0x0A),
+            Some('r') => Ok(0x0D),
+            Some('t') => Ok(0x09),
+            _ => Err(self.error("Invalid \\escape", idx - 1)),
+        }
+    }
+
+    /// `\uXXXX` with its hex digits at `next`, joining a following low surrogate escape.
+    fn unicode_escape(&self, next: usize) -> Result<(u32, usize), LoadError> {
+        let len = self.text.len();
+        let mut end = next + 4;
+        if end >= len {
+            return Err(self.error("Invalid \\uXXXX escape", next - 1));
+        }
+        let mut unit = self
+            .hex4(next)
+            .ok_or_else(|| self.error("Invalid \\uXXXX escape", end - 5))?;
+        if (0xD800..=0xDBFF).contains(&unit)
+            && end + 6 < len
+            && self.at(end) == Some(0x5C)
+            && self.at(end + 1) == Some('u' as u32)
+        {
+            let low = self
+                .hex4(end + 2)
+                .ok_or_else(|| self.error("Invalid \\uXXXX escape", end + 1))?;
+            if (0xDC00..=0xDFFF).contains(&low) {
+                unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
+                end += 6;
+            }
+        }
+        Ok((unit, end))
     }
 
     fn hex4(&self, idx: usize) -> Option<u32> {

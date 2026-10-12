@@ -220,59 +220,14 @@ const NAMES: [&str; 4] = ["agreements.json", "ledger.csv", "allocations.csv", "r
 
 /// `review(source)`.
 pub fn review(source: &str, cwd: &Path) -> Result<Json> {
-    let root = cwd.join(oserror::encode_os(source));
-    let mut content: Vec<(&'static str, Vec<u8>)> = Vec::new();
-    for name in NAMES {
-        let shown = oserror::join(source, name);
-        let bytes = std::fs::read(root.join(name)).map_err(|e| Failure::Error(file_error(&e, &shown)))?;
-        content.push((name, bytes));
-    }
-    // Optional: interest earned, cash co-contributions and in-kind contributions.
-    let contribution = root.join("contributions.csv");
-    let contribution_shown = oserror::join(source, "contributions.csv");
-    let inspected = std::fs::symlink_metadata(&contribution);
-    #[cfg(test)]
-    let inspected = faults::check("inspect", &contribution).and(inspected);
-    match inspected {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return fail(os_error(&error, &contribution_shown, None)),
-        Ok(_) => {
-            let read = std::fs::read(&contribution);
-            #[cfg(test)]
-            let read = faults::check("read", &contribution).and(read);
-            let bytes = read.map_err(|e| Failure::Error(file_error(&e, &contribution_shown)))?;
-            content.push(("contributions.csv", bytes));
-        }
-    }
+    let content = read_inputs(source, cwd)?;
     let bytes = |name: &str| &content.iter().find(|(n, _)| *n == name).expect("read above").1;
     let agreements = match pyjson::loads_bytes(bytes("agreements.json")) {
         Ok(value) => value,
         Err(LoadError::Value(message)) => return fail(message),
         Err(LoadError::Recursion) => return fail("agreements.json is nested too deeply to read"),
     };
-    let fields = [
-        "schema_version",
-        "entity",
-        "currency",
-        "ledger_start",
-        "ledger_end",
-        "amount_basis",
-        "agreements",
-    ];
-    let schema_ok = agreements.has_exact_keys(&fields)
-        && matches!(agreements.at("schema_version"), Json::Int(digits) if digits == "1");
-    if !schema_ok {
-        return fail("Unexpected agreement schema");
-    }
-    text_json(agreements.at("entity"), "Entity")?;
-    if !agreements.at("currency").is_str("AUD") || !agreements.at("amount_basis").is_str("GST-inclusive") {
-        return fail("Version 1 requires one named entity, AUD and explicitly GST-inclusive amounts");
-    }
-    let start = iso_json(agreements.at("ledger_start"))?;
-    let end = iso_json(agreements.at("ledger_end"))?;
-    if start > end {
-        return fail("Ledger period is reversed");
-    }
+    let (start, end) = check_header(&agreements)?;
     let ledger = rows(
         bytes("ledger.csv"),
         "ledger_id date description amount cash_paid evidence",
@@ -301,16 +256,74 @@ pub fn review(source: &str, cwd: &Path) -> Result<Json> {
     if ledger.is_empty() || !has_agreements {
         return fail("Supply ledger evidence and at least one reviewed agreement");
     }
-    calculate(
-        &agreements,
-        &ledger,
-        &allocations,
-        &receipts,
+    calculate(&Sources {
+        header: &agreements,
+        ledger: &ledger,
+        allocations: &allocations,
+        receipts: &receipts,
+        contributions: &contributions,
         start,
         end,
-        &content,
-        &contributions,
-    )
+        content: &content,
+    })
+}
+
+/// The four required files, then contributions.csv when present (a failure
+/// to inspect it is not treated as absence).
+fn read_inputs(source: &str, cwd: &Path) -> Result<Vec<(&'static str, Vec<u8>)>> {
+    let root = cwd.join(oserror::encode_os(source));
+    let mut content: Vec<(&'static str, Vec<u8>)> = Vec::new();
+    for name in NAMES {
+        let shown = oserror::join(source, name);
+        let bytes = std::fs::read(root.join(name)).map_err(|e| Failure::Error(file_error(&e, &shown)))?;
+        content.push((name, bytes));
+    }
+    // Optional: interest earned, cash co-contributions and in-kind contributions.
+    let contribution = root.join("contributions.csv");
+    let contribution_shown = oserror::join(source, "contributions.csv");
+    let inspected = std::fs::symlink_metadata(&contribution);
+    #[cfg(test)]
+    let inspected = faults::check("inspect", &contribution).and(inspected);
+    match inspected {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return fail(os_error(&error, &contribution_shown, None)),
+        Ok(_) => {
+            let read = std::fs::read(&contribution);
+            #[cfg(test)]
+            let read = faults::check("read", &contribution).and(read);
+            let bytes = read.map_err(|e| Failure::Error(file_error(&e, &contribution_shown)))?;
+            content.push(("contributions.csv", bytes));
+        }
+    }
+    Ok(content)
+}
+
+/// The agreements file's top level; returns the ledger period.
+fn check_header(agreements: &Json) -> Result<(Date, Date)> {
+    let fields = [
+        "schema_version",
+        "entity",
+        "currency",
+        "ledger_start",
+        "ledger_end",
+        "amount_basis",
+        "agreements",
+    ];
+    let schema_ok = agreements.has_exact_keys(&fields)
+        && matches!(agreements.at("schema_version"), Json::Int(digits) if digits == "1");
+    if !schema_ok {
+        return fail("Unexpected agreement schema");
+    }
+    text_json(agreements.at("entity"), "Entity")?;
+    if !agreements.at("currency").is_str("AUD") || !agreements.at("amount_basis").is_str("GST-inclusive") {
+        return fail("Version 1 requires one named entity, AUD and explicitly GST-inclusive amounts");
+    }
+    let start = iso_json(agreements.at("ledger_start"))?;
+    let end = iso_json(agreements.at("ledger_end"))?;
+    if start > end {
+        return fail("Ledger period is reversed");
+    }
+    Ok((start, end))
 }
 
 const CONTRIBUTION_KINDS: [&str; 3] = ["interest", "cash_contribution", "in_kind"];
@@ -348,32 +361,78 @@ impl Totals {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn calculate(
-    header: &Json,
-    ledger: &[Record],
-    allocations: &[Record],
-    receipts: &[Record],
+/// The ledger period and the files the workpaper is calculated from.
+struct Sources<'a> {
+    header: &'a Json,
+    ledger: &'a [Record],
+    allocations: &'a [Record],
+    receipts: &'a [Record],
+    contributions: &'a [Record],
     start: Date,
     end: Date,
-    content: &[(&'static str, Vec<u8>)],
-    contributions: &[Record],
-) -> Result<Json> {
+    content: &'a [(&'static str, Vec<u8>)],
+}
+
+/// What `calculate` accumulates. Each stage runs in the script's order, so the
+/// first refusal and the order of findings are unchanged.
+struct Workings<'a> {
+    grants: Vec<(String, &'a Json)>,
+    findings: Vec<Json>,
+    sources: Vec<(String, &'a Record)>,
+    allocated: BTreeMap<String, Amount>,
+    cash_allocated: BTreeMap<String, Amount>,
+    totals: Totals,
+    period_totals: Totals,
+    approved_totals: Totals,
+    paid_totals: Totals,
+    details: Vec<Json>,
+    funding: BTreeMap<String, Amount>,
+    contributed: Totals,
+}
+
+fn calculate(input: &Sources) -> Result<Json> {
+    let mut work = Workings {
+        grants: agreements(input.header)?,
+        findings: Vec::new(),
+        sources: Vec::new(),
+        allocated: BTreeMap::new(),
+        cash_allocated: BTreeMap::new(),
+        totals: Totals::default(),
+        period_totals: Totals::default(),
+        approved_totals: Totals::default(),
+        paid_totals: Totals::default(),
+        details: Vec::new(),
+        funding: BTreeMap::new(),
+        contributed: Totals::default(),
+    };
+    work.ledger(input.ledger, input.start, input.end)?;
+    for row in input.allocations {
+        work.allocation(row)?;
+    }
+    work.receipts(input.receipts, input.start, input.end)?;
+    work.contributions(input.contributions, input.start, input.end)?;
+    let contribution_rows = work.contribution_rows();
+    let tieout = work.tieout()?;
+    let (budget_rows, movements) = work.budgets()?;
+    work.result(input, budget_rows, movements, contribution_rows, tieout)
+}
+
+/// The agreements block: complete, unique and with a reviewed budget.
+fn agreements(header: &Json) -> Result<Vec<(String, &Json)>> {
     let mut grants: Vec<(String, &Json)> = Vec::new();
-    let mut findings: Vec<Json> = Vec::new();
     let Json::Array(agreements) = header.at("agreements") else {
         unreachable!("checked by review")
     };
+    let fields = [
+        "grant_id",
+        "start",
+        "end",
+        "opening_cash",
+        "opening_unspent_funding",
+        "budget",
+        "agreement_evidence",
+    ];
     for grant in agreements {
-        let fields = [
-            "grant_id",
-            "start",
-            "end",
-            "opening_cash",
-            "opening_unspent_funding",
-            "budget",
-            "agreement_evidence",
-        ];
         if !grant.has_exact_keys(&fields) {
             return fail("Agreement IDs must be unique with complete fields");
         }
@@ -388,54 +447,71 @@ fn calculate(
         }
         money_json(grant.at("opening_cash"))?;
         money_json(grant.at("opening_unspent_funding"))?;
-        let Json::Object(budget) = grant.at("budget") else {
-            return fail("Supply the reviewed budget-line mapping");
+        let budget = match grant.at("budget") {
+            Json::Object(budget) if !budget.is_empty() => budget,
+            _ => return fail("Supply the reviewed budget-line mapping"),
         };
-        if budget.is_empty() {
-            return fail("Supply the reviewed budget-line mapping");
-        }
         for (key, value) in budget {
             text_cps(&key.0, "Budget line", true)?;
             money_json(value)?;
         }
         grants.push((identifier, grant));
     }
-    let grant = |id: &str| grants.iter().find(|(g, _)| g == id).map(|(_, g)| *g);
-    let mut source_rows: Vec<(String, &Record)> = Vec::new();
-    for row in ledger {
-        let date = iso(field(row, "date"))?;
-        if !(start <= date && date <= end) {
-            return fail("Ledger rows must fall inside the declared ledger period");
-        }
-        let expense = money(field(row, "amount"))?;
-        let paid = money(field(row, "cash_paid"))?;
-        if expense <= Amount::ZERO || paid > expense {
-            return fail("Source expenses must be positive; cash paid cannot exceed the expense");
-        }
-        source_rows.push((field(row, "ledger_id").to_string(), row));
-        if pytext::strip(field(row, "evidence")).is_empty() {
-            findings.push(finding("MISSING_SOURCE_EVIDENCE", field(row, "ledger_id")));
-        }
+    Ok(grants)
+}
+
+fn budget_of(agreement: &Json) -> &[(PyStr, Json)] {
+    let Json::Object(budget) = agreement.at("budget") else {
+        unreachable!("checked by agreements")
+    };
+    budget
+}
+
+/// `start <= date(text) <= end`.
+fn within(text: &str, start: Date, end: Date) -> Result<bool> {
+    let date = iso(text)?;
+    Ok(start <= date && date <= end)
+}
+
+fn blank(text: &str) -> bool {
+    pytext::strip(text).is_empty()
+}
+
+impl<'a> Workings<'a> {
+    fn grant(&self, id: &str) -> Option<&'a Json> {
+        self.grants.iter().find(|(g, _)| g == id).map(|(_, g)| *g)
     }
-    let source = |id: &str| source_rows.iter().find(|(s, _)| s == id).map(|(_, r)| *r);
-    let mut allocated: BTreeMap<String, Amount> = BTreeMap::new();
-    let mut cash_allocated: BTreeMap<String, Amount> = BTreeMap::new();
-    let (mut totals, mut period_totals, mut approved_totals, mut paid_totals) = (
-        Totals::default(),
-        Totals::default(),
-        Totals::default(),
-        Totals::default(),
-    );
-    let mut details: Vec<Json> = Vec::new();
-    for row in allocations {
-        let (Some(item), Some(agreement)) = (source(field(row, "ledger_id")), grant(field(row, "grant_id"))) else {
+
+    fn source(&self, id: &str) -> Option<&'a Record> {
+        self.sources.iter().find(|(s, _)| s == id).map(|(_, r)| *r)
+    }
+
+    fn ledger(&mut self, ledger: &'a [Record], start: Date, end: Date) -> Result<()> {
+        for row in ledger {
+            if !within(field(row, "date"), start, end)? {
+                return fail("Ledger rows must fall inside the declared ledger period");
+            }
+            let expense = money(field(row, "amount"))?;
+            let paid = money(field(row, "cash_paid"))?;
+            if expense <= Amount::ZERO || paid > expense {
+                return fail("Source expenses must be positive; cash paid cannot exceed the expense");
+            }
+            self.sources.push((field(row, "ledger_id").to_string(), row));
+            if blank(field(row, "evidence")) {
+                self.findings
+                    .push(finding("MISSING_SOURCE_EVIDENCE", field(row, "ledger_id")));
+            }
+        }
+        Ok(())
+    }
+
+    fn allocation(&mut self, row: &Record) -> Result<()> {
+        let (Some(item), Some(agreement)) = (self.source(field(row, "ledger_id")), self.grant(field(row, "grant_id")))
+        else {
             return fail("Allocation references an unknown ledger row or grant");
         };
-        let Json::Object(budget) = agreement.at("budget") else {
-            unreachable!("checked above")
-        };
         let line = field(row, "budget_line");
-        if !budget.iter().any(|(k, _)| k.is(line)) || !["yes", "no"].contains(&field(row, "approved")) {
+        if !budget_of(agreement).iter().any(|(k, _)| k.is(line)) || !["yes", "no"].contains(&field(row, "approved")) {
             return fail("Use a reviewed budget line and approved yes/no");
         }
         let expense = money(field(row, "amount"))?;
@@ -444,175 +520,198 @@ fn calculate(
             return fail("Allocation expense must be positive and cover its cash allocation");
         }
         let ledger_id = field(row, "ledger_id").to_string();
-        let total = allocated.get(&ledger_id).copied().unwrap_or(Amount::ZERO).add(expense);
-        allocated.insert(ledger_id.clone(), total);
-        let cash = cash_allocated
+        let total = self
+            .allocated
+            .get(&ledger_id)
+            .copied()
+            .unwrap_or(Amount::ZERO)
+            .add(expense);
+        self.allocated.insert(ledger_id.clone(), total);
+        let cash = self
+            .cash_allocated
             .get(&ledger_id)
             .copied()
             .unwrap_or(Amount::ZERO)
             .add(paid);
-        cash_allocated.insert(ledger_id.clone(), cash);
+        self.cash_allocated.insert(ledger_id, cash);
         if total > money(field(item, "amount"))? || cash > money(field(item, "cash_paid"))? {
             return fail("Allocations exceed a source expense or its cash paid");
         }
         let key = (field(row, "grant_id").to_string(), line.to_string());
-        totals.add(key.clone(), expense);
-        paid_totals.add(key.clone(), paid);
+        self.totals.add(key.clone(), expense);
+        self.paid_totals.add(key.clone(), paid);
         let item_date = iso(field(item, "date"))?;
         let in_period = iso_json(agreement.at("start"))? <= item_date && item_date <= iso_json(agreement.at("end"))?;
+        self.review_allocation(row, item, in_period, key, expense);
+        self.details.push(allocation_detail(row, item, agreement, in_period));
+        Ok(())
+    }
+
+    /// The allocation's review findings, and its share of approved, evidenced, in-period work.
+    fn review_allocation(
+        &mut self,
+        row: &Record,
+        item: &Record,
+        in_period: bool,
+        key: (String, String),
+        expense: Amount,
+    ) {
+        let id = field(row, "allocation_id");
         if in_period {
-            period_totals.add(key.clone(), expense);
+            self.period_totals.add(key.clone(), expense);
         } else {
-            findings.push(finding("OUTSIDE_AGREEMENT_PERIOD", field(row, "allocation_id")));
+            self.findings.push(finding("OUTSIDE_AGREEMENT_PERIOD", id));
         }
-        let supported =
-            !pytext::strip(field(item, "evidence")).is_empty() && !pytext::strip(field(row, "evidence")).is_empty();
+        let supported = !blank(field(item, "evidence")) && !blank(field(row, "evidence"));
         if !supported {
-            findings.push(finding("MISSING_ALLOCATION_EVIDENCE", field(row, "allocation_id")));
+            self.findings.push(finding("MISSING_ALLOCATION_EVIDENCE", id));
         }
-        if field(row, "approved") != "yes" {
-            findings.push(finding("UNAPPROVED_ALLOCATION", field(row, "allocation_id")));
+        let approved = field(row, "approved") == "yes";
+        if !approved {
+            self.findings.push(finding("UNAPPROVED_ALLOCATION", id));
         }
-        if in_period && supported && field(row, "approved") == "yes" {
-            approved_totals.add(key, expense);
+        if in_period && supported && approved {
+            self.approved_totals.add(key, expense);
         }
-        let mut detail = record_json(row);
-        detail.push((PyStr::from("ledger_date"), Json::str(field(item, "date"))));
-        detail.push((PyStr::from("source_evidence"), Json::str(field(item, "evidence"))));
-        detail.push((
-            PyStr::from("agreement_evidence"),
-            agreement.at("agreement_evidence").clone(),
-        ));
-        detail.push((
-            PyStr::from("within_period"),
-            Json::str(if in_period { "yes" } else { "no" }),
-        ));
-        details.push(Json::Object(detail));
     }
-    let mut funding: BTreeMap<String, Amount> = BTreeMap::new();
-    for row in receipts {
-        let known = grant(field(row, "grant_id")).is_some();
-        if !known
-            || !{
-                let date = iso(field(row, "date"))?;
-                start <= date && date <= end
+
+    fn receipts(&mut self, receipts: &[Record], start: Date, end: Date) -> Result<()> {
+        for row in receipts {
+            if self.grant(field(row, "grant_id")).is_none() || !within(field(row, "date"), start, end)? {
+                return fail("Funding receipt must reference a declared grant and ledger period");
             }
-        {
-            return fail("Funding receipt must reference a declared grant and ledger period");
-        }
-        let amount = money(field(row, "amount"))?;
-        if amount <= Amount::ZERO {
-            return fail("Funding receipts must be positive");
-        }
-        let id = field(row, "grant_id").to_string();
-        let total = funding.get(&id).copied().unwrap_or(Amount::ZERO).add(amount);
-        funding.insert(id, total);
-        if pytext::strip(field(row, "evidence")).is_empty() {
-            findings.push(finding("MISSING_RECEIPT_EVIDENCE", field(row, "receipt_id")));
-        }
-    }
-    // Reported beside the grant, never added to its cash or unspent funding: whether
-    // interest must be spent or returned, and how a contribution counts, is the
-    // agreement's term for the reviewer to apply.
-    let mut contributed = Totals::default();
-    for row in contributions {
-        let known = grant(field(row, "grant_id")).is_some();
-        if !known
-            || !{
-                let date = iso(field(row, "date"))?;
-                start <= date && date <= end
+            let amount = money(field(row, "amount"))?;
+            if amount <= Amount::ZERO {
+                return fail("Funding receipts must be positive");
             }
-        {
-            return fail("Contribution must reference a declared grant and ledger period");
-        }
-        if !CONTRIBUTION_KINDS.contains(&field(row, "kind")) {
-            return fail(format!(
-                "Contribution kind must be one of {}",
-                CONTRIBUTION_KINDS.join(", ")
-            ));
-        }
-        let amount = money(field(row, "amount"))?;
-        if amount <= Amount::ZERO {
-            return fail("Contributions must be positive");
-        }
-        contributed.add(
-            (field(row, "grant_id").to_string(), field(row, "kind").to_string()),
-            amount,
-        );
-        if pytext::strip(field(row, "evidence")).is_empty() {
-            findings.push(finding("MISSING_CONTRIBUTION_EVIDENCE", field(row, "contribution_id")));
-        }
-    }
-    let contribution_rows: Vec<Json> = grants
-        .iter()
-        .map(|(id, _)| {
-            let mut pairs = vec![(PyStr::from("grant_id"), Json::str(id))];
-            for kind in CONTRIBUTION_KINDS {
-                let total = contributed.get(&(id.clone(), kind.to_string()));
-                pairs.push((PyStr::from(kind), Json::str(&total.to_string())));
+            let id = field(row, "grant_id").to_string();
+            let total = self.funding.get(&id).copied().unwrap_or(Amount::ZERO).add(amount);
+            self.funding.insert(id, total);
+            if blank(field(row, "evidence")) {
+                self.findings
+                    .push(finding("MISSING_RECEIPT_EVIDENCE", field(row, "receipt_id")));
             }
-            Json::Object(pairs)
-        })
-        .collect();
-    let mut tieout: Vec<Json> = Vec::new();
-    for (key, row) in &source_rows {
-        let allocated_here = allocated.get(key).copied().unwrap_or(Amount::ZERO);
-        let cash_here = cash_allocated.get(key).copied().unwrap_or(Amount::ZERO);
-        let unallocated = money(field(row, "amount"))?.sub(allocated_here);
-        let unpaid = money(field(row, "cash_paid"))?.sub(cash_here);
-        tieout.push(Json::object([
-            ("ledger_id", Json::str(key)),
-            ("source_amount", Json::str(field(row, "amount"))),
-            ("allocated", Json::str(&allocated_here.to_string())),
-            ("unallocated", Json::str(&unallocated.to_string())),
-            ("source_cash_paid", Json::str(field(row, "cash_paid"))),
-            ("cash_allocated", Json::str(&cash_here.to_string())),
-            ("cash_unallocated", Json::str(&unpaid.to_string())),
-        ]));
-        if !unallocated.is_zero() || !unpaid.is_zero() {
-            findings.push(finding("UNALLOCATED_SOURCE", key));
         }
+        Ok(())
     }
-    let mut budget_rows: Vec<Json> = Vec::new();
-    let mut movements: Vec<Json> = Vec::new();
-    for (identifier, agreement) in &grants {
+
+    /// Reported beside the grant, never added to its cash or unspent funding: whether
+    /// interest must be spent or returned, and how a contribution counts, is the
+    /// agreement's term for the reviewer to apply.
+    fn contributions(&mut self, contributions: &[Record], start: Date, end: Date) -> Result<()> {
+        for row in contributions {
+            if self.grant(field(row, "grant_id")).is_none() || !within(field(row, "date"), start, end)? {
+                return fail("Contribution must reference a declared grant and ledger period");
+            }
+            if !CONTRIBUTION_KINDS.contains(&field(row, "kind")) {
+                return fail(format!(
+                    "Contribution kind must be one of {}",
+                    CONTRIBUTION_KINDS.join(", ")
+                ));
+            }
+            let amount = money(field(row, "amount"))?;
+            if amount <= Amount::ZERO {
+                return fail("Contributions must be positive");
+            }
+            self.contributed.add(
+                (field(row, "grant_id").to_string(), field(row, "kind").to_string()),
+                amount,
+            );
+            if blank(field(row, "evidence")) {
+                self.findings
+                    .push(finding("MISSING_CONTRIBUTION_EVIDENCE", field(row, "contribution_id")));
+            }
+        }
+        Ok(())
+    }
+
+    fn contribution_rows(&self) -> Vec<Json> {
+        self.grants
+            .iter()
+            .map(|(id, _)| {
+                let mut pairs = vec![(PyStr::from("grant_id"), Json::str(id))];
+                for kind in CONTRIBUTION_KINDS {
+                    let total = self.contributed.get(&(id.clone(), kind.to_string()));
+                    pairs.push((PyStr::from(kind), Json::str(&total.to_string())));
+                }
+                Json::Object(pairs)
+            })
+            .collect()
+    }
+
+    fn tieout(&mut self) -> Result<Vec<Json>> {
+        let mut tieout: Vec<Json> = Vec::new();
+        for (key, row) in &self.sources {
+            let allocated_here = self.allocated.get(key).copied().unwrap_or(Amount::ZERO);
+            let cash_here = self.cash_allocated.get(key).copied().unwrap_or(Amount::ZERO);
+            let unallocated = money(field(row, "amount"))?.sub(allocated_here);
+            let unpaid = money(field(row, "cash_paid"))?.sub(cash_here);
+            tieout.push(Json::object([
+                ("ledger_id", Json::str(key)),
+                ("source_amount", Json::str(field(row, "amount"))),
+                ("allocated", Json::str(&allocated_here.to_string())),
+                ("unallocated", Json::str(&unallocated.to_string())),
+                ("source_cash_paid", Json::str(field(row, "cash_paid"))),
+                ("cash_allocated", Json::str(&cash_here.to_string())),
+                ("cash_unallocated", Json::str(&unpaid.to_string())),
+            ]));
+            if !unallocated.is_zero() || !unpaid.is_zero() {
+                self.findings.push(finding("UNALLOCATED_SOURCE", key));
+            }
+        }
+        Ok(tieout)
+    }
+
+    /// Budget lines and funding movements, grant by grant.
+    fn budgets(&mut self) -> Result<(Vec<Json>, Vec<Json>)> {
+        let mut budget_rows: Vec<Json> = Vec::new();
+        let mut movements: Vec<Json> = Vec::new();
+        for (identifier, agreement) in self.grants.clone() {
+            let (spent, paid) = self.budget_lines(&identifier, agreement, &mut budget_rows)?;
+            movements.push(self.movement(&identifier, agreement, spent, paid)?);
+        }
+        Ok((budget_rows, movements))
+    }
+
+    /// One grant's budget lines; returns its expenditure and cash allocated.
+    fn budget_lines(&mut self, identifier: &str, agreement: &Json, rows: &mut Vec<Json>) -> Result<(Amount, Amount)> {
         let (mut spent, mut paid) = (Amount::ZERO, Amount::ZERO);
-        let Json::Object(budget) = agreement.at("budget") else {
-            unreachable!("checked above")
-        };
-        for (line, value) in budget {
+        for (line, value) in budget_of(agreement) {
             let line_text = line.lossy();
-            let key = (identifier.clone(), line_text.clone());
-            spent = spent.add(totals.get(&key));
-            paid = paid.add(paid_totals.get(&key));
-            budget_rows.push(Json::Object(vec![
+            let key = (identifier.to_string(), line_text.clone());
+            spent = spent.add(self.totals.get(&key));
+            paid = paid.add(self.paid_totals.get(&key));
+            let amount = |totals: &Totals| Json::str(&totals.get(&key).to_string());
+            rows.push(Json::Object(vec![
                 (PyStr::from("grant_id"), Json::str(identifier)),
                 (PyStr::from("budget_line"), Json::Str(line.clone())),
                 (PyStr::from("budget"), value.clone()),
-                (PyStr::from("allocated"), Json::str(&totals.get(&key).to_string())),
-                (
-                    PyStr::from("within_period"),
-                    Json::str(&period_totals.get(&key).to_string()),
-                ),
+                (PyStr::from("allocated"), amount(&self.totals)),
+                (PyStr::from("within_period"), amount(&self.period_totals)),
                 (
                     PyStr::from("approved_evidenced_in_period"),
-                    Json::str(&approved_totals.get(&key).to_string()),
+                    amount(&self.approved_totals),
                 ),
-                (
-                    PyStr::from("cash_allocated"),
-                    Json::str(&paid_totals.get(&key).to_string()),
-                ),
+                (PyStr::from("cash_allocated"), amount(&self.paid_totals)),
             ]));
-            if totals.get(&key) > money_json(value)? {
-                findings.push(finding("OVER_BUDGET", &format!("{identifier}/{line_text}")));
+            if self.totals.get(&key) > money_json(value)? {
+                self.findings
+                    .push(finding("OVER_BUDGET", &format!("{identifier}/{line_text}")));
             }
         }
-        let received = funding.get(identifier).copied().unwrap_or(Amount::ZERO);
+        Ok((spent, paid))
+    }
+
+    fn movement(&mut self, identifier: &str, agreement: &Json, spent: Amount, paid: Amount) -> Result<Json> {
+        let received = self.funding.get(identifier).copied().unwrap_or(Amount::ZERO);
         let remaining = money_json(agreement.at("opening_unspent_funding"))?
             .add(received)
             .sub(spent);
         let cash = money_json(agreement.at("opening_cash"))?.add(received).sub(paid);
-        movements.push(Json::Object(vec![
+        if remaining.is_negative() || cash.is_negative() {
+            self.findings.push(finding("FUNDING_SHORTFALL", identifier));
+        }
+        Ok(Json::Object(vec![
             (PyStr::from("grant_id"), Json::str(identifier)),
             (PyStr::from("opening_cash"), agreement.at("opening_cash").clone()),
             (
@@ -627,17 +726,74 @@ fn calculate(
                 PyStr::from("unspent_funding_workpaper"),
                 Json::str(&remaining.to_string()),
             ),
-        ]));
-        if remaining.is_negative() || cash.is_negative() {
-            findings.push(finding("FUNDING_SHORTFALL", identifier));
+        ]))
+    }
+
+    fn result(
+        self,
+        input: &Sources,
+        budget_rows: Vec<Json>,
+        movements: Vec<Json>,
+        contribution_rows: Vec<Json>,
+        tieout: Vec<Json>,
+    ) -> Result<Json> {
+        let mut ledger_total = Amount::ZERO;
+        for row in input.ledger {
+            ledger_total = ledger_total.add(money(field(row, "amount"))?);
         }
+        let allocated_total = self.allocated.values().fold(Amount::ZERO, |acc, v| acc.add(*v));
+        let status = if self.findings.is_empty() {
+            "RECONCILED"
+        } else {
+            "REVIEW"
+        };
+        let header = input.header;
+        Ok(Json::Object(vec![
+            (PyStr::from("schema_version"), Json::Int("1".into())),
+            (PyStr::from("entity"), header.at("entity").clone()),
+            (PyStr::from("currency"), header.at("currency").clone()),
+            (PyStr::from("ledger_start"), header.at("ledger_start").clone()),
+            (PyStr::from("ledger_end"), header.at("ledger_end").clone()),
+            (PyStr::from("amount_basis"), header.at("amount_basis").clone()),
+            (PyStr::from("source_sha256"), digests(input.content)),
+            (PyStr::from("status"), Json::str(status)),
+            (PyStr::from("ledger_total"), Json::str(&ledger_total.to_string())),
+            (PyStr::from("allocated_total"), Json::str(&allocated_total.to_string())),
+            (
+                PyStr::from("unallocated_total"),
+                Json::str(&ledger_total.sub(allocated_total).to_string()),
+            ),
+            (PyStr::from("budget_lines"), Json::Array(budget_rows)),
+            (PyStr::from("funding_movements"), Json::Array(movements)),
+            (PyStr::from("contributions"), Json::Array(contribution_rows)),
+            (PyStr::from("allocation_evidence"), Json::Array(self.details)),
+            (PyStr::from("ledger_tieout"), Json::Array(tieout)),
+            (PyStr::from("findings"), Json::Array(self.findings)),
+            (PyStr::from("scope"), Json::str(SCOPE)),
+        ]))
     }
-    let mut ledger_total = Amount::ZERO;
-    for row in ledger {
-        ledger_total = ledger_total.add(money(field(row, "amount"))?);
-    }
-    let allocated_total = allocated.values().fold(Amount::ZERO, |acc, v| acc.add(*v));
-    let digests = Json::Object(
+}
+
+const SCOPE: &str = "Workpaper arithmetic and supplied review decisions only. No grant eligibility, income recognition, liability, acquittal approval or lodgement decision.";
+
+fn allocation_detail(row: &Record, item: &Record, agreement: &Json, in_period: bool) -> Json {
+    let mut detail = record_json(row);
+    detail.push((PyStr::from("ledger_date"), Json::str(field(item, "date"))));
+    detail.push((PyStr::from("source_evidence"), Json::str(field(item, "evidence"))));
+    detail.push((
+        PyStr::from("agreement_evidence"),
+        agreement.at("agreement_evidence").clone(),
+    ));
+    detail.push((
+        PyStr::from("within_period"),
+        Json::str(if in_period { "yes" } else { "no" }),
+    ));
+    Json::Object(detail)
+}
+
+/// `{name: sha256(bytes)}` for every file read, in reading order.
+fn digests(content: &[(&'static str, Vec<u8>)]) -> Json {
+    Json::Object(
         content
             .iter()
             .map(|(name, bytes)| {
@@ -645,36 +801,7 @@ fn calculate(
                 (PyStr::from(*name), Json::str(&digest))
             })
             .collect(),
-    );
-    let status = if findings.is_empty() { "RECONCILED" } else { "REVIEW" };
-    Ok(Json::Object(vec![
-        (PyStr::from("schema_version"), Json::Int("1".into())),
-        (PyStr::from("entity"), header.at("entity").clone()),
-        (PyStr::from("currency"), header.at("currency").clone()),
-        (PyStr::from("ledger_start"), header.at("ledger_start").clone()),
-        (PyStr::from("ledger_end"), header.at("ledger_end").clone()),
-        (PyStr::from("amount_basis"), header.at("amount_basis").clone()),
-        (PyStr::from("source_sha256"), digests),
-        (PyStr::from("status"), Json::str(status)),
-        (PyStr::from("ledger_total"), Json::str(&ledger_total.to_string())),
-        (PyStr::from("allocated_total"), Json::str(&allocated_total.to_string())),
-        (
-            PyStr::from("unallocated_total"),
-            Json::str(&ledger_total.sub(allocated_total).to_string()),
-        ),
-        (PyStr::from("budget_lines"), Json::Array(budget_rows)),
-        (PyStr::from("funding_movements"), Json::Array(movements)),
-        (PyStr::from("contributions"), Json::Array(contribution_rows)),
-        (PyStr::from("allocation_evidence"), Json::Array(details)),
-        (PyStr::from("ledger_tieout"), Json::Array(tieout)),
-        (PyStr::from("findings"), Json::Array(findings)),
-        (
-            PyStr::from("scope"),
-            Json::str(
-                "Workpaper arithmetic and supplied review decisions only. No grant eligibility, income recognition, liability, acquittal approval or lodgement decision.",
-            ),
-        ),
-    ]))
+    )
 }
 
 /// `safe_cell(value)`: escape text a spreadsheet would read as a formula, but leave numbers alone.
@@ -752,49 +879,70 @@ fn get_text(row: &Json, key: &str) -> String {
     }
 }
 
+const TABLES: [&str; 6] = [
+    "budget_lines",
+    "funding_movements",
+    "contributions",
+    "allocation_evidence",
+    "ledger_tieout",
+    "findings",
+];
+
+fn array<'a>(value: &'a Json, key: &str) -> &'a [Json] {
+    let Json::Array(items) = value.at(key) else {
+        unreachable!("built as lists")
+    };
+    items
+}
+
 /// `write_files(result, output)`.
 pub fn write_files(result: &Json, output: &Path) -> Result<()> {
     write_new(
         &output.join("workpaper.json"),
         &text_mode(&(pyjson::dumps_indent2(result) + "\n")),
     )?;
-    for name in [
-        "budget_lines",
-        "funding_movements",
-        "contributions",
-        "allocation_evidence",
-        "ledger_tieout",
-        "findings",
-    ] {
-        let Json::Array(table) = result.at(name) else {
-            unreachable!("built as lists")
-        };
-        let mut fields: Vec<String> = Vec::new();
-        for row in table {
-            if let Json::Object(pairs) = row {
-                for (key, _) in pairs {
-                    let key = key.lossy();
-                    if !fields.contains(&key) {
-                        fields.push(key);
-                    }
+    for name in TABLES {
+        write_new(
+            &output.join(format!("{name}.csv")),
+            csv_table(array(result, name)).as_bytes(),
+        )?;
+    }
+    write_new(
+        &output.join("workpaper.md"),
+        &text_mode(&markdown_report(result).join("\n")),
+    )
+}
+
+/// `csv.DictWriter` over the union of the rows' keys, with formula-like cells escaped.
+fn csv_table(table: &[Json]) -> String {
+    let mut fields: Vec<String> = Vec::new();
+    for row in table {
+        if let Json::Object(pairs) = row {
+            for (key, _) in pairs {
+                let key = key.lossy();
+                if !fields.contains(&key) {
+                    fields.push(key);
                 }
             }
         }
-        if fields.is_empty() {
-            fields = vec!["code".into(), "reference".into()];
-        }
-        let mut csv = pycsv::write_row(&fields);
-        for row in table {
-            let cells: Vec<String> = fields.iter().map(|key| safe_cell(&get_text(row, key))).collect();
-            csv.push_str(&pycsv::write_row(&cells));
-        }
-        write_new(&output.join(format!("{name}.csv")), csv.as_bytes())?;
     }
-    let entity = get_text(result, "entity");
+    if fields.is_empty() {
+        fields = vec!["code".into(), "reference".into()];
+    }
+    let mut csv = pycsv::write_row(&fields);
+    for row in table {
+        let cells: Vec<String> = fields.iter().map(|key| safe_cell(&get_text(row, key))).collect();
+        csv.push_str(&pycsv::write_row(&cells));
+    }
+    csv
+}
+
+/// workpaper.md's lines.
+fn markdown_report(result: &Json) -> Vec<String> {
     let mut lines = vec![
         "# Grant acquittal workpaper".to_string(),
         String::new(),
-        format!("Entity: {}. Currency: AUD. Basis: GST-inclusive.", markdown(&entity)),
+        format!("Entity: {}. Currency: AUD. Basis: GST-inclusive.", markdown(&get_text(result, "entity"))),
         format!(
             "Ledger period: {} to {}. Result: {}.",
             get_text(result, "ledger_start"),
@@ -815,10 +963,7 @@ pub fn write_files(result: &Json, output: &Path) -> Result<()> {
         "| Grant | Closing cash allocation | Unspent funding workpaper |".into(),
         "| --- | ---: | ---: |".into(),
     ];
-    let Json::Array(movements) = result.at("funding_movements") else {
-        unreachable!()
-    };
-    for row in movements {
+    for row in array(result, "funding_movements") {
         lines.push(format!(
             "| {} | {} | {} |",
             markdown(&get_text(row, "grant_id")),
@@ -826,10 +971,8 @@ pub fn write_files(result: &Json, output: &Path) -> Result<()> {
             get_text(row, "unspent_funding_workpaper")
         ));
     }
-    lines.extend(["".to_string(), "## Items requiring review".to_string(), String::new()]);
-    let Json::Array(found) = result.at("findings") else {
-        unreachable!()
-    };
+    lines.extend([String::new(), "## Items requiring review".to_string(), String::new()]);
+    let found = array(result, "findings");
     for row in found {
         lines.push(format!(
             "- {}: {}",
@@ -841,7 +984,7 @@ pub fn write_files(result: &Json, output: &Path) -> Result<()> {
         lines.push("No differences found in the supplied evidence.".into());
     }
     lines.extend([String::new(), get_text(result, "scope"), String::new()]);
-    write_new(&output.join("workpaper.md"), &text_mode(&lines.join("\n")))
+    lines
 }
 
 /// Atomically publish a complete directory without replacing any destination.
@@ -862,6 +1005,7 @@ fn publish(staged: &Path, output: &Path) -> std::io::Result<()> {
     let source = CString::new(staged.as_os_str().as_bytes()).map_err(std::io::Error::other)?;
     let destination = CString::new(output.as_os_str().as_bytes()).map_err(std::io::Error::other)?;
     // SAFETY: both arguments are valid NUL-terminated paths for the duration of the call.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let result = unsafe {
         libc::renameat2(
             libc::AT_FDCWD,
@@ -885,6 +1029,7 @@ fn publish(staged: &Path, output: &Path) -> std::io::Result<()> {
     let source = CString::new(staged.as_os_str().as_bytes()).map_err(std::io::Error::other)?;
     let destination = CString::new(output.as_os_str().as_bytes()).map_err(std::io::Error::other)?;
     // SAFETY: both arguments are valid NUL-terminated paths for the duration of the call.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let result = unsafe { libc::renamex_np(source.as_ptr(), destination.as_ptr(), libc::RENAME_EXCL) };
     if result == 0 {
         Ok(())
@@ -908,6 +1053,7 @@ fn publish(staged: &Path, output: &Path) -> std::io::Result<()> {
     let (source, destination) = (wide(staged), wide(output));
     // SAFETY: both buffers are NUL-terminated UTF-16 paths that outlive the call. With
     // no flags MoveFileExW refuses an existing destination, as Python's os.rename does.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     if unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), 0) } != 0 {
         Ok(())
     } else {

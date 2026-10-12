@@ -34,118 +34,143 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// One record in progress: `_csv.c`'s `ReaderObj` state.
+struct Record {
+    fields: Vec<String>,
+    field: String,
+    field_len: usize,
+    state: State,
+}
+
+impl Record {
+    fn save_field(&mut self) {
+        self.fields.push(std::mem::take(&mut self.field));
+        self.field_len = 0;
+    }
+
+    fn add_char(&mut self, ch: char) -> Result<(), CsvError> {
+        if self.field_len >= FIELD_LIMIT {
+            return Err(CsvError(format!("field larger than field limit ({FIELD_LIMIT})")));
+        }
+        self.field.push(ch);
+        self.field_len += 1;
+        Ok(())
+    }
+
+    /// End the field at a line end (`None` is the end of the line's text).
+    fn end_line(&mut self, c: Option<char>) {
+        self.save_field();
+        self.state = if c.is_none() {
+            State::StartRecord
+        } else {
+            State::EatCrnl
+        };
+    }
+
+    /// `parse_process_char` for one character, or `None` at the end of a line.
+    fn step(&mut self, c: Option<char>) -> Result<(), CsvError> {
+        if self.state == State::StartRecord {
+            match c {
+                None => return Ok(()),
+                Some('\n' | '\r') => {
+                    self.state = State::EatCrnl;
+                    return Ok(());
+                }
+                Some(_) => self.state = State::StartField,
+            }
+        }
+        match self.state {
+            State::StartRecord => unreachable!("handled above"),
+            State::StartField | State::InField => self.unquoted(c),
+            State::InQuotedField => match c {
+                None => Ok(()),
+                Some('"') => {
+                    self.state = State::QuoteInQuotedField;
+                    Ok(())
+                }
+                Some(ch) => self.add_char(ch),
+            },
+            State::QuoteInQuotedField => self.after_quote(c),
+            State::EatCrnl => match c {
+                Some('\n' | '\r') => Ok(()),
+                None => {
+                    self.state = State::StartRecord;
+                    Ok(())
+                }
+                Some(_) => Err(CsvError(
+                    "new-line character seen in unquoted field - do you need to open the file with newline=''?".into(),
+                )),
+            },
+        }
+    }
+
+    fn unquoted(&mut self, c: Option<char>) -> Result<(), CsvError> {
+        match c {
+            None | Some('\n' | '\r') => {
+                self.end_line(c);
+                Ok(())
+            }
+            Some('"') if self.state == State::StartField => {
+                self.state = State::InQuotedField;
+                Ok(())
+            }
+            Some(',') => {
+                self.save_field();
+                self.state = State::StartField;
+                Ok(())
+            }
+            Some(ch) => {
+                self.state = State::InField;
+                self.add_char(ch)
+            }
+        }
+    }
+
+    fn after_quote(&mut self, c: Option<char>) -> Result<(), CsvError> {
+        match c {
+            Some('"') => {
+                self.state = State::InQuotedField;
+                self.add_char('"')
+            }
+            Some(',') => {
+                self.save_field();
+                self.state = State::StartField;
+                Ok(())
+            }
+            None | Some('\n' | '\r') => {
+                self.end_line(c);
+                Ok(())
+            }
+            Some(_) => Err(CsvError("',' expected after '\"'".into())),
+        }
+    }
+}
+
 impl Iterator for Reader<'_> {
     type Item = Result<Vec<String>, CsvError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut fields: Vec<String> = Vec::new();
-        let mut field = String::new();
-        let mut field_len = 0usize;
-        let mut state = State::StartRecord;
-        fn save(fields: &mut Vec<String>, field: &mut String, field_len: &mut usize) {
-            fields.push(std::mem::take(field));
-            *field_len = 0;
-        }
-        fn add(field: &mut String, field_len: &mut usize, ch: char) -> Result<(), CsvError> {
-            if *field_len >= FIELD_LIMIT {
-                return Err(CsvError(format!("field larger than field limit ({FIELD_LIMIT})")));
-            }
-            field.push(ch);
-            *field_len += 1;
-            Ok(())
-        }
+        let mut record = Record {
+            fields: Vec::new(),
+            field: String::new(),
+            field_len: 0,
+            state: State::StartRecord,
+        };
         loop {
             let Some(line) = self.lines.next() else {
-                if field_len != 0 || state == State::InQuotedField {
+                if record.field_len != 0 || record.state == State::InQuotedField {
                     // strict=True refuses a record cut off at the end of the input.
                     return Some(Err(CsvError("unexpected end of data".into())));
                 }
                 return None;
             };
             for c in line.chars().map(Some).chain(std::iter::once(None)) {
-                if state == State::StartRecord {
-                    if c.is_none() {
-                        continue;
-                    }
-                    if matches!(c, Some('\n' | '\r')) {
-                        state = State::EatCrnl;
-                        continue;
-                    }
-                    state = State::StartField;
-                }
-                let result = match state {
-                    State::StartRecord => unreachable!("handled above"),
-                    State::StartField | State::InField => match c {
-                        None | Some('\n' | '\r') => {
-                            save(&mut fields, &mut field, &mut field_len);
-                            state = if c.is_none() {
-                                State::StartRecord
-                            } else {
-                                State::EatCrnl
-                            };
-                            Ok(())
-                        }
-                        Some('"') if state == State::StartField => {
-                            state = State::InQuotedField;
-                            Ok(())
-                        }
-                        Some(',') => {
-                            save(&mut fields, &mut field, &mut field_len);
-                            state = State::StartField;
-                            Ok(())
-                        }
-                        Some(ch) => {
-                            state = State::InField;
-                            add(&mut field, &mut field_len, ch)
-                        }
-                    },
-                    State::InQuotedField => match c {
-                        None => Ok(()),
-                        Some('"') => {
-                            state = State::QuoteInQuotedField;
-                            Ok(())
-                        }
-                        Some(ch) => add(&mut field, &mut field_len, ch),
-                    },
-                    State::QuoteInQuotedField => match c {
-                        Some('"') => {
-                            state = State::InQuotedField;
-                            add(&mut field, &mut field_len, '"')
-                        }
-                        Some(',') => {
-                            save(&mut fields, &mut field, &mut field_len);
-                            state = State::StartField;
-                            Ok(())
-                        }
-                        None | Some('\n' | '\r') => {
-                            save(&mut fields, &mut field, &mut field_len);
-                            state = if c.is_none() {
-                                State::StartRecord
-                            } else {
-                                State::EatCrnl
-                            };
-                            Ok(())
-                        }
-                        Some(_) => Err(CsvError("',' expected after '\"'".into())),
-                    },
-                    State::EatCrnl => match c {
-                        Some('\n' | '\r') => Ok(()),
-                        None => {
-                            state = State::StartRecord;
-                            Ok(())
-                        }
-                        Some(_) => Err(CsvError(
-                            "new-line character seen in unquoted field - do you need to open the file with newline=''?"
-                                .into(),
-                        )),
-                    },
-                };
-                if let Err(error) = result {
+                if let Err(error) = record.step(c) {
                     return Some(Err(error));
                 }
             }
-            if state == State::StartRecord {
-                return Some(Ok(fields));
+            if record.state == State::StartRecord {
+                return Some(Ok(record.fields));
             }
         }
     }
