@@ -1,6 +1,7 @@
 # Accounting Review Pipeline: Xero month-end close controls
 
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/ryanduguid/accounting-review-pipeline/graph/badge.svg)](https://codecov.io/gh/ryanduguid/accounting-review-pipeline)
 [![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
