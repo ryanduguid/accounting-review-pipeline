@@ -3,6 +3,7 @@
 //! Python script relied on, so outputs and messages stay identical.
 
 pub mod amount;
+pub mod argtheme;
 pub mod cli;
 pub mod isodate;
 pub mod oserror;

@@ -5,6 +5,7 @@ use crate::textwrap::wrap;
 use std::io::Write;
 use std::path::Path;
 
+use crate::argtheme::{self, Stream, Theme};
 use crate::pytext;
 use crate::workpaper::{self, Failure};
 
@@ -16,91 +17,140 @@ fn width() -> usize {
     usize::try_from(crate::termsize::columns() - 2).unwrap_or(0)
 }
 
-/// `HelpFormatter._format_usage` for this parser's three optionals.
-fn usage(prog: &str) -> String {
-    let prefix = "usage: ";
-    let text_width = width();
-    let parts = ["[-h]", "--input INPUT", "--output OUTPUT"];
-    let flat = format!("{prog} {}", parts.join(" "));
-    if prefix.len() + pytext::py_len(&flat) <= text_width {
-        return format!("{prefix}{flat}");
-    }
-    let get_lines = |parts: &[&str], indent: &str, with_prefix: bool| -> Vec<String> {
-        let mut lines = Vec::new();
-        let mut line: Vec<&str> = Vec::new();
-        let mut line_len = if with_prefix {
-            prefix.len() - 1
-        } else {
-            indent.len() - 1
-        };
-        for part in parts {
-            if line_len + 1 + pytext::py_len(part) > text_width && !line.is_empty() {
-                lines.push(format!("{indent}{}", line.join(" ")));
-                line.clear();
-                line_len = indent.len() - 1;
-            }
-            line.push(part);
-            line_len += pytext::py_len(part) + 1;
-        }
-        if !line.is_empty() {
-            lines.push(format!("{indent}{}", line.join(" ")));
-        }
-        if with_prefix && !lines.is_empty() {
-            lines[0] = lines[0][indent.len()..].to_string();
-        }
-        lines
-    };
-    let lines = if (prefix.len() + pytext::py_len(prog)) as f64 <= 0.75 * text_width as f64 {
-        let indent = " ".repeat(prefix.len() + pytext::py_len(prog) + 1);
-        let mut head = vec![prog];
-        head.extend(parts);
-        get_lines(&head, &indent, true)
-    } else {
-        let indent = " ".repeat(prefix.len());
-        let mut lines = vec![prog.to_string()];
-        lines.extend(get_lines(&parts, &indent, false));
-        lines
-    };
-    format!("{prefix}{}", lines.join("\n"))
+/// A usage part or help header: its plain text, which sets every width, and
+/// the coloured text argparse prints.
+struct Part {
+    plain: String,
+    coloured: String,
 }
 
-fn help(prog: &str) -> String {
-    let width = width();
-    let rows: [(&str, Option<&str>); 3] = [
-        ("-h, --help", Some("show this help message and exit")),
-        ("--input INPUT", None),
-        ("--output OUTPUT", None),
+/// `_format_usage`'s `get_lines`: wrap parts under `indent`; with a prefix
+/// length, the first line starts after the prefix instead of the indent.
+fn usage_lines(parts: &[Part], indent: &str, prefix_len: Option<usize>, text_width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line: Vec<&str> = Vec::new();
+    let mut line_len = prefix_len.unwrap_or(indent.len()) - 1;
+    for part in parts {
+        let part_len = pytext::py_len(&part.plain);
+        if line_len + 1 + part_len > text_width && !line.is_empty() {
+            lines.push(format!("{indent}{}", line.join(" ")));
+            line.clear();
+            line_len = indent.len() - 1;
+        }
+        line.push(&part.coloured);
+        line_len += part_len + 1;
+    }
+    if !line.is_empty() {
+        lines.push(format!("{indent}{}", line.join(" ")));
+    }
+    if prefix_len.is_some() && !lines.is_empty() {
+        lines[0] = lines[0][indent.len()..].to_string();
+    }
+    lines
+}
+
+/// `HelpFormatter._format_usage` for this parser's three optionals.
+fn usage(prog: &str, t: &Theme) -> String {
+    let prefix = "usage: ";
+    let text_width = width();
+    let option = |flag: &str, label: &str| Part {
+        plain: format!("{flag} {label}"),
+        coloured: format!("{}{flag} {}{label}{}", t.summary_long_option, t.summary_label, t.reset),
+    };
+    let parts = [
+        Part {
+            plain: "[-h]".into(),
+            coloured: format!("[{}-h{}]", t.summary_short_option, t.reset),
+        },
+        option("--input", "INPUT"),
+        option("--output", "OUTPUT"),
     ];
+    let plain: Vec<&str> = parts.iter().map(|p| p.plain.as_str()).collect();
+    let rest = if prefix.len() + pytext::py_len(&format!("{prog} {}", plain.join(" "))) <= text_width {
+        format!(
+            " {}",
+            parts.iter().map(|p| p.coloured.as_str()).collect::<Vec<_>>().join(" ")
+        )
+    } else if (prefix.len() + pytext::py_len(prog)) as f64 <= 0.75 * text_width as f64 {
+        let indent = " ".repeat(prefix.len() + pytext::py_len(prog) + 1);
+        let mut head = vec![Part {
+            plain: prog.to_string(),
+            coloured: prog.to_string(),
+        }];
+        head.extend(parts);
+        let joined = usage_lines(&head, &indent, Some(prefix.len()), text_width).join("\n");
+        joined[prog.len()..].to_string()
+    } else {
+        let indent = " ".repeat(prefix.len());
+        format!("\n{}", usage_lines(&parts, &indent, None, text_width).join("\n"))
+    };
+    format!("{}{prefix}{}{}{prog}{}{rest}", t.usage, t.reset, t.prog, t.reset)
+}
+
+/// The options section's rows: the invocation and its help, if any.
+fn help_rows(t: &Theme) -> [(Part, Option<&'static str>); 3] {
+    let flag = |text: &str, colour: &str| format!("{colour}{text}{}", t.reset);
+    let option = |name: &str, label: &str| Part {
+        plain: format!("{name} {label}"),
+        coloured: format!("{} {}", flag(name, t.long_option), flag(label, t.label)),
+    };
+    let help = Part {
+        plain: "-h, --help".into(),
+        coloured: format!("{}, {}", flag("-h", t.short_option), flag("--help", t.long_option)),
+    };
+    [
+        (help, Some("show this help message and exit")),
+        (option("--input", "INPUT"), None),
+        (option("--output", "OUTPUT"), None),
+    ]
+}
+
+/// `HelpFormatter._format_action` for each row, aligned across the section.
+fn format_rows(rows: &[(Part, Option<&str>)], width: usize) -> String {
     let max_help_position = 24.min(width.saturating_sub(20).max(4));
     let action_max = rows
         .iter()
-        .map(|(header, _)| 2 + pytext::py_len(header))
+        .map(|(header, _)| 2 + pytext::py_len(&header.plain))
         .max()
         .unwrap_or(0);
     let help_position = (action_max + 2).min(max_help_position);
     let help_width = width.saturating_sub(help_position).max(11);
     let action_width = help_position.saturating_sub(4);
-    let mut options = String::new();
+    let mut out = String::new();
     for (header, text) in rows {
-        match text {
-            None => options.push_str(&format!("  {header}\n")),
-            Some(text) => {
-                let lines = wrap(text, help_width);
-                if pytext::py_len(header) <= action_width {
-                    options.push_str(&format!("  {header:<action_width$}  {}\n", lines[0]));
-                } else {
-                    options.push_str(&format!("  {header}\n{}{}\n", " ".repeat(help_position), lines[0]));
-                }
-                for line in &lines[1..] {
-                    options.push_str(&format!("{}{line}\n", " ".repeat(help_position)));
-                }
-            }
+        let Some(text) = text else {
+            out.push_str(&format!("  {}\n", header.coloured));
+            continue;
+        };
+        let lines = wrap(text, help_width);
+        if pytext::py_len(&header.plain) <= action_width {
+            // argparse pads the plain header, then swaps the coloured one in.
+            let padded = format!("  {:<action_width$}  {}\n", header.plain, lines[0]);
+            out.push_str(&padded.replacen(&header.plain, &header.coloured, 1));
+        } else {
+            out.push_str(&format!(
+                "  {}\n{}{}\n",
+                header.coloured,
+                " ".repeat(help_position),
+                lines[0]
+            ));
+        }
+        for line in &lines[1..] {
+            out.push_str(&format!("{}{line}\n", " ".repeat(help_position)));
         }
     }
+    out
+}
+
+fn help(prog: &str, t: &Theme) -> String {
+    let width = width();
+    let options = format_rows(&help_rows(t), width);
+    let description = wrap(DESCRIPTION, width.max(11)).join("\n");
     format!(
-        "{}\n\n{}\n\noptions:\n{options}",
-        usage(prog),
-        wrap(DESCRIPTION, width.max(11)).join("\n")
+        "{}\n\n{description}\n\n{}options:{}\n{options}",
+        usage(prog, t),
+        t.heading,
+        t.reset
     )
 }
 
@@ -258,11 +308,20 @@ pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, std
     let (input, output) = match parse(args) {
         Ok(parsed) => parsed,
         Err(Exit::Help) => {
-            let _ = write!(stdout, "{}", help(prog));
+            let _ = write!(stdout, "{}", help(prog, argtheme::theme(Stream::Stdout)));
             return 0;
         }
         Err(Exit::Error(message)) => {
-            let _ = write!(stderr, "{}\n{prog}: error: {message}\n", usage(prog));
+            let t = argtheme::theme(Stream::Stderr);
+            let _ = write!(
+                stderr,
+                "{}\n{prog}: {}error:{} {}{message}{}\n",
+                usage(prog, t),
+                t.error,
+                t.reset,
+                t.message,
+                t.reset
+            );
             return 2;
         }
     };
@@ -305,12 +364,17 @@ mod tests {
 
     #[test]
     fn usage_and_help_match_argparse() {
+        // Python 3.15 with FORCE_COLOR=1 and 80 columns.
         assert_eq!(
-            usage("grant_workpaper.py"),
+            usage("grant_workpaper.py", &argtheme::COLOURED),
+            "\x1b[1;34musage: \x1b[0m\x1b[1;35mgrant_workpaper.py\x1b[0m [\x1b[32m-h\x1b[0m] \x1b[36m--input \x1b[33mINPUT\x1b[0m \x1b[36m--output \x1b[33mOUTPUT\x1b[0m"
+        );
+        assert_eq!(
+            usage("grant_workpaper.py", &argtheme::PLAIN),
             "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT"
         );
         assert_eq!(
-            help("grant_workpaper.py"),
+            help("grant_workpaper.py", &argtheme::PLAIN),
             "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT\n\nLocal grant allocation and funding workpapers from explicitly reviewed inputs.\n\noptions:\n  -h, --help       show this help message and exit\n  --input INPUT\n  --output OUTPUT\n"
         );
     }
