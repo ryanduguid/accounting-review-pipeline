@@ -1,6 +1,7 @@
 //! `main(argv)` with the argparse behaviour the script had: usage, help,
 //! option abbreviations, and exit 2 for a refused command line.
 
+use crate::textwrap::wrap;
 use std::io::Write;
 use std::path::Path;
 
@@ -10,32 +11,9 @@ use crate::workpaper::{self, Failure};
 const DESCRIPTION: &str = "Local grant allocation and funding workpapers from explicitly reviewed inputs.";
 const FLAGS: [&str; 4] = ["-h", "--help", "--input", "--output"];
 
-/// argparse's formatter width: `$COLUMNS` (or 80) minus 2.
+/// argparse's formatter width: `shutil.get_terminal_size().columns` minus 2.
 fn width() -> usize {
-    let columns = std::env::var("COLUMNS")
-        .ok()
-        .and_then(|c| c.parse::<usize>().ok())
-        .filter(|&c| c > 0)
-        .unwrap_or(80);
-    columns.saturating_sub(2)
-}
-
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in text.split_whitespace() {
-        if !line.is_empty() && pytext::py_len(&line) + 1 + pytext::py_len(word) > width {
-            lines.push(std::mem::take(&mut line));
-        }
-        if !line.is_empty() {
-            line.push(' ');
-        }
-        line.push_str(word);
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-    lines
+    usize::try_from(crate::termsize::columns() - 2).unwrap_or(0)
 }
 
 /// `HelpFormatter._format_usage` for this parser's three optionals.
@@ -122,7 +100,7 @@ fn help(prog: &str) -> String {
     format!(
         "{}\n\n{}\n\noptions:\n{options}",
         usage(prog),
-        wrap(DESCRIPTION, width).join("\n")
+        wrap(DESCRIPTION, width.max(11)).join("\n")
     )
 }
 

@@ -10,6 +10,8 @@ pub mod pycsv;
 pub mod pyjson;
 pub mod pytext;
 mod tables;
+pub mod termsize;
+pub mod textwrap;
 pub mod workpaper;
 
 #[cfg(test)]
