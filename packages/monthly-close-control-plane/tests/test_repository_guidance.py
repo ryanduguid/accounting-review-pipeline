@@ -12,7 +12,6 @@ REPOSITORY_ROOT = ROOT.parents[1]
 LANDED_RELEASE_POLICY = "ec6b0ee76446f11aefb7fa0c203f2e01b4c9a711"
 RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
-    "release-elizabeth-anne-alexander.yml",
     "release-monthly-close-control-plane.yml",
     "release-review-ready-gate.yml",
     "release-xero-trial-balance-export.yml",

@@ -10,7 +10,8 @@ These repository-wide rules apply everywhere:
   hold tokens or read Xero credentials (the environment names documented in the exporter's
   `.env.example`). Review packages, the Excel adapter and the Power BI application stay
   offline, read local files and ship fabricated data only. Python review packages
-  parse and calculate money with exact `Decimal` arithmetic. Describe the Excel
+  parse and calculate money with exact `Decimal` arithmetic, and the Rust Xero Ledger
+  Review Gate reproduces that arithmetic exactly. Describe the Excel
   adapter and Power BI application's native numeric types separately; VBA
   `Double` is floating point and is outside the Decimal guarantee.
 - Roles stay separate. The readiness gate emits `READY`, `NOT_READY` or `BLOCKED` and
@@ -23,7 +24,10 @@ These repository-wide rules apply everywhere:
   version, licence and component lockfile. Production code must not import a sibling
   component, and no review package may import the exporter. One shared `.venv` makes every
   Python component importable from every other; that is a convenience for tests, not a
-  licence to depend on a sibling.
+  licence to depend on a sibling. The owner made one exception on 11 October 2026: the
+  Xero Ledger Review Gate became a Rust binary in 1.0.0 and has no Python import package;
+  its command, exit codes and file formats are unchanged. It has no release caller until a
+  Rust release path is approved; 0.2.6 stays the released Python distribution on PyPI.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
@@ -54,7 +58,7 @@ imported later, sits at `apps/grant-acquittal-workpapers/` because it is never r
 
 ## Setup
 
-From a fresh clone, `uv sync` at the root installs the 5 Python components as editable
+From a fresh clone, `uv sync` at the root installs the 4 Python components as editable
 workspace members and the shared test toolchain into one `.venv`, and `just test` runs
 every component's suite plus the joined conformance test. That is the whole setup. `just`
 comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
@@ -73,15 +77,15 @@ Run every check from the owning component directory with its documented commands
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | the shared component gates below (mypy and coverage scoped to `xero_client.py export_tb.py auth.py token_store.py` by its `pyproject.toml`), plus `python -m pip install --require-hashes -r requirements.lock` and `python -m unittest discover -s tests -v` from that hash-locked environment |
 | Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates, which are the `test`, `dependency-audit`, `package` and `lint` jobs `ci.yml` keeps for this component; the package job and manual Windows recipe run the same installed-command smoke helper |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | the shared component gates below, scoped to `elizabeth_anne_alexander` |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked`, on Linux and Windows; `tests/differential/differential.py` compares the binary with the 0.2.6 Python release |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `python -B -m unittest discover -s tests -v`, on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
-`ci.yml` calls for the exporter, Workpaper Review Gate, Xero Ledger Review Gate and evatt
-with the component directory. Run them from the component directory:
+`ci.yml` calls for the exporter, Workpaper Review Gate and evatt with the component
+directory. `ci.yml`'s `rust` job runs the Xero Ledger Review Gate's cargo checks. Run them from the component directory:
 
 ```bash
 uv lock --check
@@ -95,8 +99,8 @@ uv run --locked --extra dev --python 3.14 python -m build
 The tests run on Python 3.11, 3.12, 3.13, 3.14 and 3.15, and the build gate installs the wheel into a
 clean virtual environment and imports the component's package from it. Every gate above
 runs on Linux; `ci.yml`'s `windows` job adds the same pytest command on `windows-latest` for
-the exporter, Monthly Close Controls and the Xero Ledger Review Gate, the 3 components with
-platform-specific behaviour. Each call filters
+the exporter and Monthly Close Controls, and the `rust` job runs on Windows too, covering
+the 3 components with platform-specific behaviour. Each call filters
 itself to its component directory, the shared contract and the root files, so a change to
 one component runs that component alone. Monthly Close Controls keeps its own `test`,
 `package` and `lint` jobs in `ci.yml` because its release workflow selects them by

@@ -43,8 +43,6 @@ jobs:
         include:
           - package_dir: packages/review-ready-gate
             import_name: reviewready
-          - package_dir: packages/elizabeth-anne-alexander
-            import_name: elizabeth_anne_alexander
           - package_dir: packages/xero-trial-balance-export
             import_name: xero_client
           - package_dir: packages/evatt
@@ -190,7 +188,6 @@ jobs:
       fail-fast: false
       matrix:
         package_dir:
-          - packages/elizabeth-anne-alexander
           - packages/monthly-close-control-plane
           - packages/xero-trial-balance-export
     steps:
@@ -211,6 +208,43 @@ jobs:
       - name: run tests with branch coverage
         run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: ${{ matrix.package_dir }}
+
+  rust:
+    # The Xero Ledger Review Gate is a Rust crate from 1.0.0. rust-toolchain.toml
+    # in its directory pins the toolchain, which rustup installs on first use.
+    # Windows runs too: the staged validation write takes its by-path branch there.
+    name: packages/elizabeth-anne-alexander / rust (${{ matrix.os }})
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/elizabeth-anne-alexander
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: format
+        run: cargo fmt --check
+      - name: lint
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --locked
+      - name: build
+        run: cargo build --locked --release
+      - name: smoke the release binary from an empty directory
+        run: |
+          binary="$PWD/target/release"
+          smoke="$PWD/../../.github/ci/elizabeth-anne-alexander/smoke.sh"
+          work="$(mktemp -d)"
+          cd "$work"
+          PATH="$binary:$PATH" bash "$smoke"
 
   windows-workspace:
     permissions:
@@ -252,14 +286,14 @@ jobs:
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
       - name: lint the workspace
-        run: uv run --locked --group dev ruff check .
+        run: uv run --locked --group dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: type-check the workspace
-        run: uv run --locked --group dev mypy
+        run: uv run --locked --group dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: run the full suite
-        run: uv run --locked --group dev pytest
+        run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   pipeline-gates:
-    needs: [component, test, dependency-audit, package, lint, windows, windows-workspace]
+    needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

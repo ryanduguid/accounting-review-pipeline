@@ -1,10 +1,10 @@
 # Xero Ledger Review Gate
 
-| Install distribution | Python import | Command |
+| Command | Build from source | Released Python distribution |
 | --- | --- | --- |
-| `elizabeth-anne-alexander` | `elizabeth_anne_alexander` | `elizabeth-anne-alexander` |
+| `elizabeth-anne-alexander` | `cargo build --release` | `elizabeth-anne-alexander` 0.2.6 on PyPI |
 
-Compatibility: install `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, and run `elizabeth-anne-alexander`. These remain the supported names; no migration is required.
+From 1.0.0 the gate is a standalone Rust binary. Its command, subcommands, flags, exit codes and output files match 0.2.6; the `elizabeth_anne_alexander` Python import no longer exists. 1.0.0 is unreleased and has no release workflow yet, so `pip install elizabeth-anne-alexander` still installs the Python 0.2.6. [RELEASE_NOTES.md](RELEASE_NOTES.md) lists the differences from 0.2.6.
 
 ## Scope and assurance boundary
 
@@ -30,7 +30,7 @@ authorship, source system, origin, time, or immutability.
 
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/elizabeth-anne-alexander/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
+[![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-5C2D91.svg?logo=rust&logoColor=white&labelColor=04001F)](rust-toolchain.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
 [![No network client](https://img.shields.io/badge/Network-No%20Client-5C2D91.svg?labelColor=04001F)](DATA-FLOW.md)
 
@@ -38,9 +38,8 @@ A **fixed-policy, zero-network ledger-review boundary for AI**, not an AI that o
 
 The maintained source is under
 [`packages/elizabeth-anne-alexander`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander)
-in the Accounting Review Pipeline. The `elizabeth-anne-alexander`
-distribution and command, and `elizabeth_anne_alexander` import, remain
-compatibility identifiers.
+in the Accounting Review Pipeline. The `elizabeth-anne-alexander` command and
+distribution name remain compatibility identifiers.
 
 Xero Ledger Review Gate consumes synthetic Xero-shaped trial-balance fixtures and produces a bounded, redacted variance-review result alongside separate local review evidence. It deliberately features **no network calls, no cloud telemetry, no LLM API clients, and zero accounting-system write operations**.
 
@@ -86,8 +85,9 @@ flowchart TD
 ## Quick Demo
 
 ```bash
-# Install package in editable development mode
-pip install -e ".[dev]"
+# Build the binary (rust-toolchain.toml names the Rust version) and put it on PATH
+cargo build --release
+export PATH="$PWD/target/release:$PATH"
 
 # Run deterministic evaluation
 elizabeth-anne-alexander evaluate \
@@ -112,7 +112,7 @@ elizabeth-anne-alexander validate-review \
 | Exit | Meaning |
 | --- | --- |
 | `0` | `evaluate` wrote its 3 artefacts (`REVIEW_READY`), or `validate-review` validated the pack it was given. Both `DECISION_RECORDED` and `PARTIAL_DECISION_RECORDED` exit `0`. |
-| `2` | The gateway refused, printing one `blocked:` line on stderr. Every `GatewayError` lands here, including malformed, tampered or out-of-bounds input, and so does argparse's own refusal of a missing or unknown flag. |
+| `2` | The gateway refused, printing one `blocked:` line on stderr. Every `GatewayError` lands here, including malformed, tampered or out-of-bounds input, and so does the command-line parser's refusal of a missing or unknown flag. |
 
 `PARTIAL_DECISION_RECORDED` is exit `0` deliberately: the pack was validated and
 some findings are still undecided. Read the status, not the exit code, to decide
@@ -133,7 +133,7 @@ codes are a released contract, so they are documented here rather than changed;
   `xero-tb-csv.v1` corpus. Its `SHA256SUMS` file and every consumer's tests verify the same bytes
   locally, with no runtime network dependency.
 - CSV schema, duplicate account IDs, reporting dates, balance pairs, source hashes, entity, basis, currency, tracking filters, and draft setting are all checked before review.
-- Monetary values use `Decimal`, never binary floating point. Evaluation runs under its own fixed 28-digit context, and a CSV whose totals would round in it is refused instead of compared inexactly.
+- Monetary values use exact decimal arithmetic, never binary floating point: the binary reproduces Python's `decimal` module at a fixed 28-digit precision, and a CSV whose totals would round in it is refused instead of compared inexactly.
 - `evaluate` writes amount strings in the model result and reviewer evidence with at least 2 decimal places, padded and never rounded, so a whole-dollar source emits `"200.00"` rather than `"200"`. `validate-review` still accepts reviewer-evidence amounts in any decimal notation, subject to the same finiteness and supported-magnitude checks as source amounts, so evidence written by earlier versions continues to validate. The disclosure check holds `current_ytd_net`, `prior_ytd_net`, `delta` and `percent_change` to those number formats instead of comparing them with source values, so an account code that happens to equal an amount does not refuse the pack.
 - `percent_change` in the model result is expressed in per cent and quantized to 4 decimal places (`"18.3333"` means 18.3333%). It is `null` when there is no prior balance to compare against.
 - The model result states its own `currency` and `sign_convention`. Amounts are debit-positive (`ytd_net = YTDDebit - YTDCredit`), so a revenue, liability, or equity balance is negative and a revenue increase shows as a negative `delta`.
@@ -143,7 +143,7 @@ codes are a released contract, so they are documented here rather than changed;
 - The model result never contains a tenant name, account name, account code, source file path, token, raw error, or free text copied from source data.
 - Artefact timestamps (`export.generated_at`, `reviewed_at`) are accepted as `YYYY-MM-DD`, then `T`, `t`, or a space, then `HH:MM` with optional `:SS` and optional `.` plus one to 6 fractional digits, then `Z`, `z`, or `+/-HH:MM` with optional `:SS`. The gateway fixes that grammar itself rather than inheriting `datetime.fromisoformat`, whose accepted forms widened in Python 3.11: a bare `+10` offset, a week date, a basic-format `20260809T000000+0000`, and a fraction longer than 6 digits are refused on every interpreter, as is a separator character other than `T`, `t`, or a space.
 - The 3 run artefacts are staged in a private temporary directory under the output directory and moved into place only once all 3 are written, receipt last. Existing `.partial` siblings are left alone, and staging cleanup is best effort. The moves are not one atomic step, so an interrupted run can still leave one new file beside 2 old ones; `validate-review` refuses that pack because the receipt checksum binds the reviewer evidence and model result sitting beside it. This detects mismatched local files, but the adjacent unkeyed receipt provides no independent trust anchor.
-- The package contains no network imports or mutation adapter. A future live connection must remain an authorised, read-only export handoff rather than an AI-controlled broad Xero tool set, and needs a fresh check against Xero's [Developer Platform terms](https://developer.xero.com/xero-developer-platform-terms-conditions), which bar using API data to train, fine-tune, adapt or enhance AI models.
+- The crate has no network dependency or mutation adapter. A future live connection must remain an authorised, read-only export handoff rather than an AI-controlled broad Xero tool set, and needs a fresh check against Xero's [Developer Platform terms](https://developer.xero.com/xero-developer-platform-terms-conditions), which bar using API data to train, fine-tune, adapt or enhance AI models.
 
 ## Scope and limitation
 

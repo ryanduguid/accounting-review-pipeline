@@ -13,10 +13,12 @@ uv sync        # install every Python component and the shared toolchain
 just test      # every component's suite, plus the joined conformance test
 ```
 
-`uv sync` creates one `.venv` at the root and installs the 5 Python distributions into it
+`uv sync` creates one `.venv` at the root and installs the 4 Python distributions into it
 as editable workspace members. The Excel adapter and the Power BI application have no
 `pyproject.toml`, and the grant workpapers application is not a member; their
-standard-library unittest suites run from the same `.venv`.
+standard-library unittest suites run from the same `.venv`. The Xero Ledger Review Gate
+is a Rust crate: `just test` runs `cargo test --locked` in its directory, which needs a
+Rust toolchain (its `rust-toolchain.toml` names the version).
 
 `just` is optional tooling; install it with `uv tool install rust-just`. The recipes are
 `setup`, `lint`, `typecheck`, `test` and `check` (the last 3 together). Each loops over
@@ -72,7 +74,7 @@ changes.
 
 Review components may not gain a network or Xero dependency or import the exporter or
 a sibling component. Preserve their documented status and exit-code boundaries and
-the Python review packages' exact `Decimal` arithmetic. Document native Excel and
+the review packages' exact `Decimal` arithmetic, which the Rust ledger-review gate reproduces. Document native Excel and
 Power BI numeric types separately. One shared `.venv` makes every Python component importable from
 every other; that does not relax the rule. Only Xero Trial Balance Export may handle Xero
 OAuth, HTTP, credentials or tokens. Keep client data and generated workpapers outside the

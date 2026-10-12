@@ -10,6 +10,7 @@ component's own version.
 from __future__ import annotations
 
 import re
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -22,7 +23,13 @@ NAME_ROW = re.compile(
 
 
 def package_version(directory: str) -> str:
-    """Read a static version, or follow setuptools' dynamic ``attr`` to its module."""
+    """Read a static version, or follow setuptools' dynamic ``attr`` to its module.
+
+    A Rust component carries its version in Cargo.toml instead.
+    """
+    cargo = ROOT / "packages" / directory / "Cargo.toml"
+    if cargo.is_file():
+        return tomllib.loads(cargo.read_text(encoding="utf-8"))["package"]["version"]
     project = (ROOT / "packages" / directory / "pyproject.toml").read_text(encoding="utf-8")
     static = re.search(r'^version = "([^"]+)"$', project, re.M)
     if static is not None:
