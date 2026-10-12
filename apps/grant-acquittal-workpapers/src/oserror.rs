@@ -178,7 +178,7 @@ pub fn encode_os(text: &str) -> OsString {
 }
 
 fn quoted(path: &str) -> String {
-    pytext::repr(path)
+    pytext::repr_os(path)
 }
 
 fn message(error: &io::Error) -> String {
@@ -263,14 +263,14 @@ mod tests {
         use std::os::unix::ffi::OsStrExt;
         let raw = OsStr::from_bytes(b"in\xff");
         let text = decode_os(raw);
-        assert_eq!(pytext::repr(&text), "'in\\udcff'");
+        assert_eq!(pytext::repr_os(&text), "'in\\udcff'");
         assert_eq!(encode_os(&text), raw);
         // A genuine private-use character from the carrier's range stays itself.
         let genuine = OsStr::from_bytes("in\u{10FCFF}\u{10F7FF}".as_bytes());
         let genuine_text = decode_os(genuine);
         assert_ne!(genuine_text, text);
         assert_eq!(encode_os(&genuine_text), genuine);
-        assert_eq!(pytext::repr(&genuine_text), "'in\\U0010fcff\\U0010f7ff'");
+        assert_eq!(pytext::repr_os(&genuine_text), "'in\\U0010fcff\\U0010f7ff'");
     }
 
     #[test]
@@ -312,7 +312,7 @@ mod windows_tests {
         use std::os::windows::ffi::OsStringExt;
         let raw = OsString::from_wide(&[0x69, 0x6E, 0xD800]);
         let text = decode_os(&raw);
-        assert_eq!(pytext::repr(&text), r"'in\ud800'");
+        assert_eq!(pytext::repr_os(&text), r"'in\ud800'");
         assert_eq!(encode_os(&text), raw);
     }
 }

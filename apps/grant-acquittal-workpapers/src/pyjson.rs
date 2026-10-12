@@ -25,6 +25,16 @@ impl PyStr {
     }
 
     /// Text for output: lone surrogates written as `\udXXX`.
+    /// The text with lone surrogates carried as escape pairs and a genuine
+    /// escape doubled, for printing through the stdout and stderr writers.
+    pub fn for_output(&self) -> String {
+        let mut out = String::new();
+        self.0
+            .iter()
+            .for_each(|&cp| crate::pytext::push_code_point(&mut out, cp));
+        out
+    }
+
     pub fn lossy(&self) -> String {
         self.0
             .iter()
@@ -532,7 +542,7 @@ impl<'a> Parser<'a> {
         // unique_fields runs once the object is complete, before parsing continues.
         for (i, (key, _)) in pairs.iter().enumerate() {
             if pairs[..i].iter().any(|(earlier, _)| earlier == key) {
-                return Err(LoadError::Value(format!("Duplicate JSON field: {}", key.lossy())));
+                return Err(LoadError::Value(format!("Duplicate JSON field: {}", key.for_output())));
             }
         }
         Ok((Json::Object(pairs), idx + 1))
@@ -712,6 +722,13 @@ mod tests {
             "Invalid control character at: line 1 column 3 (char 2)"
         );
         assert_eq!(err(b"{\"a\":1,\"a\":2}"), "Duplicate JSON field: a");
+        // A key holding the carrier's own characters prints as itself after the writer decodes it.
+        let key = "\u{10F7FF}\u{10F7FF}\u{10F7FF}\u{10F800}";
+        let message = err(format!("{{\"{key}\":1,\"{key}\":2}}").as_bytes());
+        let printed: String = crate::pytext::code_points(&message)
+            .map(|cp| char::from_u32(cp).unwrap())
+            .collect();
+        assert_eq!(printed, format!("Duplicate JSON field: {key}"));
         assert_eq!(
             err(b"\xff{}"),
             "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte"

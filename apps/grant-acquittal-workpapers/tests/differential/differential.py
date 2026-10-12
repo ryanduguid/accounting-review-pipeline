@@ -98,8 +98,17 @@ def mutate_cells(rng, case):
 def mutate_csv_text(rng, case):
     name = rng.choice(list(HEADINGS)[:3])
     data = case.files[name]
-    choice = rng.randrange(9)
-    if choice == 0:
+    choice = rng.randrange(10)
+    if choice == 9:
+        # An identifier holding the binary's surrogate-carrier code points, duplicated.
+        odd = rng.choice(["\U0010f7ff\U0010f7ff", "\U0010f7ff\U0010f800"]).encode()
+        lines = data.split(b"\n")
+        first = lines[1].split(b",")
+        first[0] = odd
+        lines[1] = b",".join(first)
+        lines.insert(2, lines[1])
+        data = b"\n".join(lines)
+    elif choice == 0:
         data = data.replace(b",", b";", 1)
     elif choice == 1:
         data = b"\xef\xbb\xbf" + data
@@ -145,8 +154,12 @@ def mutate_agreements(rng, case):
 
 def mutate_json_text(rng, case):
     data = case.files["agreements.json"].decode("utf-8")
-    choice = rng.randrange(12)
-    if choice == 0:
+    choice = rng.randrange(13)
+    if choice == 12:
+        # A duplicate key holding the code points the binary uses to carry lone surrogates.
+        key = rng.choice(["\U0010f7ff\U0010f7ff", "\U0010f7ff\U0010f800", "a\U0010f7ffb"])
+        data = data.replace("{", '{"%s": 1, "%s": 2, ' % (key, key), 1)
+    elif choice == 0:
         data = data.replace("{", '{"currency": "AUD", ', 1)
     elif choice == 1:
         data = "﻿" + data

@@ -24,7 +24,7 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split_whitespace() {
-        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
+        if !line.is_empty() && pytext::py_len(&line) + 1 + pytext::py_len(word) > width {
             lines.push(std::mem::take(&mut line));
         }
         if !line.is_empty() {
@@ -44,7 +44,7 @@ fn usage(prog: &str) -> String {
     let text_width = width();
     let parts = ["[-h]", "--input INPUT", "--output OUTPUT"];
     let flat = format!("{prog} {}", parts.join(" "));
-    if prefix.len() + flat.chars().count() <= text_width {
+    if prefix.len() + pytext::py_len(&flat) <= text_width {
         return format!("{prefix}{flat}");
     }
     let get_lines = |parts: &[&str], indent: &str, with_prefix: bool| -> Vec<String> {
@@ -56,13 +56,13 @@ fn usage(prog: &str) -> String {
             indent.len() - 1
         };
         for part in parts {
-            if line_len + 1 + part.chars().count() > text_width && !line.is_empty() {
+            if line_len + 1 + pytext::py_len(part) > text_width && !line.is_empty() {
                 lines.push(format!("{indent}{}", line.join(" ")));
                 line.clear();
                 line_len = indent.len() - 1;
             }
             line.push(part);
-            line_len += part.chars().count() + 1;
+            line_len += pytext::py_len(part) + 1;
         }
         if !line.is_empty() {
             lines.push(format!("{indent}{}", line.join(" ")));
@@ -72,8 +72,8 @@ fn usage(prog: &str) -> String {
         }
         lines
     };
-    let lines = if (prefix.len() + prog.chars().count()) as f64 <= 0.75 * text_width as f64 {
-        let indent = " ".repeat(prefix.len() + prog.chars().count() + 1);
+    let lines = if (prefix.len() + pytext::py_len(prog)) as f64 <= 0.75 * text_width as f64 {
+        let indent = " ".repeat(prefix.len() + pytext::py_len(prog) + 1);
         let mut head = vec![prog];
         head.extend(parts);
         get_lines(&head, &indent, true)
@@ -96,7 +96,7 @@ fn help(prog: &str) -> String {
     let max_help_position = 24.min(width.saturating_sub(20).max(4));
     let action_max = rows
         .iter()
-        .map(|(header, _)| 2 + header.chars().count())
+        .map(|(header, _)| 2 + pytext::py_len(header))
         .max()
         .unwrap_or(0);
     let help_position = (action_max + 2).min(max_help_position);
@@ -108,7 +108,7 @@ fn help(prog: &str) -> String {
             None => options.push_str(&format!("  {header}\n")),
             Some(text) => {
                 let lines = wrap(text, help_width);
-                if header.chars().count() <= action_width {
+                if pytext::py_len(header) <= action_width {
                     options.push_str(&format!("  {header:<action_width$}  {}\n", lines[0]));
                 } else {
                     options.push_str(&format!("  {header}\n{}{}\n", " ".repeat(help_position), lines[0]));
@@ -140,7 +140,7 @@ fn classify(token: &str) -> Result<Class, String> {
     if let Some(exact) = FLAGS.iter().find(|f| **f == token) {
         return Ok(Class::Flag(exact, None));
     }
-    if token.chars().count() == 1 {
+    if pytext::py_len(token) == 1 {
         return Ok(Class::Positional);
     }
     if let Some((name, value)) = token.split_once('=')
@@ -270,7 +270,7 @@ fn help_exit(flag: &str, explicit: Option<(String, bool)>) -> Exit {
         Some((rest, false)) if flag == "-h" && !rest.is_empty() && !rest.starts_with('-') => Exit::Help,
         Some((rest, _)) => Exit::Error(format!(
             "argument -h/--help: ignored explicit argument {}",
-            pytext::repr(&rest)
+            pytext::repr_os(&rest)
         )),
     }
 }
