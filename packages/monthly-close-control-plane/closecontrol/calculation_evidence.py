@@ -142,7 +142,9 @@ def _decimal(value: object, field: str, path: Path) -> Decimal:
     except InvalidOperation as exc:
         raise SchemaError(f"{path}: {field} is not a decimal.") from exc
     if not amount.is_finite():
-        raise SchemaError(f"{path}: {field} is not finite.")
+        # pragma reason: the character check above admits only digits, "." and "-", which
+        # cannot spell NaN or Infinity, so this defensive check cannot run.
+        raise SchemaError(f"{path}: {field} is not finite.")  # pragma: no cover
     return amount
 
 
