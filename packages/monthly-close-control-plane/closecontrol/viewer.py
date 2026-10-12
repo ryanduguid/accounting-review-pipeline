@@ -436,7 +436,9 @@ def _verify_rows_match(
                 )
             actual = row.get(field)
             if actual is None:
-                raise ControlInputError(
+                # pragma reason: _read_csv_rows builds every row from exactly the
+                # declared fields, so no field is ever absent here.
+                raise ControlInputError(  # pragma: no cover
                     f"{csv_name}: row {index + 1} has no {field} column value"
                 )
             if field in guarded and expected.lstrip().startswith(("=", "+", "-", "@")):
@@ -665,7 +667,9 @@ def _section_lines(summary_text: str, heading: str) -> list[str]:
     lines = summary_text.splitlines()
     headings = [index for index, line in enumerate(lines) if line == heading]
     if len(headings) != 1:
-        raise ControlInputError(
+        # pragma reason: every caller runs after _verify_summary_headings, which
+        # admits exactly one line equal to each heading.
+        raise ControlInputError(  # pragma: no cover
             f"{_SUMMARY_NAME}: expected exactly one {heading!r} heading, "
             f"found {len(headings)}"
         )
@@ -713,7 +717,9 @@ def _expected_summary_row(query: dict) -> str:
                  "account_name", "difference", "question", "evidence_requested"):
         value = query.get(name)
         if not isinstance(value, str):
-            raise ControlInputError(
+            # pragma reason: _verify_schema_queries has already required every
+            # register field, these included, to be a string.
+            raise ControlInputError(  # pragma: no cover
                 f"{_JSON_NAME}: client_queries[{query.get('query_id')!r}].{name} "
                 "must be a string"
             )
@@ -876,7 +882,9 @@ def _expected_scope_lines(document: dict[str, object], *, register: bool) -> lis
 
 def _exception_field(item: object, name: str) -> str:
     if not isinstance(item, dict) or not isinstance(item.get(name), str):
-        raise ControlInputError(
+        # pragma reason: the exception rows reach this only after the schema check
+        # and _verify_rows_match have required every one of these fields as a string.
+        raise ControlInputError(  # pragma: no cover
             f"{_JSON_NAME}: exceptions[].{name} must be a string"
         )
     value = item[name]

@@ -157,12 +157,14 @@ def parse_money(value: str | None, *, field: str, row_number: int, path: Path) -
     if not raw or not _ACCOUNTING_NUMBER.fullmatch(raw):
         raise NumericGateError(f"{path}: row {row_number} has invalid {field}: {raw!r}.")
     normalised = raw.replace("$", "").replace(",", "")
+    # pragma reason for both checks below: _ACCOUNTING_NUMBER admits only signed digits
+    # with optional grouping and decimals, which always parse to a finite Decimal.
     try:
         result = Decimal(normalised)
-    except InvalidOperation as exc:  # Defensive: the regex should already reject malformed input.
+    except InvalidOperation as exc:  # pragma: no cover - defensive; the regex rejects malformed input.
         raise NumericGateError(f"{path}: row {row_number} has invalid {field}: {raw!r}.") from exc
     if not result.is_finite():
-        raise NumericGateError(f"{path}: row {row_number} has non-finite {field}: {raw!r}.")
+        raise NumericGateError(f"{path}: row {row_number} has non-finite {field}: {raw!r}.")  # pragma: no cover
     return result
 
 

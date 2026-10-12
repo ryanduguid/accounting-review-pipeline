@@ -43,14 +43,13 @@ jobs:
         include:
           - package_dir: packages/review-ready-gate
             import_name: reviewready
-          - package_dir: packages/elizabeth-anne-alexander
-            import_name: elizabeth_anne_alexander
           - package_dir: packages/xero-trial-balance-export
             import_name: xero_client
           - package_dir: packages/evatt
             import_name: evatt
     permissions:
       contents: read
+      id-token: write # ci-package.yml's codecov job authenticates its upload with OIDC.
     uses: ./.github/workflows/ci-package.yml
     with:
       package_dir: ${{ matrix.package_dir }}
@@ -89,6 +88,13 @@ jobs:
         working-directory: packages/monthly-close-control-plane
         env:
           UV_PYTHON: ${{ matrix.python }}
+      - name: keep the coverage report for the Codecov upload
+        if: matrix.python == '3.13'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-codecov
+          path: packages/monthly-close-control-plane/coverage.xml
+          retention-days: 1
 
   dependency-audit:
     permissions:
@@ -190,7 +196,6 @@ jobs:
       fail-fast: false
       matrix:
         package_dir:
-          - packages/elizabeth-anne-alexander
           - packages/monthly-close-control-plane
           - packages/xero-trial-balance-export
     steps:
@@ -211,6 +216,43 @@ jobs:
       - name: run tests with branch coverage
         run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: ${{ matrix.package_dir }}
+
+  rust:
+    # The Xero Ledger Review Gate is a Rust crate from 1.0.0. rust-toolchain.toml
+    # in its directory pins the toolchain, which rustup installs on first use.
+    # Windows runs too: the staged validation write takes its by-path branch there.
+    name: packages/elizabeth-anne-alexander / rust (${{ matrix.os }})
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/elizabeth-anne-alexander
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: format
+        run: cargo fmt --check
+      - name: lint
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --locked
+      - name: build
+        run: cargo build --locked --release
+      - name: smoke the release binary from an empty directory
+        run: |
+          binary="$PWD/target/release"
+          smoke="$PWD/../../.github/ci/elizabeth-anne-alexander/smoke.sh"
+          work="$(mktemp -d)"
+          cd "$work"
+          PATH="$binary:$PATH" bash "$smoke"
 
   windows-workspace:
     permissions:
@@ -252,14 +294,41 @@ jobs:
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
       - name: lint the workspace
-        run: uv run --locked --group dev ruff check .
+        run: uv run --locked --group dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: type-check the workspace
-        run: uv run --locked --group dev mypy
+        run: uv run --locked --group dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: run the full suite
-        run: uv run --locked --group dev pytest
+        run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+
+  # The upload runs apart from the tests so the OIDC token is never available
+  # while test code runs. It is exempt from pipeline-gates: a Codecov outage must not
+  # block merges.
+  codecov:
+    name: upload coverage to Codecov
+    needs: test
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # Authenticate the Codecov upload with OIDC; no stored token.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-codecov
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: coverage.xml
+          disable_search: true
+          fail_ci_if_error: true
+          flags: monthly-close-control-plane
 
   pipeline-gates:
-    needs: [component, test, dependency-audit, package, lint, windows, windows-workspace]
+    needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -286,4 +355,4 @@ jobs:
       - name: Require every job to be listed and kept
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: python3 .github/ci/check_gates.py .github/workflows/ci.yml pipeline-gates --no-results
+        run: python3 .github/ci/check_gates.py .github/workflows/ci.yml pipeline-gates --no-results --exempt codecov

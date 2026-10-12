@@ -5,6 +5,7 @@
 *.tmp
 ~*
 *.lock
+!Cargo.lock
 
 # Python & testing caches
 __pycache__/
@@ -16,6 +17,9 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+
+# Rust build output
+/target/
 
 # Node toolchain installed from package-lock.json
 node_modules/

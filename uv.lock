@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -8,7 +8,6 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "elizabeth-anne-alexander",
     "evatt",
     "monthly-close-control-plane",
     "review-ready-gate",
@@ -387,33 +386,6 @@ wheels = [
 toml = [
     { name = "tomli", marker = "python_full_version <= '3.11'" },
 ]
-
-[[package]]
-name = "elizabeth-anne-alexander"
-source = { editable = "packages/elizabeth-anne-alexander" }
-
-[package.optional-dependencies]
-dev = [
-    { name = "build" },
-    { name = "coverage" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "setuptools" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.6.1" },
-    { name = "coverage", marker = "extra == 'dev'", specifier = "==7.16.2" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = "==2.4.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==7.1.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.10" },
-    { name = "setuptools", marker = "extra == 'dev'", specifier = "==84.0.0" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "evatt"
@@ -956,7 +928,7 @@ wheels = [
 
 [[package]]
 name = "xero-trial-balance-export"
-version = "0.1.14"
+version = "0.1.15"
 source = { editable = "packages/xero-trial-balance-export" }
 dependencies = [
     { name = "requests" },

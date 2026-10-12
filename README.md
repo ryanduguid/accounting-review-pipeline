@@ -1,10 +1,16 @@
 # Accounting Review Pipeline: Xero month-end close controls
 
-[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
-[![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
+[![Codecov](https://img.shields.io/codecov/c/github/ryanduguid/accounting-review-pipeline?label=coverage&labelColor=000000&style=flat-square)](https://codecov.io/gh/ryanduguid/accounting-review-pipeline)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/codeql.yml?branch=main&label=CodeQL&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
+[![Snyk](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/snyk.yml?branch=main&label=Snyk&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml)
+[![SonarCloud](https://img.shields.io/sonar/quality_gate/ryanduguid_accounting-review-pipeline?server=https%3A%2F%2Fsonarcloud.io&label=SonarCloud&labelColor=000000&style=flat-square)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
+[![Codacy code quality](https://img.shields.io/codacy/grade/361fa65bc2ac4e9eb812e761b0f4e227?label=Codacy&labelColor=000000&style=flat-square)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)<br>
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/ryanduguid/accounting-review-pipeline?label=Scorecard&labelColor=000000&style=flat-square)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
+[![SLSA 3](https://img.shields.io/badge/SLSA-level%203-990024?labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-scanned-990024?labelColor=000000&style=flat-square&logo=virustotal&logoColor=FFFFF0)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
-[![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227?branch=main)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)
 
 Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
@@ -82,13 +88,13 @@ It holds 8 independently versioned components joined only by local files and com
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.14 |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.15 |
 | Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.2.0 |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, command `close-control` | 0.2.0 |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.6 |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.7 |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0 (unreleased); 0.2.6 is the released Python distribution with import `elizabeth_anne_alexander` | 0.2.6 |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.8 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
-| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | command-line script `grant_workpaper.py`, standard library only, no release | 0.1.0 |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release | 0.2.0 |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.2.0 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
@@ -98,7 +104,7 @@ evatt works separately: it pseudonymises Markdown locally before an operator han
 external model. It does not read trial balances.
 Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is
 offline and ships fabricated data only. Python review packages use exact `Decimal`
-arithmetic for money. The Excel adapter and Power BI application use their native
+arithmetic for money, and the Rust ledger-review gate reproduces it exactly. The Excel adapter and Power BI application use their native
 numeric types, including VBA `Double`, so that Decimal guarantee does not cover them.
 
 Directory names follow each component's normalised distribution name so that the reviewed

@@ -285,9 +285,9 @@ class EvaluationPackTest(unittest.TestCase):
         root_readme = (MONOREPO_ROOT / "README.md").read_text(encoding="utf-8")
         canonical = "https://github.com/ryanduguid/accounting-review-pipeline"
 
-        self.assertEqual(version, "0.1.14")
-        self.assertTrue(notes.startswith("# v0.1.14\n"))
-        self.assertIn("version: 0.1.14", citation)
+        self.assertEqual(version, "0.1.15")
+        self.assertTrue(notes.startswith("# v0.1.15\n"))
+        self.assertIn("version: 0.1.15", citation)
         self.assertIn(
             f'repository-code: "{canonical}/tree/main/'
             'packages/xero-trial-balance-export"',
@@ -300,25 +300,25 @@ class EvaluationPackTest(unittest.TestCase):
         self.assertIn(
             "| Xero Trial Balance Export | `packages/xero-trial-balance-export/` "
             "| distribution `xero-trial-balance-export`, commands `export-tb` and "
-            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.14 |",
+            "`xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.15 |",
             root_readme,
         )
-        self.assertIn("tag=xero-trial-balance-export/v0.1.14", releasing)
+        self.assertIn("tag=xero-trial-balance-export/v0.1.15", releasing)
         self.assertIn("repo=ryanduguid/accounting-review-pipeline", releasing)
         self.assertIn('--signer-digest "$policy_sha"', releasing)
         self.assertNotIn("--signer-digest fcf25e532e9eb60056ae6e5c819cf3125c4f4b91", releasing)
         self.assertIn("?ref=$release_commit", releasing)
         self.assertNotIn("isLatest", releasing)
         self.assertIn("requirements-test.txt", releasing)
+        # The release consumer test installs this file with --no-deps, so it must
+        # name requests and every dependency, each at one exact version. The
+        # versions themselves move with Dependabot.
+        lines = test_requirements.splitlines()
+        for line in lines:
+            self.assertRegex(line, r"^[a-z0-9-]+==\d+(\.\d+)+$")
         self.assertEqual(
-            test_requirements.splitlines(),
-            [
-                "certifi==2026.7.22",
-                "charset-normalizer==3.5.2",
-                "idna==3.20",
-                "requests==2.34.2",
-                "urllib3==2.8.0",
-            ],
+            [line.split("==")[0] for line in lines],
+            ["certifi", "charset-normalizer", "idna", "requests", "urllib3"],
         )
 
     def test_only_declared_evaluation_csvs_are_allowlisted(self):

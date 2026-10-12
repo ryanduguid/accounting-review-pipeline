@@ -17,7 +17,7 @@ README_PATH = ROOT / "README.md"
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned when the badge and install step named the Python 3.11 floor.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "109D6FE25AA36B76283901EEBC25EAA528F2BC3B2E7BA4A11D98E5417A7F3C6F"
+README_SHA256 = "F97772CCBAE82F2D8E4DFE6A115967D5D2AE01133469AAC8521C7A1ED3D8E822"
 # Re-pinned when TOKEN_URL gained a Bandit "nosec B105" comment (the token
 # endpoint URL is not a password) after server_bind() gained its RFC 8252
 # loopback NOSONAR comment. Comments are the only change: AUTH_AST_SHA256

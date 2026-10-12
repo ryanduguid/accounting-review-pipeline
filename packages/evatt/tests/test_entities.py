@@ -778,3 +778,60 @@ def test_assign_returns_the_existing_entity_for_a_decomposed_spelling() -> None:
     existing = entities.Entity(composed, "PERSON_01", "person", "2026-09-20")
     assigned = entities.assign((existing,), unicodedata.normalize("NFD", composed), "person", "2026-09-20")
     assert assigned is existing
+
+
+@pytest.mark.parametrize("content", ["{not json", None])
+def test_load_names_the_map_it_cannot_read(tmp_path, content) -> None:
+    """Malformed JSON and a missing file are both a refusal naming the path."""
+    path = tmp_path / "entities.json"
+    if content is not None:
+        path.write_text(content, encoding="utf-8")
+    with pytest.raises(EvattError, match="cannot read entity map") as caught:
+        entities.load(path)
+    assert str(path) in str(caught.value)  # nosec B101: pytest outcome assertion
+
+
+@pytest.mark.parametrize("document", [
+    [],
+    {"schema_version": 1},
+    dict(SAMPLE, extra=True),
+])
+def test_load_rejects_a_document_without_exactly_the_two_keys(tmp_path, document) -> None:
+    with pytest.raises(EvattError, match="exactly schema_version and entries"):
+        entities.load(write_map(tmp_path, document))
+
+
+def test_load_rejects_entries_that_are_not_a_list(tmp_path) -> None:
+    with pytest.raises(EvattError, match="entries must be a list"):
+        entities.load(write_map(tmp_path, {"schema_version": 1, "entries": {}}))
+
+
+@pytest.mark.parametrize("entry", [
+    "Jane Roe",
+    {"value": "Jane Roe", "placeholder": "PERSON_01", "kind": "person"},
+    dict(SAMPLE["entries"][1], note="extra"),
+])
+def test_load_rejects_an_entry_without_exactly_the_required_keys(tmp_path, entry) -> None:
+    with pytest.raises(EvattError, match="entry must hold exactly"):
+        entities.load(write_map(tmp_path, {"schema_version": 1, "entries": [entry]}))
+
+
+@git_required
+def test_a_temporary_that_cannot_be_wrapped_is_closed_and_removed(tmp_path, monkeypatch) -> None:
+    """The descriptor is the caller's until fdopen owns it, so a failure there closes it."""
+    path = repo_map(tmp_path, SAMPLE)
+    before = path.read_bytes()
+    opened = []
+
+    def fail(descriptor, *args, **kwargs):
+        opened.append(descriptor)
+        raise OSError("cannot wrap the descriptor")
+
+    monkeypatch.setattr(entities.os, "fdopen", fail)
+    with pytest.raises(OSError, match="cannot wrap the descriptor"):
+        entities.save(path, entities.load(path)[:1])
+    assert len(opened) == 1  # nosec B101: pytest outcome assertion
+    with pytest.raises(OSError):
+        os.fstat(opened[0])
+    assert path.read_bytes() == before  # nosec B101: pytest outcome assertion
+    assert list(path.parent.glob("*.tmp")) == []  # nosec B101: pytest outcome assertion
