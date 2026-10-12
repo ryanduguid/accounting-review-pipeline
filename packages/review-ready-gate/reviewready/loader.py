@@ -177,9 +177,12 @@ def parse_money(value: str | None, *, field: str, row_number: int, path: Path) -
     normalised = raw.replace("$", "").replace(",", "")
     try:
         result = Decimal(normalised)
-    except InvalidOperation as exc:
+    # The pattern above admits only digits Decimal converts and no NaN, Infinity
+    # or exponent spelling, so these two guards cannot fire; they stay as defence
+    # if the pattern is ever widened.
+    except InvalidOperation as exc:  # pragma: no cover - pattern admits only convertible text
         raise NumericGateError(f"{path}: row {row_number} has invalid {field}: {raw!r}.") from exc
-    if not result.is_finite():
+    if not result.is_finite():  # pragma: no cover - pattern admits no NaN or Infinity
         raise NumericGateError(f"{path}: row {row_number} has non-finite {field}: {raw!r}.")
     return result
 

@@ -17,7 +17,7 @@ README_PATH = ROOT / "README.md"
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
 # Re-pinned when the licence badge and statement changed from MIT to Apache-2.0.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "8FB8DDF15B5A466B621BDB2EB9B0F17823918E8B5855C9175EE57A2F9CE05499"
+README_SHA256 = "01D760E94CEBB1B55B29EF139EB83E647932CBAB79ADB3026B219526F2121573"
 # Re-pinned when TOKEN_URL gained a Bandit "nosec B105" comment (the token
 # endpoint URL is not a password) after server_bind() gained its RFC 8252
 # loopback NOSONAR comment. Comments are the only change: AUTH_AST_SHA256

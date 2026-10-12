@@ -22,7 +22,7 @@ This project keeps Power BI models and reports in text files so changes can be r
 
 ```mermaid
 erDiagram
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#990024", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#66023C", "labelBackground": "#000000"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); } .labelBkg { background-color: #000000; }"}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#E5E4E2", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#66023C", "labelBackground": "#000000"}, "themeCSS": ".labelBkg { background-color: #000000; }"}}%%
     Dim_Entity ||--o{ Fact_GeneralLedger : "EntityID"
     Dim_Entity ||--o{ Fact_Budget : "EntityID"
     Dim_Entity ||--o{ Fact_PayrollSuper : "EntityID"
@@ -39,8 +39,12 @@ erDiagram
     Dim_ANZSIC ||--o{ Dim_Entity : "ANZSIC_Code"
     Dim_ANZSIC ||--o{ Fact_ATOBenchmark : "ANZSIC_Code"
     Review_Exception ||--o{ Review_Evidence : "ExceptionKey"
-    classDef dimension fill:#66023C,stroke:#FFFFF0,color:#FFFFF0
-    class Dim_ANZSIC,Dim_Account,Dim_Date,Dim_Employee,Dim_Entity dimension
+    classDef dimension fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    class Dim_Account,Dim_Date,Dim_Employee,Dim_Entity dimension
+    classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
+    class Dim_ANZSIC,Fact_ATOBenchmark external
+    classDef review fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    class Review_Exception,Review_Evidence review
 ```
 
 See [docs/data-model.md](docs/data-model.md) for table grain, schema descriptions, and dimension attributes.
@@ -103,15 +107,21 @@ australian-accounting-power-bi/
 │   ├── sample-budgets.csv               # Monthly departmental budgets
 │   ├── sample-payroll-super.csv         # Payday Super events with on-time & late receipts
 │   └── sample-ato-benchmarks.csv        # Sample industry and turnover-band reference values
+├── src/                                 # Rust generate-fixtures binary: fixtures, exact decimal and calendar rules
 ├── tests/
-│   ├── test_fixtures_balance.py         # Asserts debits == credits per journal and period
-│   ├── test_tmdl_integrity.py           # Asserts TMDL syntax, explicit measure formats, descriptions
-│   ├── test_powerquery_m.py             # Validates embedded Power Query M and fixture widths
-│   ├── test_pbip_structure.py           # Validates PBIP layout and report-to-model bindings
-│   ├── test_payday_super_rules.py       # Verifies Payday Super 7-business-day statutory rules
+│   ├── fixtures_balance.rs              # Asserts debits == credits per journal; fixtures regenerate byte for byte
+│   ├── tmdl_integrity.rs                # Asserts TMDL syntax, explicit measure formats, descriptions
+│   ├── powerquery_m.rs                  # Validates embedded Power Query M and fixture widths
+│   ├── pbip_structure.rs                # Validates PBIP layout and report-to-model bindings
+│   ├── payday_super_rules.rs            # Verifies Payday Super 7-business-day statutory rules
+│   ├── model_bpa_rules.rs               # Evaluates the Best Practice Analyzer rules against the model
+│   ├── test_review_workflow.py          # Review workflow suite (Python until its two producers are Rust)
+│   ├── differential/                    # Differential harnesses against the earlier Python release
 │   └── model_bpa_rules.json             # Tabular Model Best Practice Analyzer ruleset
 ├── tools/
-│   └── generate_fixtures.py             # Script to deterministically generate all synthetic test data
+│   ├── review_workflow.py               # Builds and verifies the fabricated review case
+│   └── *.ps1                            # Power BI Desktop native checks
+├── Cargo.toml                           # Rust crate for the generator and the checks above
 ├── LICENSE                              # Apache License 2.0
 ├── DISCLAIMER.md                        # Professional disclaimer
 ├── CONTRIBUTING.md                      # Contribution guidelines
@@ -122,11 +132,18 @@ australian-accounting-power-bi/
 
 ## Verification and automated testing
 
-Run the test suite locally:
+Run the test suites locally. The Rust crate holds the fixture generator and the structural checks; the review workflow's suite is still Python:
 
 ```bash
+cargo test --locked
 python -B -m unittest discover -s tests -v
 ```
+
+Regenerate the fixtures with `cargo run --locked --bin generate-fixtures`; it rewrites `samples/` and should leave Git with no changes.
+
+The generator replaced `tools/generate_fixtures.py` with the same successful output: the six files byte for byte and the same confirmation line, with CRLF on Windows as Python's stdout wrote it. It ignores arguments, as the script did. Three differences are deliberate. It writes to the `samples/` directory of the checkout it was built from, where the script used its own location; both are this directory when run from the checkout. A failed directory creation or file write prints one `OSError: ...` line and exits 1 where Python printed a traceback and exited 1. A failed write of the confirmation line exits 1 without a message.
+
+The Rust tests replaced the Python suites and fail where those suites failed. `tests/differential/` holds the harnesses that check this against the earlier Python release. One input bound applies: numbers in the fixture CSVs use ASCII digits with exponents up to 10,000, and PBIR integers stay within 2^53. Python also accepted other Unicode decimal digits and compared larger integers exactly. The BPA rule test evaluates the rule language the committed rules use: property names, string, integer and float literals, `True`, `False` and `None`, comparisons, `&&`, `||`, `!`, `string.IsNullOrEmpty`, unary signs and brackets. Python's `eval` also accepted arithmetic, attribute access, `in`, `is` and integer literals beyond 64 bits, which the Rust test refuses.
 
 With Node.js 24 available, run Microsoft's PBIR validator from the reviewed, lockfile-pinned dependency tree beside the report:
 
@@ -138,7 +155,7 @@ npx --no-install powerbi-report-author validate australian-accounting-power-bi.R
 The test suite verifies:
 - Every journal in `sample-general-ledger.csv` balances to zero (debits equal credits).
 - Intercompany entries reconcile by counterparty pair, date and balance-sheet or profit-and-loss leg. Removing one balanced counterparty journal fails the check.
-- The committed fixtures regenerate byte-for-byte from `tools/generate_fixtures.py`, and every sample ABN passes the statutory modulus-89 checksum.
+- The committed fixtures regenerate byte-for-byte from the `generate-fixtures` binary, and every sample ABN passes the statutory modulus-89 checksum.
 - Every relationship the ER diagrams document exists, and `Dim_ANZSIC` declares every industry code the entity and benchmark fixtures join on.
 - Every DAX measure uses supported `///` description syntax, and every numeric measure has an explicit format string.
 - All relationships enforce strict single-direction star schema filtering.
@@ -147,7 +164,7 @@ The test suite verifies:
 - All 6 report pages and 59 visuals are materialised, and every visual field binding resolves to a declared model column or measure. Regression checks cover alignment, overlap, shared component styles and unique query aliases.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
-The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs both the Python suite and the pinned Microsoft PBIR validator.
+The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs the Rust checks on Linux and Windows, the Python review-workflow suite and the pinned Microsoft PBIR validator.
 
 ---
 

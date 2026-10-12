@@ -220,7 +220,9 @@ def _period_comparison_exceptions(
         prior = prior_by_key.get(key)
         display_row = current or prior
         if display_row is None:  # Defensive: key came from one of the two maps.
-            raise RuntimeError("period comparison produced a key without a source row")
+            # pragma reason: both maps hold rows, never None, so a key from their union
+            # always finds one.
+            raise RuntimeError("period comparison produced a key without a source row")  # pragma: no cover
         if current is None:
             result.append(
                 _exception(
