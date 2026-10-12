@@ -170,42 +170,52 @@ pub fn load_tb_snapshot(snapshot: &FileSnapshot) -> Result<Vec<BalanceRow>> {
     let mut rows = Vec::new();
     let mut seen = BTreeSet::new();
     for (index, raw) in reader.enumerate() {
-        let line = index + 2;
         let Ok(raw) = raw else { return csv_error() };
-        if raw.has_extra {
-            return refuse(format!("CSV row {line} has more fields than its header."));
-        }
-        let field = |name: &str| raw.values[CANONICAL_COLUMNS.iter().position(|c| *c == name).unwrap()].as_deref();
-        let text_field = |name: &str| non_empty(&csv_text(field(name)), &format!("CSV row {line} {name}"));
-        let report_date_text = text_field("ReportDate")?;
-        let Some(report_date) = isodate::date_fromisoformat(&report_date_text) else {
-            return refuse(format!("CSV row {line} ReportDate must be ISO YYYY-MM-DD."));
-        };
-        let account_id = text_field("AccountID")?;
-        if !seen.insert(account_id.clone()) {
-            return refuse(format!("CSV has duplicate AccountID {}.", pytext::repr(&account_id)));
-        }
-        let tenant = text_field("Tenant")?;
-        let section = text_field("Section")?;
-        let account_name = text_field("AccountName")?;
-        let account_code = optional_text(&csv_text(field("AccountCode")), &format!("CSV row {line} AccountCode"))?;
-        let amount = |name: &str| decimal_text(field(name), &format!("CSV row {line} {name}"));
-        rows.push(BalanceRow {
-            report_date,
-            tenant,
-            section,
-            account_id,
-            account_name,
-            account_code: account_code.to_utf8().expect("CSV text is valid UTF-8"),
-            debit: amount("Debit")?,
-            credit: amount("Credit")?,
-            ytd_debit: amount("YTDDebit")?,
-            ytd_credit: amount("YTDCredit")?,
-        });
+        rows.push(balance_row(&raw, index + 2, &mut seen)?);
     }
     if rows.is_empty() {
         return refuse("CSV must contain at least one account row.");
     }
+    check_balanced(&rows)?;
+    Ok(rows)
+}
+
+/// One trial-balance row; `seen` holds the AccountIDs of earlier rows.
+fn balance_row(raw: &crate::pycsv::Row, line: usize, seen: &mut BTreeSet<String>) -> Result<BalanceRow> {
+    if raw.has_extra {
+        return refuse(format!("CSV row {line} has more fields than its header."));
+    }
+    let field = |name: &str| raw.values[CANONICAL_COLUMNS.iter().position(|c| *c == name).unwrap()].as_deref();
+    let text_field = |name: &str| non_empty(&csv_text(field(name)), &format!("CSV row {line} {name}"));
+    let report_date_text = text_field("ReportDate")?;
+    let Some(report_date) = isodate::date_fromisoformat(&report_date_text) else {
+        return refuse(format!("CSV row {line} ReportDate must be ISO YYYY-MM-DD."));
+    };
+    let account_id = text_field("AccountID")?;
+    if !seen.insert(account_id.clone()) {
+        return refuse(format!("CSV has duplicate AccountID {}.", pytext::repr(&account_id)));
+    }
+    let tenant = text_field("Tenant")?;
+    let section = text_field("Section")?;
+    let account_name = text_field("AccountName")?;
+    let account_code = optional_text(&csv_text(field("AccountCode")), &format!("CSV row {line} AccountCode"))?;
+    let amount = |name: &str| decimal_text(field(name), &format!("CSV row {line} {name}"));
+    Ok(BalanceRow {
+        report_date,
+        tenant,
+        section,
+        account_id,
+        account_name,
+        account_code: account_code.to_utf8().expect("CSV text is valid UTF-8"),
+        debit: amount("Debit")?,
+        credit: amount("Credit")?,
+        ytd_debit: amount("YTDDebit")?,
+        ytd_credit: amount("YTDCredit")?,
+    })
+}
+
+/// One tenant and report date, and exactly balanced movement and YTD totals.
+fn check_balanced(rows: &[BalanceRow]) -> Result<()> {
     let tenants: BTreeSet<_> = rows.iter().map(|r| &r.tenant).collect();
     let dates: BTreeSet<_> = rows.iter().map(|r| r.report_date).collect();
     if tenants.len() != 1 || dates.len() != 1 {
@@ -215,7 +225,7 @@ pub fn load_tb_snapshot(snapshot: &FileSnapshot) -> Result<Vec<BalanceRow>> {
     // counterpart while the source amounts differ, which would pass an imbalance.
     let exact_sum = |pick: fn(&BalanceRow) -> &Decimal| -> Result<Decimal> {
         let mut total = Decimal::zero();
-        for row in &rows {
+        for row in rows {
             let outcome = total.add(pick(row));
             if outcome.inexact {
                 return refuse(
@@ -236,7 +246,7 @@ pub fn load_tb_snapshot(snapshot: &FileSnapshot) -> Result<Vec<BalanceRow>> {
     if ytd_debit != ytd_credit {
         return refuse("CSV YTD debit and credit totals are not exactly balanced.");
     }
-    Ok(rows)
+    Ok(())
 }
 
 fn report_shape_ok(report: &Json) -> bool {
@@ -264,6 +274,41 @@ pub fn load_manifest(env: &Env, location: &Location) -> Result<Source> {
         ],
         "source manifest",
     )?;
+    let as_at = check_manifest_fields(&manifest)?;
+    let export = manifest.at("export");
+    let (Some(csv), Some(sha256)) = (export.at("csv").as_pystr(), export.at("sha256").as_pystr()) else {
+        return refuse("source manifest export schema, csv, or sha256 is invalid.");
+    };
+    if !export.at("schema").is_str("xero-tb-csv.v1") {
+        return refuse("source manifest export schema, csv, or sha256 is invalid.");
+    }
+    iso_timestamp(export.at("generated_at"), "export.generated_at")?;
+    let csv_location = env.within_bundle(csv, "samples", "manifest CSV")?;
+    let csv_snapshot = snapshot_file(env, &csv_location, "manifest CSV")?;
+    // str.lower(): no non-ASCII character lowercases to a hex digit, so ASCII folding is equivalent.
+    let declared: Vec<u32> = sha256
+        .0
+        .iter()
+        .map(|&cp| if (0x41..=0x5A).contains(&cp) { cp + 32 } else { cp })
+        .collect();
+    if !PyStr(declared).is(&csv_snapshot.sha256) {
+        return refuse("manifest CSV SHA-256 does not match the supplied source file.");
+    }
+    let rows = load_tb_snapshot(&csv_snapshot)?;
+    if rows[0].report_date != as_at {
+        return refuse("manifest report.as_at and CSV ReportDate do not match.");
+    }
+    Ok(Source {
+        manifest,
+        rows,
+        manifest_snapshot,
+        csv_snapshot,
+    })
+}
+
+/// The manifest's declarations and the shapes of its report and export
+/// blocks, in the 0.2.6 order; returns report.as_at.
+fn check_manifest_fields(manifest: &Json) -> Result<Date> {
     if !manifest.at("schema_version").is_str("xero-source-manifest.v1") || !manifest.at("mode").is_str("synthetic") {
         return refuse("Only xero-source-manifest.v1 in synthetic mode is supported.");
     }
@@ -293,34 +338,7 @@ pub fn load_manifest(env: &Env, location: &Location) -> Result<Source> {
     let Some(as_at) = isodate::date_fromisoformat(&as_at_text) else {
         return refuse("report.as_at must be an ISO date.");
     };
-    let (Some(csv), Some(sha256)) = (export.at("csv").as_pystr(), export.at("sha256").as_pystr()) else {
-        return refuse("source manifest export schema, csv, or sha256 is invalid.");
-    };
-    if !export.at("schema").is_str("xero-tb-csv.v1") {
-        return refuse("source manifest export schema, csv, or sha256 is invalid.");
-    }
-    iso_timestamp(export.at("generated_at"), "export.generated_at")?;
-    let csv_location = env.within_bundle(csv, "samples", "manifest CSV")?;
-    let csv_snapshot = snapshot_file(env, &csv_location, "manifest CSV")?;
-    // str.lower(): no non-ASCII character lowercases to a hex digit, so ASCII folding is equivalent.
-    let declared: Vec<u32> = sha256
-        .0
-        .iter()
-        .map(|&cp| if (0x41..=0x5A).contains(&cp) { cp + 32 } else { cp })
-        .collect();
-    if !PyStr(declared).is(&csv_snapshot.sha256) {
-        return refuse("manifest CSV SHA-256 does not match the supplied source file.");
-    }
-    let rows = load_tb_snapshot(&csv_snapshot)?;
-    if rows[0].report_date != as_at {
-        return refuse("manifest report.as_at and CSV ReportDate do not match.");
-    }
-    Ok(Source {
-        manifest,
-        rows,
-        manifest_snapshot,
-        csv_snapshot,
-    })
+    Ok(as_at)
 }
 
 /// The Australian financial year ending 30 June that contains the date.
@@ -502,6 +520,60 @@ pub fn variance_findings(
         decimal(operation.at("minimum_percent_delta"), "minimum_percent_delta")?.div(&Decimal::parse("100").unwrap());
     let current_by_id: BTreeMap<&str, &BalanceRow> = current_rows.iter().map(|r| (r.account_id.as_str(), r)).collect();
     let prior_by_id: BTreeMap<&str, &BalanceRow> = prior_rows.iter().map(|r| (r.account_id.as_str(), r)).collect();
+    refuse_section_drift(&current_by_id, &prior_by_id, section)?;
+    let report_date = current_rows[0].report_date;
+    let ids: BTreeSet<&str> = current_by_id.keys().chain(prior_by_id.keys()).copied().collect();
+    let entity = render(entity_ref);
+    let mut findings = Vec::new();
+    for account_id in ids {
+        let current = current_by_id.get(account_id).copied();
+        let prior = prior_by_id.get(account_id).copied();
+        let row = current.or(prior).expect("the id came from one of the maps");
+        if !section.is_str(&row.section) {
+            continue;
+        }
+        let current_net = current.map_or_else(Decimal::zero, BalanceRow::ytd_net);
+        let prior_net = prior.map_or_else(Decimal::zero, BalanceRow::ytd_net);
+        let delta = current_net.sub(&prior_net).value;
+        let percent = if prior.is_none() || prior_net.is_zero() {
+            None
+        } else {
+            Some(delta.div(&prior_net).abs())
+        };
+        if delta.is_zero() || delta.abs() < absolute || percent.as_ref().is_some_and(|p| *p < minimum_percent) {
+            continue;
+        }
+        let movement = Movement {
+            account_id,
+            current,
+            prior,
+            current_net,
+            prior_net,
+            delta,
+            percent,
+        };
+        findings.push(finding_pair(&entity, report_date, &movement)?);
+    }
+    Ok(findings)
+}
+
+/// One account's movement between the two periods.
+struct Movement<'a> {
+    account_id: &'a str,
+    current: Option<&'a BalanceRow>,
+    prior: Option<&'a BalanceRow>,
+    current_net: Decimal,
+    prior_net: Decimal,
+    delta: Decimal,
+    percent: Option<Decimal>,
+}
+
+/// Refuse accounts that moved between sections when either side is the reviewed section.
+fn refuse_section_drift(
+    current_by_id: &BTreeMap<&str, &BalanceRow>,
+    prior_by_id: &BTreeMap<&str, &BalanceRow>,
+    section: &Json,
+) -> Result<()> {
     let in_section = |text: &str| section.is_str(text);
     let drifted: Vec<&str> = current_by_id
         .iter()
@@ -511,91 +583,79 @@ pub fn variance_findings(
                 .then_some(*id)
         })
         .collect();
-    if !drifted.is_empty() {
-        let listed: Vec<String> = drifted.iter().map(|id| pytext::repr(id)).collect();
-        return refuse(format!(
-            "Accounts changed section between periods ({}); review the source mapping before comparison.",
-            listed.join(", ")
-        ));
+    if drifted.is_empty() {
+        return Ok(());
     }
-    let report_date = current_rows[0].report_date;
-    let ids: BTreeSet<&str> = current_by_id.keys().chain(prior_by_id.keys()).copied().collect();
-    let entity = render(entity_ref);
-    let mut findings = Vec::new();
-    for account_id in ids {
-        let current_row = current_by_id.get(account_id).copied();
-        let prior_row = prior_by_id.get(account_id).copied();
-        let row = current_row.or(prior_row).expect("the id came from one of the maps");
-        if !in_section(&row.section) {
-            continue;
+    let listed: Vec<String> = drifted.iter().map(|id| pytext::repr(id)).collect();
+    refuse(format!(
+        "Accounts changed section between periods ({}); review the source mapping before comparison.",
+        listed.join(", ")
+    ))
+}
+
+/// `account_ref`, `finding_id` and `evidence_ref`, derived exactly as 0.2.6 derives them.
+fn finding_refs(entity: &str, account_id: &str, delta: &Decimal, report_date: Date) -> (String, String, String) {
+    let account_ref = format!(
+        "acct:{}",
+        &sha256_hex(format!("{entity}:{account_id}").as_bytes())[..24]
+    );
+    let finding_id = format!(
+        "finding:{}",
+        &sha256_hex(format!("{account_ref}:{delta}:{}", report_date.iso()).as_bytes())[..24]
+    );
+    let evidence_ref = format!(
+        "evidence:{}",
+        &sha256_hex(format!("{finding_id}:reviewer-evidence").as_bytes())[..24]
+    );
+    (account_ref, finding_id, evidence_ref)
+}
+
+/// The model finding and its reviewer evidence item.
+fn finding_pair(entity: &str, report_date: Date, m: &Movement) -> Result<(Json, Json)> {
+    let row = m.current.or(m.prior).expect("one period has the account");
+    let reason = match (m.current, m.prior) {
+        (None, _) => {
+            "Account exists only in the prior period; its balance movement exceeds the approved variance thresholds."
         }
-        let current_net = current_row.map_or_else(Decimal::zero, BalanceRow::ytd_net);
-        let prior_net = prior_row.map_or_else(Decimal::zero, BalanceRow::ytd_net);
-        let delta = current_net.sub(&prior_net).value;
-        let percent = if prior_row.is_none() || prior_net.is_zero() {
-            None
-        } else {
-            Some(delta.div(&prior_net).abs())
-        };
-        if delta.is_zero() || delta.abs() < absolute || percent.as_ref().is_some_and(|p| *p < minimum_percent) {
-            continue;
+        (_, None) => {
+            "Account is new in the current period; its balance movement exceeds the approved variance thresholds."
         }
-        let reason = match (current_row, prior_row) {
-            (None, _) => {
-                "Account exists only in the prior period; its balance movement exceeds the approved variance thresholds."
-            }
-            (_, None) => {
-                "Account is new in the current period; its balance movement exceeds the approved variance thresholds."
-            }
-            _ => "Movement exceeds the approved variance thresholds.",
-        };
-        let account_ref = format!(
-            "acct:{}",
-            &sha256_hex(format!("{entity}:{account_id}").as_bytes())[..24]
-        );
-        let finding_id = format!(
-            "finding:{}",
-            &sha256_hex(format!("{account_ref}:{delta}:{}", report_date.iso()).as_bytes())[..24]
-        );
-        let evidence_ref = format!(
-            "evidence:{}",
-            &sha256_hex(format!("{finding_id}:reviewer-evidence").as_bytes())[..24]
-        );
-        let percent_change = match &percent {
-            None => Json::Null,
-            Some(p) => Json::str(&percent_string(p)?),
-        };
-        let model_item = Json::object([
-            ("finding_id", Json::str(&finding_id)),
-            ("evidence_ref", Json::str(&evidence_ref)),
-            ("account_ref", Json::str(&account_ref)),
-            ("section", Json::str(&row.section)),
-            ("current_ytd_net", Json::str(&decimal_string(&current_net)?)),
-            ("prior_ytd_net", Json::str(&decimal_string(&prior_net)?)),
-            ("delta", Json::str(&decimal_string(&delta)?)),
-            ("percent_change", percent_change),
-            ("review_reason", Json::str(reason)),
-        ]);
-        let source_refs: Vec<Json> = [
-            ("source:current", current_row.is_some()),
-            ("source:prior", prior_row.is_some()),
-        ]
-        .into_iter()
-        .filter(|&(_, present)| present)
-        .map(|(name, _)| Json::str(name))
-        .collect();
-        let evidence_item = Json::object([
-            ("finding_id", Json::str(&finding_id)),
-            ("account_id", Json::str(account_id)),
-            ("account_code", Json::str(&row.account_code)),
-            ("account_name", Json::str(&row.account_name)),
-            ("current_values", row_values(current_row)?),
-            ("prior_values", row_values(prior_row)?),
-            ("source_refs", Json::Array(source_refs)),
-        ]);
-        findings.push((model_item, evidence_item));
-    }
-    Ok(findings)
+        _ => "Movement exceeds the approved variance thresholds.",
+    };
+    let (account_ref, finding_id, evidence_ref) = finding_refs(entity, m.account_id, &m.delta, report_date);
+    let percent_change = match &m.percent {
+        None => Json::Null,
+        Some(p) => Json::str(&percent_string(p)?),
+    };
+    let model_item = Json::object([
+        ("finding_id", Json::str(&finding_id)),
+        ("evidence_ref", Json::str(&evidence_ref)),
+        ("account_ref", Json::str(&account_ref)),
+        ("section", Json::str(&row.section)),
+        ("current_ytd_net", Json::str(&decimal_string(&m.current_net)?)),
+        ("prior_ytd_net", Json::str(&decimal_string(&m.prior_net)?)),
+        ("delta", Json::str(&decimal_string(&m.delta)?)),
+        ("percent_change", percent_change),
+        ("review_reason", Json::str(reason)),
+    ]);
+    let source_refs: Vec<Json> = [
+        ("source:current", m.current.is_some()),
+        ("source:prior", m.prior.is_some()),
+    ]
+    .into_iter()
+    .filter(|&(_, present)| present)
+    .map(|(name, _)| Json::str(name))
+    .collect();
+    let evidence_item = Json::object([
+        ("finding_id", Json::str(&finding_id)),
+        ("account_id", Json::str(m.account_id)),
+        ("account_code", Json::str(&row.account_code)),
+        ("account_name", Json::str(&row.account_name)),
+        ("current_values", row_values(m.current)?),
+        ("prior_values", row_values(m.prior)?),
+        ("source_refs", Json::Array(source_refs)),
+    ]);
+    Ok((model_item, evidence_item))
 }
 
 pub struct Evaluation {
@@ -638,52 +698,94 @@ pub(crate) fn evaluate_with(
         .as_pystr()
         .expect("validated by non_empty");
     let all_findings = finder(&current.rows, &prior.rows, entity_ref, request.at("section"), operation)?;
-    let max_results = operation
-        .at("max_results")
-        .as_plain_int()
-        .and_then(num_traits::ToPrimitive::to_usize)
-        .expect("1 to 100");
+    let max_results = max_results(operation);
     let total_findings = all_findings.len();
     let truncated = total_findings > max_results;
     let findings = &all_findings[..total_findings.min(max_results)];
-    let run_seed = Json::object([
-        ("context_sha256", Json::str(&context_snapshot.sha256)),
-        ("request_sha256", Json::str(&request_snapshot.sha256)),
-        ("policy_sha256", Json::str(&policy_snapshot.sha256)),
-        ("current_csv_sha256", Json::str(&current.csv_snapshot.sha256)),
-        ("prior_csv_sha256", Json::str(&prior.csv_snapshot.sha256)),
-        ("current_manifest_sha256", Json::str(&current.manifest_snapshot.sha256)),
-        ("prior_manifest_sha256", Json::str(&prior.manifest_snapshot.sha256)),
-    ]);
+    let run_seed = run_seed(
+        [&context_snapshot, &request_snapshot, &policy_snapshot],
+        &current,
+        &prior,
+    );
     let run_id = format!("sha256:{}", sha256_hex(&canonical_json(&run_seed)));
-    let model = Json::object([
-        ("schema_version", Json::str("xero-model-review-result.v1")),
+    let counts = [
+        ("total_findings", Json::int(total_findings as i64)),
+        ("truncated", Json::Bool(truncated)),
+    ];
+    let model = model_json(&run_id, &request, &current, findings, &counts);
+    let evidence = Json::object([
+        ("schema_version", Json::str("xero-reviewer-evidence.v1")),
         ("run_id", Json::str(&run_id)),
+        ("mode", Json::str("synthetic")),
+        ("items", Json::Array(findings.iter().map(|f| f.1.clone()).collect())),
+        counts[0].clone(),
+        counts[1].clone(),
+    ]);
+    let receipt = receipt(&run_id, &run_seed, &model, &evidence);
+    let all_rows: Vec<&BalanceRow> = current.rows.iter().chain(&prior.rows).collect();
+    assert_model_is_redacted(&model, &all_rows)?;
+    Ok(Evaluation {
+        model,
+        evidence,
+        receipt,
+    })
+}
+
+/// policy.operations.trial_balance_variance.max_results, validated as 1 to 100.
+fn max_results(operation: &Json) -> usize {
+    operation
+        .at("max_results")
+        .as_plain_int()
+        .and_then(num_traits::ToPrimitive::to_usize)
+        .expect("1 to 100")
+}
+
+/// The model review result.
+fn model_json(
+    run_id: &str,
+    request: &Json,
+    current: &Source,
+    findings: &[(Json, Json)],
+    counts: &[(&str, Json); 2],
+) -> Json {
+    Json::object([
+        ("schema_version", Json::str("xero-model-review-result.v1")),
+        ("run_id", Json::str(run_id)),
         ("mode", Json::str("synthetic")),
         ("status", Json::str("REVIEW_READY")),
         ("operation", request.at("operation").clone()),
         ("currency", current.manifest.at("report").at("currency").clone()),
         ("sign_convention", Json::str(SIGN_CONVENTION)),
         ("findings", Json::Array(findings.iter().map(|f| f.0.clone()).collect())),
-        ("total_findings", Json::int(total_findings as i64)),
-        ("truncated", Json::Bool(truncated)),
-        (
-            "limitations",
-            Json::Array(vec![
-                Json::str("This is a synthetic-data review result."),
-                Json::str("No journal, payment, filing, or period-locking action is available."),
-                Json::str("A human reviewer must assess each finding against source evidence."),
-            ]),
-        ),
-    ]);
-    let evidence = Json::object([
-        ("schema_version", Json::str("xero-reviewer-evidence.v1")),
-        ("run_id", Json::str(&run_id)),
-        ("mode", Json::str("synthetic")),
-        ("items", Json::Array(findings.iter().map(|f| f.1.clone()).collect())),
-        ("total_findings", Json::int(total_findings as i64)),
-        ("truncated", Json::Bool(truncated)),
-    ]);
+        counts[0].clone(),
+        counts[1].clone(),
+        ("limitations", limitations()),
+    ])
+}
+
+/// The seven source digests `run_id` is the canonical digest of.
+fn run_seed([context, request, policy]: [&FileSnapshot; 3], current: &Source, prior: &Source) -> Json {
+    Json::object([
+        ("context_sha256", Json::str(&context.sha256)),
+        ("request_sha256", Json::str(&request.sha256)),
+        ("policy_sha256", Json::str(&policy.sha256)),
+        ("current_csv_sha256", Json::str(&current.csv_snapshot.sha256)),
+        ("prior_csv_sha256", Json::str(&prior.csv_snapshot.sha256)),
+        ("current_manifest_sha256", Json::str(&current.manifest_snapshot.sha256)),
+        ("prior_manifest_sha256", Json::str(&prior.manifest_snapshot.sha256)),
+    ])
+}
+
+fn limitations() -> Json {
+    Json::Array(vec![
+        Json::str("This is a synthetic-data review result."),
+        Json::str("No journal, payment, filing, or period-locking action is available."),
+        Json::str("A human reviewer must assess each finding against source evidence."),
+    ])
+}
+
+/// The receipt: the run's source digests and the canonical digests of the model and evidence.
+fn receipt(run_id: &str, run_seed: &Json, model: &Json, evidence: &Json) -> Json {
     let digest = |value: &Json| Json::str(&format!("sha256:{}", sha256_hex(&canonical_json(value))));
     let seed = |key: &str| {
         Json::str(&format!(
@@ -691,9 +793,9 @@ pub(crate) fn evaluate_with(
             run_seed.at(key).as_pystr().unwrap().to_utf8().unwrap()
         ))
     };
-    let receipt = Json::object([
+    Json::object([
         ("schema_version", Json::str("xero-review-receipt.v1")),
-        ("run_id", Json::str(&run_id)),
+        ("run_id", Json::str(run_id)),
         ("mode", Json::str("synthetic")),
         ("policy_sha256", seed("policy_sha256")),
         ("request_sha256", seed("request_sha256")),
@@ -706,17 +808,10 @@ pub(crate) fn evaluate_with(
                 ("prior_manifest", seed("prior_manifest_sha256")),
             ]),
         ),
-        ("result_sha256", digest(&model)),
-        ("evidence_sha256", digest(&evidence)),
+        ("result_sha256", digest(model)),
+        ("evidence_sha256", digest(evidence)),
         ("code_version", Json::str(VERSION)),
-    ]);
-    let all_rows: Vec<&BalanceRow> = current.rows.iter().chain(&prior.rows).collect();
-    assert_model_is_redacted(&model, &all_rows)?;
-    Ok(Evaluation {
-        model,
-        evidence,
-        receipt,
-    })
+    ])
 }
 
 fn leaf_strings<'a>(value: &'a Json, out: &mut Vec<&'a PyStr>) {
@@ -747,6 +842,34 @@ fn percent_shape(text: &str) -> bool {
     })
 }
 
+/// One finding: numeric fields must have their numeric shape (false if one does
+/// not); other text except the section joins the strings scanned for source data.
+fn scan_finding<'a>(finding: &'a Json, scanned: &mut Vec<&'a PyStr>) -> bool {
+    let Json::Object(items) = finding else { return true };
+    for (key, value) in items {
+        let shape: Option<fn(&str) -> bool> = match key.to_utf8().as_deref() {
+            Some("current_ytd_net" | "prior_ytd_net" | "delta") => Some(amount_shape),
+            Some("percent_change") => Some(percent_shape),
+            _ => None,
+        };
+        match shape {
+            None if key.is("section") => {}
+            None => leaf_strings(value, scanned),
+            Some(check) => {
+                let fits = match value {
+                    Json::Null => true,
+                    Json::Str(s) => s.to_utf8().is_some_and(|t| check(&t)),
+                    _ => false,
+                };
+                if !fits {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
 pub(crate) fn assert_model_is_redacted(model: &Json, rows: &[&BalanceRow]) -> Result<()> {
     let disclosure = "Internal disclosure assertion failed: model result contains raw source display data.";
     let mut forbidden: BTreeSet<&str> = BTreeSet::new();
@@ -767,31 +890,10 @@ pub(crate) fn assert_model_is_redacted(model: &Json, rows: &[&BalanceRow]) -> Re
             leaf_strings(value, &mut scanned);
         }
     }
-    if let Some(Json::Array(findings)) = model.get("findings") {
-        for finding in findings {
-            let Json::Object(items) = finding else { continue };
-            for (key, value) in items {
-                let shape: Option<fn(&str) -> bool> = match key.to_utf8().as_deref() {
-                    Some("current_ytd_net" | "prior_ytd_net" | "delta") => Some(amount_shape),
-                    Some("percent_change") => Some(percent_shape),
-                    _ => None,
-                };
-                match shape {
-                    None if key.is("section") => {}
-                    None => leaf_strings(value, &mut scanned),
-                    Some(check) => {
-                        let fits = match value {
-                            Json::Null => true,
-                            Json::Str(s) => s.to_utf8().is_some_and(|t| check(&t)),
-                            _ => false,
-                        };
-                        if !fits {
-                            return refuse(disclosure);
-                        }
-                    }
-                }
-            }
-        }
+    if let Some(Json::Array(findings)) = model.get("findings")
+        && !findings.iter().all(|finding| scan_finding(finding, &mut scanned))
+    {
+        return refuse(disclosure);
     }
     if scanned
         .iter()
@@ -847,6 +949,46 @@ pub fn review_input_paths(env: &Env, evidence: &Path, receipt: &Path, decision: 
 
 pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, decision_path: &Path) -> Result<Json> {
     let inputs = review_input_paths(env, evidence_path, receipt_path, decision_path)?;
+    let (evidence, receipt, decision) = load_review_documents(env, &inputs)?;
+    check_review_headers(&evidence, &receipt, &decision)?;
+    check_seals(env, &inputs, &evidence, &receipt)?;
+    let items = check_evidence_items(&evidence)?;
+    let mut finding_ids = Vec::new();
+    for item in items {
+        finding_ids.push(non_empty(item.at("finding_id"), "evidence finding_id")?);
+    }
+    let known: BTreeSet<&str> = finding_ids.iter().map(String::as_str).collect();
+    if known.len() != finding_ids.len() {
+        return refuse("Reviewer evidence contains duplicate finding IDs.");
+    }
+    let (total_findings, truncated) = evidence_counts(&evidence, items.len())?;
+    let decided = check_decisions(&decision, &known, &total_findings)?;
+    let undecided = total_findings - num_bigint::BigInt::from(decided);
+    let status = if undecided == num_bigint::BigInt::from(0) {
+        "DECISION_RECORDED"
+    } else {
+        "PARTIAL_DECISION_RECORDED"
+    };
+    Ok(Json::object([
+        ("schema_version", Json::str("xero-review-decision-validation.v1")),
+        ("run_id", receipt.at("run_id").clone()),
+        ("status", Json::str(status)),
+        ("decision_count", Json::int(decided as i64)),
+        ("undecided_count", Json::Int(undecided)),
+        ("visible_findings", Json::int(items.len() as i64)),
+        ("truncated", Json::Bool(truncated)),
+        ("completable", Json::Bool(!truncated)),
+        (
+            "limitation",
+            Json::str(
+                "Validation records a structurally valid human decision; it does not approve, resolve, post, pay, lodge, or lock anything.",
+            ),
+        ),
+    ]))
+}
+
+/// The evidence, receipt and decision, each with its exact key set.
+fn load_review_documents(env: &Env, inputs: &ReviewInputs) -> Result<(Json, Json, Json)> {
     let evidence = load_json_exact(
         env,
         &Location::Disk(inputs.evidence.clone()),
@@ -882,6 +1024,10 @@ pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, dec
         &["schema_version", "run_id", "reviewer_ref", "reviewed_at", "decisions"],
         "human decision",
     )?;
+    Ok((evidence, receipt, decision))
+}
+
+fn check_review_headers(evidence: &Json, receipt: &Json, decision: &Json) -> Result<()> {
     if !evidence.at("schema_version").is_str("xero-reviewer-evidence.v1")
         || !receipt.at("schema_version").is_str("xero-review-receipt.v1")
         || !decision.at("schema_version").is_str("xero-human-review-decision.v1")
@@ -897,6 +1043,11 @@ pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, dec
     {
         return refuse("Decision, evidence, and receipt must refer to the same run_id.");
     }
+    Ok(())
+}
+
+/// The receipt's digests of the evidence and, when it is beside the receipt, the model result.
+fn check_seals(env: &Env, inputs: &ReviewInputs, evidence: &Json, receipt: &Json) -> Result<()> {
     let sealed = |value: &Json, key: &str| {
         pyjson::py_eq(
             &Json::str(&format!("sha256:{}", sha256_hex(&canonical_json(value)))),
@@ -904,7 +1055,7 @@ pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, dec
             false,
         )
     };
-    if !sealed(&evidence, "evidence_sha256") {
+    if !sealed(evidence, "evidence_sha256") {
         return refuse("Reviewer evidence does not match the receipt's evidence digest.");
     }
     if inputs.model.is_file() {
@@ -913,6 +1064,11 @@ pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, dec
             return refuse("Model result beside the receipt does not match the receipt's result digest.");
         }
     }
+    Ok(())
+}
+
+/// The evidence items: exact shape, text fields, monetary values and source references.
+fn check_evidence_items(evidence: &Json) -> Result<&[Json]> {
     let evidence_fields = [
         "finding_id",
         "account_id",
@@ -922,64 +1078,73 @@ pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, dec
         "prior_values",
         "source_refs",
     ];
+    let shape_error = "Reviewer evidence items must be a list of objects with the exact evidence shape.";
     let Json::Array(items) = evidence.at("items") else {
-        return refuse("Reviewer evidence items must be a list of objects with the exact evidence shape.");
+        return refuse(shape_error);
     };
     if !items.iter().all(|item| item.has_exact_keys(&evidence_fields)) {
-        return refuse("Reviewer evidence items must be a list of objects with the exact evidence shape.");
+        return refuse(shape_error);
     }
     for item in items {
         for field in ["account_id", "account_name"] {
             non_empty(item.at(field), &format!("evidence {field}"))?;
         }
         optional_text(item.at("account_code"), "evidence account_code")?;
-        let mut expected_refs = Vec::new();
-        for period in ["current", "prior"] {
-            let values = item.at(&format!("{period}_values"));
-            if matches!(values, Json::Null) {
-                continue;
-            }
-            if !values.has_exact_keys(&["debit", "credit", "ytd_debit", "ytd_credit"]) {
-                return refuse(format!(
-                    "evidence {period}_values must contain the four monetary fields or be null."
-                ));
-            }
-            let Json::Object(pairs) = values else { unreachable!() };
-            for (field, value) in pairs {
-                decimal(value, &format!("evidence {period}_values.{}", render(field)))?;
-            }
-            expected_refs.push(Json::str(&format!("source:{period}")));
+        check_evidence_values(item)?;
+    }
+    Ok(items)
+}
+
+/// Each period's values hold the four monetary fields or are null, and source_refs names exactly those present.
+fn check_evidence_values(item: &Json) -> Result<()> {
+    let mut expected_refs = Vec::new();
+    for period in ["current", "prior"] {
+        let values = item.at(&format!("{period}_values"));
+        if matches!(values, Json::Null) {
+            continue;
         }
-        if expected_refs.is_empty() || !pyjson::py_eq(item.at("source_refs"), &Json::Array(expected_refs), false) {
-            return refuse("evidence source_refs must identify exactly the supplied current and prior values.");
+        if !values.has_exact_keys(&["debit", "credit", "ytd_debit", "ytd_credit"]) {
+            return refuse(format!(
+                "evidence {period}_values must contain the four monetary fields or be null."
+            ));
         }
+        let Json::Object(pairs) = values else { unreachable!() };
+        for (field, value) in pairs {
+            decimal(value, &format!("evidence {period}_values.{}", render(field)))?;
+        }
+        expected_refs.push(Json::str(&format!("source:{period}")));
     }
-    let mut finding_ids = Vec::new();
-    for item in items {
-        finding_ids.push(non_empty(item.at("finding_id"), "evidence finding_id")?);
+    if expected_refs.is_empty() || !pyjson::py_eq(item.at("source_refs"), &Json::Array(expected_refs), false) {
+        return refuse("evidence source_refs must identify exactly the supplied current and prior values.");
     }
-    let known: BTreeSet<&str> = finding_ids.iter().map(String::as_str).collect();
-    if known.len() != finding_ids.len() {
-        return refuse("Reviewer evidence contains duplicate finding IDs.");
-    }
+    Ok(())
+}
+
+/// total_findings and truncated, checked against the visible item count.
+fn evidence_counts(evidence: &Json, visible: usize) -> Result<(num_bigint::BigInt, bool)> {
+    let visible = num_bigint::BigInt::from(visible);
     let total_findings = match evidence.at("total_findings").as_plain_int() {
-        Some(n) if *n >= num_bigint::BigInt::from(items.len()) => n.clone(),
+        Some(n) if *n >= visible => n.clone(),
         _ => {
             return refuse(
                 "Reviewer evidence total_findings must be an integer at least as large as the visible item count.",
             );
         }
     };
-    let truncated = match evidence.at("truncated") {
-        Json::Bool(t) if *t == (total_findings > num_bigint::BigInt::from(items.len())) => *t,
-        _ => return refuse("Reviewer evidence truncated must exactly describe whether findings were omitted."),
-    };
+    match evidence.at("truncated") {
+        Json::Bool(t) if *t == (total_findings > visible) => Ok((total_findings, *t)),
+        _ => refuse("Reviewer evidence truncated must exactly describe whether findings were omitted."),
+    }
+}
+
+/// The human decisions; returns how many findings they decide.
+fn check_decisions(decision: &Json, known: &BTreeSet<&str>, total_findings: &num_bigint::BigInt) -> Result<usize> {
     non_empty(decision.at("reviewer_ref"), "human decision reviewer_ref")?;
     iso_timestamp(decision.at("reviewed_at"), "human decision reviewed_at")?;
     let Json::Array(decisions) = decision.at("decisions") else {
         return refuse("Human decision decisions must be a list.");
     };
-    if decisions.is_empty() && total_findings > num_bigint::BigInt::from(0) {
+    if decisions.is_empty() && *total_findings > num_bigint::BigInt::from(0) {
         return refuse("Human decision must contain at least one decision when the evidence carries findings.");
     }
     let mut decided: BTreeSet<String> = BTreeSet::new();
@@ -1004,28 +1169,7 @@ pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, dec
         non_empty(item.at("rationale"), "human decision rationale")?;
         decided.insert(finding_id);
     }
-    let undecided = total_findings - num_bigint::BigInt::from(decided.len());
-    let status = if undecided == num_bigint::BigInt::from(0) {
-        "DECISION_RECORDED"
-    } else {
-        "PARTIAL_DECISION_RECORDED"
-    };
-    Ok(Json::object([
-        ("schema_version", Json::str("xero-review-decision-validation.v1")),
-        ("run_id", receipt.at("run_id").clone()),
-        ("status", Json::str(status)),
-        ("decision_count", Json::int(decided.len() as i64)),
-        ("undecided_count", Json::Int(undecided)),
-        ("visible_findings", Json::int(items.len() as i64)),
-        ("truncated", Json::Bool(truncated)),
-        ("completable", Json::Bool(!truncated)),
-        (
-            "limitation",
-            Json::str(
-                "Validation records a structurally valid human decision; it does not approve, resolve, post, pay, lodge, or lock anything.",
-            ),
-        ),
-    ]))
+    Ok(decided.len())
 }
 
 impl From<Failure> for String {

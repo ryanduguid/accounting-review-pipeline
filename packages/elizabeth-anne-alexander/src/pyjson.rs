@@ -176,6 +176,21 @@ struct Parser<'a> {
     depth: usize,
 }
 
+/// A backslash escape other than `\u`.
+fn simple_escape(escape: u32) -> Result<u32, LoadError> {
+    match char::from_u32(escape) {
+        Some('"') => Ok(0x22),
+        Some('\\') => Ok(0x5C),
+        Some('/') => Ok(0x2F),
+        Some('b') => Ok(0x08),
+        Some('f') => Ok(0x0C),
+        Some('n') => Ok(0x0A),
+        Some('r') => Ok(0x0D),
+        Some('t') => Ok(0x09),
+        _ => Err(LoadError::Invalid),
+    }
+}
+
 fn is_ws(cp: u32) -> bool {
     matches!(cp, 0x20 | 0x09 | 0x0A | 0x0D)
 }
@@ -242,6 +257,25 @@ impl<'a> Parser<'a> {
     }
 
     fn number(&self, start: usize) -> Result<(Json, usize), LoadError> {
+        let (idx, is_float) = self.scan_number(start)?;
+        let numstr: String = self.text[start..idx]
+            .iter()
+            .map(|&c| char::from_u32(c).unwrap())
+            .collect();
+        if is_float {
+            return Ok((Json::Float(numstr.parse().expect("JSON float grammar")), idx));
+        }
+        let digits = numstr.trim_start_matches('-').len();
+        if digits > MAX_INT_DIGITS {
+            return Err(LoadError::Crash(format!(
+                "Exceeds the limit ({MAX_INT_DIGITS} digits) for integer string conversion: value has {digits} digits"
+            )));
+        }
+        Ok((Json::Int(numstr.parse().expect("JSON integer grammar")), idx))
+    }
+
+    /// The scanner's NUMBER_RE: where the number ends and whether it is a float.
+    fn scan_number(&self, start: usize) -> Result<(usize, bool), LoadError> {
         let digit = |idx: usize| self.at(idx).is_some_and(|c| (0x30..=0x39).contains(&c));
         let mut idx = start;
         if self.at(idx) == Some('-' as u32) {
@@ -280,26 +314,12 @@ impl<'a> Parser<'a> {
                 idx = e_start;
             }
         }
-        let numstr: String = self.text[start..idx]
-            .iter()
-            .map(|&c| char::from_u32(c).unwrap())
-            .collect();
-        if is_float {
-            return Ok((Json::Float(numstr.parse().expect("JSON float grammar")), idx));
-        }
-        let digits = numstr.trim_start_matches('-').len();
-        if digits > MAX_INT_DIGITS {
-            return Err(LoadError::Crash(format!(
-                "Exceeds the limit ({MAX_INT_DIGITS} digits) for integer string conversion: value has {digits} digits"
-            )));
-        }
-        Ok((Json::Int(numstr.parse().expect("JSON integer grammar")), idx))
+        Ok((idx, is_float))
     }
 
     fn string(&self, begin: usize) -> Result<(PyStr, usize), LoadError> {
         let mut out = Vec::new();
         let mut idx = begin;
-        let len = self.text.len();
         loop {
             let c = self.at(idx).ok_or(LoadError::Invalid)?;
             idx += 1;
@@ -313,42 +333,38 @@ impl<'a> Parser<'a> {
                 }
             }
             let escape = self.at(idx).ok_or(LoadError::Invalid)?;
-            if escape != 'u' as u32 {
-                out.push(match char::from_u32(escape) {
-                    Some('"') => 0x22,
-                    Some('\\') => 0x5C,
-                    Some('/') => 0x2F,
-                    Some('b') => 0x08,
-                    Some('f') => 0x0C,
-                    Some('n') => 0x0A,
-                    Some('r') => 0x0D,
-                    Some('t') => 0x09,
-                    _ => return Err(LoadError::Invalid),
-                });
-                idx += 1;
-                continue;
-            }
-            // CPython requires a character after the 4 hex digits.
-            let end = idx + 5;
-            if end >= len {
-                return Err(LoadError::Invalid);
-            }
-            let mut unit = self.hex4(idx + 1)?;
-            let mut next = end;
-            if (0xD800..=0xDBFF).contains(&unit)
-                && end + 6 < len
-                && self.at(end) == Some(0x5C)
-                && self.at(end + 1) == Some('u' as u32)
-            {
-                let low = self.hex4(end + 2)?;
-                if (0xDC00..=0xDFFF).contains(&low) {
-                    unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
-                    next = end + 6;
-                }
-            }
+            let (unit, next) = if escape == 'u' as u32 {
+                self.unicode_escape(idx)?
+            } else {
+                (simple_escape(escape)?, idx + 1)
+            };
             out.push(unit);
             idx = next;
         }
+    }
+
+    /// `\uXXXX` with the `u` at `idx`, joining a following low surrogate escape.
+    fn unicode_escape(&self, idx: usize) -> Result<(u32, usize), LoadError> {
+        let len = self.text.len();
+        // CPython requires a character after the 4 hex digits.
+        let end = idx + 5;
+        if end >= len {
+            return Err(LoadError::Invalid);
+        }
+        let mut unit = self.hex4(idx + 1)?;
+        let mut next = end;
+        if (0xD800..=0xDBFF).contains(&unit)
+            && end + 6 < len
+            && self.at(end) == Some(0x5C)
+            && self.at(end + 1) == Some('u' as u32)
+        {
+            let low = self.hex4(end + 2)?;
+            if (0xDC00..=0xDFFF).contains(&low) {
+                unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
+                next = end + 6;
+            }
+        }
+        Ok((unit, next))
     }
 
     fn hex4(&self, idx: usize) -> Result<u32, LoadError> {

@@ -316,24 +316,8 @@ fn parse_ascii(text: &str) -> Option<Decimal> {
         b'+' => (false, &text[1..]),
         _ => (false, text),
     };
-    let lower = body.to_ascii_lowercase();
-    if lower == "inf" || lower == "infinity" {
-        return Some(Decimal {
-            negative,
-            digits: "0".into(),
-            exp: 0,
-            kind: Kind::Infinite,
-        });
-    }
-    for prefix in ["snan", "nan"] {
-        if let Some(payload) = lower.strip_prefix(prefix) {
-            return payload.bytes().all(|b| b.is_ascii_digit()).then(|| Decimal {
-                negative,
-                digits: "0".into(),
-                exp: 0,
-                kind: Kind::NaN,
-            });
-        }
+    if let Some(special) = special_value(negative, &body.to_ascii_lowercase()) {
+        return special;
     }
     let (mantissa, exponent) = match body.find(['e', 'E']) {
         Some(at) => (&body[..at], Some(&body[at + 1..])),
@@ -347,28 +331,10 @@ fn parse_ascii(text: &str) -> Option<Decimal> {
     if int.len() + frac.len() == 0 || !all_digits(int) || !all_digits(frac) {
         return None;
     }
-    let mut exp: i128 = 0;
-    if let Some(exponent) = exponent {
-        let (exp_negative, exp_digits) = match exponent.as_bytes().first()? {
-            b'-' => (true, &exponent[1..]),
-            b'+' => (false, &exponent[1..]),
-            _ => (false, exponent),
-        };
-        if exp_digits.is_empty() || !all_digits(exp_digits) {
-            return None;
-        }
-        // Saturate like strtoexp; anything this large fails the bounds below.
-        let significant = exp_digits.trim_start_matches('0');
-        exp = if significant.len() > 25 {
-            i128::MAX / 4
-        } else {
-            significant.parse::<i128>().unwrap_or(0)
-        };
-        if exp_negative {
-            exp = -exp;
-        }
-    }
-    exp -= frac.len() as i128;
+    let exp = match exponent {
+        Some(exponent) => exponent_value(exponent)?,
+        None => 0,
+    } - frac.len() as i128;
     let value = finite(negative, format!("{int}{frac}"), exp);
     // Exact conversion: any rounding or clamping under the maximum context is InvalidOperation.
     if value.is_zero() {
@@ -379,6 +345,44 @@ fn parse_ascii(text: &str) -> Option<Decimal> {
         return None;
     }
     Some(value)
+}
+
+/// Infinity and the NaNs: `Some(None)` for a NaN with a malformed payload,
+/// `None` when the text is not a special value at all.
+fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
+    let special = |kind| Decimal {
+        negative,
+        digits: "0".into(),
+        exp: 0,
+        kind,
+    };
+    if lower == "inf" || lower == "infinity" {
+        return Some(Some(special(Kind::Infinite)));
+    }
+    ["snan", "nan"].iter().find_map(|prefix| {
+        let payload = lower.strip_prefix(prefix)?;
+        Some(payload.bytes().all(|b| b.is_ascii_digit()).then(|| special(Kind::NaN)))
+    })
+}
+
+/// The exponent after `e`, saturated like libmpdec's strtoexp; anything this
+/// large fails the bounds check that follows.
+fn exponent_value(exponent: &str) -> Option<i128> {
+    let (negative, digits) = match exponent.as_bytes().first()? {
+        b'-' => (true, &exponent[1..]),
+        b'+' => (false, &exponent[1..]),
+        _ => (false, exponent),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let significant = digits.trim_start_matches('0');
+    let value = if significant.len() > 25 {
+        i128::MAX / 4
+    } else {
+        significant.parse::<i128>().unwrap_or(0)
+    };
+    Some(if negative { -value } else { value })
 }
 
 fn all_zeros(digits: &str, from: usize) -> bool {

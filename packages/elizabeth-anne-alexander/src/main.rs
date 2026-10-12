@@ -38,6 +38,8 @@ fn main() {
         std::process::exit(1);
     }));
     // sys.argv as Python decodes it: undecodable bytes or UTF-16 stay as surrogates.
+    // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| pypath::decode_os(&a)).collect();
     let cwd = std::env::current_dir().expect("the working directory must exist");
     #[cfg(feature = "differential")]

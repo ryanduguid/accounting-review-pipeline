@@ -221,6 +221,40 @@ pub fn write_validation(payload: &Json, output: &Path, protected: &[Location]) -
     write_staged(payload, output, parent, protected, &fail)
 }
 
+/// Write the payload to a descriptor this call takes ownership of, then sync it.
+#[cfg(unix)]
+fn write_fd(fd: libc::c_int, payload: &Json) -> io::Result<()> {
+    use std::os::unix::io::FromRawFd;
+    // SAFETY: fd is a freshly opened descriptor this File now owns.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+    file.write_all(&text_mode_json(payload))
+        .and_then(|()| file.flush())
+        .and_then(|()| file.sync_all())
+}
+
+/// `(st_dev, st_ino)` of `name` in the open directory, or `None` when it does not exist.
+#[cfg(unix)]
+fn identity_at(dir_fd: libc::c_int, name: &std::ffi::CStr) -> io::Result<Option<(u64, u64)>> {
+    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+    // SAFETY: dir_fd and name are valid; stat is writable storage for one struct stat.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    if unsafe { libc::fstatat(dir_fd, name.as_ptr(), stat.as_mut_ptr(), 0) } != 0 {
+        let error = io::Error::last_os_error();
+        return if error.kind() == io::ErrorKind::NotFound {
+            Ok(None)
+        } else {
+            Err(error)
+        };
+    }
+    // SAFETY: fstatat succeeded and filled the struct.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let stat = unsafe { stat.assume_init() };
+    // dev_t and ino_t are not u64 on every Unix.
+    #[allow(clippy::unnecessary_cast)]
+    Ok(Some((stat.st_dev as u64, stat.st_ino as u64)))
+}
+
 #[cfg(unix)]
 fn write_staged(
     payload: &Json,
@@ -233,11 +267,11 @@ fn write_staged(
     // so renaming the parent afterwards cannot redirect the write.
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
-    use std::os::unix::io::FromRawFd;
 
     let c = |p: &Path| CString::new(p.as_os_str().as_bytes()).map_err(|_| fail("embedded null byte".into()));
     let parent_c = c(parent)?;
     // SAFETY: parent_c is a valid NUL-terminated path.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let dir_fd = unsafe { libc::open(parent_c.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC) };
     if dir_fd < 0 {
         return Err(fail(os_error(&io::Error::last_os_error(), Some(parent), None)));
@@ -250,6 +284,7 @@ fn write_staged(
     let result = (|| -> Result<()> {
         // O_EXCL prevents a pre-existing pathname (including a symlink) from being used as the staging file.
         // SAFETY: dir_fd is an open directory and temporary_c is a valid NUL-terminated name.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let fd = unsafe {
             libc::openat(
                 dir_fd,
@@ -266,30 +301,12 @@ fn write_staged(
             )));
         }
         created = true;
-        // SAFETY: fd is a freshly opened descriptor this File now owns.
-        let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
-        file.write_all(&text_mode_json(payload))
-            .and_then(|()| file.flush())
-            .and_then(|()| file.sync_all())
-            .map_err(|e| fail(os_error(&e, None, None)))?;
-        drop(file);
-        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-        // SAFETY: dir_fd and name_c are valid; stat is writable storage for one struct stat.
-        let destination = if unsafe { libc::fstatat(dir_fd, name_c.as_ptr(), stat.as_mut_ptr(), 0) } == 0 {
-            // SAFETY: fstatat succeeded and filled the struct.
-            let stat = unsafe { stat.assume_init() };
-            // dev_t and ino_t are not u64 on every Unix.
-            #[allow(clippy::unnecessary_cast)]
-            Some((stat.st_dev as u64, stat.st_ino as u64))
-        } else {
-            let error = io::Error::last_os_error();
-            if error.kind() != io::ErrorKind::NotFound {
-                return Err(fail(os_error(&error, Some(Path::new(name)), None)));
-            }
-            None
-        };
+        write_fd(fd, payload).map_err(|e| fail(os_error(&e, None, None)))?;
+        let destination =
+            identity_at(dir_fd, &name_c).map_err(|error| fail(os_error(&error, Some(Path::new(name)), None)))?;
         refuse_protected(destination, protected)?;
         // SAFETY: both names are valid and relative to the same open directory.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if unsafe { libc::renameat(dir_fd, temporary_c.as_ptr(), dir_fd, name_c.as_ptr()) } != 0 {
             let error = io::Error::last_os_error();
             return Err(fail(os_error(
@@ -303,9 +320,11 @@ fn write_staged(
     })();
     if created {
         // SAFETY: valid directory descriptor and name; failure is ignored as in the Python original.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         unsafe { libc::unlinkat(dir_fd, temporary_c.as_ptr(), 0) };
     }
     // SAFETY: dir_fd was opened above and is closed exactly once.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     unsafe { libc::close(dir_fd) };
     result
 }

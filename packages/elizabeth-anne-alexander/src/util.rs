@@ -48,8 +48,22 @@ fn anchored(text: &str) -> String {
     format!("{}{text}", package_drive())
 }
 
+/// `root / text` for an anchored `text` discards root, so CPython resolved the
+/// absolute path itself; whatever it finds, it is outside the bundled data.
+fn refuse_anchored<T>(text: &str, subdir: &str, label: &str) -> Result<T> {
+    let text = anchored(text);
+    let shown = pypath::display(&text);
+    match pypath::resolve(Path::new(&pypath::encode_os(&text)), true) {
+        Ok(_) => refuse(format!("{label} must stay within {}.", bundled(subdir))),
+        Err(ResolveError::NotFound) => refuse(format!("{label} does not exist: {shown}.")),
+        Err(ResolveError::Unusable) => refuse(format!("{label} is not a usable path: {shown}.")),
+    }
+}
+
 /// The package's drive on Windows: the drive this binary runs from.
 fn package_drive() -> String {
+    // only the drive letter is used, to resolve rooted bundled paths as Python did; it grants nothing.
+    // nosemgrep: rust.lang.security.current-exe.current-exe
     std::env::current_exe()
         .ok()
         .and_then(|exe| exe.to_str().and_then(|s| s.get(..2)).map(str::to_string))
@@ -198,17 +212,29 @@ impl Env {
         };
         let text = on_package_drive(&text).unwrap_or(text);
         if pypath::has_anchor(&text) {
-            // root / absolute discards root, so CPython resolved the absolute path itself.
-            let text = anchored(&text);
-            let shown = pypath::display(&text);
-            return match pypath::resolve(Path::new(&pypath::encode_os(&text)), true) {
-                Ok(_) => refuse(format!("{label} must stay within {}.", bundled(subdir))),
-                Err(ResolveError::NotFound) => refuse(format!("{label} does not exist: {shown}.")),
-                Err(ResolveError::Unusable) => refuse(format!("{label} is not a usable path: {shown}.")),
-            };
+            return refuse_anchored(&text, subdir, label);
         }
+        let rel = self.walk(&text, label)?;
+        if rel.is_empty() {
+            // The package directory itself: it exists, outside every data subdirectory.
+            return refuse(format!("{label} must stay within {}.", bundled(subdir)));
+        }
+        let Some(found) = self.bundle.lookup(&rel) else {
+            return refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(&text))));
+        };
+        if found != subdir && !found.starts_with(&format!("{subdir}/")) {
+            return refuse(format!("{label} must stay within {}.", bundled(subdir)));
+        }
+        Ok(Location::Bundled(found))
+    }
+
+    /// The bundled key `text` names, walking its parts as `Path.resolve(strict=True)`
+    /// does. POSIX visits every part in order, so a missing directory or a file
+    /// used as one is refused even when a later ".." would leave it; Windows
+    /// normalises ".." away before resolving.
+    fn walk(&self, text: &str, label: &str) -> Result<String> {
         let separators: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
-        let missing = || refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(&text))));
+        let missing = || refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(text))));
         let steps: Vec<&str> = text
             .split(separators)
             .filter(|part| !matches!(*part, "" | "."))
@@ -223,9 +249,6 @@ impl Env {
                 continue;
             }
             parts.push(step);
-            // POSIX strict realpath visits every part in order, so a missing
-            // directory or a file used as one is refused even when a later ".."
-            // would leave it. Windows normalises ".." away before resolving.
             if cfg!(not(windows)) {
                 let Some(found) = self.bundle.lookup(&parts.join("/")) else {
                     return missing();
@@ -233,23 +256,12 @@ impl Env {
                 if index + 1 < steps.len() && self.bundle.files.contains_key(&found) {
                     return refuse(format!(
                         "{label} is not a usable path: {}.",
-                        bundled(&pypath::display(&text))
+                        bundled(&pypath::display(text))
                     ));
                 }
             }
         }
-        let rel = parts.join("/");
-        if rel.is_empty() {
-            // The package directory itself: it exists, outside every data subdirectory.
-            return refuse(format!("{label} must stay within {}.", bundled(subdir)));
-        }
-        let Some(found) = self.bundle.lookup(&rel) else {
-            return refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(&text))));
-        };
-        if found != subdir && !found.starts_with(&format!("{subdir}/")) {
-            return refuse(format!("{label} must stay within {}.", bundled(subdir)));
-        }
-        Ok(Location::Bundled(found))
+        Ok(parts.join("/"))
     }
 
     fn bundle_display(&self, raw: &PyStr) -> String {

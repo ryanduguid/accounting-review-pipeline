@@ -24,6 +24,10 @@ libc = "0.2"
 # sample data through EAA_DIFFERENTIAL_BUNDLE. Never enabled for a release.
 differential = []
 
+[lints.clippy]
+# The repository's 50-line function limit (clippy.toml), denied in CI.
+too_many_lines = "warn"
+
 [profile.release]
 lto = true
 codegen-units = 1

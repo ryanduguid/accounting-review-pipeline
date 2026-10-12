@@ -286,11 +286,11 @@ jobs:
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
       - name: lint the workspace
-        run: uv run --locked --group dev ruff check .
+        run: uv run --locked --group dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: type-check the workspace
-        run: uv run --locked --group dev mypy
+        run: uv run --locked --group dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: run the full suite
-        run: uv run --locked --group dev pytest
+        run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   pipeline-gates:
     needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]

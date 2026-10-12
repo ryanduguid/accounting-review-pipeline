@@ -33,7 +33,7 @@ const fn opt(flag: &'static str, dest: &'static str, required: bool, help: Optio
     }
 }
 
-const COMMANDS: [Command; 2] = [
+static COMMANDS: [Command; 2] = [
     Command {
         name: "evaluate",
         help: "evaluate the one allowlisted variance review",
@@ -109,31 +109,8 @@ fn usage(prog: &str, opt_parts: &[String], pos_parts: &[String]) -> String {
     if prefix.len() + flat.chars().count() <= text_width {
         return format!("{prefix}{flat}");
     }
-    let get_lines = |parts: &[String], indent: &str, with_prefix: bool| -> Vec<String> {
-        let mut lines = Vec::new();
-        let mut line: Vec<&str> = Vec::new();
-        let indent_length = indent.len();
-        let mut line_len = if with_prefix {
-            prefix.len() - 1
-        } else {
-            indent_length - 1
-        };
-        for part in parts {
-            if line_len + 1 + part.chars().count() > text_width && !line.is_empty() {
-                lines.push(format!("{indent}{}", line.join(" ")));
-                line.clear();
-                line_len = indent_length - 1;
-            }
-            line.push(part);
-            line_len += part.chars().count() + 1;
-        }
-        if !line.is_empty() {
-            lines.push(format!("{indent}{}", line.join(" ")));
-        }
-        if with_prefix && !lines.is_empty() {
-            lines[0] = lines[0][indent_length..].to_string();
-        }
-        lines
+    let get_lines = |parts: &[String], indent: &str, with_prefix: bool| {
+        usage_lines(parts, indent, with_prefix.then_some(prefix.len()), text_width)
     };
     let lines = if (prefix.len() + prog.chars().count()) as f64 <= 0.75 * text_width as f64 {
         let indent = " ".repeat(prefix.len() + prog.chars().count() + 1);
@@ -161,6 +138,31 @@ fn usage(prog: &str, opt_parts: &[String], pos_parts: &[String]) -> String {
         with_prog
     };
     format!("{prefix}{}", lines.join("\n"))
+}
+
+/// `_format_usage`'s `get_lines`: wrap parts under `indent`; with a prefix
+/// length, the first line starts after the prefix instead of the indent.
+fn usage_lines(parts: &[String], indent: &str, prefix_len: Option<usize>, text_width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line: Vec<&str> = Vec::new();
+    let indent_length = indent.len();
+    let mut line_len = prefix_len.unwrap_or(indent_length) - 1;
+    for part in parts {
+        if line_len + 1 + part.chars().count() > text_width && !line.is_empty() {
+            lines.push(format!("{indent}{}", line.join(" ")));
+            line.clear();
+            line_len = indent_length - 1;
+        }
+        line.push(part);
+        line_len += part.chars().count() + 1;
+    }
+    if !line.is_empty() {
+        lines.push(format!("{indent}{}", line.join(" ")));
+    }
+    if prefix_len.is_some() && !lines.is_empty() {
+        lines[0] = lines[0][indent_length..].to_string();
+    }
+    lines
 }
 
 type Row<'a> = (usize, String, Option<&'a str>);
@@ -253,47 +255,11 @@ fn sequence_ratio(a: &[char], b: &[char]) -> f64 {
         let ntest = b.len() / 100 + 1;
         b2j.retain(|_, indices| indices.len() <= ntest);
     }
-    fn longest(
-        a: &[char],
-        b: &[char],
-        b2j: &BTreeMap<char, Vec<usize>>,
-        alo: usize,
-        ahi: usize,
-        blo: usize,
-        bhi: usize,
-    ) -> (usize, usize, usize) {
-        let (mut besti, mut bestj, mut bestsize) = (alo, blo, 0);
-        let mut j2len: BTreeMap<usize, usize> = BTreeMap::new();
-        for (i, ch) in a.iter().enumerate().take(ahi).skip(alo) {
-            let mut new: BTreeMap<usize, usize> = BTreeMap::new();
-            for &j in b2j.get(ch).map(Vec::as_slice).unwrap_or(&[]) {
-                if j < blo {
-                    continue;
-                }
-                if j >= bhi {
-                    break;
-                }
-                let k = j.checked_sub(1).and_then(|p| j2len.get(&p)).copied().unwrap_or(0) + 1;
-                new.insert(j, k);
-                if k > bestsize {
-                    (besti, bestj, bestsize) = (i + 1 - k, j + 1 - k, k);
-                }
-            }
-            j2len = new;
-        }
-        // Extend over popular characters the autojunk heuristic dropped from b2j.
-        while besti > alo && bestj > blo && a[besti - 1] == b[bestj - 1] {
-            (besti, bestj, bestsize) = (besti - 1, bestj - 1, bestsize + 1);
-        }
-        while besti + bestsize < ahi && bestj + bestsize < bhi && a[besti + bestsize] == b[bestj + bestsize] {
-            bestsize += 1;
-        }
-        (besti, bestj, bestsize)
-    }
     let mut matches = 0;
     let mut queue = vec![(0, a.len(), 0, b.len())];
-    while let Some((alo, ahi, blo, bhi)) = queue.pop() {
-        let (i, j, k) = longest(a, b, &b2j, alo, ahi, blo, bhi);
+    while let Some(range) = queue.pop() {
+        let (alo, ahi, blo, bhi) = range;
+        let (i, j, k) = longest_match(a, b, &b2j, range);
         if k > 0 {
             matches += k;
             if alo < i && blo < j {
@@ -310,6 +276,42 @@ fn sequence_ratio(a: &[char], b: &[char]) -> f64 {
     } else {
         2.0 * matches as f64 / total as f64
     }
+}
+
+/// `SequenceMatcher.find_longest_match(alo, ahi, blo, bhi)`.
+fn longest_match(
+    a: &[char],
+    b: &[char],
+    b2j: &BTreeMap<char, Vec<usize>>,
+    (alo, ahi, blo, bhi): (usize, usize, usize, usize),
+) -> (usize, usize, usize) {
+    let (mut besti, mut bestj, mut bestsize) = (alo, blo, 0);
+    let mut j2len: BTreeMap<usize, usize> = BTreeMap::new();
+    for (i, ch) in a.iter().enumerate().take(ahi).skip(alo) {
+        let mut new: BTreeMap<usize, usize> = BTreeMap::new();
+        for &j in b2j.get(ch).map(Vec::as_slice).unwrap_or(&[]) {
+            if j < blo {
+                continue;
+            }
+            if j >= bhi {
+                break;
+            }
+            let k = j.checked_sub(1).and_then(|p| j2len.get(&p)).copied().unwrap_or(0) + 1;
+            new.insert(j, k);
+            if k > bestsize {
+                (besti, bestj, bestsize) = (i + 1 - k, j + 1 - k, k);
+            }
+        }
+        j2len = new;
+    }
+    // Extend over popular characters the autojunk heuristic dropped from b2j.
+    while besti > alo && bestj > blo && a[besti - 1] == b[bestj - 1] {
+        (besti, bestj, bestsize) = (besti - 1, bestj - 1, bestsize + 1);
+    }
+    while besti + bestsize < ahi && bestj + bestsize < bhi && a[besti + bestsize] == b[bestj + bestsize] {
+        bestsize += 1;
+    }
+    (besti, bestj, bestsize)
 }
 
 /// `difflib.get_close_matches(word, possibilities, n=1)`.
@@ -372,34 +374,11 @@ fn classify<'a>(token: &str, flags: &[&'a str]) -> Result<Class<'a>, String> {
     {
         return Ok(Class::Flag(exact, Some((value.to_string(), true))));
     }
-    let found: Vec<(&'a str, Option<(String, bool)>)> = if token.starts_with("--") {
-        let (prefix, explicit) = match token.split_once('=') {
-            Some((name, value)) => (name, Some((value.to_string(), true))),
-            None => (token, None),
-        };
-        flags
-            .iter()
-            .filter(|f| f.starts_with(prefix))
-            .map(|f| (*f, explicit.clone()))
-            .collect()
-    } else {
-        let short: String = token.chars().take(2).collect();
-        let rest: String = token.chars().skip(2).collect();
-        flags
-            .iter()
-            .filter_map(|f| {
-                if *f == short {
-                    Some((*f, Some((rest.clone(), false))))
-                } else {
-                    f.starts_with(token).then_some((*f, None))
-                }
-            })
-            .collect()
-    };
+    let mut found = option_prefix_matches(token, flags);
     match found.len() {
         0 => {}
         1 => {
-            let (flag, explicit) = found.into_iter().next().unwrap();
+            let (flag, explicit) = found.remove(0);
             return Ok(Class::Flag(flag, explicit));
         }
         _ => {
@@ -407,16 +386,46 @@ fn classify<'a>(token: &str, flags: &[&'a str]) -> Result<Class<'a>, String> {
             return Err(format!("ambiguous option: {token} could match {}", names.join(", ")));
         }
     }
-    let body = &token[1..];
-    let digit = |c: char| pytext::decimal_value(c as u32).is_some();
-    let negative_number = (!body.is_empty() && body.chars().all(digit))
-        || body
-            .split_once('.')
-            .is_some_and(|(int, frac)| int.chars().all(digit) && !frac.is_empty() && frac.chars().all(digit));
-    if negative_number || token.contains(' ') {
+    if looks_like_negative_number(&token[1..]) || token.contains(' ') {
         return Ok(Class::Positional);
     }
     Ok(Class::UnknownOption)
+}
+
+/// argparse's `_get_option_tuples`: the flags a token abbreviates, with any explicit value.
+fn option_prefix_matches<'a>(token: &str, flags: &[&'a str]) -> Vec<(&'a str, Option<(String, bool)>)> {
+    if token.starts_with("--") {
+        let (prefix, explicit) = match token.split_once('=') {
+            Some((name, value)) => (name, Some((value.to_string(), true))),
+            None => (token, None),
+        };
+        return flags
+            .iter()
+            .filter(|f| f.starts_with(prefix))
+            .map(|f| (*f, explicit.clone()))
+            .collect();
+    }
+    let short: String = token.chars().take(2).collect();
+    let rest: String = token.chars().skip(2).collect();
+    flags
+        .iter()
+        .filter_map(|f| {
+            if *f == short {
+                Some((*f, Some((rest.clone(), false))))
+            } else {
+                f.starts_with(token).then_some((*f, None))
+            }
+        })
+        .collect()
+}
+
+/// argparse's `_negative_number_matcher` on the text after the leading '-'.
+fn looks_like_negative_number(body: &str) -> bool {
+    let digit = |c: char| pytext::decimal_value(c as u32).is_some();
+    (!body.is_empty() && body.chars().all(digit))
+        || body
+            .split_once('.')
+            .is_some_and(|(int, frac)| int.chars().all(digit) && !frac.is_empty() && frac.chars().all(digit))
 }
 
 /// argparse's handling of an explicit argument given to the zero-argument help flag.
@@ -432,18 +441,71 @@ fn help_or_error(flag: &str, explicit: Option<(String, bool)>) -> Result<(), Str
     }
 }
 
-fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
-    let main_error = |message: String| Exit::Error {
+fn main_exit(prog: &str, message: String) -> Exit {
+    Exit::Error {
         usage: main_usage(prog),
         prog: prog.to_string(),
         message,
-    };
+    }
+}
+
+fn sub_exit(prog: &str, command: &Command, message: String) -> Exit {
+    Exit::Error {
+        usage: command_usage(prog, command),
+        prog: format!("{prog} {}", command.name),
+        message,
+    }
+}
+
+fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
     let mut extras: Vec<String> = Vec::new();
+    let (command, index) = parse_command(prog, args, &mut extras)?;
+    let values = parse_options(prog, command, &args[index..], &mut extras)?;
+    let missing: Vec<&str> = command
+        .options
+        .iter()
+        .filter(|o| o.required && !values.contains_key(o.flag))
+        .map(|o| o.flag)
+        .collect();
+    if !missing.is_empty() {
+        return Err(sub_exit(
+            prog,
+            command,
+            format!("the following arguments are required: {}", missing.join(", ")),
+        ));
+    }
+    if !extras.is_empty() {
+        return Err(main_exit(prog, format!("unrecognized arguments: {}", extras.join(" "))));
+    }
+    let path = |flag: &str| {
+        values
+            .get(flag)
+            .map(|value| PathBuf::from(crate::pypath::encode_os(value)))
+    };
+    Ok(match command.name {
+        "evaluate" => Parsed::Evaluate {
+            context: path("--context").unwrap(),
+            request: path("--request").unwrap(),
+            policy: path("--policy").unwrap(),
+            out: path("--out").unwrap(),
+        },
+        _ => Parsed::Validate {
+            evidence: path("--evidence").unwrap(),
+            receipt: path("--receipt").unwrap(),
+            decision: path("--decision").unwrap(),
+            out: path("--out"),
+        },
+    })
+}
+
+/// The main parser up to the subcommand: its help flag, unknown options kept as
+/// extras, and the command choice. Returns the command and the index after it.
+fn parse_command(prog: &str, args: &[String], extras: &mut Vec<String>) -> Result<(&'static Command, usize), Exit> {
     let mut index = 0;
     let mut options_ended = false;
-    let command = loop {
+    loop {
         let Some(token) = args.get(index) else {
-            return Err(main_error("the following arguments are required: command".into()));
+            return Err(main_exit(prog, "the following arguments are required: command".into()));
         };
         index += 1;
         if !options_ended {
@@ -451,9 +513,9 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
                 options_ended = true;
                 continue;
             }
-            match classify(token, &["-h", "--help"]).map_err(main_error)? {
+            match classify(token, &["-h", "--help"]).map_err(|m| main_exit(prog, m))? {
                 Class::Flag(flag, explicit) => {
-                    help_or_error(flag, explicit).map_err(main_error)?;
+                    help_or_error(flag, explicit).map_err(|m| main_exit(prog, m))?;
                     return Err(Exit::Help(main_help(prog)));
                 }
                 Class::UnknownOption => {
@@ -463,31 +525,39 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
                 Class::Positional => {}
             }
         }
-        match COMMANDS.iter().find(|c| c.name == token) {
-            Some(command) => break command,
-            None => {
-                let names: Vec<&'static str> = COMMANDS.iter().map(|c| c.name).collect();
-                let quoted: Vec<String> = names.iter().map(|n| pytext::repr(n)).collect();
-                let suggestion = close_match(token, &names)
-                    .map(|m| format!(", maybe you meant {}?", pytext::repr(m)))
-                    .unwrap_or_default();
-                return Err(main_error(format!(
-                    "argument command: invalid choice: {}{suggestion} (choose from {})",
-                    pytext::repr(token),
-                    quoted.join(", ")
-                )));
-            }
-        }
-    };
-    let sub_prog = format!("{prog} {}", command.name);
-    let sub_error = |message: String| Exit::Error {
-        usage: command_usage(prog, command),
-        prog: sub_prog.clone(),
-        message,
-    };
-    let mut flags: Vec<&str> = vec!["-h", "--help"];
+        return match COMMANDS.iter().find(|c| c.name == token) {
+            Some(command) => Ok((command, index)),
+            None => Err(main_exit(prog, invalid_choice(token))),
+        };
+    }
+}
+
+/// argparse's invalid-choice message, with Python 3.15's close-match suggestion.
+fn invalid_choice(token: &str) -> String {
+    let names: Vec<&'static str> = COMMANDS.iter().map(|c| c.name).collect();
+    let quoted: Vec<String> = names.iter().map(|n| pytext::repr(n)).collect();
+    let suggestion = close_match(token, &names)
+        .map(|m| format!(", maybe you meant {}?", pytext::repr(m)))
+        .unwrap_or_default();
+    format!(
+        "argument command: invalid choice: {}{suggestion} (choose from {})",
+        pytext::repr(token),
+        quoted.join(", ")
+    )
+}
+
+/// The subcommand's options after its name.
+fn parse_options(
+    prog: &str,
+    command: &Command,
+    args: &[String],
+    extras: &mut Vec<String>,
+) -> Result<BTreeMap<&'static str, String>, Exit> {
+    let sub_error = |message: String| sub_exit(prog, command, message);
+    let mut flags: Vec<&'static str> = vec!["-h", "--help"];
     flags.extend(command.options.iter().map(|o| o.flag));
-    let mut values: BTreeMap<&str, String> = BTreeMap::new();
+    let mut values: BTreeMap<&'static str, String> = BTreeMap::new();
+    let mut index = 0;
     while let Some(token) = args.get(index) {
         index += 1;
         if token == "--" {
@@ -518,40 +588,7 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
         };
         values.insert(flag, value);
     }
-    let missing: Vec<&str> = command
-        .options
-        .iter()
-        .filter(|o| o.required && !values.contains_key(o.flag))
-        .map(|o| o.flag)
-        .collect();
-    if !missing.is_empty() {
-        return Err(sub_error(format!(
-            "the following arguments are required: {}",
-            missing.join(", ")
-        )));
-    }
-    if !extras.is_empty() {
-        return Err(main_error(format!("unrecognized arguments: {}", extras.join(" "))));
-    }
-    let path = |flag: &str| {
-        values
-            .get(flag)
-            .map(|value| PathBuf::from(crate::pypath::encode_os(value)))
-    };
-    Ok(match command.name {
-        "evaluate" => Parsed::Evaluate {
-            context: path("--context").unwrap(),
-            request: path("--request").unwrap(),
-            policy: path("--policy").unwrap(),
-            out: path("--out").unwrap(),
-        },
-        _ => Parsed::Validate {
-            evidence: path("--evidence").unwrap(),
-            receipt: path("--receipt").unwrap(),
-            decision: path("--decision").unwrap(),
-            out: path("--out"),
-        },
-    })
+    Ok(values)
 }
 
 /// Write one line; the text is already free of unencodable characters.
@@ -607,74 +644,87 @@ fn run(env: &Env, parsed: Parsed, stdout: &mut dyn Write) -> Result<(), Failure>
             request,
             policy,
             out,
-        } => {
-            let evaluation = gateway::evaluate(env, &context, &request, &policy)?;
-            let outputs =
-                persist::write_evaluation(env, &evaluation.model, &evaluation.evidence, &evaluation.receipt, &out)?;
-            let total = evaluation.model.at("total_findings");
-            let truncated = matches!(evaluation.model.at("truncated"), Json::Bool(true));
-            let truncation = if truncated {
-                format!(
-                    "; TRUNCATED at max_results, {} total finding(s)",
-                    crate::pyjson::canonical(total)
-                )
-            } else {
-                String::new()
-            };
-            let shown = match evaluation.model.at("findings") {
-                Json::Array(items) => items.len(),
-                _ => 0,
-            };
-            emit(
-                stdout,
-                &format!("elizabeth-anne-alexander: REVIEW_READY; {shown} bounded finding(s){truncation}"),
-            );
-            for (name, path) in [
-                ("model", &outputs.model),
-                ("evidence", &outputs.evidence),
-                ("receipt", &outputs.receipt),
-            ] {
-                emit(stdout, &format!("  {name}: {}", crate::pypath::text(path)));
-            }
-            Ok(())
-        }
+        } => run_evaluate(env, [&context, &request, &policy], &out, stdout),
         Parsed::Validate {
             evidence,
             receipt,
             decision,
             out,
-        } => {
-            let mut target = None;
-            if let Some(out) = out {
-                let resolved = env.within_build(&out, "validation output", false)?;
-                refuse_input_collision(
-                    &resolved,
-                    &gateway::review_input_paths(env, &evidence, &receipt, &decision)?,
-                )?;
-                target = Some(resolved);
-            }
-            let validation = gateway::validate_review(env, &evidence, &receipt, &decision)?;
-            if let Some(target) = target {
-                let inputs = gateway::review_input_paths(env, &evidence, &receipt, &decision)?;
-                persist::write_validation(&validation, &target, &protected_locations(&inputs))?;
-            }
-            let text = |key: &str| {
-                crate::pyjson::canonical(validation.at(key))
-                    .trim_matches('"')
-                    .to_string()
-            };
-            emit(
-                stdout,
-                &format!(
-                    "elizabeth-anne-alexander: {}; {} decision(s); {} undecided finding(s)",
-                    text("status"),
-                    text("decision_count"),
-                    text("undecided_count")
-                ),
-            );
-            Ok(())
-        }
+        } => run_validate(env, [&evidence, &receipt, &decision], out.as_deref(), stdout),
     }
+}
+
+fn run_evaluate(
+    env: &Env,
+    [context, request, policy]: [&Path; 3],
+    out: &Path,
+    stdout: &mut dyn Write,
+) -> Result<(), Failure> {
+    let evaluation = gateway::evaluate(env, context, request, policy)?;
+    let outputs = persist::write_evaluation(env, &evaluation.model, &evaluation.evidence, &evaluation.receipt, out)?;
+    let total = evaluation.model.at("total_findings");
+    let truncated = matches!(evaluation.model.at("truncated"), Json::Bool(true));
+    let truncation = if truncated {
+        format!(
+            "; TRUNCATED at max_results, {} total finding(s)",
+            crate::pyjson::canonical(total)
+        )
+    } else {
+        String::new()
+    };
+    let shown = match evaluation.model.at("findings") {
+        Json::Array(items) => items.len(),
+        _ => 0,
+    };
+    emit(
+        stdout,
+        &format!("elizabeth-anne-alexander: REVIEW_READY; {shown} bounded finding(s){truncation}"),
+    );
+    for (name, path) in [
+        ("model", &outputs.model),
+        ("evidence", &outputs.evidence),
+        ("receipt", &outputs.receipt),
+    ] {
+        emit(stdout, &format!("  {name}: {}", crate::pypath::text(path)));
+    }
+    Ok(())
+}
+
+fn run_validate(
+    env: &Env,
+    [evidence, receipt, decision]: [&Path; 3],
+    out: Option<&Path>,
+    stdout: &mut dyn Write,
+) -> Result<(), Failure> {
+    let mut target = None;
+    if let Some(out) = out {
+        let resolved = env.within_build(out, "validation output", false)?;
+        refuse_input_collision(
+            &resolved,
+            &gateway::review_input_paths(env, evidence, receipt, decision)?,
+        )?;
+        target = Some(resolved);
+    }
+    let validation = gateway::validate_review(env, evidence, receipt, decision)?;
+    if let Some(target) = target {
+        let inputs = gateway::review_input_paths(env, evidence, receipt, decision)?;
+        persist::write_validation(&validation, &target, &protected_locations(&inputs))?;
+    }
+    let text = |key: &str| {
+        crate::pyjson::canonical(validation.at(key))
+            .trim_matches('"')
+            .to_string()
+    };
+    emit(
+        stdout,
+        &format!(
+            "elizabeth-anne-alexander: {}; {} decision(s); {} undecided finding(s)",
+            text("status"),
+            text("decision_count"),
+            text("undecided_count")
+        ),
+    );
+    Ok(())
 }
 
 /// `main(argv)`: the process exit code.

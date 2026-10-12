@@ -259,87 +259,121 @@ fn strip_verbatim(path: PathBuf) -> PathBuf {
     }
 }
 
+/// Python 3.15's posixpath.realpath on bytes, step by step. Every component is
+/// examined, including those after a missing one, so a later `..` that returns
+/// to an existing directory still follows its symlinks.
 #[cfg(not(windows))]
-fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> {
-    // A line-by-line port of Python 3.15's posixpath.realpath on bytes. Every
-    // component is examined, including those after a missing one, so a later
-    // `..` that returns to an existing directory still follows its symlinks.
-    use std::collections::HashMap;
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
-    let filename = path.as_os_str().as_bytes();
-    // pathlib's str(path) never ends in a separator.
-    let trimmed = &filename[..filename.len() - filename.iter().rev().take_while(|&&b| b == b'/').count()];
-    // None marks a resolved symlink target; the link's own path is popped next.
-    let mut rest: Vec<Option<Vec<u8>>> = trimmed.split(|&b| b == b'/').rev().map(|p| Some(p.to_vec())).collect();
-    let mut part_count = rest.len();
-    let mut current: Vec<u8> = b"/".to_vec();
-    let mut seen: HashMap<Vec<u8>, Option<Vec<u8>>> = HashMap::new();
-    let os = |bytes: &[u8]| PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()));
-    while part_count > 0 {
-        let Some(name) = rest.pop().expect("part_count counts the entries left") else {
-            let link = rest.pop().flatten().expect("a link path follows its marker");
-            seen.insert(link, Some(current.clone()));
-            continue;
-        };
-        part_count -= 1;
+struct RealPath {
+    /// Unprocessed parts, last first; `None` marks a resolved symlink target,
+    /// and the link's own path is popped next.
+    rest: Vec<Option<Vec<u8>>>,
+    /// Parts left in `rest`, not counting the markers.
+    part_count: usize,
+    current: Vec<u8>,
+    /// Symlink paths and their fully resolved targets (`None` while resolving).
+    seen: std::collections::HashMap<Vec<u8>, Option<Vec<u8>>>,
+    strict: bool,
+}
+
+#[cfg(not(windows))]
+fn os_path(bytes: &[u8]) -> PathBuf {
+    use std::os::unix::ffi::OsStringExt;
+    PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()))
+}
+
+#[cfg(not(windows))]
+impl RealPath {
+    fn push_parts(&mut self, text: &[u8]) {
+        let parts: Vec<&[u8]> = text.split(|&b| b == b'/').collect();
+        self.part_count += parts.len();
+        self.rest.extend(parts.into_iter().rev().map(|p| Some(p.to_vec())));
+    }
+
+    fn step(&mut self, name: &[u8]) -> Result<(), ResolveError> {
         if name.is_empty() || name == b"." {
-            continue;
+            return Ok(());
         }
         if name == b".." {
-            let cut = current.iter().rposition(|&b| b == b'/').unwrap_or(0);
-            current.truncate(cut.max(1));
-            continue;
+            let cut = self.current.iter().rposition(|&b| b == b'/').unwrap_or(0);
+            self.current.truncate(cut.max(1));
+            return Ok(());
         }
-        let mut newpath = current.clone();
+        let mut newpath = self.current.clone();
         if newpath != b"/" {
             newpath.push(b'/');
         }
-        newpath.extend_from_slice(&name);
-        let target = match std::fs::symlink_metadata(os(&newpath)) {
+        newpath.extend_from_slice(name);
+        let target = match std::fs::symlink_metadata(os_path(&newpath)) {
             Ok(meta) if !meta.file_type().is_symlink() => {
-                if strict && part_count > 0 && !meta.is_dir() {
+                if self.strict && self.part_count > 0 && !meta.is_dir() {
                     // ENOTDIR: an OSError other than FileNotFoundError.
                     return Err(ResolveError::Unusable);
                 }
-                current = newpath;
-                continue;
+                self.current = newpath;
+                return Ok(());
             }
-            Ok(_) => match seen.get(&newpath) {
+            Ok(_) => match self.seen.get(&newpath) {
                 Some(Some(resolved)) => {
-                    current = resolved.clone();
-                    continue;
+                    self.current = resolved.clone();
+                    return Ok(());
                 }
+                // A symlink loop: ELOOP when strict, else the link path itself.
+                Some(None) if self.strict => return Err(ResolveError::Unusable),
                 Some(None) => {
-                    // A symlink loop: ELOOP when strict, else the link path itself.
-                    if strict {
-                        return Err(ResolveError::Unusable);
-                    }
-                    current = newpath;
-                    continue;
+                    self.current = newpath;
+                    return Ok(());
                 }
-                None => std::fs::read_link(os(&newpath)),
+                None => std::fs::read_link(os_path(&newpath)),
             },
             Err(error) => Err(error),
         };
         match target {
-            Ok(target) => {
-                let target = target.into_os_string().into_vec();
-                if target.starts_with(b"/") {
-                    current = b"/".to_vec();
-                }
-                seen.insert(newpath.clone(), None);
-                rest.push(Some(newpath));
-                rest.push(None);
-                let parts: Vec<&[u8]> = target.split(|&b| b == b'/').collect();
-                part_count += parts.len();
-                rest.extend(parts.into_iter().rev().map(|p| Some(p.to_vec())));
-            }
+            Ok(target) => self.follow(newpath, &target),
             // Non-strict realpath ignores every OSError and keeps the name.
-            Err(error) if strict => return Err(classify(&error)),
-            Err(_) => current = newpath,
+            Err(error) if self.strict => return Err(classify(&error)),
+            Err(_) => self.current = newpath,
         }
+        Ok(())
     }
-    Ok(os(&current))
+
+    /// Queue a symlink's target, marking the link to record where it resolved.
+    fn follow(&mut self, link: Vec<u8>, target: &Path) {
+        use std::os::unix::ffi::OsStrExt;
+        let target = target.as_os_str().as_bytes();
+        if target.starts_with(b"/") {
+            self.current = b"/".to_vec();
+        }
+        self.seen.insert(link.clone(), None);
+        self.rest.push(Some(link));
+        self.rest.push(None);
+        self.push_parts(target);
+    }
+}
+
+#[cfg(not(windows))]
+fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> {
+    use std::os::unix::ffi::OsStrExt;
+    let filename = path.as_os_str().as_bytes();
+    // pathlib's str(path) never ends in a separator.
+    let trimmed = &filename[..filename.len() - filename.iter().rev().take_while(|&&b| b == b'/').count()];
+    let mut walk = RealPath {
+        rest: Vec::new(),
+        part_count: 0,
+        current: b"/".to_vec(),
+        seen: std::collections::HashMap::new(),
+        strict,
+    };
+    walk.push_parts(trimmed);
+    while walk.part_count > 0 {
+        let Some(name) = walk.rest.pop().expect("part_count counts the entries left") else {
+            let link = walk.rest.pop().flatten().expect("a link path follows its marker");
+            walk.seen.insert(link, Some(walk.current.clone()));
+            continue;
+        };
+        walk.part_count -= 1;
+        walk.step(&name)?;
+    }
+    Ok(os_path(&walk.current))
 }
 
 fn classify(error: &io::Error) -> ResolveError {
@@ -429,11 +463,13 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
     let mut info = std::mem::MaybeUninit::<ByHandleFileInformation>::zeroed();
     // SAFETY: the handle is open for the duration of the call and info is a
     // correctly sized, writable BY_HANDLE_FILE_INFORMATION.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) };
     if ok == 0 {
         return Err(io::Error::last_os_error());
     }
     // SAFETY: the call succeeded and filled the structure.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let info = unsafe { info.assume_init() };
     Ok((
         info.volume_serial as u64,
@@ -480,6 +516,8 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn resolve_follows_a_symlink_reached_after_a_missing_part() {
+        // a test fixture directory, never used for a security decision.
+        // nosemgrep: rust.lang.security.temp-dir.temp-dir
         let dir = std::env::temp_dir().join(format!("eaa-realpath-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("build")).unwrap();
@@ -514,6 +552,8 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn resolve_follows_links_and_appends_missing_parts() {
+        // a test fixture directory, never used for a security decision.
+        // nosemgrep: rust.lang.security.temp-dir.temp-dir
         let dir = std::env::temp_dir().join(format!("eaa-resolve-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("real")).unwrap();

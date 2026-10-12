@@ -179,66 +179,83 @@ struct Parts {
     offset: Option<(char, Vec<String>)>,
 }
 
+/// A left-to-right match over the timestamp grammar, noting any non-ASCII digit.
+struct Scan<'c> {
+    chars: &'c [char],
+    at: usize,
+    ascii: bool,
+}
+
+impl Scan<'_> {
+    /// Exactly `n` decimal digits.
+    fn digits(&mut self, n: usize) -> Option<String> {
+        let got = match_digits(self.chars, &mut self.at, n)?;
+        self.ascii &= got.is_some();
+        Some(got.unwrap_or_default())
+    }
+
+    fn char(&mut self, allowed: &[char]) -> Option<char> {
+        match_char(self.chars, &mut self.at, allowed)
+    }
+
+    /// `HH:MM` and an optional `:SS`, as the clock and the offset both allow.
+    fn hours_minutes_seconds(&mut self) -> Option<Vec<String>> {
+        let mut fields = vec![self.digits(2)?];
+        self.char(&[':'])?;
+        fields.push(self.digits(2)?);
+        let mark = self.at;
+        if self.char(&[':']).is_some() {
+            match self.digits(2) {
+                Some(seconds) => fields.push(seconds),
+                None => self.at = mark,
+            }
+        }
+        Some(fields)
+    }
+
+    /// An optional `.` and one to six digits.
+    fn fraction(&mut self) -> Option<String> {
+        if self.chars.get(self.at) != Some(&'.') {
+            return None;
+        }
+        let start = self.at + 1;
+        let mut end = start;
+        while end < self.chars.len() && end - start < 6 && pytext::decimal_value(self.chars[end] as u32).is_some() {
+            end += 1;
+        }
+        if end == start {
+            return None;
+        }
+        self.ascii &= self.chars[start..end].iter().all(char::is_ascii_digit);
+        self.at = end;
+        Some(self.chars[start..end].iter().collect())
+    }
+}
+
 /// `_TIMESTAMP.fullmatch`; the inner `None` means it matched with non-ASCII digits,
 /// which `datetime.fromisoformat` then rejects.
 fn match_full(chars: &[char]) -> Option<Option<Parts>> {
-    let mut at = 0;
-    let mut ascii = true;
-    let take = |at: &mut usize, n: usize, ascii: &mut bool| -> Option<String> {
-        let got = match_digits(chars, at, n)?;
-        *ascii &= got.is_some();
-        Some(got.unwrap_or_default())
+    let mut scan = Scan {
+        chars,
+        at: 0,
+        ascii: true,
     };
-    let year = take(&mut at, 4, &mut ascii)?;
-    match_char(chars, &mut at, &['-'])?;
-    let month = take(&mut at, 2, &mut ascii)?;
-    match_char(chars, &mut at, &['-'])?;
-    let day = take(&mut at, 2, &mut ascii)?;
-    match_char(chars, &mut at, &['T', 't', ' '])?;
-    let mut clock = vec![take(&mut at, 2, &mut ascii)?];
-    match_char(chars, &mut at, &[':'])?;
-    clock.push(take(&mut at, 2, &mut ascii)?);
-    let mark = at;
-    if match_char(chars, &mut at, &[':']).is_some() {
-        match take(&mut at, 2, &mut ascii) {
-            Some(seconds) => clock.push(seconds),
-            None => at = mark,
-        }
-    }
-    let mut fraction = None;
-    if chars.get(at) == Some(&'.') {
-        let start = at + 1;
-        let mut end = start;
-        while end < chars.len() && end - start < 6 && pytext::decimal_value(chars[end] as u32).is_some() {
-            end += 1;
-        }
-        if end > start {
-            let digits: String = chars[start..end].iter().collect();
-            ascii &= chars[start..end].iter().all(char::is_ascii_digit);
-            fraction = Some(digits);
-            at = end;
-        }
-    }
-    let offset = match match_char(chars, &mut at, &['Z', 'z', '+', '-'])? {
+    let year = scan.digits(4)?;
+    scan.char(&['-'])?;
+    let month = scan.digits(2)?;
+    scan.char(&['-'])?;
+    let day = scan.digits(2)?;
+    scan.char(&['T', 't', ' '])?;
+    let clock = scan.hours_minutes_seconds()?;
+    let fraction = scan.fraction();
+    let offset = match scan.char(&['Z', 'z', '+', '-'])? {
         'Z' | 'z' => None,
-        sign => {
-            let mut fields = vec![take(&mut at, 2, &mut ascii)?];
-            match_char(chars, &mut at, &[':'])?;
-            fields.push(take(&mut at, 2, &mut ascii)?);
-            let mark = at;
-            if match_char(chars, &mut at, &[':']).is_some() {
-                match take(&mut at, 2, &mut ascii) {
-                    Some(seconds) => fields.push(seconds),
-                    None => at = mark,
-                }
-            }
-            Some((sign, fields))
-        }
+        sign => Some((sign, scan.hours_minutes_seconds()?)),
     };
-    if at != chars.len() {
+    if scan.at != chars.len() {
         return None;
     }
-    Some(ascii.then_some(Parts {
+    Some(scan.ascii.then_some(Parts {
         date: [year, month, day],
         clock,
         fraction,
