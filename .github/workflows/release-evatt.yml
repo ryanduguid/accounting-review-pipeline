@@ -5,8 +5,8 @@ name: Release evatt
 # normalised distribution name agree (evatt). The version is read as data from
 # the tracked literal in evatt/version.py.
 #
-# The sibling release-elizabeth-anne-alexander.yml has a second pypi job that
-# publishes through trusted publishing. It is deliberately absent here: a PyPI
+# The retired Python ledger caller used a second pypi job for trusted publishing.
+# The Rust ledger has no approved release caller. evatt has no PyPI job: a PyPI
 # release is out of scope until the disclosure policy this package enforces is
 # signed off, and an absent job is a better guard than a job that would fire on
 # a stray tag. Add it, with its own pypi-evatt environment, when a release is
