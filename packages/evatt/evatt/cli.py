@@ -138,7 +138,8 @@ def _read(path: Path) -> tuple[str, str]:
     before anything is decided about them. The handle is opened with that
     setting so the line endings can be counted before normalisation.
     """
-    with path.open(encoding="utf-8", newline="") as handle:  # NOSONAR: local CLI path chosen by the operator
+    # Local CLI path chosen by the operator.
+    with path.open(encoding="utf-8", newline="") as handle:  # NOSONAR
         raw = handle.read()
     crlf = raw.count("\r\n")
     ending = "\r\n" if crlf > raw.count("\n") - crlf else "\n"
@@ -157,12 +158,14 @@ def _write(path: Path, text: str, ending: str = "\n") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if ending != "\n":
         text = text.replace("\n", ending)
-    path.write_text(text, encoding="utf-8", newline="")  # NOSONAR: local CLI path chosen by the operator
+    # Local CLI path chosen by the operator.
+    path.write_text(text, encoding="utf-8", newline="")  # NOSONAR
 
 
 def _remove(path: Path) -> None:
     """Delete *path* if it is there, and say nothing if it is not."""
-    path.unlink(missing_ok=True)  # NOSONAR: local CLI path chosen by the operator
+    # Local CLI path chosen by the operator.
+    path.unlink(missing_ok=True)  # NOSONAR
 
 
 def _collision(args: argparse.Namespace) -> str | None:
@@ -298,7 +301,8 @@ def _read_record(path: Path) -> bytes:
         raise EvattError("disclosure record must be a regular file with one link")
     flags = (os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
              | getattr(os, "O_NONBLOCK", 0))
-    with os.fdopen(os.open(path, flags), "rb") as handle:  # NOSONAR: local CLI path chosen by the operator
+    # Local CLI path chosen by the operator.
+    with os.fdopen(os.open(path, flags), "rb") as handle:  # NOSONAR
         opened = os.fstat(handle.fileno())
         if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
             raise EvattError("disclosure record must be a regular file with one link")
@@ -329,7 +333,8 @@ def _disclosure_command(args: argparse.Namespace) -> int:
             # Exclusive creation never truncates an existing record or alias.
             # A failed write may leave an incomplete record, which checking rejects.
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-            with os.fdopen(os.open(args.out, flags, 0o600), "wb") as handle:  # NOSONAR: local CLI path chosen by the operator
+            # Local CLI path chosen by the operator.
+            with os.fdopen(os.open(args.out, flags, 0o600), "wb") as handle:  # NOSONAR
                 if handle.write(record) != len(record):
                     raise OSError("incomplete disclosure record write")
             print("Local disclosure evidence recorded. External authorisation has not been checked.")
