@@ -49,7 +49,7 @@ Xero Ledger Review Gate consumes synthetic Xero-shaped trial-balance fixtures an
 
 ```mermaid
 flowchart TD
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#FFFFF0", "titleColor": "#FFFFF0"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); }"}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#E5E4E2", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#E5E4E2", "titleColor": "#FFFFF0"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #E5E4E2) drop-shadow(0px -1px 0px #E5E4E2) drop-shadow(1px 0px 0px #E5E4E2) drop-shadow(-1px 0px 0px #E5E4E2); }"}}%%
     subgraph ClientPerimeter ["Local Client Perimeter (Zero-Network)"]
         Raw["Synthetic Xero-Shaped Trial Balance Fixture"] --> Validate["Context & Hash Integrity Gate"]
         Validate --> Engine["Decimal Variance Review Engine<br/><i>(Fixed Policy v1)</i>"]
@@ -70,14 +70,14 @@ flowchart TD
         Decision -->|NEEDS_EVIDENCE / ESCALATED| Action["Further Investigation"]
     end
 
-    style ClientPerimeter fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style ArtifactSplit fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Governance fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Model fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Evidence fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Done fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Action fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style ClientPerimeter fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style ArtifactSplit fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style Governance fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style Model fill:#990024,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style Evidence fill:#990024,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style Receipt fill:#990024,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style Done fill:#990024,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
+    style Action fill:#990024,stroke:#E5E4E2,stroke-width:2px,color:#FFFFF0
 ```
 
 ---
