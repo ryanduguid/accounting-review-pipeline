@@ -16,7 +16,7 @@
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0; the released 0.2.6 Python distribution also had import `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA), no Python distribution |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release |
-| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | command-line script `grant_workpaper.py`, standard library only, no release |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary |
 
 Each component carries its own README, version, lockfile, licence, release notes and release cadence. Component indexes: [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/xero-trial-balance-export/llms.txt), [review-ready-gate](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/llms.txt), [monthly-close-control-plane](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/monthly-close-control-plane/llms.txt), [elizabeth-anne-alexander](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/elizabeth-anne-alexander/llms.txt) and [evatt](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/evatt/llms.txt).

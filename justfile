@@ -11,7 +11,8 @@
 # The four Python distributions are uv workspace members. The Xero Ledger Review
 # Gate is a Rust crate, run with cargo from its directory. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
-# application is not a member; their standard-library unittest suites run from
+# application is not a member; its workpaper is a Rust crate run with cargo from
+# its directory. Their standard-library unittest suites run from
 # the same .venv. Adding a component means adding it to
 # the matching list below and to the root pyproject.toml workspace members.
 
@@ -31,7 +32,7 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "packages/elizabeth-anne-alexander"
+rust_components := "apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander"
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
 exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"

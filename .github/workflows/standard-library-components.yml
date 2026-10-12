@@ -3,11 +3,13 @@ name: Standard-library components
 # The Excel adapter, the Power BI application and the grant workpapers
 # application have no Python dependencies and are not uv workspace members, so
 # they cannot run through ci-package.yml. The grant application keeps a
-# pyproject.toml for standalone use and is never released. Each gets the same
-# lint tools at the same pins (configured in its own ruff and mypy settings) and
-# its standard-library suite runs on the same Python matrix. The grant
-# application also runs on Windows, whose exclusive-rename publication differs
-# from Linux. The Power BI report also runs Microsoft's PBIR validator once.
+# pyproject.toml for its setup and replay utility and is never released. Each
+# gets the same lint tools at the same pins (configured in its own ruff and mypy
+# settings) and its standard-library suite runs on the same Python matrix. The
+# grant workpaper itself is a Rust binary from 0.2.0; the rust job checks it on
+# Linux and Windows, whose exclusive-rename publication differs. The grant
+# application's Python suite also runs on Windows. The Power BI report also runs
+# Microsoft's PBIR validator once.
 
 on:
   push:
@@ -175,8 +177,46 @@ jobs:
       - name: Run the component's standard-library suite
         run: python -B -m unittest discover -s tests -v
 
+  rust:
+    # rust-toolchain.toml in the application directory pins the toolchain,
+    # which rustup installs on first use.
+    name: apps/grant-acquittal-workpapers / rust (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/grant-acquittal-workpapers
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked
+      - name: Run the bundled example from the release build
+        run: |
+          cargo build --locked --release
+          status=0
+          target/release/grant-workpaper --input examples/two-grants --output "$RUNNER_TEMP/grant-example" || status=$?
+          # The fabricated example retains review items, which exit 2.
+          test "$status" -eq 2
+          test -f "$RUNNER_TEMP/grant-example/workpaper.json"
+
   standard-library-gates:
-    needs: [changes, lint, verify, verify-windows]
+    needs: [changes, lint, verify, verify-windows, rust]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

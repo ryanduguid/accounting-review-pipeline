@@ -70,7 +70,7 @@ def project_evidence(project):
         raise ValueError(f"Missing authoritative lockfile: {lock}")
     paths = git_output(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
     # Hash source and fixtures only. Never read credentials or local environment files.
-    extensions = {".py", ".toml", ".lock", ".json", ".csv", ".yaml", ".yml", ".md", ".in", ".txt"}
+    extensions = {".py", ".rs", ".toml", ".lock", ".json", ".csv", ".yaml", ".yml", ".md", ".in", ".txt"}
     hashes = {}
     for name in sorted(set(paths)):
         path = Path(name)
@@ -117,6 +117,8 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
             raise ValueError("Fresh environments must be outside source checkouts")
     if shutil.which("uv") is None:
         raise ValueError("Install uv before running the locked workflow")
+    if "grants" in required and shutil.which("cargo") is None:
+        raise ValueError("Install Rust (cargo) before running the grant workflow")
     if "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
         raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
     return {"projects": projects, "output": output, "environment_root": environment_root}
@@ -136,9 +138,10 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         environment_root.mkdir(parents=True)
     calls = []
 
-    def execute(owner, arguments, expected=0, kind="workflow"):
+    def execute(owner, arguments, expected=0, kind="workflow", runner=None):
         project = projects[owner]
-        command = ["uv", "run", "--project", str(project), "--locked", "--python", "3.12", "python", *map(str, arguments)]
+        runner = runner or ["uv", "run", "--project", str(project), "--locked", "--python", "3.12", "python"]
+        command = [*runner, *map(str, arguments)]
         # RTK is optional for users. Preserve exact JSON when it is installed locally.
         if shutil.which("rtk"):
             command = ["rtk", "proxy", *command]
@@ -211,7 +214,9 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
                 (target / "project-cash.json").write_text(forecast, encoding="utf-8")
         if workflow in {"all", "grant-cash"}:
             grant = output / "grants"
-            execute("grants", ["grant_workpaper.py", "--input", "examples/two-grants", "--output", grant], 2)
+            # The grant workpaper is a Rust binary, built from its locked Cargo.lock.
+            execute("grants", ["--input", "examples/two-grants", "--output", grant], 2,
+                    runner=["cargo", "run", "--locked", "--release", "--quiet", "--bin", "grant-workpaper", "--"])
             workpaper = grant / "workpaper.json"
             digest = hashlib.sha256(workpaper.read_bytes()).hexdigest()
             save("grant-cash.json", execute("fpa", ["examples/restricted-cash/grant_cash.py", "--workpaper", workpaper, "--workpaper-sha256", digest]))

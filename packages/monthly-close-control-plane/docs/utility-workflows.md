@@ -13,7 +13,8 @@ pipeline checkout:
 python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
-The setup command needs Python 3.11 or later, Git and uv on PATH. It clones the
+The setup command needs Python 3.11 or later, Git, uv and cargo on PATH; cargo
+builds the Rust grant workpaper from its locked `Cargo.lock`. It clones the
 two companions at `main`, uses the enclosing pipeline checkout for the close
 controls, the runner and the grant workpapers, creates isolated environments and
 runs every joined example. The workspace must be new and outside existing Git checkouts.
