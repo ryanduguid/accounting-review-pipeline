@@ -34,7 +34,7 @@ fn sum(values: impl Iterator<Item = Decimal>) -> Decimal {
 /// Every journal must have sum(Debits) == sum(Credits) and a zero net amount.
 fn journals_balanced(samples: &Path) -> Result<(), String> {
     let mut journals: BTreeMap<String, Vec<Row>> = BTreeMap::new();
-    for row in csv_rows(&samples.join("sample-general-ledger.csv")) {
+    for row in csv_rows_text(&samples.join("sample-general-ledger.csv")) {
         journals.entry(row["JournalID"].clone()).or_default().push(row);
     }
     if journals.is_empty() {
@@ -59,11 +59,11 @@ fn journals_balanced(samples: &Path) -> Result<(), String> {
 
 /// Each bilateral pair balances separately for its balance sheet and P&L legs.
 fn intercompany_matched(samples: &Path) -> Result<(), String> {
-    let classes: HashMap<String, String> = csv_rows(&samples.join("sample-chart-of-accounts.csv"))
+    let classes: HashMap<String, String> = csv_rows_text(&samples.join("sample-chart-of-accounts.csv"))
         .into_iter()
         .map(|row| (row["AccountCode"].clone(), row["Class"].clone()))
         .collect();
-    let rows: Vec<_> = csv_rows(&samples.join("sample-general-ledger.csv"))
+    let rows: Vec<_> = csv_rows_text(&samples.join("sample-general-ledger.csv"))
         .into_iter()
         .filter(|row| row.value("IsIntercompany") == Some("TRUE"))
         .collect();
@@ -119,7 +119,7 @@ fn general_ledger_journals_strictly_balanced() {
 #[test]
 fn chart_of_accounts_uniqueness() {
     let mut codes = BTreeSet::new();
-    for row in csv_rows(&samples().join("sample-chart-of-accounts.csv")) {
+    for row in csv_rows_text(&samples().join("sample-chart-of-accounts.csv")) {
         assert!(
             codes.insert(row["AccountCode"].clone()),
             "Duplicate account code: {}",
@@ -138,7 +138,7 @@ fn intercompany_transactions_match_across_group() {
 #[test]
 fn pair_oracle_rejects_a_missing_balanced_counterparty() {
     let text = read(&samples().join("sample-general-ledger.csv"));
-    let records = csv_records(&samples().join("sample-general-ledger.csv"));
+    let records = parse_csv(&read(&samples().join("sample-general-ledger.csv")));
     let header = &records[0];
     let column = |name: &str| header.iter().position(|h| h == name).unwrap();
     let target = records[1..]

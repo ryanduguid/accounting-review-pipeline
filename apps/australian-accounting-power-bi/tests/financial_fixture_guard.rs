@@ -7,6 +7,7 @@ mod common;
 use std::fs;
 use std::io::{self, Read};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -46,26 +47,46 @@ fn unknown_account_is_refused_before_model_connection() {
 }
 
 /// The child's exit status and stderr, or `None` after killing it at `limit`.
+///
+/// Like `subprocess.run(..., timeout=...)` with captured output, the limit covers both
+/// the child's exit and the end of its pipes, which a descendant can hold open after the
+/// child itself has exited.
 fn within(mut child: Child, limit: Duration) -> Option<(ExitStatus, String)> {
+    let deadline = Instant::now() + limit;
+    let (sender, receiver) = mpsc::channel();
     let mut stderr = child.stderr.take().expect("piped stderr");
-    let reader = thread::spawn(move || {
+    thread::spawn(move || {
         let mut text = String::new();
-        stderr.read_to_string(&mut text).map(|_| text).unwrap_or_default()
+        let _ = stderr.read_to_string(&mut text);
+        let _ = sender.send(text);
     });
     let mut stdout = child.stdout.take().expect("piped stdout");
     thread::spawn(move || io::copy(&mut stdout, &mut io::sink()));
-    let started = Instant::now();
-    loop {
+    let status = loop {
         if let Some(status) = child.try_wait().expect("child status") {
-            return Some((status, reader.join().expect("stderr reader")));
+            break Some(status);
         }
-        if started.elapsed() >= limit {
-            let _ = child.kill();
-            let _ = child.wait();
-            return None;
+        if Instant::now() >= deadline {
+            break None;
         }
         thread::sleep(Duration::from_millis(50));
+    };
+    let stderr = status.and_then(|_| {
+        receiver
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .ok()
+    });
+    if let (Some(status), Some(stderr)) = (status, stderr) {
+        return Some((status, stderr));
     }
+    // taskkill /T also ends descendants still attached to the child; then reap the child.
+    let _ = Command::new("taskkill")
+        .args(["/T", "/F", "/PID"])
+        .arg(child.id().to_string())
+        .output();
+    let _ = child.kill();
+    let _ = child.wait();
+    None
 }
 
 #[test]
@@ -78,5 +99,28 @@ fn the_deadline_stops_a_hung_guard() {
         .expect("Windows PowerShell");
     let started = Instant::now();
     assert!(within(child, Duration::from_secs(1)).is_none());
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+/// A descendant that inherits stderr and outlives the child must not hold the test
+/// past its deadline.
+#[test]
+fn the_deadline_covers_a_descendant_holding_stderr() {
+    let child = Command::new("cmd")
+        .args([
+            "/C",
+            "start",
+            "/B",
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Start-Sleep -Seconds 20",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("cmd");
+    let started = Instant::now();
+    assert!(within(child, Duration::from_secs(2)).is_none());
     assert!(started.elapsed() < Duration::from_secs(10));
 }

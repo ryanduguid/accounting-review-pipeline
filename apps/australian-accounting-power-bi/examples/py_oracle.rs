@@ -38,7 +38,10 @@ fn object(value: &Value) -> Object {
             let datum = match item {
                 Value::String(text) => Datum::Text(text.clone()),
                 Value::Bool(flag) => Datum::Bool(*flag),
-                other => Datum::Int(other.as_i64().expect("an integer")),
+                Value::Null => Datum::None,
+                other => other
+                    .as_i64()
+                    .map_or_else(|| Datum::Float(other.as_f64().expect("a number")), Datum::Int),
             };
             let name = PROPERTIES
                 .iter()

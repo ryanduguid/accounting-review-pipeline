@@ -51,7 +51,7 @@ fn almost_equal(a: &Decimal, b: &Decimal) -> bool {
 }
 
 fn payroll_rows() -> Vec<Row> {
-    csv_rows(&samples().join("sample-payroll-super.csv"))
+    csv_rows_text(&samples().join("sample-payroll-super.csv"))
 }
 
 /// National business days after `start`, up to and including `end`.

@@ -271,6 +271,12 @@ pub fn csv_rows(path: &Path) -> Vec<Row> {
     dict_rows(&String::from_utf8(bytes).expect("UTF-8 fixture")).1
 }
 
+/// `csv.DictReader` rows of a fixture opened in text mode (no `newline=""`), whose
+/// universal newlines turn `\r` and `\r\n` into `\n` even inside quoted fields.
+pub fn csv_rows_text(path: &Path) -> Vec<Row> {
+    dict_rows(&read(path)).1
+}
+
 /// `csv.reader` rows of a committed fixture, header included.
 pub fn csv_records(path: &Path) -> Vec<Vec<String>> {
     let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));

@@ -19,6 +19,7 @@ import random
 import re
 import subprocess
 import sys
+import warnings
 from typing import Any
 
 CSV_TOKENS = ['a', 'b', ',', '"', '""', '\r', '\n', '\r\n', ' ', '1', 'x"y', '","', '\t']
@@ -29,13 +30,23 @@ CSV_DIRECTED = ["", "\n", "a,b\n\n", "a,\n", '"a\nb",c', '"unterminated', 'x"y,z
 DATE_DIRECTED = ["2026-07-29", "20260729", "2026-W31-3", "2026W313", "2026-W31", "2026W31", "2026-W53-1",
                  "2020-W53-7", "2026-02-29", "2024-02-29", "0000-01-01", "9999-12-31", "2026-1-015",
                  "2026101599", "2026-10-1x", "2026W31-3", "2026-W313", "2026-W00-1", "2026-W01-8", "٢026-01-01"]
-PROPERTIES = ["A", "N", "F", "Name"]
+PROPERTIES = ["Name", "FormatString", "DataType", "IsHidden", "Description", "CrossFilteringBehavior",
+              "Precedence", "A", "N", "F"]
 BPA_DIRECTED = [
     'A == "never" && string.IsNullOrEmpty(Unknown)', "N > 2 || Unknown == 1", "F || Unknown",
     '!(F || (A == "y" && Unknown < 3))', "string.IsNullOrEmpty(FormatString) && DataType <> \"String\"",
     "!IsHidden && string.IsNullOrEmpty(Description)", 'CrossFilteringBehavior <> "OneDirection"',
     "Precedence <= 0", "A < 3", "N == F", "!N != 1", "(A", "A &&", "N >= 3 >= 1",
+    "Precedence < 0.5", "False", "True && N", "None == None", "A == None", 'A == "x!y"', 'A == "a&&b"',
+    '"a" "b" == A', 'A == "q\\"t"', "A == 'x'", "-N < 0", "Precedence <= -1", "N == 1.0", "+F == 0",
+    "N < .5e1", "N == 1_0", "N == 007", "N.Length > 1", "A in B", "1abc",
+    'A == "a\\tb"', "A == 'x\\101'", 'A == "\\u0041"', 'A == "\\U00000041"', 'A == "\\x4"', 'A == "\\q"',
+    'A == "\\a\\b\\f\\v"', 'A == "unterminated', "A == 'mixed\"quotes'", 'A == "x" "y" \'z\'', 'A == "\\x41"', "F == 0 == N",
 ]
+
+
+# eval of an unknown string escape warns; the value is what matters here.
+warnings.simplefilter("ignore", SyntaxWarning)
 
 
 def python_evaluate(expression: str, obj: dict[str, object]) -> bool:
@@ -74,10 +85,11 @@ def expected(request: dict[str, Any]) -> Any:
 
 def random_expression(rng: random.Random, depth: int = 0) -> str:
     if depth > 2 or rng.random() < 0.3:
-        atom = rng.choice(["A", "N", "F", "Name", "Unknown", '"x"', '""', "0", "3", "string.IsNullOrEmpty(A)",
-                           "string.IsNullOrEmpty(Unknown)"])
+        atom = rng.choice(PROPERTIES + ["Unknown", '"x"', '""', "0", "3", "0.5", "-1", "True", "False", "None",
+                                        "string.IsNullOrEmpty(A)", "string.IsNullOrEmpty(Unknown)",
+                                        "string.IsNullOrEmpty(Description)", '"String"', '"OneDirection"'])
         if rng.random() < 0.4:
-            other = rng.choice(["A", "N", "F", "Unknown", '"x"', "3", "0"])
+            other = rng.choice(PROPERTIES + ["Unknown", '"x"', "3", "0", "0.0", "2.5", "-3", "True", "None"])
             atom = f"{atom} {rng.choice(['==', '<>', '!=', '<', '<=', '>', '>='])} {other}"
         return atom
     choice = rng.random()
@@ -89,8 +101,9 @@ def random_expression(rng: random.Random, depth: int = 0) -> str:
 
 
 def random_object(rng: random.Random) -> dict[str, object]:
-    values: list[object] = ["", "x", "y", 0, 3, -1, True, False]
-    return {name: rng.choice(values) for name in PROPERTIES if rng.random() < 0.85}
+    values: list[object] = ["", "x", "y", "String", "OneDirection", "BothDirections", "$#,##0.00",
+                            0, 3, -1, 10, 0.5, 2.5, True, False, None]
+    return {name: rng.choice(values) for name in PROPERTIES if rng.random() < 0.9}
 
 
 def requests(rng: random.Random, cases: int) -> list[dict[str, Any]]:

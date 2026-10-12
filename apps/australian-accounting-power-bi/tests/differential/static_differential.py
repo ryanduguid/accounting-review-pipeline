@@ -9,7 +9,8 @@ scratch tree, applies one or two seeded mutations to the committed artefacts
 runs the seven Python suites and the matching Rust test binaries against that
 tree. Besides random damage, a third of the mutations rewrite a value in a form
 Python reads the same way: decimals in another constructor spelling, dates in
-compact or ISO week form, JSON integers as floats, a leading blank CSV line, and
+compact or ISO week form, JSON integers as floats, a leading blank CSV line, a row
+repeated with a quoted CR in one copy and LF or CRLF in the other, and
 BPA expressions extended with an undefined property that short-circuiting skips.
 It reports every case where a test passes in one implementation and fails in the
 other.
@@ -214,12 +215,27 @@ def skipped_property(text: str, rng: random.Random) -> str:
     return json.dumps(rules, indent=2) + "\n"
 
 
+def quoted_newlines(text: str, rng: random.Random) -> str:
+    """Two copies of one data row whose first field holds a quoted line break, one as CR
+    and one as LF or CRLF: text-mode readers see the same value twice, raw readers two."""
+    lines = text.split("\n")
+    rows = [index for index, line in enumerate(lines[1:], 1) if line]
+    if not rows:
+        return text
+    fields = lines[rng.choice(rows)].split(",")
+    head = fields[0].strip('"')
+    copies = [",".join(['"' + head[:1] + breaker + head[1:] + '"'] + fields[1:]) for breaker in ("\r", rng.choice(("\n", "\r\n")))]
+    return text.rstrip("\n") + "\n" + "\n".join(copies) + "\n"
+
+
 def equivalent(path: Path, text: str, rng: random.Random) -> tuple[str, str]:
     """A rewrite Python reads as the same value, where the file has one."""
     if path.name == "model_bpa_rules.json":
         return skipped_property(text, rng), "skipped property"
     if path.suffix == ".csv":
-        choice = rng.randrange(3)
+        choice = rng.randrange(4)
+        if choice == 3:
+            return quoted_newlines(text, rng), "quoted line breaks"
         if choice == 0:
             return "\n" + text, "leading blank line"
         if choice == 1:
