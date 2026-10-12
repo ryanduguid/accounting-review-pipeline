@@ -96,7 +96,7 @@ CANONICAL_COLUMNS = (
 )
 
 # "Business Bank Account (090)" -> name + code
-ACCOUNT_PATTERN = re.compile(r"^(?P<name>.*?)\s*\((?P<code>[^()]+)\)\s*$")
+ACCOUNT_PATTERN = re.compile(r"^(?P<name>(?:.*?\S)??)\s*+\((?P<code>[^()]+)\)\s*$")
 
 
 def is_account_code(value: str) -> bool:
