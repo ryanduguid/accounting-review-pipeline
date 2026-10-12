@@ -8,6 +8,7 @@
 [![SonarCloud](https://img.shields.io/sonar/quality_gate/ryanduguid_accounting-review-pipeline?server=https%3A%2F%2Fsonarcloud.io&label=SonarCloud&labelColor=000000)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
 [![VirusTotal](https://img.shields.io/badge/VirusTotal-release%20files%20scanned-66023C?labelColor=000000&logo=virustotal&logoColor=FFFFF0)](https://github.com/ryanduguid/accounting-review-pipeline/releases)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ryanduguid/accounting-review-pipeline/badge)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 
 Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
