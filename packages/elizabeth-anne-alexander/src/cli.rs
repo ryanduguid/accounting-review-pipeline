@@ -1,6 +1,7 @@
 //! The command line (`cli.py`), including the argparse behaviour it relied on:
 //! usage and help text, option abbreviations, and exit code 2 for usage errors.
 
+use crate::argtheme::{self, Stream, Theme};
 use crate::textwrap::wrap;
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -75,24 +76,41 @@ fn width() -> usize {
     usize::try_from(crate::termsize::columns() - 2).unwrap_or(0)
 }
 
-/// `HelpFormatter._format_usage` for a parser whose positionals are given as parts.
-fn usage(prog: &str, opt_parts: &[String], pos_parts: &[String]) -> String {
+/// A usage part or help header: its plain text, which sets every width, and
+/// the coloured text argparse prints.
+#[derive(Clone)]
+struct Part {
+    plain: String,
+    coloured: String,
+}
+
+/// `HelpFormatter._format_usage` for a parser whose usage parts are given.
+fn usage(prog: &str, opt_parts: &[Part], pos_parts: &[Part], t: &Theme) -> String {
     let prefix = "usage: ";
     let text_width = width();
-    let mut all = vec![prog.to_string()];
-    all.extend(opt_parts.iter().cloned());
-    all.extend(pos_parts.iter().cloned());
-    let flat = all.join(" ");
-    if prefix.len() + flat.chars().count() <= text_width {
-        return format!("{prefix}{flat}");
-    }
-    let get_lines = |parts: &[String], indent: &str, with_prefix: bool| {
-        usage_lines(parts, indent, with_prefix.then_some(prefix.len()), text_width)
+    let plain: Vec<&str> = opt_parts.iter().chain(pos_parts).map(|p| p.plain.as_str()).collect();
+    let rest = if prefix.len() + pytext::py_len(&format!("{prog} {}", plain.join(" "))) <= text_width {
+        let coloured: Vec<&str> = opt_parts.iter().chain(pos_parts).map(|p| p.coloured.as_str()).collect();
+        format!(" {}", coloured.join(" "))
+    } else {
+        wrapped_usage(prog, opt_parts, pos_parts, text_width)
     };
-    let lines = if (prefix.len() + prog.chars().count()) as f64 <= 0.75 * text_width as f64 {
-        let indent = " ".repeat(prefix.len() + prog.chars().count() + 1);
-        let mut head = vec![prog.to_string()];
-        if !opt_parts.is_empty() {
+    format!("{}{prefix}{}{}{prog}{}{rest}", t.usage, t.reset, t.prog, t.reset)
+}
+
+/// The wrapped usage after the program name, as `_format_usage` lays it out.
+fn wrapped_usage(prog: &str, opt_parts: &[Part], pos_parts: &[Part], text_width: usize) -> String {
+    let prefix_len = "usage: ".len();
+    let get_lines = |parts: &[Part], indent: &str, with_prefix: bool| {
+        usage_lines(parts, indent, with_prefix.then_some(prefix_len), text_width)
+    };
+    if (prefix_len + pytext::py_len(prog)) as f64 <= 0.75 * text_width as f64 {
+        let indent = " ".repeat(prefix_len + pytext::py_len(prog) + 1);
+        let mut head = vec![Part {
+            plain: prog.to_string(),
+            coloured: prog.to_string(),
+        }];
+        let lines = if !opt_parts.is_empty() {
             head.extend(opt_parts.iter().cloned());
             let mut lines = get_lines(&head, &indent, true);
             lines.extend(get_lines(pos_parts, &indent, false));
@@ -100,38 +118,35 @@ fn usage(prog: &str, opt_parts: &[String], pos_parts: &[String]) -> String {
         } else {
             head.extend(pos_parts.iter().cloned());
             get_lines(&head, &indent, true)
-        }
-    } else {
-        let indent = " ".repeat(prefix.len());
-        let mut parts = opt_parts.to_vec();
-        parts.extend(pos_parts.iter().cloned());
-        let mut lines = get_lines(&parts, &indent, false);
-        if lines.len() > 1 {
-            lines = get_lines(opt_parts, &indent, false);
-            lines.extend(get_lines(pos_parts, &indent, false));
-        }
-        let mut with_prog = vec![prog.to_string()];
-        with_prog.extend(lines);
-        with_prog
-    };
-    format!("{prefix}{}", lines.join("\n"))
+        };
+        return lines.join("\n")[prog.len()..].to_string();
+    }
+    let indent = " ".repeat(prefix_len);
+    let all: Vec<Part> = opt_parts.iter().chain(pos_parts).cloned().collect();
+    let mut lines = get_lines(&all, &indent, false);
+    if lines.len() > 1 {
+        lines = get_lines(opt_parts, &indent, false);
+        lines.extend(get_lines(pos_parts, &indent, false));
+    }
+    format!("\n{}", lines.join("\n"))
 }
 
 /// `_format_usage`'s `get_lines`: wrap parts under `indent`; with a prefix
 /// length, the first line starts after the prefix instead of the indent.
-fn usage_lines(parts: &[String], indent: &str, prefix_len: Option<usize>, text_width: usize) -> Vec<String> {
+fn usage_lines(parts: &[Part], indent: &str, prefix_len: Option<usize>, text_width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line: Vec<&str> = Vec::new();
     let indent_length = indent.len();
     let mut line_len = prefix_len.unwrap_or(indent_length) - 1;
     for part in parts {
-        if line_len + 1 + part.chars().count() > text_width && !line.is_empty() {
+        let part_len = pytext::py_len(&part.plain);
+        if line_len + 1 + part_len > text_width && !line.is_empty() {
             lines.push(format!("{indent}{}", line.join(" ")));
             line.clear();
             line_len = indent_length - 1;
         }
-        line.push(part);
-        line_len += part.chars().count() + 1;
+        line.push(&part.coloured);
+        line_len += part_len + 1;
     }
     if !line.is_empty() {
         lines.push(format!("{indent}{}", line.join(" ")));
@@ -142,7 +157,7 @@ fn usage_lines(parts: &[String], indent: &str, prefix_len: Option<usize>, text_w
     lines
 }
 
-type Row<'a> = (usize, String, Option<&'a str>);
+type Row<'a> = (usize, Part, Option<&'a str>);
 
 /// The rows of one help section; argparse aligns help text across every section of a parser.
 fn action_rows(rows: &[Row], all: &[Row]) -> String {
@@ -150,7 +165,7 @@ fn action_rows(rows: &[Row], all: &[Row]) -> String {
     let max_help_position = 24.min(width.saturating_sub(20).max(4));
     let action_max = all
         .iter()
-        .map(|(indent, header, _)| indent + header.chars().count())
+        .map(|(indent, header, _)| indent + pytext::py_len(&header.plain))
         .max()
         .unwrap_or(0);
     let help_position = (action_max + 2).min(max_help_position);
@@ -159,19 +174,25 @@ fn action_rows(rows: &[Row], all: &[Row]) -> String {
     for (indent, header, help) in rows {
         let action_width = help_position.saturating_sub(indent + 2);
         let pad = " ".repeat(*indent);
-        match help {
-            None => out.push_str(&format!("{pad}{header}\n")),
-            Some(help) => {
-                let lines = wrap(help, help_width);
-                if header.chars().count() <= action_width {
-                    out.push_str(&format!("{pad}{header:<action_width$}  {}\n", lines[0]));
-                } else {
-                    out.push_str(&format!("{pad}{header}\n{}{}\n", " ".repeat(help_position), lines[0]));
-                }
-                for line in &lines[1..] {
-                    out.push_str(&format!("{}{line}\n", " ".repeat(help_position)));
-                }
-            }
+        let Some(help) = help else {
+            out.push_str(&format!("{pad}{}\n", header.coloured));
+            continue;
+        };
+        let lines = wrap(help, help_width);
+        if pytext::py_len(&header.plain) <= action_width {
+            // argparse pads the plain header, then swaps the coloured one in.
+            let padded = format!("{pad}{:<action_width$}  {}\n", header.plain, lines[0]);
+            out.push_str(&padded.replacen(&header.plain, &header.coloured, 1));
+        } else {
+            out.push_str(&format!(
+                "{pad}{}\n{}{}\n",
+                header.coloured,
+                " ".repeat(help_position),
+                lines[0]
+            ));
+        }
+        for line in &lines[1..] {
+            out.push_str(&format!("{}{line}\n", " ".repeat(help_position)));
         }
     }
     out
@@ -181,44 +202,103 @@ fn choices() -> String {
     format!("{{{}}}", COMMANDS.iter().map(|c| c.name).collect::<Vec<_>>().join(","))
 }
 
-fn main_usage(prog: &str) -> String {
-    // The subparsers action is one usage part: "{choices} ...".
-    usage(prog, &["[-h]".into()], &[format!("{} ...", choices())])
+fn coloured(text: &str, colour: &str, t: &Theme) -> Part {
+    Part {
+        plain: text.to_string(),
+        coloured: format!("{colour}{text}{}", t.reset),
+    }
 }
 
-fn main_help(prog: &str) -> String {
-    let mut positional: Vec<Row> = vec![(2, choices(), None)];
-    positional.extend(COMMANDS.iter().map(|c| (4, c.name.to_string(), Some(c.help))));
-    let options: Vec<Row> = vec![(2, "-h, --help".into(), Some(HELP_HELP))];
-    let all: Vec<Row> = positional.iter().chain(&options).cloned().collect();
-    let (positional, options) = (action_rows(&positional, &all), action_rows(&options, &all));
-    let description = wrap(DESCRIPTION, width().max(11)).join("\n");
-    format!(
-        "{}\n\n{description}\n\npositional arguments:\n{positional}\noptions:\n{options}",
-        main_usage(prog)
+/// `-h, --help` as `_format_action_invocation` colours it.
+fn help_header(t: &Theme) -> Part {
+    Part {
+        plain: "-h, --help".into(),
+        coloured: format!("{}-h{}, {}--help{}", t.short_option, t.reset, t.long_option, t.reset),
+    }
+}
+
+fn main_usage(prog: &str, t: &Theme) -> String {
+    let help = Part {
+        plain: "[-h]".into(),
+        coloured: format!("[{}-h{}]", t.summary_short_option, t.reset),
+    };
+    // The subparsers action is one usage part: "{choices} ...".
+    usage(
+        prog,
+        &[help],
+        &[coloured(&format!("{} ...", choices()), t.summary_action, t)],
+        t,
     )
 }
 
-fn command_usage(prog: &str, command: &Command) -> String {
-    let mut parts = vec!["[-h]".to_string()];
-    for option in command.options {
-        let part = format!("{} {}", option.flag, option.dest);
-        parts.push(if option.required { part } else { format!("[{part}]") });
-    }
-    usage(&format!("{prog} {}", command.name), &parts, &[])
+fn main_help(prog: &str, t: &Theme) -> String {
+    let mut positional: Vec<Row> = vec![(2, coloured(&choices(), t.action, t), None)];
+    positional.extend(
+        COMMANDS
+            .iter()
+            .map(|c| (4, coloured(c.name, t.action, t), Some(c.help))),
+    );
+    let options: Vec<Row> = vec![(2, help_header(t), Some(HELP_HELP))];
+    let all: Vec<Row> = positional.iter().chain(&options).cloned().collect();
+    let (positional, options) = (action_rows(&positional, &all), action_rows(&options, &all));
+    let description = wrap(DESCRIPTION, width().max(11)).join("\n");
+    let heading = |text: &str| format!("{}{text}:{}", t.heading, t.reset);
+    format!(
+        "{}\n\n{description}\n\n{}\n{positional}\n{}\n{options}",
+        main_usage(prog, t),
+        heading("positional arguments"),
+        heading("options")
+    )
 }
 
-fn command_help(prog: &str, command: &Command) -> String {
-    let mut rows = vec![(2, "-h, --help".to_string(), Some(HELP_HELP))];
-    rows.extend(
-        command
-            .options
-            .iter()
-            .map(|o| (2, format!("{} {}", o.flag, o.dest), o.help)),
-    );
+fn command_usage(prog: &str, command: &Command, t: &Theme) -> String {
+    let mut parts = vec![Part {
+        plain: "[-h]".into(),
+        coloured: format!("[{}-h{}]", t.summary_short_option, t.reset),
+    }];
+    for option in command.options {
+        let plain = format!("{} {}", option.flag, option.dest);
+        let colour = format!(
+            "{}{} {}{}{}",
+            t.summary_long_option, option.flag, t.summary_label, option.dest, t.reset
+        );
+        parts.push(if option.required {
+            Part {
+                plain,
+                coloured: colour,
+            }
+        } else {
+            Part {
+                plain: format!("[{plain}]"),
+                coloured: format!("[{colour}]"),
+            }
+        });
+    }
+    usage(&format!("{prog} {}", command.name), &parts, &[], t)
+}
+
+fn command_help(prog: &str, command: &Command, t: &Theme) -> String {
+    let mut rows = vec![(2, help_header(t), Some(HELP_HELP))];
+    rows.extend(command.options.iter().map(|o| {
+        let plain = format!("{} {}", o.flag, o.dest);
+        let colour = format!(
+            "{}{}{} {}{}{}",
+            t.long_option, o.flag, t.reset, t.label, o.dest, t.reset
+        );
+        (
+            2,
+            Part {
+                plain,
+                coloured: colour,
+            },
+            o.help,
+        )
+    }));
     format!(
-        "{}\n\noptions:\n{}",
-        command_usage(prog, command),
+        "{}\n\n{}options:{}\n{}",
+        command_usage(prog, command, t),
+        t.heading,
+        t.reset,
         action_rows(&rows, &rows)
     )
 }
@@ -345,7 +425,7 @@ fn classify<'a>(token: &str, flags: &[&'a str]) -> Result<Class<'a>, String> {
     if let Some(exact) = flags.iter().find(|f| **f == token) {
         return Ok(Class::Flag(exact, None));
     }
-    if token.chars().count() == 1 {
+    if pytext::py_len(token) == 1 {
         return Ok(Class::Positional);
     }
     if let Some((name, value)) = token.split_once('=')
@@ -422,7 +502,7 @@ fn help_or_error(flag: &str, explicit: Option<(String, bool)>) -> Result<(), Str
 
 fn main_exit(prog: &str, message: String) -> Exit {
     Exit::Error {
-        usage: main_usage(prog),
+        usage: main_usage(prog, argtheme::theme(Stream::Stderr)),
         prog: prog.to_string(),
         message,
     }
@@ -430,7 +510,7 @@ fn main_exit(prog: &str, message: String) -> Exit {
 
 fn sub_exit(prog: &str, command: &Command, message: String) -> Exit {
     Exit::Error {
-        usage: command_usage(prog, command),
+        usage: command_usage(prog, command, argtheme::theme(Stream::Stderr)),
         prog: format!("{prog} {}", command.name),
         message,
     }
@@ -495,7 +575,7 @@ fn parse_command(prog: &str, args: &[String], extras: &mut Vec<String>) -> Resul
             match classify(token, &["-h", "--help"]).map_err(|m| main_exit(prog, m))? {
                 Class::Flag(flag, explicit) => {
                     help_or_error(flag, explicit).map_err(|m| main_exit(prog, m))?;
-                    return Err(Exit::Help(main_help(prog)));
+                    return Err(Exit::Help(main_help(prog, argtheme::theme(Stream::Stdout))));
                 }
                 Class::UnknownOption => {
                     extras.push(token.clone());
@@ -553,7 +633,7 @@ fn parse_options(
         };
         if flag == "-h" || flag == "--help" {
             help_or_error(flag, explicit).map_err(sub_error)?;
-            return Err(Exit::Help(command_help(prog, command)));
+            return Err(Exit::Help(command_help(prog, command, argtheme::theme(Stream::Stdout))));
         }
         let value = match explicit {
             Some((value, _)) => value,
@@ -716,7 +796,12 @@ pub fn main(args: &[String], env: &Env, stdout: &mut dyn Write, stderr: &mut dyn
             return 0;
         }
         Err(Exit::Error { usage, prog, message }) => {
-            let _ = write!(stderr, "{usage}\n{prog}: error: {message}\n");
+            let t = argtheme::theme(Stream::Stderr);
+            let _ = write!(
+                stderr,
+                "{usage}\n{prog}: {}error:{} {}{message}{}\n",
+                t.error, t.reset, t.message, t.reset
+            );
             return 2;
         }
     };
@@ -739,9 +824,14 @@ mod tests {
 
     #[test]
     fn usage_wraps_like_argparse_at_80_columns() {
+        // Python 3.15 with FORCE_COLOR=1 and 80 columns.
+        assert_eq!(
+            main_usage("elizabeth-anne-alexander", &argtheme::COLOURED),
+            "\x1b[1;34musage: \x1b[0m\x1b[1;35melizabeth-anne-alexander\x1b[0m [\x1b[32m-h\x1b[0m] \x1b[32m{evaluate,validate-review} ...\x1b[0m"
+        );
         let evaluate = &COMMANDS[0];
         assert_eq!(
-            command_usage("elizabeth-anne-alexander", evaluate),
+            command_usage("elizabeth-anne-alexander", evaluate, &argtheme::PLAIN),
             "usage: elizabeth-anne-alexander evaluate [-h] --context CONTEXT\n                                         --request REQUEST --policy POLICY\n                                         --out OUT"
         );
     }

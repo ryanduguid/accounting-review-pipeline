@@ -3,6 +3,7 @@
 //! The modules prefixed `py` reproduce the CPython behaviour the released
 //! Python package depended on, so outputs, digests and refusals stay identical.
 
+pub mod argtheme;
 pub mod cli;
 pub mod decimal;
 pub mod gateway;
