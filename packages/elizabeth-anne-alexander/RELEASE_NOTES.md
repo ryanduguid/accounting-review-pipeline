@@ -11,7 +11,8 @@ Differences from 0.2.6:
 
 - The policy and sample files are built into the binary. Messages that printed the installed package directory now print `<bundled>`, for example `context must stay within <bundled>/samples.` A relative path that climbs above the bundled data is reported as missing, and an absolute path can no longer name a bundled file.
 - Where Python versions disagreed, the binary follows Python 3.15: command-line errors suggest a close subcommand ("maybe you meant"), a `24:00` time is accepted as the next midnight, output is UTF-8 on Windows, and Unicode rules come from Python 3.15 (Unicode 17).
-- Where 0.2.6 stopped with a Python traceback (exit `1`), the binary exits `1` with one `internal error:` line: a JSON integer over 4,300 digits, JSON nested more than 10,000 levels deep, and a zero amount whose fixed-point form would need over 1 GiB of digits.
+- Where 0.2.6 stopped with a Python traceback (exit `1`), the binary exits `1` with one `internal error:` line: a JSON integer over 4,300 digits, and a zero amount whose fixed-point form would need over 1 GiB of digits.
+- JSON nested more than 10,000 levels deep also exits `1` with one `internal error:` line. 0.2.6's nesting limit came from the C stack, so it varied by platform and stack size: under Python 3.15 it read about 13,800 nested arrays on Windows and 65,000 on Linux with an 8 MiB stack. Between 10,000 levels and that limit, 0.2.6 read the file and the binary stops.
 - Operating-system error text inside a refusal message (the part after the path) can be worded differently, particularly on Windows.
 
 
