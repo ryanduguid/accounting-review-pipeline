@@ -8,8 +8,11 @@ name: Standard-library components
 # settings) and its standard-library suite runs on the same Python matrix. The
 # grant workpaper itself is a Rust binary from 0.2.0; the rust job checks it on
 # Linux and Windows, whose exclusive-rename publication differs. The grant
-# application's Python suite also runs on Windows. The Power BI report also runs
-# Microsoft's PBIR validator once.
+# application's Python suite also runs on Windows. The Power BI application's
+# fixture generator and structural checks are a Rust crate that the same job
+# checks; its review workflow and that workflow's tests stay Python until the
+# two producers it inspects are Rust. The Power BI report also runs Microsoft's
+# PBIR validator once.
 
 on:
   push:
@@ -178,9 +181,9 @@ jobs:
         run: python -B -m unittest discover -s tests -v
 
   rust:
-    # rust-toolchain.toml in the application directory pins the toolchain,
+    # rust-toolchain.toml in each application directory pins the toolchain,
     # which rustup installs on first use.
-    name: apps/grant-acquittal-workpapers / rust (${{ matrix.os }})
+    name: ${{ matrix.component }} / rust (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.run == 'true'
     permissions:
@@ -190,11 +193,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        component:
+          - apps/australian-accounting-power-bi
+          - apps/grant-acquittal-workpapers
         os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         shell: bash
-        working-directory: apps/grant-acquittal-workpapers
+        working-directory: ${{ matrix.component }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -206,7 +212,13 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Test
         run: cargo test --locked
+      - name: Regenerate the fixtures and require the committed bytes
+        if: matrix.component == 'apps/australian-accounting-power-bi'
+        run: |
+          cargo run --locked --release --bin generate-fixtures
+          git diff --exit-code -- samples
       - name: Run the bundled example from the release build
+        if: matrix.component == 'apps/grant-acquittal-workpapers'
         run: |
           cargo build --locked --release
           status=0

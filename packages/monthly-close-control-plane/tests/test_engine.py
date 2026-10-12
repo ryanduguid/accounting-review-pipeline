@@ -770,3 +770,31 @@ def test_totals_beyond_the_context_precision_are_refused_not_rounded(tmp_path, d
         ])
     with pytest.raises(ControlInputError, match="28-digit precision"):
         review_close(current_path=paths["current"], prior_path=paths["prior"])
+
+
+def test_subledger_account_missing_from_the_current_trial_balance_is_raised(tmp_path: Path) -> None:
+    subledger = tmp_path / "subledger.csv"
+    subledger.write_text(f"Tenant,AccountID,SubledgerBalance\n{TENANT},999,250.00\n", encoding="utf-8")
+    pack = review_close(**_variance_pair(tmp_path, "100000.00"), subledger_path=subledger)
+    (item,) = [row for row in pack.exceptions if row.control == "subledger_reconciliation"]
+    assert (item.tenant, item.account_id, item.prior_value) == (TENANT, "999", Decimal("250.00"))  # nosec B101: pytest outcome assertion
+    assert item.reason == "Supplied subledger balance has no matching current trial-balance account."  # nosec B101: pytest outcome assertion
+
+
+@pytest.mark.parametrize("field", ["equity_currency", "equity_currency_evidence"])
+def test_equity_currency_declaration_without_a_schedule_is_refused(tmp_path: Path, field: str) -> None:
+    with pytest.raises(ControlInputError, match="Equity currency declarations require an equity schedule"):
+        review_close(**_variance_pair(tmp_path, "100000.00"), **{field: "AUD"})
+
+
+@pytest.mark.parametrize("name", ["absolute_threshold", "percentage_threshold", "reconciliation_tolerance"])
+@pytest.mark.parametrize("value", ["-0.01", "NaN", "Infinity"])
+def test_thresholds_must_be_finite_and_non_negative(tmp_path: Path, name: str, value: str) -> None:
+    with pytest.raises(ValueError, match=f"{name} must be a finite non-negative decimal"):
+        review_close(**_variance_pair(tmp_path, "100000.00"), **{name: Decimal(value)})
+
+
+def test_percentage_change_of_a_signalling_nan_is_undefined() -> None:
+    from closecontrol.engine import _percent_change
+
+    assert _percent_change(Decimal("sNaN"), Decimal("1")) is None  # nosec B101: pytest outcome assertion

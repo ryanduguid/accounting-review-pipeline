@@ -319,3 +319,97 @@ def test_native_fixture_failures_preserve_handle_cleanup(files, monkeypatch, sta
         kernel.CloseHandle.assert_called_once_with(42)
         if stage == "attributes":
             kernel.GetFileAttributesW.assert_called_once()
+
+
+def emulated_windows(monkeypatch, attributes, error=0):
+    """Run ``_record_path``'s Windows branch on any platform with a fake kernel32.
+
+    *attributes* maps each queried path to what GetFileAttributesW returns.
+    Only the module's view of the platform changes, so nothing else in the
+    process is told it is on Windows.
+    """
+    get_attributes = Mock(side_effect=lambda path: attributes(Path(path)))
+    kernel = SimpleNamespace(GetFileAttributesW=get_attributes)
+    loader = Mock(return_value=kernel)
+    monkeypatch.setattr(cli, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(ctypes, "WinDLL", loader, raising=False)
+    monkeypatch.setattr(ctypes, "get_last_error", lambda: error, raising=False)
+    monkeypatch.setattr(ctypes, "WinError", lambda code: OSError(f"windows error {code}"),
+                        raising=False)
+    return loader, get_attributes
+
+
+def forbid_lstat(monkeypatch, *paths):
+    original = Path.lstat
+
+    def forbid(path, *args, **kwargs):
+        if path in paths:
+            pytest.fail("lstat ran after the entry attributes decided")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", forbid)
+
+
+@pytest.mark.parametrize("error", [2, 3])
+def test_emulated_missing_entries_are_accepted_without_lstat(tmp_path, monkeypatch, error):
+    record = tmp_path / "missing" / "record.disclosure.json"
+    loader, get_attributes = emulated_windows(monkeypatch, lambda _path: 0xFFFFFFFF, error)
+    forbid_lstat(monkeypatch, record, record.parent)
+    _checks.assertIsNone(cli._record_path(record))
+    loader.assert_called_once_with("kernel32", use_last_error=True)
+    _checks.assertEqual(get_attributes.call_args_list[0].args, (str(record),))
+
+
+def test_emulated_unknown_attribute_failure_is_raised(tmp_path, monkeypatch):
+    emulated_windows(monkeypatch, lambda _path: 0xFFFFFFFF, error=5)
+    with pytest.raises(OSError, match="windows error 5"):
+        cli._record_path(tmp_path / "record.disclosure.json")
+
+
+def test_emulated_reparse_point_is_refused_before_lstat(tmp_path, monkeypatch):
+    record = tmp_path / "record.disclosure.json"
+    record.write_bytes(b"{}")
+    emulated_windows(monkeypatch, lambda path: 0x400 if path == record else 0x10)
+    forbid_lstat(monkeypatch, record)
+    with pytest.raises(EvattError, match="must not use links"):
+        cli._record_path(record)
+
+
+def test_emulated_ordinary_attributes_fall_through_to_lstat(tmp_path, monkeypatch):
+    record = tmp_path / "record.disclosure.json"
+    record.write_bytes(b"{}")
+    emulated_windows(monkeypatch, lambda path: 0x80 if path == record else 0x10)
+    seen = []
+    original = Path.lstat
+
+    def watch(path, *args, **kwargs):
+        seen.append(path)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", watch)
+    _checks.assertIsNone(cli._record_path(record))
+    _checks.assertIn(record, seen)
+
+
+def test_other_platforms_never_load_kernel32(tmp_path, monkeypatch):
+    """Off Windows the entry attributes are not consulted, and a missing path is fine."""
+    loader = Mock(side_effect=AssertionError("kernel32 loaded off Windows"))
+    monkeypatch.setattr(cli, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(ctypes, "WinDLL", loader, raising=False)
+    _checks.assertIsNone(cli._record_path(tmp_path / "missing" / "record.disclosure.json"))
+    loader.assert_not_called()
+
+
+def test_a_record_linked_between_lstat_and_open_is_refused(tmp_path, monkeypatch):
+    """The descriptor is checked again, so a hard link added after lstat is caught."""
+    record = tmp_path / "record.disclosure.json"
+    record.write_bytes(b"{}")
+    original = os.fstat
+
+    def linked(descriptor):
+        status = original(descriptor)
+        return SimpleNamespace(st_mode=status.st_mode, st_nlink=2)
+
+    monkeypatch.setattr(cli.os, "fstat", linked)
+    with pytest.raises(EvattError, match="regular file with one link"):
+        cli._read_record(record)

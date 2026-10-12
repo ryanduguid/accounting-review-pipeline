@@ -28,11 +28,11 @@ authorship, source system, origin, time, or immutability.
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/elizabeth-anne-alexander/)
-[![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-5C2D91.svg?logo=rust&logoColor=white&labelColor=04001F)](rust-toolchain.toml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
-[![No network client](https://img.shields.io/badge/Network-No%20Client-5C2D91.svg?labelColor=04001F)](DATA-FLOW.md)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
+[![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/elizabeth-anne-alexander/)
+[![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-66023C?logo=rust&logoColor=white&labelColor=000000&style=flat-square)](rust-toolchain.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![No network client](https://img.shields.io/badge/Network-No%20Client-66023C?labelColor=000000&style=flat-square)](DATA-FLOW.md)
 
 A **fixed-policy, zero-network ledger-review boundary for AI**, not an AI that operates Xero.
 
@@ -49,7 +49,7 @@ Xero Ledger Review Gate consumes synthetic Xero-shaped trial-balance fixtures an
 
 ```mermaid
 flowchart TD
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#000000", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#FFFFF0", "titleColor": "#FFFFF0"}, "themeCSS": ".flowchart-link, .relationshipLine, marker path { filter: drop-shadow(0px 1px 0px #FFFFF0) drop-shadow(0px -1px 0px #FFFFF0) drop-shadow(1px 0px 0px #FFFFF0) drop-shadow(-1px 0px 0px #FFFFF0); }"}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#E5E4E2", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#E5E4E2", "titleColor": "#E5E4E2"}}}%%
     subgraph ClientPerimeter ["Local Client Perimeter (Zero-Network)"]
         Raw["Synthetic Xero-Shaped Trial Balance Fixture"] --> Validate["Context & Hash Integrity Gate"]
         Validate --> Engine["Decimal Variance Review Engine<br/><i>(Fixed Policy v1)</i>"]
@@ -70,14 +70,16 @@ flowchart TD
         Decision -->|NEEDS_EVIDENCE / ESCALATED| Action["Further Investigation"]
     end
 
-    style ClientPerimeter fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style ArtifactSplit fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Governance fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style ClientPerimeter fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#E5E4E2
+    style ArtifactSplit fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#E5E4E2
+    style Governance fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#E5E4E2
     style Model fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Evidence fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Done fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Done fill:#0F4B32,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Action fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
+    class Raw,LLM external
 ```
 
 ---
