@@ -5,6 +5,7 @@
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 [![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227?branch=main)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)
+[![SonarCloud](https://img.shields.io/sonar/quality_gate/ryanduguid_accounting-review-pipeline?server=https%3A%2F%2Fsonarcloud.io&label=SonarCloud&labelColor=000000)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
 
 Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
