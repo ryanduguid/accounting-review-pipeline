@@ -8,7 +8,8 @@
 # Requires just, uv and cargo:
 #     uv tool install rust-just
 #
-# The five Python distributions are uv workspace members. The Excel adapter and
+# The four Python distributions are uv workspace members. The Xero Ledger Review
+# Gate is a Rust crate, run with cargo from its directory. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
 # application is not a member; its workpaper is a Rust crate run with cargo from
 # its directory. Their standard-library unittest suites run from
@@ -19,7 +20,6 @@
 pytest_components := trim(replace('''
 packages/review-ready-gate:reviewready
 packages/monthly-close-control-plane:closecontrol
-packages/elizabeth-anne-alexander:elizabeth_anne_alexander
 packages/evatt:evatt
 ''', "\n", " "))
 
@@ -32,7 +32,7 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "apps/grant-acquittal-workpapers"
+rust_components := "apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander"
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
 exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"
@@ -88,7 +88,7 @@ lint: setup
     (cd packages/xero-trial-balance-export && uv run --no-sync ruff check {{ exporter_modules }})
     for directory in {{ rust_components }}; do
         echo "==> ${directory}"
-        (cd "${directory}" && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings)
+        (cd "${directory}" && cargo fmt --check && cargo clippy --locked --all-targets --all-features -- -D warnings)
     done
 
 # Type-check every Python component with mypy.

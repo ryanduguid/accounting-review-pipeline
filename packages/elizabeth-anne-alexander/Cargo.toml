@@ -1,0 +1,33 @@
+[package]
+name = "elizabeth-anne-alexander"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.99"
+description = "A fixed-policy, synthetic-data review boundary for AI-assisted Xero trial-balance analysis"
+license = "MIT"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+readme = "README.md"
+keywords = ["xero", "accounting", "privacy", "controls"]
+include = ["src/**", "elizabeth_anne_alexander/policy/**", "elizabeth_anne_alexander/samples/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
+
+[dependencies]
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"
+sha2 = "0.11"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+# Test-only: lets tests/differential/differential.py point the binary at mutated
+# sample data through EAA_DIFFERENTIAL_BUNDLE. Never enabled for a release.
+differential = []
+
+[lints.clippy]
+# The repository's 50-line function limit (clippy.toml), denied in CI.
+too_many_lines = "warn"
+
+[profile.release]
+lto = true
+codegen-units = 1

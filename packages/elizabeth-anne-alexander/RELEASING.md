@@ -1,5 +1,12 @@
 # Releasing
 
+From 1.0.0 the gate is a Rust binary. The pinned release policy builds Python
+distributions only, so `release-elizabeth-anne-alexander.yml` has been removed
+and no 1.0.0 release can be made until a Rust release path is designed and
+approved: its build targets, signing and attestation, and whether the PyPI
+name keeps receiving releases. The rest of this file describes the 0.2.x
+Python releases.
+
 Standalone releases through `v0.2.1` were published from the `xero-ledger-review-gate`
 repository, which was retired in September 2026; `v0.2.1` remains on
 [PyPI](https://pypi.org/project/elizabeth-anne-alexander/#history).

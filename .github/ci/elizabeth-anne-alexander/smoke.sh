@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Wheel smoke for elizabeth-anne-alexander. ci-package.yml runs this from an
-# empty directory with the installed wheel's console scripts on PATH and
-# COMPONENT pointing at the checked-out component, so it proves the wheel
-# carries its package data and the documented exit codes hold.
+# Release-binary smoke for elizabeth-anne-alexander. ci.yml's rust job runs this
+# from an empty directory with the release binary on PATH, so it proves the
+# binary carries its bundled data and the documented exit codes hold.
 set -euo pipefail
 
 elizabeth-anne-alexander evaluate \

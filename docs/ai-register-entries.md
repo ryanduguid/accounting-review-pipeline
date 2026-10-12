@@ -36,7 +36,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [Xero Ledger Review Gate](../packages/elizabeth-anne-alexander/README.md) (`elizabeth-anne-alexander`) 0.2.6, a fixed-policy review boundary for AI-assisted trial-balance variance review |
+| Name and version | [Xero Ledger Review Gate](../packages/elizabeth-anne-alexander/README.md) (`elizabeth-anne-alexander`) 1.0.0, a fixed-policy review boundary for AI-assisted trial-balance variance review |
 | Source and updates | Ryan Duguid, the sole maintainer, under the MIT licence, with no warranty or support agreement. Each release has [release notes](../packages/elizabeth-anne-alexander/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Turns synthetic Xero-shaped trial balances into a variance result that carries no tenant name, account name or account code. Each finding keeps its trial-balance section, such as Revenue, which is source text passed to the model. |
 | Known limitations and prohibited use | Not for client exports or evidence from Xero. Synthetic-only; the receipt is an unkeyed local checksum, so anyone who can replace the files can replace it, and it proves no authorship, origin or time |

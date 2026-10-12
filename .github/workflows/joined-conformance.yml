@@ -87,6 +87,9 @@ jobs:
         run: sha256sum --check --strict SHA256SUMS
       - name: Run joined offline conformance
         run: python -B -m unittest tests.test_xero_trial_balance_contract -v
+      - name: Run the Rust ledger-review gate against the same contract
+        working-directory: packages/elizabeth-anne-alexander
+        run: cargo test --locked test_gateway_satisfies_the_pinned_exporter_contract
       - name: Check the duplicated review-package blocks have not drifted
         run: python -B -m unittest tests.test_shared_blocks -v
 
