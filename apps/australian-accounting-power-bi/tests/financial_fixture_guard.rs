@@ -60,8 +60,12 @@ fn within(mut child: Child, limit: Duration) -> Option<(ExitStatus, String)> {
         let _ = stderr.read_to_string(&mut text);
         let _ = sender.send(text);
     });
+    let (stdout_done, stdout_closed) = mpsc::channel();
     let mut stdout = child.stdout.take().expect("piped stdout");
-    thread::spawn(move || io::copy(&mut stdout, &mut io::sink()));
+    thread::spawn(move || {
+        let _ = io::copy(&mut stdout, &mut io::sink());
+        let _ = stdout_done.send(());
+    });
     let status = loop {
         if let Some(status) = child.try_wait().expect("child status") {
             break Some(status);
@@ -71,12 +75,12 @@ fn within(mut child: Child, limit: Duration) -> Option<(ExitStatus, String)> {
         }
         thread::sleep(Duration::from_millis(50));
     };
-    let stderr = status.and_then(|_| {
-        receiver
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .ok()
-    });
-    if let (Some(status), Some(stderr)) = (status, stderr) {
+    let remaining = || deadline.saturating_duration_since(Instant::now());
+    let stderr = status.and_then(|_| receiver.recv_timeout(remaining()).ok());
+    let stdout = stderr
+        .as_ref()
+        .and_then(|_| stdout_closed.recv_timeout(remaining()).ok());
+    if let (Some(status), Some(stderr), Some(())) = (status, stderr, stdout) {
         return Some((status, stderr));
     }
     // taskkill /T also ends descendants still attached to the child; then reap the child.
@@ -115,6 +119,29 @@ fn the_deadline_covers_a_descendant_holding_stderr() {
             "-NoProfile",
             "-Command",
             "Start-Sleep -Seconds 20",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("cmd");
+    let started = Instant::now();
+    assert!(within(child, Duration::from_secs(2)).is_none());
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+/// The same for a descendant holding only stdout, its stderr sent elsewhere.
+#[test]
+fn the_deadline_covers_a_descendant_holding_stdout() {
+    let child = Command::new("cmd")
+        .args([
+            "/C",
+            "start",
+            "/B",
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Start-Sleep -Seconds 20",
+            "2>NUL",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

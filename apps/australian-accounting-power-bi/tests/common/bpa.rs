@@ -6,8 +6,10 @@
 //! language: `or`, `and`, `not`, comparison chains, unary `+` and `-`, parentheses,
 //! string literals (adjacent ones concatenate), integer and float literals, `True`,
 //! `False`, `None` and property names. Anything else is refused, as Python would raise
-//! for most of it; `in`, `is`, arithmetic operators and attribute access are not
-//! modelled.
+//! for most of it; `in`, `is`, arithmetic operators, attribute access and integer
+//! literals beyond 64 bits are not modelled. The repository owner accepted that boundary
+//! on 13 October 2026. Source layout follows `eval`: universal newlines, comments, line
+//! joining and a line break ending the expression outside brackets.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -36,14 +38,39 @@ impl Datum {
         }
     }
 
-    /// The numeric value of an int, float or bool (an int subclass).
-    fn number(&self) -> Option<f64> {
+    /// An int or bool (an int subclass) as an exact integer.
+    fn integer(&self) -> Option<i64> {
         match self {
-            Datum::Int(number) => Some(*number as f64),
-            Datum::Float(number) => Some(*number),
-            Datum::Bool(flag) => Some(f64::from(u8::from(*flag))),
+            Datum::Int(number) => Some(*number),
+            Datum::Bool(flag) => Some(i64::from(*flag)),
             _ => None,
         }
+    }
+}
+
+/// Python's exact comparison of an int with a finite or infinite float.
+fn int_float_cmp(int: i64, float: f64) -> Ordering {
+    const TWO_TO_63: f64 = 9_223_372_036_854_775_808.0;
+    if float >= TWO_TO_63 {
+        return Ordering::Less;
+    }
+    if float < -TWO_TO_63 {
+        return Ordering::Greater;
+    }
+    let whole = float.floor();
+    match int.cmp(&(whole as i64)) {
+        Ordering::Equal if float > whole => Ordering::Less,
+        other => other,
+    }
+}
+
+/// The order of two numbers, compared exactly as Python compares ints and floats.
+fn number_order(left: &Datum, right: &Datum) -> Option<Ordering> {
+    match (left, right) {
+        (Datum::Float(a), Datum::Float(b)) => a.partial_cmp(b),
+        (Datum::Float(a), other) => other.integer().map(|b| int_float_cmp(b, *a).reverse()),
+        (other, Datum::Float(b)) => other.integer().map(|a| int_float_cmp(a, *b)),
+        _ => Some(left.integer()?.cmp(&right.integer()?)),
     }
 }
 
@@ -171,38 +198,79 @@ static STRING: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^(?:"(?:[^"\\\n]|\\(?s:.))*"|'(?:[^'\\\n]|\\(?s:.))*')"#).unwrap());
 static NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[^\W\d]\w*").unwrap());
 
+/// Tokens of Python source, read as `eval` reads it: universal newlines; spaces, tabs
+/// and form feeds between tokens; `#` comments; a backslash before a line break joins
+/// lines; and a line break outside brackets ends the expression, so only blank lines
+/// and comments may follow it.
 fn tokens(source: &str) -> Vec<Token> {
-    let (number, string, name) = (&*NUMBER, &*STRING, &*NAME);
+    let source = source.replace("\r\n", "\n").replace('\r', "\n");
     let mut found = Vec::new();
-    let mut rest = source.trim_start();
-    while !rest.is_empty() {
-        let (token, length) = if let Some(m) = string.find(rest) {
-            (
-                Token::Literal(Datum::Text(decode_string(&m.as_str()[1..m.len() - 1]))),
-                m.len(),
-            )
-        } else if let Some(m) = number
-            .find(rest)
-            .filter(|m| !rest[m.end()..].starts_with(|c: char| c.is_alphanumeric() || c == '_'))
-        {
-            (Token::Literal(number_literal(m.as_str())), m.len())
-        } else if let Some(m) = name.find(rest) {
-            let token = match m.as_str() {
-                "True" => Token::Literal(Datum::Bool(true)),
-                "False" => Token::Literal(Datum::Bool(false)),
-                "None" => Token::Literal(Datum::None),
-                word => Token::Name(word.to_owned()),
-            };
-            (token, m.len())
-        } else if let Some(symbol) = SYMBOLS.iter().find(|s| rest.starts_with(**s)) {
-            (Token::Symbol(symbol), symbol.len())
-        } else {
-            panic!("SyntaxError: unsupported text at {rest:?}");
-        };
+    let (mut depth, mut ended) = (0_usize, false);
+    let mut rest = source.as_str();
+    loop {
+        rest = skip_layout(rest, depth > 0 || found.is_empty(), &mut ended);
+        if rest.is_empty() {
+            return found;
+        }
+        assert!(!ended, "SyntaxError: invalid syntax after a line break");
+        let (token, length) = next_token(rest);
+        match token {
+            Token::Symbol("(") => depth += 1,
+            Token::Symbol(")") => depth = depth.saturating_sub(1),
+            _ => {}
+        }
         found.push(token);
-        rest = rest[length..].trim_start();
+        rest = &rest[length..];
     }
-    found
+}
+
+/// Skips layout before the next token. A line break counts as an end of the
+/// expression unless `open` (inside brackets, or before the first token).
+fn skip_layout<'a>(mut rest: &'a str, open: bool, ended: &mut bool) -> &'a str {
+    loop {
+        if let Some(tail) = rest
+            .strip_prefix([' ', '\t', '\x0c'])
+            .or_else(|| rest.strip_prefix("\\\n"))
+        {
+            rest = tail;
+        } else if rest.starts_with('#') {
+            rest = rest.find('\n').map_or("", |at| &rest[at..]);
+        } else if let Some(tail) = rest.strip_prefix('\n') {
+            *ended |= !open;
+            rest = tail;
+        } else {
+            return rest;
+        }
+    }
+}
+
+fn next_token(rest: &str) -> (Token, usize) {
+    if let Some(m) = STRING.find(rest) {
+        return (
+            Token::Literal(Datum::Text(decode_string(&m.as_str()[1..m.len() - 1]))),
+            m.len(),
+        );
+    }
+    let number = NUMBER
+        .find(rest)
+        .filter(|m| !rest[m.end()..].starts_with(|c: char| c.is_alphanumeric() || c == '_'));
+    if let Some(m) = number {
+        return (Token::Literal(number_literal(m.as_str())), m.len());
+    }
+    if let Some(m) = NAME.find(rest) {
+        let token = match m.as_str() {
+            "True" => Token::Literal(Datum::Bool(true)),
+            "False" => Token::Literal(Datum::Bool(false)),
+            "None" => Token::Literal(Datum::None),
+            word => Token::Name(word.to_owned()),
+        };
+        return (token, m.len());
+    }
+    let symbol = SYMBOLS.iter().find(|s| rest.starts_with(**s));
+    symbol.map_or_else(
+        || panic!("SyntaxError: unsupported text at {rest:?}"),
+        |s| (Token::Symbol(s), s.len()),
+    )
 }
 
 /// A parsed Python expression.
@@ -332,14 +400,12 @@ fn compare(op: &str, left: &Datum, right: &Datum) -> bool {
     let equal = match (left, right) {
         (Datum::Text(a), Datum::Text(b)) => a == b,
         (Datum::None, Datum::None) => true,
-        _ => matches!((left.number(), right.number()), (Some(a), Some(b)) if a == b),
+        _ => number_order(left, right) == Some(Ordering::Equal),
     };
     let order = || match (left, right) {
         (Datum::Text(a), Datum::Text(b)) => a.cmp(b),
-        _ => match (left.number(), right.number()) {
-            (Some(a), Some(b)) => a.partial_cmp(&b).expect("comparable numbers"),
-            _ => panic!("TypeError: '{op}' not supported between {left:?} and {right:?}"),
-        },
+        _ => number_order(left, right)
+            .unwrap_or_else(|| panic!("TypeError: '{op}' not supported between {left:?} and {right:?}")),
     };
     match op {
         "==" => equal,
