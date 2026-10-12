@@ -1,9 +1,12 @@
 """Joined offline conformance for the data-only Xero trial-balance contract.
 
-The exporter-owned integrity runner and the 3 offline review implementations
-are exercised against every root fixture. The review packages are imported from
-their directories; nothing here installs them, reaches a network, or reads a
-credential. The only runtime dependency is the exporter's hash-locked lock file.
+The exporter-owned integrity runner and the offline review implementations are
+exercised against every root fixture. The Python review packages are imported
+from their directories; nothing here installs them, reaches a network, or reads
+a credential. The Rust ledger-review gate runs the same accept/reject boundary,
+identity and account-code checks in its own cargo test
+(test_gateway_satisfies_the_pinned_exporter_contract), which
+joined-conformance.yml runs beside this file. The only runtime dependency is the exporter's hash-locked lock file.
 """
 
 from __future__ import annotations
@@ -91,16 +94,9 @@ class CanonicalContractTest(unittest.TestCase):
         sys.path[:0] = [
             str(ROOT / "packages" / "review-ready-gate"),
             str(ROOT / "packages" / "monthly-close-control-plane"),
-            str(ROOT / "packages" / "elizabeth-anne-alexander"),
         ]
         from closecontrol.engine import _integrity_exceptions
         from closecontrol.loader import load_canonical_tb as load_monthly
-        from elizabeth_anne_alexander.errors import GatewayError
-        from elizabeth_anne_alexander.gateway import _load_tb_snapshot
-        from elizabeth_anne_alexander.util import snapshot_file
-
-        def _load_tb(path: Path) -> tuple:
-            return _load_tb_snapshot(snapshot_file(path, label="source CSV"))
         from reviewready.engine import _tb_balanced
         from reviewready.loader import SourceSnapshot, load_canonical_tb as load_readiness
 
@@ -131,15 +127,6 @@ class CanonicalContractTest(unittest.TestCase):
                 )
                 self.assertEqual(tuple(row.key for row in monthly_rows), IDENTITY)
                 self.assertEqual(tuple(row.account_code for row in monthly_rows), ACCOUNT_CODES)
-
-                # Ledger review: the gateway loader accepts only a balanced file.
-                if accept:
-                    ledger_rows = _load_tb(fixture)
-                    self.assertEqual(tuple((row.tenant, row.account_id) for row in ledger_rows), IDENTITY)
-                    self.assertEqual(tuple(row.account_code for row in ledger_rows), ACCOUNT_CODES)
-                else:
-                    with self.assertRaises(GatewayError):
-                        _load_tb(fixture)
 
 
 if __name__ == "__main__":

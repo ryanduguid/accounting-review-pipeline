@@ -1,6 +1,6 @@
 [project]
 name = "grant-acquittal-workpapers"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local evidence schedules for reviewed grant allocations"
 readme = "README.md"
 license = "MIT"

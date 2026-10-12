@@ -161,6 +161,48 @@ def compute(source, **kwargs):
     return reconcile(source, **options)
 
 
+@pytest.mark.parametrize("delta,closing,suggested", [
+    ("100.00", "0.00", True), ("100.01", "-0.01", False),
+])
+def test_split_candidate_never_hides_a_cent_difference(tmp_path, delta, closing, suggested):
+    source = write_transactions(tmp_path / "split.csv", [
+        "s1,2026-07-01,Batch,First sale,60,0",
+        "s2,2026-07-02,Batch,Second sale,40,0",
+        f"p1,2026-07-06,Batch,Settlement,0,{delta}",
+    ])
+    pack = compute(source, closing_balance=closing)
+    assert pack["status"] == "REVIEW"
+    assert bool(pack["suggestions"]) is suggested
+    assert pack["outstanding_total"] == closing
+    assert {item["TransactionID"] for item in pack["outstanding"]} == {"s1", "s2", "p1"}
+    assert pack["decisions"] == []
+
+
+def test_duplicate_looking_rows_keep_distinct_identity_and_block_a_false_split(tmp_path):
+    source = write_transactions(tmp_path / "duplicates.csv", [
+        "s1,2026-07-01,R,Sale,100,0", "s2,2026-07-01,R,Sale,100,0",
+        "p1,2026-07-01,R,Payment,0,100",
+    ])
+    pack = compute(source, closing_balance="100")
+    assert pack["suggestions"] == []
+    assert len(pack["outstanding"]) == 3
+    assert pack["outstanding_total"] == "100.00"
+    assert pack["status"] == "REVIEW"
+
+
+def test_one_payment_cannot_be_consumed_by_two_accepted_allocations(tmp_path):
+    source = write_transactions(tmp_path / "competing.csv", [
+        "s1,2026-07-01,A,Sale,100,0", "s2,2026-07-01,B,Sale,100,0",
+        "p1,2026-07-02,P,Payment,0,100",
+    ])
+    decisions = decision_file(tmp_path, [
+        "first,s1,accept,First remittance", "first,p1,accept,First remittance",
+        "second,s2,accept,Second remittance", "second,p1,accept,Second remittance",
+    ])
+    with pytest.raises(ValueError, match="repeated transaction ID"):
+        compute(source, closing_balance="100", decisions=decisions)
+
+
 @pytest.mark.parametrize("rows", [
     ["a,2026-07-01,R,Sale,1,0", "a,2026-07-02,R,Payment,0,1"],
     ["a,2026-07-01,R,Sale,NaN,0"], ["a,2026-07-01,R,Sale,0.001,0"],

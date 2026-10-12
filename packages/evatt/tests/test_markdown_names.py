@@ -143,9 +143,6 @@ def test_the_tools_own_placeholders_never_trigger_the_residual_sweep() -> None:
     ("__Medicare card__: 2123456711", "__Medicare card__: MEDICARE_01", "medicare"),
     ("**Medicare card**: 2123456711", "**Medicare card**: MEDICARE_01", "medicare"),
     ("**ABN no.**: 51 824 753 557", "**ABN no.**: ABN_01", "abn"),
-    # Unchanged from before the widening: the one-character trailing pins keep these.
-    ("TFN: 123 456 782  2026", "TFN: TFN_01  2026", "tfn"),
-    ("row 7 123 456 782  45,000.00", "row 7 TFN_01  45,000.00", "tfn"),
 ])
 def test_spaced_and_labelled_identifiers_are_replaced(text: str, expected: str, kind: str) -> None:
     redacted, counts = redact(text, (), strict=False)
@@ -153,6 +150,15 @@ def test_spaced_and_labelled_identifiers_are_replaced(text: str, expected: str, 
     assert counts == {kind: 1}
     assert findings(redacted, ()) == ()
     assert kind in [f.kind for f in findings(text, ())]
+
+
+@pytest.mark.parametrize("text", ["TFN: 123 456 782  2026", "row 7 123 456 782  45,000.00"])
+def test_two_space_numeric_continuations_reach_triage_without_partial_replacement(text):
+    assert redact(text, (), strict=False) == (text, {})
+    assert [(u.kind, u.value) for u in redact_residual(text)] == [
+        ("number", text.split(": ", 1)[-1] if text.startswith("TFN:") else text[4:]),
+    ]
+    assert any(f.kind == "number" for f in findings(text, ()))
 
 
 @pytest.mark.parametrize("text", ["tax file 2026-2027", "$123 456 782", "tax file  123  456  783 lodged"])
@@ -281,7 +287,7 @@ def test_a_map_cannot_hold_two_spellings_the_markdown_matcher_joins(tmp_path, va
         entities.load(_map(tmp_path, values))
 
 
-@pytest.mark.parametrize("value", ["TFN", "01", "Medicare", "Email", "TFN 01", "client 07"])
+@pytest.mark.parametrize("value", ["TFN", "Medicare", "Email", "TFN 01", "client 07"])
 def test_a_map_refuses_a_value_made_only_of_placeholder_parts(tmp_path, value) -> None:
     with pytest.raises(EvattError, match="placeholder"):
         entities.load(_map(tmp_path, [value]))

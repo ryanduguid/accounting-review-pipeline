@@ -19,22 +19,22 @@ RESULTS = runpy.run_path(str(Path(__file__).with_name("utility_results.py")))
 
 def captured(command, *, cwd, env=None, timeout=300):
     """Stop the whole command tree on timeout or interruption."""
-    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,  # nosemgrep
                                text=True, encoding="utf-8", errors="replace", start_new_session=os.name != "nt",
                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
         if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)  # nosec B607
         else:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
         stdout, stderr = process.communicate()
-        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from exc
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from exc  # nosemgrep
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)  # nosemgrep
 
 
 def git_output(root, *arguments):
@@ -70,7 +70,7 @@ def project_evidence(project):
         raise ValueError(f"Missing authoritative lockfile: {lock}")
     paths = git_output(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
     # Hash source and fixtures only. Never read credentials or local environment files.
-    extensions = {".py", ".toml", ".lock", ".json", ".csv", ".yaml", ".yml", ".md", ".in", ".txt"}
+    extensions = {".py", ".rs", ".toml", ".lock", ".json", ".csv", ".yaml", ".yml", ".md", ".in", ".txt"}
     hashes = {}
     for name in sorted(set(paths)):
         path = Path(name)
@@ -117,6 +117,8 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
             raise ValueError("Fresh environments must be outside source checkouts")
     if shutil.which("uv") is None:
         raise ValueError("Install uv before running the locked workflow")
+    if "grants" in required and shutil.which("cargo") is None:
+        raise ValueError("Install Rust (cargo) before running the grant workflow")
     if "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
         raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
     return {"projects": projects, "output": output, "environment_root": environment_root}
@@ -136,9 +138,10 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         environment_root.mkdir(parents=True)
     calls = []
 
-    def execute(owner, arguments, expected=0, kind="workflow"):
+    def execute(owner, arguments, expected=0, kind="workflow", runner=None):
         project = projects[owner]
-        command = ["uv", "run", "--project", str(project), "--locked", "--python", "3.14", "python", *map(str, arguments)]
+        runner = runner or ["uv", "run", "--project", str(project), "--locked", "--python", "3.14", "python"]
+        command = [*runner, *map(str, arguments)]
         # RTK is optional for users. Preserve exact JSON when it is installed locally.
         if shutil.which("rtk"):
             command = ["rtk", "proxy", *command]
@@ -150,10 +153,10 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         try:
             result = captured(command, cwd=project, env=env, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            result = subprocess.CompletedProcess(command, None, exc.output or "", exc.stderr or "")
+            result = subprocess.CompletedProcess(command, None, exc.output or "", exc.stderr or "")  # nosemgrep
             failure = "timeout_or_interrupt"
         except OSError as exc:
-            result = subprocess.CompletedProcess(command, None, "", str(exc))
+            result = subprocess.CompletedProcess(command, None, "", str(exc))  # nosemgrep
             failure = "launch_error"
         calls.append({"owner": owner, "kind": kind, "arguments": list(map(str, arguments)), "exit_code": result.returncode,
                       "expected_exit": expected, "elapsed_seconds": round(time.monotonic() - started, 6), "failure": failure})
@@ -211,7 +214,9 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
                 (target / "project-cash.json").write_text(forecast, encoding="utf-8")
         if workflow in {"all", "grant-cash"}:
             grant = output / "grants"
-            execute("grants", ["grant_workpaper.py", "--input", "examples/two-grants", "--output", grant], 2)
+            # The grant workpaper is a Rust binary, built from its locked Cargo.lock.
+            execute("grants", ["--input", "examples/two-grants", "--output", grant], 2,
+                    runner=["cargo", "run", "--locked", "--release", "--quiet", "--bin", "grant-workpaper", "--"])
             workpaper = grant / "workpaper.json"
             digest = hashlib.sha256(workpaper.read_bytes()).hexdigest()
             save("grant-cash.json", execute("fpa", ["examples/restricted-cash/grant_cash.py", "--workpaper", workpaper, "--workpaper-sha256", digest]))

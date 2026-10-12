@@ -244,17 +244,7 @@ def _parse_threshold(text: object, key: str) -> Decimal:
     return value
 
 
-def _verify_json_schema(document: dict[str, object]) -> None:
-    status = document["overall_status"]
-    if status not in _STATUSES:
-        raise ControlInputError(
-            f"{_JSON_NAME}: overall_status must be one of "
-            f"{', '.join(_STATUSES)}; got {status!r}"
-        )
-    _require_string_list(document, "current_report_dates")
-    _require_string_list(document, "prior_report_dates")
-
-    thresholds = document["thresholds"]
+def _verify_schema_thresholds(thresholds: object) -> None:
     if not isinstance(thresholds, dict) or set(thresholds) != set(_THRESHOLD_KEYS):
         raise ControlInputError(
             f"{_JSON_NAME}: thresholds must hold exactly "
@@ -263,7 +253,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
     for key in _THRESHOLD_KEYS:
         _parse_threshold(thresholds[key], key)
 
-    source_hashes = document["source_sha256"]
+
+def _verify_schema_sources(source_hashes: object) -> None:
     if not isinstance(source_hashes, dict) or not source_hashes:
         raise ControlInputError(f"{_JSON_NAME}: source_sha256 must be a non-empty object")
     for label, digest in source_hashes.items():
@@ -272,7 +263,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: source_sha256[{label!r}] is not a lowercase SHA-256 digest"
             )
 
-    exceptions = document["exceptions"]
+
+def _verify_schema_exceptions(exceptions: object) -> None:
     if not isinstance(exceptions, list):
         raise ControlInputError(f"{_JSON_NAME}: exceptions must be a list")
     for index, item in enumerate(exceptions):
@@ -294,52 +286,53 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: exceptions[{index}].status is not a pack status"
             )
 
+
+def _verify_schema_queries(client_queries: object) -> None:
     # A query names an account and a movement, so a malformed or duplicated
     # register has to be named here rather than reach a preparer as a question
     # they might put to a client. A pack from before the register existed
     # carries no member to check.
-    if "client_queries" in document:
-        client_queries = document["client_queries"]
-        if not isinstance(client_queries, list):
-            raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
-        seen_ids: set[str] = set()
-        for index, query in enumerate(client_queries):
-            if not isinstance(query, dict):
+    if not isinstance(client_queries, list):
+        raise ControlInputError(f"{_JSON_NAME}: client_queries must be a list")
+    seen_ids: set[str] = set()
+    for index, query in enumerate(client_queries):
+        if not isinstance(query, dict):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}] must be an object"
+            )
+        # The CSV projects exactly these fields, so a member outside them is
+        # one no other file witnesses: it survives every cross-file
+        # comparison and leaves an edited pack verifying. The top-level
+        # members are held to their exact set for the same reason. The
+        # register is new, so no earlier pack carries a different shape.
+        if set(query) != set(_QUERY_CSV_FIELDS):
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}] does not hold the "
+                f"fields the writer emits: holds {sorted(query)!r}, "
+                f"expected {sorted(_QUERY_CSV_FIELDS)!r}"
+            )
+        for field in _QUERY_CSV_FIELDS:
+            if not isinstance(query[field], str):
                 raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries[{index}] must be an object"
+                    f"{_JSON_NAME}: client_queries[{index}].{field} must be a string"
                 )
-            # The CSV projects exactly these fields, so a member outside them is
-            # one no other file witnesses: it survives every cross-file
-            # comparison and leaves an edited pack verifying. The top-level
-            # members are held to their exact set for the same reason. The
-            # register is new, so no earlier pack carries a different shape.
-            if set(query) != set(_QUERY_CSV_FIELDS):
-                raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries[{index}] does not hold the "
-                    f"fields the writer emits: holds {sorted(query)!r}, "
-                    f"expected {sorted(_QUERY_CSV_FIELDS)!r}"
-                )
-            for field in _QUERY_CSV_FIELDS:
-                if not isinstance(query[field], str):
-                    raise ControlInputError(
-                        f"{_JSON_NAME}: client_queries[{index}].{field} must be a string"
-                    )
-            query_id = query["query_id"]
-            if not query_id:
-                raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries[{index}].query_id must be a "
-                    "non-empty string"
-                )
-            if query_id in seen_ids:
-                raise ControlInputError(
-                    f"{_JSON_NAME}: client_queries holds {query_id} more than once"
-                )
-            seen_ids.add(query_id)
+        query_id = query["query_id"]
+        if not query_id:
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries[{index}].query_id must be a "
+                "non-empty string"
+            )
+        if query_id in seen_ids:
+            raise ControlInputError(
+                f"{_JSON_NAME}: client_queries holds {query_id} more than once"
+            )
+        seen_ids.add(query_id)
 
+
+def _verify_schema_acknowledgement(acknowledgement: object) -> None:
     # An acknowledgement records a human action, so a malformed one must be
     # named here rather than reach the sheet as a traceback or as text the
     # renderer never checked.
-    acknowledgement = document["acknowledgement"]
     if acknowledgement is not None:
         if not isinstance(acknowledgement, dict):
             raise ControlInputError(
@@ -366,6 +359,24 @@ def _verify_json_schema(document: dict[str, object]) -> None:
             raise ControlInputError(
                 f"{_JSON_NAME}: acknowledgement.effect is not the text the writer emits"
             )
+
+
+def _verify_json_schema(document: dict[str, object]) -> None:
+    status = document["overall_status"]
+    if status not in _STATUSES:
+        raise ControlInputError(
+            f"{_JSON_NAME}: overall_status must be one of "
+            f"{', '.join(_STATUSES)}; got {status!r}"
+        )
+    _require_string_list(document, "current_report_dates")
+    _require_string_list(document, "prior_report_dates")
+
+    _verify_schema_thresholds(document["thresholds"])
+    _verify_schema_sources(document["source_sha256"])
+    _verify_schema_exceptions(document["exceptions"])
+    if "client_queries" in document:
+        _verify_schema_queries(document["client_queries"])
+    _verify_schema_acknowledgement(document["acknowledgement"])
 
 
 def _summary_source_evidence(summary_text: str) -> dict[str, str]:
@@ -835,9 +846,9 @@ def _expected_scope_lines(document: dict[str, object], *, register: bool) -> lis
     current = _require_string_list(document, "current_report_dates")
     prior = _require_string_list(document, "prior_report_dates")
     thresholds = document["thresholds"]
-    assert isinstance(thresholds, dict)
+    assert isinstance(thresholds, dict)  # nosec B101
     exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
+    assert isinstance(exceptions, list)  # nosec B101
     blocked = sum(1 for item in exceptions if _exception_field(item, "status") == "BLOCKED")
     review = sum(1 for item in exceptions if _exception_field(item, "status") == "REVIEW")
     lines = [
@@ -851,7 +862,7 @@ def _expected_scope_lines(document: dict[str, object], *, register: bool) -> lis
     ]
     if register:
         queries = document["client_queries"]
-        assert isinstance(queries, list)
+        assert isinstance(queries, list)  # nosec B101
         lines.append(f"- Client queries drafted: {len(queries)}.")
     # A pack written before the control-coverage line existed carries neither
     # the member nor the bullet, the same way the register is handled above.
@@ -869,7 +880,7 @@ def _exception_field(item: object, name: str) -> str:
             f"{_JSON_NAME}: exceptions[].{name} must be a string"
         )
     value = item[name]
-    assert isinstance(value, str)
+    assert isinstance(value, str)  # nosec B101
     return value
 
 
@@ -933,12 +944,12 @@ def _expected_acknowledgement_lines(acknowledgement: object) -> list[str]:
     """
     if acknowledgement is None:
         return [_NO_ACKNOWLEDGEMENT_LINE]
-    assert isinstance(acknowledgement, dict)
+    assert isinstance(acknowledgement, dict)  # nosec B101
     initials = acknowledgement["reviewer_initials"]
     reviewed_on = acknowledgement["reviewed_on"]
     comment = acknowledgement["comment"]
-    assert isinstance(initials, str) and isinstance(reviewed_on, str)
-    assert isinstance(comment, str)
+    assert isinstance(initials, str) and isinstance(reviewed_on, str)  # nosec B101
+    assert isinstance(comment, str)  # nosec B101
     return [
         f"- Reviewer initials: {_md_cell_mirror(initials)}",
         f"- Reviewed on: {reviewed_on}",
@@ -951,7 +962,7 @@ _CALCULATION_EVIDENCE_TABLE_HEADER = (
     "| Calculation | Status | Period | Figures | Relied on | Entry digest |"
 )
 _CALCULATION_EVIDENCE_TABLE_DELIMITER = "| --- | --- | --- | --- | --- | --- |"
-_CALCULATION_EVIDENCE_REQUIRED = re.compile(r"^Required: (none|`[a-z0-9]+(?:-[a-z0-9]+)*`(?:; `[a-z0-9]+(?:-[a-z0-9]+)*`)*)$")
+_CALCULATION_EVIDENCE_REQUIRED = re.compile(r"^Required: (none|`[a-z0-9]+(?:-[a-z0-9]+)*`(?:; `[a-z0-9]+(?:-[a-z0-9]+)*`)*)$")  # nosemgrep
 
 # Mirrored from report._CALCULATION_EVIDENCE_EFFECT. The block's effect text is
 # reviewer-facing and lives only in the JSON, so it is compared against this
@@ -1092,39 +1103,30 @@ def _evidence_summary_rows(
     return required, rows
 
 
-def _verify_calculation_evidence(
-    block: object,
-    summary_text: str,
-    json_hashes: dict[str, object],
-) -> None:
-    """Check the evidence block's shape, and that the summary says the same.
-
-    Every other member a reviewer acts on is witnessed by a second artefact.
-    This one carried the figures and the relied-on flag in the JSON alone, so
-    editing a figure there left the pack verifying and the review sheet
-    displaying the edited number.
-    """
-    if block is None:
-        if _CALCULATION_EVIDENCE_TABLE_HEADER in {
-            line.strip() for line in summary_text.splitlines()
-        }:
-            raise ControlInputError(
-                f"{_SUMMARY_NAME}: a calculation-evidence table is present while "
-                f"{_JSON_NAME} carries no calculation_evidence member"
-            )
-        # The witnessed source list is the one thing that survives removing
-        # the block and its section together. A pack that read an evidence
-        # file and no longer says what it found is half removed, not absent.
-        orphaned = sorted(
-            key for key in json_hashes if str(key).startswith("calculation_evidence:")
+def _verify_absent_calculation_evidence(summary_text: str, json_hashes: dict[str, object]) -> None:
+    if _CALCULATION_EVIDENCE_TABLE_HEADER in {
+        line.strip() for line in summary_text.splitlines()
+    }:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: a calculation-evidence table is present while "
+            f"{_JSON_NAME} carries no calculation_evidence member"
         )
-        if orphaned:
-            raise ControlInputError(
-                f"{_JSON_NAME}: source_sha256 records calculation evidence "
-                f"({', '.join(orphaned)}) while the pack carries no calculation_evidence "
-                "member; the evidence is half removed, not absent"
-            )
-        return
+    # The witnessed source list is the one thing that survives removing
+    # the block and its section together. A pack that read an evidence
+    # file and no longer says what it found is half removed, not absent.
+    orphaned = sorted(
+        key for key in json_hashes if str(key).startswith("calculation_evidence:")
+    )
+    if orphaned:
+        raise ControlInputError(
+            f"{_JSON_NAME}: source_sha256 records calculation evidence "
+            f"({', '.join(orphaned)}) while the pack carries no calculation_evidence "
+            "member; the evidence is half removed, not absent"
+        )
+    return
+
+
+def _evidence_block_lists(block: object) -> tuple[list, list]:
     if not isinstance(block, dict):
         raise ControlInputError(f"{_JSON_NAME}: calculation_evidence must be an object")
     unknown = sorted(set(block) - _EVIDENCE_BLOCK_MEMBERS)
@@ -1150,73 +1152,71 @@ def _verify_calculation_evidence(
         raise ControlInputError(
             f"{_JSON_NAME}: calculation_evidence.effect is not the text the writer emits"
         )
-    summary_required, summary_rows = _evidence_summary_rows(summary_text)
-    if list(required) != summary_required:
-        raise ControlInputError(
-            f"calculation evidence disagrees: {_JSON_NAME} requires {required!r}, "
-            f"{_SUMMARY_NAME} states {summary_required!r}"
-        )
-    json_rows: dict[str, tuple[str, str, str, str, str]] = {}
-    for item in supplied:
-        if not isinstance(item, dict):
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence.supplied holds a non-object entry"
-            )
-        item_unknown = sorted(set(item) - _EVIDENCE_ITEM_MEMBERS)
-        item_missing = sorted(_EVIDENCE_ITEM_MEMBERS - set(item))
-        if item_unknown or item_missing:
-            raise ControlInputError(
-                f"{_JSON_NAME}: a calculation_evidence entry has the wrong members "
-                f"(unknown: {', '.join(item_unknown) or 'none'}; "
-                f"missing: {', '.join(item_missing) or 'none'})"
-            )
-        label = item["label"]
-        values = item["values"]
-        usable = item["usable"]
-        if isinstance(label, str) and _md_cell_mirror(label) in json_rows:
-            # A dict keyed by label kept the last of two entries and the
-            # summary witnessed only that one, while the sheet rendered both.
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence.supplied lists {label!r} twice"
-            )
-        if not isinstance(label, str) or not isinstance(usable, bool):
-            raise ControlInputError(
-                f"{_JSON_NAME}: a calculation_evidence entry has a non-string label or a "
-                "non-boolean usable flag"
-            )
-        if not isinstance(values, dict) or not all(
-            isinstance(name, str) and isinstance(amount, str) for name, amount in values.items()
-        ):
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence[{label!r}].values must map names to "
-                "decimal strings"
-            )
-        # The digest the pack quotes for this file has to be the one the
-        # witnessed source list carries, or the provenance names another file.
-        witnessed = json_hashes.get(f"calculation_evidence:{label}")
-        if witnessed != item["file_sha256"]:
-            raise ControlInputError(
-                f"{_JSON_NAME}: calculation_evidence[{label!r}] quotes file digest "
-                f"{item['file_sha256']!r}, which is not the digest source_sha256 records"
-            )
-        figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
-        # Mirrored through the same escaping the writer applies, so the
-        # comparison is against what the summary renders rather than against
-        # what the JSON happens to spell.
-        json_rows[_md_cell_mirror(label)] = (
-            _md_cell_mirror(str(item["status"])),
-            _md_cell_mirror(str(item["period"]) or _ABSENT),
-            _md_cell_mirror(figures or _ABSENT),
-            "yes" if usable else "no",
-            # Every member, printed or not, is inside this digest.
-            _entry_digest_mirror(item),
-        )
+    return supplied, required
 
-    if not supplied and summary_rows:
+
+def _evidence_entry_fields(item: object, json_rows: dict) -> tuple[dict, str, dict, bool]:
+    if not isinstance(item, dict):
         raise ControlInputError(
-            f"{_SUMMARY_NAME}: holds a calculation-evidence table while {_JSON_NAME} "
-            "records no supplied evidence"
+            f"{_JSON_NAME}: calculation_evidence.supplied holds a non-object entry"
         )
+    item_unknown = sorted(set(item) - _EVIDENCE_ITEM_MEMBERS)
+    item_missing = sorted(_EVIDENCE_ITEM_MEMBERS - set(item))
+    if item_unknown or item_missing:
+        raise ControlInputError(
+            f"{_JSON_NAME}: a calculation_evidence entry has the wrong members "
+            f"(unknown: {', '.join(item_unknown) or 'none'}; "
+            f"missing: {', '.join(item_missing) or 'none'})"
+        )
+    label = item["label"]
+    values = item["values"]
+    usable = item["usable"]
+    if isinstance(label, str) and _md_cell_mirror(label) in json_rows:
+        # A dict keyed by label kept the last of two entries and the
+        # summary witnessed only that one, while the sheet rendered both.
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence.supplied lists {label!r} twice"
+        )
+    if not isinstance(label, str) or not isinstance(usable, bool):
+        raise ControlInputError(
+            f"{_JSON_NAME}: a calculation_evidence entry has a non-string label or a "
+            "non-boolean usable flag"
+        )
+    if not isinstance(values, dict) or not all(
+        isinstance(name, str) and isinstance(amount, str) for name, amount in values.items()
+    ):
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence[{label!r}].values must map names to "
+            "decimal strings"
+        )
+    return item, label, values, usable
+
+
+def _add_evidence_entry_row(item: object, json_hashes: dict[str, object], json_rows: dict) -> None:
+    item, label, values, usable = _evidence_entry_fields(item, json_rows)
+    # The digest the pack quotes for this file has to be the one the
+    # witnessed source list carries, or the provenance names another file.
+    witnessed = json_hashes.get(f"calculation_evidence:{label}")
+    if witnessed != item["file_sha256"]:
+        raise ControlInputError(
+            f"{_JSON_NAME}: calculation_evidence[{label!r}] quotes file digest "
+            f"{item['file_sha256']!r}, which is not the digest source_sha256 records"
+        )
+    figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
+    # Mirrored through the same escaping the writer applies, so the
+    # comparison is against what the summary renders rather than against
+    # what the JSON happens to spell.
+    json_rows[_md_cell_mirror(label)] = (
+        _md_cell_mirror(str(item["status"])),
+        _md_cell_mirror(str(item["period"]) or _ABSENT),
+        _md_cell_mirror(figures or _ABSENT),
+        "yes" if usable else "no",
+        # Every member, printed or not, is inside this digest.
+        _entry_digest_mirror(item),
+    )
+
+
+def _verify_evidence_sources(supplied: list, json_hashes: dict[str, object]) -> None:
     # The writer records one source digest per evidence file it read, keyed
     # by that file's label, and one supplied entry per file. The two sets are
     # the same set or the pack was edited: an entry deleted while its digest
@@ -1232,6 +1232,40 @@ def _verify_calculation_evidence(
             f"{witnessed_labels!r} while calculation_evidence.supplied describes "
             f"{supplied_labels!r}; the evidence is half removed, not absent"
         )
+
+
+def _verify_calculation_evidence(
+    block: object,
+    summary_text: str,
+    json_hashes: dict[str, object],
+) -> None:
+    """Check the evidence block's shape, and that the summary says the same.
+
+    Every other member a reviewer acts on is witnessed by a second artefact.
+    This one carried the figures and the relied-on flag in the JSON alone, so
+    editing a figure there left the pack verifying and the review sheet
+    displaying the edited number.
+    """
+    if block is None:
+        _verify_absent_calculation_evidence(summary_text, json_hashes)
+        return
+    supplied, required = _evidence_block_lists(block)
+    summary_required, summary_rows = _evidence_summary_rows(summary_text)
+    if list(required) != summary_required:
+        raise ControlInputError(
+            f"calculation evidence disagrees: {_JSON_NAME} requires {required!r}, "
+            f"{_SUMMARY_NAME} states {summary_required!r}"
+        )
+    json_rows: dict[str, tuple[str, str, str, str, str]] = {}
+    for item in supplied:
+        _add_evidence_entry_row(item, json_hashes, json_rows)
+
+    if not supplied and summary_rows:
+        raise ControlInputError(
+            f"{_SUMMARY_NAME}: holds a calculation-evidence table while {_JSON_NAME} "
+            "records no supplied evidence"
+        )
+    _verify_evidence_sources(supplied, json_hashes)
     if json_rows != summary_rows:
         raise ControlInputError(
             f"calculation evidence disagrees: {_JSON_NAME} and {_SUMMARY_NAME} state "
@@ -1288,7 +1322,7 @@ def _verify_cross_file_agreement(
     )
 
     status = document["overall_status"]
-    assert isinstance(status, str)
+    assert isinstance(status, str)  # nosec B101
 
     status_lines = _STATUS_LINE.findall(summary_text)
     if len(status_lines) != 1:
@@ -1309,7 +1343,7 @@ def _verify_cross_file_agreement(
 
     summary_hashes = _summary_source_evidence(summary_text)
     json_hashes = document["source_sha256"]
-    assert isinstance(json_hashes, dict)
+    assert isinstance(json_hashes, dict)  # nosec B101
     if summary_hashes != json_hashes:
         raise ControlInputError(
             f"source evidence disagrees: {_SUMMARY_NAME} and {_JSON_NAME} "
@@ -1319,7 +1353,7 @@ def _verify_cross_file_agreement(
     _verify_calculation_evidence(evidence_block, summary_text, json_hashes)
 
     exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
+    assert isinstance(exceptions, list)  # nosec B101
 
     if "equity_reconciliation" in document:
         equity_result = validate_equity_result(document["equity_reconciliation"], json_hashes,
@@ -1347,7 +1381,7 @@ def _verify_cross_file_agreement(
         _verify_summary_holds_no_register(summary_text)
     else:
         client_queries = document["client_queries"]
-        assert isinstance(client_queries, list)
+        assert isinstance(client_queries, list)  # nosec B101
         _verify_rows_match(
             csv_name=_QUERY_CSV_NAME,
             member="client_queries",
@@ -1405,19 +1439,22 @@ def _read_csv_rows(
     except UnicodeDecodeError as exc:
         raise ControlInputError(f"{name}: not valid UTF-8") from exc
     reader = csv.reader(io.StringIO(text, newline=""))
-    header = next(reader, None)
-    if header != list(fields):
-        raise ControlInputError(
-            f"{name}: header row does not match the written contract"
-        )
-    rows: list[dict[str, str]] = []
-    for number, cells in enumerate(reader, start=1):
-        if len(cells) != len(fields):
+    try:
+        header = next(reader, None)
+        if header != list(fields):
             raise ControlInputError(
-                f"{name}: row {number} holds {len(cells)} cells, but the header "
-                f"declares {len(fields)}"
+                f"{name}: header row does not match the written contract"
             )
-        rows.append(dict(zip(fields, cells)))
+        rows: list[dict[str, str]] = []
+        for number, cells in enumerate(reader, start=1):
+            if len(cells) != len(fields):
+                raise ControlInputError(
+                    f"{name}: row {number} holds {len(cells)} cells, but the header "
+                    f"declares {len(fields)}"
+                )
+            rows.append(dict(zip(fields, cells)))
+    except csv.Error as exc:
+        raise ControlInputError(f"{name}: not readable as CSV ({exc})") from exc
     return rows
 
 
@@ -1474,20 +1511,7 @@ def verify_pack(pack_dir: Path) -> tuple[
     return document, summary_text, csv_rows, query_rows, artefact_digests
 
 
-def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
-    """Verify a pack and render it as a plain-text review sheet.
-
-    Returns the sheet and the per-artefact digests it displays. Raises
-    ``ControlInputError`` instead of rendering whenever any artefact is
-    missing, malformed or inconsistent with its siblings.
-    """
-    document, summary_text, csv_rows, query_rows, artefact_digests = verify_pack(pack_dir)
-    thresholds = document["thresholds"]
-    assert isinstance(thresholds, dict)
-    exceptions = document["exceptions"]
-    assert isinstance(exceptions, list)
-    acknowledgement = document["acknowledgement"]
-
+def _sheet_scope(document: dict[str, object], thresholds: dict, exceptions: list) -> list[str]:
     blocked = sum(1 for item in exceptions if item["status"] == "BLOCKED")
     review = sum(1 for item in exceptions if item["status"] == "REVIEW")
 
@@ -1502,9 +1526,9 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         "",
     ]
     current_dates = document["current_report_dates"]
-    assert isinstance(current_dates, list)
+    assert isinstance(current_dates, list)  # nosec B101
     prior_dates = document["prior_report_dates"]
-    assert isinstance(prior_dates, list)
+    assert isinstance(prior_dates, list)  # nosec B101
     lines.append(f"- Current report date(s): {', '.join(current_dates) or 'n/a'}")
     lines.append(f"- Prior report date(s): {', '.join(prior_dates) or 'n/a'}")
     lines.append(f"- Material variance thresholds: {thresholds['absolute_variance']} and {thresholds['percentage_variance']}")
@@ -1514,7 +1538,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     )
     queries_in_scope = document.get("client_queries")
     if queries_in_scope is not None:
-        assert isinstance(queries_in_scope, list)
+        assert isinstance(queries_in_scope, list)  # nosec B101
         lines.append(f"- Client queries drafted: {len(queries_in_scope)}.")
     # The pack records which controls had no input and _expected_scope_lines
     # verifies the summary's line, but the displayed sheet rebuilds this section
@@ -1523,26 +1547,34 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
     if "controls_not_run" in document:
         skipped = _require_string_list(document, "controls_not_run")
         lines.append(f"- Controls not run: {', '.join(skipped) or 'none'}.")
-    lines += ["", "Source evidence", ""]
+    return lines
+
+
+def _sheet_source_evidence(document: dict[str, object]) -> list[str]:
+    lines = ["", "Source evidence", ""]
     source_hashes = document["source_sha256"]
-    assert isinstance(source_hashes, dict)
+    assert isinstance(source_hashes, dict)  # nosec B101
     for label, digest in sorted(source_hashes.items()):
         lines.append(f"- {label}: {digest}")
-    evidence_block = document.get("calculation_evidence")
+    return lines
+
+
+def _sheet_calculation_evidence(evidence_block: object) -> list[str]:
+    lines: list[str] = []
     if evidence_block is not None:
-        assert isinstance(evidence_block, dict)
+        assert isinstance(evidence_block, dict)  # nosec B101
         lines += ["", "Calculation evidence", ""]
         required_names = evidence_block["required"]
-        assert isinstance(required_names, list)
+        assert isinstance(required_names, list)  # nosec B101
         lines.append(f"- Required: {', '.join(required_names) or 'none'}")
         supplied_items = evidence_block["supplied"]
-        assert isinstance(supplied_items, list)
+        assert isinstance(supplied_items, list)  # nosec B101
         if not supplied_items:
             lines.append("- Supplied: none. The exceptions say which calculation is missing.")
         for entry in supplied_items:
-            assert isinstance(entry, dict)
+            assert isinstance(entry, dict)  # nosec B101
             values = entry["values"]
-            assert isinstance(values, dict)
+            assert isinstance(values, dict)  # nosec B101
             figures = "; ".join(f"{name} {amount}" for name, amount in sorted(values.items()))
             lines.append(
                 f"- {entry['label']}: {entry['status']}, period {entry['period'] or 'n/a'}, "
@@ -1552,11 +1584,11 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             "- A figure here supports review. It approves nothing, and the "
             "calculation-evidence exceptions say why one is not relied on."
         )
-    equity_block = document.get("equity_reconciliation")
-    if equity_block is not None:
-        assert isinstance(equity_block, dict)
-        lines += ["", "Equity reconciliation", "", *equity_summary_lines(equity_block)]
-    lines += ["", "Exceptions", ""]
+    return lines
+
+
+def _sheet_exceptions(exceptions: list) -> list[str]:
+    lines = ["", "Exceptions", ""]
     if not exceptions:
         lines.append("No exceptions were raised. A human must still decide whether the close is appropriate.")
     else:
@@ -1574,7 +1606,11 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             )
             lines.append(f"     reason: {item['reason']}")
             lines.append(f"     action: {item['reviewer_action']}")
-    lines += ["", "Client queries", ""]
+    return lines
+
+
+def _sheet_client_queries(document: dict[str, object]) -> list[str]:
+    lines = ["", "Client queries", ""]
     lines.append(
         "Draft questions for the preparer. Nothing has been sent. Edit them before "
         "they reach a client and record answers in the firm's own tracker."
@@ -1588,7 +1624,7 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             "carries none. Its exceptions are unchanged."
         )
         client_queries = []
-    assert isinstance(client_queries, list)
+    assert isinstance(client_queries, list)  # nosec B101
     if not client_queries:
         # Only a run that derived the register can report an empty one. An
         # archived pack carries no register at all, and its exceptions may well
@@ -1613,11 +1649,15 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
             )
             lines.append(f"     ask: {query['question']}")
             lines.append(f"     evidence: {query['evidence_requested']}")
-    lines += ["", "Human acknowledgement", ""]
+    return lines
+
+
+def _sheet_acknowledgement(acknowledgement: object) -> list[str]:
+    lines = ["", "Human acknowledgement", ""]
     if acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
     else:
-        assert isinstance(acknowledgement, dict)
+        assert isinstance(acknowledgement, dict)  # nosec B101
         lines.append(f"- Reviewer initials: {acknowledgement['reviewer_initials']}")
         lines.append(f"- Reviewed on: {acknowledgement['reviewed_on']}")
         comment = acknowledgement["comment"]
@@ -1626,6 +1666,33 @@ def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
         lines.append(
             "- Effect: acknowledgement records a human action only; it does not change the control status or approve a close."
         )
+    return lines
+
+
+def render_review_sheet(pack_dir: Path) -> tuple[str, dict[str, str]]:
+    """Verify a pack and render it as a plain-text review sheet.
+
+    Returns the sheet and the per-artefact digests it displays. Raises
+    ``ControlInputError`` instead of rendering whenever any artefact is
+    missing, malformed or inconsistent with its siblings.
+    """
+    document, summary_text, csv_rows, query_rows, artefact_digests = verify_pack(pack_dir)
+    thresholds = document["thresholds"]
+    assert isinstance(thresholds, dict)  # nosec B101
+    exceptions = document["exceptions"]
+    assert isinstance(exceptions, list)  # nosec B101
+    acknowledgement = document["acknowledgement"]
+
+    lines = _sheet_scope(document, thresholds, exceptions)
+    lines += _sheet_source_evidence(document)
+    lines += _sheet_calculation_evidence(document.get("calculation_evidence"))
+    equity_block = document.get("equity_reconciliation")
+    if equity_block is not None:
+        assert isinstance(equity_block, dict)  # nosec B101
+        lines += ["", "Equity reconciliation", "", *equity_summary_lines(equity_block)]
+    lines += _sheet_exceptions(exceptions)
+    lines += _sheet_client_queries(document)
+    lines += _sheet_acknowledgement(acknowledgement)
     lines += ["", "Artefacts verified", ""]
     for name in PACK_FILE_NAMES:
         if name in artefact_digests:

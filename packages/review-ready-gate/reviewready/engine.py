@@ -173,6 +173,47 @@ def _review_pack(
     if not pack_dir.is_dir():
         raise GateInputError(f"pack directory does not exist: {pack_dir}.")
 
+    loaded, findings, evidence, controls_not_run = _load_pack_slots(slots, pack_dir, profile)
+
+    self_review = loaded.get("self_review")
+    period_end, preparer_initials = _self_review_context(self_review, findings)
+
+    _apply_trial_balance_controls(loaded, findings)
+    _apply_period_binding(loaded, findings)
+    _apply_open_item_controls(loaded, findings)
+    _apply_bas_tieout(loaded, findings, tieout_tolerance)
+    _apply_gst_period(loaded, findings)
+    _apply_bank_rec(loaded, findings, tieout_tolerance)
+    _apply_year_end_tieout(loaded, findings)
+
+    _apply_document_controls(loaded, document_paths, period_end, findings, evidence)
+
+    prior = loaded.get("prior_findings")
+    if isinstance(prior, list):
+        open_prior = [(row.finding_code, row.slot) for row in prior if row.status == "OPEN"]
+        findings = _mark_repeats(findings, open_prior)
+
+    acknowledgement = load_reviewer_acknowledgement(acknowledgement_path)
+    _validate_acknowledgement(acknowledgement, self_review)
+
+    # Acknowledgement never changes status.
+    status = _overall(findings)
+    return ReadinessPack(
+        status=status,
+        engagement_type=profile,
+        period_end=period_end,
+        preparer_initials=preparer_initials,
+        findings=tuple(findings),
+        source_evidence=tuple(evidence),
+        tieout_tolerance=tieout_tolerance,
+        acknowledgement=acknowledgement,
+        controls_not_run=tuple(controls_not_run),
+    )
+
+
+def _load_pack_slots(
+    slots: tuple[Slot, ...], pack_dir: Path, profile: str,
+) -> tuple[dict[str, object], list[Finding], list[SourceEvidence], list[ControlNotRun]]:
     findings: list[Finding] = []
     evidence: list[SourceEvidence] = []
     snapshots: dict[str, SourceSnapshot] = {}
@@ -206,8 +247,10 @@ def _review_pack(
                 )
             continue
         loaded[slot.name] = _load_slot(slot, snapshot, profile)
+    return loaded, findings, evidence, controls_not_run
 
-    self_review = loaded.get("self_review")
+
+def _self_review_context(self_review: object, findings: list[Finding]) -> tuple[str, str]:
     period_end = ""
     preparer_initials = ""
     if isinstance(self_review, SelfReview):
@@ -224,15 +267,13 @@ def _review_pack(
                     reviewer_action="Return the pack. The preparer has not certified it as review-ready.",
                 )
             )
+    return period_end, preparer_initials
 
-    _apply_trial_balance_controls(loaded, findings)
-    _apply_period_binding(loaded, findings)
-    _apply_open_item_controls(loaded, findings)
-    _apply_bas_tieout(loaded, findings, tieout_tolerance)
-    _apply_gst_period(loaded, findings)
-    _apply_bank_rec(loaded, findings, tieout_tolerance)
-    _apply_year_end_tieout(loaded, findings)
 
+def _apply_document_controls(
+    loaded: dict[str, object], document_paths: tuple[Path, ...], period_end: str,
+    findings: list[Finding], evidence: list[SourceEvidence],
+) -> None:
     if document_paths:
         trial_balance = loaded.get("trial_balance")
         entity = trial_balance[0].tenant if isinstance(trial_balance, list) and trial_balance else None
@@ -242,12 +283,10 @@ def _review_pack(
         findings.extend(document_findings)
         evidence.extend(document_evidence)
 
-    prior = loaded.get("prior_findings")
-    if isinstance(prior, list):
-        open_prior = [(row.finding_code, row.slot) for row in prior if row.status == "OPEN"]
-        findings = _mark_repeats(findings, open_prior)
 
-    acknowledgement = load_reviewer_acknowledgement(acknowledgement_path)
+def _validate_acknowledgement(
+    acknowledgement: ReviewerAcknowledgement | None, self_review: object,
+) -> None:
     if acknowledgement is not None and isinstance(self_review, SelfReview):
         if acknowledgement.reviewer_initials.strip().casefold() == self_review.preparer_initials.strip().casefold():
             raise GateInputError("reviewer initials must differ from the preparer initials.")
@@ -256,20 +295,6 @@ def _review_pack(
                 "review note reviewed_on is earlier than the pack period_end; "
                 "a note cannot review a period that has not ended."
             )
-
-    # Acknowledgement never changes status.
-    status = _overall(findings)
-    return ReadinessPack(
-        status=status,
-        engagement_type=profile,
-        period_end=period_end,
-        preparer_initials=preparer_initials,
-        findings=tuple(findings),
-        source_evidence=tuple(evidence),
-        tieout_tolerance=tieout_tolerance,
-        acknowledgement=acknowledgement,
-        controls_not_run=tuple(controls_not_run),
-    )
 
 
 def _load_slot(slot: Slot, snapshot: SourceSnapshot, profile: str) -> object:
@@ -446,7 +471,17 @@ def _apply_bas_tieout(
         Decimal("0.00"),
     )
     difference = net_statement - net_gl
-    if abs(difference) > tolerance:
+    # The ATO has 1A and 1B reported in whole dollars with the cents left off, so
+    # a lodged statement sits up to 99 cents either side of the cents-level
+    # control movement with nothing wrong. Whole-dollar labels therefore pass any
+    # difference under $1; labels that carry cents keep the plain tolerance.
+    whole_dollars = all(
+        labels[label] == labels[label].to_integral_value() for label in ("1A", "1B")
+    )
+    if abs(difference) > tolerance and not (whole_dollars and abs(difference) < 1):
+        allowance = (
+            " or the 99-cent allowance for whole-dollar 1A and 1B" if whole_dollars else ""
+        )
         findings.append(
             Finding(
                 code=FINDING_TIEOUT_BREAK,
@@ -455,7 +490,7 @@ def _apply_bas_tieout(
                 reason=(
                     f"Net GST on the activity statement ({net_statement}) does not tie to "
                     f"GST control movement ({net_gl}); difference {difference} exceeds "
-                    f"tolerance {tolerance}."
+                    f"tolerance {tolerance}{allowance}."
                 ),
                 reviewer_action="Return the pack. Complete the GST control tie-out before review.",
             )

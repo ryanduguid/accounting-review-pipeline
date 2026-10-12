@@ -1,3 +1,10 @@
+# v0.1.8
+
+- The aged payables and receivables queries keep genuine `Total` contacts and signed amounts, require an explicit `HasSummaryFooter` role for an ambiguous terminal row, and refuse amount-bearing rows without a contact label (#304).
+- `tools/debtor_evidence.py` drafts a source-only manifest, verifies an aged receivables summary in Decimal arithmetic and prepares evidence requests; a summary `PASS` leaves each debtor decision at `REVIEW`. Replay and benchmark tools come with fabricated cases, and every output must sit outside the repository checkout (#304).
+- The README's aged review commands write to the temporary directory instead of the checkout's parent (#332).
+- Development checks need Python 3.11 or newer (#318).
+
 # v0.1.7
 
 - Xero aged payables keep their source section labels on request, so supplier and expense-claim balances reconcile separately; the default output is unchanged (#163).

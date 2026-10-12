@@ -100,6 +100,12 @@ The ready demo exits `0` and writes 3 files:
 - `findings.csv`: one row per finding, for Excel or Power BI
 - `readiness-pack.json`: structured evidence, source hashes, and any supplied acknowledgement
 
+The output also reserves `.reviewready` for writer admission and publication state.
+Keep it with the pack when copying a directory. The 3 returned payload paths and
+their contents retain their existing format. Use a private output directory with
+cooperating writers; protection against hostile pathname replacement is outside
+this protocol.
+
 ```bash
 review-ready gate \
   --profile bas \
@@ -214,6 +220,7 @@ If both the activity statement and the GST control GL are present:
 - labels `1A` and `1B` are required
 - `1A - 1B` is compared with GST-control `sum(Credit) - sum(Debit)`
 - a difference beyond `--tieout-tolerance` (default `$0.01`) is `NOT_READY`
+- when `1A` and `1B` are both whole dollars, as the ATO requires on a lodged statement, any difference under `$1` also ties: the ATO drops the cents from each label, so the statement can sit up to 99 cents either side of the control movement. A statement whose labels carry cents gets no allowance
 
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
 
@@ -240,6 +247,27 @@ review-ready view --pack-dir outputs/bas-ready
 ```
 
 Before displaying anything it fails closed on: a missing artefact; JSON that is not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated top-level members; a threshold or nested source digest that no longer parses as the writer rendered it; a `readiness-summary.md` whose overall status, source-evidence digests or review-boundary statement disagree with the JSON (including a second, conflicting status line); and a `findings.csv` whose header, row count or any cell disagrees with the JSON findings, honouring the writer's formula-injection guard exactly. On success the sheet ends with the SHA-256 of each artefact's exact bytes, so the displayed evidence can itself be archived. Exit code is 0 when a pack was verified and shown, 1 when verification failed.
+
+Payload entries must be regular files with a single hard link. The viewer rejects
+links, directories and special files before reading them. For a pack carrying
+`.reviewready`, it also refuses unresolved publication and a revision change while
+reading. Legacy packs without that directory retain schema and cross-file checks;
+they have no publication revision witness.
+
+The CLI observes its default SIGTERM at safe checkpoints between bounded writer
+operations. Before commit, recovery restores previous payload bytes and absence
+where possible. It does not preserve filesystem metadata. After commit, an error
+identifies the pack as published. A retry can finish ordinary cleanup, but a
+cleanup-state error requires review. A missing referenced transaction also refuses
+the next writer, including failure after transaction removal but before clearing
+its state reference.
+
+If publication is unresolved or recovery evidence is retained, stop writers and
+preserve the complete output directory, including `.reviewready`. Do not delete
+control files or retry into that directory without investigating the error. To
+regenerate from the same inputs while retaining evidence, choose a new output
+directory. Process death is detected when its state remains unresolved; physical
+power-loss durability is unverified.
 
 ## Comparing two runs of a pack
 
@@ -270,7 +298,7 @@ numbered document label that contradicts its filename also prevents comparison.
 - Missing or empty required artefacts are findings, not crashes, so the cover sheet can tell the preparer what to send back.
 - Source SHA-256 digests travel with the pack. Each digest is taken from the same immutable byte snapshot the loader parsed.
 - Spreadsheet-facing finding text whose first non-whitespace character is `=`, `+`, `-` or `@` is prefixed with an apostrophe.
-- The 3 pack files are staged beside their destinations and moved into place only once all 3 have been written. A failed run does not leave 2 runs mixed together.
+- The 3 payloads are staged before replacement under exclusive writer admission. The supported viewer refuses an unresolved publication; failed restoration retains its backups for review.
 - No wall-clock timestamps in the pack.
 
 ## Data boundary
@@ -302,6 +330,6 @@ uv build
 
 The test suite covers schema gates, the 3 fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
+Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14 and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
 
 MIT licensed. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).

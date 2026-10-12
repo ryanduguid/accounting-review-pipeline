@@ -4,12 +4,12 @@ import csv
 import io
 import json
 import os
-import uuid
 from pathlib import Path
 
 from .engine import ReadinessPack
 from .errors import GateInputError
 from .models import Finding
+from .publication import publish
 
 REVIEW_BOUNDARY = (
     "This pack is a review aid. It does not approve a file, lodge a return, "
@@ -150,6 +150,14 @@ def _as_markdown(pack: ReadinessPack) -> str:
         "## Source evidence",
         "",
     ]
+    _append_source_sections(pack, lines)
+    _append_findings_section(pack, lines)
+    _append_acknowledgement_section(pack, lines)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _append_source_sections(pack: ReadinessPack, lines: list[str]) -> None:
     if not pack.source_evidence:
         lines.append("No source files were present in the pack directory.")
     else:
@@ -166,6 +174,9 @@ def _as_markdown(pack: ReadinessPack) -> str:
             )
             for control in pack.controls_not_run:
                 lines.append(f"- `{control.slot}` (`{control.filename}`): {control.reason}")
+
+
+def _append_findings_section(pack: ReadinessPack, lines: list[str]) -> None:
     lines += ["", "## Findings", ""]
     if not pack.findings:
         lines.append(
@@ -181,6 +192,9 @@ def _as_markdown(pack: ReadinessPack) -> str:
                 f"| {finding.status} | {finding.code} | {_md_cell(finding.slot)} | "
                 f"{'yes' if finding.repeat else 'no'} | {_md_cell(finding.reason)} |"
             )
+
+
+def _append_acknowledgement_section(pack: ReadinessPack, lines: list[str]) -> None:
     lines += ["", "## Human acknowledgement", ""]
     if pack.acknowledgement is None:
         lines.append("No reviewer acknowledgement was supplied. This does not create or imply an approval.")
@@ -191,8 +205,6 @@ def _as_markdown(pack: ReadinessPack) -> str:
             *_md_note_lines(pack.acknowledgement.comment),
             "- Effect: acknowledgement records a human action only; it does not change readiness or approve a file.",
         ]
-    lines.append("")
-    return "\n".join(lines)
 
 
 def _as_csv(pack: ReadinessPack) -> str:
@@ -206,49 +218,6 @@ def _as_csv(pack: ReadinessPack) -> str:
             row[field] = _csv_safe(row[field])
         writer.writerow(row)
     return buffer.getvalue()
-
-
-def _remove_quietly(path: Path) -> None:
-    try:
-        path.unlink()
-    except OSError:
-        pass
-
-
-def _restore_quietly(parked: Path, destination: Path) -> None:
-    try:
-        os.replace(parked, destination)
-    except OSError:
-        pass
-
-
-def _sibling_partial(destination: Path) -> Path:
-    while True:
-        candidate = destination.with_name(f"{destination.name}.{uuid.uuid4().hex[:12]}.partial")
-        try:
-            with candidate.open("x", encoding="utf-8"):
-                pass
-        except FileExistsError:  # pragma: no cover
-            continue
-        return candidate
-
-
-def _swap_into_place(staged_path: Path, destination: Path) -> Path | None:
-    parked: Path | None = None
-    if destination.is_file():
-        parked = _sibling_partial(destination)
-        try:
-            os.replace(destination, parked)
-        except OSError:
-            _remove_quietly(parked)
-            raise
-    try:
-        os.replace(staged_path, destination)
-    except OSError:
-        if parked is not None:
-            _restore_quietly(parked, destination)
-        raise
-    return parked
 
 
 CHECKOUT_MARKERS = (".git", ".hg", ".svn", ".bzr")
@@ -463,31 +432,5 @@ def write_review_pack(pack: ReadinessPack, output_dir: Path) -> dict[str, Path]:
         (findings_path, _as_csv(pack), "utf-8-sig", ""),
     )
 
-    staged: list[tuple[Path, Path]] = []
-    try:
-        for destination, text, encoding, newline in rendered:
-            staged_path = _sibling_partial(destination)
-            staged.append((staged_path, destination))
-            staged_path.write_text(text, encoding=encoding, newline=newline)
-    except BaseException:
-        for staged_path, _ in staged:
-            _remove_quietly(staged_path)
-        raise
-
-    replaced: list[tuple[Path, Path | None]] = []
-    try:
-        for staged_path, destination in staged:
-            replaced.append((destination, _swap_into_place(staged_path, destination)))
-    except OSError:
-        for destination, parked in reversed(replaced):
-            if parked is None:
-                _remove_quietly(destination)
-            else:
-                _restore_quietly(parked, destination)
-        for staged_path, _ in staged:
-            _remove_quietly(staged_path)
-        raise
-    for _, parked in replaced:
-        if parked is not None:
-            _remove_quietly(parked)
+    publish(output_dir, rendered)
     return {"json": json_path, "summary": summary_path, "findings": findings_path}

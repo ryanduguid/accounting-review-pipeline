@@ -157,8 +157,8 @@ class TestPaydaySuperRules(unittest.TestCase):
                 f"Event {row['EventID']} due date disagrees with the independent calendar",
             )
 
-        # The 3 paydays whose 7-business-day windows cross one of these holidays, and 2
-        # controls whose windows cross none.
+        # The 4 paydays whose 7-business-day windows cross one of these holidays, and the
+        # 26 August control, whose window crosses none.
         self.assertEqual(due_date(datetime.date(2026, 7, 29)), datetime.date(2026, 8, 10))
         self.assertEqual(due_date(datetime.date(2026, 9, 23)), datetime.date(2026, 10, 6))
         self.assertEqual(due_date(datetime.date(2026, 9, 30)), datetime.date(2026, 10, 12))

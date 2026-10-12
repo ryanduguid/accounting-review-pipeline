@@ -44,7 +44,7 @@ def _string(value: Any, label: str, *, empty: bool = False) -> str:
 
 def _capture(path: Path, limit: int) -> SourceSnapshot:
     try:
-        with path.open("rb") as source:
+        with path.open("rb") as source:  # NOSONAR: local CLI path chosen by the operator
             content = source.read(limit + 1)
     except OSError as exc:
         raise GateInputError(f"Cannot read document input {path}: {exc}.") from exc

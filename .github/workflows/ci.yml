@@ -47,8 +47,6 @@ jobs:
         include:
           - package_dir: packages/review-ready-gate
             import_name: reviewready
-          - package_dir: packages/elizabeth-anne-alexander
-            import_name: elizabeth_anne_alexander
           - package_dir: packages/xero-trial-balance-export
             import_name: xero_client
           - package_dir: packages/evatt
@@ -68,7 +66,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.14"]
+        python: ["3.14", "3.15"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,6 +74,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
+          allow-prereleases: true
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -88,7 +87,7 @@ jobs:
       # its source from the component's [tool.coverage.run] configuration, the
       # same gate ci-package.yml runs for the other components.
       - name: run tests with branch coverage
-        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         working-directory: packages/monthly-close-control-plane
         env:
           UV_PYTHON: ${{ matrix.python }}
@@ -104,7 +103,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -113,7 +113,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: audit the locked project environment
-        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         working-directory: packages/monthly-close-control-plane
 
   package:
@@ -127,7 +127,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -135,7 +136,7 @@ jobs:
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
-      - run: uv run --locked --extra dev --python 3.14 python -m build
+      - run: uv run --locked --extra dev --python 3.14 python -m build  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         working-directory: packages/monthly-close-control-plane
       - name: Install and smoke-test the built wheel outside the checkout
         working-directory: packages/monthly-close-control-plane
@@ -160,7 +161,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -168,9 +170,9 @@ jobs:
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
-      - run: uv run --locked --extra dev ruff check closecontrol tests
+      - run: uv run --locked --extra dev ruff check closecontrol tests  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         working-directory: packages/monthly-close-control-plane
-      - run: uv run --locked --extra dev mypy closecontrol
+      - run: uv run --locked --extra dev mypy closecontrol  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         working-directory: packages/monthly-close-control-plane
 
   windows:
@@ -186,11 +188,12 @@ jobs:
       contents: read
     timeout-minutes: 30
     runs-on: windows-latest
+    env:
+      UV_PYTHON: "3.15"
     strategy:
       fail-fast: false
       matrix:
         package_dir:
-          - packages/elizabeth-anne-alexander
           - packages/monthly-close-control-plane
           - packages/xero-trial-balance-export
     steps:
@@ -199,7 +202,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -211,18 +215,58 @@ jobs:
         run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
         working-directory: ${{ matrix.package_dir }}
 
+  rust:
+    # The Xero Ledger Review Gate is a Rust crate from 1.0.0. rust-toolchain.toml
+    # in its directory pins the toolchain, which rustup installs on first use.
+    # Windows runs too: the staged validation write takes its by-path branch there.
+    name: packages/elizabeth-anne-alexander / rust (${{ matrix.os }})
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/elizabeth-anne-alexander
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: format
+        run: cargo fmt --check
+      - name: lint
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --locked
+      - name: build
+        run: cargo build --locked --release
+      - name: smoke the release binary from an empty directory
+        run: |
+          binary="$PWD/target/release"
+          smoke="$PWD/../../.github/ci/elizabeth-anne-alexander/smoke.sh"
+          work="$(mktemp -d)"
+          cd "$work"
+          PATH="$binary:$PATH" bash "$smoke"
+
   windows-workspace:
     permissions:
       contents: read
     timeout-minutes: 30
     runs-on: windows-latest
+    env:
+      UV_PYTHON: "3.15"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -250,14 +294,14 @@ jobs:
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
       - name: lint the workspace
-        run: uv run --locked --group dev ruff check .
+        run: uv run --locked --group dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: type-check the workspace
-        run: uv run --locked --group dev mypy
+        run: uv run --locked --group dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: run the full suite
-        run: uv run --locked --group dev pytest
+        run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   pipeline-gates:
-    needs: [component, test, dependency-audit, package, lint, windows, windows-workspace]
+    needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

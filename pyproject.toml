@@ -8,13 +8,15 @@
 # shared test toolchain in one command and run the whole suite from the top. See
 # the justfile for the setup, lint, typecheck and test entrypoints.
 #
-# Only the 5 Python distributions are members. The Excel adapter and the
+# Only the 4 Python distributions are members. The Xero Ledger Review Gate is a
+# Rust crate checked with cargo, so it is excluded. The Excel adapter and the
 # Power BI application have no pyproject.toml and no Python dependencies, and
 # the grant workpapers application keeps its pyproject.toml for standalone use;
 # the justfile runs their standard-library unittest suites from the same .venv.
 
 [tool.uv.workspace]
 members = ["packages/*"]
+exclude = ["packages/elizabeth-anne-alexander"]
 
 # The shared toolchain for running every component's checks from one
 # environment: the union of what the component `dev` extras and test suites
@@ -22,14 +24,14 @@ members = ["packages/*"]
 # for their own CI. The 5 check tools carry the same exact pin in every
 # member's `dev` extra and here, so one workspace resolution holds them all and
 # `just lint`, `just typecheck` and `just test` run the versions CI runs. Move
-# a pin in all 6 places together.
+# a pin in all 5 places together.
 [dependency-groups]
 dev = [
-  "ruff==0.16.9",
-  "mypy==2.3.1",
+  "ruff==0.16.10",
+  "mypy==2.4.0",
   "pytest==9.1.1",
   "pytest-cov==7.1.0",
-  "coverage==7.16.1",
+  "coverage==7.16.2",
   "build>=1.6.1",
   "PyYAML>=6.0.3,<7",
 ]
@@ -41,7 +43,6 @@ pythonpath = [
   ".",
   "packages/review-ready-gate",
   "packages/monthly-close-control-plane/tests",
-  "packages/elizabeth-anne-alexander/tests",
   "packages/xero-trial-balance-export",
   "apps/grant-acquittal-workpapers",
 ]
@@ -60,7 +61,6 @@ files = [
   "packages/monthly-close-control-plane/closecontrol",
   "packages/evatt/evatt",
   "packages/review-ready-gate/reviewready",
-  "packages/elizabeth-anne-alexander/elizabeth_anne_alexander",
   "packages/xero-trial-balance-export/xero_client.py",
   "packages/xero-trial-balance-export/export_tb.py",
   "packages/xero-trial-balance-export/auth.py",

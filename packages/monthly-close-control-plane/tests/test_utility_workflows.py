@@ -163,7 +163,7 @@ def test_output_and_finalisation_failures_retain_failure_summary(tmp_path, monke
             return subprocess.CompletedProcess(command, 0, "uv fixture", "")
         if "-c" in command:
             return subprocess.CompletedProcess(command, 0, "invalid JSON" if failure == "runtime" else "{}", "")
-        if "grant_workpaper.py" in command:
+        if "grant-workpaper" in command:
             if failure != "workpaper":
                 target = output / "grants"
                 target.mkdir()

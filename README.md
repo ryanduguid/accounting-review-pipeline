@@ -4,6 +4,7 @@
 [![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-5C2D91.svg?labelColor=04001F)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
+[![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227?branch=main)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)
 
 Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
@@ -18,6 +19,14 @@ that does not tie is not exported, and an incomplete pack does not reach manager
 review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
 before writing its CSV (see packages/xero-trial-balance-export/README.md).
 None of them approves a close, locks a period or lodges anything.
+
+For a Xero Activity Statement transaction GST review, use the
+[BAS skill and transaction procedure](https://github.com/ryanduguid/australian-accounting-skills/blob/main/docs/bas-walkthrough.md#transaction-gst-review-in-codex-chatgpt-or-copilot).
+Account for supplied rows and establish supply treatment, buyer entitlement and
+attribution separately. The BAS readiness gate checks pack evidence and the GST
+control tie-out; it does not classify transaction tax treatment. Equal ledger
+and statement errors can still reconcile. Carry unresolved transaction findings
+to the authorised reviewer alongside the gate result.
 
 **Start here:** [review-pack contract](#review-pack-contract) ·
 [status meanings](#status-contract) ·
@@ -48,6 +57,14 @@ This calls the existing `close-control review` command with the supplied fiction
 
 The CLI and `just demo` both exit 2 because the sample needs review. The recipe is reported as unsuccessful, but the generated `REVIEW` pack is the expected result. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
 
+Check that the four result files agree before reviewing the pack:
+
+```bash
+uv run --locked close-control view --pack-dir ../close-control-demo
+```
+
+The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all four result files together and record each review decision in your workpaper. For a published-package example without a clone, use the [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md).
+
 The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) installs uv and runs `uv sync --locked`; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota.
 
 [Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Workpaper Review Gate](packages/review-ready-gate/README.md)
@@ -65,13 +82,13 @@ It holds 8 independently versioned components joined only by local files and com
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.14 |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.15 |
 | Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.2.0 |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, command `close-control` | 0.2.0 |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | distribution `elizabeth-anne-alexander`, import `elizabeth_anne_alexander`, command `elizabeth-anne-alexander` | 0.2.6 |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.7 |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0 (unreleased); 0.2.6 is the released Python distribution with import `elizabeth_anne_alexander` | 0.2.6 |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.8 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
-| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | command-line script `grant_workpaper.py`, standard library only, no release | 0.1.0 |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release | 0.2.0 |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.2.0 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
@@ -81,7 +98,7 @@ evatt works separately: it pseudonymises Markdown locally before an operator han
 external model. It does not read trial balances.
 Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is
 offline and ships fabricated data only. Python review packages use exact `Decimal`
-arithmetic for money. The Excel adapter and Power BI application use their native
+arithmetic for money, and the Rust ledger-review gate reproduces it exactly. The Excel adapter and Power BI application use their native
 numeric types, including VBA `Double`, so that Decimal guarantee does not cover them.
 
 Directory names follow each component's normalised distribution name so that the reviewed
@@ -99,6 +116,10 @@ commands. Only the root `.github/workflows/` are active. `IMPORTS.md` records so
 and import records. Historical releases and tags remain owned by the source repositories.
 
 ## Review-pack contract
+
+The [LodgeiT workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
+import, workpaper and review patterns to these existing components, with a
+checklist for using their local evidence outputs.
 
 Review packs are deterministic evidence for a human reviewer; they do not approve a close,
 post a journal, make a payment, lodge a return or lock a period. Each pack is a directory whose
@@ -174,12 +195,17 @@ means malformed input, invalid configuration or an unwritable output. The read-o
 The exporter and ledger-review commands document their command-specific exits in their
 component READMEs.
 
+The read-only [close review queue](packages/monthly-close-control-plane/docs/review-queue.md)
+also exits `0` after verified display and `1` for invalid arguments or verification
+failure. It filters supplied packs by recorded period, state and reviewer without
+changing their status.
+
 ## Releases
 
-Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
+Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`f068fb4f1d8f90e07429ded7cfb85bdbcc2960fe`: `monthly-close-control-plane/v*`,
-`review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*`,
+`10b43b5f7f97b8829c7ca4d453d22e0acf60d590`: `monthly-close-control-plane/v*`,
+`review-ready-gate/v*`, `xero-trial-balance-export/v*`,
 `accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
@@ -187,6 +213,9 @@ is the only difference, except that `release-evatt.yml` has no `pypi` job at all
 `evatt/v*` tag produces GitHub release assets and publishes to no index while the disclosure
 policy that package enforces is unsigned. `IMPORTS.md` lists the callers and publisher
 environments.
+
+The Rust Xero Ledger Review Gate 1.0.0 has no release caller until a Rust release path
+is approved. Version 0.2.6 remains the released Python distribution on PyPI.
 
 ## Contract
 

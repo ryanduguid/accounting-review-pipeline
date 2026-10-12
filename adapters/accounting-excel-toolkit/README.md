@@ -18,7 +18,7 @@
 
 Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 
-The `accounting-excel-toolkit/v0.1.7` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
+The `accounting-excel-toolkit/v0.1.8` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
 
 Maintain this adapter at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit). Run the commands below from `adapters/accounting-excel-toolkit/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical API CSV header, fixtures and expected results; the interactive-export parser fixtures under `samples/` cover a separate format.
 
@@ -89,10 +89,10 @@ The optional helpers use the existing verifier and fabricated sample. Give each
 command a new output outside the checkout:
 
 ```powershell
-python tools/debtor_evidence.py draft samples/sample-aged-receivables-review.csv --output ../manifest-draft
-python tools/debtor_evidence.py review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output ../debtor-review
-python tools/replay_aged_review.py --case all --output ../aged-replay.json
-python tools/benchmark_aged_review.py --output ../aged-measurements.json
+python tools/debtor_evidence.py draft samples/sample-aged-receivables-review.csv --output $env:TEMP/manifest-draft
+python tools/debtor_evidence.py review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output $env:TEMP/debtor-review
+python tools/replay_aged_review.py --case all --output $env:TEMP/aged-replay.json
+python tools/benchmark_aged_review.py --output $env:TEMP/aged-measurements.json
 ```
 
 The draft records source metadata and its byte digest. Independent settings,

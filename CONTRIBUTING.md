@@ -13,10 +13,12 @@ uv sync        # install every Python component and the shared toolchain
 just test      # every component's suite, plus the joined conformance test
 ```
 
-`uv sync` creates one `.venv` at the root and installs the 5 Python distributions into it
+`uv sync` creates one `.venv` at the root and installs the 4 Python distributions into it
 as editable workspace members. The Excel adapter and the Power BI application have no
 `pyproject.toml`, and the grant workpapers application is not a member; their
-standard-library unittest suites run from the same `.venv`.
+standard-library unittest suites run from the same `.venv`. The Xero Ledger Review Gate
+is a Rust crate: `just test` runs `cargo test --locked` in its directory, which needs a
+Rust toolchain (its `rust-toolchain.toml` names the version).
 
 `just` is optional tooling; install it with `uv tool install rust-just`. The recipes are
 `setup`, `lint`, `typecheck`, `test` and `check` (the last 3 together). Each loops over
@@ -24,8 +26,7 @@ the per-component commands in the `AGENTS.md` command-routing table, which remai
 authority; `just` runs them from one place, it does not replace them.
 
 `just check` is the fast local pass, not a CI equivalent. It runs Ruff, mypy, pytest and
-unittest. CI additionally runs the tests with branch coverage on Python 3.14,
-verifies each component lockfile, audits each locked environment with pip-audit,
+unittest. CI additionally runs the tests with branch coverage on Python 3.14 and 3.15, verifies each component lockfile, audits each locked environment with pip-audit,
 installs the exporter's hash-locked requirements, builds each distribution and imports it
 from a clean environment, validates
 the Power BI report with Microsoft's PBIR CLI, checks the contract digests and runs CodeQL.
@@ -72,7 +73,7 @@ changes.
 
 Review components may not gain a network or Xero dependency or import the exporter or
 a sibling component. Preserve their documented status and exit-code boundaries and
-the Python review packages' exact `Decimal` arithmetic. Document native Excel and
+the review packages' exact `Decimal` arithmetic, which the Rust ledger-review gate reproduces. Document native Excel and
 Power BI numeric types separately. One shared `.venv` makes every Python component importable from
 every other; that does not relax the rule. Only Xero Trial Balance Export may handle Xero
 OAuth, HTTP, credentials or tokens. Keep client data and generated workpapers outside the

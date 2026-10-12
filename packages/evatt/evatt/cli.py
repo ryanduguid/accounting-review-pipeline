@@ -36,10 +36,12 @@ redirecting stdout to the sanitised text still sees why a run failed.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import stat
 import sys
+from collections import deque
 from pathlib import Path
 from typing import NoReturn
 
@@ -47,8 +49,8 @@ from . import disclosure
 from . import entities as entities_module
 from . import verify as verify_module
 from .errors import EvattError, Halt
-from .patterns import value_pattern
-from .redact import redact
+from .patterns import _ambiguous_identifiers, value_pattern
+from .redact import _lines_and_starts, _locate, redact
 from .restore import restore
 from .version import __version__
 
@@ -136,7 +138,7 @@ def _read(path: Path) -> tuple[str, str]:
     before anything is decided about them. The handle is opened with that
     setting so the line endings can be counted before normalisation.
     """
-    with path.open(encoding="utf-8", newline="") as handle:
+    with path.open(encoding="utf-8", newline="") as handle:  # NOSONAR: local CLI path chosen by the operator
         raw = handle.read()
     crlf = raw.count("\r\n")
     ending = "\r\n" if crlf > raw.count("\n") - crlf else "\n"
@@ -155,12 +157,12 @@ def _write(path: Path, text: str, ending: str = "\n") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if ending != "\n":
         text = text.replace("\n", ending)
-    path.write_text(text, encoding="utf-8", newline="")
+    path.write_text(text, encoding="utf-8", newline="")  # NOSONAR: local CLI path chosen by the operator
 
 
 def _remove(path: Path) -> None:
     """Delete *path* if it is there, and say nothing if it is not."""
-    path.unlink(missing_ok=True)
+    path.unlink(missing_ok=True)  # NOSONAR: local CLI path chosen by the operator
 
 
 def _collision(args: argparse.Namespace) -> str | None:
@@ -237,22 +239,56 @@ def _write_triage(path: Path, halt: Halt) -> None:
         "",
         f"{halt}.",
         "",
-        "Add every candidate to the entity map, then run redact again.",
+        "Classify every candidate, then run redact again.",
         "Map a false positive as an entity; it will also be replaced and restored.",
+        "For a number: rewrite a TFN, ABN, ACN or Medicare number in a recognised spelling",
+        "so pass one replaces it one-way; map any other number as an entity.",
         "",
     ]
+    quoted_lines: set[int] = set()
     for unknown in sorted(halt.unknowns, key=lambda u: (u.line, u.kind, u.value)):
         value = " ".join(unknown.value.split())
         lines.append(f"- **{value}** ({unknown.kind}, line {unknown.line})")
-        lines.append(f"  > {unknown.context}")
+        if unknown.line not in quoted_lines:
+            lines.append(f"  > {unknown.context}")
+            quoted_lines.add(unknown.line)
     _write(path, "\n".join(lines) + "\n")
 
 
 def _record_path(path: Path) -> None:
     """Reject static links in the record path; the containing worktree must be trusted."""
-    for candidate in (path, *path.parents):
-        if candidate.resolve() != Path(os.path.abspath(candidate)) or candidate.is_symlink():
+    get_attributes = None
+    if sys.platform == "win32":
+        # lstat can follow non-name-surrogate reparse points on Windows.
+        # Query the entry attributes before allowing any such traversal.
+        get_attributes = ctypes.WinDLL("kernel32", use_last_error=True).GetFileAttributesW
+        get_attributes.argtypes = [ctypes.c_wchar_p]
+        get_attributes.restype = ctypes.c_uint32
+
+    def inspect(candidate: Path) -> None:
+        if sys.platform == "win32" and get_attributes is not None:
+            attributes = get_attributes(str(candidate))
+            if attributes == 0xFFFFFFFF:
+                error = ctypes.get_last_error()
+                if error in (2, 3):  # File or parent directory does not exist.
+                    return
+                raise ctypes.WinError(error)
+            if attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise EvattError("disclosure record paths must not use links")
+        try:
+            entry = candidate.lstat()
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(entry.st_mode):
             raise EvattError("disclosure record paths must not use links")
+
+    lexical = (path, *path.parents)
+    for candidate in lexical:
+        inspect(candidate)
+    # A missing component before '..' can conceal an existing linked prefix.
+    normalised = tuple(Path(os.path.abspath(candidate)) for candidate in lexical)
+    for candidate in (*normalised, *normalised[-1].parents):
+        inspect(candidate)
 
 
 def _read_record(path: Path) -> bytes:
@@ -262,7 +298,7 @@ def _read_record(path: Path) -> bytes:
         raise EvattError("disclosure record must be a regular file with one link")
     flags = (os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
              | getattr(os, "O_NONBLOCK", 0))
-    with os.fdopen(os.open(path, flags), "rb") as handle:
+    with os.fdopen(os.open(path, flags), "rb") as handle:  # NOSONAR: local CLI path chosen by the operator
         opened = os.fstat(handle.fileno())
         if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
             raise EvattError("disclosure record must be a regular file with one link")
@@ -293,7 +329,7 @@ def _disclosure_command(args: argparse.Namespace) -> int:
             # Exclusive creation never truncates an existing record or alias.
             # A failed write may leave an incomplete record, which checking rejects.
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-            with os.fdopen(os.open(args.out, flags, 0o600), "wb") as handle:
+            with os.fdopen(os.open(args.out, flags, 0o600), "wb") as handle:  # NOSONAR: local CLI path chosen by the operator
                 if handle.write(record) != len(record):
                     raise OSError("incomplete disclosure record write")
             print("Local disclosure evidence recorded. External authorisation has not been checked.")
@@ -416,9 +452,25 @@ def main(argv: list[str] | None = None) -> int:
 
     found = verify_module.findings(text, entity_map)
     if found:
+        # Index rejected captures once. Searching from the start for every
+        # finding mislocates repeated values and scales with document length.
+        lines, starts = _lines_and_starts(text)
+        ambiguous_locations: dict[str, deque[int]] = {}
+        seen: set[tuple[int, str]] = set()
+        for candidate in _ambiguous_identifiers(text):
+            line, _context = _locate(lines, starts, candidate.digit_start)
+            key = line, candidate.value
+            if key not in seen:
+                seen.add(key)
+                ambiguous_locations.setdefault(candidate.value, deque()).append(line)
         for finding in found:
-            match = value_pattern(finding.value).search(text)
-            location = f"line {text.count(chr(10), 0, match.start()) + 1}" if match else "detected in input"
+            locations = ambiguous_locations.get(finding.value) if finding.kind == "number" else None
+            if locations:
+                location = f"line {locations.popleft()}"
+            else:
+                match = value_pattern(finding.value).search(text)
+                location = (f"line {text.count(chr(10), 0, match.start()) + 1}"
+                            if match else "detected in input")
             print(f"{finding.kind}: {location}")
         print(f"{len(found)} finding(s); this file is not ready to send")
         return 2

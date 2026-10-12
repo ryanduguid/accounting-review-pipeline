@@ -254,13 +254,13 @@ def generate_fixtures():
     gl_rows = []
     journal_id = 1000
 
-    def add_balanced_journal(date_str: str, entity_id: str, desc: str, debits: list[tuple[str, Decimal]], credits: list[tuple[str, Decimal]], ic_entity: str = "", journal_key: str | None = None):
+    def add_balanced_journal(date_str: str, entity_id: str, desc: str, debits: list[tuple[str, Decimal]], credit_lines: list[tuple[str, Decimal]], ic_entity: str = "", journal_key: str | None = None):
         nonlocal journal_id
         if journal_key is None:
             journal_id += 1
             journal_key = f"JNL{journal_id}"
         d_sum = round(sum(amt for _, amt in debits), 2)
-        c_sum = round(sum(amt for _, amt in credits), 2)
+        c_sum = round(sum(amt for _, amt in credit_lines), 2)
         if d_sum != c_sum:
             raise ValueError(f"Unbalanced journal {journal_id}: Debits {d_sum} != Credits {c_sum}")
         line_no = 1
@@ -279,7 +279,7 @@ def generate_fixtures():
                 "IsIntercompany": "TRUE" if ic_entity else "FALSE",
             })
             line_no += 1
-        for code, amt in credits:
+        for code, amt in credit_lines:
             gl_rows.append({
                 "JournalID": journal_key,
                 "LineNumber": line_no,

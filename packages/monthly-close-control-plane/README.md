@@ -158,6 +158,10 @@ exports and generated packs becoming repository content.
 
 ## Viewing an existing pack
 
+For several packs, use the [local review queue](docs/review-queue.md). It verifies
+every explicitly supplied pack before filtering by report date, recorded state
+and recorded reviewer, and retains omitted-control and missing-metadata disclosures.
+
 `close-control view` is the read-only half of the workbench: it loads a
 generated pack, proves the 4 files still agree with each other, and prints
 a review sheet. It never writes, renames or deletes anything, and it cannot
@@ -567,7 +571,7 @@ python -m build
 
 The test suite covers schema gates, exact balancing, variance and metadata exceptions, mapping and subledger checks, deterministic pack generation, acknowledgement parsing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
+Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14 and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
 
 ## Related
 

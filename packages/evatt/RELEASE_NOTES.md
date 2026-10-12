@@ -1,3 +1,21 @@
+# Unreleased
+
+- Halt on TFN, ABN, ACN and Medicare digits that continue into a next-line
+  numbered-list marker, including short fragments and candidates hidden by
+  trailing digit pins. Keep genuine hard wraps and index ambiguous `verify`
+  locations once. Document the accepted next-line Medicare reference limit in
+  README.md and DECISIONS.md rulings 47 and 48.
+- Tighten `redact` and `verify` for dotted, comma-separated and Unicode-dash
+  labelled identifiers, compound labels, labelled space-separated BSBs and
+  Medicare individual reference numbers. Unclassified numeric tokens of 8 or
+  more digits now halt; ordinary references may need mapping as entities.
+  Keep bare dotted/comma fragments out of one-way replacement.
+- `verify` is stricter. Reverify files that version 0.2.0 verified clean. Where
+  findings appear, re-redact from the originals and recreate any disclosure
+  records for the changed output. Review the number sweep's amount/date
+  exclusions and remaining detection limits in the README before upgrading.
+- Replace both identifiers when an email is written straight against a phone number, ABN or other identifier, so `(02) 9876 5432jane@example.com` becomes `PHONE_01EMAIL_01`, where it had become `PHONE_01jane@example.com`. Whichever started second was dropped, and the rest of it stayed in the sanitised output with no halt.
+
 # v0.2.0
 
 - Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.4 remains the last release that runs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).

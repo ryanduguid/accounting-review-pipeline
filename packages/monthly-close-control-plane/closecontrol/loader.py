@@ -52,7 +52,7 @@ class SourceSnapshot:
     @classmethod
     def capture(cls, path: Path, *, label: str) -> SourceSnapshot:
         try:
-            content = path.read_bytes()
+            content = path.read_bytes()  # NOSONAR: local CLI path chosen by the operator
         except FileNotFoundError as exc:
             raise ControlInputError(f"{label} does not exist: {path}.") from exc
         except OSError as exc:

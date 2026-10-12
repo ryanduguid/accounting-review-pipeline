@@ -1,3 +1,11 @@
+# v0.1.15
+
+- Requires Python 3.11 or newer; Python 3.10 is no longer supported (#318).
+- On a Python that uses the pure-Python `decimal` module, a report cell over 4,300 digits now exits with the existing "not a ledger balance" error instead of an uncaught `ValueError` (#350).
+- Temporary output names are drawn from `secrets` instead of `random` (#342).
+- `export_tb.main` is split into four private helpers; new characterisation tests hold the command's failure order unchanged (#352).
+- The hash-locked install (`requirements.lock`) moves charset-normalizer from 3.5.1 to 3.5.2 (#351).
+
 # v0.1.14
 
 - The exporter no longer overwrites an unrelated `.manifest.json.previous` recovery file. It refuses inspection errors, checks for an occupied path and reserves it exclusively before parking the current manifest, and a failed park removes only its own reservation. A `--no-manifest` rerun checks the existing manifest and recovery paths against the checkout's ignore rules.
@@ -111,7 +119,7 @@ Changes since published `v0.1.3`:
 - let an explicit `--token-file` beat the `XERO_TOKEN_FILE` environment variable so scripts can pin their credentials source
 - documentation corrections: the fact-check fixes, the sample organisation name, a DISCLAIMER linked from the README, the provisional-member CA ANZ designation, and retirement of the last codename from user-facing docs.
 
-The annotated `v0.1.2` tag is protected and permanently records commit `bd4cd417b06fb9dba3d6b36fbedbe544b1e0fec7`. [Workflow run 31832080223](https://github.com/ryanduguid/xero-trial-balance-export/actions/runs/31832080223) passed its tests, archives, checksums and attestations, then stopped before draft creation because one step lacked `GH_TOKEN`. No v0.1.2 GitHub release or draft was created. The protected tag must never be moved, deleted or reused; v0.1.3 is the recovery release.
+The annotated `v0.1.2` tag is protected and permanently records commit `bd4cd417b06fb9dba3d6b36fbedbe544b1e0fec7`. Workflow run 31832080223, in the former standalone xero-trial-balance-export repository, passed its tests, archives, checksums and attestations, then stopped before draft creation because one step lacked `GH_TOKEN`. No v0.1.2 GitHub release or draft was created. The protected tag must never be moved, deleted or reused; v0.1.3 is the recovery release.
 
 ## Security boundary
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = "f068fb4f1d8f90e07429ded7cfb85bdbcc2960fe"
+POLICY = "10b43b5f7f97b8829c7ca4d453d22e0acf60d590"
 # These are component jobs from successful main-branch runs, plus aggregates that
 # require every job in their workflow to succeed; never a skip-tolerant aggregate
 # gate. Review the list when a component's CI contract changes.
@@ -16,16 +16,6 @@ REQUIRED = {
         ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
         ".github/workflows/standard-library-components.yml: lint (adapters/accounting-excel-toolkit)",
         ".github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)",
-        ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python",
-        ".github/workflows/codeql.yml: codeql-gates"
-    ],
-    "release-elizabeth-anne-alexander.yml": [
-        ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / build",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / dependency-audit",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / lint",
-        ".github/workflows/ci.yml: packages/elizabeth-anne-alexander / test (3.14)",
         ".github/workflows/joined-conformance.yml: verify",
         ".github/workflows/codeql.yml: Analyze Python",
         ".github/workflows/codeql.yml: codeql-gates"
@@ -135,7 +125,7 @@ class ReleaseChecksTests(unittest.TestCase):
                 match = re.search(r"(?m)^      source-directory: (\S+)$", text)
                 assert match is not None, path.name
                 components.append(match.group(1))
-        self.assertEqual(len(components), 5, components)
+        self.assertEqual(len(components), 4, components)
         for component in components:
             with self.subTest(component=component):
                 project = tomllib.loads((ROOT / component / "pyproject.toml").read_text(encoding="utf-8"))

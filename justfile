@@ -5,12 +5,14 @@
 # and CI runs those commands per component; the recipes here loop over the same
 # commands so a fresh clone can be verified from the top.
 #
-# Requires just and uv:
+# Requires just, uv and cargo:
 #     uv tool install rust-just
 #
-# The five Python distributions are uv workspace members. The Excel adapter and
+# The four Python distributions are uv workspace members. The Xero Ledger Review
+# Gate is a Rust crate, run with cargo from its directory. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
-# application is not a member; their standard-library unittest suites run from
+# application is not a member; its workpaper is a Rust crate run with cargo from
+# its directory. Their standard-library unittest suites run from
 # the same .venv. Adding a component means adding it to
 # the matching list below and to the root pyproject.toml workspace members.
 
@@ -18,7 +20,6 @@
 pytest_components := trim(replace('''
 packages/review-ready-gate:reviewready
 packages/monthly-close-control-plane:closecontrol
-packages/elizabeth-anne-alexander:elizabeth_anne_alexander
 packages/evatt:evatt
 ''', "\n", " "))
 
@@ -29,6 +30,9 @@ adapters/accounting-excel-toolkit
 apps/australian-accounting-power-bi
 apps/grant-acquittal-workpapers
 ''', "\n", " "))
+
+# cargo components: directory only
+rust_components := "apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander"
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
 exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"
@@ -61,6 +65,10 @@ test: setup
         echo "==> ${directory}"
         (cd "${directory}" && uv run --no-sync python -B -m unittest discover -s tests -v)
     done
+    for directory in {{ rust_components }}; do
+        echo "==> ${directory}"
+        (cd "${directory}" && cargo test --locked)
+    done
     echo "==> joined conformance"
     uv run --no-sync python -B -m unittest tests.test_xero_trial_balance_contract -v
     echo "==> shared blocks"
@@ -78,6 +86,10 @@ lint: setup
     done
     echo "==> packages/xero-trial-balance-export"
     (cd packages/xero-trial-balance-export && uv run --no-sync ruff check {{ exporter_modules }})
+    for directory in {{ rust_components }}; do
+        echo "==> ${directory}"
+        (cd "${directory}" && cargo fmt --check && cargo clippy --locked --all-targets --all-features -- -D warnings)
+    done
 
 # Type-check every Python component with mypy.
 typecheck: setup
@@ -91,6 +103,31 @@ typecheck: setup
     done
     echo "==> packages/xero-trial-balance-export"
     (cd packages/xero-trial-balance-export && uv run --no-sync mypy --ignore-missing-imports --pretty {{ exporter_modules }})
+
+# Regenerate the root lock, every component's own release lock and the exporter's
+# requirements.lock. Run it after any dependency change, including on a Dependabot
+# branch before merging. Inside the workspace `uv lock` writes only the root lock,
+# so each component is relocked from a copy outside the checkout, as CI checks it.
+relock:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "==> root"
+    uv lock
+    for lock in packages/*/uv.lock apps/*/uv.lock; do
+        directory="$(dirname "${lock}")"
+        [ -f "${directory}/pyproject.toml" ] || continue
+        echo "==> ${directory}"
+        standalone="$(mktemp -d)"
+        tar -C "${directory}" --exclude=.venv --exclude=target -cf - . | tar -C "${standalone}" -xf -
+        (cd "${standalone}" && uv lock)
+        cp "${standalone}/uv.lock" "${lock}"
+        if [ -f "${directory}/requirements.lock" ]; then
+            (cd "${standalone}" && uv export --locked --no-dev --no-emit-project \
+                --format requirements-txt --output-file requirements.lock >/dev/null)
+            cp "${standalone}/requirements.lock" "${directory}/requirements.lock"
+        fi
+        rm -rf "${standalone}"
+    done
 
 # Not a CI equivalent. The component workflows also verify the component
 # lockfile, install the exporter's hash-locked requirements, build each

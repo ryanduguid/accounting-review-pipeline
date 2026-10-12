@@ -155,10 +155,14 @@ def _check_fields(
     # "<br>Jane" stays in the document and restore would write it a second time.
     if JOIN_EDGE.search(value):
         raise EvattError(f"entity value {value!r} starts or ends with whitespace or markup")
-    # A value made only of placeholder parts ("TFN", "01", "Medicare", "TFN 01")
-    # names nothing a client could be, and pass two joins tokens across "_", so
-    # it would read the placeholders pass one writes as mentions.
-    if all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in value_parts(value)):
+    # A prefix plus only placeholder parts ("TFN", "Medicare", "TFN 01")
+    # could read pass one's placeholders as mentions. Numeric-only values are
+    # ordinary account/reference entities; pass two protects placeholder spans.
+    parts = value_parts(value)
+    if not parts or (
+        any(part.upper() in PLACEHOLDER_PREFIXES for part in parts)
+        and all(part.upper() in PLACEHOLDER_PREFIXES or part.isdigit() for part in parts)
+    ):
         raise EvattError(f"entity value {value!r} is made only of placeholder parts")
     if not isinstance(kind, str) or kind not in KINDS:
         raise EvattError(f"unknown entity kind {kind!r}")
@@ -242,7 +246,7 @@ def _check_sequence(entities: Sequence[Entity]) -> None:
 def load(path: Path) -> tuple[Entity, ...]:
     """Load and strictly validate the map. Every rejection is a hard error."""
     try:
-        document = json.loads(path.read_text(encoding="utf-8"))
+        document = json.loads(path.read_text(encoding="utf-8"))  # NOSONAR: local CLI path chosen by the operator
     except (OSError, json.JSONDecodeError) as error:
         raise EvattError(f"cannot read entity map {path}: {error}") from error
     if not isinstance(document, dict) or set(document) != {"schema_version", "entries"}:
@@ -433,7 +437,7 @@ def _git(subcommand: list[str], target: Path) -> int:
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
         environment.pop(name, None)
     try:
-        return subprocess.run(
+        return subprocess.run(  # nosemgrep
             [executable, *subcommand, "--", target.name],
             cwd=target.parent, env=environment, capture_output=True, timeout=30, check=False
         ).returncode

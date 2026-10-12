@@ -1,0 +1,29 @@
+---
+# Opengrep's subprocess, eval and permission audit rules fire on test fixtures
+# that run argument-list commands and set file modes on purpose. Bandit's test
+# exclusion lives in bandit.yml, which Codacy reads for that tool.
+#
+# Lizard and Prospector measure function and file size and complexity. Tests
+# are long by design, one case per assertion block, and uv.lock files are
+# generated, so neither is measured; production code still is.
+#
+# Lizard's Rust reader takes a lifetime such as 'a or 'static for the start of
+# a character literal and loses track of braces until the next quote mark, so
+# it reports wrong function spans for Rust. Rust crates set clippy's
+# too_many_lines lint to the same 50-line limit instead, and CI denies it.
+engines:
+  opengrep:
+    exclude_paths:
+      - "tests/**"
+      - "**/tests/**"
+  lizard:
+    exclude_paths:
+      - "tests/**"
+      - "**/tests/**"
+      - "uv.lock"
+      - "**/uv.lock"
+      - "**/*.rs"
+  prospector:
+    exclude_paths:
+      - "tests/**"
+      - "**/tests/**"

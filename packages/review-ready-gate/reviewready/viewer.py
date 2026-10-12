@@ -19,6 +19,7 @@ import hashlib
 import io
 import json
 import re
+import stat
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -27,6 +28,7 @@ from typing import Any, cast
 from .engine import ReadinessPack, _overall
 from .errors import GateInputError
 from .models import ControlNotRun, Finding, ReviewerAcknowledgement, SourceEvidence
+from .publication import snapshot_revision
 from .report import (
     _ABSENT,
     ACKNOWLEDGEMENT_EFFECT,
@@ -119,6 +121,9 @@ def _load_artefact_bytes(pack_dir: Path) -> dict[str, bytes]:
     for name in PACK_FILE_NAMES:
         path = pack_dir / name
         try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise GateInputError(f"{name}: expected a regular, single-link artefact")
             payloads[name] = path.read_bytes()
         except FileNotFoundError as exc:
             raise GateInputError(f"{name}: not found in {pack_dir}") from exc
@@ -174,6 +179,15 @@ def _parse_threshold(text: object, key: str) -> Decimal:
 
 
 def _verify_json_schema(document: dict[str, object]) -> None:
+    _verify_json_identity(document)
+    _verify_json_thresholds(document)
+    _verify_json_sources(document)
+    _verify_json_acknowledgement(document)
+    _verify_json_findings(document)
+    _verify_json_controls(document)
+
+
+def _verify_json_identity(document: dict[str, object]) -> None:
     status = document["overall_status"]
     if status not in _STATUSES:
         raise GateInputError(
@@ -194,6 +208,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
             f"{_JSON_NAME}: review_boundary does not match the written contract"
         )
 
+
+def _verify_json_thresholds(document: dict[str, object]) -> None:
     thresholds = document["thresholds"]
     if not isinstance(thresholds, dict) or set(thresholds) != set(_THRESHOLD_KEYS):
         raise GateInputError(
@@ -203,6 +219,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
     for key in _THRESHOLD_KEYS:
         _parse_threshold(thresholds[key], key)
 
+
+def _verify_json_sources(document: dict[str, object]) -> None:
     source_hashes = document["source_sha256"]
     if not isinstance(source_hashes, dict):
         raise GateInputError(f"{_JSON_NAME}: source_sha256 must be an object")
@@ -223,6 +241,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: source_sha256[{label!r}].sha256 is not a lowercase SHA-256 digest"
             )
 
+
+def _verify_json_acknowledgement(document: dict[str, object]) -> None:
     acknowledgement = document["acknowledgement"]
     if acknowledgement is not None:
         if not isinstance(acknowledgement, dict) or set(acknowledgement) != _ACK_MEMBERS:
@@ -242,6 +262,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: acknowledgement.effect disagrees with the written contract"
             )
 
+
+def _verify_json_findings(document: dict[str, object]) -> None:
     findings = document["findings"]
     if not isinstance(findings, list):
         raise GateInputError(f"{_JSON_NAME}: findings must be a list")
@@ -264,6 +286,8 @@ def _verify_json_schema(document: dict[str, object]) -> None:
                 f"{_JSON_NAME}: findings[{index}].status is not a finding status"
             )
 
+
+def _verify_json_controls(document: dict[str, object]) -> None:
     # The summary renders one line per entry, so an added member here would be
     # one no other file witnesses, as with the findings above.
     controls = document.get("controls_not_run", [])
@@ -307,14 +331,14 @@ def _summary_source_evidence(summary_text: str) -> dict[str, tuple[str, str]]:
 
 def _json_source_evidence(document: dict[str, object]) -> dict[str, tuple[str, str]]:
     source_hashes = document["source_sha256"]
-    assert isinstance(source_hashes, dict)
+    assert isinstance(source_hashes, dict)  # nosec B101
     evidence: dict[str, tuple[str, str]] = {}
     for slot, info in source_hashes.items():
-        assert isinstance(info, dict)
+        assert isinstance(info, dict)  # nosec B101
         filename = info["filename"]
         digest = info["sha256"]
-        assert isinstance(filename, str)
-        assert isinstance(digest, str)
+        assert isinstance(filename, str)  # nosec B101
+        assert isinstance(digest, str)  # nosec B101
         evidence[slot] = (filename, digest)
     return evidence
 
@@ -386,7 +410,7 @@ def _expected_finding_cells(item: dict[str, object], index: int) -> list[str]:
 def _verify_findings_table(document: dict[str, object], summary_text: str) -> None:
     """Prove the table a reviewer actually reads still states the JSON findings."""
     findings = document["findings"]
-    assert isinstance(findings, list)
+    assert isinstance(findings, list)  # nosec B101
     if not findings:
         if _FINDINGS_HEADER in summary_text:
             raise GateInputError(
@@ -436,12 +460,12 @@ def _verify_scope_block(document: dict[str, object], summary_text: str) -> None:
     period_end = document["period_end"]
     initials = document["preparer_initials"]
     thresholds = document["thresholds"]
-    assert isinstance(engagement, str)
-    assert isinstance(period_end, str)
-    assert isinstance(initials, str)
-    assert isinstance(thresholds, dict)
+    assert isinstance(engagement, str)  # nosec B101
+    assert isinstance(period_end, str)  # nosec B101
+    assert isinstance(initials, str)  # nosec B101
+    assert isinstance(thresholds, dict)  # nosec B101
     tolerance = thresholds["tieout_tolerance"]
-    assert isinstance(tolerance, str)
+    assert isinstance(tolerance, str)  # nosec B101
     for label, expected in (
         ("Engagement type", engagement),
         ("Period end", period_end or _ABSENT),
@@ -463,7 +487,7 @@ def _verify_scope_block(document: dict[str, object], summary_text: str) -> None:
             f"{_SUMMARY_NAME}: expected exactly one 'Findings' scope line, found {len(counts)}"
         )
     findings = document["findings"]
-    assert isinstance(findings, list)
+    assert isinstance(findings, list)  # nosec B101
     blocked = sum(item.get("status") == "BLOCKED" for item in findings)
     not_ready = sum(item.get("status") == "NOT_READY" for item in findings)
     repeats = sum(item.get("repeat") == "true" for item in findings)
@@ -483,7 +507,7 @@ def _verify_cross_file_agreement(
     csv_rows: list[dict[str, str]],
 ) -> None:
     status = document["overall_status"]
-    assert isinstance(status, str)
+    assert isinstance(status, str)  # nosec B101
 
     status_lines = _STATUS_LINE.findall(summary_text)
     if len(status_lines) != 1:
@@ -518,7 +542,7 @@ def _verify_cross_file_agreement(
             )
 
     findings = document["findings"]
-    assert isinstance(findings, list)
+    assert isinstance(findings, list)  # nosec B101
     if len(csv_rows) != len(findings):
         raise GateInputError(
             f"finding counts disagree: {_JSON_NAME} holds {len(findings)}, "
@@ -636,7 +660,13 @@ def verify_pack(pack_dir: Path) -> tuple[
     bytes under ``artefact_sha256``, so a displayed sheet can state what it
     actually read.
     """
-    payloads = _load_artefact_bytes(pack_dir)
+    try:
+        revision = snapshot_revision(pack_dir)
+        payloads = _load_artefact_bytes(pack_dir)
+        if snapshot_revision(pack_dir) != revision:
+            raise GateInputError("pack publication changed during acquisition; retry")
+    except OSError as exc:
+        raise GateInputError(str(exc)) from exc
     document = _parse_json(payloads[_JSON_NAME])
     _verify_json_schema(document)
     try:

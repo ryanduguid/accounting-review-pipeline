@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.14"]
+        python: ["3.14", "3.15"]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -124,6 +124,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -137,9 +138,7 @@ jobs:
       # leaves every leg green. --cov takes its source from the component's
       # [tool.coverage.run] configuration.
       - name: run tests with branch coverage
-        run: >-
-          uv run --locked --extra dev pytest
-          --cov --cov-branch --cov-report=term-missing --cov-report=xml
+        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
         env:
           UV_PYTHON: ${{ matrix.python }}
 
@@ -159,7 +158,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -188,9 +188,9 @@ jobs:
             diff -u requirements.lock "${standalone}/requirements.lock"
           fi
       - name: ruff
-        run: uv run --locked --extra dev ruff check .
+        run: uv run --locked --extra dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: mypy
-        run: uv run --locked --extra dev mypy
+        run: uv run --locked --extra dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   dependency-audit:
     needs: changes
@@ -208,7 +208,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -217,13 +218,13 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: audit the locked project environment
-        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: audit the hash-locked runtime
         # The README installs from requirements.lock, not from the environment
         # audited above, so an advisory against a version pinned only there
         # went unreported.
         if: hashFiles(format('{0}/requirements.lock', inputs.package_dir)) != ''
-        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --strict --require-hashes --disable-pip -r requirements.lock
+        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --strict --require-hashes --disable-pip -r requirements.lock  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
   build:
     needs: changes
@@ -241,7 +242,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -250,7 +252,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: build the distribution
-        run: uv run --locked --extra dev --python 3.14 python -m build
+        run: uv run --locked --extra dev --python 3.14 python -m build  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: install the wheel into a clean environment, import it and run the smoke
         # Exactly one wheel, installed by path with --no-index, or pip is free
         # to resolve the name from PyPI and test a release nobody built in this
@@ -297,7 +299,7 @@ jobs:
           locked="$(mktemp -d)"
           trap 'rm -rf "${locked}"' EXIT
           python -m venv "${locked}/venv"
-          "${locked}/venv/bin/python" -m pip install --require-hashes -r requirements.lock
+          "${locked}/venv/bin/python" -m pip install --only-binary :all: --require-hashes -r requirements.lock
           "${locked}/venv/bin/python" -m unittest discover -s tests -v
 
   gates:

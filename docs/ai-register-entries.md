@@ -36,7 +36,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [Xero Ledger Review Gate](../packages/elizabeth-anne-alexander/README.md) (`elizabeth-anne-alexander`) 0.2.6, a fixed-policy review boundary for AI-assisted trial-balance variance review |
+| Name and version | [Xero Ledger Review Gate](../packages/elizabeth-anne-alexander/README.md) (`elizabeth-anne-alexander`) 1.0.0, a fixed-policy review boundary for AI-assisted trial-balance variance review |
 | Source and updates | Ryan Duguid, the sole maintainer, under the MIT licence, with no warranty or support agreement. Each release has [release notes](../packages/elizabeth-anne-alexander/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Turns synthetic Xero-shaped trial balances into a variance result that carries no tenant name, account name or account code. Each finding keeps its trial-balance section, such as Revenue, which is source text passed to the model. |
 | Known limitations and prohibited use | Not for client exports or evidence from Xero. Synthetic-only; the receipt is an unkeyed local checksum, so anyone who can replace the files can replace it, and it proves no authorship, origin or time |
@@ -45,7 +45,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 | Key stakeholders affected | None in its synthetic-only design; a firm that adapted the design to real ledgers would affect the clients whose accounts are reviewed |
 | Contains an AI model | No. It contains no LLM client; it produces a bounded, redacted result that a model or a person can review. |
 | Datasets and training | Tested on the fabricated `xero-tb-csv.v1` contract corpus, whose digests every consumer's tests check. It trains, fine-tunes and evaluates no model. |
-| Technical requirements | Python 3.14 or later, run locally |
+| Technical requirements | Standalone Rust binary, run locally; building from source requires Rust 1.99 or later |
 | Network access | None, and no write operation on any accounting system |
 | Where a person decides | A human decision file records the reviewer's decision, and `validate-review` checks it against the run's artefacts and receipt |
 | Acceptance and testing | A change reaches `main` only when the required CI checks pass, and they run the component's test suite on Linux and Windows |

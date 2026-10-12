@@ -87,7 +87,7 @@ class OutputPathTests(unittest.TestCase):
 HEADER = ["Account", "Debit", "Credit", "YTD Debit", "YTD Credit"]
 
 
-def _report(accounts, section="Assets", header=HEADER):
+def _report(accounts, section="Assets", header=HEADER):  # pylint: disable=dangerous-default-value
     """Build a Trial Balance payload.
 
     accounts: [(account_label, debit, credit, ytd_debit, ytd_credit), ...]
@@ -129,7 +129,7 @@ class _ExportCase(unittest.TestCase):
     same shape a scheduled job uses.
     """
 
-    def run_export(
+    def run_export(  # pylint: disable=dangerous-default-value
         self,
         accounts,
         date="2026-06-30",
@@ -595,23 +595,23 @@ class DecimalMoneyTest(_ExportCase):
 
     def test_an_unbalanced_report_is_not_totalled_into_balance(self):
         debits = ["9007199254740992.00", "1.00"]
-        credits = ["9007199254740992.00"]
+        credit_cells = ["9007199254740992.00"]
         # Float agrees with itself and is wrong: 9007199254740992.0 + 1.0
         # rounds straight back to 9007199254740992.0, so the missing dollar
         # vanishes and the report looks balanced.
         self.assertEqual(
-            float(debits[0]) + float(debits[1]), float(credits[0]),
+            float(debits[0]) + float(debits[1]), float(credit_cells[0]),
             "the fixture no longer exercises float's rounding",
         )
         self.assertNotEqual(
-            Decimal(debits[0]) + Decimal(debits[1]), Decimal(credits[0])
+            Decimal(debits[0]) + Decimal(debits[1]), Decimal(credit_cells[0])
         )
 
         raised, out, data = self.run_export(
             [
                 ("Cash (090)", debits[0], "", debits[0], ""),
                 ("Rounding (091)", debits[1], "", debits[1], ""),
-                ("Equity (960)", "", credits[0], "", credits[0]),
+                ("Equity (960)", "", credit_cells[0], "", credit_cells[0]),
             ]
         )
         self.assertIsInstance(raised, SystemExit)
@@ -1191,7 +1191,7 @@ class FlattenReportShapeTest(unittest.TestCase):
     """A cell-count change and a missing Header row both hit the strict zip.
     Neither is a bug in this script, so neither should print a traceback."""
 
-    def _payload(self, cells, header=HEADER, title="Assets"):
+    def _payload(self, cells, header=HEADER, title="Assets"):  # pylint: disable=dangerous-default-value
         rows = []
         if header is not None:
             rows.append(
@@ -2006,7 +2006,7 @@ class AbsurdMagnitudeTest(unittest.TestCase):
         from decimal import Overflow
 
         with self.assertRaises(Overflow):
-            Decimal("1E1000000") + Decimal("1E1000000")
+            Decimal("1E1000000") + Decimal("1E1000000")  # pylint: disable=expression-not-assigned
         with self.assertRaises(SystemExit):
             export_tb.to_number("1E1000000")
 
@@ -2017,6 +2017,21 @@ class AbsurdMagnitudeTest(unittest.TestCase):
             export_tb.to_number("1E999999")
         with self.assertRaises(SystemExit):
             export_tb.to_number("9" * 1000001)
+
+    def test_a_million_digit_cell_is_refused_by_the_pure_python_decimal(self):
+        """Where the C decimal module is unavailable, decimal is _pydecimal,
+        which converts the digits through int() and raises ValueError past
+        sys.get_int_max_str_digits() instead of parsing them."""
+        import _pydecimal
+
+        with patch.object(export_tb, "Decimal", _pydecimal.Decimal), \
+                patch.object(export_tb, "InvalidOperation", _pydecimal.InvalidOperation):
+            with self.assertRaises(SystemExit) as ctx:
+                export_tb.to_number("9" * 1000001)
+        self.assertEqual(
+            str(ctx.exception).split(", which")[0],
+            f'error: report cell "{"9" * 40}" is 1000001 digits long',
+        )
 
     def test_the_cell_is_stripped_before_it_reaches_the_terminal(self):
         with self.assertRaises(SystemExit) as ctx:

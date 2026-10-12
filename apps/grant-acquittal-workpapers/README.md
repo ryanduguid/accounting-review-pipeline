@@ -1,10 +1,10 @@
 # Grant acquittal workpapers
 
-Prepare a local workpaper from a reviewed agreement summary, ledger expenses, explicit allocations and funding receipts. It uses Python's standard library and makes no network requests.
+Prepare a local workpaper from a reviewed agreement summary, ledger expenses, explicit allocations and funding receipts. The `grant-workpaper` command is a Rust binary that makes no network requests.
 
 ```powershell
-python grant_workpaper.py --input examples/two-grants --output ../../../grant-workpaper-demo
-python -m unittest discover -s tests -v
+cargo run --locked --release --bin grant-workpaper -- --input examples/two-grants --output ../../../grant-workpaper-demo
+cargo test --locked
 ```
 
 Run these commands from `apps/grant-acquittal-workpapers` in an
@@ -14,12 +14,22 @@ REVIEW (exit 2) and saves 5 review items. RECONCILED exits 0 and malformed input
 exits 1. These describe the supplied arithmetic and evidence, never grant
 eligibility or acquittal approval. Choose a new output folder for each run.
 
-For a locked setup, use `uv sync --locked` and run the same commands through
-`uv run --locked`. The package has no runtime dependencies.
+`rust-toolchain.toml` pins the Rust toolchain, which rustup installs on first
+use, and `Cargo.lock` pins the one dependency, `sha2`. From 0.2.0 the Python
+script `grant_workpaper.py` is gone. The Rust command reads the same inputs and
+writes byte-identical files, exit codes and messages, matching the script under
+Python 3.15 (a date outside the calendar reports the range error that version's
+`date.fromisoformat` gives). One exception: the command refuses `agreements.json`
+nested more than 10,000 levels deep (`agreements.json is nested too deeply to
+read`). The script's
+limit came from the C stack, so it varied by platform and stack size: under
+Python 3.15 it read about 13,800 nested arrays on Windows and 65,000 on Linux
+with an 8 MiB stack. The Python `pyproject.toml` and its `uv.lock` remain
+for the setup and replay utility below, which has no runtime dependencies.
 
 ## Run all joined accounting examples
 
-From this directory, with Python 3.14 or later, Git and uv on PATH:
+From this directory, with Python 3.14 or later, Git, uv and cargo on PATH:
 
 ```powershell
 python setup_utility.py --workspace ../../../accounting-utility-demo
@@ -168,11 +178,20 @@ The fabricated ledger totals $6,500. Allocations total $6,300 and $200 remains u
 
 ## Verification and development
 
-Run the standard-library unittest suite above. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
+Run `cargo test --locked` above for the workpaper, and
+`python -m unittest discover -s tests -v` for the setup and replay utility. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
 
-GitHub Actions runs the suite with Python 3.14, including a competing
-destination created immediately before publication. Pull requests run on Linux;
-pushes to `main` and manual runs also test Windows. It does not run macOS, so the
+GitHub Actions runs the Rust tests, `cargo fmt --check` and `cargo clippy` on Linux
+and Windows, including a competing destination created immediately before
+publication, and runs the bundled example from a release build. The utility's
+unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
 `RENAME_EXCL` path is untested there.
-It also runs Ruff with a pinned version. Local lint uses
+It also runs Ruff with a pinned version on the utility. Local lint uses
 `uv run --with ruff==0.16.7 ruff check .`.
+
+`tests/differential/differential.py` compares the binary with the 0.1.0 Python
+script on generated inputs, mutated CSV and JSON, output paths and command lines:
+
+```powershell
+python -I tests/differential/differential.py --script <path to grant_workpaper.py> --binary target/debug/grant-workpaper --cases 1500
+```
