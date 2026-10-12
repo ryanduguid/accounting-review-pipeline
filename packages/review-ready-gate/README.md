@@ -15,9 +15,9 @@
 ```
 
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/review-ready-gate.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/review-ready-gate/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-5C2D91.svg?logo=python&logoColor=white&labelColor=04001F)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/review-ready-gate.svg?color=66023C&labelColor=000000)](https://pypi.org/project/review-ready-gate/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-66023C.svg?logo=python&logoColor=white&labelColor=000000)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-66023C.svg?labelColor=000000)](LICENSE)
 
 [Browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) · [Reproduce locally](evaluation/manager_review_gate/README.md) · [Quick demo](#quick-demo) · [Release notes](RELEASE_NOTES.md)
 
