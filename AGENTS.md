@@ -21,14 +21,13 @@ These repository-wide rules apply everywhere:
   `DECISION_RECORDED` receipt. None of them approves accounting, posts a journal, makes a
   payment, lodges a return or locks a period.
 - Preserve every distribution name, import package, command, exit code, file schema,
-  version, licence and component lockfile. The one exception, decided by the owner on
-  11 October 2026: the Xero Ledger Review Gate became a Rust binary in 1.0.0 and has no
-  Python import package; its command, exit codes and file formats are unchanged. It has
-  no release caller until a Rust release path is approved; 0.2.6 stays the released
-  Python distribution on PyPI. Production code must not import a sibling
+  version, licence and component lockfile. Production code must not import a sibling
   component, and no review package may import the exporter. One shared `.venv` makes every
   Python component importable from every other; that is a convenience for tests, not a
-  licence to depend on a sibling.
+  licence to depend on a sibling. The owner made one exception on 11 October 2026: the
+  Xero Ledger Review Gate became a Rust binary in 1.0.0 and has no Python import package;
+  its command, exit codes and file formats are unchanged. It has no release caller until a
+  Rust release path is approved; 0.2.6 stays the released Python distribution on PyPI.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
