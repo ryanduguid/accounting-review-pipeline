@@ -1,5 +1,9 @@
 # v1.0.0 (unreleased)
 
+Licence: Apache-2.0 replaces MIT. Anyone who redistributes this package or a
+derivative must keep the attribution in `NOTICE`. Versions already released stay
+under MIT.
+
 Breaking changes:
 
 - The gate is a standalone Rust binary. The `elizabeth_anne_alexander` Python import is removed; call the `elizabeth-anne-alexander` command, whose subcommands and flags are unchanged.

@@ -14,7 +14,7 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
+[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-4F485E.svg?labelColor=04001F)](LICENSE)
 
 Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 
@@ -246,7 +246,7 @@ See [the close-input contract roadmap](docs/close-input-contract-roadmap.md) for
 
 ## Disclaimer
 
-Utility code, MIT-licensed, no warranty. Nothing here is tax or financial advice; outputs need professional review like any workpaper input. Xero and MYOB are trademarks of their respective owners. This project is independent and not affiliated with or endorsed by either.
+Utility code, Apache-2.0 licensed, no warranty. Nothing here is tax or financial advice; outputs need professional review like any workpaper input. Xero and MYOB are trademarks of their respective owners. This project is independent and not affiliated with or endorsed by either.
 
 ## Author
 

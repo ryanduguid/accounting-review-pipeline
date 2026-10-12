@@ -99,7 +99,7 @@ def test_citation_declares_the_current_release_identity() -> None:
     assert "version: 0.2.0" in citation
     assert 'family-names: "Duguid"' in citation
     assert 'given-names: "Ryan"' in citation
-    assert "license: MIT" in citation
+    assert "license: Apache-2.0" in citation
     assert f'repository-code: "{PACKAGE_URL}"' in citation
     assert "date-released:" not in citation
 

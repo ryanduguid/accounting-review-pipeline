@@ -31,7 +31,7 @@ authorship, source system, origin, time, or immutability.
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=5C2D91&labelColor=04001F)](https://pypi.org/project/elizabeth-anne-alexander/)
 [![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-5C2D91.svg?logo=rust&logoColor=white&labelColor=04001F)](rust-toolchain.toml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-4F485E.svg?labelColor=04001F)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-4F485E.svg?labelColor=04001F)](LICENSE)
 [![No network client](https://img.shields.io/badge/Network-No%20Client-5C2D91.svg?labelColor=04001F)](DATA-FLOW.md)
 
 A **fixed-policy, zero-network ledger-review boundary for AI**, not an AI that operates Xero.
@@ -153,4 +153,5 @@ Every source manifest, review context, model result, reviewer evidence, and rece
 
 - [`DATA-FLOW.md`](./DATA-FLOW.md) - Formal data-flow and zero-network security specification.
 - [`CITATION.cff`](./CITATION.cff) - Academic and industry citation metadata.
-- [`LICENSE`](./LICENSE) - MIT License.
+- [`LICENSE`](./LICENSE) - Apache License 2.0.
+- [`NOTICE`](./NOTICE) - attribution to keep in redistributions and derivative works.
