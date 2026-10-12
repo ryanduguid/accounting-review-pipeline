@@ -29,7 +29,7 @@ flowchart LR
     Model --> Answer["answer carrying placeholders"]
     Answer --> Restore["restore, local, entity map only"]
     style Halt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    style Out fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    style Out fill:#0F4B32,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Restore fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
 ```
 
