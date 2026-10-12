@@ -8,7 +8,7 @@ authors:
 abstract: "Runs deterministic month-end close checks on Xero trial-balance exports and produces exception packs for human sign-off."
 repository-code: "https://github.com/ryanduguid/accounting-review-pipeline"
 url: "https://duguid.com.au/tools/"
-license: MIT
+license: Apache-2.0
 keywords:
   - accounting
   - accounting-automation

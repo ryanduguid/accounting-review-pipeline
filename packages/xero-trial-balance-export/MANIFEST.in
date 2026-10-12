@@ -2,6 +2,7 @@
 # read. A link in the archive that opens nothing, or an install command whose
 # lockfile is absent, is what this file exists to prevent.
 include LICENSE
+include NOTICE
 include CITATION.cff
 include README.md
 include SECURITY.md

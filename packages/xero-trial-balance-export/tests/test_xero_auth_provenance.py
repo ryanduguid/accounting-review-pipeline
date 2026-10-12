@@ -15,9 +15,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned when the badge and install step named the Python 3.11 floor.
+# Re-pinned when the licence badge and statement changed from MIT to Apache-2.0.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "F97772CCBAE82F2D8E4DFE6A115967D5D2AE01133469AAC8521C7A1ED3D8E822"
+README_SHA256 = "01D760E94CEBB1B55B29EF139EB83E647932CBAB79ADB3026B219526F2121573"
 # Re-pinned when TOKEN_URL gained a Bandit "nosec B105" comment (the token
 # endpoint URL is not a password) after server_bind() gained its RFC 8252
 # loopback NOSONAR comment. Comments are the only change: AUTH_AST_SHA256

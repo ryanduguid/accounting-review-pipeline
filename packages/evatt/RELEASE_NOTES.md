@@ -1,5 +1,8 @@
 # Unreleased
 
+- Licence: Apache-2.0 replaces MIT. Anyone who redistributes this package or a
+  derivative must keep the attribution in `NOTICE`. Versions already released stay
+  under MIT.
 - Halt on TFN, ABN, ACN and Medicare digits that continue into a next-line
   numbered-list marker, including short fragments and candidates hidden by
   trailing digit pins. Keep genuine hard wraps and index ambiguous `verify`

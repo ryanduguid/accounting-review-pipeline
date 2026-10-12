@@ -4,11 +4,11 @@ version = "1.0.0"
 edition = "2024"
 rust-version = "1.99"
 description = "A fixed-policy, synthetic-data review boundary for AI-assisted Xero trial-balance analysis"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 readme = "README.md"
 keywords = ["xero", "accounting", "privacy", "controls"]
-include = ["src/**", "elizabeth_anne_alexander/policy/**", "elizabeth_anne_alexander/samples/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
+include = ["src/**", "elizabeth_anne_alexander/policy/**", "elizabeth_anne_alexander/samples/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "NOTICE"]
 
 [dependencies]
 num-bigint = "0.4"

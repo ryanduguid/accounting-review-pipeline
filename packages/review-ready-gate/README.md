@@ -17,7 +17,7 @@
 [![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/review-ready-gate.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/review-ready-gate/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
 
 [Browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) · [Reproduce locally](evaluation/manager_review_gate/README.md) · [Quick demo](#quick-demo) · [Release notes](RELEASE_NOTES.md)
 
@@ -332,4 +332,4 @@ The test suite covers schema gates, the 3 fabricated engagement packs, empty and
 
 Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.11, 3.12, 3.13, 3.14 and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
 
-MIT licensed. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+Apache-2.0 licensed; keep the attribution in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
