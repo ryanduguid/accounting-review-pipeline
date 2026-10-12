@@ -1,7 +1,7 @@
 //! Reads one JSON request per line and answers with the test suite's reimplementation of
 //! a Python behaviour, for tests/differential/python_semantics_differential.py:
 //!
-//! - `{"mode": "csv", "text": ...}`: `csv.reader` rows;
+//! - `{"mode": "csv", "text": ...}`: `csv.reader` rows, or `"error"` past the field limit;
 //! - `{"mode": "dict", "text": ...}`: `csv.DictReader` header and rows, `null` for restval;
 //! - `{"mode": "date", "text": ...}`: `date.fromisoformat`, or `"error"`;
 //! - `{"mode": "bpa", "text": ..., "object": {...}}`: the BPA rule evaluation, or `"error"`.
@@ -80,6 +80,7 @@ fn main() {
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for line in std::io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line.expect("readable input")).expect("a JSON request");
-        writeln!(out, "{}", answer(&request)).expect("writable output");
+        let result = catch_unwind(AssertUnwindSafe(|| answer(&request))).unwrap_or_else(|_| json!("error"));
+        writeln!(out, "{result}").expect("writable output");
     }
 }

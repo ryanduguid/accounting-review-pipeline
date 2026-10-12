@@ -4,7 +4,8 @@
         [--cases N] [--seed S]
 
 Four behaviours the Rust tests rely on, each over generated input plus a directed
-corpus: csv.reader and csv.DictReader over text read with newline="", date.fromisoformat,
+corpus: csv.reader and csv.DictReader over text read with newline="" (including the
+default 131,072-character field limit), date.fromisoformat,
 and the BPA rule evaluation the Python suite performed by translating Dynamic LINQ to
 Python and calling eval.
 """
@@ -22,7 +23,9 @@ from typing import Any
 
 CSV_TOKENS = ['a', 'b', ',', '"', '""', '\r', '\n', '\r\n', ' ', '1', 'x"y', '","', '\t']
 CSV_DIRECTED = ["", "\n", "a,b\n\n", "a,\n", '"a\nb",c', '"unterminated', 'x"y,z', '"a"b,c', "\r\r\n\n",
-                "\nAccountCode,Class\n100,Asset\n", "a,b\n1\n", "a,b\n1,2,3\n", "a,a\n1,2\n", "a\n\n\n1\n"]
+                "\nAccountCode,Class\n100,Asset\n", "a,b\n1\n", "a,b\n1,2,3\n", "a,a\n1,2\n", "a\n\n\n1\n",
+                "a" * 131072, "a" * 131073, '"' + "b" * 131072 + '"', '"' + "b" * 131073 + '"',
+                "x," + "c" * 131073 + "\n", "h\n" + "d" * 131072 + "\n" + "e" * 131072]
 DATE_DIRECTED = ["2026-07-29", "20260729", "2026-W31-3", "2026W313", "2026-W31", "2026W31", "2026-W53-1",
                  "2020-W53-7", "2026-02-29", "2024-02-29", "0000-01-01", "9999-12-31", "2026-1-015",
                  "2026101599", "2026-10-1x", "2026W31-3", "2026-W313", "2026-W00-1", "2026-W01-8", "٢026-01-01"]
@@ -49,12 +52,15 @@ def python_evaluate(expression: str, obj: dict[str, object]) -> bool:
 def expected(request: dict[str, Any]) -> Any:
     text = request["text"]
     mode = request["mode"]
-    if mode == "csv":
-        return [list(row) for row in csv.reader(io.StringIO(text, newline=""))]
-    if mode == "dict":
-        reader = csv.DictReader(io.StringIO(text, newline=""))
-        rows = [{key: value for key, value in row.items() if key is not None} for row in reader]
-        return {"header": list(reader.fieldnames or []), "rows": rows}
+    try:
+        if mode == "csv":
+            return [list(row) for row in csv.reader(io.StringIO(text, newline=""))]
+        if mode == "dict":
+            reader = csv.DictReader(io.StringIO(text, newline=""))
+            rows = [{key: value for key, value in row.items() if key is not None} for row in reader]
+            return {"header": list(reader.fieldnames or []), "rows": rows}
+    except csv.Error:
+        return "error"
     if mode == "date":
         try:
             return datetime.date.fromisoformat(text).isoformat()

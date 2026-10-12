@@ -167,13 +167,13 @@ enum CsvState {
 /// closing quote continues the field, and an unterminated quote ends the last field.
 pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     use CsvState::*;
-    let (mut rows, mut fields, mut field, mut state) = (Vec::new(), Vec::new(), String::new(), StartRecord);
+    let (mut rows, mut fields, mut field, mut state) = (Vec::new(), Vec::new(), Field::default(), StartRecord);
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
         let newline = c == '\r' || c == '\n';
         if newline && state != InQuoted {
             if state != StartRecord {
-                fields.push(std::mem::take(&mut field));
+                fields.push(field.take());
             }
             rows.push(std::mem::take(&mut fields));
             if c == '\r' && chars.peek() == Some(&'\n') {
@@ -185,25 +185,48 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
         state = match (state, c) {
             (StartRecord | StartField, '"') => InQuoted,
             (StartRecord | StartField | InField | QuoteInQuoted, ',') => {
-                fields.push(std::mem::take(&mut field));
+                fields.push(field.take());
                 StartField
             }
             (InQuoted, '"') => QuoteInQuoted,
             (QuoteInQuoted, '"') | (InQuoted, _) => {
-                field.push(c);
+                field.add(c);
                 InQuoted
             }
             _ => {
-                field.push(c);
+                field.add(c);
                 InField
             }
         };
     }
     if state != StartRecord {
-        fields.push(field);
+        fields.push(field.take());
         rows.push(fields);
     }
     rows
+}
+
+/// A field being read, held to csv.field_size_limit()'s default of 131,072 characters.
+#[derive(Default)]
+struct Field {
+    text: String,
+    length: usize,
+}
+
+impl Field {
+    fn add(&mut self, c: char) {
+        assert!(
+            self.length < 131_072,
+            "_csv.Error: field larger than field limit (131072)"
+        );
+        self.length += 1;
+        self.text.push(c);
+    }
+
+    fn take(&mut self) -> String {
+        self.length = 0;
+        std::mem::take(&mut self.text)
+    }
 }
 
 /// A `csv.DictReader` row. A short row's missing values are `None`, as DictReader's
