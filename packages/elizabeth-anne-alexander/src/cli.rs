@@ -246,8 +246,8 @@ fn command_help(prog: &str, command: &Command) -> String {
 }
 
 /// The ratio difflib.SequenceMatcher(None, a, b).ratio() computes.
-fn sequence_ratio(a: &[char], b: &[char]) -> f64 {
-    let mut b2j: BTreeMap<char, Vec<usize>> = BTreeMap::new();
+fn sequence_ratio(a: &[u32], b: &[u32]) -> f64 {
+    let mut b2j: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
     for (j, c) in b.iter().enumerate() {
         b2j.entry(*c).or_default().push(j);
     }
@@ -280,9 +280,9 @@ fn sequence_ratio(a: &[char], b: &[char]) -> f64 {
 
 /// `SequenceMatcher.find_longest_match(alo, ahi, blo, bhi)`.
 fn longest_match(
-    a: &[char],
-    b: &[char],
-    b2j: &BTreeMap<char, Vec<usize>>,
+    a: &[u32],
+    b: &[u32],
+    b2j: &BTreeMap<u32, Vec<usize>>,
     (alo, ahi, blo, bhi): (usize, usize, usize, usize),
 ) -> (usize, usize, usize) {
     let (mut besti, mut bestj, mut bestsize) = (alo, blo, 0);
@@ -316,10 +316,11 @@ fn longest_match(
 
 /// `difflib.get_close_matches(word, possibilities, n=1)`.
 fn close_match(word: &str, possibilities: &[&'static str]) -> Option<&'static str> {
-    let b: Vec<char> = word.chars().collect();
+    // Python compares code points, so a lone surrogate counts once.
+    let b: Vec<u32> = pytext::code_points(word).collect();
     possibilities
         .iter()
-        .map(|p| (sequence_ratio(&p.chars().collect::<Vec<_>>(), &b), *p))
+        .map(|p| (sequence_ratio(&p.chars().map(u32::from).collect::<Vec<_>>(), &b), *p))
         .filter(|(score, _)| *score >= 0.6)
         .max_by(|x, y| x.0.partial_cmp(&y.0).unwrap().then_with(|| x.1.cmp(y.1)))
         .map(|(_, p)| p)
@@ -436,7 +437,7 @@ fn help_or_error(flag: &str, explicit: Option<(String, bool)>) -> Result<(), Str
         Some((rest, false)) if flag == "-h" && !rest.is_empty() && !rest.starts_with('-') => Ok(()),
         Some((rest, _)) => Err(format!(
             "argument -h/--help: ignored explicit argument {}",
-            pytext::repr(&rest)
+            pytext::repr_os(&rest)
         )),
     }
 }
@@ -541,7 +542,7 @@ fn invalid_choice(token: &str) -> String {
         .unwrap_or_default();
     format!(
         "argument command: invalid choice: {}{suggestion} (choose from {})",
-        pytext::repr(token),
+        pytext::repr_os(token),
         quoted.join(", ")
     )
 }
@@ -774,5 +775,16 @@ mod tests {
             Some("evaluate")
         );
         assert_eq!(close_match("zzz", &["evaluate", "validate-review"]), None);
+        // A carried lone surrogate is one code point, as in Python: "eval\udcff"
+        // scores 8/13 against "evaluate", above the 0.6 cutoff.
+        let mut word = "eval".to_string();
+        pytext::push_code_point(&mut word, 0xDCFF);
+        assert_eq!(close_match(&word, &["evaluate", "validate-review"]), Some("evaluate"));
+        let mut genuine = "eval".to_string();
+        pytext::push_code_point(&mut genuine, 0x10_F7FF);
+        assert_eq!(
+            close_match(&genuine, &["evaluate", "validate-review"]),
+            Some("evaluate")
+        );
     }
 }

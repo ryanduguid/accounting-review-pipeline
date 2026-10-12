@@ -265,7 +265,7 @@ impl Env {
     }
 
     fn bundle_display(&self, raw: &PyStr) -> String {
-        bundled(&pypath::display(&render(raw)))
+        bundled(&pypath::display(&raw.os_text()))
     }
 }
 

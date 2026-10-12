@@ -62,6 +62,11 @@ pub fn code_points(text: &str) -> impl Iterator<Item = u32> + '_ {
     })
 }
 
+/// `len(text)` in Python: code points, with each carried lone surrogate counted once.
+pub fn py_len(text: &str) -> usize {
+    code_points(text).count()
+}
+
 pub fn is_space(cp: u32) -> bool {
     in_ranges(PY_SPACE, cp)
 }
@@ -116,7 +121,15 @@ pub fn repr_code_points(cps: &[u32]) -> String {
     out
 }
 
+/// `repr(text)` for text read from a file or built by the program.
 pub fn repr(text: &str) -> String {
+    let cps: Vec<u32> = text.chars().map(u32::from).collect();
+    repr_code_points(&cps)
+}
+
+/// `repr(text)` for text decoded from an OS string (`oserror::decode_os`),
+/// whose lone surrogates are carried as escape pairs.
+pub fn repr_os(text: &str) -> String {
     let cps: Vec<u32> = code_points(text).collect();
     repr_code_points(&cps)
 }
@@ -144,6 +157,10 @@ mod tests {
 
     #[test]
     fn repr_matches_python() {
+        // File text keeps the carrier's code points as themselves; only OS text decodes pairs.
+        let pair = "\u{10F7FF}\u{10F800}";
+        assert_eq!(repr(pair), r"'\U0010f7ff\U0010f800'");
+        assert_eq!(repr_os(pair), r"'\ud800'");
         assert_eq!(repr("200"), "'200'");
         assert_eq!(repr("it's"), "\"it's\"");
         assert_eq!(repr("a'b\"c"), "'a\\'b\"c'");

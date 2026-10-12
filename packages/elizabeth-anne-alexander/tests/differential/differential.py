@@ -378,10 +378,12 @@ INPUT_VARIANTS = [CONTEXT, "./" + CONTEXT, "samples//contexts/sample-monthly-var
 # Names Python decodes with surrogateescape (POSIX bytes) or keeps as lone
 # surrogates (Windows UTF-16), and root forms pathlib prints its own way.
 if os.name != "nt":
-    ODD_INPUTS = [b"samples/x\xff.json", b"\xe9t\xe9.json", "//etc/hostname", "///etc/hostname", "//x/./y.json"]
+    ODD_INPUTS = [b"samples/x\xff.json", b"\xe9t\xe9.json", "//etc/hostname", "///etc/hostname", "//x/./y.json",
+                  b"eval\xff", "eval\U0010f7ff".encode(), b"evalu\xff\xfe"]
     ODD_OUTPUTS = [b"build/out\xff", b"build/\x80/v"]
 else:
-    ODD_INPUTS = ["samples/x\ud800.json", "\udc80.json", "C:", "C:x.json", "\\x.json"]
+    ODD_INPUTS = ["samples/x\ud800.json", "\udc80.json", "C:", "C:x.json", "\\x.json",
+                  "eval\udcff", "eval\U0010f7ff", "evalu𐏿"]
     ODD_OUTPUTS = ["build/out\udcff", "build/\ud800/v"]
 PATH_VARIANTS += ODD_OUTPUTS
 INPUT_VARIANTS += ODD_INPUTS

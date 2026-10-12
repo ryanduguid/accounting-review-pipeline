@@ -37,7 +37,7 @@ pub fn os_error(error: &io::Error, filename: Option<&Path>, other: Option<&Path>
         Some(code) => format!("[Errno {code}] "),
         None => String::new(),
     };
-    let quoted = |p: &Path| pytext::repr(&pypath::text(p));
+    let quoted = |p: &Path| pytext::repr_os(&pypath::text(p));
     match (filename, other) {
         (Some(a), Some(b)) => format!("{tag}{message}: {} -> {}", quoted(a), quoted(b)),
         (Some(a), None) => format!("{tag}{message}: {}", quoted(a)),

@@ -487,7 +487,7 @@ mod tests {
         use std::os::unix::ffi::OsStrExt;
         let raw = OsStr::from_bytes(b"build/out\xff");
         let text = decode_os(raw);
-        assert_eq!(pytext::repr(&text), "'build/out\\udcff'");
+        assert_eq!(pytext::repr_os(&text), "'build/out\\udcff'");
         assert_eq!(encode_os(&text), raw);
         assert_eq!(display("//x/./y"), "//x/y");
         assert_eq!(display("///etc"), "/etc");
@@ -497,7 +497,7 @@ mod tests {
         let genuine_text = decode_os(genuine);
         assert_ne!(genuine_text, text);
         assert_eq!(encode_os(&genuine_text), genuine);
-        assert_eq!(pytext::repr(&genuine_text), "'build/out\\U0010fcff\\U0010f7ff'");
+        assert_eq!(pytext::repr_os(&genuine_text), "'build/out\\U0010fcff\\U0010f7ff'");
     }
 
     #[cfg(not(windows))]
