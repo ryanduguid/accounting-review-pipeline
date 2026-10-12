@@ -56,7 +56,7 @@ member and 3 columns:
 
 New entity-master columns: `State`, `GSTBasis`, `BASCycle`. The Power BI
 `Dim_Entity` expression declares `Columns=10` and
-`test_powerquery_m.py` holds every sample row to that width, so the
+`tests/powerquery_m.rs` holds every sample row to that width, so the
 expression and the table definition change with the master. Place names
 follow the existing convention.
 Customer, supplier and employee names stay obviously synthetic.
@@ -196,7 +196,7 @@ runs:
 | Cedar and Pine Consulting | ENT001 Varrock Ventures | Regenerate the skills README preview from the ENT001 September 2026 pack; add firm-based Workpaper Review Gate examples beside the existing 3 | The existing `bas-*` examples are pinned by `test_loader.py`, `test_engine.py` and the site's refusals page at `v0.1.3`; remove them only in a later minor release, in their own pull request |
 | Harbour Light | ENT002 Draynor Produce, VIC | Regenerate `data/xero_pl.csv`, `xero_bs.csv` and `xero_pl_tracking.csv` from the ENT002 July 2026 ledger; rename the example directory, intake, profile and registries; update the 9 tests to the firm figures | au-fpa-pack 0.1.1 is published on PyPI; preserve its distribution identity, the 13-week window and the 28 October BAS due date |
 | CivilCo and HaulCo | ENT005 Lumbridge Civil and ENT003 Falador Freight | Rename the `Entity` dimension elements and every rule and example row; recompute; `Group` stays | The model is recomputed in CI, so every expected figure moves with the rename in one change |
-| Varrock group (Power BI) | The base of the firm | Retire `generate_fixtures.py` in favour of the root generator; the 6 samples become copies with a drift test against `contracts/fabricated-firm-v1/`; add ENT005 and the 3 columns; update the `Dim_Entity` width | `Fx_ValidateABN` must keep passing, so ENT005 needs a checksum-valid ABN |
+| Varrock group (Power BI) | The base of the firm | Retire the `generate-fixtures` binary in favour of the root generator; the 6 samples become copies with a drift test against `contracts/fabricated-firm-v1/`; add ENT005 and the 3 columns; update the `Dim_Entity` width | `Fx_ValidateABN` must keep passing, so ENT005 needs a checksum-valid ABN |
 | Varrock Ventures (Monthly Close, Workpaper Review Gate month-end and year-end) | ENT001 | Add firm-based examples beside the existing ones | The Monthly Close README pins `REVIEW; 8 exception(s)` and the refusals page pins `BLOCKED; 10 exception(s)` with its totals at `monthly-close-control-plane/v0.1.3`, so the existing examples go only in a later minor release, as for the `bas-*` examples above; exit codes and status vocabularies never change |
 | Catherby Fisheries | Unchanged | v1 stays the byte-pinned integrity corpus | Its digests are release evidence |
 | Demo Entity, Yanille Trading | ENT001 | Regenerate from the firm trial balances and Xero report shapes | The ledger-review gate's tests pin its sample outcomes; update them in the same change |
