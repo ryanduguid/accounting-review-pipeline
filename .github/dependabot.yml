@@ -2,8 +2,9 @@ version: 2
 updates:
   # The exporter's pip requirement files get their own entry. The exporter is
   # also a uv workspace member, so a bump here to one of the 5 exact check-tool
-  # pins must be matched in the root and the other members, as in #197. The
-  # other 4 uv components have no entry: a member-directory job resolves the
+  # pins must be matched in the root and the other members, as in #197 and
+  # #351. Those 5 are ignored here as at the root, and move together in a
+  # reviewed change. The other 4 uv components have no entry: a member-directory job resolves the
   # whole workspace, so it cannot move one member's pin alone. Their jobs
   # opened no pull request after the root workspace was added on 7 September
   # 2026, and all 4 failed on 20 September. The root entry below moves the
@@ -13,8 +14,7 @@ updates:
   # This entry never edits requirements.lock: it left the file alone through
   # 2 group bumps. The lock is exported from the exporter's uv.lock and CI
   # fails when the two differ, so when the root entry moves the exporter's
-  # lock, regenerate the export in the same pull request (see the exporter's
-  # CONTRIBUTING.md).
+  # lock, regenerate the export in the same pull request with `just relock`.
   - package-ecosystem: "pip"
     directory: "/packages/xero-trial-balance-export"
     schedule:
@@ -26,6 +26,12 @@ updates:
       python-dependencies:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "ruff"
+      - dependency-name: "mypy"
+      - dependency-name: "pytest"
+      - dependency-name: "pytest-cov"
+      - dependency-name: "coverage"
 
   # The root uv workspace lock. `uv run --locked` inside every component
   # directory validates this lock, not the component's, so it must move too.

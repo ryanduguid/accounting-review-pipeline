@@ -104,6 +104,31 @@ typecheck: setup
     echo "==> packages/xero-trial-balance-export"
     (cd packages/xero-trial-balance-export && uv run --no-sync mypy --ignore-missing-imports --pretty {{ exporter_modules }})
 
+# Regenerate the root lock, every component's own release lock and the exporter's
+# requirements.lock. Run it after any dependency change, including on a Dependabot
+# branch before merging. Inside the workspace `uv lock` writes only the root lock,
+# so each component is relocked from a copy outside the checkout, as CI checks it.
+relock:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "==> root"
+    uv lock
+    for lock in packages/*/uv.lock apps/*/uv.lock; do
+        directory="$(dirname "${lock}")"
+        [ -f "${directory}/pyproject.toml" ] || continue
+        echo "==> ${directory}"
+        standalone="$(mktemp -d)"
+        tar -C "${directory}" --exclude=.venv --exclude=target -cf - . | tar -C "${standalone}" -xf -
+        (cd "${standalone}" && uv lock)
+        cp "${standalone}/uv.lock" "${lock}"
+        if [ -f "${directory}/requirements.lock" ]; then
+            (cd "${standalone}" && uv export --locked --no-dev --no-emit-project \
+                --format requirements-txt --output-file requirements.lock >/dev/null)
+            cp "${standalone}/requirements.lock" "${directory}/requirements.lock"
+        fi
+        rm -rf "${standalone}"
+    done
+
 # Not a CI equivalent. The component workflows also verify the component
 # lockfile, install the exporter's hash-locked requirements, build each
 # distribution, install and smoke-test the built wheel outside the checkout,
