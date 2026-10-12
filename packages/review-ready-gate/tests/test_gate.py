@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from reviewready.cli import main
 from reviewready.engine import review_pack
-from reviewready.errors import GateInputError
+from reviewready.errors import GateInputError, NumericGateError
 from reviewready.models import FINDING_MISSING_ARTEFACT, FINDING_TB_UNBALANCED
 from reviewready.report import (
     CHECKOUT_MARKERS,
@@ -83,6 +83,33 @@ def test_gst_tieout_break(tmp_path: Path) -> None:
     pack = review_pack(profile="bas", pack_dir=pack_dir, tieout_tolerance=Decimal("0.01"))
     assert pack.status == "NOT_READY"
     assert any(item.code == "TIEOUT_BREAK" for item in pack.findings)
+
+
+@pytest.mark.parametrize("small_first", [True, False])
+def test_bas_precision_cannot_hide_gst_movement(tmp_path: Path, small_first: bool) -> None:
+    pack_dir = copy_example_pack("bas-ready", tmp_path / "pack")
+    (pack_dir / "activity_statement.csv").write_text(
+        "Label,Amount\n1A,0.00\n1B,0.00\n", encoding="utf-8"
+    )
+    amount = "1" + "0" * 28 + ".00"
+    large_credit = f"2026-01-15,820,GST Payable,0.00,{amount},Fabricated credit\n"
+    large_debit = f"2026-01-15,820,GST Payable,{amount},0.00,Fabricated debit\n"
+    small_credit = "2026-01-15,820,GST Payable,0.00,2.00,Fabricated residual\n"
+    postings = (
+        large_credit + small_credit + large_debit
+        if small_first
+        else large_credit + large_debit + small_credit
+    )
+    (pack_dir / "gst_control_gl.csv").write_text(
+        "Date,AccountID,AccountName,Debit,Credit,Description\n" + postings,
+        encoding="utf-8",
+    )
+    try:
+        pack = review_pack(profile="bas", pack_dir=pack_dir)
+    except NumericGateError:
+        # Refusing unsupported precision also preserves the readiness boundary.
+        return
+    assert pack.status != "READY"
 
 
 @pytest.mark.parametrize(
