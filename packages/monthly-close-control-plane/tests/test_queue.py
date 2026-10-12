@@ -208,3 +208,12 @@ def test_recorded_text_cannot_split_table_rows_or_emit_terminal_controls(tmp_pat
     assert "\u009b" not in sheet  # nosec B101 - pytest outcome assertion.
     assert "\u202e" not in sheet  # nosec B101 - pytest outcome assertion.
     assert r"RD\|\n\u001b[31m" in sheet  # nosec B101 - pytest outcome assertion.
+
+
+def test_unresolvable_pack_directory_is_an_input_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def symlink_loop(self: Path, strict: bool = False) -> Path:
+        raise RuntimeError(f"Symlink loop from {self}")
+
+    monkeypatch.setattr(Path, "resolve", symlink_loop)
+    with pytest.raises(ControlInputError, match="Cannot resolve pack directory: Symlink loop"):
+        render_review_queue([tmp_path / "pack"])

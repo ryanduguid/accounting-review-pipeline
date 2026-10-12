@@ -249,3 +249,20 @@ def test_cli_exit_contract(tmp_path, capsys):
     inputs[2].write_text("invalid")
     assert main(args) == 1
     assert "Invalid coding evidence" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("field", ["tenant", "period_start", "period_end"])
+def test_declared_scope_fields_must_be_text(tmp_path, field):
+    before, after, path, document = _fixture(tmp_path)
+    document[field] = 2025
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ControlInputError, match=f"{field} must be text"):
+        classify(before, after, path, currency="AUD")
+
+
+def test_transaction_outside_the_declared_period_is_refused(tmp_path):
+    before, after, path, document = _fixture(tmp_path)
+    document["period_end"] = "2025-11-30"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ControlInputError, match="Every transaction must fall within the declared selection period"):
+        classify(before, after, path, currency="AUD")
