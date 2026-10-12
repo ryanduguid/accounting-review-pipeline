@@ -1,0 +1,16 @@
+# Codecov reports coverage for the README badge. The CI coverage gates decide
+# merges, so Codecov's own statuses are informational and it posts no comments.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+comment: false
+# Path filters skip unchanged components, so each component's upload carries
+# a flag and keeps its last figure until its tests run again.
+flag_management:
+  default_rules:
+    carryforward: true
