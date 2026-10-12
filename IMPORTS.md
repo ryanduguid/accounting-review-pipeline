@@ -87,13 +87,13 @@ OAuth or publishing credentials. Production packages do not import sibling packa
 
 ## Anchor remote preflight (read-only)
 
-The anchor remains public and active as `accounting-review-pipeline`; its default branch is
-`main`. Branch protection on `main` requires the status checks `package`, `test (3.10)`,
-`test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python` with strict up-to-date
-enforcement, so the root `ci.yml` keeps the workflow name `tests` with job ids `test`,
-`package` and `lint`, and `codeql.yml` keeps its job name `Analyze Python`. The repository
-has exactly one environment, `pypi`. The latest anchor release is `v0.1.2`. No remote
-setting was changed.
+The import preflight recorded the public `accounting-review-pipeline` anchor with
+default branch `main`. Its recorded protected checks were `package`, `test (3.10)`,
+`test (3.11)`, `test (3.12)`, `test (3.13)` and `Analyze Python`, with strict up-to-date
+enforcement. The root workflow retains the name `tests` and job ids `test`, `package`
+and `lint`; `codeql.yml` retains `Analyze Python`. Before merging the Python 3.14
+migration, verify the current protected check contexts against the new matrix.
+The preflight recorded one environment, `pypi`, and anchor release `v0.1.2`.
 
 ## Release policy prerequisite
 
@@ -106,7 +106,8 @@ the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7f
 commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
 produced no release. Every root release caller now pins `a601f1d`, a later policy commit
-that descends from that twin, so the reusable workflows remain reachable;
+that descends from the squash-landed Python 3.14 migration. The reusable workflows
+remain reachable at that immutable commit.
 `tests/test_release_pins.py` holds the README and the release recipes to whatever the
 callers pin today.
 
@@ -138,7 +139,6 @@ disagree.
 |---|---|---|---|---|---|---|
 | Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
 | Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
-| Xero Ledger Review Gate | `release-elizabeth-anne-alexander.yml` | `elizabeth-anne-alexander/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: elizabeth_anne_alexander/version.py` | `packages/elizabeth-anne-alexander` | `elizabeth-anne-alexander` | `pypi-elizabeth-anne-alexander` (https://pypi.org/p/elizabeth-anne-alexander) |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
 | evatt | `release-evatt.yml` | `evatt/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: evatt/version.py` | `packages/evatt` | `evatt` | none (GitHub release assets only; the caller has no `pypi` job) |
@@ -187,7 +187,7 @@ demonstrations run as its per-component `smoke` input. evatt runs through the sa
 rather than through a workflow of its own: `evatt.yml` was replaced by a fourth `component`
 entry (`packages/evatt`, import `evatt`), and its clean-wheel redact, verify, restore and
 halt demonstration runs as that entry's `smoke` input, over the reusable workflow's Python
-3.10, 3.12, 3.13 and 3.14 legs. `AGENTS.md` lists the current gates.
+3.14 leg. `AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
 

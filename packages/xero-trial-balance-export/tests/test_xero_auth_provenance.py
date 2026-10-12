@@ -15,9 +15,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned when the licence badge and statement changed from MIT to Apache-2.0.
+# Re-pinned after retaining the licence changes and Python 3.14 minimum.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "01D760E94CEBB1B55B29EF139EB83E647932CBAB79ADB3026B219526F2121573"
+README_SHA256 = "A598A274689EBCE3CC28F77E7D2BD7B8A59C9FF97F3D6E19541132C48BFFFFA2"
 # Re-pinned when server_bind()'s RFC 8252 loopback reason moved to its own
 # comment line above a bare NOSONAR, the form SonarCloud's Python analyser
 # honours. Comments are the only change: AUTH_AST_SHA256 below still

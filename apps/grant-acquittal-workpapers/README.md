@@ -29,7 +29,7 @@ for the setup and replay utility below, which has no runtime dependencies.
 
 ## Run all joined accounting examples
 
-From this directory, with Python 3.11 or later, Git, uv and cargo on PATH:
+From this directory, with Python 3.14 or later, Git, uv and cargo on PATH:
 
 ```powershell
 python setup_utility.py --workspace ../../../accounting-utility-demo
@@ -184,7 +184,7 @@ Run `cargo test --locked` above for the workpaper, and
 GitHub Actions runs the Rust tests, `cargo fmt --check` and `cargo clippy` on Linux
 and Windows, including a competing destination created immediately before
 publication, and runs the bundled example from a release build. The utility's
-unittest suite runs with Python 3.11 to 3.15. It does not run macOS, so the
+unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
 `RENAME_EXCL` path is untested there.
 It also runs Ruff with a pinned version on the utility. Local lint uses
 `uv run --with ruff==0.16.7 ruff check .`.

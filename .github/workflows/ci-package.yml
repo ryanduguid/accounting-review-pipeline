@@ -50,6 +50,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  UV_PYTHON: "3.14"
   UV_VERSION: "0.12.0"
 
 jobs:
@@ -110,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+        python: ["3.14", "3.15"]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -141,10 +142,10 @@ jobs:
         env:
           UV_PYTHON: ${{ matrix.python }}
       - name: copy the whole-component coverage for Codecov
-        if: matrix.python == '3.13'
+        if: matrix.python == '3.14'
         run: cp coverage.xml coverage-codecov.xml
       - name: keep the coverage report for the Codecov upload
-        if: matrix.python == '3.13'
+        if: matrix.python == '3.14'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-codecov-${{ inputs.import_name }}
@@ -349,6 +350,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
       - name: Require the selected checks to complete
         shell: python
         env:

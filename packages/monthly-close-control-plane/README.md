@@ -17,7 +17,7 @@
 [![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/monthly-close-control-plane.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/monthly-close-control-plane/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
 
 The maintained source is under
 [`packages/monthly-close-control-plane`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane)
@@ -574,7 +574,7 @@ python -m build
 
 The test suite covers schema gates, exact balancing, variance and metadata exceptions, mapping and subledger checks, deterministic pack generation, acknowledgement parsing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.11, 3.12, 3.13, 3.14, and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
+Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14 and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
 
 ## Related
 

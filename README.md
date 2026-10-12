@@ -209,10 +209,10 @@ changing their status.
 
 ## Releases
 
-Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
+Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
 `a601f1d8b143f92b0517f709216993660d21f480`: `monthly-close-control-plane/v*`,
-`review-ready-gate/v*`, `elizabeth-anne-alexander/v*`, `xero-trial-balance-export/v*`,
+`review-ready-gate/v*`, `xero-trial-balance-export/v*`,
 `accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
@@ -220,6 +220,9 @@ is the only difference, except that `release-evatt.yml` has no `pypi` job at all
 `evatt/v*` tag produces GitHub release assets and publishes to no index while the disclosure
 policy that package enforces is unsigned. `IMPORTS.md` lists the callers and publisher
 environments.
+
+The Rust Xero Ledger Review Gate 1.0.0 has no release caller until a Rust release path
+is approved. Version 0.2.6 remains the released Python distribution on PyPI.
 
 ## Contract
 

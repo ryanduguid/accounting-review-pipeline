@@ -31,9 +31,6 @@ jobs:
         .github/workflows/ci.yml: packages/xero-trial-balance-export / build
         .github/workflows/ci.yml: packages/xero-trial-balance-export / dependency-audit
         .github/workflows/ci.yml: packages/xero-trial-balance-export / lint
-        .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.11)
-        .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.12)
-        .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.13)
         .github/workflows/ci.yml: packages/xero-trial-balance-export / test (3.14)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
@@ -56,6 +53,9 @@ jobs:
       contents: read # Read the pinned policy.
       id-token: write # Mint the OIDC token PyPI Trusted Publishing verifies.
     steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
       - name: Check out the policy that built the candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

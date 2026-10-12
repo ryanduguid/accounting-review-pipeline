@@ -30,7 +30,7 @@ cargo test --locked
 
 CI runs these on Linux and Windows, builds the release binary and runs the smoke script from an empty directory.
 
-The differential test compares the binary with the released 0.2.6 Python package. It needs Python 3.11 or newer:
+The differential test compares the binary with the released 0.2.6 Python package. It needs Python 3.14 or newer:
 
 ```bash
 mkdir -p /tmp/py-base
