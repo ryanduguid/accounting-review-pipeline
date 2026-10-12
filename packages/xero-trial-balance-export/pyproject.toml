@@ -54,3 +54,7 @@ pretty = true
 
 [tool.coverage.run]
 source = ["xero_client", "export_tb", "auth", "token_store"]
+
+[tool.coverage.report]
+fail_under = 100
+exclude_also = ['if __name__ == "__main__":']

@@ -15,9 +15,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned after raising the documented Python minimum to 3.14.
+# Re-pinned after integrating the new badges with the Python 3.14 minimum.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "E9B72A18BAA67632535DACF5249EC73EEE221EDB86CF1D36BE3418F0F7863E71"
+README_SHA256 = "3530E5A9722E3A199242C1D9259997A97A2908407BFF50BABD58AA7A9D8D9928"
 # Re-pinned when TOKEN_URL gained a Bandit "nosec B105" comment (the token
 # endpoint URL is not a password) after server_bind() gained its RFC 8252
 # loopback NOSONAR comment. Comments are the only change: AUTH_AST_SHA256

@@ -1150,3 +1150,49 @@ def test_a_carried_placeholder_still_halts_beside_touching_mapped_values() -> No
     with pytest.raises(Halt) as caught:
         redact_module.redact("PERSON_99 (Jane Roe)(John Smith)", PARENTHESISED)
     assert [(u.kind, u.value) for u in caught.value.unknowns] == [("placeholder", "PERSON_99")]
+
+
+@pytest.mark.parametrize("lead", ["15/01/2150", "2150-01-15"])
+def test_a_leading_calendar_date_is_cut_from_a_number_candidate(lead) -> None:
+    """A real date joined to digits by a separator is not part of the identifier.
+
+    DOB only masks years 19xx and 20xx, so a later year reaches the number scan
+    with the date still attached. Both date spellings are cut, and what is left
+    is reported on its own.
+    """
+    found = redact_module.residual(f"Ref {lead} 1234 5678 here")
+    assert [(u.kind, u.value) for u in found] == [  # nosec B101: pytest outcome assertion
+        ("number", "1234 5678")]
+
+
+def test_an_impossible_leading_date_stays_part_of_the_number() -> None:
+    found = redact_module.residual("Ref 31/02/2150 1234 5678 here")
+    assert [(u.kind, u.value) for u in found] == [  # nosec B101: pytest outcome assertion
+        ("number", "31/02/2150 1234 5678")]
+
+
+def test_locate_answers_line_one_for_a_text_without_lines() -> None:
+    """Every caller passes a match from a non-empty text, so this is the floor case."""
+    assert redact_module._locate([], [], 0) == (1, "")  # nosec B101: pytest outcome assertion
+
+
+def test_the_name_sweep_never_reports_a_placeholder_shaped_span(monkeypatch) -> None:
+    """The guard behind NAME's trailing edge: a span holding a placeholder is skipped.
+
+    NAME cannot produce such a span today, so the matcher is replaced with one
+    that does, to show the sweep still never halts on the redactor's own output.
+    """
+    spans = [(0, 8, "Jane Roe"), (13, 28, "CLIENT_01 Smith")]
+    monkeypatch.setattr(redact_module, "person_name_spans", lambda _text: spans)
+    found = redact_module.residual("Jane Roe met CLIENT_01 Smith")
+    assert [(u.kind, u.value) for u in found] == [  # nosec B101: pytest outcome assertion
+        ("name", "Jane Roe")]
+
+
+def test_a_surviving_and_a_replaced_carried_placeholder_both_halt() -> None:
+    """The input is rescanned for lost tokens without reporting the survivor twice."""
+    with pytest.raises(Halt) as caught:
+        redact_module.redact("Row CLIENT_01.\nCard MEDICARE_2123456701 filed.\n", MAP)
+    assert [(u.kind, u.value, u.line) for u in caught.value.unknowns] == [  # nosec B101: pytest outcome assertion
+        ("placeholder", "CLIENT_01", 1), ("placeholder", "MEDICARE_2123456701", 2)]
+    assert "2123456701" not in caught.value.unknowns[1].context  # nosec B101: pytest outcome assertion

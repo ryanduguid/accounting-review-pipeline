@@ -65,3 +65,6 @@ pretty = true
 
 [tool.coverage.run]
 source = ["closecontrol"]
+
+[tool.coverage.report]
+fail_under = 100

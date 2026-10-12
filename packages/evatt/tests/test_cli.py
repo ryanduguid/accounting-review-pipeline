@@ -819,3 +819,38 @@ def test_the_research_walkthrough_round_trips_the_samples(tmp_path) -> None:
         assert value in restored
     # Structured identifiers are one-way: the placeholder is all the reply can carry.
     assert "TFN_01" in restored
+
+
+def test_a_halt_that_cannot_clear_the_stale_output_writes_no_triage(tmp_path, capsys) -> None:
+    """A directory at --out cannot be removed, so the halt is an error, not a worklist."""
+    root = workspace(tmp_path)
+    shutil.copy(SAMPLES / "unmapped-name.md", root / "in.md")
+    out = root / "out.md"
+    out.mkdir()
+    code = main(["redact", "--in", str(root / "in.md"), "--map", str(root / "entities.json"),
+                 "--out", str(out)])
+    assert code == 1  # nosec B101: pytest outcome assertion
+    assert capsys.readouterr().err.startswith("error: ")  # nosec B101: pytest outcome assertion
+    assert out.is_dir()  # nosec B101: pytest outcome assertion
+    assert not (root / "out.md.triage.md").exists()  # nosec B101: pytest outcome assertion
+
+
+def test_restore_reports_an_output_it_cannot_write(tmp_path, capsys) -> None:
+    root = workspace(tmp_path)
+    blocker = root / "blocker"
+    blocker.write_text("a file, not a directory\n", encoding="utf-8")
+    code = main(["restore", "--in", str(SAMPLES / "research-answer.md"),
+                 "--map", str(root / "entities.json"), "--out", str(blocker / "answer.md")])
+    assert code == 1  # nosec B101: pytest outcome assertion
+    output = capsys.readouterr()
+    assert output.out == ""  # nosec B101: pytest outcome assertion
+    assert output.err.startswith("error: ")  # nosec B101: pytest outcome assertion
+    assert blocker.read_text(encoding="utf-8") == "a file, not a directory\n"  # nosec B101: pytest outcome assertion
+
+
+def test_the_module_entry_point_is_the_cli_main() -> None:
+    """``python -m evatt`` runs the same main the console script does."""
+    import importlib
+
+    module = importlib.import_module("evatt.__main__")
+    assert module.main is cli.main  # nosec B101: pytest outcome assertion
