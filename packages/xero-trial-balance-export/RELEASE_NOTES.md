@@ -1,3 +1,11 @@
+# v0.1.15
+
+- Requires Python 3.11 or newer; Python 3.10 is no longer supported (#318).
+- On a Python that uses the pure-Python `decimal` module, a report cell over 4,300 digits now exits with the existing "not a ledger balance" error instead of an uncaught `ValueError` (#350).
+- Temporary output names are drawn from `secrets` instead of `random` (#342).
+- `export_tb.main` is split into four private helpers; new characterisation tests hold the command's failure order unchanged (#352).
+- The hash-locked install (`requirements.lock`) moves charset-normalizer from 3.5.1 to 3.5.2 (#351).
+
 # v0.1.14
 
 - The exporter no longer overwrites an unrelated `.manifest.json.previous` recovery file. It refuses inspection errors, checks for an occupied path and reserves it exclusively before parking the current manifest, and a failed park removes only its own reservation. A `--no-manifest` rerun checks the existing manifest and recovery paths against the checkout's ignore rules.

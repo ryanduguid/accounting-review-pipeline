@@ -82,11 +82,11 @@ It holds 8 independently versioned components joined only by local files and com
 
 | Component | Directory | Identity | Version |
 |---|---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.14 |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 0.1.15 |
 | Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.2.0 |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, command `close-control` | 0.2.0 |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0 (unreleased); 0.2.6 is the released Python distribution with import `elizabeth_anne_alexander` | 0.2.6 |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.7 |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.8 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release | 0.2.0 |
 | evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.2.0 |
