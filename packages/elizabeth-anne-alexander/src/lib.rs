@@ -13,6 +13,8 @@ pub mod pyjson;
 pub mod pypath;
 pub mod pytext;
 mod tables;
+pub mod termsize;
+pub mod textwrap;
 pub mod util;
 
 #[cfg(test)]

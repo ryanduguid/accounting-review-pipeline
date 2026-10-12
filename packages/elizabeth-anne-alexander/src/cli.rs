@@ -1,6 +1,7 @@
 //! The command line (`cli.py`), including the argparse behaviour it relied on:
 //! usage and help text, option abbreviations, and exit code 2 for usage errors.
 
+use crate::textwrap::wrap;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -69,33 +70,9 @@ static COMMANDS: [Command; 2] = [
 const DESCRIPTION: &str = "Run a fixed-policy, synthetic Xero review boundary.";
 const HELP_HELP: &str = "show this help message and exit";
 
-/// argparse's formatter width: `$COLUMNS` (or 80 when unset) minus 2.
+/// argparse's formatter width: `shutil.get_terminal_size().columns` minus 2.
 fn width() -> usize {
-    let columns = std::env::var("COLUMNS")
-        .ok()
-        .and_then(|c| c.parse::<usize>().ok())
-        .filter(|&c| c > 0)
-        .unwrap_or(80);
-    columns.saturating_sub(2)
-}
-
-/// `textwrap.wrap(text, width)` for single-spaced text.
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in text.split_whitespace() {
-        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
-            lines.push(std::mem::take(&mut line));
-        }
-        if !line.is_empty() {
-            line.push(' ');
-        }
-        line.push_str(word);
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-    lines
+    usize::try_from(crate::termsize::columns() - 2).unwrap_or(0)
 }
 
 /// `HelpFormatter._format_usage` for a parser whose positionals are given as parts.
@@ -205,7 +182,8 @@ fn choices() -> String {
 }
 
 fn main_usage(prog: &str) -> String {
-    usage(prog, &["[-h]".into()], &[choices(), "...".into()])
+    // The subparsers action is one usage part: "{choices} ...".
+    usage(prog, &["[-h]".into()], &[format!("{} ...", choices())])
 }
 
 fn main_help(prog: &str) -> String {
@@ -214,7 +192,7 @@ fn main_help(prog: &str) -> String {
     let options: Vec<Row> = vec![(2, "-h, --help".into(), Some(HELP_HELP))];
     let all: Vec<Row> = positional.iter().chain(&options).cloned().collect();
     let (positional, options) = (action_rows(&positional, &all), action_rows(&options, &all));
-    let description = wrap(DESCRIPTION, width()).join("\n");
+    let description = wrap(DESCRIPTION, width().max(11)).join("\n");
     format!(
         "{}\n\n{description}\n\npositional arguments:\n{positional}\noptions:\n{options}",
         main_usage(prog)
