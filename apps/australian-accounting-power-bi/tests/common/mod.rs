@@ -150,34 +150,103 @@ pub fn all_visual_files() -> Vec<PathBuf> {
     pages.iter().flat_map(|page| visual_files(page)).collect()
 }
 
-/// `csv.DictReader` rows of a committed fixture.
-pub fn csv_rows(path: &Path) -> Vec<HashMap<String, String>> {
-    let mut reader = csv::Reader::from_path(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-    let headers = reader.headers().expect("CSV header").clone();
-    reader
-        .records()
+#[derive(Clone, Copy, PartialEq)]
+enum CsvState {
+    StartRecord,
+    StartField,
+    InField,
+    InQuoted,
+    QuoteInQuoted,
+}
+
+/// `csv.reader` over text opened with `newline=""`, excel dialect, not strict: a blank
+/// line is an empty row, a quote inside an unquoted field is literal, text after a
+/// closing quote continues the field, and an unterminated quote ends the last field.
+pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
+    use CsvState::*;
+    let (mut rows, mut fields, mut field, mut state) = (Vec::new(), Vec::new(), String::new(), StartRecord);
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let newline = c == '\r' || c == '\n';
+        if newline && state != InQuoted {
+            if state != StartRecord {
+                fields.push(std::mem::take(&mut field));
+            }
+            rows.push(std::mem::take(&mut fields));
+            if c == '\r' && chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            state = StartRecord;
+            continue;
+        }
+        state = match (state, c) {
+            (StartRecord | StartField, '"') => InQuoted,
+            (StartRecord | StartField | InField | QuoteInQuoted, ',') => {
+                fields.push(std::mem::take(&mut field));
+                StartField
+            }
+            (InQuoted, '"') => QuoteInQuoted,
+            (QuoteInQuoted, '"') | (InQuoted, _) => {
+                field.push(c);
+                InQuoted
+            }
+            _ => {
+                field.push(c);
+                InField
+            }
+        };
+    }
+    if state != StartRecord {
+        fields.push(field);
+        rows.push(fields);
+    }
+    rows
+}
+
+/// A `csv.DictReader` row. A short row's missing values are `None`, as DictReader's
+/// restval leaves them; indexing one panics, as using it in the Python checks raised.
+pub struct Row(HashMap<String, Option<String>>);
+
+impl Row {
+    /// The value under `key`: `None` for a short row. A key outside the header panics,
+    /// like Python's KeyError.
+    pub fn value(&self, key: &str) -> Option<&str> {
+        self.0.get(key).unwrap_or_else(|| panic!("KeyError: {key}")).as_deref()
+    }
+}
+
+impl std::ops::Index<&str> for Row {
+    type Output = String;
+
+    fn index(&self, key: &str) -> &String {
+        let value = self.0.get(key).unwrap_or_else(|| panic!("KeyError: {key}"));
+        value.as_ref().unwrap_or_else(|| panic!("None value under {key}"))
+    }
+}
+
+/// `csv.DictReader` rows of text: the first row names the columns and empty rows are skipped.
+pub fn dict_rows(text: &str) -> (Vec<String>, Vec<Row>) {
+    let mut records = parse_csv(text).into_iter().filter(|record| !record.is_empty());
+    let header = records.next().unwrap_or_default();
+    let rows = records
         .map(|record| {
-            let record = record.expect("CSV record");
-            headers
-                .iter()
-                .zip(record.iter())
-                .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                .collect()
+            let mut values = record.into_iter();
+            Row(header.iter().map(|name| (name.clone(), values.next())).collect())
         })
-        .collect()
+        .collect();
+    (header, rows)
+}
+
+/// `csv.DictReader` rows of a committed fixture.
+pub fn csv_rows(path: &Path) -> Vec<Row> {
+    let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    dict_rows(&String::from_utf8(bytes).expect("UTF-8 fixture")).1
 }
 
 /// `csv.reader` rows of a committed fixture, header included.
 pub fn csv_records(path: &Path) -> Vec<Vec<String>> {
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .flexible(true)
-        .from_path(path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-    reader
-        .records()
-        .map(|record| record.expect("CSV record").iter().map(str::to_owned).collect())
-        .collect()
+    let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    parse_csv(&String::from_utf8(bytes).expect("UTF-8 fixture"))
 }
 
 /// The name in a `\tmeasure Name = ...` line, quotes stripped.

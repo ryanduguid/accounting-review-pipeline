@@ -57,27 +57,18 @@ fn model_import_boundary_uses_the_pinned_data_only_shape() {
         let actual: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(actual, digest, "{name}");
         let text = String::from_utf8(bytes).unwrap();
-        let mut reader = csv::Reader::from_reader(text.strip_prefix('\u{feff}').unwrap_or(&text).as_bytes());
-        assert_eq!(reader.headers().unwrap().iter().collect::<Vec<_>>(), HEADER, "{name}");
-        let rows: Vec<csv::StringRecord> = reader.records().map(Result::unwrap).collect();
-        let column = |label: &str| HEADER.iter().position(|h| *h == label).unwrap();
-        let distinct = |label: &str| rows.iter().map(|r| r[column(label)].to_owned()).collect::<HashSet<_>>();
+        let (header, rows) = dict_rows(text.strip_prefix('\u{feff}').unwrap_or(&text));
+        assert_eq!(header, HEADER, "{name}");
+        let distinct = |label: &str| rows.iter().map(|r| r[label].clone()).collect::<HashSet<_>>();
         assert_eq!(distinct("ReportDate").len(), 1, "{name}");
         assert_eq!(distinct("Tenant").len(), 1, "{name}");
-        assert!(rows.iter().all(|r| !r[column("AccountID")].is_empty()), "{name}");
-        let identities: HashSet<_> = rows
-            .iter()
-            .map(|r| (&r[column("Tenant")], &r[column("AccountID")]))
-            .collect();
+        assert!(rows.iter().all(|r| !r["AccountID"].is_empty()), "{name}");
+        let identities: HashSet<_> = rows.iter().map(|r| (&r["Tenant"], &r["AccountID"])).collect();
         assert_eq!(identities.len(), rows.len(), "{name}");
         assert!(distinct("AccountCode").contains("090"), "{name}");
         for row in &rows {
             for label in ["Debit", "Credit", "YTDDebit", "YTDCredit"] {
-                assert!(
-                    is_decimal(&row[column(label)]),
-                    "{name}: {label} {}",
-                    &row[column(label)]
-                );
+                assert!(is_decimal(&row[label]), "{name}: {label} {}", row[label]);
             }
         }
     }

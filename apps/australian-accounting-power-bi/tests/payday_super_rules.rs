@@ -2,7 +2,7 @@
 
 mod common;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use australian_accounting_power_bi::calendar::{
     NATIONAL_HOLIDAYS, add_business_days, is_holiday, is_national_business_day,
@@ -50,7 +50,7 @@ fn almost_equal(a: &Decimal, b: &Decimal) -> bool {
     a.sub(b).round(2).is_zero()
 }
 
-fn payroll_rows() -> Vec<HashMap<String, String>> {
+fn payroll_rows() -> Vec<Row> {
     csv_rows(&samples().join("sample-payroll-super.csv"))
 }
 
@@ -212,7 +212,7 @@ fn sg_charge_has_the_four_payday_super_components() {
     let mut checked = 0;
     for row in payroll_rows()
         .iter()
-        .filter(|row| row["ComplianceStatus"] == "LATE_BREACH")
+        .filter(|row| row.value("ComplianceStatus") == Some("LATE_BREACH"))
     {
         checked += 1;
         let (due, received) = (date(&row["StatutoryDueDate"]), date(&row["FundReceiptDate"]));
@@ -242,7 +242,7 @@ fn received_contribution_reduces_the_final_shortfall_to_nil() {
     let mut checked = 0;
     for row in payroll_rows()
         .iter()
-        .filter(|row| row["ComplianceStatus"] == "LATE_BREACH")
+        .filter(|row| row.value("ComplianceStatus") == Some("LATE_BREACH"))
     {
         checked += 1;
         let (base, charge) = (d(&row["SuperLiability_CodeL"]), d(&row["SGC_Shortfall"]));

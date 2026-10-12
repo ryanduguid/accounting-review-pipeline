@@ -10,8 +10,6 @@ use australian_accounting_power_bi::decimal::Decimal;
 use australian_accounting_power_bi::fixtures;
 use common::*;
 
-type Row = HashMap<String, String>;
-
 const FIXTURE_FILES: [&str; 6] = [
     "sample-entities.csv",
     "sample-chart-of-accounts.csv",
@@ -67,7 +65,7 @@ fn intercompany_matched(samples: &Path) -> Result<(), String> {
         .collect();
     let rows: Vec<_> = csv_rows(&samples.join("sample-general-ledger.csv"))
         .into_iter()
-        .filter(|row| row["IsIntercompany"] == "TRUE")
+        .filter(|row| row.value("IsIntercompany") == Some("TRUE"))
         .collect();
     if rows.is_empty() {
         return Err("no intercompany rows".to_owned());
