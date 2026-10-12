@@ -1,5 +1,7 @@
 # Security policy
 
+Report privately at <https://github.com/ryanduguid/accounting-review-pipeline/security/advisories/new>.
+
 Report a suspected vulnerability through this repository's private vulnerability-reporting
 feature. Do not open a public issue containing exploit details, credentials or client data.
 Include the component directory, the gate or refusal you believe is bypassed and a fabricated
