@@ -9,7 +9,7 @@
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/ryanduguid/accounting-review-pipeline?label=Scorecard&labelColor=000000&style=flat-square)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
 [![SLSA 3](https://img.shields.io/badge/SLSA-level%203-990024?labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 [![VirusTotal](https://img.shields.io/badge/VirusTotal-scanned-990024?labelColor=000000&style=flat-square&logo=virustotal&logoColor=FFFFF0)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
-[![licence: MIT](https://img.shields.io/badge/licence-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
 Eight independently versioned components that carry an Australian month end from a

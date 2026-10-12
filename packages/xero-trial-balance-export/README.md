@@ -4,7 +4,7 @@
 
 [![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=Verify&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/xero-trial-balance-export.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/xero-trial-balance-export/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
 
 Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. The 4 Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) handle consent, token refresh, the API request and CSV output.
@@ -160,7 +160,7 @@ Xero's [Developer Platform terms](https://developer.xero.com/xero-developer-plat
 
 On Windows, `token.json` uses the operating system's current-user [Data Protection API](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata) (`CryptProtectData`/`CryptUnprotectData`) with UI forbidden. It is encrypted at rest and bound to that user's DPAPI security context; there is no repository key and no custom cryptography. Treat the cache as non-portable and re-authorise instead of trying to move it between unrelated accounts or machines. DPAPI does not protect tokens from code already running as that user, an administrator controlling the machine, or a compromised user session. `.env` remains plaintext because it must supply the OAuth client credentials, so keep the clone inside your own user profile. On a shared machine, restrict the clone directory before scheduling anything, for example with `icacls <clone-dir> /inheritance:r /grant:r <your-username>:(OI)(CI)F`.
 
-Python's standard library has no equivalent portable secret store. On non-Windows systems the project therefore retains its existing plaintext JSON cache as an explicit compatibility fallback and forces its mode to owner-read/write only (`0600`) on every save and load. Use a private account and directory, and do not copy a Windows DPAPI envelope to Linux or macOS: it cannot be decrypted there. `token.json.lock` contains only zero-valued lock bytes and no credentials. MIT-licensed utility code, no warranty; outputs feed professional review like any other workpaper input. Not affiliated with or endorsed by Xero. Full boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+Python's standard library has no equivalent portable secret store. On non-Windows systems the project therefore retains its existing plaintext JSON cache as an explicit compatibility fallback and forces its mode to owner-read/write only (`0600`) on every save and load. Use a private account and directory, and do not copy a Windows DPAPI envelope to Linux or macOS: it cannot be decrypted there. `token.json.lock` contains only zero-valued lock bytes and no credentials. Apache-2.0 licensed utility code, no warranty; outputs feed professional review like any other workpaper input. Not affiliated with or endorsed by Xero. Full boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
 
 ## Tests
 

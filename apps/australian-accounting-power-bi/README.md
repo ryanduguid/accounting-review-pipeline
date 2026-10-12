@@ -1,6 +1,6 @@
 # Australian Accounting Power BI
 
-[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 Maintain this application at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/apps/australian-accounting-power-bi). Run the commands below from `apps/australian-accounting-power-bi/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical CSV header, fixtures and expected results, and [Xero Trial Balance Export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) for its producer. The report's native smoke uses its own fabricated `samples/` model; the contract checks do not prove a native model refresh.
 
@@ -122,7 +122,7 @@ australian-accounting-power-bi/
 │   ├── review_workflow.py               # Builds and verifies the fabricated review case
 │   └── *.ps1                            # Power BI Desktop native checks
 ├── Cargo.toml                           # Rust crate for the generator and the checks above
-├── LICENSE                              # MIT License
+├── LICENSE                              # Apache License 2.0
 ├── DISCLAIMER.md                        # Professional disclaimer
 ├── CONTRIBUTING.md                      # Contribution guidelines
 └── SECURITY.md                          # Security policy
@@ -188,7 +188,7 @@ The [native verification record](docs/native-verification.md) includes the 25 Se
 
 ## Disclaimer
 
-Utility code, MIT-licensed, no warranty. Nothing here constitutes tax, financial, or legal advice. Outputs and calculations require independent professional review. All sample data is fabricated using synthetic entities.
+Utility code, Apache-2.0 licensed, no warranty. Nothing here constitutes tax, financial, or legal advice. Outputs and calculations require independent professional review. All sample data is fabricated using synthetic entities.
 
 ---
 
