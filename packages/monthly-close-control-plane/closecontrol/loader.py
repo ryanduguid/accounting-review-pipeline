@@ -12,6 +12,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .csv_input import _csv_source
 from .errors import (
     ControlInputError,
     DateMismatchError,
@@ -106,7 +107,7 @@ def _read_csv_rows(
     snapshot: SourceSnapshot, required: tuple[str, ...], *, label: str
 ) -> Iterator[tuple[int, dict[str, str | None]]]:
     path = snapshot.path
-    with io.StringIO(snapshot.text(label=label, encoding="utf-8-sig"), newline="") as source:
+    with _csv_source(snapshot.text(label=label, encoding="utf-8-sig"), path, label) as source:
         reader = csv.DictReader(source)
         _require_columns(reader.fieldnames, required, path)
         for values in reader:

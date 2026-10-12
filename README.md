@@ -210,7 +210,7 @@ changing their status.
 
 Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`10b43b5f7f97b8829c7ca4d453d22e0acf60d590`: `monthly-close-control-plane/v*`,
+`a601f1d8b143f92b0517f709216993660d21f480`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `xero-trial-balance-export/v*`,
 `accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its

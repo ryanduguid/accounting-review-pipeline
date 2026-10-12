@@ -9,7 +9,7 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = ROOT.parents[1]
-REVIEWED_RELEASE_POLICY = "10b43b5f7f97b8829c7ca4d453d22e0acf60d590"
+LANDED_RELEASE_POLICY = "a601f1d8b143f92b0517f709216993660d21f480"
 RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
     "release-monthly-close-control-plane.yml",
@@ -312,7 +312,7 @@ def test_root_readme_defines_distinct_output_contracts() -> None:
     assert "`PARTIAL_DECISION_RECORDED`" in normalised_status
 
 
-def test_release_callers_resolve_to_reviewed_release_policy() -> None:
+def test_release_callers_resolve_to_landed_release_policy() -> None:
     for caller in RELEASE_CALLERS:
         workflow = (REPOSITORY_ROOT / ".github" / "workflows" / caller).read_text(
             encoding="utf-8"
@@ -321,7 +321,7 @@ def test_release_callers_resolve_to_reviewed_release_policy() -> None:
             r"uses:\s+ryanduguid/release-policy/\.github/workflows/[^@\s]+@([0-9a-f]{40})",
             workflow,
         )
-        assert pins == [REVIEWED_RELEASE_POLICY], caller
+        assert pins == [LANDED_RELEASE_POLICY], caller
 
 
 def test_agents_links_existing_docs_and_tracks_scalar_ci_commands() -> None:

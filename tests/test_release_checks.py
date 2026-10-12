@@ -7,7 +7,7 @@ from pathlib import Path
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = "10b43b5f7f97b8829c7ca4d453d22e0acf60d590"
+POLICY = "a601f1d8b143f92b0517f709216993660d21f480"
 # These are component jobs from successful main-branch runs, plus aggregates that
 # require every job in their workflow to succeed; never a skip-tolerant aggregate
 # gate. Review the list when a component's CI contract changes.

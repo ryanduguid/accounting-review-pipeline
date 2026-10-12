@@ -30,6 +30,7 @@ CLOSECONTROL = ROOT / "packages" / "monthly-close-control-plane" / "closecontrol
 REVIEWREADY = ROOT / "packages" / "review-ready-gate" / "reviewready"
 
 PAIRS = {
+    "csv_input.py": (CLOSECONTROL / "csv_input.py", REVIEWREADY / "csv_input.py"),
     "report.py": (CLOSECONTROL / "report.py", REVIEWREADY / "report.py"),
     "loader.py": (CLOSECONTROL / "loader.py", REVIEWREADY / "loader.py"),
     "viewer.py": (CLOSECONTROL / "viewer.py", REVIEWREADY / "viewer.py"),
@@ -37,6 +38,7 @@ PAIRS = {
 }
 
 IDENTICAL = {
+    "csv_input.py": ("_csv_source",),
     "report.py": (
         # The checkout-marker guard, whole.
         "CHECKOUT_MARKERS",
@@ -59,6 +61,7 @@ IDENTICAL = {
 }
 
 SAME_LOGIC = {
+    "csv_input.py": (),
     "report.py": (
         "_money",
     ),

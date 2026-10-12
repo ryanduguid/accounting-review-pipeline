@@ -32,7 +32,7 @@ def test_release_uses_the_hardened_shared_policy_contract() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-        "10b43b5f7f97b8829c7ca4d453d22e0acf60d590"
+        "a601f1d8b143f92b0517f709216993660d21f480"
     ) in release_job
     assert "actions: read" in release_job
     assert "source-directory: packages/monthly-close-control-plane" in release_job

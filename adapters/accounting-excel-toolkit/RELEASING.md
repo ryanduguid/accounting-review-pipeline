@@ -59,6 +59,9 @@ gh release download "$tag" -R "$repo" --dir "$release_dir"
 cd "$release_dir"
 sha256sum --check SHA256SUMS
 for file in *; do
+  # From Release Policy a601f1d the release also carries the signed provenance
+  # bundle, <stem>-<version>.intoto.jsonl, which holds the attestation itself.
+  case "$file" in *.intoto.jsonl) continue ;; esac
   gh attestation verify "$file" -R "$repo" \
     --source-digest "$release_commit" \
     --source-ref "refs/tags/$tag" \
