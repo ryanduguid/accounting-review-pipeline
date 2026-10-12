@@ -18,6 +18,7 @@ Work from `apps/australian-accounting-power-bi/` in [Accounting Review Pipeline]
 1. Clone the repository and inspect or edit TMDL / M files using your preferred code editor (VS Code with TMDL extension, Tabular Editor, or Power BI Desktop with developer mode enabled).
 2. Run automated test suites:
    ```bash
+   cargo test --locked
    python -B -m unittest discover -s tests -v
    npm ci --ignore-scripts
    npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report
