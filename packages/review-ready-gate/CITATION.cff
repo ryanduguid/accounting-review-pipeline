@@ -8,4 +8,4 @@ authors:
     given-names: "Ryan"
 repository-code: "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate"
 url: "https://duguid.com.au/tools/workpaper-review-gate/"
-license: MIT
+license: Apache-2.0

@@ -398,4 +398,4 @@ copying or authenticate the external decision.
 
 ## Licence
 
-MIT. See `LICENSE`.
+Apache-2.0. See [LICENSE](LICENSE). If you redistribute this work or build on it, keep the attribution in [NOTICE](NOTICE).
