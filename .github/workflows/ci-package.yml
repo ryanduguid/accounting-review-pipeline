@@ -317,6 +317,9 @@ jobs:
   codecov:
     name: upload coverage to Codecov
     needs: test
+    # A failed job in a called workflow fails the caller's job and its gate;
+    # the upload reports here without blocking merges.
+    continue-on-error: true
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
