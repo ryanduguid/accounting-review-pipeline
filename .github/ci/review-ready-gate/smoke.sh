@@ -6,9 +6,9 @@
 set -euo pipefail
 
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-ready" --output pack
-test -f pack/readiness-pack.json
+[[ -f pack/readiness-pack.json ]]
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-not-ready" --output pack-nr && nr=0 || nr=$?
-test "$nr" = "2"
+[[ "$nr" = "2" ]]
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-blocked" --output pack-bl && bl=0 || bl=$?
-test "$bl" = "2"
+[[ "$bl" = "2" ]]
 python -c "import json; assert json.load(open('pack-bl/readiness-pack.json'))['overall_status']=='BLOCKED'"

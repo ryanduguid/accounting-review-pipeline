@@ -13,4 +13,4 @@ elizabeth-anne-alexander validate-review \
   --evidence build/demo/reviewer-evidence.json \
   --receipt build/demo/receipt.json \
   --decision samples/decisions/sample-review-decision.json
-test -f build/demo/receipt.json
+[[ -f build/demo/receipt.json ]]
