@@ -14,7 +14,8 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![Verify](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-66023C.svg?labelColor=000000)](LICENSE)
+[![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/standard-library-components.yml?branch=main&label=Verify&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml)<br>
+[![License: MIT](https://img.shields.io/badge/License-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
 
 Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 

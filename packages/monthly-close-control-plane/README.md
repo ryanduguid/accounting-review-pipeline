@@ -14,7 +14,10 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/monthly-close-control-plane.svg?color=66023C&labelColor=000000)](https://pypi.org/project/monthly-close-control-plane/) [![License: MIT](https://img.shields.io/badge/License-MIT-66023C.svg?labelColor=000000)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-66023C.svg?logo=python&logoColor=white&labelColor=000000)](https://www.python.org/downloads/)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
+[![PyPI](https://img.shields.io/pypi/v/monthly-close-control-plane.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/monthly-close-control-plane/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
 
 The maintained source is under
 [`packages/monthly-close-control-plane`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane)
