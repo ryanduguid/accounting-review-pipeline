@@ -84,10 +84,24 @@ pub fn configure() -> Result<(), &'static str> {
             return Err(UNSUPPORTED);
         }
     }
+    // The legacy Windows modes change how CPython picks UTF-8 mode and the console
+    // code page; they are refused rather than emulated. CPython treats an empty
+    // value as unset.
+    #[cfg(windows)]
+    for name in ["PYTHONLEGACYWINDOWSFSENCODING", "PYTHONLEGACYWINDOWSSTDIO"] {
+        if std::env::var_os(name).is_some_and(|value| !value.is_empty()) {
+            return Err(UNSUPPORTED);
+        }
+    }
     #[cfg(not(windows))]
     utf8_mode(posix_locale().0.as_deref())?;
     #[cfg(windows)]
     utf8_mode(None)?;
+    // A named codec must be one implemented here even where a console would ignore
+    // it, because CPython still applies it to any redirected stream, stdin included.
+    if let Some(name) = override_name() {
+        codec(&name)?;
+    }
     encoding(false)?;
     encoding(true)?;
     stdout_policy()?;
@@ -116,7 +130,8 @@ pub fn encoding(stderr: bool) -> Result<Encoding, &'static str> {
     }
     #[cfg(windows)]
     {
-        let console = console(stderr) && std::env::var_os("PYTHONLEGACYWINDOWSSTDIO").is_none();
+        // `configure` has refused legacy console I/O, so a console is always UTF-8 here.
+        let console = console(stderr);
         if console {
             return Ok(Encoding::Utf8);
         }
@@ -221,8 +236,9 @@ pub enum ErrorPolicy {
 }
 
 /// CPython 3.14's stdout error handler. An explicit PYTHONIOENCODING handler wins;
-/// an encoding named without one means strict. Otherwise UTF-8 mode, a C or POSIX
-/// LC_CTYPE or a PEP 538 coercion target means surrogateescape, and anything else strict.
+/// an encoding named without one means strict. Otherwise Windows always uses
+/// surrogateescape; POSIX uses it under UTF-8 mode, a C or POSIX LC_CTYPE or a
+/// PEP 538 coercion target, and strict elsewhere.
 fn stdout_policy() -> Result<ErrorPolicy, &'static str> {
     let env = std::env::var("PYTHONIOENCODING").unwrap_or_default();
     let (name, errors) = env.split_once(':').unwrap_or((env.as_str(), ""));
@@ -245,8 +261,10 @@ fn stdout_policy() -> Result<ErrorPolicy, &'static str> {
         utf8_mode(locale.as_deref())?
             || matches!(locale.as_deref(), Some("C" | "POSIX" | "C.UTF-8" | "C.utf8" | "UTF-8"))
     };
+    // CPython 3.14 on Windows defaults stdout to surrogateescape with or without
+    // UTF-8 mode (probed: cp1252 surrogateescape with UTF-8 mode off).
     #[cfg(windows)]
-    let escape = utf8_mode(None)?;
+    let escape = true;
     Ok(if escape {
         ErrorPolicy::SurrogateEscape
     } else {

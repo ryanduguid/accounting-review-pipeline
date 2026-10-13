@@ -53,9 +53,15 @@ Deliberate differences:
   locale or code page 1251) and there it can write redacted documents,
   manifests and records that evatt 1.0.0 does not. It stops at start-up in
   the others, as evatt does: an unknown codec, a `PYTHONUTF8` other than 0 or
-  1, or either variable holding a value the system cannot decode. A
-  non-Unicode `PATHEXT` on Windows makes git unavailable rather than guessed
-  at; POSIX ignores `PATHEXT`, as CPython does.
+  1, or either variable holding a value the system cannot decode. On Windows
+  evatt also refuses a non-empty `PYTHONLEGACYWINDOWSFSENCODING` or
+  `PYTHONLEGACYWINDOWSSTDIO`, which change how CPython selects UTF-8 mode and
+  the console code page; CPython runs under them, including with an otherwise
+  invalid `PYTHONUTF8` beside the legacy file system setting. A codec named in
+  `PYTHONIOENCODING` must be an accepted one even when every stream is a
+  console that CPython would write in UTF-8 regardless. A non-Unicode
+  `PATHEXT` on Windows makes git unavailable rather than guessed at; POSIX
+  ignores `PATHEXT`, as CPython does.
 - A regex compilation or execution error, including exhaustion of its 100,000,000-step
   backtrack budget, refuses the run with an `error:` line and exit 1. Every
   detector, mapped value and restore pattern uses the same budget. It never

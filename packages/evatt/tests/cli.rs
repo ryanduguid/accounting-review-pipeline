@@ -422,3 +422,38 @@ fn undecodable_python_variables_refuse_and_pathext_is_ignored_on_posix() {
     command.env("PATHEXT", raw(b"\xff"));
     assert_eq!(code(&command.output().unwrap()), 2);
 }
+
+#[cfg(windows)]
+#[test]
+fn legacy_windows_stream_modes_refuse_and_empty_values_count_as_unset() {
+    let repo = Repo::new();
+    for name in ["PYTHONLEGACYWINDOWSFSENCODING", "PYTHONLEGACYWINDOWSSTDIO"] {
+        let mut command = repo.command(&repo.normal("redact"));
+        command.env(name, "1");
+        let output = command.output().unwrap();
+        assert_eq!(code(&output), 1, "{name}");
+        assert!(output.stdout.is_empty() && !repo.path("out.md").exists(), "{name}");
+        let mut command = repo.command(&["--version"]);
+        command.env(name, "");
+        assert_eq!(code(&command.output().unwrap()), 0, "{name} empty");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn default_windows_stdout_escapes_a_lone_low_surrogate_like_cpython() {
+    use std::os::windows::ffi::OsStringExt;
+    let repo = Repo::new();
+    repo.put("in.md", b"Hello world.\n");
+    // "out" + U+DCE9 + ".md": CPython 3.14.8 writes b"wrote out\xe9.md\r\n", exit 0.
+    let out = std::ffi::OsString::from_wide(&[111, 117, 116, 0xDCE9, 46, 109, 100]);
+    let mut command = repo.configured(env!("CARGO_BIN_EXE_evatt"));
+    command
+        .args(["redact", "--in", "in.md", "--map", "entities.json", "--out"])
+        .arg(&out)
+        .env_remove("PYTHONIOENCODING")
+        .env_remove("PYTHONUTF8");
+    let output = command.output().unwrap();
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(output.stdout, b"wrote out\xe9.md\r\n");
+}
