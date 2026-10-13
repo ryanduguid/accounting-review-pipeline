@@ -18,10 +18,12 @@ def main():
     marks = [chr(cp) for cp in range(0x110000) if unicodedata.category(chr(cp)).startswith("M")]
     starters = "AaÉéİıΣσςKſßΐẞÅ\u1100\u1161\u11a8\U0001d15e"
     texts = ["AΣ", "AΣ'A", "AΣ'", "Σ\u0301", "A\u0301Σ\u0301", "\u1100\u1161\u11a8"]
-    texts += [rng.choice(starters) + mark + rng.choice(marks) for mark in marks]
+    # A fixed seed makes reproducible fabricated test text; nothing here is secret.
+    texts += [rng.choice(starters) + mark + rng.choice(marks) for mark in marks]  # NOSONAR
     for _ in range(2048):
         text = "".join(
-            rng.choice(starters + "' .\u200d") + rng.choice(marks) for _ in range(rng.randint(1, 8))
+            # The same seeded, non-security generator as above.
+            rng.choice(starters + "' .\u200d") + rng.choice(marks) for _ in range(rng.randint(1, 8))  # NOSONAR
         )
         texts.append(unicodedata.normalize("NFD", text))
     document = {
