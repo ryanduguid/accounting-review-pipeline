@@ -59,9 +59,25 @@ Deliberate differences:
   the console code page; CPython runs under them, including with an otherwise
   invalid `PYTHONUTF8` beside the legacy file system setting. A codec named in
   `PYTHONIOENCODING` must be an accepted one even when every stream is a
-  console that CPython would write in UTF-8 regardless. A non-Unicode
-  `PATHEXT` on Windows makes git unavailable rather than guessed at; POSIX
-  ignores `PATHEXT`, as CPython does.
+  console that CPython would write in UTF-8 regardless. A codec name holding
+  any non-ASCII character is refused, as is an error handler other than
+  strict, surrogateescape, surrogatepass, ignore, replace or backslashreplace
+  (CPython also accepts xmlcharrefreplace and namereplace, and looks an
+  unknown name up only when it needs it). On POSIX,
+  `PYTHONCOERCECLOCALE=warn` is refused, because CPython then writes locale
+  warnings to stderr. A non-Unicode `PATHEXT` on Windows makes git
+  unavailable rather than guessed at; POSIX ignores `PATHEXT`, as CPython
+  does.
+- Compatibility scope: the reference is Python evatt 0.2.0 run by a working
+  CPython 3.14.8 with default interpreter settings. evatt reads these
+  environment variables that CPython also reads: `PYTHONIOENCODING`,
+  `PYTHONUTF8`, `PYTHONLEGACYWINDOWSFSENCODING`, `PYTHONLEGACYWINDOWSSTDIO`,
+  `PYTHONCOERCECLOCALE`, `PYTHONUNBUFFERED`, `PYTHON_COLORS`, `NO_COLOR`,
+  `FORCE_COLOR`, `TERM`, `COLUMNS` and `LINES`, plus the locale. Settings
+  that only configure the interpreter itself, such as `PYTHONHOME`,
+  `PYTHONPATH`, `PYTHONDEVMODE`, `PYTHONWARNINGS` or `-X` options, have no
+  meaning for a standalone binary and are ignored, including where they
+  would stop or change CPython.
 - A regex compilation or execution error, including exhaustion of its 100,000,000-step
   backtrack budget, refuses the run with an `error:` line and exit 1. Every
   detector, mapped value and restore pattern uses the same budget. It never

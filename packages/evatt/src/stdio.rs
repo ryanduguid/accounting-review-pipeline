@@ -19,8 +19,13 @@ ASCII, Latin-1 or Windows-1252, so set PYTHONIOENCODING or the locale to one of 
 /// `encodings.normalize_encoding` followed by the codec alias table, for the
 /// codecs implemented here. Any other name, valid in CPython or not, is refused.
 fn codec(name: &str) -> Result<Encoding, &'static str> {
+    // CPython lowercases ASCII only and drops non-ASCII letters, so "asci" + U+0130
+    // is not ASCII there; a non-ASCII name is refused rather than folded.
+    if !name.is_ascii() {
+        return Err(UNSUPPORTED);
+    }
     let mut normal = String::new();
-    for ch in name.to_lowercase().chars() {
+    for ch in name.to_ascii_lowercase().chars() {
         if ch.is_ascii_alphanumeric() || ch == '.' {
             normal.push(ch);
         } else if !normal.is_empty() && !normal.ends_with('_') {
@@ -92,6 +97,11 @@ pub fn configure() -> Result<(), &'static str> {
         if std::env::var_os(name).is_some_and(|value| !value.is_empty()) {
             return Err(UNSUPPORTED);
         }
+    }
+    // PYTHONCOERCECLOCALE=warn makes CPython write locale warnings to stderr.
+    #[cfg(not(windows))]
+    if std::env::var_os("PYTHONCOERCECLOCALE").is_some_and(|value| value == "warn") {
+        return Err(UNSUPPORTED);
     }
     #[cfg(not(windows))]
     utf8_mode(posix_locale().0.as_deref())?;
@@ -243,14 +253,17 @@ fn stdout_policy() -> Result<ErrorPolicy, &'static str> {
     let env = std::env::var("PYTHONIOENCODING").unwrap_or_default();
     let (name, errors) = env.split_once(':').unwrap_or((env.as_str(), ""));
     if !errors.is_empty() {
-        return Ok(match errors {
-            "surrogateescape" => ErrorPolicy::SurrogateEscape,
-            "surrogatepass" => ErrorPolicy::SurrogatePass,
-            "ignore" => ErrorPolicy::Ignore,
-            "replace" => ErrorPolicy::Replace,
-            "backslashreplace" => ErrorPolicy::BackslashReplace,
-            _ => ErrorPolicy::Strict,
-        });
+        // Handlers not implemented here (xmlcharrefreplace, namereplace or an unknown
+        // name CPython would look up only when needed) are refused at start-up.
+        return match errors {
+            "strict" => Ok(ErrorPolicy::Strict),
+            "surrogateescape" => Ok(ErrorPolicy::SurrogateEscape),
+            "surrogatepass" => Ok(ErrorPolicy::SurrogatePass),
+            "ignore" => Ok(ErrorPolicy::Ignore),
+            "replace" => Ok(ErrorPolicy::Replace),
+            "backslashreplace" => Ok(ErrorPolicy::BackslashReplace),
+            _ => Err(UNSUPPORTED),
+        };
     }
     if !name.is_empty() {
         return Ok(ErrorPolicy::Strict);
@@ -324,7 +337,15 @@ mod tests {
         assert!(matches!(codec("US-ASCII"), Ok(Encoding::Ascii)));
         assert!(matches!(codec("ISO-8859-1"), Ok(Encoding::Latin1)));
         assert!(matches!(codec("windows-1252"), Ok(Encoding::Windows1252)));
-        for name in ["cp1251", "utf-16", "shift_jis", "bogus", ""] {
+        for name in [
+            "cp1251",
+            "utf-16",
+            "shift_jis",
+            "bogus",
+            "",
+            "asci\u{130}",
+            "utf-8\u{e9}",
+        ] {
             assert!(codec(name).is_err(), "{name}");
         }
     }

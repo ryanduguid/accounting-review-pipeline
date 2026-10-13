@@ -378,11 +378,17 @@ fn closed_pipes_keep_buffered_and_argparse_unbuffered_exit_codes() {
 #[test]
 fn stream_settings_cpython_refuses_at_start_up_write_nothing() {
     let repo = Repo::new();
-    let cases: [&[(&str, &str)]; 4] = [
+    let cases: [&[(&str, &str)]; 8] = [
         &[("PYTHONUTF8", "2"), ("PYTHONIOENCODING", "utf-8")],
         &[("PYTHONUTF8", "2"), ("PYTHONIOENCODING", "utf-8:strict")],
         &[("PYTHONUTF8", "2"), ("PYTHONIOENCODING", "cp1252")],
         &[("PYTHONIOENCODING", "bogus")],
+        // CPython drops the non-ASCII letter and looks up "asci", which fails.
+        &[("PYTHONIOENCODING", "asci\u{130}")],
+        // Handlers not implemented here are refused before any command runs.
+        &[("PYTHONIOENCODING", "ascii:xmlcharrefreplace")],
+        &[("PYTHONIOENCODING", "utf-8:namereplace")],
+        &[("PYTHONIOENCODING", "utf-8:bogus")],
     ];
     for env in cases {
         for args in [vec!["--version"], repo.normal("redact")] {
@@ -421,6 +427,11 @@ fn undecodable_python_variables_refuse_and_pathext_is_ignored_on_posix() {
     let mut command = repo.command(&repo.normal("verify"));
     command.env("PATHEXT", raw(b"\xff"));
     assert_eq!(code(&command.output().unwrap()), 2);
+    // CPython prints locale coercion warnings to stderr under this setting.
+    let mut command = repo.command(&repo.normal("redact"));
+    command.env("PYTHONCOERCECLOCALE", "warn");
+    assert_eq!(code(&command.output().unwrap()), 1);
+    assert!(!repo.path("out.md").exists());
 }
 
 #[cfg(windows)]
