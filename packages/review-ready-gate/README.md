@@ -222,6 +222,8 @@ If both the activity statement and the GST control GL are present:
 - a difference beyond `--tieout-tolerance` (default `$0.01`) is `NOT_READY`
 - when `1A` and `1B` are both whole dollars, as the ATO requires on a lodged statement, any difference under `$1` also ties: the ATO drops the cents from each label, so the statement can sit up to 99 cents either side of the control movement. A statement whose labels carry cents gets no allowance
 
+When the 28-digit precision limit would change a BAS result, the library raises `NumericGateError` and the CLI exits `1` without writing a pack. An exact discrepancy beyond the allowances produces a `TIEOUT_BREAK` finding.
+
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
 
 ## Human acknowledgement

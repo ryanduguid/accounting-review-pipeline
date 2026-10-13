@@ -11,7 +11,11 @@ import pytest
 from reviewready.cli import main
 from reviewready.engine import review_pack
 from reviewready.errors import GateInputError, NumericGateError
-from reviewready.models import FINDING_MISSING_ARTEFACT, FINDING_TB_UNBALANCED
+from reviewready.models import (
+    FINDING_MISSING_ARTEFACT,
+    FINDING_TB_UNBALANCED,
+    FINDING_TIEOUT_BREAK,
+)
 from reviewready.report import (
     CHECKOUT_MARKERS,
     PACK_FILE_NAMES,
@@ -104,12 +108,13 @@ def test_bas_precision_cannot_hide_gst_movement(tmp_path: Path, small_first: boo
         "Date,AccountID,AccountName,Debit,Credit,Description\n" + postings,
         encoding="utf-8",
     )
-    try:
+    if small_first:
+        with pytest.raises(NumericGateError, match="28-digit precision"):
+            review_pack(profile="bas", pack_dir=pack_dir)
+    else:
         pack = review_pack(profile="bas", pack_dir=pack_dir)
-    except NumericGateError:
-        # Refusing unsupported precision also preserves the readiness boundary.
-        return
-    assert pack.status != "READY"
+        assert pack.status == "NOT_READY"
+        assert [finding.code for finding in pack.findings] == [FINDING_TIEOUT_BREAK]
 
 
 def _bas_tieout_pack(
