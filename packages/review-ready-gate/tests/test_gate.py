@@ -112,6 +112,89 @@ def test_bas_precision_cannot_hide_gst_movement(tmp_path: Path, small_first: boo
     assert pack.status != "READY"
 
 
+def _bas_tieout_pack(
+    tmp_path: Path, labels: tuple[str, str], postings: tuple[tuple[str, str], ...]
+) -> Path:
+    pack_dir = copy_example_pack("bas-ready", tmp_path / "pack")
+    (pack_dir / "activity_statement.csv").write_text(
+        f"Label,Amount\n1A,{labels[0]}\n1B,{labels[1]}\n", encoding="utf-8"
+    )
+    (pack_dir / "gst_control_gl.csv").write_text(
+        "Date,AccountID,AccountName,Debit,Credit,Description\n"
+        + "".join(
+            f"2026-01-15,820,GST Payable,{debit},{credit},Fabricated movement\n"
+            for debit, credit in postings
+        ),
+        encoding="utf-8",
+    )
+    return pack_dir
+
+
+@pytest.mark.parametrize("stage", ["statement", "row", "difference"])
+def test_bas_precision_refused_at_each_stage(tmp_path: Path, stage: str) -> None:
+    large = "1" + "0" * 28 + ".00"
+    beyond_precision = "1" + "0" * 27 + "2.00"
+    cases = {
+        "statement": ((beyond_precision, "0.00"), (("0.00", large),)),
+        "row": ((large, "0.00"), (("0.00", beyond_precision),)),
+        "difference": ((large, "0.00"), (("2.00", "0.00"),)),
+    }
+    labels, postings = cases[stage]
+    pack_dir = _bas_tieout_pack(tmp_path, labels, postings)
+    with pytest.raises(NumericGateError, match="28-digit precision"):
+        review_pack(profile="bas", pack_dir=pack_dir)
+
+
+@pytest.mark.parametrize("cancelling_labels", [False, True])
+def test_bas_exact_large_amounts_remain_ready(tmp_path: Path, cancelling_labels: bool) -> None:
+    if cancelling_labels:
+        amount = "1" + "0" * 27 + "2.00"
+        labels, postings = (amount, amount), (("0.00", "0.00"),)
+    else:
+        amount = "1" + "0" * 26 + "2.00"
+        labels, postings = (amount, "0.00"), (("0.00", amount),)
+    pack_dir = _bas_tieout_pack(tmp_path, labels, postings)
+    assert review_pack(profile="bas", pack_dir=pack_dir).status == "READY"
+
+
+def test_bas_precision_refusal_preserves_caller_context(tmp_path: Path) -> None:
+    large = "1" + "0" * 28 + ".00"
+    pack_dir = _bas_tieout_pack(
+        tmp_path, ("0.00", "0.00"), (("0.00", large), ("0.00", "2.00"), (large, "0.00"))
+    )
+    with localcontext(Context(prec=4)) as context:
+        before = str(context)
+        with pytest.raises(NumericGateError, match="28-digit precision"):
+            review_pack(profile="bas", pack_dir=pack_dir)
+        assert str(context) == before
+
+
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_bas_precision_cli_refusal_writes_no_pack(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], existing_output: bool
+) -> None:
+    output = tmp_path / "out"
+    if existing_output:
+        assert main(
+            ["gate", "--profile", "bas", "--pack", str(EXAMPLES / "bas-ready"),
+             "--output", str(output)]
+        ) == 0
+        before = {name: (output / name).read_bytes() for name in PACK_FILE_NAMES}
+        capsys.readouterr()
+    large = "1" + "0" * 28 + ".00"
+    pack_dir = _bas_tieout_pack(
+        tmp_path, ("0.00", "0.00"), (("0.00", large), ("0.00", "2.00"), (large, "0.00"))
+    )
+    assert main(["gate", "--profile", "bas", "--pack", str(pack_dir), "--output", str(output)]) == 1
+    captured = capsys.readouterr()
+    assert "28-digit precision" in captured.err
+    assert not captured.out
+    if existing_output:
+        assert {name: (output / name).read_bytes() for name in PACK_FILE_NAMES} == before
+    else:
+        assert not output.exists()
+
+
 @pytest.mark.parametrize(
     ("labels", "postings", "breaks"),
     [

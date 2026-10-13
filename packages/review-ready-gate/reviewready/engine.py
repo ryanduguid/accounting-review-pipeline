@@ -465,12 +465,21 @@ def _apply_bas_tieout(
             )
         )
         return
-    net_statement = labels["1A"] - labels["1B"]
-    net_gl = sum(
-        (row.credit - row.debit for row in gst if isinstance(row, GstControlRow)),
-        Decimal("0.00"),
-    )
-    difference = net_statement - net_gl
+    with localcontext() as context:
+        context.traps[Inexact] = True
+        try:
+            net_statement = labels["1A"] - labels["1B"]
+            net_gl = sum(
+                (row.credit - row.debit for row in gst if isinstance(row, GstControlRow)),
+                Decimal("0.00"),
+            )
+            difference = net_statement - net_gl
+            absolute_difference = abs(difference)
+        except Inexact as exc:
+            raise NumericGateError(
+                "BAS tie-out exceeds the supported 28-digit precision, "
+                "so the activity statement and GST control cannot be compared exactly."
+            ) from exc
     # The ATO has 1A and 1B reported in whole dollars with the cents left off, so
     # a lodged statement sits up to 99 cents either side of the cents-level
     # control movement with nothing wrong. Whole-dollar labels therefore pass any
@@ -478,7 +487,7 @@ def _apply_bas_tieout(
     whole_dollars = all(
         labels[label] == labels[label].to_integral_value() for label in ("1A", "1B")
     )
-    if abs(difference) > tolerance and not (whole_dollars and abs(difference) < 1):
+    if absolute_difference > tolerance and not (whole_dollars and absolute_difference < 1):
         allowance = (
             " or the 99-cent allowance for whole-dollar 1A and 1B" if whole_dollars else ""
         )
