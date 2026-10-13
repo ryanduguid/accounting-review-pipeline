@@ -43,10 +43,8 @@ impl<W: std::io::Write> std::io::Write for PythonText<W> {
 }
 
 fn capacity() -> usize {
-    match std::env::var("PYTHONUNBUFFERED").as_deref() {
-        Err(_) | Ok("") | Ok("0") => 8192,
-        _ => 0,
-    }
+    // CPython reads PYTHONUNBUFFERED with its integer flag rule ("00" keeps buffering).
+    if stdio::env_flag("PYTHONUNBUFFERED") { 0 } else { 8192 }
 }
 
 fn finish<W: std::io::Write, E: std::io::Write>(

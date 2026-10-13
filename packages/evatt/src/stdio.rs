@@ -79,6 +79,48 @@ fn posix_locale() -> &'static (Option<String>, Option<String>) {
     })
 }
 
+/// CPython's `_Py_get_env_flag`: an unset or empty variable is off. Otherwise the
+/// value is `_Py_str_to_int` (strtol base 10 over the whole string: leading C
+/// whitespace, an optional sign, digits, within int range), and a value that fails
+/// to parse or is negative counts as 1. The flag is on when that value is non-zero.
+pub fn env_flag(name: &str) -> bool {
+    let Some(value) = std::env::var_os(name) else {
+        return false;
+    };
+    #[cfg(unix)]
+    let bytes = {
+        use std::os::unix::ffi::OsStrExt;
+        value.as_bytes().to_vec()
+    };
+    #[cfg(not(unix))]
+    let bytes = value.to_string_lossy().into_owned().into_bytes();
+    !bytes.is_empty() && c_int(&bytes) != Some(0)
+}
+
+/// `_Py_str_to_int`: the whole string must be one base-10 integer within int range.
+fn c_int(bytes: &[u8]) -> Option<i64> {
+    let start = bytes.iter().position(|b| !b" \t\n\x0b\x0c\r".contains(b))?;
+    let (negative, digits) = match &bytes[start..] {
+        [b'-', rest @ ..] => (true, rest),
+        [b'+', rest @ ..] => (false, rest),
+        rest => (false, rest),
+    };
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let mut value: i64 = 0;
+    for digit in digits {
+        value = value.checked_mul(10)?.checked_add(i64::from(digit - b'0'))?;
+        if value > i64::from(i32::MAX) + 1 {
+            return None;
+        }
+    }
+    let value = if negative { -value } else { value };
+    (i64::from(i32::MIN)..=i64::from(i32::MAX))
+        .contains(&value)
+        .then_some(value)
+}
+
 /// Settle the stream configuration once, in the main thread, before any command runs.
 pub fn configure() -> Result<(), &'static str> {
     // CPython reads both variables before it sets up any stream and stops on a value
@@ -90,11 +132,11 @@ pub fn configure() -> Result<(), &'static str> {
         }
     }
     // The legacy Windows modes change how CPython picks UTF-8 mode and the console
-    // code page; they are refused rather than emulated. CPython treats an empty
-    // value as unset.
+    // code page; they are refused rather than emulated when CPython's flag reading
+    // turns them on (so "", "0" and "00" leave them off).
     #[cfg(windows)]
     for name in ["PYTHONLEGACYWINDOWSFSENCODING", "PYTHONLEGACYWINDOWSSTDIO"] {
-        if std::env::var_os(name).is_some_and(|value| !value.is_empty()) {
+        if env_flag(name) {
             return Err(UNSUPPORTED);
         }
     }
@@ -328,6 +370,18 @@ pub fn encode_with(text: &str, encoding: &Encoding, policy: ErrorPolicy) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn flag_values_parse_like_cpython_py_str_to_int() {
+        for zero in ["0", "00", "+0", "-0", " 0", "\t\n0", "0000000000000000000000"] {
+            assert_eq!(c_int(zero.as_bytes()), Some(0), "{zero:?}");
+        }
+        for on in ["0 ", "0x0", "text", "", " ", "+", "2147483648", "-2147483649", "1e0"] {
+            assert_ne!(c_int(on.as_bytes()), Some(0), "{on:?}");
+        }
+        assert_eq!(c_int(b"2147483647"), Some(2_147_483_647));
+        assert_eq!(c_int(b"-2147483648"), Some(-2_147_483_648));
+        assert_eq!(c_int(b"-3"), Some(-3));
+    }
     #[test]
     fn only_implemented_codecs_are_accepted_by_their_cpython_spellings() {
         for name in ["utf-8", "UTF8", "utf_8", "U8", "cp65001"] {

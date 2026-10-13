@@ -64,8 +64,9 @@ Deliberate differences:
   strict, surrogateescape, surrogatepass, ignore, replace or backslashreplace
   (CPython also accepts xmlcharrefreplace and namereplace, and looks an
   unknown name up only when it needs it). On POSIX,
-  `PYTHONCOERCECLOCALE=warn` is refused, because CPython then writes locale
-  warnings to stderr. A non-Unicode `PATHEXT` on Windows makes git
+  `PYTHONCOERCECLOCALE=warn` is refused in every locale, because CPython can
+  then write locale warnings to stderr; it writes none under a UTF-8 locale,
+  where the refusal is an extra one. A non-Unicode `PATHEXT` on Windows makes git
   unavailable rather than guessed at; POSIX ignores `PATHEXT`, as CPython
   does.
 - Compatibility scope: the reference is Python evatt 0.2.0 run by a working
@@ -73,7 +74,12 @@ Deliberate differences:
   environment variables that CPython also reads: `PYTHONIOENCODING`,
   `PYTHONUTF8`, `PYTHONLEGACYWINDOWSFSENCODING`, `PYTHONLEGACYWINDOWSSTDIO`,
   `PYTHONCOERCECLOCALE`, `PYTHONUNBUFFERED`, `PYTHON_COLORS`, `NO_COLOR`,
-  `FORCE_COLOR`, `TERM`, `COLUMNS` and `LINES`, plus the locale. Settings
+  `FORCE_COLOR`, `TERM`, `COLUMNS` and `LINES`, plus the locale;
+  `PYTHONUNBUFFERED` and the two legacy Windows variables are read with
+  CPython's integer flag rule. `PATH`, `PATHEXT` and
+  `NoDefaultCurrentDirectoryInExePath` locate git, and the git subprocess
+  inherits the remaining environment apart from the six `GIT_*` location
+  overrides evatt removes, as the Python release's subprocess did. Settings
   that only configure the interpreter itself, such as `PYTHONHOME`,
   `PYTHONPATH`, `PYTHONDEVMODE`, `PYTHONWARNINGS` or `-X` options, have no
   meaning for a standalone binary and are ignored, including where they
