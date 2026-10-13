@@ -96,7 +96,7 @@ It holds 8 independently versioned components joined only by local files and com
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.8 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release | 0.2.0 |
-| evatt | `packages/evatt/` | distribution `evatt`, import `evatt`, command `evatt`; a local pseudonymisation boundary, no network of any kind | 0.2.0 |
+| evatt | `packages/evatt/` | Rust binary `evatt` from 1.0.0 (unreleased); a local pseudonymisation boundary, no network of any kind | 0.2.0 |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly
@@ -213,16 +213,14 @@ Each active release caller uses its own namespaced annotated tag, `<component>/v
 through a root caller pinned to the independently reviewed Release Policy commit
 `a601f1d8b143f92b0517f709216993660d21f480`: `monthly-close-control-plane/v*`,
 `review-ready-gate/v*`, `xero-trial-balance-export/v*`,
-`accounting-excel-toolkit/v*` and `evatt/v*`. One tag publishes exactly one component; the
+`accounting-excel-toolkit/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
-is the only difference, except that `release-evatt.yml` has no `pypi` job at all, so an
-`evatt/v*` tag produces GitHub release assets and publishes to no index while the disclosure
-policy that package enforces is unsigned. `IMPORTS.md` lists the callers and publisher
-environments.
+is the only difference. `IMPORTS.md` lists the callers and publisher environments.
 
-The Rust Xero Ledger Review Gate 1.0.0 has no release caller until a Rust release path
-is approved. Version 0.2.6 remains the released Python distribution on PyPI.
+The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
+until their Rust release paths are approved. Version 0.2.6 remains the released
+ledger-review Python distribution on PyPI; evatt 0.2.0 was never on PyPI.
 
 ## Contract
 

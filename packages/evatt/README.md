@@ -1,14 +1,14 @@
 # evatt
 
-| Install distribution | Python import | Command |
+| Binary | Version | Command |
 | --- | --- | --- |
-| `evatt` | `evatt` | `evatt` |
+| `evatt` | `1.0.0` (unreleased) | `evatt` |
 
-This checkout targets `evatt/v0.2.0`. Each evatt release is an immutable GitHub
-release with a wheel, a source distribution, an SPDX SBOM, a release manifest
-and `SHA256SUMS`; check GitHub Releases for the published assets. The
-distribution is not on PyPI, by design: install it from the release assets, or
-run `uv run --locked evatt ...` from `packages/evatt/` in a checkout.
+This checkout builds a standalone Rust binary. It needs no installed Python.
+The Python import API and map-writing facility have been removed. Version
+0.2.0 remains the prior Python release; nothing is published to PyPI.
+There is no 1.0.0 release until a Rust release path is approved. See
+[RELEASING.md](RELEASING.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ## Scope and assurance boundary
 
@@ -51,6 +51,17 @@ whatever the operator does with the output, and a control being evaluated is not
 yet a control anyone has agreed to rely on. Use the fabricated files under
 `evatt/samples/` until the sign-off exists.
 
+Build and run from `packages/evatt/`:
+
+```bash
+cargo build --locked --release
+./target/release/evatt --version
+```
+
+On Windows the binary is `target\release\evatt.exe`. Either put the binary
+on `PATH` or use its full path in the examples below. Rust 1.99.0 builds the
+crate; `git` on `PATH` is the only runtime program it calls.
+
 ```
 evatt redact  --in notes.md --map entities.json --out build/notes.md
 evatt verify  --in build/notes.md --map entities.json
@@ -66,16 +77,14 @@ fabricated samples from `packages/evatt/` in a checkout, where this repository's
 
 ```
 cp evatt/samples/entities.sample.json entities.json
-uv run --locked evatt redact  --in evatt/samples/research-question.md --map entities.json --out build/question.md
-uv run --locked evatt verify  --in build/question.md --map entities.json
-uv run --locked evatt restore --in evatt/samples/research-answer.md --map entities.json --out build/answer.md
+evatt redact  --in evatt/samples/research-question.md --map entities.json --out build/question.md
+evatt verify  --in build/question.md --map entities.json
+evatt restore --in evatt/samples/research-answer.md --map entities.json --out build/answer.md
 ```
 
-An installed wheel carries the same samples inside the `evatt` package, and
-`python -c "import evatt, pathlib; print(pathlib.Path(evatt.__file__).parent / 'samples')"`
-prints where. Copy that folder to `evatt/samples/` in a repository whose
-`.gitignore` covers the map and `build/` (see Requirements), then run the same
-commands without `uv run --locked`.
+The fabricated samples stay at `evatt/samples/` in the source checkout. Copy
+that folder into your scratch repository when running an installed binary,
+and write the ignore rules below before trying a command.
 
 `build/question.md` carries `CLIENT_01`, `ENTITY_01` and `PERSON_01` in place of
 the names and `TFN_01` and `ABN_01` in place of the identifiers. That file, not
@@ -88,33 +97,29 @@ cannot change them.
 
 ## Requirements
 
-Python 3.14 or later, and `git` on `PATH`. Every command asks git whether it
+The standalone binary and `git` on `PATH`. Every command asks git whether it
 would let you commit the map, and refuses to run when the answer is yes or
 unclear. A halt asks the same question about the triage path before it writes
 one. That question has no answer outside a work tree, so the map, and therefore
 the run, must live inside a repository that ignores it.
 
-The rules covering `entities.json`, `*.entities.json`, `*.triage.md`, `*.tmp`
-and `*.disclosure.json`
-live in this repository's own `.gitignore`, which ships in neither the wheel nor
-the source distribution. **If you installed evatt as a package, you have none of
-them and must write your own**, in the repository your map and your run live in.
-Four kinds of path are guarded, and a rule has to cover every one of them:
+The rules covering `entities.json`, `*.entities.json`, `*.triage.md` and
+`*.disclosure.json` live in this repository's own `.gitignore`. That file
+is not part of the binary. **If you installed evatt, you must write your own**
+rules in the repository your map and your run live in.
+Three kinds of path are guarded, and a rule has to cover every one of them:
 
 ```
 entities.json
 *.entities.json
-*.tmp
 *.triage.md
 *.disclosure.json
 ```
 
-The first 2 are the map itself, under whichever of the two names you use. The
-`*.tmp` rule covers the temporary `save` writes beside the map before renaming
-it over the top, which is named `<map>.tmp.<random>.tmp` and holds the same real
-values as the map; a hard kill can leave one behind. The triage rule covers the
-worklist a halt writes beside `--out`. The disclosure rule covers local evidence
-records, whose metadata and map digest must also stay local.
+The first 2 are the map itself, under whichever of the two names you use.
+The triage rule covers the worklist a halt writes beside `--out`. The
+disclosure rule covers local evidence records, whose metadata and map digest
+must also stay local. evatt reads the map and never writes it.
 
 Leave any of them out and the run fails closed, naming the path and the rule it
 wants, rather than writing the file.
@@ -223,19 +228,9 @@ an extra placeholder costs a triage decision while a miss leaks.
   job, not the tool's.
 - **`restore --out` is not gitignore-guarded.** It writes real names to a path
   you choose, anywhere, so the tool cannot know what rule would cover it. The
-  map, every temporary written beside it and the triage path are guarded,
+  map, the disclosure record and the triage path are guarded,
   because those are either the key or a path evatt derived rather than one you
   typed. Where the restored answer lands is yours to keep out of a commit.
-- **The map's temporary is created exclusively, at a name that does not already
-  exist.** `save` writes `<map>.tmp.<random>.tmp` and renames it over the map.
-  The name is fresh each time and the file is created with `O_CREAT | O_EXCL`,
-  so a symbolic or hard link left at that path is never followed or truncated,
-  and a temporary left behind by a hard kill cannot block the next save. On
-  Windows `O_NOFOLLOW` does not exist and is not used; exclusive creation is
-  what refuses a link on both platforms, because a link is a name that already
-  exists and creating one therefore fails. What Windows does not honour is the
-  POSIX file mode, so there the temporary is readable by whoever can read the
-  directory rather than by its owner alone.
 - **A labelled identifier is admitted on the label alone**, with no check
   digit, because something wrote 'TFN' next to those digits and a typo in a
   real tax file number is still a real tax file number. Only a bare digit run
@@ -318,8 +313,8 @@ document before you send it.
 One JSON file, `schema_version` and `entries`, each entry holding a real value,
 its placeholder, a kind (`client`, `person`, `staff` or `entity`) and the date
 it was added. Keep the map append-only: never delete an entry or change what
-its placeholder means. Assignment uses the highest remaining ordinal plus one;
-deleting the highest entry would allow its placeholder to be reissued.
+its placeholder means. Allocate a new ordinal above the highest one ever used
+for that kind; deleting the highest entry can lead to its placeholder being reissued.
 `evatt/samples/entities.sample.json` is a fabricated map of the right shape.
 
 ## Disclosure evidence
@@ -375,12 +370,8 @@ confine a process that can change its directories concurrently. Failed writes
 can leave an incomplete record, which checking rejects. On Windows, directory
 permissions control access; POSIX creation uses owner-only file permissions.
 
-For a library caller, `evatt.disclosure.create_record(payload, entries,
-destination=..., decision_ref=...)` returns record bytes.
-`check_record(payload, entries, record, expected_destination=...,
-expected_decision_ref=...)` returns the same immutable payload bytes on success.
-Use validated entries from `entities.load`. The pure API performs no file or Git
-operations; callers must keep its returned metadata private.
+The CLI operates on one immutable snapshot of the supplied payload bytes.
+The Python library API is removed in 1.0.0; use the two commands above.
 
 **Matching evidence is not permission.** The record is unsigned and can be edited
 consistently. An outer sender must independently authenticate the external human

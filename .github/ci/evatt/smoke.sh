@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
-# Wheel smoke for evatt. ci-package.yml runs this from an empty directory with
-# the installed wheel's console scripts on PATH and COMPONENT pointing at the
-# checked-out component, so it proves the wheel carries its package data and
-# the documented exit codes hold.
+# Standalone binary smoke, run from an empty directory with the release binary
+# on PATH and COMPONENT pointing at this component's fabricated source samples.
 set -euo pipefail
 
-# samples/ ships as package data, so the demo inputs are read out
-# of the installed wheel rather than the checkout: a wheel that
-# drops them produces a console script whose demo cannot run.
-# Every evatt command asks git whether it would let you commit the
-# map, so the demo directory has to be a work tree with a covering
-# ignore rule.
+# Every command asks git whether it would let you commit the map.
 git init --quiet .
 printf 'entities.json\n*.triage.md\n*.disclosure.json\n' > .gitignore
-samples=$(python -c "import evatt, pathlib; print(pathlib.Path(evatt.__file__).parent / 'samples')")
+samples="${COMPONENT:?COMPONENT must name the checkout}/evatt/samples"
 cp "${samples}/entities.sample.json" entities.json
 cp "${samples}/entities-only.md" in.md
 cp "${samples}/identifiers.md" identifiers.md

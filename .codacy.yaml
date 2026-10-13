@@ -11,6 +11,7 @@
 # a character literal and loses track of braces until the next quote mark, so
 # it reports wrong function spans for Rust. Rust crates set clippy's
 # too_many_lines lint to the same 50-line limit instead, and CI denies it.
+# This includes evatt and its generated CPython compatibility tables.
 engines:
   opengrep:
     exclude_paths:

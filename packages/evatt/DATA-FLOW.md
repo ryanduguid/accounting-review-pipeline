@@ -10,7 +10,7 @@ recipient receives; it does not change the character of the data.
 
 - No HTTP client, socket or telemetry library appears in this package.
 - No cloud model is called. All processing is in memory, locally.
-- The entity map is read from disk and written to disk. It is never sent.
+- The entity map is read from disk and never written by evatt. It is never sent.
 - The one subprocess this package runs is `git`, asked locally whether it
   ignores and does not track the map. It is a question about the working
   directory, not a network call.
@@ -49,17 +49,17 @@ decoded text with its documented normalisation. They bind the unchanged bytes'
 SHA-256 digest to the loaded map's digest, evatt version, destination ID and
 external decision reference. They do not alter the replacement-count manifest.
 
-`disclosure-check` reports local consistency only. Its pure API returns the exact
-checked bytes, so a caller can use that snapshot without reopening the file.
-Neither the CLI nor the API authenticates the unsigned record or human decision.
+`disclosure-check` reports local consistency only. Both commands inspect one
+immutable snapshot of the exact payload bytes. The CLI authenticates neither
+the unsigned record nor the human decision.
 A sender must independently authenticate the external decision, bind it to the
 actual destination and exact bytes, and account for any added message content.
 evatt has no sender and does not prevent copying, later edits or manual disclosure.
 
 ## 5. What stays on the local disk
 
-The entity map, its `.tmp` while it is being replaced, and any triage file. All
-3 name real values or real candidates. Every command refuses to read a map
+The entity map and any triage file. Both name real values or real candidates.
+evatt never writes the map. Every command refuses to read a map
 git would let you commit, and a halt refuses to write a triage file at a path
 git would let you commit.
 
@@ -68,8 +68,7 @@ and map digest must also stay local. Both disclosure commands require ignored,
 untracked records at the time they run.
 
 The rules covering these files live in this repository's `.gitignore`.
-That file is in neither the wheel nor the source distribution, so an installed
-user has none of them and has to write the equivalent rules in the repository
+That file is not part of the binary, so an installed user has none of them and has to write the equivalent rules in the repository
 their map and their runs live in. The guards are what enforce the rule; the
 shipped file only satisfies it here.
 

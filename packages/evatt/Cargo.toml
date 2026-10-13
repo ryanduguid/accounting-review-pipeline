@@ -1,0 +1,43 @@
+[package]
+name = "evatt"
+version = "1.0.0"
+edition = "2024"
+publish = false
+rust-version = "1.99"
+description = "Local pseudonymisation of Australian client data in markdown"
+license = "Apache-2.0"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+readme = "README.md"
+
+[dependencies]
+fancy-regex = "=0.19.2"
+unicode-normalization = "=0.1.24"
+num-bigint = "0.4"
+num-traits = "0.2"
+sha2 = "0.11"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[features]
+# Comparison tools only; never enabled in the distributed binary.
+probe = []
+
+[[bin]]
+name = "evatt"
+path = "src/main.rs"
+
+[[bin]]
+name = "evatt-probe"
+path = "src/probe.rs"
+required-features = ["probe"]
+
+[lints.clippy]
+too_many_lines = "warn"
+
+[profile.release]
+lto = true
+codegen-units = 1

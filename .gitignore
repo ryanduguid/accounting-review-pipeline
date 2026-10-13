@@ -12,7 +12,7 @@
 outputs/
 review-notes/
 
-# evatt writes its entity map in the directory it is run from, and the map holds
+# evatt reads a local entity map, and the map holds
 # the real names the redacted document no longer shows.
 entities.json
 *.entities.json

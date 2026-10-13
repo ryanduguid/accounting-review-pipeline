@@ -1,0 +1,83 @@
+[
+  {
+    "argv": [],
+    "columns": 40,
+    "colour": "1"
+  },
+  {
+    "argv": [
+      "--help"
+    ],
+    "columns": 40,
+    "colour": "1"
+  },
+  {
+    "command": "verify",
+    "state": "bad-map",
+    "source": "",
+    "raw_map": "{"
+  },
+  {
+    "command": "verify",
+    "state": "map-directory",
+    "source": ""
+  },
+  {
+    "command": "disclosure-check",
+    "state": "record-link",
+    "source": "PERSON_01"
+  },
+  {
+    "command": "disclosure-check",
+    "state": "record-hardlink",
+    "source": "PERSON_01"
+  },
+  {
+    "command": "disclosure-check",
+    "state": "linked-parent",
+    "source": "PERSON_01"
+  },
+  {
+    "command": "disclosure-check",
+    "state": "missing-dotdot-link",
+    "source": "PERSON_01"
+  },
+  {
+    "command": "disclosure-record",
+    "state": "record-parent-file",
+    "source": "PERSON_01"
+  },
+  {
+    "argv": [
+      "redact",
+      "--record"
+    ]
+  },
+  {
+    "argv": [
+      "redact",
+      "--in",
+      "--record"
+    ]
+  },
+  {
+    "argv": [
+      "redact",
+      "-h=x",
+      "--record"
+    ]
+  },
+  {
+    "argv": [
+      "redact",
+      "--in",
+      "in.md",
+      "--map",
+      "entities.json",
+      "--out",
+      "out.md",
+      "--record",
+      "Sample Sensitive Sentinel"
+    ]
+  }
+]
