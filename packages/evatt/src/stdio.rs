@@ -8,8 +8,6 @@ pub enum Encoding {
     Ascii,
     Latin1,
     Windows1252,
-    #[cfg(windows)]
-    Native(u32),
 }
 
 /// Refusal for a stream configuration this binary cannot reproduce byte for byte.
@@ -78,6 +76,18 @@ fn posix_locale() -> &'static (Option<String>, Option<String>) {
 
 /// Settle the stream configuration once, in the main thread, before any command runs.
 pub fn configure() -> Result<(), &'static str> {
+    // CPython reads both variables before it sets up any stream and stops on a value
+    // it cannot decode or, for PYTHONUTF8, one other than 0 or 1. Check them before
+    // the console or explicit-codec branches below can return early.
+    for name in ["PYTHONUTF8", "PYTHONIOENCODING"] {
+        if matches!(std::env::var(name), Err(std::env::VarError::NotUnicode(_))) {
+            return Err(UNSUPPORTED);
+        }
+    }
+    #[cfg(not(windows))]
+    utf8_mode(posix_locale().0.as_deref())?;
+    #[cfg(windows)]
+    utf8_mode(None)?;
     encoding(false)?;
     encoding(true)?;
     stdout_policy()?;
@@ -120,11 +130,12 @@ pub fn encoding(stderr: bool) -> Result<Encoding, &'static str> {
             fn GetACP() -> u32;
         }
         // SAFETY: GetACP has no arguments and only reports a code page.
-        Ok(match unsafe { GetACP() } {
-            65001 => Encoding::Utf8,
-            1252 => Encoding::Windows1252,
-            code => Encoding::Native(code),
-        })
+        // Other code pages would need CPython's own codec tables, so they are refused.
+        match unsafe { GetACP() } {
+            65001 => Ok(Encoding::Utf8),
+            1252 => Ok(Encoding::Windows1252),
+            _ => Err(UNSUPPORTED),
+        }
     }
 }
 
@@ -183,43 +194,7 @@ fn scalar(cp: u32, encoding: &Encoding) -> Option<Vec<u8>> {
         Encoding::Ascii => (cp < 128).then_some(vec![cp as u8]),
         Encoding::Latin1 => (cp < 256).then_some(vec![cp as u8]),
         Encoding::Windows1252 => windows1252(cp).map(|byte| vec![byte]),
-        #[cfg(windows)]
-        Encoding::Native(code) => native(ch, *code),
     }
-}
-
-#[cfg(windows)]
-fn native(ch: char, code: u32) -> Option<Vec<u8>> {
-    unsafe extern "system" {
-        fn WideCharToMultiByte(
-            code: u32,
-            flags: u32,
-            wide: *const u16,
-            len: i32,
-            bytes: *mut u8,
-            capacity: i32,
-            default: *const u8,
-            used_default: *mut i32,
-        ) -> i32;
-    }
-    let mut wide = [0; 2];
-    let wide = ch.encode_utf16(&mut wide);
-    let mut out = [0; 16];
-    let mut replaced = 0;
-    // SAFETY: both buffers live through the call and their lengths are exact.
-    let size = unsafe {
-        WideCharToMultiByte(
-            code,
-            0x400,
-            wide.as_ptr(),
-            wide.len() as i32,
-            out.as_mut_ptr(),
-            16,
-            std::ptr::null(),
-            &mut replaced,
-        )
-    };
-    (size > 0 && replaced == 0).then(|| out[..size as usize].to_vec())
 }
 
 fn escaped(cp: u32) -> Vec<u8> {

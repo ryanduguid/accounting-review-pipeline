@@ -374,3 +374,51 @@ fn closed_pipes_keep_buffered_and_argparse_unbuffered_exit_codes() {
         assert!(output.stdout.is_empty());
     }
 }
+
+#[test]
+fn stream_settings_cpython_refuses_at_start_up_write_nothing() {
+    let repo = Repo::new();
+    let cases: [&[(&str, &str)]; 4] = [
+        &[("PYTHONUTF8", "2"), ("PYTHONIOENCODING", "utf-8")],
+        &[("PYTHONUTF8", "2"), ("PYTHONIOENCODING", "utf-8:strict")],
+        &[("PYTHONUTF8", "2"), ("PYTHONIOENCODING", "cp1252")],
+        &[("PYTHONIOENCODING", "bogus")],
+    ];
+    for env in cases {
+        for args in [vec!["--version"], repo.normal("redact")] {
+            let mut command = repo.command(&args);
+            command.envs(env.iter().copied());
+            let output = command.output().unwrap();
+            assert_eq!(code(&output), 1, "{env:?} {args:?}");
+            assert!(output.stdout.is_empty(), "{env:?} {args:?}");
+            assert!(
+                stderr(&output).starts_with("error: unsupported stream encoding"),
+                "{env:?}"
+            );
+            assert!(!repo.path("out.md").exists() && !repo.path("out.md.manifest.json").exists());
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn undecodable_python_variables_refuse_and_pathext_is_ignored_on_posix() {
+    use std::os::unix::ffi::OsStringExt;
+    let repo = Repo::new();
+    let raw = |bytes: &[u8]| std::ffi::OsString::from_vec(bytes.to_vec());
+    for (name, value) in [
+        ("PYTHONUTF8", raw(b"\xff")),
+        ("PYTHONIOENCODING", raw(b"bogus\xff")),
+        ("PYTHONIOENCODING", raw(b"utf-8\xff")),
+        ("PYTHONIOENCODING", raw(b"utf-8:\xff")),
+    ] {
+        let mut command = repo.command(&repo.normal("redact"));
+        command.env(name, &value);
+        let output = command.output().unwrap();
+        assert_eq!(code(&output), 1, "{name}");
+        assert!(!repo.path("out.md").exists(), "{name}");
+    }
+    let mut command = repo.command(&repo.normal("verify"));
+    command.env("PATHEXT", raw(b"\xff"));
+    assert_eq!(code(&command.output().unwrap()), 2);
+}

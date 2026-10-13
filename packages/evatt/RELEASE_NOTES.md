@@ -45,12 +45,17 @@ Deliberate differences:
   would write its streams in a codec this binary does not implement or would
   decode arguments and paths with a non-UTF-8 locale. The accepted stream
   codecs are UTF-8, UTF-8 with signature, ASCII, Latin-1 and Windows-1252,
-  set through `PYTHONIOENCODING` or, on Windows, the active code page. POSIX
-  locales must resolve to UTF-8 (a UTF-8 codeset, C, POSIX or UTF-8 mode).
-  CPython would run in some of these environments (for example
-  `PYTHONIOENCODING=cp1251` or a Latin-1 locale) and stop at start-up in
-  others (an unknown codec or an invalid `PYTHONUTF8`). A non-Unicode
-  `PATHEXT` on Windows makes git unavailable rather than guessed at.
+  set through `PYTHONIOENCODING` or, on Windows, the active code page; any
+  other Windows code page is refused unless the console, UTF-8 mode or
+  `PYTHONIOENCODING` selects an accepted codec. POSIX locales must resolve to
+  UTF-8 (a UTF-8 codeset, C, POSIX or UTF-8 mode). CPython would run in some
+  of these environments (for example `PYTHONIOENCODING=cp1251`, a Latin-1
+  locale or code page 1251) and there it can write redacted documents,
+  manifests and records that evatt 1.0.0 does not. It stops at start-up in
+  the others, as evatt does: an unknown codec, a `PYTHONUTF8` other than 0 or
+  1, or either variable holding a value the system cannot decode. A
+  non-Unicode `PATHEXT` on Windows makes git unavailable rather than guessed
+  at; POSIX ignores `PATHEXT`, as CPython does.
 - A regex compilation or execution error, including exhaustion of its 100,000,000-step
   backtrack budget, refuses the run with an `error:` line and exit 1. Every
   detector, mapped value and restore pattern uses the same budget. It never

@@ -248,12 +248,16 @@ fn git_executable() -> Option<PathBuf> {
         std::env::var_os("PATH"),
         std::env::var_os("NoDefaultCurrentDirectoryInExePath").is_some(),
     );
+    // shutil.which reads PATHEXT on Windows only.
+    #[cfg(windows)]
     let names = match std::env::var("PATHEXT") {
         Ok(value) => which_names(Some(value)),
         Err(std::env::VarError::NotPresent) => which_names(None),
         // CPython would try extensions holding lone surrogates; refuse instead of guessing.
         Err(std::env::VarError::NotUnicode(_)) => return None,
     };
+    #[cfg(not(windows))]
+    let names = which_names(None);
     for dir in dirs {
         for name in &names {
             let candidate = dir.join(name);
