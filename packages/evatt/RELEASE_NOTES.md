@@ -32,13 +32,28 @@ Deliberate differences:
   JSON integers and excessive JSON nesting. Restoration preserves the empty
   output left by Python's failed encoding. JSON nesting is capped at 10,000
   levels to protect the worker stack; ordinary record JSON remains capped at
-  4,096 bytes. These are failure paths, not successful output transformations.
+  4,096 bytes. CPython's own depth limit follows its C stack and can be lower,
+  so a map nested deeper than CPython parses can reach evatt's field
+  validation, which still refuses it, because every map and record field is a
+  string or an integer. These are failure paths, not successful output
+  transformations.
   A shutdown stream-flush failure retains CPython's exit 120 and emits an
   `error:` line instead of its ignored-exception diagnostic. Argparse's
   unbuffered help/version writes still ignore an I/O error, as CPython does.
   A closed stderr cannot receive that diagnostic; the failure exit is retained.
+- evatt refuses to start, with one `error:` line and exit 1, when CPython 3.14
+  would write its streams in a codec this binary does not implement or would
+  decode arguments and paths with a non-UTF-8 locale. The accepted stream
+  codecs are UTF-8, UTF-8 with signature, ASCII, Latin-1 and Windows-1252,
+  set through `PYTHONIOENCODING` or, on Windows, the active code page. POSIX
+  locales must resolve to UTF-8 (a UTF-8 codeset, C, POSIX or UTF-8 mode).
+  CPython would run in some of these environments (for example
+  `PYTHONIOENCODING=cp1251` or a Latin-1 locale) and stop at start-up in
+  others (an unknown codec or an invalid `PYTHONUTF8`). A non-Unicode
+  `PATHEXT` on Windows makes git unavailable rather than guessed at.
 - A regex compilation or execution error, including exhaustion of its 100,000,000-step
-  backtrack budget, refuses the run with an `error:` line and exit 1. It never
+  backtrack budget, refuses the run with an `error:` line and exit 1. Every
+  detector, mapped value and restore pattern uses the same budget. It never
   becomes a missing match or permits a sendable output to be written. Extremely
   long inputs that CPython can scan may therefore be refused. This follows the
   port's explicit fail-closed regex-error rule.

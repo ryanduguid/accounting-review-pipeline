@@ -82,6 +82,13 @@ fn main() {
     // sys.argv as Python decodes it: undecodable bytes or UTF-16 stay as surrogates.
     // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
     // nosemgrep: rust.lang.security.args-os.args-os
+    // Settle the streams before argv is decoded or any command runs. A configuration
+    // CPython would encode differently, or refuse to start under, is refused here.
+    if let Err(message) = stdio::configure() {
+        use std::io::Write;
+        let _ = writeln!(std::io::stderr(), "error: {message}");
+        std::process::exit(1);
+    }
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| pypath::decode_os(&a)).collect();
     // A deeply nested JSON input recurses; give it the room CPython's own limit allows.
     let code = std::thread::Builder::new()
@@ -93,7 +100,7 @@ fn main() {
                 stderr: false,
                 failed_encoding: false,
                 failed_write: false,
-                encoding: stdio::encoding(false),
+                encoding: stdio::encoding(false).unwrap_or(stdio::Encoding::Utf8),
                 wrote_bom: false,
                 line_buffering: std::io::stdout().is_terminal(),
             };
@@ -102,7 +109,7 @@ fn main() {
                 stderr: true,
                 failed_encoding: false,
                 failed_write: false,
-                encoding: stdio::encoding(true),
+                encoding: stdio::encoding(true).unwrap_or(stdio::Encoding::Utf8),
                 wrote_bom: false,
                 line_buffering: true,
             };

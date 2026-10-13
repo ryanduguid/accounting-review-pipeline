@@ -9,6 +9,9 @@ use std::sync::LazyLock;
 
 pub type Result<T> = std::result::Result<T, String>;
 
+/// The backtrack budget every evatt regex runs under; exhausting it refuses the run.
+pub const BACKTRACK_LIMIT: usize = 100_000_000;
+
 static COMPILED: LazyLock<HashMap<&'static str, Regex>> = LazyLock::new(|| {
     // Labelled expressions have a constant number of qualifier/whole-markup
     // parses. Mandatory tokens separate whitespace runs, and terminal pins
@@ -19,7 +22,7 @@ static COMPILED: LazyLock<HashMap<&'static str, Regex>> = LazyLock::new(|| {
         .iter()
         .map(|&(name, expression)| {
             let regex = fancy_regex::RegexBuilder::new(&regexes::expand(expression))
-                .backtrack_limit(100_000_000)
+                .backtrack_limit(BACKTRACK_LIMIT)
                 .build()
                 .unwrap_or_else(|error| panic!("{name}: {error}"));
             (name, regex)
@@ -382,7 +385,7 @@ fn compile_value(value: &str) -> Result<Regex> {
     fancy_regex::RegexBuilder::new(&format!(
         "(?P<open>(?<![{word}*])[*_]*|(?<=\\*)_*){body}(?P<close>[*_]*)(?!{word})"
     ))
-    .backtrack_limit(100_000_000)
+    .backtrack_limit(BACKTRACK_LIMIT)
     .build()
     .map_err(runtime)
 }

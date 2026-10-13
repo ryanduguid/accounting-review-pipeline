@@ -165,16 +165,62 @@ fn executable(path: &Path) -> bool {
 /// goes first only when `NeedCurrentDirectoryForExePathW("git")` is true, which
 /// for a name without a backslash means NoDefaultCurrentDirectoryInExePath is unset.
 fn which_dirs(path: Option<OsString>, no_default_curdir: bool) -> Vec<PathBuf> {
-    let path = path.unwrap_or_else(|| OsString::from(if cfg!(windows) { ".;C:\\bin" } else { "/bin:/usr/bin" }));
+    let Some(path) = path.or_else(default_search_path) else {
+        return Vec::new();
+    };
     if path.is_empty() {
         return Vec::new();
     }
-    let separator = if cfg!(windows) { ';' } else { ':' };
-    let mut dirs: Vec<PathBuf> = path.to_string_lossy().split(separator).map(PathBuf::from).collect();
+    // Split the OS string itself: a lossy decode could turn an undecodable
+    // directory name into a different, existing one.
+    let mut dirs = split_search_path(&path);
     if cfg!(windows) && !no_default_curdir {
         dirs.insert(0, PathBuf::from("."));
     }
     dirs
+}
+
+/// `os.confstr("CS_PATH")` on POSIX, or `os.defpath` on Windows. None when
+/// confstr has no value, which CPython then treats as an empty search path.
+fn default_search_path() -> Option<OsString> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        // SAFETY: a null buffer with length 0 asks only for the required size.
+        let size = unsafe { libc::confstr(libc::_CS_PATH, std::ptr::null_mut(), 0) };
+        if size == 0 {
+            return None;
+        }
+        let mut buffer = vec![0u8; size];
+        // SAFETY: buffer has exactly the size confstr reported, including its NUL.
+        unsafe { libc::confstr(libc::_CS_PATH, buffer.as_mut_ptr().cast(), size) };
+        buffer.truncate(size - 1);
+        Some(OsString::from_vec(buffer))
+    }
+    #[cfg(not(unix))]
+    {
+        Some(OsString::from(".;C:\\bin"))
+    }
+}
+
+/// `str.split(os.pathsep)` on the undecoded value: raw bytes on POSIX, UTF-16 on Windows.
+fn split_search_path(path: &std::ffi::OsStr) -> Vec<PathBuf> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        path.as_bytes()
+            .split(|&byte| byte == b':')
+            .map(|part| PathBuf::from(OsString::from_vec(part.to_vec())))
+            .collect()
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let wide: Vec<u16> = path.encode_wide().collect();
+        wide.split(|&unit| unit == u16::from(b';'))
+            .map(|part| PathBuf::from(OsString::from_wide(part)))
+            .collect()
+    }
 }
 
 /// The file names `shutil.which("git")` tries in each directory.
@@ -202,7 +248,12 @@ fn git_executable() -> Option<PathBuf> {
         std::env::var_os("PATH"),
         std::env::var_os("NoDefaultCurrentDirectoryInExePath").is_some(),
     );
-    let names = which_names(std::env::var("PATHEXT").ok());
+    let names = match std::env::var("PATHEXT") {
+        Ok(value) => which_names(Some(value)),
+        Err(std::env::VarError::NotPresent) => which_names(None),
+        // CPython would try extensions holding lone surrogates; refuse instead of guessing.
+        Err(std::env::VarError::NotUnicode(_)) => return None,
+    };
     for dir in dirs {
         for name in &names {
             let candidate = dir.join(name);
@@ -489,8 +540,28 @@ mod tests {
         } else {
             let dirs = which_dirs(Some(OsString::from("/a::/b")), false);
             assert_eq!(dirs, ["/a", "", "/b"].map(PathBuf::from));
+            // glibc's CS_PATH, which os.confstr returns.
             assert_eq!(which_dirs(None, false), ["/bin", "/usr/bin"].map(PathBuf::from));
             assert_eq!(which_names(Some(".EXE".into())), ["git"]);
+        }
+    }
+    #[test]
+    fn undecodable_search_directories_keep_their_exact_names() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::{OsStrExt, OsStringExt};
+            let dirs = which_dirs(Some(OsString::from_vec(b"/x\xff:/y\xef\xbf\xbd".to_vec())), false);
+            assert_eq!(dirs[0].as_os_str().as_bytes(), b"/x\xff");
+            assert_eq!(dirs[1].as_os_str().as_bytes(), "/y\u{fffd}".as_bytes());
+            assert_ne!(dirs[0], dirs[1].with_file_name("x\u{fffd}"));
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::{OsStrExt, OsStringExt};
+            let raw = [u16::from(b'C'), u16::from(b':'), 0xD800, u16::from(b';'), 0xFFFD];
+            let dirs = which_dirs(Some(OsString::from_wide(&raw)), true);
+            assert_eq!(dirs[0].as_os_str().encode_wide().collect::<Vec<_>>(), [67, 58, 0xD800]);
+            assert_eq!(dirs[1].as_os_str().encode_wide().collect::<Vec<_>>(), [0xFFFD]);
         }
     }
     #[test]

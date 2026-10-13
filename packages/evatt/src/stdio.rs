@@ -12,51 +12,119 @@ pub enum Encoding {
     Native(u32),
 }
 
-fn override_encoding() -> Option<Encoding> {
-    let raw = std::env::var("PYTHONIOENCODING").ok()?;
-    match raw
-        .split(':')
-        .next()?
-        .to_ascii_lowercase()
-        .replace(['-', '_'], "")
-        .as_str()
-    {
-        "utf8" => Some(Encoding::Utf8),
-        "utf8sig" => Some(Encoding::Utf8Sig),
-        "ascii" | "usascii" => Some(Encoding::Ascii),
-        "latin1" | "iso88591" => Some(Encoding::Latin1),
-        "cp1252" | "windows1252" => Some(Encoding::Windows1252),
-        _ => None,
+/// Refusal for a stream configuration this binary cannot reproduce byte for byte.
+/// CPython would either encode with a codec not implemented here or fail to start;
+/// refusing before any command runs keeps a Python failure from becoming a success.
+pub const UNSUPPORTED: &str = "unsupported stream encoding; evatt writes diagnostics only in UTF-8, \
+ASCII, Latin-1 or Windows-1252, so set PYTHONIOENCODING or the locale to one of them";
+
+/// `encodings.normalize_encoding` followed by the codec alias table, for the
+/// codecs implemented here. Any other name, valid in CPython or not, is refused.
+fn codec(name: &str) -> Result<Encoding, &'static str> {
+    let mut normal = String::new();
+    for ch in name.to_lowercase().chars() {
+        if ch.is_ascii_alphanumeric() || ch == '.' {
+            normal.push(ch);
+        } else if !normal.is_empty() && !normal.ends_with('_') {
+            normal.push('_');
+        }
+    }
+    match normal.trim_end_matches('_') {
+        "utf_8" | "utf8" | "u8" | "utf" | "utf8_ucs2" | "utf8_ucs4" | "cp65001" => Ok(Encoding::Utf8),
+        "utf_8_sig" | "utf8_sig" => Ok(Encoding::Utf8Sig),
+        "ascii" | "646" | "ansi_x3.4_1968" | "ansi_x3_4_1968" | "ansi_x3.4_1986" | "cp367" | "csascii" | "ibm367"
+        | "iso646_us" | "iso_646.irv_1991" | "iso_ir_6" | "us" | "us_ascii" => Ok(Encoding::Ascii),
+        "latin_1" | "latin1" | "iso8859_1" | "iso_8859_1" | "8859" | "cp819" | "csisolatin1" | "ibm819"
+        | "iso_8859_1_1987" | "iso_ir_100" | "l1" | "latin" => Ok(Encoding::Latin1),
+        "cp1252" | "windows_1252" => Ok(Encoding::Windows1252),
+        _ => Err(UNSUPPORTED),
     }
 }
 
-pub fn encoding(stderr: bool) -> Encoding {
+/// The encoding part of PYTHONIOENCODING, when it names one.
+fn override_name() -> Option<String> {
+    let raw = std::env::var("PYTHONIOENCODING").ok()?;
+    let name = raw.split(':').next().unwrap_or_default();
+    (!name.is_empty()).then(|| name.to_string())
+}
+
+/// Whether CPython's UTF-8 mode is on: PYTHONUTF8=1, or unset with a C or POSIX
+/// LC_CTYPE (PEP 540). Any other PYTHONUTF8 value stops CPython at start-up.
+fn utf8_mode(locale: Option<&str>) -> Result<bool, &'static str> {
+    match std::env::var("PYTHONUTF8").as_deref() {
+        Ok("1") => Ok(true),
+        Ok("0") => Ok(false),
+        Err(_) | Ok("") => Ok(matches!(locale, Some("C" | "POSIX"))),
+        Ok(_) => Err(UNSUPPORTED),
+    }
+}
+
+/// LC_CTYPE as CPython leaves it after `setlocale(LC_CTYPE, "")`: its name and codeset.
+#[cfg(not(windows))]
+fn posix_locale() -> &'static (Option<String>, Option<String>) {
+    static LOCALE: std::sync::OnceLock<(Option<String>, Option<String>)> = std::sync::OnceLock::new();
+    LOCALE.get_or_init(|| {
+        let text = |ptr: *const libc::c_char| {
+            // SAFETY: a non-null result is a NUL-terminated string owned by libc.
+            (!ptr.is_null()).then(|| unsafe { std::ffi::CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+        };
+        // SAFETY: called once, before evatt starts its worker thread or reads locale data.
+        let name = text(unsafe { libc::setlocale(libc::LC_CTYPE, c"".as_ptr()) });
+        // SAFETY: nl_langinfo only reads the current locale's codeset.
+        let codeset = text(unsafe { libc::nl_langinfo(libc::CODESET) });
+        (name, codeset)
+    })
+}
+
+/// Settle the stream configuration once, in the main thread, before any command runs.
+pub fn configure() -> Result<(), &'static str> {
+    encoding(false)?;
+    encoding(true)?;
+    stdout_policy()?;
+    Ok(())
+}
+
+pub fn encoding(stderr: bool) -> Result<Encoding, &'static str> {
     #[cfg(not(windows))]
     {
         let _ = stderr;
-        override_encoding().unwrap_or(Encoding::Utf8)
+        // The locale also decides how CPython decodes argv and paths, so it must
+        // resolve to UTF-8 even when PYTHONIOENCODING names the stream codec.
+        let (name, codeset) = posix_locale();
+        let utf8_locale = utf8_mode(name.as_deref())?
+            // PEP 538 coerces C or POSIX to C.UTF-8 unless PYTHONCOERCECLOCALE=0.
+            || (matches!(name.as_deref(), Some("C" | "POSIX"))
+                && std::env::var("PYTHONCOERCECLOCALE").as_deref() != Ok("0"))
+            || codeset.as_deref().is_some_and(|c| codec(c).is_ok_and(|e| matches!(e, Encoding::Utf8)));
+        if !utf8_locale {
+            return Err(UNSUPPORTED);
+        }
+        match override_name() {
+            Some(name) => codec(&name),
+            None => Ok(Encoding::Utf8),
+        }
     }
     #[cfg(windows)]
     {
         let console = console(stderr) && std::env::var_os("PYTHONLEGACYWINDOWSSTDIO").is_none();
         if console {
-            return Encoding::Utf8;
+            return Ok(Encoding::Utf8);
         }
-        if let Some(encoding) = override_encoding() {
-            return encoding;
+        if let Some(name) = override_name() {
+            return codec(&name);
         }
-        if std::env::var("PYTHONUTF8").is_ok_and(|v| v == "1") {
-            return Encoding::Utf8;
+        if utf8_mode(None)? {
+            return Ok(Encoding::Utf8);
         }
         unsafe extern "system" {
             fn GetACP() -> u32;
         }
         // SAFETY: GetACP has no arguments and only reports a code page.
-        match unsafe { GetACP() } {
+        Ok(match unsafe { GetACP() } {
             65001 => Encoding::Utf8,
             1252 => Encoding::Windows1252,
             code => Encoding::Native(code),
-        }
+        })
     }
 }
 
@@ -177,30 +245,48 @@ pub enum ErrorPolicy {
     BackslashReplace,
 }
 
-fn stdout_policy() -> ErrorPolicy {
+/// CPython 3.14's stdout error handler. An explicit PYTHONIOENCODING handler wins;
+/// an encoding named without one means strict. Otherwise UTF-8 mode, a C or POSIX
+/// LC_CTYPE or a PEP 538 coercion target means surrogateescape, and anything else strict.
+fn stdout_policy() -> Result<ErrorPolicy, &'static str> {
     let env = std::env::var("PYTHONIOENCODING").unwrap_or_default();
-    let encoding_given = !env.split(':').next().unwrap_or_default().is_empty();
-    match env.split_once(':').map(|(_, errors)| errors) {
-        None | Some("") if encoding_given => ErrorPolicy::Strict,
-        None | Some("") | Some("surrogateescape") => ErrorPolicy::SurrogateEscape,
-        Some("surrogatepass") => ErrorPolicy::SurrogatePass,
-        Some("ignore") => ErrorPolicy::Ignore,
-        Some("replace") => ErrorPolicy::Replace,
-        Some("backslashreplace") => ErrorPolicy::BackslashReplace,
-        _ => ErrorPolicy::Strict,
+    let (name, errors) = env.split_once(':').unwrap_or((env.as_str(), ""));
+    if !errors.is_empty() {
+        return Ok(match errors {
+            "surrogateescape" => ErrorPolicy::SurrogateEscape,
+            "surrogatepass" => ErrorPolicy::SurrogatePass,
+            "ignore" => ErrorPolicy::Ignore,
+            "replace" => ErrorPolicy::Replace,
+            "backslashreplace" => ErrorPolicy::BackslashReplace,
+            _ => ErrorPolicy::Strict,
+        });
     }
+    if !name.is_empty() {
+        return Ok(ErrorPolicy::Strict);
+    }
+    #[cfg(not(windows))]
+    let escape = {
+        let (locale, _) = posix_locale();
+        utf8_mode(locale.as_deref())?
+            || matches!(locale.as_deref(), Some("C" | "POSIX" | "C.UTF-8" | "C.utf8" | "UTF-8"))
+    };
+    #[cfg(windows)]
+    let escape = utf8_mode(None)?;
+    Ok(if escape {
+        ErrorPolicy::SurrogateEscape
+    } else {
+        ErrorPolicy::Strict
+    })
 }
 
 pub fn encode(text: &str, stderr: bool, encoding: &Encoding) -> Result<Vec<u8>, EncodeError> {
-    encode_with(
-        text,
-        encoding,
-        if stderr {
-            ErrorPolicy::BackslashReplace
-        } else {
-            stdout_policy()
-        },
-    )
+    let policy = if stderr {
+        ErrorPolicy::BackslashReplace
+    } else {
+        // `configure` has already refused any configuration this cannot settle.
+        stdout_policy().unwrap_or(ErrorPolicy::Strict)
+    };
+    encode_with(text, encoding, policy)
 }
 
 pub fn encode_with(text: &str, encoding: &Encoding, policy: ErrorPolicy) -> Result<Vec<u8>, EncodeError> {
@@ -236,6 +322,19 @@ pub fn encode_with(text: &str, encoding: &Encoding, policy: ErrorPolicy) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_implemented_codecs_are_accepted_by_their_cpython_spellings() {
+        for name in ["utf-8", "UTF8", "utf_8", "U8", "cp65001"] {
+            assert!(matches!(codec(name), Ok(Encoding::Utf8)), "{name}");
+        }
+        assert!(matches!(codec("utf-8-sig"), Ok(Encoding::Utf8Sig)));
+        assert!(matches!(codec("US-ASCII"), Ok(Encoding::Ascii)));
+        assert!(matches!(codec("ISO-8859-1"), Ok(Encoding::Latin1)));
+        assert!(matches!(codec("windows-1252"), Ok(Encoding::Windows1252)));
+        for name in ["cp1251", "utf-16", "shift_jis", "bogus", ""] {
+            assert!(codec(name).is_err(), "{name}");
+        }
+    }
     #[test]
     fn native_code_pages_match_python_strict_and_backslashreplace_vectors() {
         assert_eq!(

@@ -80,7 +80,10 @@ pub fn restore(text: &str, entries: &[Entity]) -> Result<String> {
             "(?<![A-Za-z0-9_]){}(?![A-Za-z0-9_])",
             patterns::literal(&e.placeholder, false)
         );
-        let regex = fancy_regex::Regex::new(&expression).map_err(patterns::runtime)?;
+        let regex = fancy_regex::RegexBuilder::new(&expression)
+            .backtrack_limit(patterns::BACKTRACK_LIMIT)
+            .build()
+            .map_err(patterns::runtime)?;
         let mut out = String::new();
         let mut cursor = 0;
         for m in regex.find_iter(&text) {
@@ -97,4 +100,23 @@ pub fn restore(text: &str, entries: &[Entity]) -> Result<String> {
         text = out;
     }
     Ok(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn restore_completes_a_long_answer_of_near_miss_placeholders() {
+        // 400,000 near misses exceeded fancy-regex's default budget of 1,000,000
+        // backtracks; Python restores it, so restore must use evatt's own budget.
+        let entity = Entity {
+            value: "Sample Holdings Pty Ltd".into(),
+            placeholder: "CLIENT_01".into(),
+            kind: "client".into(),
+            added: "2026-09-09".into(),
+        };
+        let text = "XCLIENT_01 ".repeat(400_000) + "CLIENT_01\n";
+        let restored = restore(&text, &[entity]).expect("restore completes");
+        assert!(restored.ends_with("XCLIENT_01 Sample Holdings Pty Ltd\n"));
+    }
 }
