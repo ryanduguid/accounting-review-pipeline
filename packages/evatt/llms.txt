@@ -5,18 +5,19 @@
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/evatt
 - **Distribution name**: `evatt`
-- **Python import**: `evatt`
-- **CLI command**: `evatt`, with the subcommands `redact`, `restore` and `verify`
+- **Runtime**: standalone Rust binary; no Python import or installed Python
+- **CLI command**: `evatt`, with the subcommands `redact`, `restore`, `verify`, `disclosure-record` and `disclosure-check`
 - **Domain**: Local pseudonymisation of Australian client data in markdown, so a document can be handed to an external model without the identifiers in it.
-- **Release state**: The current release is `evatt/v0.2.0`. Releases come from this repository as immutable GitHub releases with a wheel, a source distribution, an SPDX SBOM, a release manifest and `SHA256SUMS`; check GitHub Releases for the published assets. The distribution is not on PyPI, and `release-evatt.yml` carries no `pypi` job by design. It installs from the release assets or runs from a checkout.
+- **Release state**: 1.0.0 is an unreleased Rust binary. Build with `cargo build --locked --release`; there is no release caller until a Rust release path is approved. The prior Python release is 0.2.0 and was never on PyPI.
+
 
 ## Core modules
-- `evatt.patterns`: Detection patterns and check digits for TFN, ABN, ACN, BSB and Medicare numbers, plus names, emails, phone numbers and the statutory vocabulary the residual sweep filters.
-- `evatt.entities`: The local entity map, real value to stable placeholder, with a kind (`client`, `person`, `staff` or `entity`) and the date it was added. Kept append-only; saved through an exclusively created temporary renamed over the map.
-- `evatt.redact`: The 3 passes. Structured identifiers by check digit, then known entities from the map, then a residual sweep that halts rather than guessing.
-- `evatt.restore`: Reverses the entity map over a model's answer. Named entities only.
-- `evatt.verify`: Re-scans an already sanitised file and reports every reason it is not clean, naming finding kinds and line numbers without printing detected values.
-- `evatt.cli`: `redact`, `restore` and `verify`, and the question every command asks git about the map before it runs.
+- `src/patterns.rs` and `src/email.rs`: Detection patterns and check digits for TFN, ABN, ACN, BSB and Medicare numbers, plus names, emails, phone numbers and the statutory vocabulary the residual sweep filters.
+- `src/entities.rs`: The local entity map, real value to stable placeholder, with a kind (`client`, `person`, `staff` or `entity`) and the date it was added. Kept append-only; evatt reads it and never writes it.
+- `src/redact.rs`: The 3 passes. Structured identifiers by check digit, then known entities from the map, then a residual sweep that halts rather than guessing.
+- `src/verify.rs`: Reverses the entity map over a model's answer. Named entities only.
+- `src/verify.rs`: Re-scans an already sanitised file and reports every reason it is not clean, naming finding kinds and line numbers without printing detected values.
+- `src/cli.rs` and `src/commands.rs`: `redact`, `restore`, `verify`, `disclosure-record` and `disclosure-check`, and the question every command asks git about the map before it runs.
 
 ## Architectural boundaries
 1. **No network client.** The package contains no HTTP, API or model client. The entity map never leaves the local machine.

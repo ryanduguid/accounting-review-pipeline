@@ -1,9 +1,0 @@
-include LICENSE
-include NOTICE
-include README.md
-include DISCLAIMER.md
-include DATA-FLOW.md
-include SECURITY.md
-include CONTRIBUTING.md
-include uv.lock
-recursive-include evatt/samples *.md *.json

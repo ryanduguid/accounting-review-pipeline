@@ -147,3 +147,30 @@ covers these four identifier families; phone-only collisions remain outside it.
 - Task 9/10: open for the final review: evatt's sdist carries only README.md and LICENSE, where the sibling's MANIFEST.in also ships SECURITY.md. Divergence from house form, not a defect.
 - Task 9/10: open for the final review: cli.py's _collision docstring claims "--out entities" beside a map at "entities.json" collides through the derived manifest path. It does not; _manifest_path yields "entities.manifest.json". The guard is real, the docstring overstates it. One-line correction.
 - FINAL: not verified: the GitHub workflow has never run; the 3.10 CI leg fetches a 3.12 interpreter for the build step via uv automatic downloads, which is untested. The clean-wheel demo was run locally by extracting the YAML run block, not by CI.
+
+## Rust port decisions (13 October 2026)
+
+- The supplied snapshot identifies itself as `efa253847e4ecdca5ae9b4abec045c0b16b6835c`,
+  rather than the task's stated `01d1e83`. Its component was copied with
+  `git archive HEAD packages/evatt` before source removal and is the differential
+  oracle. This machine reports CPython 3.14.8, with Unicode 16.0.0.
+- The snapshot's root Rust job covered Elizabeth alone; grant and Power BI
+  already have their own Rust workflow jobs. Extend the existing root job with
+  evatt and preserve those other jobs and the current justfile component list.
+- Keep `evatt/samples/` in place so every fabricated walkthrough retains its
+  paths. It is a data directory, with no Python package or import entrypoint.
+- Retain historical release-verification recipes under an explicit historical
+  heading. Remove the active Python caller and prohibit a 1.0.0 release until
+  its Rust release path is approved.
+- The labelled grammar has bounded work: its four whole-run markup choices and
+  bounded qualifier choices give a constant number of parses at one label;
+  mandatory non-space tokens own following whitespace, and terminal digit
+  probes inspect at most eleven digits and two separators per gap. Raise the
+  regex work budget to accommodate those constant-factor scans. Propagate every
+  execution error and refuse output. The original email pattern has no such
+  bound and therefore uses a scanner, retaining its regex in the probe.
+- Keep all four original timing constructions and their bounded-growth tests.
+  Release tests use the original sizes; debug tests use one tenth the sizes,
+  preserving the four-times comparison, to keep VM instrumentation practical
+  in CI. The release probe also measures 1, 2, 4, 8 and 16 times size and records
+  real name-retry and number-cursor counters. Map size and sorting are excluded.

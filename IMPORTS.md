@@ -141,9 +141,8 @@ disagree.
 | Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
-| evatt | `release-evatt.yml` | `evatt/v*` tags | `release-python.yml` with `version-parser: python-literal` and `version-file: evatt/version.py` | `packages/evatt` | `evatt` | none (GitHub release assets only; the caller has no `pypi` job) |
 
-The 4 Python callers upload the attested distribution (`upload-dist-artifact: true`) and
+The 3 Python callers upload the attested distribution (`upload-dist-artifact: true`) and
 publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
 exactly one wheel and one source distribution, and uses
 `pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`.
@@ -152,14 +151,10 @@ new caller file name and environment (the repository currently has only the `pyp
 environment). The Release Policy pin resolves to its protected `main`. No caller references
 a secret. No component directory carries a `release.yml` of its own.
 
-`release-evatt.yml` is the sixth caller and the exception to the paragraph
-above. It uploads the attested distribution but has no `pypi` job at all, so a
-tag produces GitHub release assets and publishes to no index. That is
-deliberate: a public release of evatt is out of scope until the disclosure
-policy the package enforces is signed off, and an absent job is a better guard
-than one that would fire on a stray tag. `packages/evatt/RELEASING.md` records
-the `pypi-evatt` environment and trusted-publisher values to register when that
-changes.
+The evatt Python caller was removed for the 1.0.0 Rust port on 13 October 2026.
+It has no release caller until its Rust release path is approved. The historical
+0.2.x caller produced GitHub release assets without a PyPI publisher;
+`packages/evatt/RELEASING.md` retains the historical verification recipe.
 
 Per-component verification workflows at import: `ci.yml` (anchor; workflow `tests`, jobs
 `test`, `package`, `lint`), `xero-trial-balance-export.yml`, `review-ready-gate.yml`,
@@ -183,11 +178,10 @@ Superseded after import: `xero-trial-balance-export.yml`, `review-ready-gate.yml
 required-check names and `codeql.yml` are unchanged; the checks the matrix reports are
 `component (<directory>, <import>) / <gate>`. The reusable workflow filters itself on the
 same paths the deleted workflows listed, and the readiness and ledger clean-wheel
-demonstrations run as its per-component `smoke` input. evatt runs through the same matrix
-rather than through a workflow of its own: `evatt.yml` was replaced by a fourth `component`
-entry (`packages/evatt`, import `evatt`), and its clean-wheel redact, verify, restore and
-halt demonstration runs as that entry's `smoke` input, over the reusable workflow's Python
-3.14 leg. `AGENTS.md` lists the current gates.
+demonstrations run as its per-component `smoke` input. evatt originally ran through that Python matrix. From 1.0.0 it runs in
+`ci.yml`'s Rust component matrix beside Elizabeth, on Linux and Windows, and its
+redact, verify, restore, halt and disclosure smoke uses the standalone binary.
+`AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
 

@@ -8,11 +8,10 @@ entities.json
 # Disclosure records contain destination and decision metadata and a map digest.
 # Keep them local even though they do not contain the map's values.
 *.disclosure.json
-# save writes the map through a neighbouring .tmp holding the same real values.
-# It refuses to write one at a path git would let you commit, and a hard kill or
-# a power loss can leave one behind, so a rule has to cover the .tmp as well.
+# Retain the historical map-temporary ignore rule; 1.0.0 never writes maps.
 *.tmp
 build/
 dist/
 *.egg-info/
 __pycache__/
+target/

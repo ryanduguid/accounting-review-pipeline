@@ -28,6 +28,11 @@ These repository-wide rules apply everywhere:
   Xero Ledger Review Gate became a Rust binary in 1.0.0 and has no Python import package;
   its command, exit codes and file formats are unchanged. It has no release caller until a
   Rust release path is approved; 0.2.6 stays the released Python distribution on PyPI.
+  The owner authorised the same binary-only major-version exception for evatt
+  1.0.0 on 13 October 2026. Its Python import and map-writing facility are removed;
+  its CLI contracts remain, with the documented version and failure-path changes.
+  It has no release caller until a Rust release path is approved; 0.2.0 remains
+  the prior Python release, which was never published to PyPI.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
@@ -58,7 +63,7 @@ imported later, sits at `apps/grant-acquittal-workpapers/` because it is never r
 
 ## Setup
 
-From a fresh clone, `uv sync` at the root installs the 4 Python components as editable
+From a fresh clone, `uv sync` at the root installs the 3 Python components as editable
 workspace members and the shared test toolchain into one `.venv`, and `just test` runs
 every component's suite plus the joined conformance test. That is the whole setup. `just`
 comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
@@ -81,11 +86,11 @@ Run every check from the owning component directory with its documented commands
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked`; `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked` for the Rust workpaper; `python -B -m unittest discover -s tests -v` for the setup and replay utility; both on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
-| evatt | `packages/evatt/` | the shared component gates below, scoped to `evatt` |
+| evatt | `packages/evatt/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked --all-features`; the differential probe is enabled only with `--features probe` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
-`ci.yml` calls for the exporter, Workpaper Review Gate and evatt with the component
-directory. `ci.yml`'s `rust` job runs the Xero Ledger Review Gate's cargo checks. Run them from the component directory:
+`ci.yml` calls for the exporter and Workpaper Review Gate with the component
+directory. `ci.yml`'s `rust` job runs the Xero Ledger Review Gate and evatt cargo checks. Run them from the component directory:
 
 ```bash
 uv lock --check

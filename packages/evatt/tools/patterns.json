@@ -1,0 +1,178 @@
+{
+  "NAME": {
+    "pattern": "(?<![^\\W_])(?<![^\\W_]_)[A-Z\\u00c0-\\u00d6\\u00d8-\\u00de][A-Z\\u00c0-\\u00d6\\u00d8-\\u00dea-z\\u00df-\\u00f6\\u00f8-\\u00ff'\\u2019-]{1,20},?\\s+[A-Z\\u00c0-\\u00d6\\u00d8-\\u00de][A-Z\\u00c0-\\u00d6\\u00d8-\\u00dea-z\\u00df-\\u00f6\\u00f8-\\u00ff'\\u2019-]{1,20}(?:\\s+[A-Z\\u00c0-\\u00d6\\u00d8-\\u00de][A-Z\\u00c0-\\u00d6\\u00d8-\\u00dea-z\\u00df-\\u00f6\\u00f8-\\u00ff'\\u2019-]{1,20})?(?![^\\W_])(?!_[^\\W_])",
+    "ignorecase": false
+  },
+  "_NAME_TOKEN": {
+    "pattern": "[A-Z\\u00c0-\\u00d6\\u00d8-\\u00de][A-Z\\u00c0-\\u00d6\\u00d8-\\u00dea-z\\u00df-\\u00f6\\u00f8-\\u00ff'\\u2019-]{1,20}",
+    "ignorecase": false
+  },
+  "EMAIL": {
+    "pattern": "\\b[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+\\b",
+    "ignorecase": false
+  },
+  "PHONE": {
+    "pattern": "(?<!\\d)(?:\\(0\\d\\)[\\s-]?\\d{4}[\\s-]?\\d{4}|0[2-8][\\s-]?\\d{4}[\\s-]?\\d{4}|04\\d{2}[\\s-]?\\d{3}[\\s-]?\\d{3}|\\+61[\\s-]?(?:\\(0\\)[\\s-]?)?\\d(?:[\\s-]?\\d){8}|\\+61[\\s-]?\\(0?\\d\\)[\\s-]?\\d(?:[\\s-]?\\d){7}|1[38]00[\\s-]?\\d{3}[\\s-]?\\d{3}|13[\\s-]?\\d{2}[\\s-]?\\d{2})(?!\\d)",
+    "ignorecase": false
+  },
+  "TFN_LABELLED": {
+    "pattern": "(?<![^\\W_])(?:tax file (?:number|no(?![^\\W_])\\.?)(?:[ \\t]*\\(TFN\\))?|TFN)(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){7,8})(?![ \\t/.,\\u2010-\\u2015\\u2212-]{0,2}\\d)",
+    "ignorecase": true
+  },
+  "ABN_LABELLED": {
+    "pattern": "(?<![^\\W_])(?:Australian business (?:number|no(?![^\\W_])\\.?)(?:[ \\t]*\\(ABN\\))?|ABN|A\\.B\\.N\\.?)(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){10})(?![ \\t/.,\\u2010-\\u2015\\u2212-]{0,2}\\d)",
+    "ignorecase": true
+  },
+  "ACN_LABELLED": {
+    "pattern": "(?<![^\\W_])(?:Australian company (?:number|no(?![^\\W_])\\.?)(?:[ \\t]*\\(ACN\\))?|ACN|A\\.C\\.N\\.?)(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){8})(?![ \\t/.,\\u2010-\\u2015\\u2212-]{0,2}\\d)",
+    "ignorecase": true
+  },
+  "MEDICARE_LABELLED": {
+    "pattern": "(?<![^\\W_])Medicare(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){9})(?P<reference>[ \\t/-]{1,2}[1-9])?(?![ \\t/.,\\u2010-\\u2015\\u2212-]{0,2}\\d)",
+    "ignorecase": true
+  },
+  "BSB_LABELLED": {
+    "pattern": "(?<![^\\W_])BSB(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d{3}[ \\t-]\\d{3})(?![ \\t/.,\\u2010-\\u2015\\u2212-]{0,2}\\d)",
+    "ignorecase": true
+  },
+  "TFN_BARE": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{3}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3})(?![ \\t-]?\\d)(?![\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212]{0,2}\\d)",
+    "ignorecase": false
+  },
+  "ABN": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{2}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3})(?![ \\t-]?\\d)(?![\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212]{0,2}\\d)",
+    "ignorecase": false
+  },
+  "ACN": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{3}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3})(?![ \\t-]?\\d)(?![\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212]{0,2}\\d)",
+    "ignorecase": false
+  },
+  "MEDICARE": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{4}[\\s-]{0,2}\\d{5}[\\s-]{0,2}\\d)(?P<reference>[ \\t/-]{1,2}[1-9])?(?![ \\t/.,\\u2010-\\u2015\\u2212-]{0,2}\\d)",
+    "ignorecase": false
+  },
+  "BSB": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(?<!-)(\\d{3}-\\d{3})(?![\\d-])(?![\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212]?[.,/\\u2010-\\u2015\\u2212-]\\d|[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212]?\\d)",
+    "ignorecase": false
+  },
+  "ADDRESS": {
+    "pattern": "\\b\\d{1,4}[A-Za-z]?\\s+[A-Z\\u00c0-\\u00d6\\u00d8-\\u00de][A-Z\\u00c0-\\u00d6\\u00d8-\\u00dea-z\\u00df-\\u00f6\\u00f8-\\u00ff'\\u2019-]+(?:\\s+[A-Z\\u00c0-\\u00d6\\u00d8-\\u00de][A-Z\\u00c0-\\u00d6\\u00d8-\\u00dea-z\\u00df-\\u00f6\\u00f8-\\u00ff'\\u2019-]+)?\\s+(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Court|Ct|Place|Pl|Lane|Ln|Parade|Pde|Crescent|Cres|Highway|Hwy|Terrace|Tce|Close|Way|Circuit|Boulevard|Esplanade|Grove)\\b",
+    "ignorecase": false
+  },
+  "DOB": {
+    "pattern": "\\b(?:(?:0?[1-9]|[12]\\d|3[01])\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+(?:19|20)\\d{2}|(?:0?[1-9]|[12]\\d|3[01])/(?:0?[1-9]|1[0-2])/(?:19|20)\\d{2}|(?:0?[1-9]|[12]\\d|3[01])-(?:0?[1-9]|1[0-2])-(?:19|20)\\d{2})\\b",
+    "ignorecase": false
+  },
+  "PLACEHOLDER": {
+    "pattern": "(?<![A-Za-z0-9_])(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\\d{2,}",
+    "ignorecase": false
+  },
+  "PLACEHOLDER_CI": {
+    "pattern": "(?<![A-Za-z0-9_])(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\\d{2,}",
+    "ignorecase": true
+  },
+  "CARRIED_PLACEHOLDER": {
+    "pattern": "(?<![A-Za-z0-9_])_*(?P<token>(?:CLIENT|PERSON|STAFF|ENTITY|TFN|ABN|ACN|BSB|MEDICARE|EMAIL|PHONE)_\\d{2,})",
+    "ignorecase": false
+  },
+  "_JOIN_SPLIT": {
+    "pattern": "(?:(?:[^\\S\\n]|[\\u200b-\\u200d\\u2060]|\\n(?:[ \\t]*>)*|[*_]|<br\\s*/?>))+",
+    "ignorecase": true
+  },
+  "JOIN_EDGE": {
+    "pattern": "\\A(?:(?:[^\\S\\n]|[\\u200b-\\u200d\\u2060]|\\n(?:[ \\t]*>)*|[*_]|<br\\s*/?>))|(?:(?:[^\\S\\n]|[\\u200b-\\u200d\\u2060]|\\n(?:[ \\t]*>)*|[*_]|<br\\s*/?>))\\Z",
+    "ignorecase": true
+  },
+  "STATUTORY": {
+    "pattern": "\\b(Act|Regulation|Schedule|Division|Subdivision|Part|Chapter|Section|Commissioner|Minister|Treasurer|Commonwealth|Australian|Australia|Board|Tax|Taxation|Income|Superannuation|Court|Tribunal|Appeals|Determination|Notice|Instrument|Amendment)\\b",
+    "ignorecase": false
+  },
+  "_STATUTORY_CI": {
+    "pattern": "\\b(Act|Regulation|Schedule|Division|Subdivision|Part|Chapter|Section|Commissioner|Minister|Treasurer|Commonwealth|Australian|Australia|Board|Tax|Taxation|Income|Superannuation|Court|Tribunal|Appeals|Determination|Notice|Instrument|Amendment)\\b",
+    "ignorecase": true
+  },
+  "_LINE_LIST_MARKER": {
+    "pattern": "[\n\r\u000b\f\u001c\u001d\u001e\u0085\u2028\u2029][^\\S\n\r\u000b\f\u001c\u001d\u001e\u0085\u2028\u2029]*\\d+[.)](?=\\s|$)",
+    "ignorecase": false
+  },
+  "_DATE_LEAD": {
+    "pattern": "(?:(\\d{4})-(\\d{2})-(\\d{2})|(\\d{1,2})/(\\d{1,2})/(\\d{4}))(?!\\d)",
+    "ignorecase": false
+  },
+  "_AMOUNT": {
+    "pattern": "(?:\\d+\\.\\d+|\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?)",
+    "ignorecase": false
+  },
+  "PROBE_0": {
+    "pattern": "(?<![^\\W_])(?:Australian business (?:number|no(?![^\\W_])\\.?)(?:[ \\t]*\\(ABN\\))?|ABN|A\\.B\\.N\\.?)(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){10})",
+    "ignorecase": true
+  },
+  "PROBE_1": {
+    "pattern": "(?<![^\\W_])Medicare(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){9})(?P<reference>[ \\t/-]{1,2}[1-9])?",
+    "ignorecase": true
+  },
+  "PROBE_2": {
+    "pattern": "(?<![^\\W_])(?:tax file (?:number|no(?![^\\W_])\\.?)(?:[ \\t]*\\(TFN\\))?|TFN)(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){7,8})",
+    "ignorecase": true
+  },
+  "PROBE_3": {
+    "pattern": "(?<![^\\W_])(?:Australian company (?:number|no(?![^\\W_])\\.?)(?:[ \\t]*\\(ACN\\))?|ACN|A\\.C\\.N\\.?)(?![^\\W\\d_])(?!_\\d)\\s*(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:[.:#,(|;/=\\u2013-]\\s*)?(?:(?:number|no|card(?:holder)?)(?![^\\W_])\\.?\\s*){0,2}(?:[*_`][*_`\\s]*(?![*_`\\s]))?(?:(?:is|was|of)(?![^\\W_])\\s*)?(?:[*_`][*_`\\s]*(?![*_`\\s]))?(\\d(?:[\\s.,\\u2010-\\u2015\\u2212-]{0,2}\\d){8})",
+    "ignorecase": true
+  },
+  "PROBE_4": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{2}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3})",
+    "ignorecase": false
+  },
+  "PROBE_5": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{4}[\\s-]{0,2}\\d{5}[\\s-]{0,2}\\d)(?P<reference>[ \\t/-]{1,2}[1-9])?",
+    "ignorecase": false
+  },
+  "PROBE_6": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{3}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3})",
+    "ignorecase": false
+  },
+  "PROBE_7": {
+    "pattern": "(?<![\\d$])(?<!\\d[.,/\\u2010-\\u2015\\u2212-])(?<!\\d[.,/\\u2010-\\u2015\\u2212-][\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212])(?<!\\d[\\ \\\t\\-/\\.,\u2010\u2011\u2012\u2013\u2014\u2015\u2212][.,/\\u2010-\\u2015\\u2212-])(\\d{3}[\\s-]{0,2}\\d{3}[\\s-]{0,2}\\d{3})",
+    "ignorecase": false
+  },
+  "_DESTINATION": {
+    "pattern": "[a-z0-9][a-z0-9._:-]{0,127}",
+    "ignorecase": false
+  },
+  "_DECISION_REF": {
+    "pattern": "[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+    "ignorecase": false
+  },
+  "_DIGEST": {
+    "pattern": "[0-9a-f]{64}",
+    "ignorecase": false
+  },
+  "_TOOL_VERSION": {
+    "pattern": "[A-Za-z0-9][A-Za-z0-9.!+_-]{0,127}",
+    "ignorecase": false
+  },
+  "_STATUTORY_SPLIT": {
+    "pattern": "[^A-Za-z]+",
+    "ignorecase": false
+  },
+  "_WORD_SCALAR": {
+    "pattern": "\\w",
+    "ignorecase": false
+  },
+  "MAP_CLIENT": {
+    "pattern": "CLIENT_[0-9]{2,}",
+    "ignorecase": false
+  },
+  "MAP_PERSON": {
+    "pattern": "PERSON_[0-9]{2,}",
+    "ignorecase": false
+  },
+  "MAP_STAFF": {
+    "pattern": "STAFF_[0-9]{2,}",
+    "ignorecase": false
+  },
+  "MAP_ENTITY": {
+    "pattern": "ENTITY_[0-9]{2,}",
+    "ignorecase": false
+  }
+}

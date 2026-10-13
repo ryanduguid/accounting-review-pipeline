@@ -1,5 +1,15 @@
 # Releasing
 
+From 1.0.0 evatt is a standalone Rust binary. The Python release caller
+`release-evatt.yml` has been removed. No 1.0.0 release can be made until a Rust
+release path is designed and approved, including build targets, signing,
+attestation, sample and documentation delivery, and the disclosure-policy gate.
+`cargo build --locked --release` builds the binary locally; it publishes nothing.
+There is no Python import API or PyPI publication.
+
+The remaining instructions describe the historical 0.2.x Python release path
+and how to verify those historical assets. They do not authorise a 1.0.0 tag.
+
 evatt has no standalone release history. It was written in this repository, and
 every release it ever has will be a namespaced tag `evatt/vMAJOR.MINOR.PATCH`
 published from the

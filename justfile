@@ -8,8 +8,8 @@
 # Requires just, uv and cargo:
 #     uv tool install rust-just
 #
-# The four Python distributions are uv workspace members. The Xero Ledger Review
-# Gate is a Rust crate, run with cargo from its directory. The Excel adapter and
+# The three Python distributions are uv workspace members. The Xero Ledger Review
+# Gate and evatt are Rust crates, run with cargo from their directories. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
 # application is not a member; its workpaper is a Rust crate run with cargo from
 # its directory. Their standard-library unittest suites run from
@@ -20,7 +20,6 @@
 pytest_components := trim(replace('''
 packages/review-ready-gate:reviewready
 packages/monthly-close-control-plane:closecontrol
-packages/evatt:evatt
 ''', "\n", " "))
 
 # unittest components: directory only
@@ -32,7 +31,7 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander"
+rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt"
 
 # The exporter is flat modules, not a package; its lint and mypy targets are files.
 exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"
@@ -67,7 +66,7 @@ test: setup
     done
     for directory in {{ rust_components }}; do
         echo "==> ${directory}"
-        (cd "${directory}" && cargo test --locked)
+        (cd "${directory}" && cargo test --locked --all-features)
     done
     echo "==> joined conformance"
     uv run --no-sync python -B -m unittest tests.test_xero_trial_balance_contract -v

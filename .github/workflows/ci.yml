@@ -49,8 +49,6 @@ jobs:
             import_name: reviewready
           - package_dir: packages/xero-trial-balance-export
             import_name: xero_client
-          - package_dir: packages/evatt
-            import_name: evatt
     permissions:
       contents: read
       id-token: write # ci-package.yml's codecov job authenticates its upload with OIDC.
@@ -224,10 +222,10 @@ jobs:
         working-directory: ${{ matrix.package_dir }}
 
   rust:
-    # The Xero Ledger Review Gate is a Rust crate from 1.0.0. rust-toolchain.toml
-    # in its directory pins the toolchain, which rustup installs on first use.
-    # Windows runs too: the staged validation write takes its by-path branch there.
-    name: packages/elizabeth-anne-alexander / rust (${{ matrix.os }})
+    # The Xero Ledger Review Gate and evatt are Rust crates from 1.0.0.
+    # Each rust-toolchain.toml pins the toolchain. Windows also exercises staged
+    # validation writes and evatt's record links, native paths and text streams.
+    name: ${{ matrix.package_dir }} / rust (${{ matrix.os }})
     permissions:
       contents: read
     timeout-minutes: 30
@@ -236,10 +234,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        package_dir: [packages/elizabeth-anne-alexander, packages/evatt]
     defaults:
       run:
         shell: bash
-        working-directory: packages/elizabeth-anne-alexander
+        working-directory: ${{ matrix.package_dir }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -249,13 +248,15 @@ jobs:
       - name: lint
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: test
-        run: cargo test --locked
+        run: cargo test --locked --all-features
       - name: build
         run: cargo build --locked --release
       - name: smoke the release binary from an empty directory
         run: |
           binary="$PWD/target/release"
-          smoke="$PWD/../../.github/ci/elizabeth-anne-alexander/smoke.sh"
+          component="${PWD##*/}"
+          smoke="$PWD/../../.github/ci/$component/smoke.sh"
+          export COMPONENT="$PWD"
           work="$(mktemp -d)"
           cd "$work"
           PATH="$binary:$PATH" bash "$smoke"

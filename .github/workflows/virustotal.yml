@@ -5,7 +5,6 @@ on:
   workflow_run:
     workflows:
       - Release accounting-excel-toolkit
-      - Release evatt
       - Release monthly-close-control-plane
       - Release review-ready-gate
       - Release xero-trial-balance-export

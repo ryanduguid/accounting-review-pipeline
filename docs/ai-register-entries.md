@@ -14,7 +14,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [evatt](../packages/evatt/README.md) 0.2.0, local pseudonymisation of Australian client data in markdown |
+| Name and version | [evatt](../packages/evatt/README.md) 1.0.0, unreleased Rust binary for local pseudonymisation of Australian client data in markdown |
 | Source and updates | Ryan Duguid, the sole maintainer, under the Apache License 2.0, with no warranty or support agreement. Each release has [release notes](../packages/evatt/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Runs before a document is sent to a model, replacing structured identifiers and mapped named entities with placeholders |
 | Known limitations and prohibited use | Not for client data before the firm signs off the policy that governs it, and not authority to disclose anything. Contextual re-identification is the residual risk; there is no ATO client reference detector; general ledger codes shaped like a BSB are replaced; unmapped names can escape the residual sweep; `verify` re-runs the same detection rather than a second detector |

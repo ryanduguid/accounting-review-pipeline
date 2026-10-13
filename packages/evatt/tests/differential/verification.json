@@ -1,0 +1,192 @@
+{
+  "date": "2026-10-13",
+  "machine": "ll (Linux)",
+  "oracle_snapshot": "efa253847e4ecdca5ae9b4abec045c0b16b6835c",
+  "stated_task_base": "01d1e83",
+  "python": "CPython 3.14.8",
+  "unicode": "16.0.0",
+  "rust": "1.99.0",
+  "build_environment": {
+    "CARGO_HOME": "/work/tmp/cargo",
+    "CARGO_TARGET_DIR": "/work/tmp/target",
+    "vendored_source": "/work/inputs/vendor",
+    "offline": true
+  },
+  "component_checks": [
+    {
+      "command": "cargo fmt --check",
+      "exit": 0
+    },
+    {
+      "command": "cargo clippy --all-targets --all-features -- -D warnings",
+      "exit": 0
+    },
+    {
+      "command": "cargo test --all-features",
+      "exit": 0,
+      "tests": 48,
+      "groups": {
+        "library": 27,
+        "cli": 10,
+        "documentation": 2,
+        "performance": 5,
+        "regression": 4
+      },
+      "python_core_vectors": 6171,
+      "unicode_sequence_vectors": 4555
+    },
+    {
+      "command": "cargo build --locked --release",
+      "exit": 0,
+      "default_binary": "evatt",
+      "version": "1.0.0"
+    },
+    {
+      "command": "COMPONENT=/work/repos/accounting-review-pipeline/packages/evatt PATH=/work/tmp/target/release:$PATH bash /work/repos/accounting-review-pipeline/.github/ci/evatt/smoke.sh",
+      "cwd": "/work/tmp/evatt-smoke-final-3",
+      "exit": 0
+    },
+    {
+      "command": "cargo test --release --all-features --test performance",
+      "exit": 0,
+      "tests": 5
+    },
+    {
+      "command": "python3.14 tests/differential/performance.py --probe /work/tmp/target/release/evatt-probe --output /work/tmp/evatt-performance-results.json",
+      "exit": 0,
+      "measurements": 130,
+      "factors": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ]
+    },
+    {
+      "command": "python3.14 tools/gen_unicode_tables.py --test",
+      "exit": 0,
+      "compiled_ignorecase_literals_checked": 2940
+    },
+    {
+      "command": "python3.14 tools/gen_unicode_tables.py > /work/tmp/evatt-tables-final.rs; cmp src/tables.rs /work/tmp/evatt-tables-final.rs",
+      "exit": 0,
+      "byte_identical": true
+    },
+    {
+      "command": "python3.14 tools/gen_patterns.py > /work/tmp/evatt-regexes-final.rs; cmp src/regexes.rs /work/tmp/evatt-regexes-final.rs",
+      "exit": 0,
+      "byte_identical": true
+    },
+    {
+      "command": "python3.14 tools/gen_unicode_cases.py > /work/tmp/evatt-unicode-final.json; cmp tests/fixtures/unicode-16.json /work/tmp/evatt-unicode-final.json",
+      "exit": 0,
+      "byte_identical": true
+    },
+    {
+      "command": "ruff check tools tests/differential",
+      "exit": 0
+    }
+  ],
+  "differentials": [
+    {
+      "seed": 1,
+      "detector_cases": 4022,
+      "end_to_end_cases": 521,
+      "argument_cases": 1000,
+      "unexplained_differences": 0
+    },
+    {
+      "seed": 2,
+      "detector_cases": 4022,
+      "end_to_end_cases": 521,
+      "argument_cases": 1000,
+      "unexplained_differences": 0
+    }
+  ],
+  "differential_commands": [
+    "python3.14 tests/differential/detectors.py --python-root /work/tmp/evatt-oracle/packages/evatt --probe /work/tmp/target/debug/evatt-probe --seed SEED --cases 2000 --shrink",
+    "python3.14 tests/differential/cli.py --python-root /work/tmp/evatt-oracle/packages/evatt --binary /work/tmp/target/debug/evatt --seed SEED --cases 300",
+    "python3.14 tests/differential/arguments.py --python-root /work/tmp/evatt-oracle/packages/evatt --binary /work/tmp/target/debug/evatt --seed SEED --cases 1000"
+  ],
+  "original_python_suite": {
+    "command": "PYTHONPATH=/work/tmp/evatt-oracle/packages/evatt python3.14 -m pytest /work/tmp/evatt-oracle/packages/evatt/tests --basetemp=/work/tmp/evatt-pristine-pytest",
+    "exit": 0,
+    "passed": 1443,
+    "windows_only_skipped": 21
+  },
+  "real_git_timeout": [
+    {
+      "elapsed": 30.118560932998662,
+      "exit": 1,
+      "stdout": "",
+      "stderr": "error: cannot ask git about entities.json in /work/tmp/evatt-git-timeout: Command '['/work/tmp/evatt-git-timeout/git', 'ls-files', '--error-unmatch', '--', 'entities.json']' timed out after 30 seconds; put git on PATH and re-run once the repository is idle\n"
+    },
+    {
+      "elapsed": 30.005323231000148,
+      "exit": 1,
+      "stdout": "",
+      "stderr": "error: cannot ask git about entities.json in /work/tmp/evatt-git-timeout: Command '['/work/tmp/evatt-git-timeout/git', 'ls-files', '--error-unmatch', '--', 'entities.json']' timed out after 30 seconds; put git on PATH and re-run once the repository is idle\n"
+    }
+  ],
+  "root_checks": [
+    {
+      "command": "python3.14 -m pytest tests -q",
+      "exit": 2,
+      "blocked_by": [
+        "closecontrol not installed in the system interpreter",
+        "PyYAML not installed"
+      ]
+    },
+    {
+      "command": "PYTHONPATH=/work/repos/accounting-review-pipeline/packages/monthly-close-control-plane TMPDIR=/work/tmp python3.14 -m pytest tests -q --ignore=tests/test_coverage_routing.py",
+      "exit": 0,
+      "passed": 37,
+      "subtests_passed": 63
+    },
+    {
+      "command": "UV_CACHE_DIR=/work/tmp/uv-cache UV_PYTHON_DOWNLOADS=never uv lock --offline --python /usr/bin/python3.14",
+      "exit": 0,
+      "resolved_packages": 27
+    },
+    {
+      "command": "UV_CACHE_DIR=/work/tmp/uv-cache UV_PYTHON_DOWNLOADS=never uv lock --offline --check --python /usr/bin/python3.14",
+      "exit": 0,
+      "resolved_packages": 27
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  ],
+  "unverified": [
+    "Windows build and execution, including reparse points and native code pages",
+    "Full root pytest: tests/test_coverage_routing.py requires unavailable PyYAML",
+    "actionlint unavailable",
+    "GitHub-hosted CI and security-service checks"
+  ],
+  "release_status": "1.0.0 unreleased; Python caller removed; no Rust release until approved",
+  "translated_patterns": 44,
+  "stream_failure_contract": {
+    "buffered_shutdown_flush_exit": 120,
+    "unbuffered_argparse_help_version_write_error_exit": 0,
+    "ordinary_unbuffered_traceback_failure_exit": 1,
+    "diagnostic": "one error: line when stderr remains writable"
+  },
+  "performance": {
+    "measurements": 130,
+    "factors": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "observed_16_times_growth": [
+      14.78359127682026,
+      19.09461570836895
+    ],
+    "name_and_number_counters": "linear bounds passed",
+    "global_linearity_claim": false
+  }
+}

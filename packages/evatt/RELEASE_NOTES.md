@@ -1,4 +1,105 @@
-# Unreleased
+# v1.0.0 (unreleased)
+
+- evatt is a standalone Rust binary, built with `cargo build --locked --release`.
+  It uses local files and git only, with no installed Python and no network
+  dependency. The Python release caller has been removed; a Rust release path
+  must be approved before 1.0.0 can be released.
+- The command names, flags, abbreviations, help, exit codes, redacted documents,
+  manifests, triage files and disclosure records retain the Python 0.2.0 CLI
+  contract. The compatibility reference is CPython 3.14.8 and Unicode 16.0.0.
+  Unicode predicates, regex IGNORECASE equivalence and full casefold are frozen
+  separately; NFC pins unicode-normalization 0.1.24 (Unicode 16).
+- The email matcher uses a bounded scanner in place of the equivalent regex.
+  The regex remains in the test-only probe for comparison. Long failing local
+  parts such as `9-9-9-...` otherwise retry each suffix in quadratic time.
+  Numeric and name scans retain their existing cursor and retry rules. Masking
+  writes one `#` per code point and maps byte offsets back explicitly; findings
+  on a line share their context. Map size and sorting are outside the bounded
+  matcher-work claims.
+
+Deliberate differences:
+
+- `--version` and newly written disclosure records carry `1.0.0`. A record
+  carrying `0.2.0` therefore fails `disclosure-check` under 1.0.0.
+- The Python import API is removed, including `entities.save`, `entities.assign`
+  and the public disclosure functions. evatt never writes a map or a map
+  temporary. The `disclosure-record` and `disclosure-check` algorithms remain
+  internal and are ported in full. Keep existing `*.tmp` ignore rules.
+- Failures that escaped Python as a traceback exit 1 with one `error:` line.
+  This includes a restored lone surrogate that UTF-8 cannot encode, a path
+  stdout cannot encode in its native code page, unbuffered command diagnostics
+  that cannot be written, oversized
+  JSON integers and excessive JSON nesting. Restoration preserves the empty
+  output left by Python's failed encoding. JSON nesting is capped at 10,000
+  levels to protect the worker stack; ordinary record JSON remains capped at
+  4,096 bytes. CPython's own depth limit follows its C stack and can be lower,
+  so a map nested deeper than CPython parses can reach evatt's field
+  validation, which still refuses it, because every map and record field is a
+  string or an integer. These are failure paths, not successful output
+  transformations.
+  A shutdown stream-flush failure retains CPython's exit 120 and emits an
+  `error:` line instead of its ignored-exception diagnostic. Argparse's
+  unbuffered help/version writes still ignore an I/O error, as CPython does.
+  A closed stderr cannot receive that diagnostic; the failure exit is retained.
+- evatt refuses to start, with one `error:` line and exit 1, when CPython 3.14
+  would write its streams in a codec this binary does not implement or would
+  decode arguments and paths with a non-UTF-8 locale. The accepted stream
+  codecs are UTF-8, UTF-8 with signature, ASCII, Latin-1 and Windows-1252,
+  set through `PYTHONIOENCODING` or, on Windows, the active code page; any
+  other Windows code page is refused unless the console, UTF-8 mode or
+  `PYTHONIOENCODING` selects an accepted codec. POSIX locales must resolve to
+  UTF-8 (a UTF-8 codeset, C, POSIX or UTF-8 mode). CPython would run in some
+  of these environments (for example `PYTHONIOENCODING=cp1251`, a Latin-1
+  locale or code page 1251) and there it can write redacted documents,
+  manifests and records that evatt 1.0.0 does not. It stops at start-up in
+  the others, as evatt does: an unknown codec, a `PYTHONUTF8` other than 0 or
+  1, or either variable holding a value the system cannot decode. On Windows
+  evatt also refuses a non-empty `PYTHONLEGACYWINDOWSFSENCODING` or
+  `PYTHONLEGACYWINDOWSSTDIO`, which change how CPython selects UTF-8 mode and
+  the console code page; CPython runs under them, including with an otherwise
+  invalid `PYTHONUTF8` beside the legacy file system setting. A codec named in
+  `PYTHONIOENCODING` must be an accepted one even when every stream is a
+  console that CPython would write in UTF-8 regardless. A codec name holding
+  any non-ASCII character is refused, as is an error handler other than
+  strict, surrogateescape, surrogatepass, ignore, replace or backslashreplace
+  (CPython also accepts xmlcharrefreplace and namereplace, and looks an
+  unknown name up only when it needs it). On POSIX,
+  `PYTHONCOERCECLOCALE=warn` is refused in every locale, because CPython can
+  then write locale warnings to stderr; it writes none under a UTF-8 locale,
+  where the refusal is an extra one. A non-Unicode `PATHEXT` on Windows makes git
+  unavailable rather than guessed at; POSIX ignores `PATHEXT`, as CPython
+  does.
+- Compatibility scope: the reference is Python evatt 0.2.0 run by a working
+  CPython 3.14.8 with default interpreter settings. evatt reads these
+  environment variables that CPython also reads: `PYTHONIOENCODING`,
+  `PYTHONUTF8`, `PYTHONLEGACYWINDOWSFSENCODING`, `PYTHONLEGACYWINDOWSSTDIO`,
+  `PYTHONCOERCECLOCALE`, `PYTHONUNBUFFERED`, `PYTHON_COLORS`, `NO_COLOR`,
+  `FORCE_COLOR`, `TERM`, `COLUMNS` and `LINES`, plus the locale;
+  `PYTHONUNBUFFERED` and the two legacy Windows variables are read with
+  CPython's integer flag rule. `PATH`, `PATHEXT` and
+  `NoDefaultCurrentDirectoryInExePath` locate git, and the git subprocess
+  inherits the remaining environment apart from the six `GIT_*` location
+  overrides evatt removes, as the Python release's subprocess did. Settings
+  that only configure the interpreter itself, such as `PYTHONHOME`,
+  `PYTHONPATH`, `PYTHONDEVMODE`, `PYTHONWARNINGS` or `-X` options, have no
+  meaning for a standalone binary and are ignored, including where they
+  would stop or change CPython.
+- A regex compilation or execution error, including exhaustion of its 100,000,000-step
+  backtrack budget, refuses the run with an `error:` line and exit 1. Every
+  detector, mapped value and restore pattern uses the same budget. It never
+  becomes a missing match or permits a sendable output to be written. Extremely
+  long inputs that CPython can scan may therefore be refused. This follows the
+  port's explicit fail-closed regex-error rule.
+
+The test-only probe is behind Cargo's `probe` feature and is absent from the
+normal binary build. It compares individual pattern captures before arbitration,
+name retries, the email scanner, structured spans, number candidates, mapped
+values, folding, residual findings, redaction and verification against the
+preserved Python oracle. The CLI differential compares temporary worktrees,
+including ignore rules, links, collisions and leftover files. All fixtures are
+fabricated. Windows execution remains a separate verification gate.
+
+# Also in v1.0.0: Python changes made after v0.2.0
 
 - Licence: Apache-2.0 replaces MIT. Anyone who redistributes this package or a
   derivative must keep the attribution in `NOTICE`. Versions already released stay
