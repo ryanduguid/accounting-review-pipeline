@@ -152,7 +152,7 @@ jobs:
           python -m venv /tmp/venv
           wheels=(dist/*.whl)
           test "${#wheels[@]}" -eq 1
-          /tmp/venv/bin/pip install --no-index "${wheels[0]}"
+          /tmp/venv/bin/pip install --no-index dist/*.whl
           cd /tmp
           /tmp/venv/bin/python -I \
             "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/tests/smoke_installed_wheel.py" \

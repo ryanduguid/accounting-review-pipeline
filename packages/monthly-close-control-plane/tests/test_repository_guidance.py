@@ -214,7 +214,7 @@ def _ci_smoke_contract() -> tuple[str, ...]:
     assert venv_path == PurePosixPath("/tmp/venv")
     assert commands[1] == "wheels=(dist/*.whl)"
     assert commands[2] == 'test "${#wheels[@]}" -eq 1'  # nosec B101 - pytest contract assertion.
-    assert commands[3] == f'{venv_path}/bin/pip install --no-index "${{wheels[0]}}"'  # nosec B101 - pytest contract assertion.
+    assert commands[3] == f'{venv_path}/bin/pip install --no-index dist/*.whl'  # nosec B101 - pytest contract assertion.
     assert commands[4] == "cd /tmp"  # nosec B101 - pytest contract assertion.
     assert commands[5] == (  # nosec B101 - pytest contract assertion.
         f"{venv_path}/bin/python -I "
