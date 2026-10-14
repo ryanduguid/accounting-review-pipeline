@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, Decimal, Inexact, localcontext
 from pathlib import Path
@@ -92,19 +94,25 @@ def _empty(slot: str, *, required: bool) -> Finding:
     )
 
 
-def _tb_balanced(rows: list[TrialBalanceRow]) -> tuple[Decimal, Decimal]:
-    # Sum exactly or refuse: a total the 28-digit context rounds can equal its
-    # counterpart while the source amounts differ, which would pass an imbalance.
+@contextmanager
+def _exact(refusal: str) -> Iterator[None]:
+    # Calculate exactly or refuse: a result the 28-digit context rounds can equal
+    # its counterpart while the source amounts differ, which would hide a difference.
     with localcontext() as context:
         context.traps[Inexact] = True
         try:
-            movement = sum((row.debit - row.credit for row in rows), Decimal("0.00"))
-            ytd = sum((row.ytd_debit - row.ytd_credit for row in rows), Decimal("0.00"))
+            yield
         except Inexact as exc:
-            raise NumericGateError(
-                "trial balance totals exceed the supported 28-digit precision, "
-                "so debits and credits cannot be compared exactly."
-            ) from exc
+            raise NumericGateError(refusal) from exc
+
+
+def _tb_balanced(rows: list[TrialBalanceRow]) -> tuple[Decimal, Decimal]:
+    with _exact(
+        "trial balance totals exceed the supported 28-digit precision, "
+        "so debits and credits cannot be compared exactly."
+    ):
+        movement = sum((row.debit - row.credit for row in rows), Decimal("0.00"))
+        ytd = sum((row.ytd_debit - row.ytd_credit for row in rows), Decimal("0.00"))
     return movement, ytd
 
 
@@ -465,12 +473,16 @@ def _apply_bas_tieout(
             )
         )
         return
-    net_statement = labels["1A"] - labels["1B"]
-    net_gl = sum(
-        (row.credit - row.debit for row in gst if isinstance(row, GstControlRow)),
-        Decimal("0.00"),
-    )
-    difference = net_statement - net_gl
+    with _exact(
+        "BAS amounts exceed the supported 28-digit precision, "
+        "so net GST cannot be tied exactly."
+    ):
+        net_statement = labels["1A"] - labels["1B"]
+        net_gl = sum(
+            (row.credit - row.debit for row in gst if isinstance(row, GstControlRow)),
+            Decimal("0.00"),
+        )
+        difference = net_statement - net_gl
     # The ATO has 1A and 1B reported in whole dollars with the cents left off, so
     # a lodged statement sits up to 99 cents either side of the cents-level
     # control movement with nothing wrong. Whole-dollar labels therefore pass any
