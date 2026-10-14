@@ -13,7 +13,7 @@ uv sync        # install every Python component and the shared toolchain
 just test      # every component's suite, plus the joined conformance test
 ```
 
-`uv sync` creates one `.venv` at the root and installs the 4 Python distributions into it
+`uv sync` creates one `.venv` at the root and installs the 3 Python distributions into it
 as editable workspace members. The Excel adapter and the Power BI application have no
 `pyproject.toml`, and the grant workpapers application is not a member; their
 standard-library unittest suites run from the same `.venv`. The Xero Ledger Review Gate
@@ -35,7 +35,7 @@ The shared component gates are defined once in `.github/workflows/ci-package.yml
 
 Every member's `dev` extra and the root `dev` group carry the same exact pins for `ruff`,
 `mypy`, `pytest`, `pytest-cov` and `coverage`, so one workspace resolution holds them all
-and the versions `just` runs are the versions CI runs. Move a pin in all 6 places
+and the versions `just` runs are the versions CI runs. Move a pin in all 4 places
 together, then regenerate the root and component lockfiles.
 
 Two consequences of the workspace are worth knowing before you run a component's own
