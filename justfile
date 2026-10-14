@@ -8,8 +8,8 @@
 # Requires just, uv and cargo:
 #     uv tool install rust-just
 #
-# The two Python distributions are uv workspace members. The Xero Ledger Review
-# Gate, evatt and Xero exporter are Rust crates, run with cargo from their directories. The Excel adapter and
+# Monthly Close Controls is the Python workspace member. The readiness gate,
+# Xero Ledger Review Gate, evatt and Xero exporter use cargo from their directories. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
 # application is not a member; its workpaper is a Rust crate run with cargo from
 # its directory. Their standard-library unittest suites run from
@@ -18,7 +18,6 @@
 
 # pytest components: directory:import package
 pytest_components := trim(replace('''
-packages/review-ready-gate:reviewready
 packages/monthly-close-control-plane:closecontrol
 ''', "\n", " "))
 
@@ -30,7 +29,7 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export"
+rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export packages/review-ready-gate"
 
 # List the available recipes.
 default:
@@ -45,7 +44,7 @@ demo:
     uv run --locked close-control review --current packages/monthly-close-control-plane/examples/current_trial_balance.csv --prior packages/monthly-close-control-plane/examples/prior_trial_balance.csv --mapping packages/monthly-close-control-plane/examples/account_mapping.csv --subledger packages/monthly-close-control-plane/examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note packages/monthly-close-control-plane/examples/review_note.json --output ../close-control-demo
 
 # Run every component's test suite, then the joined trial-balance conformance
-# test and the root check on the blocks the two review packages each copy.
+# test and the shared behavioural conformance check.
 test: setup
     #!/usr/bin/env bash
     set -euo pipefail

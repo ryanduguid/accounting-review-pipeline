@@ -1,0 +1,48 @@
+[package]
+name = "review-ready-gate"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+description = "Offline workpaper completeness and tie-out controls"
+license = "Apache-2.0"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+
+[dependencies]
+num-bigint = "0.5.1"
+num-integer = "0.1"
+num-traits = "0.2"
+sha2 = "0.11"
+getrandom = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO"] }
+
+[[bin]]
+name = "review-ready"
+path = "src/main.rs"
+
+[[bin]]
+name = "review-ready-probe"
+path = "src/probe_main.rs"
+required-features = ["probe"]
+
+[[bin]]
+name = "review-ready-differential"
+path = "tools/differential.rs"
+required-features = ["probe"]
+
+[[bin]]
+name = "review-ready-publication-probe"
+path = "src/publication_probe_main.rs"
+required-features = ["probe"]
+
+[features]
+probe = []
+
+[profile.release]
+lto = true
+codegen-units = 1

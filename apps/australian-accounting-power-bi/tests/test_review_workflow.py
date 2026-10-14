@@ -27,6 +27,11 @@ spec.loader.exec_module(workflow)
 
 
 def manifest_fixture(command: str, launcher: bytes = b"original") -> dict:
+    if command == "review-ready":
+        return {"manifest_version": 2, "command": command,
+                "launcher_name": command + (".exe" if os.name == "nt" else ""),
+                "launcher_sha256": workflow.digest(launcher),
+                "native": {"package": "review-ready-gate", "version": "1.0.0"}}
     distribution, package, entry = workflow.PRODUCERS[command]
     return {"manifest_version": 1, "command": command,
             "launcher_name": command + (".exe" if os.name == "nt" else ""),
@@ -46,6 +51,37 @@ class ReportElements(HTMLParser):
 
 
 class ReviewWorkflowTests(unittest.TestCase):
+    def test_native_producer_binds_version_and_executable_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / ("review-ready.exe" if os.name == "nt" else "review-ready")
+            launcher = b"MZfabricated native image"
+            executable.write_bytes(launcher)
+            result = subprocess.CompletedProcess([], 0, b"review-ready 1.0.0\n", b"")
+            with patch.object(workflow.subprocess, "run", return_value=result) as run:
+                self.assertEqual(workflow.producer_manifest(root, "review-ready"), manifest_fixture("review-ready", launcher))
+                self.assertEqual(run.call_args.args[0], [str(executable.resolve()), "--version"])
+            for result in (subprocess.CompletedProcess([], 1, b"", b"refused"),
+                           subprocess.CompletedProcess([], 0, b"review-ready 0.3.0\n", b""),
+                           subprocess.CompletedProcess([], 0, b"review-ready 1.0.0\n", b"warning")):
+                with self.subTest(result=result), patch.object(workflow.subprocess, "run", return_value=result), self.assertRaises(ValueError):
+                    workflow.producer_manifest(root, "review-ready")
+            with patch.object(workflow.subprocess, "run", side_effect=subprocess.TimeoutExpired([], 20)), self.assertRaisesRegex(ValueError, "deadline"):
+                workflow.producer_manifest(root, "review-ready")
+            def changed(*args, **kwargs):
+                executable.write_bytes(launcher + b"changed")
+                return subprocess.CompletedProcess([], 0, b"review-ready 1.0.0\n", b"")
+            with patch.object(workflow.subprocess, "run", side_effect=changed), self.assertRaisesRegex(ValueError, "changed"):
+                workflow.producer_manifest(root, "review-ready")
+
+    def test_native_manifest_refuses_incomplete_or_ambiguous_identity(self) -> None:
+        baseline = manifest_fixture("review-ready")
+        for value in (baseline | {"manifest_version": True}, baseline | {"command": "close-control"},
+                      baseline | {"launcher_sha256": "bad"}, baseline | {"extra": "field"},
+                      baseline | {"native": {"package": "review-ready-gate", "version": "0.3.0"}},
+                      baseline | {"native": {"package": "other", "version": "1.0.0"}}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                workflow.producer_document(value, "review-ready")
     def resource_api(self, payloads: dict[str, bytes], *, handle: int = 5) -> MagicMock:
         api = MagicMock()
         api.LoadLibraryExW.return_value = handle

@@ -17,7 +17,7 @@ workpaper and it does not assess a client's accounting records.
 
 Every pack under `packs/` is a copy of the fabricated `examples/month-end-ready`
 pack with one change. `expected_results.json` names that change, and
-`tests/test_missing_evidence_evaluation.py` fails if a pack differs from the
+`src/evaluation_tests.rs` fails if a pack differs from the
 example in any other file. No pack contains client data.
 
 ## Expected results
@@ -50,9 +50,9 @@ source may have changed since the pack was written.
 ## Reproduce the result
 
 ```bash
-uv sync --locked --all-extras
-uv run review-ready gate --profile month_end --pack evaluation/missing_evidence/packs/no_bank_reconciliation --output ../../../review-ready-demo/missing-evidence
-uv run pytest tests/test_missing_evidence_evaluation.py -q
+cargo install --path . --locked
+review-ready gate --profile month_end --pack evaluation/missing_evidence/packs/no_bank_reconciliation --output ../../../review-ready-demo/missing-evidence
+cargo test --locked evaluation_tests
 ```
 
 Run both from the component directory. `--output` points outside the checkout

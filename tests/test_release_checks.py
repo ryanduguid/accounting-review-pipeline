@@ -30,26 +30,28 @@ REQUIRED = {
         ".github/workflows/codeql.yml: Analyze Python",
         ".github/workflows/codeql.yml: codeql-gates"
     ],
-    "release-review-ready-gate.yml": [
-        ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
-        ".github/workflows/ci.yml: packages/review-ready-gate / build",
-        ".github/workflows/ci.yml: packages/review-ready-gate / dependency-audit",
-        ".github/workflows/ci.yml: packages/review-ready-gate / lint",
-        ".github/workflows/ci.yml: packages/review-ready-gate / test (3.14)",
-        ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python",
-        ".github/workflows/codeql.yml: codeql-gates"
-    ],
 }
+BLOCKED = {"release-review-ready-gate.yml"}
 
 
 class ReleaseChecksTests(unittest.TestCase):
+    def test_native_readiness_release_is_explicitly_blocked(self) -> None:
+        import yaml
+        document = yaml.safe_load((ROOT / ".github/workflows/release-review-ready-gate.yml").read_text())
+        self.assertEqual(document["permissions"], {"contents": "read"})
+        self.assertEqual(set(document["jobs"]), {"release-blocked"})
+        steps = document["jobs"]["release-blocked"]["steps"]
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(set(steps[0]), {"name", "run"})
+        self.assertIn("Native release publishing is not configured", steps[0]["run"])
+        self.assertEqual(steps[0]["run"].strip().splitlines()[-1], "exit 1")
+
     def test_every_release_caller_requires_its_component_checks(self) -> None:
         workflows = ROOT / ".github" / "workflows"
         callers = sorted(
             path.name for path in workflows.glob("release*") if path.suffix in {".yml", ".yaml"}
         )
-        self.assertEqual(callers, sorted(REQUIRED))
+        self.assertEqual(callers, sorted(set(REQUIRED) | BLOCKED))
         for filename, expected in REQUIRED.items():
             with self.subTest(workflow=filename):
                 text = (workflows / filename).read_text(encoding="utf-8")
@@ -106,7 +108,7 @@ class ReleaseChecksTests(unittest.TestCase):
                 match = re.search(r"(?m)^      source-directory: (\S+)$", text)
                 assert match is not None, path.name
                 components.append(match.group(1))
-        self.assertEqual(len(components), 2, components)
+        self.assertEqual(len(components), 1, components)
         for component in components:
             with self.subTest(component=component):
                 project = tomllib.loads((ROOT / component / "pyproject.toml").read_text(encoding="utf-8"))

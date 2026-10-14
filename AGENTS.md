@@ -36,6 +36,11 @@ These repository-wide rules apply everywhere:
   The same approved binary-only exception applies to the Xero exporter in
   1.0.0: its Rust commands retain the CSV and token-cache contracts, and the
   Python import API is removed. It has no native release caller yet.
+  The same approved binary-only exception applies to Workpaper Review Gate
+  1.0.0. Its Python runtime and import API are removed; its native commands
+  retain the readiness and file contracts, with documented parser and diagnostic
+  limits. Its release workflow explicitly blocks publication until a native
+  publisher is approved.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
@@ -66,7 +71,7 @@ imported later, sits at `apps/grant-acquittal-workpapers/` because it is never r
 
 ## Setup
 
-From a fresh clone, `uv sync` at the root installs the 2 Python components as editable
+From a fresh clone, `uv sync` at the root installs Monthly Close Controls as an editable
 workspace members and the shared test toolchain into one `.venv`, and `just test` runs
 every component's suite plus the joined conformance test. That is the whole setup. `just`
 comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
@@ -83,7 +88,7 @@ Run every check from the owning component directory with its documented commands
 | Component | Directory | Checks |
 |---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and the pinned Python 3.15 differential, on Linux and Windows |
-| Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
+| Workpaper Review Gate | `packages/review-ready-gate/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and its frozen Python 3.15 differential, on Linux and Windows |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates, which are the `test`, `dependency-audit`, `package` and `lint` jobs `ci.yml` keeps for this component; the package job and manual Windows recipe run the same installed-command smoke helper |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked`, on Linux and Windows; `tests/differential/differential.py` compares the binary with the 0.2.6 Python release |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
@@ -91,10 +96,9 @@ Run every check from the owning component directory with its documented commands
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked` for the Rust workpaper; `python -B -m unittest discover -s tests -v` for the setup and replay utility; both on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked --all-features`; the differential probe is enabled only with `--features probe` |
 
-The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
-`ci.yml` calls for Workpaper Review Gate with the component directory.
-`ci.yml`'s `rust` job runs the native component checks in its matrix. Run the
-Python gates from the owning component directory:
+`ci.yml`'s `rust` job runs the native component checks in its matrix. Monthly
+Close Controls keeps the Python gates below in the same workflow. Run those
+gates from its component directory:
 
 ```bash
 uv lock --check
@@ -109,9 +113,7 @@ The tests run on Python 3.14 and 3.15, and the build gate installs the wheel int
 clean virtual environment and imports the component's package from it. Every gate above
 runs on Linux; `ci.yml`'s `windows` job adds the same pytest command on `windows-latest` for
 Monthly Close Controls, and the `rust` job runs on Windows too, covering
-the 3 components with platform-specific behaviour. Each call filters
-itself to its component directory, the shared contract and the root files, so a change to
-one component runs that component alone. Monthly Close Controls keeps its own `test`,
+the 4 native packages with platform-specific behaviour. Monthly Close Controls keeps its own `test`,
 `package` and `lint` jobs in `ci.yml` because its release workflow selects them by
 name. The Excel adapter, the Power BI application and the grant workpapers application are
 not workspace members, so their root workflow runs ruff and mypy from their own settings and
@@ -119,7 +121,7 @@ their unittest suites on the same Python matrix, with a Windows leg for the gran
 The grant workpaper is a Rust crate from 0.2.0; the same workflow's `rust` job checks it on
 Linux and Windows. The Power BI application's fixture generator and structural checks are a
 Rust crate that the same job checks; its review workflow and that workflow's tests stay Python
-until the close-control and review-ready producers it inspects are Rust.
+until the remaining close-control producer is Rust.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change

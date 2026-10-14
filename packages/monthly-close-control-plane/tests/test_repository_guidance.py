@@ -13,7 +13,6 @@ LANDED_RELEASE_POLICY = "a601f1d8b143f92b0517f709216993660d21f480"
 RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
     "release-monthly-close-control-plane.yml",
-    "release-review-ready-gate.yml",
 )
 
 EXPECTED_POLICY = """\
