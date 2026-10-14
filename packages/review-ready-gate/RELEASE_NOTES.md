@@ -1,3 +1,11 @@
+# v0.3.0
+
+- Breaking: requires Python 3.14 or later. 0.2.0 remains the last release for Python 3.11 to 3.13 ([#321](https://github.com/ryanduguid/accounting-review-pipeline/pull/321)).
+- Licence: Apache-2.0 replaces MIT, with a `NOTICE` file whose attribution anyone redistributing the package or a derivative must keep. Versions already released stay under MIT ([#358](https://github.com/ryanduguid/accounting-review-pipeline/pull/358)).
+- The BAS tie-out accepts labels 1A and 1B reported in whole dollars: when both are integral, a difference under $1 from the cents-level GST control movement no longer breaks the tie-out, and a failing finding names the allowance ([#341](https://github.com/ryanduguid/accounting-review-pipeline/pull/341)). Real activity statements used to return `NOT_READY` almost every time.
+- `review-ready gate` publishes its three pack files through a `.reviewready` control directory inside `--output`, so an interrupted or concurrent write can no longer leave a mixed pack that the viewer accepts. `verify_pack` refuses a pack whose revision changes while it is read ([#340](https://github.com/ryanduguid/accounting-review-pipeline/pull/340)).
+- An oversized CSV header or field is reported as a `SchemaError` with the source path and exit 1, and no pack JSON is written ([#353](https://github.com/ryanduguid/accounting-review-pipeline/pull/353)).
+
 # v0.2.0
 
 - Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.10 remains the last release that installs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).
