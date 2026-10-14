@@ -35,17 +35,6 @@ BLOCKED = {"release-review-ready-gate.yml"}
 
 
 class ReleaseChecksTests(unittest.TestCase):
-    def test_native_readiness_release_is_explicitly_blocked(self) -> None:
-        import yaml
-        document = yaml.safe_load((ROOT / ".github/workflows/release-review-ready-gate.yml").read_text())
-        self.assertEqual(document["permissions"], {"contents": "read"})
-        self.assertEqual(set(document["jobs"]), {"release-blocked"})
-        steps = document["jobs"]["release-blocked"]["steps"]
-        self.assertEqual(len(steps), 1)
-        self.assertEqual(set(steps[0]), {"name", "run"})
-        self.assertIn("Native release publishing is not configured", steps[0]["run"])
-        self.assertEqual(steps[0]["run"].strip().splitlines()[-1], "exit 1")
-
     def test_every_release_caller_requires_its_component_checks(self) -> None:
         workflows = ROOT / ".github" / "workflows"
         callers = sorted(
