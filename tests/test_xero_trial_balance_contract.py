@@ -74,7 +74,7 @@ class CanonicalContractTest(unittest.TestCase):
                     self.assertEqual(tuple(next(csv.reader(source))), HEADER)
                 result = subprocess.run(
                     ["cargo", "run", "--quiet", "--locked", "--features", "tools", "--bin", "xero-tb-evaluate", "--manifest-path", str(EXPORTER_MANIFEST), "--", str(fixture)],
-                    cwd=ROOT,
+                    cwd=EXPORTER_MANIFEST.parent,
                     text=True,
                     capture_output=True,
                     check=False,

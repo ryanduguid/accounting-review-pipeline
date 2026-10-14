@@ -255,7 +255,7 @@ jobs:
           baseline="$RUNNER_TEMP/xero-python-baseline"
           oracle="$RUNNER_TEMP/xero-python-oracle"
           mkdir -p "$baseline"
-          git archive 1af8a855578afaec97bd2e56836a8aa8fb15e729:packages/xero-trial-balance-export | tar -xf - -C "$baseline"
+          git -C "$GITHUB_WORKSPACE" archive 1af8a855578afaec97bd2e56836a8aa8fb15e729:packages/xero-trial-balance-export | tar -xf - -C "$baseline"
           python -m venv "$oracle"
           oracle_python="$oracle/bin/python"
           [ ! -f "$oracle/Scripts/python.exe" ] || oracle_python="$oracle/Scripts/python.exe"
