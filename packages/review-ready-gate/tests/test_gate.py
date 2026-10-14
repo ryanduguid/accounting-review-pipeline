@@ -730,3 +730,28 @@ def test_totals_beyond_the_context_precision_are_refused_not_rounded(tmp_path: P
     pack = _bas_ready_with_bank_row(tmp_path, "15000.0000000000000000000000001,0.00,120000.00,0.00")
     with pytest.raises(GateInputError, match="28-digit precision"):
         review_pack(profile="bas", pack_dir=pack)
+
+
+def _bas_pack_with_1a(tmp_path: Path, label_1a: str) -> Path:
+    pack = copy_example_pack("bas-ready", tmp_path / "pack")
+    (pack / "activity_statement.csv").write_text(
+        f"Label,Amount\n1A,{label_1a}\n1B,0.00\n", encoding="utf-8"
+    )
+    (pack / "gst_control_gl.csv").write_text(
+        "Date,AccountID,AccountName,Debit,Credit,Description\n"
+        "2026-01-15,820,GST Payable,0.00,1000000000000000000000000000.00,GST on sales\n",
+        encoding="utf-8",
+    )
+    return pack
+
+
+def test_bas_amounts_beyond_the_context_precision_are_refused_not_rounded(tmp_path: Path) -> None:
+    # At 28 digits 1A rounds to the control movement and the 0.40 difference vanished.
+    pack = _bas_pack_with_1a(tmp_path, "1000000000000000000000000000.40")
+    with pytest.raises(GateInputError, match="28-digit precision"):
+        review_pack(profile="bas", pack_dir=pack)
+
+
+def test_large_bas_amounts_that_calculate_exactly_still_tie(tmp_path: Path) -> None:
+    pack = _bas_pack_with_1a(tmp_path, "1000000000000000000000000000.00")
+    assert review_pack(profile="bas", pack_dir=pack).status == "READY"
