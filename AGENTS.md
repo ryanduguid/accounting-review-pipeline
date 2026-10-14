@@ -33,6 +33,9 @@ These repository-wide rules apply everywhere:
   its CLI contracts remain, with the documented version and failure-path changes.
   It has no release caller until a Rust release path is approved; 0.2.0 remains
   the prior Python release, which was never published to PyPI.
+  The same approved binary-only exception applies to the Xero exporter in
+  1.0.0: its Rust commands retain the CSV and token-cache contracts, and the
+  Python import API is removed. It has no native release caller yet.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
@@ -63,14 +66,14 @@ imported later, sits at `apps/grant-acquittal-workpapers/` because it is never r
 
 ## Setup
 
-From a fresh clone, `uv sync` at the root installs the 3 Python components as editable
+From a fresh clone, `uv sync` at the root installs the 2 Python components as editable
 workspace members and the shared test toolchain into one `.venv`, and `just test` runs
 every component's suite plus the joined conformance test. That is the whole setup. `just`
 comes from `uv tool install rust-just`; its recipes are `setup`, `lint`, `typecheck`,
 `test` and `check` (the last 3 together). Each recipe loops over the per-component
 commands in the table below, which remain the authority. `just check` is not a CI
-equivalent: it does not verify component lockfiles, install the exporter's hash-locked
-requirements, build or smoke-test a wheel, run actionlint, the Power BI CLI
+equivalent: it does not verify component lockfiles, run the exporter's pinned Python
+comparison or native binary smoke checks, build or smoke-test a wheel, run actionlint, the Power BI CLI
 or CodeQL, or check the contract digests.
 
 ## Command routing
@@ -79,7 +82,7 @@ Run every check from the owning component directory with its documented commands
 
 | Component | Directory | Checks |
 |---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | the shared component gates below (mypy and coverage scoped to `xero_client.py export_tb.py auth.py token_store.py` by its `pyproject.toml`), plus `python -m pip install --require-hashes -r requirements.lock` and `python -m unittest discover -s tests -v` from that hash-locked environment |
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and the pinned Python 3.15 differential, on Linux and Windows |
 | Workpaper Review Gate | `packages/review-ready-gate/` | the shared component gates below, scoped to `reviewready` |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | its `AGENTS.md` CI gates, which are the `test`, `dependency-audit`, `package` and `lint` jobs `ci.yml` keeps for this component; the package job and manual Windows recipe run the same installed-command smoke helper |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked`, on Linux and Windows; `tests/differential/differential.py` compares the binary with the 0.2.6 Python release |
@@ -89,8 +92,9 @@ Run every check from the owning component directory with its documented commands
 | evatt | `packages/evatt/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked --all-features`; the differential probe is enabled only with `--features probe` |
 
 The shared component gates are defined once in `.github/workflows/ci-package.yml`, which
-`ci.yml` calls for the exporter and Workpaper Review Gate with the component
-directory. `ci.yml`'s `rust` job runs the Xero Ledger Review Gate and evatt cargo checks. Run them from the component directory:
+`ci.yml` calls for Workpaper Review Gate with the component directory.
+`ci.yml`'s `rust` job runs the native component checks in its matrix. Run the
+Python gates from the owning component directory:
 
 ```bash
 uv lock --check
@@ -104,7 +108,7 @@ uv run --locked --extra dev --python 3.14 python -m build
 The tests run on Python 3.14 and 3.15, and the build gate installs the wheel into a
 clean virtual environment and imports the component's package from it. Every gate above
 runs on Linux; `ci.yml`'s `windows` job adds the same pytest command on `windows-latest` for
-the exporter and Monthly Close Controls, and the `rust` job runs on Windows too, covering
+Monthly Close Controls, and the `rust` job runs on Windows too, covering
 the 3 components with platform-specific behaviour. Each call filters
 itself to its component directory, the shared contract and the root files, so a change to
 one component runs that component alone. Monthly Close Controls keeps its own `test`,

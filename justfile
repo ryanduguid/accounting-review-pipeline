@@ -8,8 +8,8 @@
 # Requires just, uv and cargo:
 #     uv tool install rust-just
 #
-# The three Python distributions are uv workspace members. The Xero Ledger Review
-# Gate and evatt are Rust crates, run with cargo from their directories. The Excel adapter and
+# The two Python distributions are uv workspace members. The Xero Ledger Review
+# Gate, evatt and Xero exporter are Rust crates, run with cargo from their directories. The Excel adapter and
 # the Power BI application have no pyproject.toml, and the grant workpapers
 # application is not a member; its workpaper is a Rust crate run with cargo from
 # its directory. Their standard-library unittest suites run from
@@ -24,17 +24,13 @@ packages/monthly-close-control-plane:closecontrol
 
 # unittest components: directory only
 unittest_components := trim(replace('''
-packages/xero-trial-balance-export
 adapters/accounting-excel-toolkit
 apps/australian-accounting-power-bi
 apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt"
-
-# The exporter is flat modules, not a package; its lint and mypy targets are files.
-exporter_modules := "xero_client.py export_tb.py auth.py token_store.py"
+rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export"
 
 # List the available recipes.
 default:
@@ -83,8 +79,6 @@ lint: setup
         echo "==> ${directory}"
         (cd "${directory}" && uv run --no-sync ruff check "${package}" tests)
     done
-    echo "==> packages/xero-trial-balance-export"
-    (cd packages/xero-trial-balance-export && uv run --no-sync ruff check {{ exporter_modules }})
     for directory in {{ rust_components }}; do
         echo "==> ${directory}"
         (cd "${directory}" && cargo fmt --check && cargo clippy --locked --all-targets --all-features -- -D warnings)
@@ -100,11 +94,9 @@ typecheck: setup
         echo "==> ${directory}"
         (cd "${directory}" && uv run --no-sync mypy "${package}")
     done
-    echo "==> packages/xero-trial-balance-export"
-    (cd packages/xero-trial-balance-export && uv run --no-sync mypy --ignore-missing-imports --pretty {{ exporter_modules }})
 
-# Regenerate the root lock, every component's own release lock and the exporter's
-# requirements.lock. Run it after any dependency change, including on a Dependabot
+# Regenerate the root lock and each Python component's standalone release lock.
+# Run it after any Python dependency change, including on a Dependabot
 # branch before merging. Inside the workspace `uv lock` writes only the root lock,
 # so each component is relocked from a copy outside the checkout, as CI checks it.
 relock:
@@ -129,7 +121,7 @@ relock:
     done
 
 # Not a CI equivalent. The component workflows also verify the component
-# lockfile, install the exporter's hash-locked requirements, build each
+# lockfile, run the exporter's pinned Python comparison, build each
 # distribution, install and smoke-test the built wheel outside the checkout,
 # run actionlint, validate the Power BI
 # report with Microsoft's PBIR CLI, check the contract digests and run CodeQL.
