@@ -1,5 +1,10 @@
 # Releasing
 
+Version 1.0.0 is an unreleased Rust binary port. Its Python release caller has
+been removed. A native release path requires approval before any tag, upload
+or publication. The instructions below are retained for historical Python
+releases and do not publish the Rust crate.
+
 The Accounting Review Pipeline
 [releases](https://github.com/ryanduguid/accounting-review-pipeline/releases)
 are canonical from `xero-trial-balance-export/v0.1.6` onward. Releases through

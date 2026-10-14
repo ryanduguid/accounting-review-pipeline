@@ -8,15 +8,15 @@
 # shared test toolchain in one command and run the whole suite from the top. See
 # the justfile for the setup, lint, typecheck and test entrypoints.
 #
-# Only the 3 Python distributions are members. The Xero Ledger Review Gate and
-# evatt are Rust crates checked with cargo, so both are excluded. The Excel adapter and the
+# Only the 2 Python distributions are members. The Xero Ledger Review Gate,
+# evatt and exporter are Rust crates checked with cargo and are excluded. The Excel adapter and the
 # Power BI application have no pyproject.toml and no Python dependencies, and
 # the grant workpapers application keeps its pyproject.toml for standalone use;
 # the justfile runs their standard-library unittest suites from the same .venv.
 
 [tool.uv.workspace]
 members = ["packages/*"]
-exclude = ["packages/elizabeth-anne-alexander", "packages/evatt"]
+exclude = ["packages/elizabeth-anne-alexander", "packages/evatt", "packages/xero-trial-balance-export"]
 
 # The shared toolchain for running every component's checks from one
 # environment: the union of what the component `dev` extras and test suites
@@ -24,7 +24,7 @@ exclude = ["packages/elizabeth-anne-alexander", "packages/evatt"]
 # for their own CI. The 5 check tools carry the same exact pin in every
 # member's `dev` extra and here, so one workspace resolution holds them all and
 # `just lint`, `just typecheck` and `just test` run the versions CI runs. Move
-# a pin in all 4 places together.
+# a pin in the root and both workspace members together.
 [dependency-groups]
 dev = [
   "ruff==0.16.10",
@@ -43,7 +43,6 @@ pythonpath = [
   ".",
   "packages/review-ready-gate",
   "packages/monthly-close-control-plane/tests",
-  "packages/xero-trial-balance-export",
   "apps/grant-acquittal-workpapers",
 ]
 
@@ -60,10 +59,6 @@ python_version = "3.14"
 files = [
   "packages/monthly-close-control-plane/closecontrol",
   "packages/review-ready-gate/reviewready",
-  "packages/xero-trial-balance-export/xero_client.py",
-  "packages/xero-trial-balance-export/export_tb.py",
-  "packages/xero-trial-balance-export/auth.py",
-  "packages/xero-trial-balance-export/token_store.py",
 ]
 ignore_missing_imports = true
 pretty = true
