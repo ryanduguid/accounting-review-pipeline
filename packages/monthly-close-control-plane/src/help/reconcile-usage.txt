@@ -1,0 +1,9 @@
+usage: close-control reconcile [-h] --transactions TRANSACTIONS
+                               --tenant TENANT --account-id ACCOUNT_ID
+                               --currency CURRENCY --period-start PERIOD_START
+                               --period-end PERIOD_END
+                               --opening-balance OPENING_BALANCE
+                               --closing-balance CLOSING_BALANCE
+                               [--opening-items OPENING_ITEMS]
+                               [--decisions DECISIONS] [--decisions-escaped]
+                               --output OUTPUT

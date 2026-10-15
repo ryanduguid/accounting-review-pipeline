@@ -1,9 +1,8 @@
 """Joined offline conformance for the data-only Xero trial-balance contract.
 
 The exporter-owned integrity runner and the offline review implementations are
-exercised against every root fixture. The Python review packages are imported
-from their directories; nothing here installs them, reaches a network, or reads
-a credential. The Rust ledger-review gate runs the same accept/reject boundary,
+exercised against every root fixture through their native probes. The Rust
+ledger-review gate runs the same accept/reject boundary,
 identity and account-code checks in its own cargo test
 (test_gateway_satisfies_the_pinned_exporter_contract), which
 joined-conformance.yml runs beside this file. The exporter integrity runner is Rust.
@@ -15,11 +14,11 @@ import csv
 import hashlib
 import json
 import subprocess
-import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
 from tests.native_review_ready import probe
+from tests.native_monthly_close import probe as monthly_probe
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,12 +84,6 @@ class CanonicalContractTest(unittest.TestCase):
                     self.assertIn(marker, result.stdout + result.stderr)
 
     def test_all_offline_review_consumers_keep_the_same_accept_reject_boundary(self) -> None:
-        sys.path[:0] = [
-            str(ROOT / "packages" / "monthly-close-control-plane"),
-        ]
-        from closecontrol.engine import _integrity_exceptions
-        from closecontrol.loader import load_canonical_tb as load_monthly
-
         expected = {
             "passing.csv": (True, Decimal("0"), Decimal("0")),
             "failing_movement.csv": (False, Decimal("0.01"), Decimal("0")),
@@ -107,15 +100,16 @@ class CanonicalContractTest(unittest.TestCase):
                 self.assertEqual(tuple(row["account_code"] for row in readiness["rows"]), ACCOUNT_CODES)
 
                 # Monthly close: a blocked integrity exception carries the exact 0.01 difference.
-                monthly_rows = load_monthly(fixture)
-                monthly_findings = _integrity_exceptions(monthly_rows, "current")
+                monthly = monthly_probe({"op": "tb_integrity", "path": str(fixture),
+                                         "hex": fixture.read_bytes().hex()})["ok"]
+                monthly_rows, monthly_findings = monthly["rows"], monthly["findings"]
                 self.assertEqual(monthly_findings == [], accept)
                 self.assertEqual(
-                    [(item.status, item.difference) for item in monthly_findings],
+                    [(item["status"], Decimal(item["difference"])) for item in monthly_findings],
                     [] if accept else [("BLOCKED", movement + ytd)],
                 )
-                self.assertEqual(tuple(row.key for row in monthly_rows), IDENTITY)
-                self.assertEqual(tuple(row.account_code for row in monthly_rows), ACCOUNT_CODES)
+                self.assertEqual(tuple((row["tenant"], row["account_id"]) for row in monthly_rows), IDENTITY)
+                self.assertEqual(tuple(row["account_code"] for row in monthly_rows), ACCOUNT_CODES)
 
 
 if __name__ == "__main__":

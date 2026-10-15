@@ -1,18 +1,8 @@
 name: tests
-# removed-jobs: component
-
-# The `test`, `package` and `lint` jobs are Monthly Close Controls' own checks,
-# which its release workflow selects by name, so they keep their ids. This
-# workflow carries no path filter, so `pipeline-gates`, the check branch
-# protection requires, reports on every pull request. They run the same gates as ci-package.yml: `test` measures branch
-# coverage and `dependency-audit` runs pip-audit against the locked
-# environment. The `rust` matrix checks the native packages on Linux and Windows.
-# Every main push runs the component checks the active release gates require.
-# The `windows` job runs Monthly
-# Close Controls with coverage; `windows-workspace` checks the full suite
-# from the root on Windows. The Excel adapter and the Power BI
-# application have no pyproject.toml and are not workspace members; their
-# standard-library suites run in standard-library-components.yml.
+# removed-jobs: component, test, package, lint, windows, codecov
+# Native component checks run on Linux and Windows. The dependency audit checks
+# Monthly Close Controls against RustSec; the Windows workspace keeps the joined
+# Python conformance consumers. pipeline-gates reports for every pull request.
 
 on:
   push:
@@ -31,169 +21,25 @@ env:
   UV_PYTHON: "3.15"
 
 jobs:
-  test:
-    permissions:
-      contents: read
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.14", "3.15"]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: ${{ matrix.python }}
-          allow-prereleases: true
-      - name: Install the locked toolchain
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.13.0"
-          enable-cache: true
-          save-cache: ${{ github.ref == 'refs/heads/main' }}
-          prune-cache: true
-      # No -q here: the component's pytest addopts already sets it, and a second
-      # one is -qq, which drops the "N passed" count from the log. --cov takes
-      # its source from the component's [tool.coverage.run] configuration, the
-      # same gate ci-package.yml runs for the other components.
-      - name: run tests with branch coverage
-        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
-        working-directory: packages/monthly-close-control-plane
-        env:
-          UV_PYTHON: ${{ matrix.python }}
-      - name: keep the coverage report for the Codecov upload
-        if: matrix.python == '3.14'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: coverage-codecov
-          path: packages/monthly-close-control-plane/coverage.xml
-          retention-days: 1
-
   dependency-audit:
     permissions:
       contents: read
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/monthly-close-control-plane
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.15"
-          allow-prereleases: true
-      - name: Install the locked toolchain
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.13.0"
-          enable-cache: true
-          save-cache: ${{ github.ref == 'refs/heads/main' }}
-          prune-cache: true
-      - name: audit the locked project environment
-        run: uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
-        working-directory: packages/monthly-close-control-plane
-
-  package:
-    permissions:
-      contents: read
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.15"
-          allow-prereleases: true
-      - name: Install the locked toolchain
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.13.0"
-          enable-cache: true
-          save-cache: ${{ github.ref == 'refs/heads/main' }}
-          prune-cache: true
-      - run: uv run --locked --extra dev --python 3.14 python -m build  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
-        working-directory: packages/monthly-close-control-plane
-      - name: Install and smoke-test the built wheel outside the checkout
-        working-directory: packages/monthly-close-control-plane
-        run: |
-          python -m venv /tmp/venv
-          wheels=(dist/*.whl)
-          test "${#wheels[@]}" -eq 1
-          /tmp/venv/bin/pip install --no-index dist/*.whl
-          cd /tmp
-          /tmp/venv/bin/python -I \
-            "$GITHUB_WORKSPACE/packages/monthly-close-control-plane/tests/smoke_installed_wheel.py" \
-            "$GITHUB_WORKSPACE/packages/monthly-close-control-plane"
-
-  lint:
-    permissions:
-      contents: read
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.15"
-          allow-prereleases: true
-      - name: install the locked toolchain
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.13.0"
-          enable-cache: true
-          save-cache: ${{ github.ref == 'refs/heads/main' }}
-          prune-cache: true
-      - run: uv run --locked --extra dev ruff check closecontrol tests  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
-        working-directory: packages/monthly-close-control-plane
-      - run: uv run --locked --extra dev mypy closecontrol  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
-        working-directory: packages/monthly-close-control-plane
-
-  windows:
-    # Monthly Close Controls' documented Windows wheel smoke follows this suite.
-    # The native exporter and ledger gateway have Windows legs in the Rust job.
-    # A Windows leg inside ci-package.yml would rename every `test (3.x)` job
-    # the release callers require by name, so this is one extra job instead. It
-    # runs the same command as the Linux gates, from the component directory.
-    name: windows (${{ matrix.package_dir }})
-    permissions:
-      contents: read
-    timeout-minutes: 30
-    runs-on: windows-latest
-    env:
-      UV_PYTHON: "3.15"
-    strategy:
-      fail-fast: false
-      matrix:
-        package_dir:
-          - packages/monthly-close-control-plane
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.15"
-          allow-prereleases: true
-      - name: install the locked toolchain
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: "0.13.0"
-          enable-cache: true
-          save-cache: ${{ github.ref == 'refs/heads/main' }}
-          prune-cache: true
-      - name: run tests with branch coverage
-        run: uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
-        working-directory: ${{ matrix.package_dir }}
+      - name: Install the current RustSec audit tool
+        run: cargo install cargo-audit --locked
+      - name: Audit the native dependency lock
+        run: cargo audit --deny warnings
 
   rust:
-    # The ledger gate, readiness gate, evatt and exporter are Rust crates from 1.0.0.
+    # These five packages are native Rust crates from 1.0.0.
     # Each rust-toolchain.toml pins the toolchain. Windows also exercises staged
     # validation writes and evatt's record links, native paths and text streams.
     name: ${{ matrix.package_dir }} / rust (${{ matrix.os }})
@@ -205,7 +51,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate]
+        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate, packages/monthly-close-control-plane]
     defaults:
       run:
         shell: bash
@@ -222,7 +68,7 @@ jobs:
       - name: test
         run: cargo test --locked --all-features
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate'
+        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane'
         with:
           python-version: '3.15'
       - name: Compare the exporter with the pinned Python baseline
@@ -252,6 +98,16 @@ jobs:
           git -C "$GITHUB_WORKSPACE" archive 8061079d0b4206d064c54751aa047af8588fa265:packages/review-ready-gate | tar -xf - -C "$baseline"
           cargo build --locked --features probe --bins
           cargo run --locked --features probe --bin review-ready-differential -- "$(command -v python)" "$baseline" 1
+      - name: Compare Monthly Close Controls with the frozen Python baseline
+        if: matrix.package_dir == 'packages/monthly-close-control-plane'
+        run: |
+          temp_root="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
+          baseline="$temp_root/monthly-close-python-baseline"
+          mkdir -p "$baseline"
+          git -C "$GITHUB_WORKSPACE" archive 2523f118bd9f1a5bda6e3540e06647a03371fe04:packages/monthly-close-control-plane | tar -xf - -C "$baseline"
+          cargo build --locked --features probe --bins
+          cargo run --locked --features probe --bin close-control-differential -- "$(command -v python)" "$baseline" 1
       - name: build
         run: cargo build --locked --release
       - name: smoke the release binary from an empty directory
@@ -308,39 +164,19 @@ jobs:
       - name: lint the workspace
         run: uv run --locked --group dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
       - name: type-check the workspace
-        run: uv run --locked --group dev mypy  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          python = Path(".venv/Scripts/python.exe").resolve()
+          for component in ("adapters/accounting-excel-toolkit", "apps/australian-accounting-power-bi", "apps/grant-acquittal-workpapers"):
+              subprocess.run([str(python), "-m", "mypy"], cwd=component, check=True)
       - name: run the full suite
         run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
 
-  # The upload runs apart from the tests so the OIDC token is never available
-  # while test code runs. It is exempt from pipeline-gates: a Codecov outage must not
-  # block merges.
-  codecov:
-    name: upload coverage to Codecov
-    needs: test
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      id-token: write # Authenticate the Codecov upload with OIDC; no stored token.
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: coverage-codecov
-      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-        with:
-          use_oidc: true
-          files: coverage.xml
-          disable_search: true
-          fail_ci_if_error: true
-          flags: monthly-close-control-plane
-
   pipeline-gates:
-    needs: [test, dependency-audit, package, lint, windows, rust, windows-workspace]
+    needs: [dependency-audit, rust, windows-workspace]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -370,4 +206,4 @@ jobs:
       - name: Require every job to be listed and kept
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: python3 .github/ci/check_gates.py .github/workflows/ci.yml pipeline-gates --no-results --exempt codecov
+        run: python3 .github/ci/check_gates.py .github/workflows/ci.yml pipeline-gates --no-results

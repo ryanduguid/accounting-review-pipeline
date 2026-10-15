@@ -28,7 +28,7 @@ are named. A changed subledger digest also makes absence NOT_COMPARABLE because
 the existing pack stores its digest, not the complete covered account list.
 
 Comparison works on findings, not balances, so an error no single run flags can
-never appear in it. The fabricated ledger in `tests/test_comparison.py` posts 150
+never appear in it. The historical Python comparison regression's fabricated ledger posts 150
 of software subscriptions to Office Expenses every month for a financial year.
 At the default thresholds no pack or comparison names either account, and the
 June close passes with Office Expenses overstated by 1,800, a quarter of its

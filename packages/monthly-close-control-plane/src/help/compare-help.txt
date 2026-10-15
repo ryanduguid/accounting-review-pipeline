@@ -1,0 +1,13 @@
+usage: close-control compare [-h] --previous-pack PREVIOUS_PACK
+                             --current-pack CURRENT_PACK
+                             --previous-tb PREVIOUS_TB --current-tb CURRENT_TB
+                             [--responses RESPONSES]
+
+options:
+  -h, --help            show this help message and exit
+  --previous-pack PREVIOUS_PACK
+  --current-pack CURRENT_PACK
+  --previous-tb PREVIOUS_TB
+  --current-tb CURRENT_TB
+  --responses RESPONSES
+                        optional responses bound to the current pack

@@ -1,0 +1,6 @@
+usage: close-control view [-h] --pack-dir PACK_DIR
+
+options:
+  -h, --help           show this help message and exit
+  --pack-dir PACK_DIR  directory holding close-review-pack.json, close-
+                       summary.md, exceptions.csv and client-queries.csv

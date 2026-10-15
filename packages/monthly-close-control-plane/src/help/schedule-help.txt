@@ -1,0 +1,7 @@
+usage: close-control schedule [-h] --kind {expenses,migration,interentity}
+                              --input INPUT
+
+options:
+  -h, --help            show this help message and exit
+  --kind {expenses,migration,interentity}
+  --input INPUT

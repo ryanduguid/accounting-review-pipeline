@@ -43,8 +43,6 @@ jobs:
       SNYK_TARGETS: |
         uv:.
         uv:apps/grant-acquittal-workpapers
-        uv:packages/monthly-close-control-plane
-        uv:packages/review-ready-gate
         pip:packages/xero-trial-balance-export/tests/differential/requirements.lock
         npm:apps/australian-accounting-power-bi/package-lock.json
     steps:

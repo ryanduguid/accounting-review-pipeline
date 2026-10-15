@@ -1,27 +1,17 @@
-The Atheris target writes fabricated bytes to a file and reads it with Monthly
-Close Controls' trial-balance, mapping, mapping-policy, balance-policy and
-subledger loaders. Each malformed file must be refused with
-`ControlInputError`, the error the command line reports. Anything else that
-escapes fails the run. The seed corpus holds the component's example inputs,
-truncated to 4 KiB, and an empty file.
-
-On Linux with Python 3.14, from the repository root, run:
+The native harness replays fabricated bytes through Monthly Close Controls'
+trial-balance, mapping, mapping-policy, balance-policy and subledger loaders.
+Expected validation errors are returned; a panic fails the run. Seeds are at
+most 4 KiB. From the repository root:
 
 ```sh
-python -m pip install --require-hashes --only-binary :all: -r fuzz/requirements-fuzz.txt
-python -m fuzz.close_control_loader fuzz/corpus -max_total_time=60 -max_len=4096 -timeout=2 -rss_limit_mb=1024
+cargo run --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --features tools --bin close-control-fuzz -- fuzz/corpus 60
 ```
 
-The component has no runtime dependencies, so the harness imports it from
-`packages/monthly-close-control-plane`. `.github/workflows/fuzzing.yml` runs
-the target after main pushes, weekly and on demand, with read-only repository
-access and a five-minute timeout; it is not a merge gate.
-`tests/test_fuzz_harness.py` replays the corpus in the root suite. Atheris
-does not support Windows, so coverage-guided fuzzing runs on Linux. A
-successful run is bounded evidence, not proof that every input is handled.
-
-After changing the pinned version, regenerate the hashes with:
-
-```sh
-uv pip compile fuzz/requirements-fuzz.in --python-version 3.14 --python-platform x86_64-unknown-linux-gnu --generate-hashes --output-file fuzz/requirements-fuzz.txt
-```
+Use `0` seconds for corpus replay only. A non-zero duration adds deterministic
+single-byte changes, deletions and appends until its deadline. The workflow
+adds an external 90-second process timeout and a five-minute job limit.
+`tests/test_fuzz_harness.py` checks native corpus replay in the root suite.
+The scheduled workflow retains read-only repository access and is not a merge
+gate. Its mutation pass does not measure code coverage; the former Python
+Atheris coverage does not establish Rust coverage. Successful runs are bounded
+evidence, not proof that every input is handled.

@@ -15,14 +15,17 @@
 ```
 
 [![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
-[![PyPI](https://img.shields.io/pypi/v/monthly-close-control-plane.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/monthly-close-control-plane/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
-[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
 
 The maintained source is under
 [`packages/monthly-close-control-plane`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane)
 in the Accounting Review Pipeline. The `monthly-close-control-plane`
 distribution and `close-control` command remain compatibility identifiers.
+
+Version 1.0.0 provides a standalone Rust `close-control` binary. Install from this
+directory with `cargo install --locked --path .`. It replaces the Python runtime
+and import API. Native release publishing is not configured; see
+[RELEASING.md](RELEASING.md) before preparing a release.
 
 A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
 
@@ -52,9 +55,8 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
-No Python or clone needed: the [reviewer quick start](docs/reviewer-quick-start.md)
-runs the published 0.1.5 release on fabricated files with `uvx`, and shows how to
-keep the resulting pack with a job and check it later.
+The [reviewer quick start](docs/reviewer-quick-start.md) uses fabricated files and
+shows how to retain and verify a saved pack.
 
 Published controls: [compare successive verified close packs](docs/close-comparison.md)
 and [reconcile ledger equity movements](docs/equity-reconciliation.md).
@@ -62,9 +64,9 @@ and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots and inter-entity balances from supplied canonical records.
-Comparison, equity reconciliation and evidence schedules ship from 0.1.5.
-The published 0.1.8 package also includes variance drivers and the balance policy.
-The quick start remains pinned to 0.1.5; use 0.1.8 to run these controls.
+Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
+variance drivers and the balance policy. The quick start builds the native command
+from source; native publication is not configured.
 The [classification evidence check](docs/classification-evidence.md) compares
 selected postings with supplied purpose and account assertions, preserving
 original discrepancies after a recode. It first ships in 0.2.0.
@@ -88,7 +90,7 @@ fabricated data, with nothing at stake. Learn the flags here before pointing
 it at a real ledger.
 
 ```bash
-python -m pip install -e ".[dev]"
+cargo install --locked --path .
 
 close-control review \
   --current examples/current_trial_balance.csv \
@@ -241,7 +243,7 @@ existing behaviour. This option ships from 0.1.5.
 
 ## Balance policy
 
-The published 0.1.8 package accepts optional `--balance-policy` on `review` and
+The native command accepts optional `--balance-policy` on `review` and
 `workbench`. It accepts a local UTF-8 CSV with exactly
 `AccountID,ExpectedBalance,ExpectMovement` columns. `ExpectedBalance` is
 `debit`, `credit`, `nil` or `any`; `ExpectMovement` is `yes` or `no`. Blank
@@ -567,14 +569,19 @@ Passed through unchanged:
 ## Development
 
 ```bash
-python -m pip install -e ".[dev]"
-pytest
-python -m build
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release --bin close-control
 ```
 
 The test suite covers schema gates, exact balancing, variance and metadata exceptions, mapping and subledger checks, deterministic pack generation, acknowledgement parsing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14 and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements.
+Continuous integration runs Rust checks, frozen Python 3.15 differential cases
+and native binary smokes on Linux and Windows, plus a RustSec dependency audit.
+CodeQL does not analyse Rust here. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+verification and data handling, and [RELEASE_NOTES.md](RELEASE_NOTES.md) for
+the breaking API removal and compatibility limits.
 
 ## Related
 

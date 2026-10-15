@@ -10,28 +10,23 @@ Keep this project in its narrow role: a local, deterministic review-pack generat
 
 ## Local verification
 
-Python 3.14 or newer. The repository uses `uv` and commits its lock file.
+Use the stable Rust toolchain pinned in `rust-toolchain.toml`, from this directory:
 
 ```bash
-uv lock --check
-uv sync --locked --all-extras
-uv run pytest
-uv build
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release --bin close-control
 ```
 
-For a behaviour change, add or update a focused test under `tests/`. Keep the output deterministic: no wall-clock timestamps, client identifiers or hidden state in a review pack.
+For a behaviour change, add or update a focused Rust test. Keep the output deterministic: no wall-clock timestamps, client identifiers or hidden state in a review pack.
 
-Some of these checks read files that live above this component and are not in
-the source archive. Run them from a full `accounting-review-pipeline` checkout:
-`tests/test_repository_guidance.py` reads the root `AGENTS.md`, `README.md` and
-`.github/workflows/`; `tests/test_xero_trial_balance_contract.py` reads
-`contracts/xero-trial-balance-v1/`; and
-`test_repository_identity_is_distinct_from_package_identity` in
-`tests/test_workflow_examples.py` reads the root release caller. From an
-extracted source archive they fail for want of those files, not for a defect in
-this package. `test_output_inside_repository_rejected_before_source_read` needs
-the run to sit inside a version-control checkout, which an extracted archive is
-not.
+The `probe` feature enables the migration differential harness; Python 3.15 is
+needed only to run its frozen 0.2.0 oracle. Follow `AGENTS.md` for that comparison,
+the all-command binary smoke and the RustSec dependency check. Production needs
+no Python interpreter. The retained cross-repository utility helpers and their
+tests use the root development environment. Run joined conformance and workflow
+checks from a full `accounting-review-pipeline` checkout.
 
 ## Pull requests
 

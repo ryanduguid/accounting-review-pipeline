@@ -3,7 +3,7 @@
 # 1. close-control review of the co-located Elizabeth Anne Alexander same-FY
 #    sample TBs into close-control-demo/gateway-tb-loop in the checkout's parent.
 # 2. elizabeth-anne-alexander evaluate against that package's bundled samples/
-#    context, if the CLI is on PATH or importable. Context is never this package's
+#    context, if the native CLI or Cargo crate is available. Context is never this package's
 #    examples/ (the Varrock June/July pair crosses the 1 July FY reset).
 #
 # Set ELIZABETH_ANNE_ALEXANDER_ROOT only when using a separate checkout.
@@ -51,29 +51,23 @@ Do not substitute examples/current_trial_balance.csv and examples/prior_trial_ba
 "@
 }
 
-function Get-Python {
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($null -ne $python) {
-        return $python.Source
-    }
-    throw "python is not on PATH. Install Python 3.14+ and retry."
-}
-
-function Invoke-NamedOrModuleCli {
+function Invoke-NativeCli {
     param(
         [Parameter(Mandatory = $true)][string]$CommandName,
-        [Parameter(Mandatory = $true)][string]$ModuleName,
+        [Parameter(Mandatory = $true)][string]$ComponentRoot,
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
-    # Do not return $LASTEXITCODE: native stdout would then mix with the
-    # integer and the caller could not test the exit code.
-    $cmd = Get-Command $CommandName -ErrorAction SilentlyContinue
-    if ($null -ne $cmd) {
-        & $cmd.Source @Arguments
+    $command = Get-Command $CommandName -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        & $command.Source @Arguments
         return
     }
-    $python = Get-Python
-    & $python -m $ModuleName @Arguments
+    if (-not (Test-Path -LiteralPath (Join-Path $ComponentRoot "Cargo.toml"))) {
+        throw "Cannot find the native $CommandName crate at $ComponentRoot."
+    }
+    Push-Location $ComponentRoot
+    try { cargo run --locked --release --bin $CommandName -- @Arguments }
+    finally { Pop-Location }
 }
 
 # Beside the checkout, not inside it: close-control refuses an --output
@@ -94,7 +88,7 @@ $ReviewArgs = @(
 )
 
 Write-Host "close-control review -> $OutputDir"
-Invoke-NamedOrModuleCli -CommandName "close-control" -ModuleName "closecontrol.cli" -Arguments $ReviewArgs
+Invoke-NativeCli -CommandName "close-control" -ComponentRoot $RepoRoot -Arguments $ReviewArgs
 # 0 = PASS, 2 = REVIEW/BLOCKED pack. 1 is a malformed input or unusable --output.
 if ($LASTEXITCODE -notin 0, 2) {
     throw "close-control failed with exit code $LASTEXITCODE."
@@ -109,22 +103,13 @@ $EvaluateArgs = @(
 )
 
 $gatewayCmd = Get-Command elizabeth-anne-alexander -ErrorAction SilentlyContinue
-$gatewayModule = $false
-if ($null -eq $gatewayCmd) {
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($null -ne $python) {
-        & $python.Source -c "import elizabeth_anne_alexander.cli" 2>$null
-        $gatewayModule = ($LASTEXITCODE -eq 0)
-    }
-}
-
-if ($null -ne $gatewayCmd -or $gatewayModule) {
+if ($null -ne $gatewayCmd -or (Test-Path -LiteralPath (Join-Path $GatewayRoot "Cargo.toml"))) {
     Write-Host "elizabeth-anne-alexander evaluate (bundled package samples/, not close-control examples/)"
-    Invoke-NamedOrModuleCli -CommandName "elizabeth-anne-alexander" -ModuleName "elizabeth_anne_alexander.cli" -Arguments $EvaluateArgs
+    Invoke-NativeCli -CommandName "elizabeth-anne-alexander" -ComponentRoot $GatewayRoot -Arguments $EvaluateArgs
     if ($LASTEXITCODE -ne 0) {
         throw "elizabeth-anne-alexander evaluate failed with exit code $LASTEXITCODE."
     }
 }
 else {
-    Write-Host "Skipping gateway evaluate: elizabeth-anne-alexander is not on PATH and the package is not importable."
+    Write-Host "Skipping gateway evaluate: the native executable and Cargo crate are unavailable."
 }

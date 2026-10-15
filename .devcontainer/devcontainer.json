@@ -1,10 +1,13 @@
 {
   "name": "accounting-review-pipeline",
   "image": "mcr.microsoft.com/devcontainers/python:3-3.14-bookworm",
-  "postCreateCommand": "pipx install uv==0.13.1 && uv sync --locked",
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {}
+  },
+  "postCreateCommand": "pipx install uv==0.13.1 && uv sync --locked --group dev",
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python"]
+      "extensions": ["ms-python.python", "rust-lang.rust-analyzer"]
     }
   }
 }
