@@ -1,0 +1,3 @@
+usage: close-control queue [-h] --pack-dir PACK_DIR [--period PERIOD]
+                           [--status {PASS,REVIEW,BLOCKED}]
+                           [--reviewer REVIEWER]

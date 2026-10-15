@@ -1,0 +1,26 @@
+usage: close-control [-h]
+                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule} ...
+
+Create a review-first monthly close control pack from validated trial-balance
+exports.
+
+positional arguments:
+  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule}
+    review (workbench)  run integrity, variance, mapping, and optional
+                        reconciliation controls (as `workbench`, with the
+                        local close-review banner)
+    view                display an existing review pack after verifying its
+                        four files agree
+    queue               filter explicitly supplied close packs after verifying
+                        every pack
+    reconcile           review clearing-account transactions and carry
+                        outstanding items forward
+    drivers             rank the transactions behind each period variance in a
+                        verified pack
+    compare             compare verified close packs without changing them
+    classify            compare postings with supplied bill-purpose evidence
+    schedule            review a canonical expense, migration or inter-entity
+                        schedule
+
+options:
+  -h, --help            show this help message and exit

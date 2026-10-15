@@ -6,19 +6,20 @@ and compares two verified runs. All demonstration assertions are fabricated.
 
 ## Build the shared case
 
-From the repository root, install Monthly Close Controls with `uv sync --locked`
-and build the Rust readiness binary. On Windows, put it beside the installed
-close-control launcher:
+From the repository root, build both native producer commands. On Windows,
+install them into the shared development environment's command directory:
 
 ```powershell
-Set-Location packages/review-ready-gate
-cargo build --locked --release
-Set-Location ../..
+uv sync --locked --group dev
+cargo build --locked --release --manifest-path packages/review-ready-gate/Cargo.toml --bin review-ready
+cargo build --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control
 Copy-Item packages/review-ready-gate/target/release/review-ready.exe .venv/Scripts/review-ready.exe
+Copy-Item packages/monthly-close-control-plane/target/release/close-control.exe .venv/Scripts/close-control.exe
 ```
 
-On Linux, copy `target/release/review-ready` into the environment's `bin`
-directory. Rebuild and copy after a native producer change.
+On Linux, copy each component's `target/release/review-ready` or
+`target/release/close-control` into the environment's `bin` directory.
+Rebuild and copy after a native producer change.
 Run these commands from this component directory, with new output directories
 outside every Git checkout:
 
@@ -33,10 +34,8 @@ Use `--bin-dir` for another installed CLI directory. On Linux, supply the
 environment's `bin` directory explicitly. The workflow invokes `review-ready`
 and `close-control` as independent commands. It imports no sibling runtime.
 It retains the commands, producer manifests, timestamps, exit codes and logs.
-The close-control manifest binds its Python launcher, interpreter, distribution,
-entry point and first-party package files. The version 2 review-ready manifest
-binds the native package version and executable hash. Normal uv and PyPA
-close-control launchers are supported; review-ready requires the native binary.
+Each version 2 producer manifest binds that command's native package version
+and executable hash. Both commands require native binaries.
 Unknown launchers, linked paths and changed identities are refused.
 Historical version 1 manifests can be read, but a live run must match the current
 installed producer identity. Rebuild earlier demonstration runs after migration.

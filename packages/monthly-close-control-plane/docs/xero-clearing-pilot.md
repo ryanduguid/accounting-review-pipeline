@@ -82,9 +82,10 @@ from the native-export trial and has no independent human review.
 July's source debits total 370 and credits total 327. Its closing balance is 43
 with 6 outstanding lines after accepting the reversal. August's movement is
 -43 and its closing balance is zero, but 2 unrelated lines remain outstanding.
-The test is `test_partial_settlements_roll_forward_without_clearing_unrelated_zero_net_items`
-in [test_reconciliation.py](../tests/test_reconciliation.py). Run the documented
-component test command, `uv run pytest`.
+The historical Python regression was
+`test_partial_settlements_roll_forward_without_clearing_unrelated_zero_net_items`.
+Native reconciliation checks live in `src/reconciliation.rs` and the migration
+differential corpus. Run `cargo test --locked --all-features` from the component.
 
 ## Bookkeeper trial record
 

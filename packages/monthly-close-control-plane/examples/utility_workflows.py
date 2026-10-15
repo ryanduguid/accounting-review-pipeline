@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import runpy
 import shutil
 import signal
@@ -53,7 +54,8 @@ def project_evidence(project):
     root = Path(git_output(project, "rev-parse", "--show-toplevel").strip()).resolve()
     relative = project.relative_to(root)
     lock_owner = project
-    for parent in (project, *project.parents):
+    native = (project / "Cargo.toml").is_file()
+    for parent in (() if native else (project, *project.parents)):
         manifest = parent / "pyproject.toml"
         if manifest.is_file():
             workspace = tomllib.loads(manifest.read_text(encoding="utf-8")).get("tool", {}).get("uv", {}).get("workspace")
@@ -65,7 +67,7 @@ def project_evidence(project):
                     break
         if parent == root:
             break
-    lock = lock_owner / ("uv.lock" if (lock_owner / "pyproject.toml").is_file() else "Cargo.lock")
+    lock = lock_owner / ("Cargo.lock" if native else "uv.lock")
     if not lock.is_file():
         raise ValueError(f"Missing authoritative lockfile: {lock}")
     paths = git_output(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
@@ -98,11 +100,9 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
     required = {"all": {"wip", "grants"}, "job-cash": {"wip"}, "grant-cash": {"grants"}}.get(workflow, set())
     if required - projects.keys():
         raise ValueError("This workflow needs --accounting and/or --grants checkouts")
-    for project in projects.values():
-        if not any((project / name).is_file() for name in ("pyproject.toml", "Cargo.toml")):
+    for owner, project in projects.items():
+        if not (project / ("Cargo.toml" if owner == "close" else "pyproject.toml")).is_file():
             raise ValueError(f"Missing project manifest: {project}")
-    # The WIP Tally is a Rust crate from australian-accounting PR #430; earlier revisions are uv projects.
-    cargo = {owner for owner, project in projects.items() if not (project / "pyproject.toml").is_file()}
     output = output.resolve()
     roots = [COMPONENT.parents[1], fpa.resolve(), *([accounting.resolve()] if accounting else []), *([grants.resolve()] if grants else [])]
     roots.extend(projects.values())
@@ -119,16 +119,11 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
             raise ValueError("Fresh environments must be outside source checkouts")
     if shutil.which("uv") is None:
         raise ValueError("Install uv before running the locked workflow")
-    if "grants" in required and shutil.which("cargo") is None:
-        raise ValueError("Install Rust (cargo) before running the grant workflow")
-    if "wip" in required and "wip" in cargo:
-        if shutil.which("cargo") is None:
-            raise ValueError("Install Rust (cargo) before running the job-cash workflow")
-        if not (projects["wip"] / "examples/job_to_cash.rs").is_file():
-            raise ValueError("The WIP checkout needs examples/job_to_cash.rs from australian-accounting PR #430")
-    elif "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
+    if shutil.which("cargo") is None:
+        raise ValueError("Install Rust (cargo) before running the native close workflow")
+    if "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
         raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
-    return {"projects": projects, "output": output, "environment_root": environment_root, "cargo": cargo}
+    return {"projects": projects, "output": output, "environment_root": environment_root}
 
 
 def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, grants: Path | None = None,
@@ -137,7 +132,6 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         raise ValueError("Command timeout must be positive and at most 3600 seconds")
     prepared = prepare(output, fpa, accounting, grants, environment_root, workflow)
     projects, output, environment_root = (prepared[key] for key in ("projects", "output", "environment_root"))
-    cargo = prepared.get("cargo", set())
     provenance = {owner: project_evidence(project) for owner, project in projects.items()}
     output.mkdir(parents=True)
     (output / "replay.json").write_text(json.dumps({"schema_version": "utility-workflows.v2",
@@ -148,7 +142,8 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
 
     def execute(owner, arguments, expected=0, kind="workflow", runner=None):
         project = projects[owner]
-        runner = runner or ["uv", "run", "--project", str(project), "--locked", "--python", "3.14", "python"]
+        runner = runner or (["cargo", "run", "--locked", "--release", "--quiet", "--bin", "close-control", "--"]
+                            if owner == "close" else ["uv", "run", "--project", str(project), "--locked", "--python", "3.14", "python"])
         command = [*runner, *map(str, arguments)]
         # RTK is optional for users. Preserve exact JSON when it is installed locally.
         if shutil.which("rtk"):
@@ -179,21 +174,23 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         (output / name).write_text(text, encoding="utf-8")
 
     def close_pack(current, prior, subledger, target, mapping=None):
-        arguments = ["-m", "closecontrol.cli", "review", "--current", current, "--prior", prior,
+        arguments = ["review", "--current", current, "--prior", prior,
                      "--subledger", subledger, "--output", target]
         if mapping is not None:
             arguments += ["--mapping", mapping]
         execute("close", arguments, 2)
-        execute("close", ["-m", "closecontrol.cli", "view", "--pack-dir", target])
+        execute("close", ["view", "--pack-dir", target])
 
     try:
-        def runtime(owner):
-            if owner in cargo:
-                # rustup resolves the project's rust-toolchain.toml from its directory.
-                return {"rustc": execute(owner, ["-vV"], kind="runtime", runner=["rustc"]).strip()}
-            return json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime"))
-
-        runtimes = {owner: runtime(owner) for owner in projects}
+        runtimes = {}
+        for owner in projects:
+            if owner == "close":
+                version = execute(owner, ["--version"], kind="runtime")
+                if not re.fullmatch(r"close-control ([1-9][0-9]*\.[0-9]+\.[0-9]+)\r?\n", version):
+                    raise ValueError("Native close runtime version differs")
+                runtimes[owner] = {"runtime": "rust", "command": "close-control", "version": version.split()[1]}
+            else:
+                runtimes[owner] = json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime"))
         uv_version = captured(["uv", "--version"], cwd=COMPONENT, timeout=30)
         if uv_version.returncode:
             raise ValueError("Unable to record uv version")
@@ -216,18 +213,14 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
                 current, prior = (quarter / periods[i]["cutoff"] for i in (index, index - 1))
                 close_pack(current / "trial-balance.csv", prior / "trial-balance.csv", current / "subledger.csv", current / "close")
                 if index > 1:
-                    comparison = execute("close", ["-m", "closecontrol.cli", "compare", "--previous-pack", prior / "close",
+                    comparison = execute("close", ["compare", "--previous-pack", prior / "close",
                         "--current-pack", current / "close", "--previous-tb", prior / "trial-balance.csv",
                         "--current-tb", current / "trial-balance.csv"])
                     (current / "comparison.json").write_text(comparison, encoding="utf-8")
         if workflow in {"all", "job-cash"}:
             for label, extra in (("job-base", "0"), ("job-extra-cost", "100000")):
                 target = output / label
-                arguments = ["--output", target, "--extra-cost-to-complete", extra]
-                if "wip" in cargo:
-                    execute("wip", arguments, runner=["cargo", "run", "--locked", "--quiet", "--example", "job_to_cash", "--"])
-                else:
-                    execute("wip", ["examples/job_to_cash.py", *arguments])
+                execute("wip", ["examples/job_to_cash.py", "--output", target, "--extra-cost-to-complete", extra])
                 forecast = execute("fpa", ["examples/job-to-cash/project_cash.py", "--pack", target])
                 (target / "project-cash.json").write_text(forecast, encoding="utf-8")
         if workflow in {"all", "grant-cash"}:

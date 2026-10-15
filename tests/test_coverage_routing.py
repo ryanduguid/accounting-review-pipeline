@@ -12,7 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class CoverageRoutingTests(unittest.TestCase):
     def test_coverage_artifact_has_a_live_matrix_producer(self) -> None:
-        for filename in ('ci.yml', 'ci-package.yml'):
+        native_jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())['jobs']
+        self.assertIn('rust', native_jobs)
+        self.assertNotIn('codecov', native_jobs)
+        for filename in ('ci-package.yml',):
             with self.subTest(workflow=filename):
                 jobs = yaml.safe_load((ROOT / '.github/workflows' / filename).read_text())['jobs']
                 versions = jobs['test']['strategy']['matrix']['python']

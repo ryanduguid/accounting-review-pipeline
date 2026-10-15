@@ -144,6 +144,60 @@ def test_command_timeout_stops_a_process(tmp_path):
         MODULE["captured"]([sys.executable, "-c", "import time; time.sleep(30)"], cwd=tmp_path, timeout=0.1)
 
 
+def test_native_project_provenance_uses_its_cargo_lock(tmp_path):
+    MODULE["git_output"](tmp_path, "init")
+    (tmp_path / "pyproject.toml").write_text('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
+    (tmp_path / "uv.lock").write_text("Python workspace resolution")
+    child = tmp_path / "packages/native"
+    child.mkdir(parents=True)
+    (child / "Cargo.toml").write_text('[package]\nname = "fixture"\n')
+    (child / "Cargo.lock").write_text("Native resolution")
+    evidence = MODULE["project_evidence"](child)
+    assert evidence["lockfile"] == "packages/native/Cargo.lock"
+    assert evidence["lock_scope"] == "project"
+
+
+def test_every_route_requires_cargo_before_creating_outputs(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text("[project]")
+    monkeypatch.setattr(MODULE["shutil"], "which", lambda name: None if name == "cargo" else "fixture")
+    output = tmp_path / "output"
+    with pytest.raises(ValueError, match="cargo"):
+        PREPARE(output, source, None, None, None, "quarter")
+    assert not output.exists()
+
+
+def test_native_runtime_probe_keeps_the_close_process_boundary(tmp_path, monkeypatch):
+    run = MODULE["run_workflows"]
+    scope = run.__globals__
+    output = tmp_path / "output"
+    monkeypatch.setitem(scope, "prepare", lambda *args: {"projects": {"close": ROOT, "fpa": tmp_path}, "output": output, "environment_root": None})
+    monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "fixture"})
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: None)
+    commands = []
+
+    def completed(command, **kwargs):
+        commands.append(command)
+        if "close-control" in command:
+            return subprocess.CompletedProcess(command, 0, "close-control 1.0.0\n", "")
+        if command[-1] == "--version":
+            return subprocess.CompletedProcess(command, 0, "uv fixture", "")
+        if "-c" in command:
+            return subprocess.CompletedProcess(command, 0, "{}", "")
+        quarter = output / "quarter"
+        quarter.mkdir()
+        (quarter / "quarter.json").write_text('{"periods": []}')
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setitem(scope, "captured", completed)
+    with pytest.raises(ValueError, match="Fixture result validation failed"):
+        run(output=output, fpa=tmp_path, workflow="quarter")
+    assert commands[0] == ["cargo", "run", "--locked", "--release", "--quiet", "--bin", "close-control", "--", "--version"]
+    calls = json.loads((output / "failed-results.json").read_text())["calls"]
+    assert sum(call["kind"] == "runtime" for call in calls) == 2
+
+
 def test_git_evidence_does_not_require_optional_rtk(tmp_path, monkeypatch):
     scope = MODULE["git_output"].__globals__
     commands = []
@@ -223,7 +277,7 @@ def test_output_and_finalisation_failures_retain_failure_summary(tmp_path, monke
 
     def completed(command, **kwargs):
         if command[-1] == "--version":
-            return subprocess.CompletedProcess(command, 0, "uv fixture", "")
+            return subprocess.CompletedProcess(command, 0, "close-control 1.0.0\n" if "close-control" in command else "uv fixture", "")
         if "-c" in command:
             return subprocess.CompletedProcess(command, 0, "invalid JSON" if failure == "runtime" else "{}", "")
         if "grant-workpaper" in command:

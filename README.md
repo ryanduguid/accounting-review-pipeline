@@ -54,7 +54,7 @@ Synthetic examples. A human decides whether the close is acceptable.
 
 ### Reproduce the sample pack
 
-From the repository root, with [uv](https://docs.astral.sh/uv/) and [just](https://github.com/casey/just) installed, run:
+From the repository root, with Rust and [just](https://github.com/casey/just) installed, run:
 
 ```bash
 just demo
@@ -67,12 +67,12 @@ The CLI and `just demo` both exit 2 because the sample needs review. The recipe 
 Check that the four result files agree before reviewing the pack:
 
 ```bash
-uv run --locked close-control view --pack-dir ../close-control-demo
+cargo run --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control -- view --pack-dir ../close-control-demo
 ```
 
-The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all four result files together and record each review decision in your workpaper. For a published-package example without a clone, use the [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md).
+The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all four result files together and record each review decision in your workpaper. The [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md) explains installation from source.
 
-The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) installs uv and runs `uv sync --locked`; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota.
+The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. The [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) configuration includes Rust and the Python development tools; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota. The updated container has not been built locally.
 
 [Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Workpaper Review Gate](packages/review-ready-gate/README.md)
 
@@ -91,7 +91,7 @@ It holds 8 independently versioned components joined only by local files and com
 |---|---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | native Rust commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 1.0.0 (unreleased) |
 | Workpaper Review Gate | `packages/review-ready-gate/` | native Rust command `review-ready`; Python runtime and import API removed | 1.0.0 (unreleased) |
-| Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, command `close-control` | 0.2.0 |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust command `close-control`; Python runtime and import API removed | 1.0.0 (unreleased) |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0 (unreleased); 0.2.6 is the released Python distribution with import `elizabeth_anne_alexander` | 0.2.6 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.8 |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
@@ -104,8 +104,8 @@ close surfaces exceptions, and the ledger-review boundary or Power BI consumes t
 evatt works separately: it pseudonymises Markdown locally before an operator hands it to an
 external model. It does not read trial balances.
 Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is
-offline and ships fabricated data only. Python review packages use exact `Decimal`
-arithmetic for money, and the Rust ledger-review gate reproduces it exactly. The Excel adapter and Power BI application use their native
+offline and ships fabricated data only. Native review commands preserve the original
+exact decimal money rules. The Excel adapter and Power BI application use their native
 numeric types, including VBA `Double`, so that Decimal guarantee does not cover them.
 
 Directory names follow each component's normalised distribution name so that the reviewed
@@ -211,13 +211,18 @@ changing their status.
 
 Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
+<<<<<<< HEAD
 `0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c`: `monthly-close-control-plane/v*`,
 `accounting-excel-toolkit/v*`. One tag publishes exactly one component; the
+=======
+`a601f1d8b143f92b0517f709216993660d21f480`: `accounting-excel-toolkit/v*`.
+One tag publishes exactly one component; the
+>>>>>>> 84659f7 (Port Monthly Close Controls to standalone Rust)
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
 
-The Rust Workpaper Review Gate 1.0.0 explicitly blocks publication until a native
+The Rust Monthly Close Controls and Workpaper Review Gate 1.0.0 explicitly block publication until a native
 publisher is approved. The Xero exporter also has no native publisher.
 The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
 until their Rust release paths are approved. Version 0.2.6 remains the released

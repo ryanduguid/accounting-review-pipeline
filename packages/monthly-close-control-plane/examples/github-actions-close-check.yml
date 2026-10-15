@@ -1,10 +1,10 @@
 # Example: scheduled close check with GitHub Actions.
 #
-# Copy this file to .github/workflows/ in your own repository and adjust the
-# paths. It runs close-control against a synthetic trial balance stored in the
-# repository and fails the job when the pack is BLOCKED.
+# This example builds close-control in an Accounting Review Pipeline checkout.
+# Adapt the source and fixture paths for another repository. Native release
+# publication is not configured; use a reviewed source revision.
 #
-# Exit codes, from closecontrol/cli.py:
+# Exit codes, from src/cli.rs:
 #   0  every control passed (PASS)
 #   1  malformed input, invalid command configuration, an --output inside a
 #      version-control checkout, or an unwritable --output
@@ -49,12 +49,12 @@ jobs:
           python-version: "3.14"
 
       - name: Install close-control
-        run: python -m pip install "monthly-close-control-plane @ https://github.com/ryanduguid/accounting-review-pipeline/releases/download/monthly-close-control-plane/v0.1.5/monthly_close_control_plane-0.1.5-py3-none-any.whl#sha256=8ebdb0b3c831eb4a1d274b8cd458be0835ce848ce2c036b0be2cd7f86897b2c2"
-        # For a checkout of this repository itself, use:
-        # run: python -m pip install .
+        working-directory: packages/monthly-close-control-plane
+        run: cargo install --locked --path . --bin close-control
 
       - name: Run the close review
         id: review
+        working-directory: packages/monthly-close-control-plane
         # The && / || pair captures the exit code without tripping the shell's
         # exit-on-error mode, so this step always succeeds and the status step
         # below decides the job outcome.

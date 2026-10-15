@@ -3,9 +3,9 @@
 Source-only additions for local preparation. Run from this component after installing its dev environment:
 
 ```powershell
-uv run --locked close-control schedule --kind expenses --input examples/schedules/expenses.json
-uv run --locked close-control schedule --kind migration --input examples/schedules/migration.json
-uv run --locked close-control schedule --kind interentity --input examples/schedules/interentity.json
+cargo run --locked --release --bin close-control -- schedule --kind expenses --input examples/schedules/expenses.json
+cargo run --locked --release --bin close-control -- schedule --kind migration --input examples/schedules/migration.json
+cargo run --locked --release --bin close-control -- schedule --kind interentity --input examples/schedules/interentity.json
 ```
 
 Each fabricated example returns REVIEW (exit 2). JSON goes to standard output. PASS exits 0; malformed input exits 1. A PASS concerns only the supplied records, never approval, completeness of a ledger or a tax conclusion. Redirect output to a new file outside the checkout when retaining a workpaper. The result contains the SHA-256 of the exact input bytes.
