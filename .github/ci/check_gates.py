@@ -9,8 +9,8 @@ parents (fetch-depth: 2). It fails when:
 - a needed job did not succeed (skipped with --no-results, where the gate
   applies its own result rules);
 - a job in WORKFLOW other than GATE and the exempt jobs is missing from needs;
-- on a pull request, a job on the base branch's copy of WORKFLOW (or, for a new
-  or renamed file, of the one base workflow reporting the gate's context) is gone, and WORKFLOW
+- on a pull request, a job in the base copy or unique context predecessor of
+  WORKFLOW is gone, and WORKFLOW
   has no comment "# removed-jobs: JOB" naming it (the declaration lives in the
   file, so it cannot change without a new commit and a new run);
 - a line at job-key indentation in the jobs block is not a job key it can read.
@@ -224,14 +224,50 @@ def possible_context(names: set[str] | None, context: str) -> bool:
     return False
 
 
-def base_copy(workflow: str, gate: str, head: str) -> str | None:
-    """Return the base branch's copy of WORKFLOW, or of its predecessor, or None if it is new."""
+def workflow_modes(text: str) -> set[str] | None:
+    """Read event names from a scalar, flat list or plain block; aliases stay unknown."""
+    lines = text.splitlines()
+    headers = [line for line in lines if job_key(line) == "on"]
+    if len(headers) != 1:
+        return None
+    tail = headers[0].split(":", 1)[1].strip()
+    if not tail or tail.startswith("#"):
+        body = block(lines, "on", 0)
+        if body is None:
+            return None
+        events: set[str] = set()
+        for line in body:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            if line.startswith("  ") and line[2:3] != " ":
+                event = job_key(line[2:])
+                if event is None or event in events:
+                    return None
+                events.add(event)
+            elif not events:
+                return None
+    else:
+        tail = re.split(r"\s+#", tail, maxsplit=1)[0].strip()
+        values = tail[1:-1].split(",") if tail.startswith("[") and tail.endswith("]") else [tail]
+        names = [literal_name(value) for value in values]
+        if any(name is None or job_key(name + ":") != name for name in names):
+            return None
+        events = set(names)
+    return {"callable" if event == "workflow_call" else "standalone" for event in events} or None
+
+
+def base_jobs(workflow: str, gate: str, head: str) -> set[str]:
+    """Keep both destination and uniquely established context-source removal obligations."""
+    required: set[str] = set()
     if git("ls-tree", "--name-only", "HEAD^1", "--", workflow).strip():
-        return git("show", f"HEAD^1:{workflow}")
+        required.update(job_ids(git("show", f"HEAD^1:{workflow}")))
     names = parse_jobs(head)[0][gate]
     if names is None or len(names) != 1 or any("${{" in name for name in names):
         sys.exit("Cannot determine the gate context; use a single-line literal name")
     context = next(iter(names))
+    modes = workflow_modes(head)
+    if modes is None or len(modes) != 1:
+        sys.exit("Cannot determine the workflow invocation namespace; update the reader")
     # shortcut: only static include rows and literal-result conditionals resolve;
     # keep other expressions possible and use a maintained parser for broader YAML.
     candidates = []
@@ -240,19 +276,26 @@ def base_copy(workflow: str, gate: str, head: str) -> str | None:
         # GitHub reads workflows only from the top level of .github/workflows.
         if path.count("/") == 2 and path.endswith((".yml", ".yaml")):
             text = git("show", f"HEAD^1:{path}")
+            base_modes = workflow_modes(text)
+            if base_modes is not None and not modes & base_modes:
+                continue
             parsed = parse_jobs(text)
             if parsed is None or not parsed[0] or parsed[1]:
                 sys.exit(f"Cannot read base workflow {path}; the gate check needs updating")
             for names in parsed[0].values():
                 if possible_context(names, context):
+                    if base_modes is None:
+                        sys.exit(f"Cannot determine the invocation namespace in {path}; update the reader")
                     if names is None or any("${{" in name for name in names):
                         sys.exit(f"Cannot resolve a possible gate context in {path}; update the reader")
-                    candidates.append(text)
+                    candidates.append(set(parsed[0]))
     if len(candidates) > 1:
         sys.exit(
             f"More than one base job can precede {gate}; the gate check needs updating"
         )
-    return candidates[0] if candidates else None
+    if candidates:
+        required.update(candidates[0])
+    return required
 
 
 def workflow_file(argument: str) -> str:
@@ -307,10 +350,10 @@ def main(argv: list[str]) -> None:
     # the merge was made against. A missing parent fails the check rather than
     # skipping it; a workflow and gate both new in this pull request have no base.
     base = (
-        base_copy(workflow, gate, text) if os.environ.get("GITHUB_EVENT_NAME") == "pull_request" else None
+        base_jobs(workflow, gate, text) if os.environ.get("GITHUB_EVENT_NAME") == "pull_request" else None
     )
     if base is not None:
-        removed = job_ids(base) - jobs
+        removed = base - jobs
         if removed & declared:
             print(f"Declared removals from {workflow}: {', '.join(sorted(removed & declared))}")
         undeclared = sorted(removed - declared)
