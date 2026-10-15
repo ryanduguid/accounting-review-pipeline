@@ -41,8 +41,19 @@ class GateReaderTests(unittest.TestCase):
             if args[0] == "ls-tree":
                 return "" if "-r" not in args else "\0".join(sources) + "\0"
             return sources[args[1].split(":", 1)[1]]
-        with patch.object(checker, "git", side_effect=git):
+        with patch.object(checker, "git", side_effect=git), patch.object(checker, "base_workflow_paths", return_value=list(sources)):
             return checker.base_jobs(".github/workflows/new.yml", "replacement", workflow(head))
+
+    def test_path_listing_preserves_linebreaks_and_rejects_invalid_utf8(self):
+        paths = [".github/workflows/ci\r.yml", ".github/workflows/ci\n.yml"]
+        completed = subprocess.CompletedProcess([], 0, "\0".join(paths).encode("utf-8") + b"\0")
+        with patch.object(checker.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(checker.base_workflow_paths(), paths + [""])
+            self.assertNotIn("encoding", run.call_args.kwargs)
+            self.assertNotIn("text", run.call_args.kwargs)
+        with patch.object(checker.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"\xff\0")):
+            with self.assertRaises(UnicodeDecodeError):
+                checker.base_workflow_paths()
 
     def test_literal_names_and_quoted_job_keys(self):
         self.assertEqual(self.names("  'plain':\n    runs-on: linux\n  other:\n    name: 'It''s quoted' # comment\n"), {"plain": {"plain"}, "other": {"It's quoted"}})
@@ -135,7 +146,7 @@ class GateReaderTests(unittest.TestCase):
     def test_same_path_and_context_sources_both_contribute_jobs(self):
         destination = workflow("  existing:\n    runs-on: linux\n")
         source = workflow("  original:\n    name: protected\n")
-        with patch.object(checker, "git", side_effect=["new.yml", destination, ".github/workflows/old.yml", source]):
+        with patch.object(checker, "git", side_effect=["new.yml", destination, source]), patch.object(checker, "base_workflow_paths", return_value=[".github/workflows/old.yml"]):
             self.assertEqual(checker.base_jobs(".github/workflows/new.yml", "replacement", workflow("  replacement:\n    name: protected\n")), {"existing", "original"})
 
     def test_event_forms_and_unknown_namespaces(self):
@@ -163,11 +174,11 @@ class GateReaderTests(unittest.TestCase):
 
 
 class PipelineGatePredecessorTests(unittest.TestCase):
-    def run_fixture(self, gate, context, declaration="", destination="renamed.yml", reusable=False, quoted_path=False, tab_comment=False):
+    def run_fixture(self, gate, context, declaration="", destination="renamed.yml", reusable=False, quoted_path=False, tab_comment=False, control_paths=False):
         source_name = "ci-package.yml" if reusable else "ci.yml"
         old_gate = "gates" if reusable else OLD_GATE
         base = (ROOT / ".github/workflows" / source_name).read_text(encoding="utf-8")
-        base_name = "c\u00ed.yml" if quoted_path else source_name
+        base_name = "ci\r.yml" if control_paths else "c\u00ed.yml" if quoted_path else source_name
         if quoted_path:
             base = base.replace(f".github/workflows/{source_name}", f".github/workflows/{base_name}")
         needs = "    needs: [changes, test, lint, dependency-audit, build]\n" if reusable else NEEDS
@@ -209,10 +220,10 @@ class PipelineGatePredecessorTests(unittest.TestCase):
                 RESULTS=json.dumps(results),
             )
 
-            def git(*args):
+            def git(*args, raw=False):
                 return subprocess.run(
                     [*git_command, *args], cwd=repo, env=env,
-                    capture_output=True, text=True, encoding="utf-8", check=True, timeout=10,
+                    capture_output=True, text=not raw, encoding=None if raw else "utf-8", check=True, timeout=10,
                 )
 
             workflows = repo / ".github/workflows"
@@ -220,9 +231,11 @@ class PipelineGatePredecessorTests(unittest.TestCase):
             source_workflows = ROOT / ".github/workflows"
             for source in sorted([*source_workflows.glob("*.yml"), *source_workflows.glob("*.yaml")]):
                 (workflows / source.name).write_bytes(source.read_bytes())
-            if quoted_path:
+            if quoted_path or control_paths:
                 (workflows / source_name).unlink()
                 (workflows / base_name).write_text(base, encoding="utf-8")
+            if control_paths:
+                (workflows / "ci\n.yml").write_text(workflow("  unrelated:\n    runs-on: linux\n"), encoding="utf-8")
             git("init", "--quiet", "--initial-branch=main")
             git("config", "core.quotePath", "true")
             git("add", "--", ".github/workflows")
@@ -247,13 +260,17 @@ class PipelineGatePredecessorTests(unittest.TestCase):
             self.assertEqual(len(git("rev-list", "--parents", "-n", "1", "HEAD").stdout.split()), 3)
             self.assertEqual(git("show", f"HEAD^2:.github/workflows/{destination}").stdout, head)
             self.assertEqual(git("show", f"HEAD^1:.github/workflows/{base_name}").stdout, base)
-            changes = git("diff", "--no-renames", "--name-status", "-z", "HEAD^1", "HEAD").stdout.split("\0")[:-1]
+            changes = git("diff", "--no-renames", "--name-status", "-z", "HEAD^1", "HEAD", raw=True).stdout.decode("utf-8").split("\0")[:-1]
             self.assertEqual(
                 set(zip(changes[::2], changes[1::2])),
                 set() if unchanged else {("D", f".github/workflows/{base_name}"), ("M" if occupied else "A", f".github/workflows/{destination}")},
             )
             if quoted_path:
                 self.assertIn('".github/workflows/c\\303\\255.yml"', git("ls-tree", "-r", "--name-only", "HEAD^1", "--", ".github/workflows/").stdout)
+            if control_paths:
+                paths = git("ls-tree", "-r", "--name-only", "-z", "HEAD^1", "--", ".github/workflows/", raw=True).stdout.decode("utf-8").split("\0")
+                self.assertIn(".github/workflows/ci\r.yml", paths)
+                self.assertIn(".github/workflows/ci\n.yml", paths)
             return subprocess.run(
                 [sys.executable, "-I", str(ROOT / ".github/ci/check_gates.py"),
                  f".github/workflows/{destination}", gate, "--no-results", "--exempt", "codecov"],
@@ -322,6 +339,23 @@ class PipelineGatePredecessorTests(unittest.TestCase):
     def test_git_quoted_workflow_accepts_declared_removals(self):
         result = self.run_fixture("replacement", OLD_GATE,
             "component, test, dependency-audit, package, lint, windows, rust, windows-workspace, codecov, pipeline-gates", quoted_path=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "CR/LF filenames require a POSIX working tree")
+    def test_distinct_cr_lf_paths_retain_predecessor_removals(self):
+        result = self.run_fixture("replacement", OLD_GATE, control_paths=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("component", result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "CR/LF filenames require a POSIX working tree")
+    def test_distinct_cr_lf_paths_accept_declared_removals(self):
+        result = self.run_fixture("replacement", OLD_GATE,
+            "component, test, dependency-audit, package, lint, windows, rust, windows-workspace, codecov, pipeline-gates", control_paths=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "CR/LF filenames require a POSIX working tree")
+    def test_distinct_cr_lf_paths_do_not_invent_a_predecessor(self):
+        result = self.run_fixture("replacement", "new-gates", control_paths=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 

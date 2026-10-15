@@ -275,8 +275,7 @@ def base_jobs(workflow: str, gate: str, head: str) -> set[str]:
     # shortcut: only static include rows and literal-result conditionals resolve;
     # keep other expressions possible and use a maintained parser for broader YAML.
     candidates = []
-    listing = git("ls-tree", "-r", "--name-only", "-z", "HEAD^1", "--", ".github/workflows/")
-    for path in listing.split("\0"):
+    for path in base_workflow_paths():
         # GitHub reads workflows only from the top level of .github/workflows.
         if path.count("/") == 2 and path.endswith((".yml", ".yaml")):
             text = git("show", f"HEAD^1:{path}")
@@ -311,6 +310,15 @@ def workflow_file(argument: str) -> str:
     if name not in listing:
         sys.exit(f"{argument} is not a file in .github/workflows")
     return listing[name]
+
+
+def base_workflow_paths() -> list[str]:
+    """Preserve pathname bytes, including CR and LF, before strict UTF-8 decoding."""
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", "-z", "HEAD^1", "--", ".github/workflows/"],
+        capture_output=True, check=True,
+    ).stdout
+    return listing.decode("utf-8").split("\0")
 
 
 def git(*args: str) -> str:
