@@ -27,6 +27,24 @@ Power Query (M) functions and VBA modules for accountants working with Australia
 
 Every function here solves a problem the Australian ledger-export formats create. Written independently, from scratch, in my own time and on my own equipment.
 
+## Formula changes between revisions
+
+Import `vba/modFormulaCompare.bas` in a disposable workbook, then call
+`CompareFormulaRanges(beforeRange, afterRange)` with explicitly selected,
+equally shaped ranges of at most 100,000 cells. It returns a `Collection` of
+arrays containing location, finding, before formula and after formula or link.
+It flags formulas removed, added or changed even when displayed values match.
+New Excel workbook links are reported at workbook level, including links outside
+the selected cells; this is not a claim that a particular cell uses that link.
+
+The diagnostic compares exact `Formula2` text, not mathematical equivalence,
+relative-reference equivalence or cached values. It reads existing link metadata
+without opening links and does not recalculate, write, post or approve anything.
+Retain source revisions, range coverage and checks not performed with the findings.
+The existing `CompareKeyedRanges` remains the amount-reconciliation workflow.
+Native VBA acceptance for this new diagnostic has not been recorded; see
+[the disposable-workbook cases](CONTRIBUTING.md#formula-comparison-cases).
+
 ## Offline aged receivables review
 
 The [standard-library verifier](tools/xero_aged_receivables.py) checks a supplied
