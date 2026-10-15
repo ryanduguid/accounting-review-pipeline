@@ -160,6 +160,8 @@ def parse_jobs(text: str) -> tuple[dict[str, set[str] | None], list[str]] | None
     has_property = False
     properties: set[str] = set()
     for line in parts[1].splitlines():
+        if not line.strip() or line.lstrip(" \t").startswith("#"):
+            continue
         if line[:1] not in ("", " ", "#"):
             break  # the next top-level key ends the jobs block
         if line.startswith("  ") and line[2:3] not in ("", " ", "#"):
@@ -216,11 +218,13 @@ def possible_context(names: set[str] | None, context: str) -> bool:
         if "${{" not in name:
             if name == context:
                 return True
-        elif "}}" not in name or (
-            context.startswith(name.split("${{", 1)[0])
-            and context.endswith(name.rsplit("}}", 1)[1])
-        ):
-            return True
+        else:
+            prefix, expression = name.split("${{", 1)
+            if "}}" not in expression:
+                return True
+            suffix = expression.rsplit("}}", 1)[1]
+            if len(context) >= len(prefix) + len(suffix) and context.startswith(prefix) and context.endswith(suffix):
+                return True
     return False
 
 
@@ -271,8 +275,8 @@ def base_jobs(workflow: str, gate: str, head: str) -> set[str]:
     # shortcut: only static include rows and literal-result conditionals resolve;
     # keep other expressions possible and use a maintained parser for broader YAML.
     candidates = []
-    listing = git("ls-tree", "-r", "--name-only", "HEAD^1", "--", ".github/workflows/")
-    for path in listing.splitlines():
+    listing = git("ls-tree", "-r", "--name-only", "-z", "HEAD^1", "--", ".github/workflows/")
+    for path in listing.split("\0"):
         # GitHub reads workflows only from the top level of .github/workflows.
         if path.count("/") == 2 and path.endswith((".yml", ".yaml")):
             text = git("show", f"HEAD^1:{path}")
@@ -310,7 +314,7 @@ def workflow_file(argument: str) -> str:
 
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout  # nosec B607
+    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", check=True).stdout  # nosec B607
 
 
 def main(argv: list[str]) -> None:
