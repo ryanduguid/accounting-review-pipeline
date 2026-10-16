@@ -1,0 +1,14 @@
+usage: close-control review [-h] --current CURRENT --prior PRIOR
+                            [--mapping MAPPING]
+                            [--mapping-policy MAPPING_POLICY]
+                            [--balance-policy BALANCE_POLICY]
+                            [--subledger SUBLEDGER]
+                            [--review-note REVIEW_NOTE]
+                            [--equity-schedule EQUITY_SCHEDULE]
+                            [--equity-currency EQUITY_CURRENCY]
+                            [--equity-currency-evidence EQUITY_CURRENCY_EVIDENCE]
+                            [--calculation-evidence PATH]
+                            [--require-calculation LABEL] --output OUTPUT
+                            [--absolute-threshold ABSOLUTE_THRESHOLD]
+                            [--percentage-threshold PERCENTAGE_THRESHOLD]
+                            [--reconciliation-tolerance RECONCILIATION_TOLERANCE]

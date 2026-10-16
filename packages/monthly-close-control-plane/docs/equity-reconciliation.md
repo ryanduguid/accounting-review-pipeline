@@ -49,10 +49,10 @@ the existing CSV contracts. The viewer verifies all four files together and
 shows successful equity evidence too. Existing packs without this optional block
 retain their previous shape.
 
-Run the fabricated example from this component's installed development checkout:
+Run the fabricated example from this component directory:
 
 ```text
-python examples/equity_demo.py --output OUTSIDE_CHECKOUT
+cargo run --locked --release --features tools --bin close-control-equity-demo -- --output OUTSIDE_CHECKOUT
 ```
 
 The independent movements are a 25,000 contribution, 10,000 withdrawal and
@@ -61,7 +61,8 @@ closing is 130,000; the ledger closes at 129,750, leaving -250 for review.
 The example asserts that arithmetic and verifies the generated pack. No journal
 is posted and no period is approved.
 
-Focused regression coverage: tests/test_equity.py. It covers matching and nil
-movements, loss transfers, debit balances, sub-cent tolerances, offsetting errors,
-incomplete evidence, changed identity and currency, malformed input, tampered
-output, inert source text and preservation of an old pack on input failure.
+Native checks live in `src/equity.rs`, `src/viewer.rs` and the frozen-oracle
+differential corpus. The example asserts the unexplained amount and verifies
+the four generated files. The migration corpus includes malformed evidence,
+identity/currency changes, tolerances and tampered output; complete equivalence
+with every historical Python test remains unproven.

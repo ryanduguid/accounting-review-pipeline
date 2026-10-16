@@ -1,0 +1,12 @@
+usage: close-control classify [-h]
+                              --original-transactions ORIGINAL_TRANSACTIONS
+                              --current-transactions CURRENT_TRANSACTIONS
+                              --coding-evidence CODING_EVIDENCE
+                              --currency CURRENCY
+
+options:
+  -h, --help            show this help message and exit
+  --original-transactions ORIGINAL_TRANSACTIONS
+  --current-transactions CURRENT_TRANSACTIONS
+  --coding-evidence CODING_EVIDENCE
+  --currency CURRENCY

@@ -1,14 +1,16 @@
 # Reviewer quick start
 
-This guide is for a reviewer who wants to see what Monthly Close Controls
-produces without cloning the repository or writing Python. It runs the
-published 0.1.5 release on fabricated trial balances. Review aid, not
+This guide runs native Monthly Close Controls 1.0.0 on fabricated trial balances.
+Build it from an Accounting Review Pipeline checkout; native release publication
+is not configured. Review aid, not
 professional advice; the reviewer decides whether a close is acceptable.
 
 ## What you need
 
-- [uv](https://docs.astral.sh/uv/getting-started/installation/). `uvx` runs
-  the published release in a temporary environment and installs nothing else.
+- Rust and an Accounting Review Pipeline checkout containing the native port.
+  From `packages/monthly-close-control-plane`, run
+  `cargo install --locked --path . --bin close-control` and ensure Cargo's
+  binary directory is on PATH. Production needs no Python interpreter.
 - An empty folder that is not inside a Git, Mercurial, Subversion or Bazaar
   checkout. The command refuses to write a review pack inside one, because a
   pack names accounts and balances.
@@ -35,7 +37,7 @@ for f in current_trial_balance.csv prior_trial_balance.csv account_mapping.csv s
 ## 2. Run the review
 
 ```bash
-uvx --from monthly-close-control-plane==0.1.5 close-control review --current current_trial_balance.csv --prior prior_trial_balance.csv --mapping account_mapping.csv --subledger subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --output close-pack
+close-control review --current current_trial_balance.csv --prior prior_trial_balance.csv --mapping account_mapping.csv --subledger subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --output close-pack
 ```
 
 It prints `close-control: REVIEW; 8 exception(s); 6 client query(ies) drafted`
@@ -75,7 +77,7 @@ a file handoff, not an integration with any practice management product.
 To check a stored pack later, run:
 
 ```bash
-uvx --from monthly-close-control-plane==0.1.5 close-control view --pack-dir close-pack
+close-control view --pack-dir close-pack
 ```
 
 It prints the review sheet and exits 0 when the four files still agree. If

@@ -27,11 +27,11 @@ spec.loader.exec_module(workflow)
 
 
 def manifest_fixture(command: str, launcher: bytes = b"original") -> dict:
-    if command == "review-ready":
+    if command in workflow.PRODUCERS:
         return {"manifest_version": 2, "command": command,
                 "launcher_name": command + (".exe" if os.name == "nt" else ""),
                 "launcher_sha256": workflow.digest(launcher),
-                "native": {"package": "review-ready-gate", "version": "1.0.0"}}
+                "native": {"package": workflow.PRODUCERS[command][0], "version": "1.0.0"}}
     distribution, package, entry = workflow.PRODUCERS[command]
     return {"manifest_version": 1, "command": command,
             "launcher_name": command + (".exe" if os.name == "nt" else ""),
@@ -51,6 +51,25 @@ class ReportElements(HTMLParser):
 
 
 class ReviewWorkflowTests(unittest.TestCase):
+    def test_close_control_native_identity_requires_its_own_package_and_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / ("close-control.exe" if os.name == "nt" else "close-control")
+            launcher = b"MZfabricated monthly close image"
+            executable.write_bytes(launcher)
+            result = subprocess.CompletedProcess([], 0, b"close-control 1.0.0\n", b"")
+            with patch.object(workflow.subprocess, "run", return_value=result) as run:
+                self.assertEqual(workflow.producer_manifest(root, "close-control"), manifest_fixture("close-control", launcher))
+                self.assertEqual(run.call_args.args[0], [str(executable.resolve()), "--version"])
+            for result in (subprocess.CompletedProcess([], 0, b"review-ready 1.0.0\n", b""),
+                           subprocess.CompletedProcess([], 0, b"close-control 0.2.0\n", b""),
+                           subprocess.CompletedProcess([], 1, b"", b"refused")):
+                with self.subTest(result=result), patch.object(workflow.subprocess, "run", return_value=result), self.assertRaises(ValueError):
+                    workflow.producer_manifest(root, "close-control")
+            wrong = manifest_fixture("close-control", launcher) | {"native": {"package": "review-ready-gate", "version": "1.0.0"}}
+            with self.assertRaises(ValueError):
+                workflow.producer_document(wrong, "close-control")
+
     def test_native_producer_binds_version_and_executable_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

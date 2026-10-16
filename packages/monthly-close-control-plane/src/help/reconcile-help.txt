@@ -1,0 +1,29 @@
+usage: close-control reconcile [-h] --transactions TRANSACTIONS
+                               --tenant TENANT --account-id ACCOUNT_ID
+                               --currency CURRENCY --period-start PERIOD_START
+                               --period-end PERIOD_END
+                               --opening-balance OPENING_BALANCE
+                               --closing-balance CLOSING_BALANCE
+                               [--opening-items OPENING_ITEMS]
+                               [--decisions DECISIONS] [--decisions-escaped]
+                               --output OUTPUT
+
+options:
+  -h, --help            show this help message and exit
+  --transactions TRANSACTIONS
+                        mapped transaction CSV; see docs/clearing-
+                        reconciliation.md
+  --tenant TENANT
+  --account-id ACCOUNT_ID
+  --currency CURRENCY
+  --period-start PERIOD_START
+  --period-end PERIOD_END
+  --opening-balance OPENING_BALANCE
+  --closing-balance CLOSING_BALANCE
+  --opening-items OPENING_ITEMS
+                        previous period's carry-forward.json
+  --decisions DECISIONS
+                        reviewed Group,TransactionID,Decision,Note CSV
+  --decisions-escaped   decode Group and Note escapes when reusing generated
+                        suggestions.csv
+  --output OUTPUT       new directory outside version control

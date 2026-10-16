@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Clearing reconciliation: {identity}</title>
+<style>body{{font:16px/1.55 system-ui,sans-serif;max-width:1100px;margin:40px auto;padding:0 24px;color:#182d34;background:#fafaf7}}
+h1{{font-size:2rem;line-height:1.2}}h2{{margin-top:32px}}.meta{{color:#465961}}.status{{font-weight:700}}
+table{{border-collapse:collapse;width:100%;background:white}}th,td{{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid #ccd5d5;overflow-wrap:anywhere}}
+th{{font-weight:600}}caption{{text-align:left;padding:8px 0}}.scroll{{overflow-x:auto}}.notice{{padding:16px;border-left:4px solid #9b3c19;background:#fff0e5}}
+li{{margin:10px 0}}@media print{{body{{margin:0;font-size:10pt}}table{{font-size:9pt}}}}</style></head>
+<body><main><p class="meta">MONTHLY CLOSE CONTROLS</p><h1>Clearing-account reconciliation</h1>
+<p>{identity}<br>{period_start} to {period_end}</p>
+<p class="status">{status} · {count} outstanding items</p>
+<p>{boundary}</p>{blocked}
+<h2>Balance checks</h2><table><caption>Debit balances are positive; credit balances are negative.</caption>
+<tbody>{totals}</tbody></table>
+<h2>Outstanding items</h2><div class="scroll"><table><thead><tr>
+<th scope="col">ID</th><th scope="col">Date</th><th scope="col">Age (days)</th><th scope="col">Reference</th>
+<th scope="col">Description</th><th scope="col">Amount</th><th scope="col">Review note</th>
+</tr></thead><tbody>{outstanding}</tbody></table></div>
+<h2>Suggested matches</h2><p>Suggestions remain outstanding until a reviewer supplies an accepted group.</p>
+<ul>{suggestions}</ul>
+<h2>Review groups</h2><ul>{decisions}</ul>
+<h2>Continue the review</h2><p>Open suggestions.csv, set Decision to accept or reject and add the same note
+on every row of a group. Add manual groups using outstanding transaction IDs. Supply that CSV with
+--decisions with --decisions-escaped and rerun into a new output directory.
+Keep the CSV's leading apostrophes; double a literal leading apostrophe when adding a Group or Note.
+Include your earlier decisions when revising this period.</p>
+<p>Use carry-forward.json as --opening-items for the next period after reviewing this pack.
+The JSON preserves original text and dates; the spreadsheet export guards formula-like text.</p>
+</main></body></html>

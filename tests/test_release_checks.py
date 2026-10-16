@@ -20,18 +20,8 @@ REQUIRED = {
         ".github/workflows/codeql.yml: Analyze Python",
         ".github/workflows/codeql.yml: codeql-gates"
     ],
-    "release-monthly-close-control-plane.yml": [
-        ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
-        ".github/workflows/ci.yml: dependency-audit",
-        ".github/workflows/ci.yml: lint",
-        ".github/workflows/ci.yml: package",
-        ".github/workflows/ci.yml: test (3.14)",
-        ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python",
-        ".github/workflows/codeql.yml: codeql-gates"
-    ],
 }
-BLOCKED = {"release-review-ready-gate.yml"}
+BLOCKED = {"release-review-ready-gate.yml", "release-monthly-close-control-plane.yml"}
 
 
 class ReleaseChecksTests(unittest.TestCase):
@@ -97,7 +87,7 @@ class ReleaseChecksTests(unittest.TestCase):
                 match = re.search(r"(?m)^      source-directory: (\S+)$", text)
                 assert match is not None, path.name
                 components.append(match.group(1))
-        self.assertEqual(len(components), 1, components)
+        self.assertEqual(len(components), 0, components)
         for component in components:
             with self.subTest(component=component):
                 project = tomllib.loads((ROOT / component / "pyproject.toml").read_text(encoding="utf-8"))

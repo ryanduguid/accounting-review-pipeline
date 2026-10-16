@@ -18,7 +18,7 @@ accounting and human-review boundaries:
   arithmetic, never binary floating point. Preserve fail-closed schema and integrity gates.
 - Do not add network or live Xero access, credential or token handling, journal, payment
   or report mutation, approval or sign-off authority, period locking, or tax lodgement.
-- `calculation_evidence.py` reads evidence files from disk and must stay that way. It has
+- `src/calculation_evidence.rs` reads evidence files from disk and must stay that way. It has
   no HTTP client and no calculator, and it never makes the call the evidence describes.
   Treat an evidence file as untrusted input. A required calculation with no evidence, a
   tampered file, a recorded refusal and a period mismatch each map onto an existing state
@@ -36,56 +36,26 @@ accounting and human-review boundaries:
 - [CONTRIBUTING.md](CONTRIBUTING.md) owns fixture, data-handling and pull-request rules.
 - [RELEASING.md](RELEASING.md) owns release preflight, tagging and verification.
 
-## CI gates
+## Native checks
 
-Run the commands below from `packages/monthly-close-control-plane/`. They come
-from [the root ci.yml](../../.github/workflows/ci.yml). The multiline package-smoke gate is explained and
-matched semantically below without duplicating its shell body:
+Version 1.0.0 is an authorised standalone Rust binary. The Python import package
+is removed. Preserve command names, flags, exit states and saved file contracts.
+Run these checks from this component:
 
 ```bash
-uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
-uv run --locked --extra dev --with "pip-audit==2.10.1" pip-audit --local --strict
-uv run --locked --extra dev --python 3.14 python -m build
-uv run --locked --extra dev ruff check closecontrol tests
-uv run --locked --extra dev mypy closecontrol
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release
+cargo audit --deny warnings
 ```
 
-## Package smoke outside the checkout
+The root ci.yml runs these gates on Linux and Windows, with the dependency audit
+on Linux. The feature-gated close-control-differential compares fabricated values,
+file bytes and command execution with frozen CPython 3.15 source from the port's
+base revision. Its Python process is a migration oracle, never a production
+runtime. The root `.github/ci/monthly-close-control-plane/smoke.sh` exercises the
+release binary from an empty directory using fabricated examples.
 
-The CI smoke uses `/tmp`; on Windows use separate fresh system temporary artefact
-and smoke directories. Fail immediately if a native build or install command fails,
-install only the one wheel produced by that build, and always restore the caller's
-location and remove both temporary directories. The fabricated demo deliberately
-returns `REVIEW` exit `2`, which is the accepted smoke result. This proves the
-installed wheel, not a checkout import, and does not publish anything:
-
-```powershell
-$ErrorActionPreference = "Stop"
-$repoRoot = (Get-Location).Path
-$artifactDir = Join-Path ([System.IO.Path]::GetTempPath()) ("monthly-close-wheel-build-" + [guid]::NewGuid().ToString("N"))
-$smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("monthly-close-wheel-smoke-" + [guid]::NewGuid().ToString("N"))
-try {
-    New-Item -ItemType Directory -Path $artifactDir | Out-Null
-    uv run --locked --extra dev --python 3.14 python -m build --outdir "$artifactDir"
-    if ($LASTEXITCODE -ne 0) { throw "wheel build failed with exit $LASTEXITCODE" }
-    $wheels = @(Get-ChildItem -LiteralPath $artifactDir -Filter "*.whl" -File)
-    if ($wheels.Count -ne 1) { throw "expected exactly one built wheel" }
-    $wheel = $wheels[0].FullName
-    python -m venv "$smokeDir\venv"
-    if ($LASTEXITCODE -ne 0) { throw "venv creation failed with exit $LASTEXITCODE" }
-    & "$smokeDir\venv\Scripts\python.exe" -m pip install --no-index "$wheel"
-    if ($LASTEXITCODE -ne 0) { throw "wheel install failed with exit $LASTEXITCODE" }
-    Push-Location $smokeDir
-    try {
-        & "$smokeDir\venv\Scripts\python.exe" -I "$repoRoot\tests\smoke_installed_wheel.py" "$repoRoot"
-        if ($LASTEXITCODE -ne 0) { throw "installed command smoke failed with exit $LASTEXITCODE" }
-    }
-    finally {
-        Pop-Location
-    }
-}
-finally {
-    Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $artifactDir -Recurse -Force -ErrorAction SilentlyContinue
-}
-```
+Native release publishing is not configured. The root release caller fails with
+read permission only; a publisher requires separate approval.

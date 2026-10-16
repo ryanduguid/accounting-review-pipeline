@@ -9,9 +9,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeReleaseWorkflowTests(unittest.TestCase):
-    def test_native_readiness_release_is_explicitly_blocked(self) -> None:
+    def test_native_review_releases_are_explicitly_blocked(self) -> None:
+        for component in ("review-ready-gate", "monthly-close-control-plane"):
+            with self.subTest(component=component):
+                self.check_blocked_release(component)
+
+    def check_blocked_release(self, component: str) -> None:
         document = yaml.safe_load(
-            (ROOT / ".github/workflows/release-review-ready-gate.yml").read_text()
+            (ROOT / f".github/workflows/release-{component}.yml").read_text()
         )
         self.assertEqual(document["permissions"], {"contents": "read"})
         self.assertEqual(set(document["jobs"]), {"release-blocked"})

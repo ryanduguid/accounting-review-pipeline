@@ -1,0 +1,11 @@
+usage: close-control queue [-h] --pack-dir PACK_DIR [--period PERIOD]
+                           [--status {PASS,REVIEW,BLOCKED}]
+                           [--reviewer REVIEWER]
+
+options:
+  -h, --help            show this help message and exit
+  --pack-dir PACK_DIR   pack directory; repeat to include more packs
+  --period PERIOD       exact current report date, YYYY-MM-DD
+  --status {PASS,REVIEW,BLOCKED}
+                        recorded pack state
+  --reviewer REVIEWER   exact initials from a recorded human acknowledgement

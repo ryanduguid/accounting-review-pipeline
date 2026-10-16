@@ -1,5 +1,29 @@
 # Releasing
 
+Native release publishing is not configured. Do not tag or publish version 1.0.0.
+The root release-monthly-close-control-plane.yml has read permission only and
+fails explicitly. Build a local candidate from this directory:
+
+```bash
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release --bin close-control
+```
+
+A native publisher needs a
+separate approved release task, platform builds, checksums, dependency evidence
+and provenance before publication can be enabled.
+
+Version 1.0.0 replaces the Python runtime and import API with the close-control
+Rust binary. Existing Python tags and artefacts remain historical records.
+A PASS review pack does not approve accounting or authorise a software release.
+
+## Historical Python release procedure
+
+The following procedure documents earlier Python releases and does not apply to
+version 1.0.0 or authorise a new publication.
+
 The repository's [GitHub Releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
 
 Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not build or upload package assets by hand.
