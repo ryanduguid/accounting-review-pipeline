@@ -3,6 +3,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
+pub mod transactions;
+
 fn line(stream: &mut dyn Write, text: std::fmt::Arguments<'_>) -> Result<(), String> {
     write!(
         stream,

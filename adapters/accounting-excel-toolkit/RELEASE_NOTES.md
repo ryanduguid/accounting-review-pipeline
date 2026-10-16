@@ -1,3 +1,18 @@
+# Unreleased Rust tooling
+
+- Replace the Python encoding guard with `check-vba-encoding`. Its source lookup
+  follows the executable's installed or standard Cargo layout. Custom target
+  layouts need explicit file arguments or an installed copy. Native path, OS
+  and directory-listing diagnostics can differ.
+- Replace `tools/xero_account_transactions.py` with `xero-account-transactions`;
+  its Python import API is removed. Preserve exact amounts, source hashes,
+  logical-row mappings, inspection JSON and clearing CSV. Native help, usage,
+  JSON parser and OS diagnostics can differ; invalid amounts use JSON quotation,
+  and text option values require valid Unicode scalar values. See the
+  [migration commands](docs/account-transactions-import.md).
+- Require native Windows/Linux checks and frozen Python comparisons alongside
+  the retained source-archive release gates. No release is created by this port.
+
 # v0.1.8
 
 - The aged payables and receivables queries keep genuine `Total` contacts and signed amounts, require an explicit `HasSummaryFooter` role for an ambiguous terminal row, and refuse amount-bearing rows without a contact label (#304).

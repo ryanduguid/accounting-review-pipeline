@@ -61,7 +61,9 @@ working directory never selects a different source tree. Native path formatting,
 operating-system error text and directory-listing failures can differ from the
 Python guard. Byte diagnostics and stdout/stderr separation are retained.
 
-The other five review and measurement tools below still use Python.
+The account-transactions converter also uses Rust; see its
+[inspection and conversion guide](docs/account-transactions-import.md).
+Four review and measurement tools below still use Python.
 
 ## Offline aged receivables review
 
