@@ -1,0 +1,20 @@
+[package]
+name = "accounting-excel-toolkit"
+version = "0.1.8"
+edition = "2024"
+rust-version = "1.99"
+description = "Offline source checks for Accounting Excel Toolkit"
+license = "Apache-2.0"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+publish = false
+
+[[bin]]
+name = "check-vba-encoding"
+path = "src/main.rs"
+
+[[example]]
+name = "encoding-differential"
+path = "tests/differential/encoding_differential.rs"
+
+[lints.clippy]
+too_many_lines = "warn"
