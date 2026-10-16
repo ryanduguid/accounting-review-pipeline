@@ -46,7 +46,8 @@ def operation(r):
                 try: code=cli.main(args)
                 except SystemExit as exited: code=exited.code
             def normalise(text):
-                for raw in (directory,directory.replace('\\','/')):
+                resolved=str(root.resolve())
+                for raw in (directory,directory.replace('\\','/'),resolved,resolved.replace('\\','/')):
                     variants=[raw]
                     for _ in range(3): variants.append(json.dumps(variants[-1])[1:-1])
                     for variant in reversed(variants): text=text.replace(variant,'$TMP')
