@@ -573,6 +573,55 @@ fn core(c: &mut Corpus, seed: u64) {
             );
         }
     }
+    let header = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n";
+    let prior = format!(
+        "{header}\
+         2026-06-30,Synthetic,Assets,100,Operating Bank,1000,0.00,0.00,100000.00,0.00\n\
+         2026-06-30,Synthetic,Assets,777,New Clearing,1770,0.00,0.00,0.00,0.00\n\
+         2026-06-30,Synthetic,Assets,888,Old Clearing,1880,0.00,0.00,50000.00,0.00\n\
+         2026-06-30,Synthetic,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,150000.00\n"
+    );
+    let current = format!(
+        "{header}\
+         2026-07-31,Synthetic,Assets,100,Operating Bank,1000,0.00,0.00,100000.00,0.00\n\
+         2026-07-31,Synthetic,Assets,777,New Clearing,1770,900000.00,0.00,900000.00,0.00\n\
+         2026-07-31,Synthetic,Assets,888,Old Clearing,1880,0.00,50000.00,0.00,0.00\n\
+         2026-07-31,Synthetic,Equity,900,Retained Earnings,3000,0.00,850000.00,0.00,1000000.00\n"
+    );
+    let pair = |date: &str, amount: &str| {
+        format!(
+            "{header}\
+             {date},Synthetic,Assets,110,Clearing,110,0.00,0.00,{amount},0.00\n\
+             {date},Synthetic,Equity,900,Retained Earnings,900,0.00,0.00,0.00,{amount}\n"
+        )
+    };
+    let mut cases = vec![
+        ("first-funding", current, prior),
+        (
+            "nil-prior-ytd",
+            pair("2026-07-31", "50000.00"),
+            pair("2026-06-30", "0.00"),
+        ),
+    ];
+    for (label, prior, current) in [
+        ("april-may", "2026-04-30", "2026-05-31"),
+        ("may-june", "2026-05-31", "2026-06-30"),
+        ("december-january", "2025-12-31", "2026-01-31"),
+    ] {
+        cases.push((label, pair(current, "0.00"), pair(prior, "0.00")));
+    }
+    for (label, current, prior) in cases {
+        c.push(
+            format!("core-legacy-{label}"),
+            "compare_core",
+            vec![
+                ("current", source("current.csv", current.as_bytes())),
+                ("prior", source("prior.csv", prior.as_bytes())),
+                ("absolute", Json::str("10000")),
+                ("percentage", Json::str("0.10")),
+            ],
+        );
+    }
 }
 fn notes(c: &mut Corpus) {
     let valid = probe::decode(
@@ -1248,6 +1297,41 @@ fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
             ],
         );
     }
+    let debit_tb = |date: &str, amount: &str| {
+        format!(
+            "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n\
+             {date},Synthetic,Equity,E,Debit Equity,E,{amount},0,{amount},0\n\
+             {date},Synthetic,Assets,A,Asset,A,0,{amount},0,{amount}\n"
+        )
+    };
+    let old = debit_tb("2026-08-31", "100");
+    let new = debit_tb("2026-09-30", "125");
+    let mut schedule = probe::decode(
+        r#"{"schema_version":1,"tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","basis":"ledger_equity","equity_account_ids":["E"],"complete":true,"movements":[{"movement_id":"loss","date":"2026-09-30","account_id":"E","debit":"25","credit":"0","description":"Loss transfer","evidence_reference":"Fabricated independent closing record"}]}"#,
+    )?;
+    schedule.set(
+        "prior_source_sha256",
+        Json::str(&monthly_close_control_plane::sha256(old.as_bytes())),
+    );
+    schedule.set(
+        "current_source_sha256",
+        Json::str(&monthly_close_control_plane::sha256(new.as_bytes())),
+    );
+    c.push(
+        "review-equity-legacy-debit-loss",
+        "review",
+        vec![
+            ("current", source("current.csv", new.as_bytes())),
+            ("prior", source("prior.csv", old.as_bytes())),
+            (
+                "equity_schedule",
+                source("equity.json", probe::encode(&schedule).as_bytes()),
+            ),
+            ("currency", Json::str("AUD")),
+            ("currency_evidence", Json::str("Fabricated source metadata")),
+            ("absolute", Json::str("999999999")),
+        ],
+    );
     for (label, date, prior_date, tenant, account) in [
         ("later", "2026-10-31", "2026-09-30", "Synthetic", "A"),
         ("earlier", "2026-08-31", "2026-07-31", "Synthetic", "A"),
@@ -3581,6 +3665,7 @@ fn assert_legacy_financial_cases(corpus: &Corpus, responses: &[Json]) -> Result<
             "review-equity-legacy-nil-movement"
             | "review-equity-legacy-positive-at-tolerance"
             | "review-equity-legacy-negative-at-tolerance"
+            | "review-equity-legacy-debit-loss"
             | "schedule-legacy-expenses-pass"
             | "schedule-legacy-migration-split"
             | "schedule-legacy-interentity-agrees" => "PASS",
@@ -3597,6 +3682,13 @@ fn assert_legacy_financial_cases(corpus: &Corpus, responses: &[Json]) -> Result<
         };
         let mut holds = value.at("status").is_str(status);
         match name.as_str() {
+            "review-equity-legacy-debit-loss" => {
+                holds &= value
+                    .at("equity_reconciliation")
+                    .at("total")
+                    .at("expected_close")
+                    .is_str("-125");
+            }
             "review-equity-legacy-nil-movement" => {
                 holds &= value
                     .at("equity_reconciliation")
@@ -3638,10 +3730,73 @@ fn assert_legacy_financial_cases(corpus: &Corpus, responses: &[Json]) -> Result<
         }
         checked += 1;
     }
-    if checked != 12 || rendered != 7 {
-        return Err(format!("expected 12 legacy financial cases and 7 equity renders, checked {checked} and {rendered}").into());
+    if checked != 13 || rendered != 8 {
+        return Err(format!("expected 13 legacy financial cases and 8 equity renders, checked {checked} and {rendered}").into());
     }
-    println!("12 legacy financial scenarios and 7 equity renders satisfy fixed outcome assertions");
+    println!("13 legacy financial scenarios and 8 equity renders satisfy fixed outcome assertions");
+    Ok(())
+}
+
+fn assert_legacy_comparison_cases(corpus: &Corpus, responses: &[Json]) -> Result<()> {
+    let mut checked = 0;
+    for (request, response) in corpus.0.iter().zip(responses) {
+        let name = request.at("name").as_pystr().unwrap().to_utf8().unwrap();
+        let Some(label) = name.strip_prefix("core-legacy-") else {
+            continue;
+        };
+        let findings = response
+            .get("ok")
+            .and_then(|value| value.get("exceptions"))
+            .and_then(Json::as_array)
+            .ok_or_else(|| format!("legacy comparison {name} did not produce findings"))?;
+        let variances: Vec<_> = findings
+            .iter()
+            .filter(|row| row.at("control").is_str("period_variance"))
+            .collect();
+        let holds = match label {
+            "first-funding" => {
+                variances.len() == 3
+                    && ["777", "888", "900"].iter().all(|account| {
+                        variances
+                            .iter()
+                            .filter(|row| row.at("account_id").is_str(account))
+                            .count()
+                            == 1
+                    })
+                    && variances.iter().any(|row| {
+                        row.at("account_id").is_str("777")
+                            && matches!(row.at("percentage_change"), Json::Null)
+                            && row.at("prior_value").is_str("0.00")
+                            && row.at("difference").is_str("900000.00")
+                            && row.at("reason").is_str("YTD net balance movement met or exceeded the configured absolute threshold; no percentage change could be computed from the prior YTD balance, so the percentage threshold was not tested.")
+                    })
+            }
+            "nil-prior-ytd" => {
+                let rows: Vec<_> = variances
+                    .iter()
+                    .filter(|row| row.at("account_id").is_str("110"))
+                    .collect();
+                rows.len() == 1
+                    && matches!(rows[0].at("percentage_change"), Json::Null)
+                    && rows[0].at("difference").is_str("50000.00")
+            }
+            "april-may" | "may-june" | "december-january" => {
+                variances.is_empty()
+                    && findings
+                        .iter()
+                        .all(|row| !row.at("control").is_str("financial_year_reset"))
+            }
+            _ => return Err(format!("unrecognised legacy comparison {name}").into()),
+        };
+        if !holds {
+            return Err(format!("legacy comparison outcome assertion failed for {name}").into());
+        }
+        checked += 1;
+    }
+    if checked != 5 {
+        return Err(format!("expected 5 legacy comparisons, checked {checked}").into());
+    }
+    println!("5 legacy balance and financial-year comparisons satisfy fixed outcome assertions");
     Ok(())
 }
 
@@ -3653,7 +3808,9 @@ fn assert_legacy_equity_verification(corpus: &Corpus, responses: &[Json]) -> Res
             continue;
         };
         let status = match label {
-            "nil-movement" | "positive-at-tolerance" | "negative-at-tolerance" => "PASS",
+            "nil-movement" | "positive-at-tolerance" | "negative-at-tolerance" | "debit-loss" => {
+                "PASS"
+            }
             "opposite-errors"
             | "aggregate-tolerance"
             | "positive-over-tolerance"
@@ -3685,10 +3842,10 @@ fn assert_legacy_equity_verification(corpus: &Corpus, responses: &[Json]) -> Res
         }
         checked += 1;
     }
-    if checked != 7 {
-        return Err(format!("expected 7 verified legacy equity packs, checked {checked}").into());
+    if checked != 8 {
+        return Err(format!("expected 8 verified legacy equity packs, checked {checked}").into());
     }
-    println!("7 legacy equity saved packs verify with fixed status assertions");
+    println!("8 legacy equity saved packs verify with fixed status assertions");
     Ok(())
 }
 
@@ -3794,6 +3951,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     }
     let expected = run_batch(&corpus, python, &root, &executable)?;
     assert_legacy_financial_cases(&corpus, &expected)?;
+    assert_legacy_comparison_cases(&corpus, &expected)?;
     let verification = verification_cases(&corpus, &expected)?;
     let verified = run_batch(&verification, python, &root, &executable)?;
     assert_legacy_equity_verification(&verification, &verified)?;
