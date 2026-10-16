@@ -45,6 +45,24 @@ The existing `CompareKeyedRanges` remains the amount-reconciliation workflow.
 Native VBA acceptance for this new diagnostic has not been recorded; see
 [the disposable-workbook cases](CONTRIBUTING.md#formula-comparison-cases).
 
+## VBA source checks
+
+The VBA encoding guard is now the Rust `check-vba-encoding` binary. From this
+adapter directory, run `cargo run --locked --release --bin check-vba-encoding`.
+It checks all `.bas`, `.cls` and `.frm` sources recursively for pure ASCII,
+CRLF and absence of a BOM. Explicit file arguments retain their supplied order
+and are checked regardless of suffix. Success exits 0; a refusal exits 1.
+
+Default source discovery follows the executable: place an installed binary
+beside `vba/` or in `tools/`. The standard Cargo `target/debug` and
+`target/release` layouts also locate this adapter's `vba/`. A custom target
+directory needs explicit file arguments or an installed copy. The current
+working directory never selects a different source tree. Native path formatting,
+operating-system error text and directory-listing failures can differ from the
+Python guard. Byte diagnostics and stdout/stderr separation are retained.
+
+The other five review and measurement tools below still use Python.
+
 ## Offline aged receivables review
 
 The [standard-library verifier](tools/xero_aged_receivables.py) checks a supplied
