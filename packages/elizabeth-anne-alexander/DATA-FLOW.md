@@ -15,7 +15,7 @@ or establish that input came from Xero.
 
 ```mermaid
 flowchart LR
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#E5E4E2", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#E5E4E2", "titleColor": "#E5E4E2"}}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#FFD32A", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#9B7735", "titleColor": "#E5E4E2"}}}%%
     Source["Synthetic Xero-Shaped Trial Balance CSV"] --> Ingestion["Schema & Hash Validation"]
     Ingestion --> Sandbox["In-Memory Decimal Math Engine"]
     Sandbox --> Split{"Artefact Splitter"}
@@ -26,8 +26,10 @@ flowchart LR
     style ModelArtifact fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style HumanArtifact fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
+    classDef external fill:#745EB1,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     class Source external
+    classDef decision fill:#E7162F,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    class Split decision
 ```
 
 ## 4. Receipt limitation
