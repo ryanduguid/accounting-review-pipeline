@@ -3,7 +3,7 @@ name = "accounting-excel-toolkit"
 version = "0.1.8"
 edition = "2024"
 rust-version = "1.99"
-description = "Offline source checks for Accounting Excel Toolkit"
+description = "Offline source checks and account-transactions conversion for Accounting Excel Toolkit"
 license = "Apache-2.0"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 publish = false
@@ -12,9 +12,21 @@ publish = false
 name = "check-vba-encoding"
 path = "src/main.rs"
 
+[[bin]]
+name = "xero-account-transactions"
+path = "src/transactions_main.rs"
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.11"
+
 [[example]]
 name = "encoding-differential"
 path = "tests/differential/encoding_differential.rs"
+
+[[example]]
+name = "transactions-differential"
+path = "tests/differential/transactions_differential.rs"
 
 [lints.clippy]
 too_many_lines = "warn"

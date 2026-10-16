@@ -226,19 +226,19 @@ jobs:
       - name: Check the tracked VBA source
         if: matrix.component == 'adapters/accounting-excel-toolkit'
         run: cargo run --locked --release --bin check-vba-encoding
-      - name: Check out the frozen Python VBA guard
+      - name: Check out the frozen Python Excel tools
         if: matrix.component == 'adapters/accounting-excel-toolkit'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: e06647062efaf4410f7d4a414a0559ca51147267
           path: .encoding-oracle
           persist-credentials: false
-      - name: Set up CPython for the frozen VBA guard
+      - name: Set up CPython for the frozen Excel tools
         if: matrix.component == 'adapters/accounting-excel-toolkit'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.15"
-      - name: Compare byte diagnostics and CLI streams with the frozen guard
+      - name: Compare native Excel tools with their frozen Python implementations
         if: matrix.component == 'adapters/accounting-excel-toolkit'
         run: |
           cargo build --locked --bins --examples
@@ -247,6 +247,8 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
           target/debug/examples/encoding-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/check_vba_encoding.py" "target/debug/check-vba-encoding$suffix" 16
           target/debug/examples/encoding-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/check_vba_encoding.py" "target/debug/check-vba-encoding$suffix" 17
+          target/debug/examples/transactions-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/xero_account_transactions.py" "target/debug/xero-account-transactions$suffix" 16
+          target/debug/examples/transactions-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/xero_account_transactions.py" "target/debug/xero-account-transactions$suffix" 17
       - name: Check out the frozen pre-port Power BI workflow
         if: matrix.component == 'apps/australian-accounting-power-bi'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
