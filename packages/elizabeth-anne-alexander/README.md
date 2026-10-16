@@ -49,7 +49,7 @@ Xero Ledger Review Gate consumes synthetic Xero-shaped trial-balance fixtures an
 
 ```mermaid
 flowchart TD
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#E5E4E2", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#E5E4E2", "titleColor": "#E5E4E2"}}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#FFD32A", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#9B7735", "titleColor": "#E5E4E2"}}}%%
     subgraph ClientPerimeter ["Local Client Perimeter (Zero-Network)"]
         Raw["Synthetic Xero-Shaped Trial Balance Fixture"] --> Validate["Context & Hash Integrity Gate"]
         Validate --> Engine["Decimal Variance Review Engine<br/><i>(Fixed Policy v1)</i>"]
@@ -70,16 +70,18 @@ flowchart TD
         Decision -->|NEEDS_EVIDENCE / ESCALATED| Action["Further Investigation"]
     end
 
-    style ClientPerimeter fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#E5E4E2
-    style ArtifactSplit fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#E5E4E2
-    style Governance fill:#000000,stroke:#E5E4E2,stroke-width:2px,color:#E5E4E2
+    style ClientPerimeter fill:#000000,stroke:#9B7735,stroke-width:2px,color:#E5E4E2
+    style ArtifactSplit fill:#000000,stroke:#9B7735,stroke-width:2px,color:#E5E4E2
+    style Governance fill:#000000,stroke:#9B7735,stroke-width:2px,color:#E5E4E2
     style Model fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Evidence fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Receipt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Done fill:#0F4B32,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Action fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
+    classDef external fill:#745EB1,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     class Raw,LLM external
+    classDef decision fill:#E7162F,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    class Decision,Split decision
 ```
 
 ---
