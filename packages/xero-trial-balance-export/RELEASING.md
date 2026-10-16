@@ -5,6 +5,14 @@ been removed. A native release path requires approval before any tag, upload
 or publication. The instructions below are retained for historical Python
 releases and do not publish the Rust crate.
 
+Before approving a native publisher, verify that its candidate archive includes
+`NOTICE`, `data/cacert.pem` and `data/certifi-LICENSE` alongside both commands.
+The CA bundle must match the SHA-256 recorded in `NOTICE`. It is the unmodified
+MPL-2.0 source embedded in the executables, and recipients must receive its
+source and licence notice. Preserve these files when installing or redistributing
+the commands. This source availability requirement follows
+[MPL-2.0 sections 3.1 to 3.4](https://www.mozilla.org/en-US/MPL/2.0/).
+
 The Accounting Review Pipeline
 [releases](https://github.com/ryanduguid/accounting-review-pipeline/releases)
 are canonical from `xero-trial-balance-export/v0.1.6` onward. Releases through
