@@ -69,6 +69,32 @@ key. Confirm the header is text rather than a formula, existing rows move down,
 and `Recon Result` carries the expected difference. Do not weaken the Office
 trust policy solely to run this check.
 
+## Formula comparison cases
+
+Import `modFormulaCompare.bas` into a disposable workbook without changing
+Office trust settings. Use two fabricated workbooks and explicitly selected
+equally shaped ranges. Record Excel version, module digest, range addresses,
+source revisions and each observed result:
+
+For an assert-based self-check, also import
+`tests/native/modFormulaCompareTests.bas` and run `TestCompareFormulaRanges`.
+It creates and closes its own fabricated workbooks without saving them, and
+raises an error on a failed assertion. Retain the printed result and module
+digests with the Excel version. This self-check has not yet been run in Excel.
+
+| Before | After | Expected diagnostic |
+|---|---|---|
+| `=SUM(B2:B5)` | constant with the same displayed amount | `FORMULA_REMOVED` |
+| `=SUM(B2:B5)` | `=SUM(B2:B4)` with an equal cached amount | `FORMULA_CHANGED` |
+| constant | `=SUM(B2:B5)` | `FORMULA_ADDED` |
+| identical `Formula2` text | identical text with changed formatting | no formula finding |
+| no Excel workbook link | a new fabricated workbook link | workbook-level `EXTERNAL_LINK_ADDED` |
+
+Also check that mismatched shapes and noncontiguous ranges are refused, source
+cells and workbook links remain unchanged, and no source workbook is saved or
+recalculated by the diagnostic. The Power Query runner does not import this module;
+passing its tests cannot establish these VBA results.
+
 ## Pull requests
 
 Say which function or module you changed and show the fixture that exercises it. For an M change, state the locale and column shape you tested against.
