@@ -1,5 +1,5 @@
-//! The Python `decimal` arithmetic the fixture generator relies on, under the default
-//! context: 28 significant digits, ROUND_HALF_EVEN.
+//! Python `decimal` arithmetic with ROUND_HALF_EVEN: 28 significant digits for
+//! the fixture generator and 40 for the review workflow.
 //!
 //! Every operation returns the correctly rounded value of the exact operation, with the
 //! sign CPython gives it, zeros included, so a negative amount that rounds away still
@@ -17,9 +17,12 @@ use num_traits::Zero;
 /// Significant digits in Python's default decimal context.
 pub const PRECISION: u32 = 28;
 
+/// The fixture generator retains Python's default 28-digit context.
+pub type Decimal = ContextDecimal<PRECISION>;
+
 /// A finite decimal value: `(-1)^negative * magnitude * 10^exponent`.
 #[derive(Clone, Debug)]
-pub struct Decimal {
+pub struct ContextDecimal<const P: u32> {
     negative: bool,
     magnitude: BigInt,
     exponent: i64,
@@ -50,13 +53,17 @@ fn round_half_even(magnitude: &BigInt, drop: u64, sticky: bool) -> BigInt {
     if up { quotient + 1 } else { quotient }
 }
 
-impl Decimal {
+impl<const P: u32> ContextDecimal<P> {
     /// `Decimal(text)` for finite values. Like CPython's constructor it is exact, strips
     /// surrounding whitespace, drops every underscore and reads an optional sign, digits
     /// with an optional point, and an optional exponent. Infinities, NaNs, non-ASCII
     /// digits and exponents beyond 10,000 are outside this module and panic.
-    pub fn parse(text: &str) -> Decimal {
-        let refuse = || -> ! { panic!("InvalidOperation: not a supported decimal literal: {text:?}") };
+    pub fn parse(text: &str) -> Self {
+        Self::try_parse(text).unwrap_or_else(|| panic!("InvalidOperation: not a supported decimal literal: {text:?}"))
+    }
+
+    /// A fallible constructor for untrusted workflow money text.
+    pub fn try_parse(text: &str) -> Option<Self> {
         let python_space = |c: char| c.is_whitespace() || ('\x1c'..='\x1f').contains(&c);
         let cleaned: String = text.trim_matches(python_space).chars().filter(|&c| c != '_').collect();
         let (negative, unsigned) = match cleaned.as_bytes().first() {
@@ -65,35 +72,30 @@ impl Decimal {
             _ => (false, cleaned.as_str()),
         };
         let (mantissa, exponent) = match unsigned.find(['e', 'E']) {
-            Some(at) => (
-                &unsigned[..at],
-                parse_exponent(&unsigned[at + 1..]).unwrap_or_else(|| refuse()),
-            ),
+            Some(at) => (&unsigned[..at], parse_exponent(&unsigned[at + 1..])?),
             None => (unsigned, 0),
         };
         let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
         let digits = format!("{whole}{fraction}");
         if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-            refuse();
+            return None;
         }
-        let exponent = exponent - i64::try_from(fraction.len()).expect("short literal");
-        Decimal {
+        Some(Self {
             negative,
-            magnitude: digits.parse().expect("digits"),
-            exponent,
-        }
+            magnitude: digits.parse().ok()?,
+            exponent: exponent - i64::try_from(fraction.len()).ok()?,
+        })
     }
-
-    pub fn from_int(value: i64) -> Decimal {
-        Decimal {
+    pub fn from_int(value: i64) -> Self {
+        Self {
             negative: value < 0,
             magnitude: BigInt::from(value.unsigned_abs()),
             exponent: 0,
         }
     }
 
-    pub fn zero() -> Decimal {
-        Decimal::from_int(0)
+    pub fn zero() -> Self {
+        Self::from_int(0)
     }
 
     pub fn is_zero(&self) -> bool {
@@ -109,23 +111,23 @@ impl Decimal {
     }
 
     /// The exact value rounded to the context precision, keeping its sign.
-    fn rounded(negative: bool, magnitude: BigInt, exponent: i64, sticky: bool) -> Decimal {
+    fn rounded(negative: bool, magnitude: BigInt, exponent: i64, sticky: bool) -> Self {
         let count = digits(&magnitude);
-        if count <= u64::from(PRECISION) && !sticky {
-            return Decimal {
+        if count <= u64::from(P) && !sticky {
+            return Self {
                 negative,
                 magnitude,
                 exponent,
             };
         }
-        let mut drop = count.saturating_sub(u64::from(PRECISION));
+        let mut drop = count.saturating_sub(u64::from(P));
         let mut magnitude = round_half_even(&magnitude, drop, sticky);
-        if digits(&magnitude) > u64::from(PRECISION) {
-            // Rounding carried into a new digit: 10^28 becomes 10^27 one place higher.
+        if digits(&magnitude) > u64::from(P) {
+            // A rounding carry shifts one coefficient digit into the exponent.
             magnitude /= 10;
             drop += 1;
         }
-        Decimal {
+        Self {
             negative,
             magnitude,
             exponent: exponent + i64::try_from(drop).expect("small shift"),
@@ -133,15 +135,15 @@ impl Decimal {
     }
 
     /// Both signed coefficients scaled to the smaller exponent.
-    fn aligned(&self, other: &Decimal) -> (BigInt, BigInt, i64) {
+    fn aligned(&self, other: &Self) -> (BigInt, BigInt, i64) {
         let exponent = self.exponent.min(other.exponent);
-        let scale = |d: &Decimal| d.signed() * pow10((d.exponent - exponent) as u64);
+        let scale = |d: &Self| d.signed() * pow10((d.exponent - exponent) as u64);
         (scale(self), scale(other), exponent)
     }
 
     /// `self + other`. An exact zero sum is negative only when both operands are, as
     /// CPython gives it outside ROUND_FLOOR.
-    pub fn add(&self, other: &Decimal) -> Decimal {
+    pub fn add(&self, other: &Self) -> Self {
         let (a, b, exponent) = self.aligned(other);
         let sum = a + b;
         let negative = if sum.is_zero() {
@@ -149,20 +151,20 @@ impl Decimal {
         } else {
             sum < BigInt::zero()
         };
-        Decimal::rounded(negative, sum.magnitude().clone().into(), exponent, false)
+        Self::rounded(negative, sum.magnitude().clone().into(), exponent, false)
     }
 
     /// `self - other`: the exact difference, rounded once, as `__add__` of `copy_negate()`.
-    pub fn sub(&self, other: &Decimal) -> Decimal {
-        self.add(&Decimal {
+    pub fn sub(&self, other: &Self) -> Self {
+        self.add(&Self {
             negative: !other.negative,
             ..other.clone()
         })
     }
 
-    pub fn mul(&self, other: &Decimal) -> Decimal {
+    pub fn mul(&self, other: &Self) -> Self {
         let magnitude = &self.magnitude * &other.magnitude;
-        Decimal::rounded(
+        Self::rounded(
             self.negative != other.negative,
             magnitude,
             self.exponent + other.exponent,
@@ -172,17 +174,17 @@ impl Decimal {
 
     /// True division, correctly rounded: the quotient is taken to at least one digit
     /// beyond the precision and any remainder is kept as a sticky bit.
-    pub fn div(&self, other: &Decimal) -> Decimal {
+    pub fn div(&self, other: &Self) -> Self {
         assert!(!other.is_zero(), "division by zero");
         let negative = self.negative != other.negative;
         if self.is_zero() {
-            return Decimal {
+            return Self {
                 negative,
                 magnitude: BigInt::zero(),
                 exponent: 0,
             };
         }
-        let shift = i64::from(PRECISION) + 1 + digits(&other.magnitude) as i64 - digits(&self.magnitude) as i64;
+        let shift = i64::from(P) + 1 + digits(&other.magnitude) as i64 - digits(&self.magnitude) as i64;
         let (numerator, denominator) = if shift >= 0 {
             (&self.magnitude * pow10(shift as u64), other.magnitude.clone())
         } else {
@@ -190,24 +192,24 @@ impl Decimal {
         };
         let (quotient, remainder) = numerator.div_rem(&denominator);
         let exponent = self.exponent - other.exponent - shift;
-        Decimal::rounded(negative, quotient, exponent, !remainder.is_zero())
+        Self::rounded(negative, quotient, exponent, !remainder.is_zero())
     }
 
     /// Unary minus, rounded to the context like CPython's `__neg__`; a zero becomes positive.
-    pub fn neg(&self) -> Decimal {
+    pub fn neg(&self) -> Self {
         let negative = !self.negative && !self.is_zero();
-        Decimal::rounded(negative, self.magnitude.clone(), self.exponent, false)
+        Self::rounded(negative, self.magnitude.clone(), self.exponent, false)
     }
 
     /// `value` at exactly `places` decimals, half to even, keeping the sign.
-    fn rescale(&self, places: u32) -> Decimal {
+    fn rescale(&self, places: u32) -> Self {
         let target = -i64::from(places);
         let magnitude = if self.exponent >= target {
             &self.magnitude * pow10((self.exponent - target) as u64)
         } else {
             round_half_even(&self.magnitude, (target - self.exponent) as u64, false)
         };
-        Decimal {
+        Self {
             negative: self.negative,
             magnitude,
             exponent: target,
@@ -217,10 +219,10 @@ impl Decimal {
     /// `round(value, places)`: quantize to `places` decimals, half to even, keeping the
     /// sign even when the result is zero. Like quantize it refuses a result longer than
     /// the context precision.
-    pub fn round(&self, places: u32) -> Decimal {
+    pub fn round(&self, places: u32) -> Self {
         let result = self.rescale(places);
         assert!(
-            digits(&result.magnitude) <= u64::from(PRECISION),
+            digits(&result.magnitude) <= u64::from(P),
             "InvalidOperation: quantize result exceeds the context precision"
         );
         result
@@ -260,23 +262,23 @@ fn parse_exponent(text: &str) -> Option<i64> {
     (value <= 10_000).then_some(if text.starts_with('-') { -value } else { value })
 }
 
-impl PartialEq for Decimal {
-    fn eq(&self, other: &Decimal) -> bool {
+impl<const P: u32> PartialEq for ContextDecimal<P> {
+    fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for Decimal {}
+impl<const P: u32> Eq for ContextDecimal<P> {}
 
-impl PartialOrd for Decimal {
-    fn partial_cmp(&self, other: &Decimal) -> Option<Ordering> {
+impl<const P: u32> PartialOrd for ContextDecimal<P> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 /// Numeric order; a negative zero equals zero.
-impl Ord for Decimal {
-    fn cmp(&self, other: &Decimal) -> Ordering {
+impl<const P: u32> Ord for ContextDecimal<P> {
+    fn cmp(&self, other: &Self) -> Ordering {
         let (a, b, _) = self.aligned(other);
         a.cmp(&b)
     }
@@ -342,5 +344,22 @@ mod tests {
         assert_eq!(near_one.mul(&near_one).to_fixed(27), "1.000000000000000000000000002");
         assert_eq!(d("1.015").mul(&d("160000.0")), d("162400"));
         assert!(d("0.0") == Decimal::zero() && d("1.10") == d("1.1") && d("1.1") < d("1.11"));
+    }
+    #[test]
+    fn review_context_retains_forty_digits_without_changing_fixture_rounding() {
+        type Review = ContextDecimal<40>;
+        let value = "1.00000000000000000000000000001";
+        assert_eq!(Review::parse(value).add(&Review::zero()).to_fixed(29), value);
+        assert_eq!(
+            Decimal::parse(value).add(&Decimal::zero()).to_fixed(29),
+            "1.00000000000000000000000000000"
+        );
+        assert_eq!(
+            Review::from_int(2).div(&Review::from_int(3)).to_fixed(40),
+            "0.6666666666666666666666666666666666666667"
+        );
+        for invalid in ["NaN", "Infinity", "1.2.3", "1e999999", ""] {
+            assert!(Review::try_parse(invalid).is_none());
+        }
     }
 }

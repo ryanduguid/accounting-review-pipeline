@@ -292,6 +292,38 @@ fn all_pages_and_review_visuals_are_materialised() {
 }
 
 #[test]
+fn drillthrough_binds_complete_review_context_and_preserves_back_navigation() {
+    let pages = report_definition().join("pages");
+    let evidence = pages.join("a02closeevid202410002");
+    let page = read_json(&evidence.join("page.json"));
+    assert_eq!(page["type"], "Drillthrough");
+    let properties: HashSet<_> = page["pageBinding"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|parameter| parameter["fieldExpr"]["Column"]["Property"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        properties,
+        HashSet::from(["RunID", "Entity", "Period", "Basis", "ExceptionKey"])
+    );
+    let back = read_json(&evidence.join("visuals/reviewevidback00001/visual.json"));
+    assert_eq!(
+        back["visual"]["visualContainerObjects"]["visualLink"][0]["properties"]["type"]["expr"]["Literal"]["Value"],
+        "'Back'"
+    );
+    let finding = read_json(&pages.join("a01closehome202410001/visuals/reviewhomefinding01/visual.json"));
+    assert_eq!(
+        finding["visual"]["query"]["queryState"]["Values"]["projections"][0]["field"]["Column"]["Property"],
+        "Account"
+    );
+    assert_eq!(
+        finding["visual"]["objects"]["selection"][0]["properties"]["singleSelect"]["expr"]["Literal"]["Value"],
+        "true"
+    );
+}
+
+#[test]
 fn pages_have_selectors_alt_text_and_unique_keyboard_order() {
     for page_dir in page_dirs() {
         let visuals = visuals_of(&page_dir);
