@@ -334,6 +334,7 @@ mod tests {
         // the same resolution it applies rather than the aliased spelling.
         let safe = crate::pypath::resolve(&safe, true).unwrap();
         fs::write(checkout.join(".git"), b"marker").unwrap();
+        let approved = pypath::resolve(&safe, true).unwrap();
         #[cfg(unix)]
         let symlink = std::os::unix::fs::symlink;
         #[cfg(windows)]
@@ -349,7 +350,7 @@ mod tests {
         })
         .unwrap();
         for (index, path) in paths.iter().enumerate() {
-            assert_eq!(path.parent(), Some(safe.as_path()));
+            assert_eq!(path.parent(), Some(approved.as_path()));
             assert_eq!(fs::read(path).unwrap(), data("new")[index]);
         }
         assert_eq!(inventory(&checkout), vec![".git"]);

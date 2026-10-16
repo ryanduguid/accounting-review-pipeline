@@ -171,7 +171,7 @@ def operation(r):
         with decimal.localcontext(decimal.Context(prec=int(r['precision']),rounding=decimal.ROUND_HALF_EVEN)) as context:
             a,b=decimal.Decimal(r['a']),decimal.Decimal(r['b'])
             value={'add':lambda:a+b,'sub':lambda:a-b,'mul':lambda:a*b,'div':lambda:a/b}[r['kind']]()
-            if r['kind'] in ('add','sub'): return {'value':str(value),'inexact':context.flags[decimal.Inexact]}
+            if r['kind'] in ('add','sub'): return {'value':str(value),'inexact':bool(context.flags[decimal.Inexact])}
             return str(value)
     raise ValueError('unsupported oracle operation')
 for line in sys.stdin:
