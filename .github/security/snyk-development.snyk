@@ -1,0 +1,8 @@
+ignore:
+  'snyk:lic:pip:pathspec:MPL-2.0':
+    - '* > pathspec@1.1.1':
+        reason: >-
+          Accept MPL-2.0 for unmodified pathspec 1.1.1 used by mypy for
+          development type checking in the root development environment only.
+          Review before redistribution, modification or use outside this scope.
+        expires: '2026-11-15T00:00:00.000Z'
