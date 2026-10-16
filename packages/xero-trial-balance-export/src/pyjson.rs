@@ -477,6 +477,47 @@ impl<'a> Parser<'a> {
     }
 }
 
+fn shortest_half_even(value: f64, digits: String, scale: i32) -> String {
+    if (digits.as_bytes().last().unwrap() - b'0').is_multiple_of(2) {
+        return digits;
+    }
+    // Resolve shortest-decimal ties with Python's even choice.
+    let bits = value.to_bits();
+    let exponent = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1u64 << 52) - 1);
+    let (significand, binary_scale) = if exponent == 0 {
+        (fraction, -1074)
+    } else {
+        (fraction | (1u64 << 52), exponent - 1023 - 52)
+    };
+    let mut exact = BigInt::from(significand) * 2;
+    let mut unit = BigInt::from(1);
+    if binary_scale >= 0 {
+        exact <<= binary_scale as usize;
+    } else {
+        unit <<= (-binary_scale) as usize;
+    }
+    if scale >= 0 {
+        unit *= BigInt::from(10).pow(scale as u32);
+    } else {
+        exact *= BigInt::from(10).pow((-scale) as u32);
+    }
+    let coefficient = BigInt::parse_bytes(digits.as_bytes(), 10).unwrap();
+    let centre = &coefficient * 2 * &unit;
+    let candidate = if exact == &centre - &unit {
+        (coefficient - 1u32).to_string()
+    } else if exact == centre + unit {
+        (coefficient + 1u32).to_string()
+    } else {
+        return digits;
+    };
+    if format!("{candidate}e{scale}").parse::<f64>().ok() == Some(value.abs()) {
+        candidate
+    } else {
+        digits
+    }
+}
+
 /// `float.__repr__`, the shortest round-tripping form in Python's layout.
 pub fn float_repr(value: f64) -> String {
     if value == 0.0 {
@@ -491,6 +532,8 @@ pub fn float_repr(value: f64) -> String {
     let exponent: i32 = exponent.parse().expect("integer exponent");
     let negative = mantissa.starts_with('-');
     let digits: String = mantissa.chars().filter(|c| c.is_ascii_digit()).collect();
+    let scale = exponent - digits.len() as i32 + 1;
+    let digits = shortest_half_even(value, digits, scale);
     let decpt = exponent + 1;
     let sign = if negative { "-" } else { "" };
     if !(-4 < decpt && decpt <= 16) {
@@ -680,6 +723,22 @@ mod tests {
     fn float_repr_matches_python() {
         for (value, text) in [
             (1.0, "1.0"),
+            (
+                f64::from_bits(0x3e60_0000_0000_0000),
+                "2.9802322387695312e-08",
+            ),
+            (
+                f64::from_bits(0xbe60_0000_0000_0000),
+                "-2.9802322387695312e-08",
+            ),
+            (
+                f64::from_bits(0x3e70_0000_0000_0000),
+                "5.960464477539063e-08",
+            ),
+            (
+                f64::from_bits(0xbe70_0000_0000_0000),
+                "-5.960464477539063e-08",
+            ),
             (1e16, "1e+16"),
             (9999999999999998.0, "9999999999999998.0"),
             (0.0001, "0.0001"),
