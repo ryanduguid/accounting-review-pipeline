@@ -15,11 +15,12 @@ import time
 import tracemalloc
 from pathlib import Path
 
-from debtor_evidence import briefing
-from xero_aged_receivables import inspect_export
-
 HERE = Path(__file__).resolve().parent
 REPOSITORY = Path(__file__).resolve().parents[3]
+REFERENCE = HERE.parent / "tests" / "differential" / "python_reference"
+sys.path.insert(0, str(REFERENCE))
+from debtor_evidence import briefing  # noqa: E402 - frozen Python measurement target
+from xero_aged_receivables import inspect_export  # noqa: E402
 
 
 def workload(count):

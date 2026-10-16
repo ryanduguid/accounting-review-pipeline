@@ -3,7 +3,7 @@ name = "accounting-excel-toolkit"
 version = "0.1.8"
 edition = "2024"
 rust-version = "1.99"
-description = "Offline source checks and account-transactions conversion for Accounting Excel Toolkit"
+description = "Offline source checks, account-transactions conversion and aged review for Accounting Excel Toolkit"
 license = "Apache-2.0"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 publish = false
@@ -16,9 +16,23 @@ path = "src/main.rs"
 name = "xero-account-transactions"
 path = "src/transactions_main.rs"
 
+[[bin]]
+name = "xero-aged-receivables"
+path = "src/aged_main.rs"
+
+[[bin]]
+name = "debtor-evidence"
+path = "src/debtor_main.rs"
+
+[[bin]]
+name = "replay-aged-review"
+path = "src/replay_main.rs"
+
 [dependencies]
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.11"
+num-bigint = "0.5"
+num-traits = "0.2"
 
 [[example]]
 name = "encoding-differential"
@@ -27,6 +41,10 @@ path = "tests/differential/encoding_differential.rs"
 [[example]]
 name = "transactions-differential"
 path = "tests/differential/transactions_differential.rs"
+
+[[example]]
+name = "aged-differential"
+path = "tests/differential/aged_differential.rs"
 
 [lints.clippy]
 too_many_lines = "warn"

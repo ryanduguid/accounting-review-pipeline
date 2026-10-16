@@ -24,7 +24,7 @@ Keep client data out. The `.gitignore` blocks `input/`, `output/`, `clients/`, `
 
 Run these commands from `adapters/accounting-excel-toolkit/` in [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline). Keep the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) as the data-only authority; do not vendor another copy into this adapter.
 
-Rust checks the VBA source guard and account-transactions converter;
+Rust checks the VBA source guard, account-transactions converter and aged review tools;
 Python 3.14 or newer drives the retained suite.
 
 ```bash
@@ -67,6 +67,23 @@ JSON quotation. Help, usage, JSON parser and OS error presentation can differ;
 their CLI exits and stream selection are checked. Native tests cover all seven
 previous converter tests plus formula refusals, mapping limits and raw-byte
 identity. Run both comparisons on Windows and Linux.
+
+The aged verifier, debtor evidence and replay comparison uses the same frozen
+checkout's `tools/` directory and the directory containing all native binaries:
+
+```text
+target/debug/examples/aged-differential PATH_TO_PYTHON_3_15 PATH_TO_FROZEN_TOOLS target/debug 16
+target/debug/examples/aged-differential PATH_TO_PYTHON_3_15 PATH_TO_FROZEN_TOOLS target/debug 17
+```
+
+It compares exact signed amounts, strict CSV parsing, timestamps, metadata,
+ordered JSON, requests and briefing text. CLI comparisons check all 12 replay
+cases and exact evidence bytes. Native tests cover the 31 original verifier,
+debtor and replay test behaviours, with benchmark assertions retained in Python.
+The benchmark imports the frozen Python reference only: its schema 1 Python
+allocation measurements cannot represent a Rust process. Aged arithmetic uses
+`num-bigint` and `num-traits`, already used by other native components in this
+repository. These additions stay private to this crate.
 
 On Windows with Windows PowerShell 5.1 or newer and desktop Excel installed,
 run the checked-in acceptance checks in Excel itself:
