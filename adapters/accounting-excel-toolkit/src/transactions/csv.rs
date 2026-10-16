@@ -25,6 +25,7 @@ fn lines(text: &str) -> Vec<&str> {
 pub struct Reader<'a> {
     lines: std::vec::IntoIter<&'a str>,
     line_num: usize,
+    strict: bool,
 }
 
 impl<'a> Reader<'a> {
@@ -32,6 +33,32 @@ impl<'a> Reader<'a> {
         Reader {
             lines: lines(text).into_iter(),
             line_num: 0,
+            strict: false,
+        }
+    }
+
+    pub fn strict(text: &'a str) -> Reader<'a> {
+        let mut lines = Vec::new();
+        let (mut start, mut index) = (0, 0);
+        let bytes = text.as_bytes();
+        while index < bytes.len() {
+            let current = bytes[index];
+            index += 1;
+            if current == b'\r' && bytes.get(index) == Some(&b'\n') {
+                index += 1;
+            }
+            if matches!(current, b'\r' | b'\n') {
+                lines.push(&text[start..index]);
+                start = index;
+            }
+        }
+        if start < text.len() {
+            lines.push(&text[start..]);
+        }
+        Reader {
+            lines: lines.into_iter(),
+            line_num: 0,
+            strict: true,
         }
     }
 }
@@ -42,6 +69,7 @@ struct Record {
     field: String,
     field_len: usize,
     state: State,
+    strict: bool,
 }
 
 impl Record {
@@ -145,6 +173,7 @@ impl Record {
                 self.end_line(c);
                 Ok(())
             }
+            Some(_) if self.strict => Err(CsvError("',' expected after '\"'".into())),
             Some(ch) => {
                 self.state = State::InField;
                 self.add_char(ch)
@@ -162,9 +191,13 @@ impl Iterator for Reader<'_> {
             field: String::new(),
             field_len: 0,
             state: State::StartRecord,
+            strict: self.strict,
         };
         loop {
             let Some(line) = self.lines.next() else {
+                if record.state == State::InQuotedField && self.strict {
+                    return Some(Err(CsvError("unexpected end of data".into())));
+                }
                 if record.field_len != 0 || record.state == State::InQuotedField {
                     record.save_field();
                     return Some(Ok(record.fields));

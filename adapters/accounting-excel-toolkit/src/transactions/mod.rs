@@ -1,7 +1,7 @@
 mod amount;
 pub mod cli;
-mod csv;
-mod date;
+pub(crate) mod csv;
+pub(crate) mod date;
 pub mod text;
 
 use amount::Amount;

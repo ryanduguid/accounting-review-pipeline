@@ -28,7 +28,7 @@ fn usage(message: &str) -> (u8, String) {
     )
 }
 
-fn negative(text: &str) -> bool {
+pub(crate) fn negative(text: &str) -> bool {
     let Some(text) = text.strip_prefix('-') else {
         return false;
     };
@@ -56,7 +56,7 @@ fn option(name: &str) -> Result<&'static str, (u8, String)> {
     }
 }
 
-fn inline_value(argument: &OsStr) -> OsString {
+pub(crate) fn inline_value(argument: &OsStr) -> OsString {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::{OsStrExt, OsStringExt};

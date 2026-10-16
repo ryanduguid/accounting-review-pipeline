@@ -1,5 +1,18 @@
 # Unreleased Rust tooling
 
+- Replace `tools/xero_aged_receivables.py`, `tools/debtor_evidence.py` and
+  `tools/replay_aged_review.py` with `xero-aged-receivables`, `debtor-evidence`
+  and `replay-aged-review`; their Python import APIs are removed. Build with
+  `cargo build --locked --release --bins` and use the same flags and subcommands.
+  Install replay beside the verifier. Preserve signed four-place amounts,
+  logical records, evidence bytes, statuses and the 12 fabricated replay cases.
+  Native help, usage, malformed JSON, OS and replay failure diagnostics can
+  differ; literal Unicode JSON output requires encodable scalar values.
+  JSON parsing limits are 1,000 nested containers and 4,300 integer digits.
+  New evidence files are created exclusively; a later write failure can leave
+  partial evidence. The source archive remains version 0.1.8.
+- Keep `tools/benchmark_aged_review.py` measuring the frozen Python reference.
+  Schema 1's Python allocation tracing cannot measure the Rust commands.
 - Replace the Python encoding guard with `check-vba-encoding`. Its source lookup
   follows the executable's installed or standard Cargo layout. Custom target
   layouts need explicit file arguments or an installed copy. Native path, OS
