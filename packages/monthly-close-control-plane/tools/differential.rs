@@ -1174,6 +1174,80 @@ fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
         ("current", source("current.csv", current.as_bytes())),
         ("prior", source("prior.csv", prior.as_bytes())),
     ];
+    let equity_tb = |date: &str, first: &str, second: &str, total: &str| {
+        format!(
+            "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n\
+             {date},Synthetic,Equity,E,Account E,E,0,{first},0,{first}\n\
+             {date},Synthetic,Equity,F,Account F,F,0,{second},0,{second}\n\
+             {date},Synthetic,Assets,A,Account A,A,{total},0,{total},0\n"
+        )
+    };
+    for (label, first, second, total, tolerance) in [
+        ("nil-movement", "100", "100", "200", "0.01"),
+        ("opposite-errors", "101", "99", "200", "0.01"),
+        (
+            "aggregate-tolerance",
+            "100.009",
+            "100.009",
+            "200.018",
+            "0.01",
+        ),
+        (
+            "positive-at-tolerance",
+            "100.001",
+            "100",
+            "200.001",
+            "0.001",
+        ),
+        ("negative-at-tolerance", "99.999", "100", "199.999", "0.001"),
+        (
+            "positive-over-tolerance",
+            "100.0011",
+            "100",
+            "200.0011",
+            "0.001",
+        ),
+        (
+            "negative-over-tolerance",
+            "99.9989",
+            "100",
+            "199.9989",
+            "0.001",
+        ),
+    ] {
+        let old = equity_tb("2026-08-31", "100", "100", "200");
+        let new = equity_tb("2026-09-30", first, second, total);
+        let mut schedule = probe::decode(
+            r#"{"schema_version":1,"tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","basis":"ledger_equity","equity_account_ids":["E","F"],"complete":true,"movements":[]}"#,
+        )?;
+        schedule.set(
+            "prior_source_sha256",
+            Json::str(&monthly_close_control_plane::sha256(old.as_bytes())),
+        );
+        schedule.set(
+            "current_source_sha256",
+            Json::str(&monthly_close_control_plane::sha256(new.as_bytes())),
+        );
+        c.push(
+            format!("review-equity-legacy-{label}"),
+            "review",
+            vec![
+                ("current", source("current.csv", new.as_bytes())),
+                ("prior", source("prior.csv", old.as_bytes())),
+                (
+                    "equity_schedule",
+                    source("equity.json", probe::encode(&schedule).as_bytes()),
+                ),
+                ("currency", Json::str("AUD")),
+                (
+                    "currency_evidence",
+                    Json::str("Both fabricated source reports, metadata"),
+                ),
+                ("absolute", Json::str("999999999")),
+                ("tolerance", Json::str(tolerance)),
+            ],
+        );
+    }
     for (label, date, prior_date, tenant, account) in [
         ("later", "2026-10-31", "2026-09-30", "Synthetic", "A"),
         ("earlier", "2026-08-31", "2026-07-31", "Synthetic", "A"),
@@ -1975,6 +2049,59 @@ fn schedules(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
             root.join("examples/schedules").join(format!("{kind}.json")),
         )?)?;
         push(c, &format!("schedule-{kind}-example"), kind, &base);
+        match kind {
+            "expenses" => {
+                let mut document = base.clone();
+                let mut payment = base.at("payments").as_array().unwrap()[0].clone();
+                payment.set("amount", Json::str("100.00"));
+                document.set("payments", Json::Array(vec![payment]));
+                document.set("ledger_balance", Json::str("0"));
+                push(c, "schedule-legacy-expenses-pass", kind, &document);
+            }
+            "migration" => {
+                let mut document = base.clone();
+                document.set(
+                    "before",
+                    Json::Array(vec![base.at("before").as_array().unwrap()[0].clone()]),
+                );
+                let mut first_mapping = base.at("mapping").as_array().unwrap()[0].clone();
+                first_mapping.set("weight", Json::str("0.4"));
+                let mut second_mapping = first_mapping.clone();
+                second_mapping.set("mapping_id", Json::str("M2"));
+                second_mapping.set("target_account", Json::str("OTHER"));
+                second_mapping.set("weight", Json::str("0.6"));
+                document.set("mapping", Json::Array(vec![first_mapping, second_mapping]));
+                let mut first_after = base.at("after").as_array().unwrap()[0].clone();
+                first_after.set("amount", Json::str("40"));
+                let mut second_after = first_after.clone();
+                second_after.set("row_id", Json::str("split"));
+                second_after.set("account", Json::str("OTHER"));
+                second_after.set("amount", Json::str("60"));
+                document.set("after", Json::Array(vec![first_after, second_after]));
+                push(c, "schedule-legacy-migration-split", kind, &document);
+            }
+            "interentity" => {
+                for (label, reference, disputed) in [
+                    ("agrees", "LOAN-1", false),
+                    ("unmatched", "OTHER", false),
+                    ("disputed", "LOAN-1", true),
+                ] {
+                    let mut document = base.clone();
+                    let mut records = base.at("records").as_array().unwrap().to_vec();
+                    records[1].set("amount", Json::str("-50000"));
+                    records[1].set("reference", Json::str(reference));
+                    records[1].set("disputed", Json::Bool(disputed));
+                    document.set("records", Json::Array(records));
+                    push(
+                        c,
+                        &format!("schedule-legacy-interentity-{label}"),
+                        kind,
+                        &document,
+                    );
+                }
+            }
+            _ => unreachable!(),
+        }
         for key in base.keys().unwrap() {
             let key = key.to_utf8().unwrap();
             for (index, raw) in values.iter().enumerate() {
@@ -3434,6 +3561,137 @@ fn cli_cases(corpus: &Corpus, drivers: &Corpus, reads: &Corpus) -> Result<Corpus
     Ok(result)
 }
 
+fn assert_legacy_financial_cases(corpus: &Corpus, responses: &[Json]) -> Result<()> {
+    let mut checked = 0;
+    let mut rendered = 0;
+    for (request, response) in corpus.0.iter().zip(responses) {
+        let name = request.at("name").as_pystr().unwrap().to_utf8().unwrap();
+        if name.starts_with("render-review-equity-legacy-") {
+            if !response
+                .get("ok")
+                .and_then(Json::as_array)
+                .is_some_and(|files| files.len() == 4)
+            {
+                return Err(format!("legacy equity rendering failed for {name}").into());
+            }
+            rendered += 1;
+            continue;
+        }
+        let status = match name.as_str() {
+            "review-equity-legacy-nil-movement"
+            | "review-equity-legacy-positive-at-tolerance"
+            | "review-equity-legacy-negative-at-tolerance"
+            | "schedule-legacy-expenses-pass"
+            | "schedule-legacy-migration-split"
+            | "schedule-legacy-interentity-agrees" => "PASS",
+            "review-equity-legacy-opposite-errors"
+            | "review-equity-legacy-aggregate-tolerance"
+            | "review-equity-legacy-positive-over-tolerance"
+            | "review-equity-legacy-negative-over-tolerance"
+            | "schedule-legacy-interentity-unmatched"
+            | "schedule-legacy-interentity-disputed" => "REVIEW",
+            _ => continue,
+        };
+        let Some(value) = response.get("ok") else {
+            return Err(format!("legacy financial case {name} did not produce a result").into());
+        };
+        let mut holds = value.at("status").is_str(status);
+        match name.as_str() {
+            "review-equity-legacy-nil-movement" => {
+                holds &= value
+                    .at("equity_reconciliation")
+                    .at("total")
+                    .at("movement")
+                    .is_str("0");
+            }
+            "review-equity-legacy-opposite-errors" => {
+                holds &= value
+                    .at("exceptions")
+                    .as_array()
+                    .is_some_and(|rows| rows.len() == 2)
+                    && value
+                        .at("equity_reconciliation")
+                        .at("total")
+                        .at("unexplained")
+                        .is_str("0");
+            }
+            "review-equity-legacy-aggregate-tolerance" => {
+                holds &= value.at("exceptions").as_array().is_some_and(|rows| {
+                    rows.len() == 1 && rows[0].at("difference").is_str("0.018")
+                });
+            }
+            "schedule-legacy-interentity-unmatched" => {
+                holds &= value.at("pairs").as_array().is_some_and(|rows| {
+                    rows.len() == 2 && rows.iter().all(|row| row.at("status").is_str("UNMATCHED"))
+                });
+            }
+            "schedule-legacy-interentity-disputed" => {
+                holds &= value
+                    .at("pairs")
+                    .as_array()
+                    .is_some_and(|rows| rows.len() == 1 && rows[0].at("status").is_str("AGREES"));
+            }
+            _ => {}
+        }
+        if !holds {
+            return Err(format!("legacy financial outcome assertion failed for {name}").into());
+        }
+        checked += 1;
+    }
+    if checked != 12 || rendered != 7 {
+        return Err(format!("expected 12 legacy financial cases and 7 equity renders, checked {checked} and {rendered}").into());
+    }
+    println!("12 legacy financial scenarios and 7 equity renders satisfy fixed outcome assertions");
+    Ok(())
+}
+
+fn assert_legacy_equity_verification(corpus: &Corpus, responses: &[Json]) -> Result<()> {
+    let mut checked = 0;
+    for (request, response) in corpus.0.iter().zip(responses) {
+        let name = request.at("name").as_pystr().unwrap().to_utf8().unwrap();
+        let Some(label) = name.strip_prefix("verify-render-review-equity-legacy-") else {
+            continue;
+        };
+        let status = match label {
+            "nil-movement" | "positive-at-tolerance" | "negative-at-tolerance" => "PASS",
+            "opposite-errors"
+            | "aggregate-tolerance"
+            | "positive-over-tolerance"
+            | "negative-over-tolerance" => "REVIEW",
+            _ => continue,
+        };
+        let document = response
+            .get("ok")
+            .and_then(|value| value.get("verified"))
+            .and_then(Json::as_array)
+            .and_then(|verified| verified.first())
+            .ok_or_else(|| format!("legacy equity saved-pack verification failed for {name}"))?;
+        if !document
+            .at("equity_reconciliation")
+            .at("status")
+            .is_str(status)
+        {
+            return Err(
+                format!("legacy equity saved-pack status assertion failed for {name}").into(),
+            );
+        }
+        if label == "aggregate-tolerance"
+            && !document
+                .at("client_queries")
+                .as_array()
+                .is_some_and(|rows| rows.is_empty())
+        {
+            return Err("aggregate-only equity finding must not draft a client query".into());
+        }
+        checked += 1;
+    }
+    if checked != 7 {
+        return Err(format!("expected 7 verified legacy equity packs, checked {checked}").into());
+    }
+    println!("7 legacy equity saved packs verify with fixed status assertions");
+    Ok(())
+}
+
 fn run_batch(corpus: &Corpus, python: &Path, root: &Path, executable: &Path) -> Result<Vec<Json>> {
     let names: Vec<_> = corpus
         .0
@@ -3535,8 +3793,10 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         return Err("build probe binaries before running the differential".into());
     }
     let expected = run_batch(&corpus, python, &root, &executable)?;
+    assert_legacy_financial_cases(&corpus, &expected)?;
     let verification = verification_cases(&corpus, &expected)?;
-    run_batch(&verification, python, &root, &executable)?;
+    let verified = run_batch(&verification, python, &root, &executable)?;
+    assert_legacy_equity_verification(&verification, &verified)?;
     let drivers = driver_cases(&corpus, &expected)?;
     run_batch(&drivers, python, &root, &executable)?;
     let read_utilities = read_utility_cases(&corpus, &expected)?;
