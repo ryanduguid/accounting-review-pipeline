@@ -211,13 +211,8 @@ changing their status.
 
 Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-<<<<<<< HEAD
-`0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c`: `monthly-close-control-plane/v*`,
-`accounting-excel-toolkit/v*`. One tag publishes exactly one component; the
-=======
-`a601f1d8b143f92b0517f709216993660d21f480`: `accounting-excel-toolkit/v*`.
+`0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c`: `accounting-excel-toolkit/v*`.
 One tag publishes exactly one component; the
->>>>>>> 84659f7 (Port Monthly Close Controls to standalone Rust)
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
