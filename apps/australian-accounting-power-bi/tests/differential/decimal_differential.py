@@ -73,9 +73,9 @@ DIRECTED = [
 ]
 
 
-def expected(op: str, a: str, b: str) -> str:
+def expected(op: str, a: str, b: str, precision: int = 28) -> str:
     try:
-        with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
+        with localcontext(Context(prec=precision, rounding=ROUND_HALF_EVEN)):
             x = Decimal(a)
             if op == "parse":
                 return format(x, ".60f")
@@ -100,6 +100,7 @@ def main() -> int:
     parser.add_argument("oracle")
     parser.add_argument("--cases", type=int, default=200000)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--precision", type=int, choices=(28, 40), default=28)
     args = parser.parse_args()
     rng = random.Random(args.seed)
     requests = list(DIRECTED)
@@ -113,13 +114,14 @@ def main() -> int:
             b = "7"
         requests.append((op, a, b))
     stdin = "".join(json.dumps(request) + "\n" for request in requests)
-    completed = subprocess.run([args.oracle], input=stdin, capture_output=True, text=True, check=True)
+    command = [args.oracle] + (["--precision", "40"] if args.precision == 40 else [])
+    completed = subprocess.run(command, input=stdin, capture_output=True, text=True, check=True)
     actual = completed.stdout.splitlines()
     if len(actual) != len(requests):
         print(f"oracle returned {len(actual)} results for {len(requests)} requests")
         return 1
     mismatches = [(request, got, want) for request, got in zip(requests, actual)
-                  if got != (want := expected(*request))]
+                  if got != (want := expected(*request, precision=args.precision))]
     for request, got, want in mismatches[:20]:
         print(f"{json.dumps(request)}\n  rust   {got}\n  python {want}")
     errors = sum(got == "error" for got in actual)

@@ -43,7 +43,13 @@ MODULES = {
     "test_payday_super_rules": "payday_super_rules",
 }
 RENAMED = {"all_four_pages_and_review_visuals_are_materialised": "all_pages_and_review_visuals_are_materialised"}
-RUST_ONLY = {"evaluator_follows_the_rule_grammar", "decimal_grammar_matches_python_conversion"}
+# The three review assertions came from the separate, later workflow suite.
+RUST_ONLY = {
+    "evaluator_follows_the_rule_grammar", "decimal_grammar_matches_python_conversion",
+    "review_account_mapping_matches_the_pinned_case",
+    "review_island_has_only_its_own_single_direction_relationship_and_text_amounts",
+    "drillthrough_binds_complete_review_context_and_preserves_back_navigation",
+}
 SWAPS = [
     ("KEEPFILTERS(", "FILTER("), ("TREATAS(", "TREAT("), ("OneDirection", "BothDirections"),
     ("crossFilteringBehavior", "crossFilter"), ("formatString:", "formatstring:"), ("\t/// ", "\t// "),

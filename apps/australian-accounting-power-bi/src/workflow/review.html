@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-AU"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Fabricated close review</title><style>
+:root{{color-scheme:light dark;--page:#f3f5f6;--panel:#ffffff;--text:#182b32;--muted:#43535b;--line:#cad4d8;--link:#075f67;--focus:#b95715}}
+*{{box-sizing:border-box}}body{{font:17px/1.5 system-ui,sans-serif;margin:0;background:var(--page);color:var(--text)}}
+main{{max-width:1100px;margin:auto;padding:32px}}article,header,section{{background:var(--panel);padding:24px;margin:24px 0;border:1px solid var(--line);border-radius:8px}}
+h1,h2,h3,h4{{line-height:1.25;text-wrap:balance;overflow-wrap:anywhere}}h1,h2{{margin-top:0}}h1{{font-size:2rem}}h2{{font-size:1.5rem}}h3{{font-size:1.125rem}}
+p{{max-width:65ch}}a{{color:var(--link);text-underline-offset:3px}}a:hover{{text-decoration-thickness:2px}}a:active{{background:var(--page)}}
+:focus-visible{{outline:3px solid var(--focus);outline-offset:4px}}.finding:target{{outline:3px solid var(--link);outline-offset:4px}}
+dl{{display:grid;grid-template-columns:176px minmax(0,1fr);gap:8px 16px}}dt{{font-weight:650;overflow-wrap:anywhere}}dd{{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}}
+.control,.scroll-hint{{color:var(--muted)}}.index{{padding-left:32px}}.index li{{padding:0 0 8px 8px}}.index a{{display:block;min-height:44px;padding:8px;overflow-wrap:anywhere}}
+.index span{{display:block;font-size:0.875rem;color:var(--muted);font-weight:400}}.finding-nav,.section-nav{{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:24px}}
+.finding-nav a,.section-nav a{{display:flex;align-items:center;min-height:44px;padding:8px 0;overflow-wrap:anywhere}}
+.journal-scroll{{overflow-x:auto;max-width:100%}}table{{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}}
+caption{{text-align:left;padding:8px 0;font-weight:650}}th,td{{padding:8px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}}
+.amount{{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}}pre{{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}}
+.comparison table{{min-width:0}}.comparison th{{overflow-wrap:normal}}
+.comparison-records{{list-style:none;padding:0}}.comparison-records li{{padding:16px 0;border-bottom:1px solid var(--line)}}.comparison-records li:last-child{{border-bottom:0}}.comparison-records h4{{font-size:1.125rem;margin:0}}.comparison-records p{{margin:4px 0 8px;overflow-wrap:anywhere}}
+.comparison-records dl{{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0}}.comparison-records dd{{margin:4px 0 0}}.comparison-records dl>div{{min-width:0}}.comparison-period{{text-align:right}}
+.comparison-value span{{display:block;white-space:normal;overflow-wrap:anywhere}}.comparison-value+.comparison-value{{margin-top:8px}}
+@media screen and (max-width:650px){{.comparison-records dl{{display:grid;grid-template-columns:minmax(0,1fr)}}}}
+@media(min-width:651px){{.scroll-hint{{display:none}}}}
+@media(max-width:650px){{main{{padding:12px}}article,header,section{{padding:16px}}h1{{font-size:1.75rem}}dl{{display:block}}dd{{margin:4px 0 16px}}.finding-nav{{display:block}}.finding-nav a{{margin-top:8px}}.section-nav{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}}.section-nav a{{padding:8px;min-height:64px;font-size:16px}}}}
+@media(prefers-color-scheme:dark){{:root{{--page:#102229;--panel:#182f36;--text:#eef4f6;--muted:#bacdd3;--line:#56717b;--link:#87dbdf;--focus:#efb06a}}}}
+@media print{{:root{{color-scheme:light;--page:white;--panel:white;--text:black;--muted:#333;--line:#777;--link:black}}body{{font-size:11pt}}main{{max-width:none;padding:0}}article,header,section{{border:0;border-radius:0;padding:0}}nav,.finding-nav,.section-nav,.scroll-hint,#finding-index{{display:none}}.finding:target,:focus-visible{{outline:0}}h2,h3,h4,dt,.finding>.control,caption,thead{{break-after:avoid}}tr{{break-inside:avoid}}.comparison-records li{{break-inside:avoid}}table{{min-width:0;font-size:10pt}}.journal-scroll{{overflow:visible}}pre{{font-size:9pt}}}}
+</style></head><body><main>
+<header><h1>Exceptions requiring review</h1><p>{heading_context}</p><p>{boundary}</p><p><strong>{finding_count} findings</strong>. Journal amounts are in {currency}. Review values retain the producer's units.</p><nav class="section-nav" aria-label="Report sections"><a href="#finding-index">Finding index</a><a href="#run-context">Run context</a><a href="#run-changes">Run changes</a><a href="#run-hashes">Input and result hashes</a></nav></header>
+<section id="finding-index" tabindex="-1" aria-labelledby="index-title"><h2 id="index-title">Finding index</h2><p>Choose a finding to read its review action and journal evidence. Findings retain the producer's order.</p><nav aria-label="Findings"><ol class="index">{index_links}</ol></nav></section>
+{sections}
+<section id="run-context" tabindex="-1"><h2>Run context and control coverage</h2><p>Amounts retain the producer's exact text. Self-review assertions and any demonstration note are fabricated.</p><dl>{metadata}</dl></section>
+<section id="run-changes" tabindex="-1"><h2>Changes from the previous verified run</h2>{comparison_html}</section>
+{comparison_record}
+<section id="run-hashes" tabindex="-1"><h2>Input and result hashes</h2><p>Local hash receipts detect accidental edits. They are unsigned and can be replaced by anyone who can replace the whole run.</p><pre>{hashes}</pre></section>
+</main></body></html>

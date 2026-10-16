@@ -44,6 +44,9 @@ These repository-wide rules apply everywhere:
   1.0.0. Its Python runtime and import API are removed. The native close-control
   command preserves its file and status contracts, with documented compatibility
   limits. Native publication is explicitly blocked.
+  The approved binary-only exception also applies to the Power BI review workflow
+  in 1.0.0. Its six commands use the native review-workflow binary and an embedded
+  fabricated case; the previous Python workflow module is removed.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
@@ -93,16 +96,16 @@ Run every check from the owning component directory with its documented commands
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, its frozen Python 3.15 differential and native binary smoke on Linux and Windows; RustSec dependency audit |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked`, on Linux and Windows; `tests/differential/differential.py` compares the binary with the 0.2.6 Python release |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
-| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked`; `python -B -m unittest discover -s tests -v`; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
+| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and its frozen Python 3.15 workflow differential on Linux and Windows; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked` for the Rust workpaper; `python -B -m unittest discover -s tests -v` for the setup and replay utility; both on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked --all-features`; the differential probe is enabled only with `--features probe` |
 
 `ci.yml`'s `rust` job runs native package checks on Linux and Windows. Its
 `dependency-audit` job checks Monthly Close Controls against RustSec. The Excel
-adapter, Power BI and grant applications retain Python tooling checked with
-their own Ruff, mypy and unittest settings. Their native crates run in the
-standard-library workflow. Power BI's review workflow remains Python pending
-its separate port; both producer commands are native binaries.
+adapter and grant application retain Python tooling checked with their own
+Ruff, mypy and unittest settings. The application Rust crates run in the
+standard-library workflow. Power BI uses native commands for its generator,
+review workflow and both review producers; Python is retained for frozen oracles.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,
 the Excel adapter, Power BI structural validation and the joined conformance test. A change
