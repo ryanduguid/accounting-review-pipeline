@@ -111,8 +111,17 @@ fn cli(request: &Json) -> Result<Json> {
         })
         .collect::<Result<Vec<_>>>()?;
     let (code, stdout, stderr) = crate::stdio::capture(|| crate::cli::main(arguments));
+    let resolved = pypath::text(
+        &pypath::resolve(&directory.0, true)
+            .map_err(|_| "cannot resolve probe temporary directory")?,
+    );
     let normalise = |mut text: String| {
-        for raw in [root.clone(), root.replace('\\', "/")] {
+        for raw in [
+            root.clone(),
+            root.replace('\\', "/"),
+            resolved.clone(),
+            resolved.replace('\\', "/"),
+        ] {
             let mut variants = vec![raw];
             for _ in 0..3 {
                 let quoted = pyjson::dumps(&Json::str(variants.last().unwrap()), false);
