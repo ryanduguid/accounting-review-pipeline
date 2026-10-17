@@ -5,9 +5,15 @@
 [![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=Verify&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/xero-trial-balance-export.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/xero-trial-balance-export/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
-[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-66023C?logo=python&logoColor=white&labelColor=000000&style=flat-square)](https://www.python.org/downloads/)
+[![Rust 1.99](https://img.shields.io/badge/Rust-1.99-66023C?logo=rust&logoColor=white&labelColor=000000&style=flat-square)](https://www.rust-lang.org/tools/install)
 
-Pull a trial balance straight from the Xero API into a tidy CSV that Power BI (or pandas, or Excel) loads without cleanup. The 4 Python files (`auth.py`, `xero_client.py`, `export_tb.py`, `token_store.py`) handle consent, token refresh, the API request and CSV output.
+Export a validated Xero trial balance to CSV for Power BI and Excel. Version 1.0.0 supplies the native Rust commands `export-tb` and `xero-tb-auth`. Build and install them from this component directory:
+
+```bash
+cargo install --locked --path .
+```
+
+The Python import API is removed. The Rust release workflow is pending approval; the earlier Python distribution remains on PyPI. See [release notes](RELEASE_NOTES.md) for migration details.
 
 The maintained source is under `packages/xero-trial-balance-export` in the
 Accounting Review Pipeline. The `xero-trial-balance-export` distribution,
@@ -28,7 +34,7 @@ The API path is read-only and cannot write to the ledger; see
 The card is built from the fabricated sample. Recalculate both balance checks and confirm that the committed proof is current:
 
 ```bash
-python tools/render_quick_proof.py --check
+cargo run --locked --features tools --bin xero-tb-proof -- --check
 ```
 
 ## Why
@@ -45,20 +51,20 @@ See [`samples/sample-output.csv`](samples/sample-output.csv) for the exact outpu
 
 Reproduce the offline movement and YTD gate with the fabricated fixtures in the [Xero trial balance integrity evaluation](evaluation/xero_tb_integrity/README.md).
 
-## Setup (once, ~5 minutes)
+## Setup
 
 1. Create an app at [developer.xero.com](https://developer.xero.com/app/manage) → New app → Web app. Redirect URI: `http://localhost:8400/callback`. This script intentionally accepts `localhost` only: it runs a local plain-HTTP callback and does not expose an OAuth listener to your LAN.
-2. `python -m pip install --require-hashes -r requirements.lock` (Python 3.14 or newer)
+2. Install Rust 1.99 stable, then run `cargo install --locked --path .` from this component directory.
 3. Copy `.env.example` to `.env`, fill in the app's client ID and secret
-4. `python auth.py`: browser opens, consent, done. On Windows, `token.json` is protected immediately with current-user DPAPI. Works with Xero's free Demo Company; no paid subscription needed.
+4. `xero-tb-auth`: browser opens, consent, done. On Windows, `token.json` is protected immediately with current-user DPAPI. Works with Xero's free Demo Company; no paid subscription needed.
 
 ## Use
 
 ```bash
-python export_tb.py --date 2026-06-30
+export-tb --date 2026-06-30
 ```
 
-Options: `--tenant "name-or-id"` (name substring, or an exact `tenantId` when display names collide), `--out relative/path.csv`, `--payments-only` (cash basis), `--token-file path/to/token.json` (where the token cache lives; the flag beats the `XERO_TOKEN_FILE` environment variable, and the default is the per-user state directory: `~/.local/state/xero-trial-balance-export/token.json` on Unix, `%LOCALAPPDATA%\xero-trial-balance-export\token.json` on Windows. An existing `token.json` beside `xero_client.py` is still used so older clones keep working). `--out` must be a `.csv` path beneath the process working directory; absolute paths outside the working directory, `..` traversal and paths through an existing symlink that escapes that directory are rejected. A missing parent directory under `--out` is created rather than refused (`--out exports/tb.csv` makes `exports/` if it is not there), so a fetched report is never thrown away for want of a folder. `--quiet` drops the `Tenant:` line, the balance-check totals line and every written filename, in failure messages as well as successful ones, for a run whose log is not access-controlled; the default filename embeds the organisation name, so the output directory is printed instead of the path. The account count, the fact that a manifest was written and every warning still print. Default filename: `{tenant}-{tenantid8}-tb-{date}-{accrual|cash}.csv`, so the 2 bases never overwrite each other. The `{tenant}` segment is sanitised for filesystem safety; see the [Filename reference](#filename-reference) appendix for the exact rules and their edge cases.
+Options: `--tenant "name-or-id"` (name substring, or an exact `tenantId` when display names collide), `--out relative/path.csv`, `--payments-only` (cash basis), `--token-file path/to/token.json` (where the token cache lives; the flag beats the `XERO_TOKEN_FILE` environment variable, and the default is the per-user state directory: `~/.local/state/xero-trial-balance-export/token.json` on Unix, `%LOCALAPPDATA%\xero-trial-balance-export\token.json` on Windows. An existing `token.json` beside the executable takes precedence over the state default. Point `XERO_TOKEN_FILE` at an earlier Python cache to reuse it). `--out` must be a `.csv` path beneath the process working directory; absolute paths outside the working directory, `..` traversal and paths through an existing symlink that escapes that directory are rejected. A missing parent directory under `--out` is created rather than refused (`--out exports/tb.csv` makes `exports/` if it is not there), so a fetched report is never thrown away for want of a folder. `--quiet` drops the `Tenant:` line, the balance-check totals line and every written filename, in failure messages as well as successful ones, for a run whose log is not access-controlled; the default filename embeds the organisation name, so the output directory is printed instead of the path. The account count, the fact that a manifest was written and every warning still print. Default filename: `{tenant}-{tenantid8}-tb-{date}-{accrual|cash}.csv`, so the 2 bases never overwrite each other. The `{tenant}` segment is sanitised for filesystem safety; see the [Filename reference](#filename-reference) appendix for the exact rules and their edge cases.
 
 `--date` is an as-at date, not a range. Xero's `Reports/TrialBalance` endpoint takes
 only `date` and `paymentsOnly`, so this tool reproduces the `Trial Balance` report and
@@ -83,8 +89,8 @@ A manifest is written beside the CSV as `<out>.manifest.json` once the CSV is on
 ## Power BI
 
 1. Get Data → Text/CSV → point at the export. Columns arrive typed and tidy; `Section` and `AccountCode` are ready for slicers and drill-downs.
-2. For a zero-click refresh, set the scheduled task's working directory (Windows **Start in**, or cron's `cd`) to the fixed Power BI data directory, then schedule `export_tb.py` with an explicit `--tenant` and relative `--out`, for example, from `C:\data`: `python C:\path\to\export_tb.py --tenant "Org Name" --out tb-latest.csv`.
-3. Run the Windows task in the same Windows user profile that ran `auth.py`: current-user DPAPI is deliberately not a portable cache format, and a non-Windows process cannot decrypt it.
+2. For a zero-click refresh, set the scheduled task's working directory (Windows **Start in**, or cron's `cd`) to the fixed Power BI data directory, then schedule `export-tb` with an explicit `--tenant` and relative `--out`, for example, from `C:\data`: `C:\path\to\export-tb.exe --tenant "Org Name" --out tb-latest.csv`.
+3. Run the Windows task in the same Windows user profile that ran `xero-tb-auth`: current-user DPAPI is deliberately not a portable cache format, and a non-Windows process cannot decrypt it.
 4. Pin the output name with `--out`, as above. The default filename embeds the report date, so a bare scheduled run writes a new file every day while Power BI keeps refreshing the stale one from setup day.
 
 A ready-made query is committed at [`samples/power-bi-query.pq`](samples/power-bi-query.pq). Paste it into Power BI Desktop (Home → Transform data → New Source → Blank Query → Advanced Editor), set the path at the top, and it loads the 10 exported columns with explicit types, refusing any file whose header is not the exporter's. Point it at the fabricated [`samples/sample-output.csv`](samples/sample-output.csv) to exercise the whole load path with no Xero connection. It types `AccountCode` as text on purpose: codes like `090` lose their leading zero as a number, which breaks slicers and joins back to the ledger.
@@ -95,30 +101,30 @@ Two Xero platform limits worth knowing, checked against Xero's [OAuth 2.0 API li
 
 ## Scheduled runs
 
-Point the job at a stable token cache first. `export_tb.py` resolves it in the order `--token-file`, then `XERO_TOKEN_FILE`, then an existing module-adjacent `token.json`, then the per-user state directory. Pin the path in a scheduled job so a checkout move cannot orphan the cache and an operator's flag always wins. The lock file (`<cache>.lock`) always sits beside whichever cache path wins. Run the job as the same user that ran `auth.py` (on Windows this is mandatory: the DPAPI cache only decrypts under that user's profile).
+Point the job at a stable token cache first. `export-tb` resolves it in the order `--token-file`, then `XERO_TOKEN_FILE`, then an existing executable-adjacent `token.json`, then the per-user state directory. Pin the path in a scheduled job so a checkout move cannot orphan the cache and an operator's flag always wins. The lock file (`<cache>.lock`) always sits beside whichever cache path wins. Run the job as the same user that ran `xero-tb-auth` (on Windows this is mandatory: the DPAPI cache only decrypts under that user's profile).
 
-Authorise into that same path. `auth.py` has **no `--token-file` flag**: it takes the cache path only from `XERO_TOKEN_FILE`, read from the environment or from `.env`. Set it before running `auth.py`, or the pinned path in the recipes below names a cache `auth.py` never wrote and the first scheduled run fails with no `token.json`. Both scripts refuse a cache outside the allowed roots (your home or profile directory, the working directory, the system temp directory, or the install directory), so pin a path under one of those. Put `XERO_TOKEN_FILE=~/.xero/token.json` in `.env` (see `.env.example`) so both commands agree (`.env` gets no shell expansion, so use `~`, which the path check expands, rather than `$HOME`), or set it for the one authorisation run:
+Authorise into that same path. `xero-tb-auth` has **no `--token-file` flag**: it takes the cache path only from `XERO_TOKEN_FILE`, read from the environment or from `.env`. Set it before running `xero-tb-auth`, or the pinned path in the recipes below names a cache `xero-tb-auth` never wrote and the first scheduled run fails with no `token.json`. Both commands refuse a cache outside the allowed roots (your home or profile directory, the working directory, the system temp directory, or the install directory), so pin a path under one of those. Put `XERO_TOKEN_FILE=~/.xero/token.json` in `.env` (see `.env.example`) so both commands agree (`.env` gets no shell expansion, so use `~`, which the path check expands, rather than `$HOME`), or set it for the one authorisation run:
 
 ```bash
-XERO_TOKEN_FILE=$HOME/.xero/token.json python auth.py    # Linux or macOS
+XERO_TOKEN_FILE=$HOME/.xero/token.json xero-tb-auth    # Linux or macOS
 ```
 
 ```powershell
-$env:XERO_TOKEN_FILE = "$env:USERPROFILE\xero\token.json"; python auth.py    # Windows PowerShell
+$env:XERO_TOKEN_FILE = "$env:USERPROFILE\xero\token.json"; xero-tb-auth    # Windows PowerShell
 ```
 
-Exit codes: `0` means the export succeeded and the CSV is in place. `1` means the run failed and printed a one-line reason (most failures report on stderr; the balance-check warnings print on stdout, so capture both streams). `2` means a command-line error (a malformed `--date`, an `--out` outside the working directory, or an output inside a version-control checkout that git does not ignore). Any non-zero exit writes no CSV to the destination, though a locked destination leaves the finished export beside it as a named `*.csv.tmp`.
+Exit codes: `0` means the export succeeded and the CSV is in place. `1` means the run failed and printed a one-line reason (most failures report on stderr; the balance-check warnings print on stdout, so capture both streams). `2` means a command-line error (a malformed `--date`, an `--out` outside the working directory, or an output inside a version-control checkout that git does not ignore). Validation failures preserve the earlier CSV. A locked destination leaves the complete export beside it as a named `*.csv.tmp`. If manifest publication fails after CSV replacement, exit 1 can accompany a complete new CSV; follow the printed recovery instruction.
 
 cron (Linux or macOS), daily at 06:30, with both streams appended to a log:
 
 ```cron
-30 6 * * * cd /srv/powerbi-data && XERO_TOKEN_FILE=$HOME/.xero/token.json /usr/bin/python3 /opt/xero-trial-balance-export/export_tb.py --tenant "Org Name" --out tb-latest.csv >> /var/log/xero-export.log 2>&1
+30 6 * * * cd /srv/powerbi-data && XERO_TOKEN_FILE=$HOME/.xero/token.json /opt/xero-trial-balance-export/export-tb --tenant "Org Name" --out tb-latest.csv >> /var/log/xero-export.log 2>&1
 ```
 
-Windows Task Scheduler: create a task that runs as the Windows user who ran `auth.py`, with 'Start in' set to the Power BI data directory. Action program: `cmd.exe`. Arguments:
+Windows Task Scheduler: create a task that runs as the Windows user who ran `xero-tb-auth`, with 'Start in' set to the Power BI data directory. Action program: `cmd.exe`. Arguments:
 
 ```
-/c ""C:\Python313\python.exe" "C:\tools\xero-trial-balance-export\export_tb.py" --tenant "Org Name" --out tb-latest.csv --token-file "%USERPROFILE%\xero\token.json" >> "C:\logs\xero-export.log" 2>&1"
+/c ""C:\tools\xero-trial-balance-export\export-tb.exe" --tenant "Org Name" --out tb-latest.csv --token-file "%USERPROFILE%\xero\token.json" >> "C:\logs\xero-export.log" 2>&1"
 ```
 
 Task Scheduler records the exit code as the task's 'Last Run Result', so a `1` or `2` there means read the log. The `>>` redirection is what captures the one-line error messages; without it a failed scheduled run leaves nothing to read.
@@ -127,10 +133,10 @@ Task Scheduler records the exit code as the task's 'Last Run Result', so a `1` o
 
 Xero refresh tokens **rotate on use**: every refresh returns a replacement refresh token. If the refresh response does not arrive, Xero permits retrying the previous token for up to a 30-minute grace period; outside that window, the user must re-authorise. The [Xero OAuth FAQ](https://developer.xero.com/faq/oauth2) was checked on 20 August 2026 (`2026-08-20`); recheck it for apps created or used after that date.
 
-[`xero_client.py`](xero_client.py) uses one `TokenSession` for the selected cache
+[`src/tokens.rs`](src/tokens.rs) uses one `TokenSession` for the selected cache
 path. A cross-process lock covers cache reads, migration, refresh and writes.
 The session persists the new token pair before using the access token, writing
-through a temporary file and `os.replace` so a crash cannot leave a partial
+through a temporary file and an atomic rename so a crash cannot leave a partial
 `token.json`. A refresh callback keeps Xero's endpoint and HTTP handling outside
 the cache boundary.
 
@@ -141,16 +147,17 @@ cache migrates it atomically under the same lock, preserving its original
 
 A corrupt cache or unknown envelope version stops the run without a network
 call or rewrite. If a token is unusable, for example after restoring an old
-`token.json` from backup, the error directs the operator back to `auth.py`.
+`token.json` from backup, the error directs the operator back to `xero-tb-auth`.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| [`auth.py`](auth.py) | One-time browser consent → `token.json` |
-| [`xero_client.py`](xero_client.py) | Token cache, rotation-safe refresh, authed GET with 429 and 401 retries |
-| [`export_tb.py`](export_tb.py) | Fetch report → flatten nested rows → CSV + balance check |
-| [`token_store.py`](token_store.py) | Resolves the cache path (flag, env, legacy module-adjacent file, then per-user state) |
+| [`src/auth.rs`](src/auth.rs) | Runs browser consent and validates the callback state |
+| [`src/tokens.rs`](src/tokens.rs) | Locks, protects and persists the rotating token pair |
+| [`src/http.rs`](src/http.rs) | Sends the read-only requests and bounded retries |
+| [`src/report.rs`](src/report.rs) | Validates report rows and serialises the CSV |
+| [`src/paths.rs`](src/paths.rs) | Checks output and cache destinations |
 
 ## Scope and disclaimer
 
@@ -160,7 +167,7 @@ Xero's [Developer Platform terms](https://developer.xero.com/xero-developer-plat
 
 On Windows, `token.json` uses the operating system's current-user [Data Protection API](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata) (`CryptProtectData`/`CryptUnprotectData`) with UI forbidden. It is encrypted at rest and bound to that user's DPAPI security context; there is no repository key and no custom cryptography. Treat the cache as non-portable and re-authorise instead of trying to move it between unrelated accounts or machines. DPAPI does not protect tokens from code already running as that user, an administrator controlling the machine, or a compromised user session. `.env` remains plaintext because it must supply the OAuth client credentials, so keep the clone inside your own user profile. On a shared machine, restrict the clone directory before scheduling anything, for example with `icacls <clone-dir> /inheritance:r /grant:r <your-username>:(OI)(CI)F`.
 
-Python's standard library has no equivalent portable secret store. On non-Windows systems the project therefore retains its existing plaintext JSON cache as an explicit compatibility fallback and forces its mode to owner-read/write only (`0600`) on every save and load. Use a private account and directory, and do not copy a Windows DPAPI envelope to Linux or macOS: it cannot be decrypted there. `token.json.lock` contains only zero-valued lock bytes and no credentials. Apache-2.0 licensed utility code, no warranty; outputs feed professional review like any other workpaper input. Not affiliated with or endorsed by Xero. Full boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+On non-Windows systems the project retains its existing plaintext JSON cache as an explicit compatibility fallback and forces its mode to owner-read/write only (`0600`) on every save and load. Use a private account and directory, and do not copy a Windows DPAPI envelope to Linux or macOS: it cannot be decrypted there. `token.json.lock` contains only zero-valued lock bytes and no credentials. Apache-2.0 licensed utility code, no warranty; outputs feed professional review like any other workpaper input. Not affiliated with or endorsed by Xero. Full boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
 
 ## Tests
 
@@ -168,7 +175,9 @@ With the dependencies installed, run the offline regression suite from this
 component directory (`packages/xero-trial-balance-export`):
 
 ```bash
-python -B -m unittest discover -s tests -v
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
 ```
 
 ## Power BI failure modes

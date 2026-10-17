@@ -3,3 +3,21 @@ Copyright 2026 Ryan Duguid
 
 This product includes work by Ryan Duguid
 (https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export).
+
+The Rust exporter includes the public CA bundle from certifi 2026.7.22 to
+preserve the Python exporter's TLS trust roots. That bundle is licensed under
+the Mozilla Public License 2.0; see data/certifi-LICENSE. Its SHA-256 is
+9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f.
+
+The bundle's unmodified Source Code Form is included as data/cacert.pem.
+The matching upstream source is available from
+https://pypi.org/project/certifi/2026.7.22/#files.
+The exporter's Apache-2.0 licence does not replace MPL-2.0 for the bundle.
+See https://mozilla.org/MPL/2.0/.
+Native distributions must include this NOTICE, data/cacert.pem and
+data/certifi-LICENSE so recipients receive the source and its licence notice.
+
+Retry-After date parsing adapts CPython 3.15 email._parseaddr. Copyright
+2002 Python Software Foundation. The CLI formatting and date helpers also
+adapt CPython behaviour, and its Unicode data generated the character tables.
+See data/Python-LICENSE.txt.

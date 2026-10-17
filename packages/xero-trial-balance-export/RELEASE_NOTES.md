@@ -1,3 +1,13 @@
+# v1.0.0 (unreleased)
+
+- Replace the Python runtime with native Rust `export-tb` and `xero-tb-auth` commands. Install from this directory with `cargo install --locked --path .`; Python imports and direct `.py` entrypoints are removed.
+- Keep the CSV and token-cache formats, exact balance controls, current-user Windows DPAPI protection and the POSIX mode-0600 fallback. The compatibility oracle is the 0.1.15 source at `1af8a855578afaec97bd2e56836a8aa8fb15e729` on CPython 3.15.
+- Use `XERO_TOKEN_FILE` to select an earlier Python cache. Automatic legacy selection now checks beside the executable. Authorisation guidance names `xero-tb-auth` and `export-tb`.
+- Require `HOME` on Unix or `USERPROFILE` on Windows for home-directory resolution. Expand `~` for the current user; named-user forms remain literal paths.
+- Replace the offline Python evaluation and proof scripts with the `tools` feature's `xero-tb-evaluate` and `xero-tb-proof` commands.
+- Report unexpected HTTP statuses and UTF-8 encoding refusals on one line. OS diagnostics use Rust's platform messages. JSON documents deeper than 1,000 containers are refused; the command runs with a bounded 32 MiB parser stack. Custom TLS CA overrides accept PEM bundle files; OpenSSL CA directories are unsupported.
+- Remove the Python release caller. No native release or PyPI publication is configured until a Rust release path is approved.
+
 # v0.1.15
 
 - Requires Python 3.11 or newer; Python 3.10 is no longer supported (#318).

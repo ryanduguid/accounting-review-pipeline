@@ -11,7 +11,7 @@ Source: [`samples/sample-output.csv`](../samples/sample-output.csv)
 Reproduce the card and verify that both committed assets are current:
 
 ```bash
-python tools/render_quick_proof.py --check
+cargo run --locked --features tools --bin xero-tb-proof -- --check
 ```
 
 The source is fabricated. No Xero credentials or organisation data are used.

@@ -9,8 +9,8 @@ name: tests
 # other Python distribution; on a pull request each call filters itself to its
 # component directory, the shared contract and the root files, so a change to
 # one component runs that component alone, and a push to main runs every
-# component so the release gate finds its checks. The `windows` job runs 3
-# components' suites with coverage; `windows-workspace` checks the full suite
+# component so the release gate finds its checks. The `windows` job runs Monthly
+# Close Controls with coverage; `windows-workspace` checks the full suite
 # from the root on Windows. The Excel adapter and the Power BI
 # application have no pyproject.toml and are not workspace members; their
 # standard-library suites run in standard-library-components.yml.
@@ -47,8 +47,6 @@ jobs:
         include:
           - package_dir: packages/review-ready-gate
             import_name: reviewready
-          - package_dir: packages/xero-trial-balance-export
-            import_name: xero_client
     permissions:
       contents: read
       id-token: write # ci-package.yml's codecov job authenticates its upload with OIDC.
@@ -61,7 +59,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -77,7 +75,7 @@ jobs:
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.0"
+          version: "0.13.0"
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
@@ -102,7 +100,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -114,7 +112,7 @@ jobs:
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.0"
+          version: "0.13.0"
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
@@ -126,7 +124,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -138,7 +136,7 @@ jobs:
       - name: Install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.0"
+          version: "0.13.0"
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
@@ -160,7 +158,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,7 +170,7 @@ jobs:
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.0"
+          version: "0.13.0"
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
@@ -182,10 +180,8 @@ jobs:
         working-directory: packages/monthly-close-control-plane
 
   windows:
-    # The 3 components whose behaviour is platform-specific: the exporter's
-    # DPAPI token cache, the ledger gateway's staged writes (which have no
-    # directory descriptors to work with on Windows) and Monthly Close Controls'
-    # documented Windows wheel smoke, whose operator follows the same suite.
+    # Monthly Close Controls' documented Windows wheel smoke follows this suite.
+    # The native exporter and ledger gateway have Windows legs in the Rust job.
     # A Windows leg inside ci-package.yml would rename every `test (3.x)` job
     # the release callers require by name, so this is one extra job instead. It
     # runs the same command as the Linux gates, from the component directory.
@@ -201,7 +197,6 @@ jobs:
       matrix:
         package_dir:
           - packages/monthly-close-control-plane
-          - packages/xero-trial-balance-export
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -213,7 +208,7 @@ jobs:
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.0"
+          version: "0.13.0"
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
@@ -222,7 +217,7 @@ jobs:
         working-directory: ${{ matrix.package_dir }}
 
   rust:
-    # The Xero Ledger Review Gate and evatt are Rust crates from 1.0.0.
+    # The ledger gate, evatt and exporter are Rust crates from 1.0.0.
     # Each rust-toolchain.toml pins the toolchain. Windows also exercises staged
     # validation writes and evatt's record links, native paths and text streams.
     name: ${{ matrix.package_dir }} / rust (${{ matrix.os }})
@@ -233,8 +228,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        package_dir: [packages/elizabeth-anne-alexander, packages/evatt]
+        os: [ubuntu-24.04, windows-latest]
+        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export]
     defaults:
       run:
         shell: bash
@@ -243,12 +238,34 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: format
         run: cargo fmt --check
       - name: lint
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: test
         run: cargo test --locked --all-features
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: matrix.package_dir == 'packages/xero-trial-balance-export'
+        with:
+          python-version: '3.15'
+      - name: Compare the exporter with the pinned Python baseline
+        if: matrix.package_dir == 'packages/xero-trial-balance-export'
+        run: |
+          temp_root="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
+          baseline="$temp_root/xero-python-baseline"
+          oracle="$temp_root/xero-python-oracle"
+          mkdir -p "$baseline"
+          git -C "$GITHUB_WORKSPACE" archive 1af8a855578afaec97bd2e56836a8aa8fb15e729:packages/xero-trial-balance-export | tar -xf - -C "$baseline"
+          python -m venv "$oracle"
+          oracle_python="$oracle/bin/python"
+          [ ! -f "$oracle/Scripts/python.exe" ] || oracle_python="$oracle/Scripts/python.exe"
+          "$oracle_python" -m pip install --only-binary :all: --require-hashes -r tests/differential/requirements.lock
+          cargo build --locked --features probe
+          extension=""
+          [ ! -f target/debug/xero-tb-probe.exe ] || extension=".exe"
+          "target/debug/xero-tb-differential$extension" "$oracle_python" "$baseline" "target/debug/xero-tb-probe$extension" 1 10000
       - name: build
         run: cargo build --locked --release
       - name: smoke the release binary from an empty directory
@@ -279,7 +296,7 @@ jobs:
       - name: install the locked toolchain
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.0"
+          version: "0.13.0"
           enable-cache: true
           save-cache: ${{ github.ref == 'refs/heads/main' }}
           prune-cache: true
@@ -316,7 +333,7 @@ jobs:
     name: upload coverage to Codecov
     needs: test
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -339,7 +356,7 @@ jobs:
   pipeline-gates:
     needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read

@@ -7,7 +7,6 @@ on:
       - Release accounting-excel-toolkit
       - Release monthly-close-control-plane
       - Release review-ready-gate
-      - Release xero-trial-balance-export
     types: [completed]
   workflow_dispatch:
     inputs:

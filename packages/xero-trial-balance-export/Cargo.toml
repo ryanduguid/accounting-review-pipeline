@@ -1,0 +1,63 @@
+[package]
+name = "xero-trial-balance-export"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+description = "Read-only Xero trial-balance export with exact balance controls"
+license = "Apache-2.0"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+
+[dependencies]
+num-bigint = "0.5.1"
+num-traits = "0.2"
+sha2 = "0.11"
+reqwest = { version = "0.13.5", features = ["form", "query"] }
+base64 = "0.23.1"
+getrandom = "0.4"
+unicode-normalization = "0.1.25"
+chrono = "0.4"
+tokio = { version = "1.53", features = ["rt", "time", "net"] }
+socket2 = "0.6"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_Networking_WinSock", "Win32_Storage_FileSystem", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[[bin]]
+name = "export-tb"
+path = "src/main.rs"
+
+[[bin]]
+name = "xero-tb-auth"
+path = "src/auth_main.rs"
+
+[[bin]]
+name = "xero-tb-probe"
+path = "src/probe.rs"
+required-features = ["probe"]
+
+[[bin]]
+name = "xero-tb-differential"
+path = "tools/differential.rs"
+required-features = ["probe"]
+
+[features]
+probe = []
+tools = []
+
+[[bin]]
+name = "xero-tb-evaluate"
+path = "tools/evaluate.rs"
+required-features = ["tools"]
+
+[[bin]]
+name = "xero-tb-proof"
+path = "tools/proof.rs"
+required-features = ["tools"]
+
+[profile.release]
+lto = true
+codegen-units = 1

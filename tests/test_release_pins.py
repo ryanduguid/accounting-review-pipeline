@@ -35,7 +35,7 @@ def caller_pins() -> dict[str, str]:
 class ReleasePinTests(unittest.TestCase):
     def test_every_release_caller_pins_a_full_commit(self) -> None:
         pins = caller_pins()
-        self.assertEqual(len(pins), 4, sorted(pins))
+        self.assertEqual(len(pins), 3, sorted(pins))
 
     def test_readme_names_the_pin_the_callers_run(self) -> None:
         """One claim, one pin: if the callers diverge, the README has to say so."""

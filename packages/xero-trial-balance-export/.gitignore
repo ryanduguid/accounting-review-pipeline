@@ -46,3 +46,10 @@ desktop.ini
 dist/
 build/
 *.egg-info/
+# Rust builds are local; Cargo.lock is part of this standalone component.
+/target/
+/test-target/
+!data/cacert.pem
+!data/Python-LICENSE.txt
+!tests/fixtures/
+!tests/fixtures/*.json

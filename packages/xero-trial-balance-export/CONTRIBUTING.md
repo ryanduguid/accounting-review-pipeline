@@ -17,27 +17,26 @@ This exporter reads a Xero trial balance and writes a validated CSV. It stays re
 
 ## Local verification
 
-Python 3.14 or newer. The lock file pins dependencies with hashes.
+Rust 1.99 stable. Cargo.lock pins the native dependencies.
 
 ```bash
-python -m pip install --require-hashes -r requirements.lock
-python -m unittest discover -s tests -v
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
 ```
 
-`requirements.lock` is exported from this component's own `uv.lock`, and CI
-fails when the two differ. After the lock moves, regenerate the export from a
-copy of this directory outside the workspace, because inside it uv reads the
-root lock:
+The offline tools and their tests read the shared contract at
+`contracts/xero-trial-balance-v1/`. Run those checks from a full pipeline clone.
+The two installed production commands have no sibling runtime dependency.
 
-```bash
-uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file requirements.lock
-```
+The differential oracle uses the immutable Python source at
+`1af8a855578afaec97bd2e56836a8aa8fb15e729` and the hash-locked dependencies in
+`tests/differential/requirements.lock`. Python 3.15 is required for this check.
+The native commands do not require Python.
 
-`tests/test_evaluation_pack.py` reads the shared trial-balance contract at
-`contracts/xero-trial-balance-v1/`, which lives above this component and is not
-in the source archive. Run it from a full `accounting-review-pipeline` checkout;
-from an extracted archive it fails for want of that directory, not for a defect
-in this package. Every other test in the suite runs from the archive alone.
+The OAuth source and README have canonical UTF-8/LF SHA-256 pins in
+`tests/provenance.rs`. Review changes to that source and its claims before
+updating the pins; the tests refuse BOMs, invalid UTF-8 and bare carriage returns.
 
 ## Pull requests
 
