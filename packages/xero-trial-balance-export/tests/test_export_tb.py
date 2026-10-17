@@ -192,6 +192,32 @@ class _ExportCase(unittest.TestCase):
 
 
 class ManifestTest(_ExportCase):
+    def test_occupied_recovery_file_preserves_the_existing_export(self):
+        for no_manifest in (False, True):
+            for quiet in (False, True):
+                with self.subTest(no_manifest=no_manifest, quiet=quiet), \
+                        tempfile.TemporaryDirectory() as root:
+                    csv = Path(root) / "synthetic-entity.csv"
+                    manifest = Path(str(csv) + ".manifest.json")
+                    aside = Path(str(manifest) + ".previous")
+                    originals = {csv: b"old csv", manifest: b"old manifest", aside: b"recovery"}
+                    for path, content in originals.items():
+                        path.write_bytes(content)
+                    flags = (["--no-manifest"] if no_manifest else [])
+                    flags += ["--quiet"] if quiet else []
+                    with patch.object(export_tb, "write_csv", return_value="a" * 64) as write_csv:
+                        raised, stdout, _ = self.run_export(
+                            self.BALANCED, out=csv.name, work_dir=root, extra_args=flags
+                        )
+                    self.assertIsInstance(raised, SystemExit)
+                    write_csv.assert_not_called()
+                    for path, content in originals.items():
+                        self.assertEqual(path.read_bytes(), content)
+                    self.assertIn("inspect", str(raised).lower())
+                    if quiet:
+                        self.assertNotIn(csv.name, str(raised) + stdout)
+
+
     BALANCED = [
         ("Business Bank Account (090)", "1200.00", "", "15234.50", ""),
         ("Trade Debtors (610)", "", "1200.00", "", "15234.50"),
