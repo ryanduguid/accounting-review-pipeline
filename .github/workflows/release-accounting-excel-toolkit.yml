@@ -28,6 +28,8 @@ jobs:
         .github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner
         .github/workflows/standard-library-components.yml: lint (adapters/accounting-excel-toolkit)
         .github/workflows/standard-library-components.yml: verify (adapters/accounting-excel-toolkit, 3.14)
+        .github/workflows/standard-library-components.yml: adapters/accounting-excel-toolkit / rust (ubuntu-latest)
+        .github/workflows/standard-library-components.yml: adapters/accounting-excel-toolkit / rust (windows-latest)
         .github/workflows/joined-conformance.yml: verify
         .github/workflows/codeql.yml: Analyze Python
         .github/workflows/codeql.yml: codeql-gates

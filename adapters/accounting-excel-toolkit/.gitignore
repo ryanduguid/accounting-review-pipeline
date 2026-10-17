@@ -43,6 +43,7 @@ exports/
 # Python bytecode from tools/ and tests/
 __pycache__/
 *.pyc
+/target/
 
 # OS / editor noise
 .DS_Store
