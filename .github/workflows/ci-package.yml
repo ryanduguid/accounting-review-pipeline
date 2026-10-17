@@ -57,7 +57,7 @@ jobs:
   changes:
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       run: ${{ steps.filter.outputs.run }}
@@ -112,7 +112,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.14", "3.15"]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
@@ -157,7 +157,7 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -207,7 +207,7 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -241,7 +241,7 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -322,7 +322,7 @@ jobs:
     # the upload reports here without blocking merges.
     continue-on-error: true
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -345,7 +345,7 @@ jobs:
   gates:
     needs: [changes, test, lint, dependency-audit, build]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
