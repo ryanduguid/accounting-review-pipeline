@@ -1,197 +1,100 @@
-"""Pin the code Monthly Close Controls and the Workpaper Review Gate each keep a copy of.
-
-The 2 packages publish independently: separate distributions, versions,
-lockfiles, licences and release tags, joined only by local files and commands.
-Moving the helpers below into a shared module would mean a new distribution
-every release has to carry, so the copies stay. A copy nobody checks is a fork
-waiting to happen, because a fix made in one `report.py` and not the other is
-invisible in review: neither diff shows the sibling. This is where that drift
-fails instead.
-
-Two tiers. `IDENTICAL` names definitions that are the same bytes in both
-packages and must stay that way. `SAME_LOGIC` names definitions whose prose has
-already diverged - one package keeps the reasoning in a docstring or a comment,
-the other does not - and whose fail-closed error class differs by design, so
-only the executable code is compared. The pack writers are not compared:
-the Workpaper Review Gate publishes through its own `publication` module.
-
-Standard library only, and no component is imported: the files are read and
-parsed. This runs from the repository root, like the joined conformance test.
-"""
-
+"""Behavioural conformance for the independently released review commands."""
 from __future__ import annotations
 
-import ast
+import tempfile
 import unittest
+import sys
+from decimal import Decimal
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-CLOSECONTROL = ROOT / "packages" / "monthly-close-control-plane" / "closecontrol"
-REVIEWREADY = ROOT / "packages" / "review-ready-gate" / "reviewready"
-
-PAIRS = {
-    "csv_input.py": (CLOSECONTROL / "csv_input.py", REVIEWREADY / "csv_input.py"),
-    "report.py": (CLOSECONTROL / "report.py", REVIEWREADY / "report.py"),
-    "loader.py": (CLOSECONTROL / "loader.py", REVIEWREADY / "loader.py"),
-    "viewer.py": (CLOSECONTROL / "viewer.py", REVIEWREADY / "viewer.py"),
-    "cli.py": (CLOSECONTROL / "cli.py", REVIEWREADY / "cli.py"),
-}
-
-IDENTICAL = {
-    "csv_input.py": ("_csv_source",),
-    "report.py": (
-        # The checkout-marker guard, whole.
-        "CHECKOUT_MARKERS",
-        "_marker_present",
-        "_configured_work_tree",
-        "_enclosing_repository",
-        "_reject_unreachable",
-        "_same_directory",
-        "_ABSENT",
-    ),
-    "loader.py": (
-        "_ACCOUNTING_NUMBER",
-        "_EXTENDED_ISO_DATE",
-        "_no_duplicate_json_members",
-        "_require_columns",
-        "_text",
-    ),
-    "viewer.py": (),
-    "cli.py": ("_non_negative_decimal",),
-}
-
-SAME_LOGIC = {
-    "csv_input.py": (),
-    "report.py": (
-        "_money",
-    ),
-    "loader.py": (
-        "SourceSnapshot",
-        "parse_money",
-        "parse_iso_date",
-        "_read_csv_rows",
-        "_has_control_or_format_character",
-    ),
-    # The pack JSON parser: strict UTF-8, duplicate keys refused, and
-    # unknown or missing top-level members rejected.
-    "viewer.py": (
-        "_no_duplicate_keys",
-        "_parse_json",
-    ),
-    "cli.py": (),
-}
-
-# Each package raises its own fail-closed error. That difference is deliberate
-# and is not drift, so the names are folded together before comparing.
-ERROR_CLASSES = ("ControlInputError", "GateInputError")
-
-
-def _definitions(path: Path) -> dict[str, str]:
-    """Every top-level definition and simple assignment, by name, as written."""
-    return _definitions_in(path.read_text(encoding="utf-8"))
-
-
-def _definitions_in(text: str) -> dict[str, str]:
-    lines = text.splitlines(keepends=True)
-    found: dict[str, str] = {}
-    for node in ast.parse(text).body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            # A decorator such as @dataclass(frozen=True) changes behaviour, so
-            # the compared source starts at the first decorator, not at `class`.
-            start = min([node.lineno, *(d.lineno for d in node.decorator_list)])
-            found[node.name] = "".join(lines[start - 1 : node.end_lineno])
-            continue
-        if (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-        ):
-            name = node.targets[0].id
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            name = node.target.id
-        else:
-            continue
-        segment = ast.get_source_segment(text, node)
-        if segment is not None:
-            found[name] = segment
-    return found
-
-
-def _without_docstrings(tree: ast.AST) -> ast.AST:
-    for node in ast.walk(tree):
-        if not isinstance(
-            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        ):
-            continue
-        first = node.body[0] if node.body else None
-        if (
-            len(node.body) > 1
-            and isinstance(first, ast.Expr)
-            and isinstance(first.value, ast.Constant)
-            and isinstance(first.value.value, str)
-        ):
-            node.body = node.body[1:]
-    return tree
-
-
-def _executable(source: str) -> str:
-    """The code alone: comments dropped by unparse, docstrings and error names removed."""
-    rendered = ast.unparse(_without_docstrings(ast.parse(source)))
-    for error_class in ERROR_CLASSES:
-        rendered = rendered.replace(error_class, "PackInputError")
-    return rendered
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages/monthly-close-control-plane"))
+from closecontrol import loader, report, viewer  # noqa: E402
+from tests.native_review_ready import probe
 
 
 class SharedBlockTests(unittest.TestCase):
-    def test_a_decorator_is_part_of_the_compared_definition(self) -> None:
-        plain = "class Snapshot:\n    path: str\n"
-        decorated = "@dataclass(frozen=True)\n" + plain
-        self.assertNotEqual(
-            _definitions_in(plain)["Snapshot"], _definitions_in(decorated)["Snapshot"]
-        )
-        self.assertNotEqual(
-            _executable(_definitions_in(plain)["Snapshot"]),
-            _executable(_definitions_in(decorated)["Snapshot"]),
-        )
-    def test_every_pinned_name_is_still_defined_in_both_packages(self) -> None:
-        """A renamed or deleted helper must fail here, not quietly stop being compared."""
-        for filename, (left, right) in PAIRS.items():
-            pinned = set(IDENTICAL[filename]) | set(SAME_LOGIC[filename])
-            for path in (left, right):
-                with self.subTest(file=filename, package=path.parent.name):
-                    self.assertLessEqual(pinned, set(_definitions(path)))
+    def test_money_grammar_and_exact_values_agree(self) -> None:
+        values = (None, "", "0", "-0.00", "1,234.50", "(1,234.50)", "+1.2",
+                  "١٢.٥", "1e2", "12,34", "(+1)", "--1", "NaN", "1_000")
+        for value in values:
+            native = probe({"op": "money", "value": value})
+            with self.subTest(value=value):
+                try:
+                    expected = loader.parse_money(value, field="Amount", row_number=2,
+                                                  path=Path("input.csv"))
+                except loader.ControlInputError:
+                    self.assertIn("error", native)
+                else:
+                    self.assertEqual(native, {"ok": str(expected)})
 
-    def test_the_shared_definitions_are_byte_identical(self) -> None:
-        for filename, (left, right) in PAIRS.items():
-            here, there = _definitions(left), _definitions(right)
-            for name in IDENTICAL[filename]:
-                with self.subTest(file=filename, name=name):
-                    self.assertEqual(here[name], there[name])
+    def test_money_report_precision_agrees(self) -> None:
+        for value in ("0", "-0", "1.2", "1.2300", "1234567890123456789.0123"):
+            with self.subTest(value=value):
+                self.assertEqual(probe({"op": "format_money", "value": value}),
+                                 {"ok": report._money(Decimal(value))})
 
-    def test_the_shared_code_is_identical_where_only_the_prose_differs(self) -> None:
-        for filename, (left, right) in PAIRS.items():
-            here, there = _definitions(left), _definitions(right)
-            for name in SAME_LOGIC[filename]:
-                with self.subTest(file=filename, name=name):
-                    self.assertEqual(_executable(here[name]), _executable(there[name]))
+    def test_calendar_dates_agree(self) -> None:
+        for value in ("2024-02-29", "2026-02-29", "20260923", "2026-W39-3",
+                      "2026-09-23", "0000-01-01", "9999-12-31"):
+            native = probe({"op": "date", "value": value})
+            with self.subTest(value=value):
+                try:
+                    expected = loader.parse_iso_date(value, field="Date", path=Path("input.csv"),
+                                                     row_number=2)
+                except loader.ControlInputError:
+                    self.assertIn("error", native)
+                else:
+                    self.assertEqual(native, {"ok": expected.isoformat()})
 
-    def test_loader_bodies_match_after_the_deliberate_input_adapters(self) -> None:
-        # Close control accepts paths or snapshots; review readiness accepts
-        # snapshots for trial balances and paths for review notes. Pin all
-        # validation after those intentionally different capture adapters.
-        left, right = PAIRS["loader.py"]
-        for name, start_type in (("load_canonical_tb", ast.AnnAssign),
-                                 ("load_reviewer_acknowledgement", ast.Try)):
-            bodies = []
-            for path in (left, right):
-                node = ast.parse(_definitions(path)[name]).body[0]
-                start = next(i for i, statement in enumerate(node.body)
-                             if isinstance(statement, start_type))
-                body = "\n".join(ast.unparse(statement) for statement in node.body[start:])
-                bodies.append(_executable(body).replace("CANONICAL_TB_COLUMNS", "CANONICAL_COLUMNS"))
-            with self.subTest(name=name):
-                self.assertEqual(*bodies)  # pylint: disable=no-value-for-parameter
+    def test_csv_headers_width_and_identifiers_agree(self) -> None:
+        header = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit"
+        row = "2026-09-23,Fixture,Assets,one,Cash,090,0,0,0,0"
+        cases = (header + "\n" + row + "\n", header + ",Extra\n" + row + ",x\n",
+                 header + "\n" + row + ",extra\n", header + "\n" + row.rsplit(",", 1)[0],
+                 header.replace("Tenant", "AccountID") + "\n" + row,
+                 header + "\n" + row.replace("one", "one\u200b"),
+                 header + "\n" + row + "\n" + row,
+                 "\ufeff" + header + "\r\n" + row + "\r\n")
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.csv"
+            for content in cases:
+                source.write_bytes(content.encode())
+                native = probe({"op": "csv", "kind": "trial_balance", "path": str(source),
+                                "hex": source.read_bytes().hex()})
+                with self.subTest(content=content):
+                    try:
+                        rows = loader.load_canonical_tb(source)
+                    except loader.ControlInputError:
+                        self.assertIn("error", native)
+                    else:
+                        self.assertEqual([(r.tenant, r.account_id, r.account_code) for r in rows],
+                                         [(r["tenant"], r["account_id"], r["account_code"])
+                                          for r in native["ok"]])
+
+    def test_both_saved_json_parsers_refuse_ambiguous_or_unreadable_documents(self) -> None:
+        for payload in (b'[]', b'null', b'{}', b'{"unexpected":1}', b'{"x":1,"x":2}',
+                        b'{"x":{"a":1,"a":2}}', b'\xff', b'{"x":', b'\xef\xbb\xbf{}'):
+            with self.subTest(payload=payload):
+                with self.assertRaises(loader.ControlInputError):
+                    viewer._parse_json(payload)
+                self.assertIn("error", probe({"op": "parse_pack_json", "hex": payload.hex()}))
+
+    def test_checkout_guards_agree_for_every_marker_and_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            outside = root / "outside"
+            self.assertEqual(probe({"op": "output_guard", "path": str(outside)}),
+                             {"ok": str(report.require_output_outside_repository(outside))})
+            for marker in (".git", ".hg", ".svn", ".bzr"):
+                checkout = root / marker[1:]
+                checkout.mkdir()
+                (checkout / marker).mkdir()
+                destination = checkout / "nested" / "output"
+                with self.subTest(marker=marker):
+                    with self.assertRaises(ValueError):
+                        report.require_output_outside_repository(destination)
+                    self.assertIn("error", probe({"op": "output_guard", "path": str(destination)}))
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     unittest.main()

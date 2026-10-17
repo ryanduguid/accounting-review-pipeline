@@ -33,7 +33,7 @@ on:
         required: true
         type: string
       import_name:
-        description: An import the built wheel must provide, for example reviewready.
+        description: An import the built wheel must provide, for example closecontrol.
         required: true
         type: string
 

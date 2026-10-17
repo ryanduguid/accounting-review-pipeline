@@ -90,7 +90,7 @@ It holds 8 independently versioned components joined only by local files and com
 | Component | Directory | Identity | Version |
 |---|---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | native Rust commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 1.0.0 (unreleased) |
-| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` | 0.3.0 |
+| Workpaper Review Gate | `packages/review-ready-gate/` | native Rust command `review-ready`; Python runtime and import API removed | 1.0.0 (unreleased) |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, command `close-control` | 0.2.0 |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0 (unreleased); 0.2.6 is the released Python distribution with import `elizabeth_anne_alexander` | 0.2.6 |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 0.1.8 |
@@ -212,12 +212,13 @@ changing their status.
 Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
 `a601f1d8b143f92b0517f709216993660d21f480`: `monthly-close-control-plane/v*`,
-`review-ready-gate/v*`, `xero-trial-balance-export/v*`,
 `accounting-excel-toolkit/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
 
+The Rust Workpaper Review Gate 1.0.0 explicitly blocks publication until a native
+publisher is approved. The Xero exporter also has no native publisher.
 The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
 until their Rust release paths are approved. Version 0.2.6 remains the released
 ledger-review Python distribution on PyPI; evatt 0.2.0 was never on PyPI.

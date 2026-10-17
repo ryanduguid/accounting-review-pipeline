@@ -1,15 +1,14 @@
 name: tests
+# removed-jobs: component
 
 # The `test`, `package` and `lint` jobs are Monthly Close Controls' own checks,
 # which its release workflow selects by name, so they keep their ids. This
 # workflow carries no path filter, so `pipeline-gates`, the check branch
 # protection requires, reports on every pull request. They run the same gates as ci-package.yml: `test` measures branch
 # coverage and `dependency-audit` runs pip-audit against the locked
-# environment. The `component` matrix calls the reusable ci-package.yml once per
-# other Python distribution; on a pull request each call filters itself to its
-# component directory, the shared contract and the root files, so a change to
-# one component runs that component alone, and a push to main runs every
-# component so the release gate finds its checks. The `windows` job runs Monthly
+# environment. The `rust` matrix checks the native packages on Linux and Windows.
+# Every main push runs the component checks the active release gates require.
+# The `windows` job runs Monthly
 # Close Controls with coverage; `windows-workspace` checks the full suite
 # from the root on Windows. The Excel adapter and the Power BI
 # application have no pyproject.toml and are not workspace members; their
@@ -32,34 +31,11 @@ env:
   UV_PYTHON: "3.15"
 
 jobs:
-  component:
-    name: ${{ matrix.package_dir }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # Each component's wheel smoke lives in .github/ci/<component>/smoke.sh;
-        # ci-package.yml runs it from an empty directory with the installed
-        # wheel's console scripts on PATH and COMPONENT pointing at the
-        # checked-out component, so each proves the wheel carries its package
-        # data and the documented exit codes hold. The exporter has no offline
-        # command line to exercise; its hash-locked install and unittest run
-        # cover it.
-        include:
-          - package_dir: packages/review-ready-gate
-            import_name: reviewready
-    permissions:
-      contents: read
-      id-token: write # ci-package.yml's codecov job authenticates its upload with OIDC.
-    uses: ./.github/workflows/ci-package.yml
-    with:
-      package_dir: ${{ matrix.package_dir }}
-      import_name: ${{ matrix.import_name }}
-
   test:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -100,7 +76,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,7 +100,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -158,7 +134,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -217,7 +193,7 @@ jobs:
         working-directory: ${{ matrix.package_dir }}
 
   rust:
-    # The ledger gate, evatt and exporter are Rust crates from 1.0.0.
+    # The ledger gate, readiness gate, evatt and exporter are Rust crates from 1.0.0.
     # Each rust-toolchain.toml pins the toolchain. Windows also exercises staged
     # validation writes and evatt's record links, native paths and text streams.
     name: ${{ matrix.package_dir }} / rust (${{ matrix.os }})
@@ -228,8 +204,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export]
+        os: [ubuntu-24.04, windows-latest]
+        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate]
     defaults:
       run:
         shell: bash
@@ -246,7 +222,7 @@ jobs:
       - name: test
         run: cargo test --locked --all-features
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: matrix.package_dir == 'packages/xero-trial-balance-export'
+        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate'
         with:
           python-version: '3.15'
       - name: Compare the exporter with the pinned Python baseline
@@ -266,6 +242,16 @@ jobs:
           extension=""
           [ ! -f target/debug/xero-tb-probe.exe ] || extension=".exe"
           "target/debug/xero-tb-differential$extension" "$oracle_python" "$baseline" "target/debug/xero-tb-probe$extension" 1 10000
+      - name: Compare the readiness gate with the frozen Python baseline
+        if: matrix.package_dir == 'packages/review-ready-gate'
+        run: |
+          temp_root="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
+          baseline="$temp_root/review-ready-python-baseline"
+          mkdir -p "$baseline"
+          git -C "$GITHUB_WORKSPACE" archive 8061079d0b4206d064c54751aa047af8588fa265:packages/review-ready-gate | tar -xf - -C "$baseline"
+          cargo build --locked --features probe --bins
+          cargo run --locked --features probe --bin review-ready-differential -- "$(command -v python)" "$baseline" 1
       - name: build
         run: cargo build --locked --release
       - name: smoke the release binary from an empty directory
@@ -333,7 +319,7 @@ jobs:
     name: upload coverage to Codecov
     needs: test
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -354,9 +340,9 @@ jobs:
           flags: monthly-close-control-plane
 
   pipeline-gates:
-    needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]
+    needs: [test, dependency-audit, package, lint, windows, rust, windows-workspace]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read

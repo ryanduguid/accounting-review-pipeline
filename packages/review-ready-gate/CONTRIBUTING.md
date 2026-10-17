@@ -17,31 +17,30 @@ returns, lock periods, send reports, or approve a file.
 
 ## Local verification
 
-Python 3.14 or newer. The repository uses `uv` and commits its lock file.
+Use Rust stable and the committed Cargo lockfile.
 
 ```bash
-uv lock --check
-uv sync --locked --all-extras
-uv run pytest
-uv run ruff check reviewready tests
-uv run mypy reviewready
-uv build
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release
 ```
 
-CI also runs those checks on Python 3.14 and 3.15, plus CodeQL on the Python source. Do not expand the ruff rule set; it is `E4`, `E7`, `E9`, `F` and `I`, matching Monthly Close Controls.
+CI runs the native checks on Linux and Windows. CodeQL does not cover this Rust
+source. Python 3.15 with Unicode 17.0.0 is required only for the frozen baseline
+comparison, which uses fabricated inputs.
 
 For a behaviour change, add or update a focused test under `tests/`. Keep the
 output deterministic: no wall-clock timestamps, client identifiers or hidden
 state in a readiness pack.
 
-Two checks read files that live above this component and are not in the source
-archive. Run them from a full `accounting-review-pipeline` checkout:
-`tests/test_xero_trial_balance_contract.py` reads
-`contracts/xero-trial-balance-v1/`, and
-`test_current_release_metadata_uses_immutable_documentation` in
-`tests/test_workflow_examples.py` reads the root release caller. From an
-extracted source archive they fail for want of those files, not for a defect in
-this package.
+[Native port coverage](tests/PORT_COVERAGE.md) maps the retired Python test
+families to native tests and records the limit of that mapping.
+
+Run the root joined conformance tests from a full `accounting-review-pipeline`
+checkout. They read `contracts/xero-trial-balance-v1/` and compare Monthly Close
+Controls with the Rust probe. The native crate's tests use its own fabricated
+examples and evaluation fixtures.
 
 ## Pull requests
 
@@ -54,6 +53,5 @@ keep credentials, client data and exploit details out of the issue tracker.
 
 ## Releasing
 
-Do not tag from a feature branch. Follow [RELEASING.md](RELEASING.md). For the
-first monorepo publication, complete the one-time `pypi-review-ready-gate`
-environment and trusted-publisher setup in that file before tagging.
+Native publishing is blocked. Follow [RELEASING.md](RELEASING.md); do not tag or
+upload a native release until a separately authorised publisher is configured.

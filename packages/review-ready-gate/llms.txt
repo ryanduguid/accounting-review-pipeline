@@ -4,7 +4,7 @@
 
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate
-- **Distribution name**: `review-ready-gate`
+- **Rust package**: `review-ready-gate` 1.0.0, binary only; native publishing blocked.
 - **CLI command**: `review-ready`
 - **Domain**: Local, deterministic readiness gating for Australian public-practice workpaper packs (BAS, month-end, year-end).
 - **Control basis**: Required-artefact completeness, self-review assertions, open-item blocking, trial-balance integrity, GST 1A/1B tie-out, optional bank rec, year-end tie-out matrix, and prior-finding repeats.
@@ -12,14 +12,18 @@
 - **Missing evidence evaluation**: [evaluation/missing_evidence/README.md](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/evaluation/missing_evidence/README.md) (absent, empty, wrong-period and edited evidence; practitioner review pending)
 
 ## Core modules
-- `reviewready.engine`: Builds `READY`, `NOT_READY`, or `BLOCKED` packs without mutating an accounting system.
-- `reviewready.loader`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
-- `reviewready.report`: Writes JSON, Markdown, and CSV readiness-pack files.
-- `reviewready.cli`: `review-ready gate`, `review-ready view` and `review-ready compare`.
-- `reviewready.comparison`: Verifies 2 runs of one pack and reports changed sources and findings as JSON; it writes nothing and changes no status.
-- `reviewready.viewer`: Fail-closed read of an existing pack. Duplicate JSON keys, disagreeing artefacts, or a missing review-boundary statement are exit `1`, not a displayed sheet.
+- `src/engine.rs`: Builds `READY`, `NOT_READY` or `BLOCKED` packs.
+- `src/loader.rs`: Validates input schemas and captures immutable source bytes and hashes.
+- `src/report.rs`: Renders JSON, Markdown and CSV readiness files.
+- `src/cli.rs`: Runs gate, view, compare, intake and view-document commands.
+- `src/comparison.rs`: Verifies two runs and reports changed sources, findings and coverage.
+- `src/viewer.rs`: Refuses ambiguous JSON or disagreeing artefacts before display.
+- `src/publication.rs`: Admits one writer and preserves interrupted-publication evidence.
 
 ## Architectural boundaries
+
+Build with Rust stable and the committed Cargo lockfile. Python is required only
+for the feature-gated frozen baseline comparison; the runtime has no Python API.
 1. **Gate, not review.** A `READY` pack may enter manager review. The tool does not decide that the work is correct.
 2. **Acknowledgement never changes status.** A review note records that a human looked; it cannot flip `NOT_READY` or `BLOCKED` to `READY`.
 3. **No operational authority.** The package does not post journals, lodge returns, or connect to Xero.
