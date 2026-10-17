@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       run: ${{ steps.select.outputs.run }}
@@ -70,7 +70,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -108,7 +108,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -137,7 +137,7 @@ jobs:
   pbir:
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -207,7 +207,7 @@ jobs:
           - adapters/accounting-excel-toolkit
           - apps/australian-accounting-power-bi
           - apps/grant-acquittal-workpapers
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
     defaults:
       run:
         shell: bash
@@ -298,7 +298,7 @@ jobs:
   standard-library-gates:
     needs: [changes, lint, verify, verify-windows, rust, pbir]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
