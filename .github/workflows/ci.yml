@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: packages/monthly-close-control-plane
@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate, packages/monthly-close-control-plane]
     defaults:
       run:
@@ -170,7 +170,7 @@ jobs:
           import subprocess
 
           python = Path(".venv/Scripts/python.exe").resolve()
-          for component in ("adapters/accounting-excel-toolkit", "apps/australian-accounting-power-bi", "apps/grant-acquittal-workpapers"):
+          for component in ("adapters/accounting-excel-toolkit", "apps/grant-acquittal-workpapers"):
               subprocess.run([str(python), "-m", "mypy"], cwd=component, check=True)
       - name: run the full suite
         run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
@@ -178,7 +178,7 @@ jobs:
   pipeline-gates:
     needs: [dependency-audit, rust, windows-workspace]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read

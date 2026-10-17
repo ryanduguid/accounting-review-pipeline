@@ -1,26 +1,45 @@
 [package]
 name = "australian-accounting-power-bi"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.99"
-description = "Fixture generator and structural checks for the Australian Accounting Power BI reference application"
+description = "Offline review workflow, fixture generator and structural checks for Australian Accounting Power BI"
 license = "Apache-2.0"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 readme = "README.md"
 publish = false
 
+[features]
+probe = []
+
 [[bin]]
 name = "generate-fixtures"
 path = "src/main.rs"
+
+[[bin]]
+name = "review-workflow"
+path = "src/review_workflow_main.rs"
+
+[[bin]]
+name = "workflow-differential"
+path = "tools/workflow_differential.rs"
+required-features = ["probe"]
 
 [dependencies]
 num-bigint = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"
+serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
+sha2 = "0.11"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 regex = "1"
-serde_json = "1"
-sha2 = "0.11"
 
 [lints.clippy]
 # The repository's 50-line function limit (clippy.toml), denied in CI.

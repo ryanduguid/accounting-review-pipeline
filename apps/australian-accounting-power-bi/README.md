@@ -107,7 +107,7 @@ australian-accounting-power-bi/
 │   ├── sample-budgets.csv               # Monthly departmental budgets
 │   ├── sample-payroll-super.csv         # Payday Super events with on-time & late receipts
 │   └── sample-ato-benchmarks.csv        # Sample industry and turnover-band reference values
-├── src/                                 # Rust generate-fixtures binary: fixtures, exact decimal and calendar rules
+├── src/                                 # Rust fixture generator, review workflow, decimal and calendar rules
 ├── tests/
 │   ├── fixtures_balance.rs              # Asserts debits == credits per journal; fixtures regenerate byte for byte
 │   ├── tmdl_integrity.rs                # Asserts TMDL syntax, explicit measure formats, descriptions
@@ -115,11 +115,10 @@ australian-accounting-power-bi/
 │   ├── pbip_structure.rs                # Validates PBIP layout and report-to-model bindings
 │   ├── payday_super_rules.rs            # Verifies Payday Super 7-business-day statutory rules
 │   ├── model_bpa_rules.rs               # Evaluates the Best Practice Analyzer rules against the model
-│   ├── test_review_workflow.py          # Review workflow suite (Python until its two producers are Rust)
 │   ├── differential/                    # Differential harnesses against the earlier Python release
 │   └── model_bpa_rules.json             # Tabular Model Best Practice Analyzer ruleset
 ├── tools/
-│   ├── review_workflow.py               # Builds and verifies the fabricated review case
+│   ├── workflow_differential.rs         # Compares the native workflow with its frozen Python oracle
 │   └── *.ps1                            # Power BI Desktop native checks
 ├── Cargo.toml                           # Rust crate for the generator and the checks above
 ├── LICENSE                              # Apache License 2.0
@@ -132,18 +131,19 @@ australian-accounting-power-bi/
 
 ## Verification and automated testing
 
-Run the test suites locally. The Rust crate holds the fixture generator and the structural checks; the review workflow's suite is still Python:
+Run the native workflow, fixture and structural checks locally:
 
 ```bash
-cargo test --locked
-python -B -m unittest discover -s tests -v
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
 ```
 
 Regenerate the fixtures with `cargo run --locked --bin generate-fixtures`; it rewrites `samples/` and should leave Git with no changes.
 
 The generator replaced `tools/generate_fixtures.py` with the same successful output: the six files byte for byte and the same confirmation line, with CRLF on Windows as Python's stdout wrote it. It ignores arguments, as the script did. Three differences are deliberate. It writes to the `samples/` directory of the checkout it was built from, where the script used its own location; both are this directory when run from the checkout. A failed directory creation or file write prints one `OSError: ...` line and exits 1 where Python printed a traceback and exited 1. A failed write of the confirmation line exits 1 without a message.
 
-The Rust tests replaced the Python suites and fail where those suites failed. `tests/differential/` holds the harnesses that check this against the earlier Python release. One input bound applies: numbers in the fixture CSVs use ASCII digits with exponents up to 10,000, and PBIR integers stay within 2^53. Python also accepted other Unicode decimal digits and compared larger integers exactly. The BPA rule test evaluates the rule language the committed rules use: property names, string, integer and float literals, `True`, `False` and `None`, comparisons, `&&`, `||`, `!`, `string.IsNullOrEmpty`, unary signs and brackets. Python's `eval` also accepted arithmetic, attribute access, `in`, `is` and integer literals beyond 64 bits, which the Rust test refuses.
+The generator and structural Rust tests replaced their earlier Python suites. `tests/differential/` holds the harnesses that check this against the earlier Python release. One input bound applies: numbers in the fixture CSVs use ASCII digits with exponents up to 10,000, and PBIR integers stay within 2^53. Python also accepted other Unicode decimal digits and compared larger integers exactly. The BPA rule test evaluates the rule language the committed rules use: property names, string, integer and float literals, `True`, `False` and `None`, comparisons, `&&`, `||`, `!`, `string.IsNullOrEmpty`, unary signs and brackets. Python's `eval` also accepted arithmetic, attribute access, `in`, `is` and integer literals beyond 64 bits, which the Rust test refuses.
 
 With Node.js 24 available, run Microsoft's PBIR validator from the reviewed, lockfile-pinned dependency tree beside the report:
 
@@ -164,7 +164,7 @@ The test suite verifies:
 - All 6 report pages and 59 visuals are materialised, and every visual field binding resolves to a declared model column or measure. Regression checks cover alignment, overlap, shared component styles and unique query aliases.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
-The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs the Rust checks on Linux and Windows, the Python review-workflow suite and the pinned Microsoft PBIR validator.
+The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs the Rust checks and frozen workflow comparison on Linux and Windows, plus the pinned Microsoft PBIR validator. The [1.0 migration notes](docs/review-workflow-rust-migration.md) explain native command setup, compatibility limits and local comparison commands.
 
 ---
 

@@ -11,7 +11,6 @@
 # unittest components: directory only
 unittest_components := trim(replace('''
 adapters/accounting-excel-toolkit
-apps/australian-accounting-power-bi
 apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
