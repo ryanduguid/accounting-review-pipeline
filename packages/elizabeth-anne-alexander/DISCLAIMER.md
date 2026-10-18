@@ -1,14 +1,6 @@
 # Disclaimer
 
-Xero Ledger Review Gate is a fixed-policy, zero-network review boundary and test harness for deterministic tax agents. It is not tax, legal, accounting, financial, investment, BAS-agent, registered-tax-agent, or assurance advice. It is not an assessment, a private ruling, or a determination.
-
-This project is not affiliated with, sponsored by, endorsed by, or approved by:
-
-- Xero Limited
-- the Australian Taxation Office
-- the Commonwealth of Australia
-- any state or territory revenue office
-- Chartered Accountants Australia and New Zealand
+Xero Ledger Review Gate is a fixed-policy, zero-network review boundary and test harness for deterministic tax agents. It does not provide professional advice. It is not an assessment, a private ruling, or a determination.
 
 Outputs are intermediate data-minimisation and variance-review artefacts. They do not replace a human accountant's examination, professional judgement, or statutory reconciliation.
 

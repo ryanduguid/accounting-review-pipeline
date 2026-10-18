@@ -1,6 +1,6 @@
 # Balanced trial balance, unfinished review
 
-Synthetic case study, reproduced on 6 September 2026. Review aid, not professional advice; a human decides whether the close is acceptable.
+Synthetic case study, reproduced on 6 September 2026. A human decides whether the close is acceptable.
 
 ## The review question
 

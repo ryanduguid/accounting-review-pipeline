@@ -1,21 +1,9 @@
 # Disclaimer
 
 Monthly Close Controls compares 2 validated trial-balance exports and
-writes an exception pack for human close review. It is not tax, legal,
-accounting, financial, investment, BAS-agent, registered-tax-agent, or
-assurance advice, and it is not an audit or a review engagement.
+writes an exception pack for human close review. It does not provide professional advice, and it is not an audit or a review engagement.
 
-This project is not affiliated with, sponsored by, endorsed by, or approved by:
-
-- the Australian Taxation Office
-- the Commonwealth of Australia
-- any state or territory revenue office
-- Chartered Accountants Australia and New Zealand
-- CPA Australia, or any other professional body
-- Xero, MYOB, or any other software vendor
-
-The pack can be wrong, incomplete, stale, or unsuitable for a given set of
-facts. Thresholds are defaults, not a materiality judgement, and the tool sees
+Thresholds are defaults, not a materiality judgement, and the tool sees
 only the 2 files it is given. A `PASS` result means no configured gate
 tripped on that evidence. It is not sign-off, not assurance, and not a
 statement that the close is correct. A reviewer, not the tool, decides whether
