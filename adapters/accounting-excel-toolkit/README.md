@@ -265,7 +265,7 @@ See [the close-input contract roadmap](docs/close-input-contract-roadmap.md) for
 
 ## Disclaimer
 
-Utility code, Apache-2.0 licensed, no warranty. Nothing here is tax or financial advice; outputs need professional review like any workpaper input. Xero and MYOB are trademarks of their respective owners. This project is independent and not affiliated with or endorsed by either.
+Apache-2.0 licensed; see [LICENSE](LICENSE) for the terms. Review outputs like any workpaper input. Xero and MYOB are trademarks of their respective owners.
 
 ## Author
 

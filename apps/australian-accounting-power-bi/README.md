@@ -190,7 +190,7 @@ The [native verification record](docs/native-verification.md) includes the 25 Se
 
 ## Disclaimer
 
-Utility code, Apache-2.0 licensed, no warranty. Nothing here constitutes tax, financial, or legal advice. Outputs and calculations require independent professional review. All sample data is fabricated using synthetic entities.
+Apache-2.0 licensed; see [LICENSE](LICENSE) for the terms. Outputs and calculations require professional review. All sample data is fabricated.
 
 ---
 

@@ -41,7 +41,7 @@ to the authorised reviewer alongside the gate result.
 [Workpaper Review Gate](packages/review-ready-gate/README.md) ·
 [Xero trial balance export](packages/xero-trial-balance-export/README.md)
 
-Synthetic examples. Review aid, not professional advice; a human decides whether the close is acceptable.
+Synthetic examples. A human decides whether the close is acceptable.
 
 **Input:** the supplied current and prior trial balances, account mapping and subledger. The creditors reconciliation differs by $250.
 
