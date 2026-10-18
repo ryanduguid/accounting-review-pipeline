@@ -43,7 +43,7 @@ class ReleasePolicyTests(unittest.TestCase):
         self.assertIn("id-token: write", pypi_job)
         self.assertIn("artifact-ids: ${{ needs.release.outputs.dist-id }}", pypi_job)
         self.assertIn("python policy/scripts/python_release.py verify-candidate", pypi_job)
-        self.assertIn("pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33", pypi_job)
+        self.assertRegex(pypi_job, r"pypa/gh-action-pypi-publish@[0-9a-f]{40} # v\d")
         self.assertNotIn("python -m build", pypi_job)
 
 
