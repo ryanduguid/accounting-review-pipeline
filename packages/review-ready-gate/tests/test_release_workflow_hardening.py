@@ -1,5 +1,6 @@
 """Contracts for the active namespaced release boundary."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,7 @@ def test_pypi_uses_only_the_exact_attested_distribution() -> None:
     assert "id-token: write" in pypi_job
     assert "artifact-ids: ${{ needs.release.outputs.dist-id }}" in pypi_job
     assert "python policy/scripts/python_release.py verify-candidate" in pypi_job
-    assert "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333" in pypi_job
-    assert "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33" in pypi_job
+    # Full commit SHAs, so Dependabot can advance them without editing this test.
+    assert re.search(r"actions/download-artifact@[0-9a-f]{40} # v\d", pypi_job)
+    assert re.search(r"pypa/gh-action-pypi-publish@[0-9a-f]{40} # v\d", pypi_job)
     assert "python -m build" not in pypi_job
