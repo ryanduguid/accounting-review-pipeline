@@ -50,6 +50,6 @@ def test_pypi_uses_only_the_exact_attested_distribution() -> None:
     assert "id-token: write" in pypi_job
     assert "artifact-ids: ${{ needs.release.outputs.dist-id }}" in pypi_job
     assert "python policy/scripts/python_release.py verify-candidate" in pypi_job
-    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in pypi_job
+    assert "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333" in pypi_job
     assert "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33" in pypi_job
     assert "python -m build" not in pypi_job
