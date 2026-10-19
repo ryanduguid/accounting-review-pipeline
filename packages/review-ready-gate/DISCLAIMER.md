@@ -4,7 +4,8 @@ Workpaper Review Gate inspects a workpaper pack directory and writes a readiness
 pack for human review. It does not provide professional advice, and it is not an audit
 or a review engagement.
 
-A `READY` result means no configured gate tripped on the files that were
+The pack can be wrong, incomplete, stale, or unsuitable for a given set of
+facts. A `READY` result means no configured gate tripped on the files that were
 present. It is not sign-off, not assurance, and not a statement that the
 underlying work is correct. A reviewer, not the tool, decides whether a file
 may be signed or lodged.

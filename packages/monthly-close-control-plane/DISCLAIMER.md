@@ -3,7 +3,8 @@
 Monthly Close Controls compares 2 validated trial-balance exports and
 writes an exception pack for human close review. It does not provide professional advice, and it is not an audit or a review engagement.
 
-Thresholds are defaults, not a materiality judgement, and the tool sees
+The pack can be wrong, incomplete, stale, or unsuitable for a given set of
+facts. Thresholds are defaults, not a materiality judgement, and the tool sees
 only the 2 files it is given. A `PASS` result means no configured gate
 tripped on that evidence. It is not sign-off, not assurance, and not a
 statement that the close is correct. A reviewer, not the tool, decides whether
