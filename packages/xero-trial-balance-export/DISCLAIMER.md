@@ -3,7 +3,8 @@
 xero-trial-balance-export pulls a read-only trial balance from the Xero
 Accounting API and writes it to CSV. It does not provide professional advice.
 
-Xero report shapes, OAuth scopes and API behaviour change, and a run
+An export can be wrong, incomplete, stale, or unsuitable for a given set of
+facts. Xero report shapes, OAuth scopes and API behaviour change, and a run
 reflects only the ledger at the moment it was fetched. Reconcile every export
 against the source ledger before relying on it, and keep professional
 judgement with a qualified practitioner.
