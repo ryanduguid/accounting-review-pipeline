@@ -4,7 +4,10 @@ Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and austral
 
 The joined examples are available on all three repositories' `main` branches.
 The driver refuses an older WIP checkout without `examples/job_to_cash.py`
-before creating outputs or environments.
+before creating outputs or environments. From australian-accounting PR #430
+the WIP Tally is a Rust crate without `pyproject.toml`: job cash then needs
+cargo, runs `cargo run --locked --example job_to_cash` from its
+`Cargo.lock` and refuses a checkout without `examples/job_to_cash.rs`.
 
 For one-command setup, run this from `apps/grant-acquittal-workpapers` in a
 pipeline checkout:
@@ -73,7 +76,7 @@ commands produce a failure summary; fixture validation errors retain
 `failed-results.json` and do not produce a success manifest. Neither summary
 publishes subprocess output. Review the retained diagnostics locally.
 
-A successful run writes `manifest.json` with the 19 workflow commands, 4 runtime probes, expected and actual exits, elapsed times and output hashes. It records Git revisions, uncommitted file status, source hashes, authoritative lock hashes, Python versions, installed package versions and the uv version. Source hashes cover Git-listed Python, TOML, lock, JSON, CSV, YAML, Markdown, manifest and text files, excluding local environment files, secret directories, symlinks and ignored files. The driver compares source evidence before and after execution and refuses a success manifest if it changes.
+A successful run writes `manifest.json` with the 19 workflow commands, 4 runtime probes, expected and actual exits, elapsed times and output hashes. It records Git revisions, uncommitted file status, source hashes, authoritative lock hashes, Python versions and installed package versions (`rustc -vV` for a Rust-only project) and the uv version. Source hashes cover Git-listed Python, TOML, lock, JSON, CSV, YAML, Markdown, manifest and text files, excluding local environment files, secret directories, symlinks and ignored files. The driver compares source evidence before and after execution and refuses a success manifest if it changes.
 
 Each command has a 300-second timeout, adjustable with `--timeout` up to 3,600 seconds. A timeout or interruption stops the command process tree. Launch errors, unexpected exits and timeouts retain `failed-calls.json` with completed steps, timings, source evidence and the failed command's output. No success manifest is written for that run. Review diagnostics locally before sharing them. The driver does not resume a partial run; correct the cause and choose a new output directory.
 
