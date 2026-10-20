@@ -74,7 +74,7 @@ Monthly Close Controls / payday-super-checker / other engines
 It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM, or claim that a file is correct.
 
 > [!WARNING]
-> **Not tax advice.** A `READY` result means no configured gate tripped on the files that were present. A human still decides. See [DISCLAIMER.md](DISCLAIMER.md).
+> A `READY` result means no configured gate tripped on the files that were present. A human still decides. See [DISCLAIMER.md](DISCLAIMER.md).
 
 ## Why this exists
 

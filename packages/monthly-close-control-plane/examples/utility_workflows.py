@@ -65,7 +65,7 @@ def project_evidence(project):
                     break
         if parent == root:
             break
-    lock = lock_owner / "uv.lock"
+    lock = lock_owner / ("uv.lock" if (lock_owner / "pyproject.toml").is_file() else "Cargo.lock")
     if not lock.is_file():
         raise ValueError(f"Missing authoritative lockfile: {lock}")
     paths = git_output(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
@@ -99,8 +99,10 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
     if required - projects.keys():
         raise ValueError("This workflow needs --accounting and/or --grants checkouts")
     for project in projects.values():
-        if not (project / "pyproject.toml").is_file():
+        if not any((project / name).is_file() for name in ("pyproject.toml", "Cargo.toml")):
             raise ValueError(f"Missing project manifest: {project}")
+    # The WIP Tally is a Rust crate from australian-accounting PR #430; earlier revisions are uv projects.
+    cargo = {owner for owner, project in projects.items() if not (project / "pyproject.toml").is_file()}
     output = output.resolve()
     roots = [COMPONENT.parents[1], fpa.resolve(), *([accounting.resolve()] if accounting else []), *([grants.resolve()] if grants else [])]
     roots.extend(projects.values())
@@ -119,9 +121,14 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
         raise ValueError("Install uv before running the locked workflow")
     if "grants" in required and shutil.which("cargo") is None:
         raise ValueError("Install Rust (cargo) before running the grant workflow")
-    if "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
+    if "wip" in required and "wip" in cargo:
+        if shutil.which("cargo") is None:
+            raise ValueError("Install Rust (cargo) before running the job-cash workflow")
+        if not (projects["wip"] / "examples/job_to_cash.rs").is_file():
+            raise ValueError("The WIP checkout needs examples/job_to_cash.rs from australian-accounting PR #430")
+    elif "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
         raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
-    return {"projects": projects, "output": output, "environment_root": environment_root}
+    return {"projects": projects, "output": output, "environment_root": environment_root, "cargo": cargo}
 
 
 def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, grants: Path | None = None,
@@ -130,6 +137,7 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         raise ValueError("Command timeout must be positive and at most 3600 seconds")
     prepared = prepare(output, fpa, accounting, grants, environment_root, workflow)
     projects, output, environment_root = (prepared[key] for key in ("projects", "output", "environment_root"))
+    cargo = prepared.get("cargo", set())
     provenance = {owner: project_evidence(project) for owner, project in projects.items()}
     output.mkdir(parents=True)
     (output / "replay.json").write_text(json.dumps({"schema_version": "utility-workflows.v2",
@@ -179,7 +187,13 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         execute("close", ["-m", "closecontrol.cli", "view", "--pack-dir", target])
 
     try:
-        runtimes = {owner: json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime")) for owner in projects}
+        def runtime(owner):
+            if owner in cargo:
+                # rustup resolves the project's rust-toolchain.toml from its directory.
+                return {"rustc": execute(owner, ["-vV"], kind="runtime", runner=["rustc"]).strip()}
+            return json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime"))
+
+        runtimes = {owner: runtime(owner) for owner in projects}
         uv_version = captured(["uv", "--version"], cwd=COMPONENT, timeout=30)
         if uv_version.returncode:
             raise ValueError("Unable to record uv version")
@@ -209,7 +223,11 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         if workflow in {"all", "job-cash"}:
             for label, extra in (("job-base", "0"), ("job-extra-cost", "100000")):
                 target = output / label
-                execute("wip", ["examples/job_to_cash.py", "--output", target, "--extra-cost-to-complete", extra])
+                arguments = ["--output", target, "--extra-cost-to-complete", extra]
+                if "wip" in cargo:
+                    execute("wip", arguments, runner=["cargo", "run", "--locked", "--quiet", "--example", "job_to_cash", "--"])
+                else:
+                    execute("wip", ["examples/job_to_cash.py", *arguments])
                 forecast = execute("fpa", ["examples/job-to-cash/project_cash.py", "--pack", target])
                 (target / "project-cash.json").write_text(forecast, encoding="utf-8")
         if workflow in {"all", "grant-cash"}:

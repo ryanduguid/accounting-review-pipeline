@@ -1,17 +1,7 @@
 # Disclaimer
 
 xero-trial-balance-export pulls a read-only trial balance from the Xero
-Accounting API and writes it to CSV. It is not tax, legal, accounting,
-financial, investment, BAS-agent, registered-tax-agent, or assurance advice.
-
-This project is not affiliated with, sponsored by, endorsed by, or approved by:
-
-- Xero Limited
-- the Australian Taxation Office
-- the Commonwealth of Australia
-- any state or territory revenue office
-- Chartered Accountants Australia and New Zealand
-- Microsoft, or any other software vendor
+Accounting API and writes it to CSV. It does not provide professional advice.
 
 An export can be wrong, incomplete, stale, or unsuitable for a given set of
 facts. Xero report shapes, OAuth scopes and API behaviour change, and a run

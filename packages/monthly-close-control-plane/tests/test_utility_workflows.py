@@ -25,6 +25,69 @@ def test_missing_companion_entrypoint_fails_before_creating_outputs(tmp_path):
     assert not output.exists() and not environments.exists()
 
 
+def test_rust_wip_checkout_needs_its_cargo_example(tmp_path, monkeypatch):
+    accounting = tmp_path / "accounting"
+    wip = accounting / "packages/the-wip-tally"
+    fpa = tmp_path / "fpa"
+    wip.mkdir(parents=True)
+    fpa.mkdir()
+    (wip / "Cargo.toml").write_text("[package]")
+    (fpa / "pyproject.toml").write_text("[project]")
+    monkeypatch.setattr(PREPARE.__globals__["shutil"], "which", lambda name: name)
+    with pytest.raises(ValueError, match="job_to_cash.rs.*#430"):
+        PREPARE(tmp_path / "output", fpa, accounting, None, None, "job-cash")
+    (wip / "examples").mkdir()
+    (wip / "examples/job_to_cash.rs").write_text("fn main() {}")
+    assert PREPARE(tmp_path / "output", fpa, accounting, None, None, "job-cash")["cargo"] == {"wip"}
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="The cross-repository driver requires Python 3.14")
+def test_provenance_uses_cargo_lock_for_excluded_rust_member(tmp_path):
+    MODULE["git_output"](tmp_path, "init")
+    (tmp_path / "pyproject.toml").write_text('[tool.uv.workspace]\nmembers = ["packages/*"]\nexclude = ["packages/crate"]\n')
+    (tmp_path / "uv.lock").write_text("workspace resolution")
+    crate = tmp_path / "packages/crate"
+    crate.mkdir(parents=True)
+    (crate / "Cargo.toml").write_text('[package]\nname = "crate"\n')
+    (crate / "Cargo.lock").write_text("version = 4\n")
+    evidence = MODULE["project_evidence"](crate)
+    assert (evidence["lockfile"], evidence["lock_scope"]) == ("packages/crate/Cargo.lock", "project")
+
+
+def test_rust_wip_runs_through_cargo_and_records_rustc(tmp_path, monkeypatch):
+    run = MODULE["run_workflows"]
+    scope = run.__globals__
+    output = tmp_path / "results"
+    projects = {"fpa": tmp_path, "wip": tmp_path}
+    monkeypatch.setitem(scope, "prepare", lambda *args: {"projects": projects, "output": output,
+                                                         "environment_root": None, "cargo": {"wip"}})
+    monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "fixture"})
+    monkeypatch.setitem(scope["RESULTS"], "validate", lambda *args: ["Verified fixture"])
+    commands = []
+
+    def completed(command, **kwargs):
+        commands.append(command)
+        if command[-1] == "--version":
+            text = "uv fixture"
+        elif "-vV" in command:
+            text = "rustc fixture\n"
+        elif "-c" in command:
+            text = json.dumps({"python": "fixture", "packages": []})
+        else:
+            if "job_to_cash" in command:
+                Path(command[command.index("--output") + 1]).mkdir(parents=True)
+            text = "{}"
+        return subprocess.CompletedProcess(command, 0, text, "")
+
+    monkeypatch.setitem(scope, "captured", completed)
+    manifest = run(output=output, fpa=tmp_path, accounting=tmp_path, workflow="job-cash")
+    assert manifest["runtimes"]["wip"] == {"rustc": "rustc fixture"}
+    wip = [c for c in commands if "job_to_cash" in c]
+    assert len(wip) == 2 and all(c[c.index("cargo"):c.index("--") + 1] == [
+        "cargo", "run", "--locked", "--quiet", "--example", "job_to_cash", "--"] for c in wip)
+    assert not any("examples/job_to_cash.py" in c for c in commands)
+
+
 def test_existing_output_is_not_overwritten(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]")
     output = tmp_path / "existing"

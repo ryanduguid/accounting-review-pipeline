@@ -19,7 +19,7 @@ recipient receives; it does not change the character of the data.
 
 ```mermaid
 flowchart LR
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#E5E4E2", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#E5E4E2", "titleColor": "#E5E4E2"}}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#FFD32A", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "clusterBkg": "#000000", "clusterBorder": "#9B7735", "titleColor": "#E5E4E2"}}}%%
     Raw["raw .md"] --> Structured["pass 1: structured identifiers, labelled or check digit confirmed"]
     Structured --> Entities["pass 2: known entities from the local map"]
     Entities --> Residual{"pass 3: residual sweep"}
@@ -31,8 +31,10 @@ flowchart LR
     style Halt fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Out fill:#0F4B32,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     style Restore fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
+    classDef external fill:#745EB1,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     class Raw,Model external
+    classDef decision fill:#E7162F,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    class Residual decision
 ```
 
 The operator carries the sanitised file to the model and the answer back. evatt

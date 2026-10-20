@@ -41,7 +41,7 @@ to the authorised reviewer alongside the gate result.
 [Workpaper Review Gate](packages/review-ready-gate/README.md) ·
 [Xero trial balance export](packages/xero-trial-balance-export/README.md)
 
-Synthetic examples. Review aid, not professional advice; a human decides whether the close is acceptable.
+Synthetic examples. A human decides whether the close is acceptable.
 
 **Input:** the supplied current and prior trial balances, account mapping and subledger. The creditors reconciliation differs by $250.
 
@@ -211,7 +211,7 @@ changing their status.
 
 Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
 through a root caller pinned to the independently reviewed Release Policy commit
-`a601f1d8b143f92b0517f709216993660d21f480`: `monthly-close-control-plane/v*`,
+`0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c`: `monthly-close-control-plane/v*`,
 `accounting-excel-toolkit/v*`. One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
