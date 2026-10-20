@@ -549,6 +549,27 @@ impl<'a> Parser<'a> {
     }
 }
 
+/// `format!("{value:e}")`, but where two spellings are equally short, the one
+/// CPython's `repr` prints: the nearer to `value`, an exact tie going to the even
+/// digit. Rust's shortest formatting can break that tie upwards: `1 + 2**-17` is
+/// `1.0000076293945312` in Python, not `…313`. `{:.Ne}` rounds exactly with ties
+/// to even, so its spelling is used whenever it still reads back as `value`.
+fn shortest_exp(value: f64) -> String {
+    let shortest = format!("{value:e}");
+    let precision = shortest
+        .bytes()
+        .take_while(|&b| b != b'e')
+        .filter(u8::is_ascii_digit)
+        .count()
+        - 1;
+    let nearest = format!("{value:.precision$e}");
+    if nearest.parse::<f64>() == Ok(value) {
+        nearest
+    } else {
+        shortest
+    }
+}
+
 /// `float.__repr__`.
 pub fn float_repr(value: f64) -> String {
     if value.is_nan() {
@@ -564,7 +585,7 @@ pub fn float_repr(value: f64) -> String {
             "0.0".into()
         };
     }
-    let sci = format!("{value:e}");
+    let sci = shortest_exp(value);
     let (mantissa, exponent) = sci.split_once('e').expect("Rust {:e} has an exponent");
     let exponent: i32 = exponent.parse().expect("integer exponent");
     let negative = mantissa.starts_with('-');
@@ -748,6 +769,27 @@ mod tests {
         assert_eq!(
             repr(&loads_bytes(b"[null, true, 1e400, -0]").unwrap()),
             "[None, True, inf, 0]"
+        );
+    }
+
+    #[test]
+    fn float_repr_matches_cpython_corpus() {
+        // CPython 3.15's repr for doubles chosen to exercise ties between two
+        // equally short spellings: bits in hex, then the repr.
+        assert_eq!(float_repr(1.0 + 2f64.powi(-17)), "1.0000076293945312");
+        let wrong: Vec<String> = include_str!("../tests/data/float_repr.txt")
+            .lines()
+            .filter_map(|line| {
+                let (bits, expected) = line.split_once(' ').expect("bits and repr");
+                let actual = float_repr(f64::from_bits(u64::from_str_radix(bits, 16).unwrap()));
+                (actual != expected).then(|| format!("{bits}: python {expected}, rust {actual}"))
+            })
+            .collect();
+        assert!(
+            wrong.is_empty(),
+            "{} wrong: {:?}",
+            wrong.len(),
+            &wrong[..wrong.len().min(10)]
         );
     }
 }
