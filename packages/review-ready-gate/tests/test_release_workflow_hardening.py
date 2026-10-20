@@ -29,10 +29,11 @@ def test_release_uses_the_hardened_shared_policy_contract() -> None:
     workflow = _workflow_text()
     release_job = workflow.split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
 
-    assert (
-        "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-        "0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c"
-    ) in release_job
+    # The pin itself is the callers' to set; tests/test_release_pins.py holds them together.
+    assert re.search(
+        r"(?m)^    uses: ryanduguid/release-policy/\.github/workflows/release-python\.yml@[0-9a-f]{40}$",
+        release_job,
+    )
     assert "actions: read" in release_job
     assert "source-directory: packages/review-ready-gate" in release_job
     assert "tag-prefix: review-ready-gate" in release_job
