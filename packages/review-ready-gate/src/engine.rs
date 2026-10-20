@@ -498,6 +498,36 @@ mod tests {
         }
     }
     #[test]
+    fn bas_refuses_gst_postings_after_the_declared_period() {
+        for (posted_on, status) in [
+            ("2026-04-01", "NOT_READY"),
+            ("2026-03-31", "READY"),
+            ("2026-01-01", "READY"),
+        ] {
+            let tmp = TempDir::new();
+            let pack_dir = tmp.join("pack");
+            test_support::copy_example("bas-ready", &pack_dir);
+            let source = pack_dir.join("gst_control_gl.csv");
+            let text = fs::read_to_string(&source).unwrap();
+            let mut lines = text.lines();
+            let mut rewritten = format!("{}\n", lines.next().unwrap());
+            for line in lines {
+                let (_, rest) = line.split_once(',').unwrap();
+                rewritten.push_str(&format!("{posted_on},{rest}\n"));
+            }
+            fs::write(&source, rewritten).unwrap();
+            let pack = review("bas", &pack_dir).unwrap();
+            assert_eq!(pack.status, status, "{posted_on}");
+            assert_eq!(
+                pack.findings
+                    .iter()
+                    .any(|f| f.code == "PERIOD_ORDER" && f.slot == "gst_control_gl"),
+                status == "NOT_READY",
+                "{posted_on}"
+            );
+        }
+    }
+    #[test]
     fn empty_optional_evidence_is_a_finding_and_names_the_unrun_control() {
         let tmp = TempDir::new();
         let dir = tmp.join("pack");

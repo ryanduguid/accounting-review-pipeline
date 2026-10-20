@@ -15,6 +15,10 @@ commit `8061079d0b4206d064c54751aa047af8588fa265`. Inputs are fabricated.
 | Evaluation and downstream contract | `src/evaluation_tests.rs`; root trial-balance and shared-behaviour conformance; native Power BI producer tests |
 | Package/release metadata | Root metadata checks and explicit blocked native publisher; release-binary smokes |
 
+The GST period-boundary regression added on main after that commit
+(`test_gst_period_audit.py`, #395) is ported as
+`bas_refuses_gst_postings_after_the_declared_period` in `src/engine.rs`.
+
 Python import/class/ambient Decimal-context assertions and Python AST/source
 identity checks are retired with the binary-only API. Historical fixture
 provenance remains pinned.
