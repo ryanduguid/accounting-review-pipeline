@@ -15,9 +15,9 @@ AUTH_PATH = ROOT / "auth.py"
 README_PATH = ROOT / "README.md"
 
 RUNTIME_SCOPES = "offline_access accounting.reports.trialbalance.read"
-# Re-pinned after trimming redundant warranty and endorsement wording.
+# Re-pinned after changing only the README badge presentation.
 # OAuth scope, refresh and reviewer claims are unchanged.
-README_SHA256 = "BB7DDD1A9A820B76AB17047B3F9DC52088607317E1BD72174DB171E660C931DF"
+README_SHA256 = "0B8CD748F7B69A1252D7AA740D8A7DFC7034B5613200C11D99321C1C5B2A8E3D"
 # Re-pinned when server_bind()'s RFC 8252 loopback reason moved to its own
 # comment line above a bare NOSONAR, the form SonarCloud's Python analyser
 # honours. Comments are the only change: AUTH_AST_SHA256 below still
