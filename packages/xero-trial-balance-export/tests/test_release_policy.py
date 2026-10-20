@@ -22,10 +22,10 @@ class ReleasePolicyTests(unittest.TestCase):
 
     def test_release_uses_the_shared_python_policy(self) -> None:
         release_job = self.workflow().split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
-        self.assertIn(
-            "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-            "0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c",
+        # The pin itself is the callers' to set; tests/test_release_pins.py holds them together.
+        self.assertRegex(
             release_job,
+            r"(?m)^    uses: ryanduguid/release-policy/\.github/workflows/release-python\.yml@[0-9a-f]{40}$",
         )
         self.assertIn("source-directory: packages/xero-trial-balance-export", release_job)
         self.assertIn("tag-prefix: xero-trial-balance-export", release_job)
