@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       run: ${{ steps.select.outputs.run }}
@@ -71,7 +71,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +110,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     timeout-minutes: 15
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -201,7 +201,7 @@ jobs:
         component:
           - apps/australian-accounting-power-bi
           - apps/grant-acquittal-workpapers
-        os: [ubuntu-24.04, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         shell: bash
@@ -235,7 +235,7 @@ jobs:
   standard-library-gates:
     needs: [changes, lint, verify, verify-windows, rust]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
       contents: read
