@@ -1,5 +1,6 @@
 """Contracts for the active namespaced release boundary."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ def test_release_uses_the_hardened_shared_policy_contract() -> None:
 
     assert (
         "uses: ryanduguid/release-policy/.github/workflows/release-python.yml@"
-        "a601f1d8b143f92b0517f709216993660d21f480"
+        "0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c"
     ) in release_job
     assert "actions: read" in release_job
     assert "source-directory: packages/review-ready-gate" in release_job
@@ -50,6 +51,7 @@ def test_pypi_uses_only_the_exact_attested_distribution() -> None:
     assert "id-token: write" in pypi_job
     assert "artifact-ids: ${{ needs.release.outputs.dist-id }}" in pypi_job
     assert "python policy/scripts/python_release.py verify-candidate" in pypi_job
-    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in pypi_job
-    assert "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33" in pypi_job
+    # Full commit SHAs, so Dependabot can advance them without editing this test.
+    assert re.search(r"actions/download-artifact@[0-9a-f]{40} # v\d", pypi_job)
+    assert re.search(r"pypa/gh-action-pypi-publish@[0-9a-f]{40} # v\d", pypi_job)
     assert "python -m build" not in pypi_job

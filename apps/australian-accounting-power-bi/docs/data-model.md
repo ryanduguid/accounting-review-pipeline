@@ -4,7 +4,7 @@ The semantic model follows Kimball star schema principles, strictly separating d
 
 ```mermaid
 erDiagram
-%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#E5E4E2", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#66023C", "labelBackground": "#000000"}, "themeCSS": ".labelBkg { background-color: #000000; }"}}%%
+%%{init: {"theme": "base", "look": "classic", "themeVariables": {"background": "#000000", "primaryColor": "#66023C", "primaryTextColor": "#FFFFF0", "primaryBorderColor": "#FFFFF0", "lineColor": "#FFD32A", "textColor": "#FFFFF0", "edgeLabelBackground": "#000000", "attributeBackgroundColorOdd": "#000000", "attributeBackgroundColorEven": "#66023C", "labelBackground": "#000000"}, "themeCSS": ".labelBkg { background-color: #000000; }"}}%%
     Dim_Entity ||--o{ Fact_GeneralLedger : "EntityID"
     Dim_Entity ||--o{ Fact_Budget : "EntityID"
     Dim_Entity ||--o{ Fact_PayrollSuper : "EntityID"
@@ -23,10 +23,12 @@ erDiagram
     Review_Exception ||--o{ Review_Evidence : "ExceptionKey"
     classDef dimension fill:#000000,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     class Dim_Account,Dim_Date,Dim_Employee,Dim_Entity dimension
-    classDef external fill:#E5E4E2,stroke:#E5E4E2,stroke-width:2px,color:#000000
+    classDef external fill:#745EB1,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
     class Dim_ANZSIC,Fact_ATOBenchmark external
     classDef review fill:#990024,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
-    class Review_Exception,Review_Evidence review
+    class Review_Evidence review
+    classDef decision fill:#E7162F,stroke:#FFFFF0,stroke-width:2px,color:#FFFFF0
+    class Review_Exception decision
 ```
 
 ---

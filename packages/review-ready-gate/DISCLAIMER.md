@@ -1,18 +1,8 @@
 # Disclaimer
 
 Workpaper Review Gate inspects a workpaper pack directory and writes a readiness
-pack for human review. It is not tax, legal, accounting, financial, investment,
-BAS-agent, registered-tax-agent, or assurance advice, and it is not an audit
+pack for human review. It does not provide professional advice, and it is not an audit
 or a review engagement.
-
-This project is not affiliated with, sponsored by, endorsed by, or approved by:
-
-- the Australian Taxation Office
-- the Commonwealth of Australia
-- any state or territory revenue office
-- Chartered Accountants Australia and New Zealand
-- CPA Australia, or any other professional body
-- Xero, MYOB, or any other software vendor
 
 The pack can be wrong, incomplete, stale, or unsuitable for a given set of
 facts. A `READY` result means no configured gate tripped on the files that were

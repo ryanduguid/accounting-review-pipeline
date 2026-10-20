@@ -40,7 +40,7 @@ READY means no configured gate tripped; it is not approval, not a tax or BAS age
 Reviewed 2026-08-26.
 
 - [Australian Taxation Office, Business activity statements](https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/business-activity-statements-bas)
-- [Australian Taxation Office, Monthly GST reporting](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/lodging-your-bas-or-annual-gst-return/options-for-reporting-and-paying-gst/monthly-gst-reporting)
+- [Australian Taxation Office, Monthly GST reporting](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/when-and-how-to-report-and-pay-gst/monthly-gst-reporting)
 
 ## Product and fixture version
 
