@@ -35,7 +35,7 @@ jobs:
     # Pull requests from forks, and Dependabot's (which get Dependabot secrets
     # only), receive no SNYK_TOKEN; the weekly run on main scans their changes.
     if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       # One dependency set per line: uv:<project directory>,
