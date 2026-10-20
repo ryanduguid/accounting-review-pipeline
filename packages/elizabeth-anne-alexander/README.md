@@ -28,11 +28,11 @@ authorship, source system, origin, time, or immutability.
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
-[![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=66023C&labelColor=000000&style=flat-square)](https://pypi.org/project/elizabeth-anne-alexander/)
-[![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-66023C?logo=rust&logoColor=white&labelColor=000000&style=flat-square)](rust-toolchain.toml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
-[![No network client](https://img.shields.io/badge/Network-No%20Client-66023C?labelColor=000000&style=flat-square)](DATA-FLOW.md)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
+[![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=66023C&labelColor=000000&style=flat)](https://pypi.org/project/elizabeth-anne-alexander/)
+[![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-66023C?logo=rust&logoColor=E5E4E2&labelColor=000000&style=flat&color=66023C)](rust-toolchain.toml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
+[![No network client](https://img.shields.io/badge/Network-No%20Client-66023C?labelColor=000000&style=flat&color=66023C)](DATA-FLOW.md)
 
 A **fixed-policy, zero-network ledger-review boundary for AI**, not an AI that operates Xero.
 

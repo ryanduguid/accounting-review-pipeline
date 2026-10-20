@@ -1,16 +1,16 @@
 # Accounting Review Pipeline: Xero month-end close controls
 
-[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
-[![Codecov](https://img.shields.io/codecov/c/github/ryanduguid/accounting-review-pipeline?label=coverage&labelColor=000000&style=flat-square)](https://codecov.io/gh/ryanduguid/accounting-review-pipeline)
-[![CodeQL](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/codeql.yml?branch=main&label=CodeQL&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
-[![Snyk](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/snyk.yml?branch=main&label=Snyk&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml)
-[![SonarCloud](https://img.shields.io/sonar/quality_gate/ryanduguid_accounting-review-pipeline?server=https%3A%2F%2Fsonarcloud.io&label=SonarCloud&labelColor=000000&style=flat-square)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
-[![Codacy code quality](https://img.shields.io/codacy/grade/361fa65bc2ac4e9eb812e761b0f4e227?label=Codacy&labelColor=000000&style=flat-square)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)<br>
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/ryanduguid/accounting-review-pipeline?label=Scorecard&labelColor=000000&style=flat-square)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
-[![OpenSSF Best Practices](https://img.shields.io/cii/level/15430?label=Best%20Practices&labelColor=000000&style=flat-square)](https://www.bestpractices.dev/projects/15430)
-[![SLSA 3](https://img.shields.io/badge/SLSA-level%203-990024?labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
-[![VirusTotal](https://img.shields.io/badge/VirusTotal-scanned-990024?labelColor=000000&style=flat-square&logo=virustotal&logoColor=FFFFF0)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
-[![licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
+[![Codecov](https://img.shields.io/codecov/c/github/ryanduguid/accounting-review-pipeline?label=coverage&labelColor=000000&style=flat)](https://codecov.io/gh/ryanduguid/accounting-review-pipeline)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/codeql.yml?branch=main&label=CodeQL&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
+[![Snyk](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/snyk.yml?branch=main&label=Snyk&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml)
+[![SonarCloud](https://img.shields.io/sonar/quality_gate/ryanduguid_accounting-review-pipeline?server=https%3A%2F%2Fsonarcloud.io&label=SonarCloud&labelColor=000000&style=flat)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
+[![Codacy code quality](https://img.shields.io/codacy/grade/361fa65bc2ac4e9eb812e761b0f4e227?label=Codacy&labelColor=000000&style=flat)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)<br>
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/ryanduguid/accounting-review-pipeline?label=Scorecard&labelColor=000000&style=flat)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
+[![OpenSSF Best Practices](https://img.shields.io/cii/level/15430?label=Best%20Practices&labelColor=000000&style=flat)](https://www.bestpractices.dev/projects/15430)
+[![SLSA 3](https://img.shields.io/badge/SLSA-level%203-990024?labelColor=000000&style=flat&color=990024)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-scanned-990024?labelColor=000000&style=flat&logo=virustotal&logoColor=FFD32A&color=990024)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
+[![licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
 Eight independently versioned components that carry an Australian month end from a
