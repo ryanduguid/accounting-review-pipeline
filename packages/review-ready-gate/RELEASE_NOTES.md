@@ -1,3 +1,18 @@
+# v1.0.0
+
+- Replace the Python runtime and import API with the `review-ready` Rust binary.
+  Preserve the five commands, readiness statuses, exit codes, pack schemas,
+  decimal controls, document evidence and publication recovery protocol.
+- Add `--version` for native executable identity checks. Power BI records the
+  native version and executable hash alongside the Python close-control identity.
+- Use native help, usage and JSON syntax diagnostics. Limit JSON nesting to
+  1,000 containers and decimal rendering to a 1 GiB resource ceiling.
+- Decode publication control files as UTF-8. Unix SIGTERM is managed at writer
+  checkpoints; SIGINT and Windows process termination can leave unresolved state
+  that requires review before retrying.
+- Native release publishing is not configured. The release workflow fails
+  explicitly and cannot publish Python or native artefacts.
+
 # v0.3.0
 
 - Breaking: requires Python 3.14 or later. 0.2.0 remains the last release for Python 3.11 to 3.13 ([#321](https://github.com/ryanduguid/accounting-review-pipeline/pull/321)).

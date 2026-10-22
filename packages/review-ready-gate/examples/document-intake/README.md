@@ -2,8 +2,8 @@
 
 This local path prepares supporting evidence for an existing readiness pack.
 It preserves the original file, extracted text and proposed fields, then binds a
-separate human transcription review to the intake bytes. It uses the standard
-library and makes no network or model calls.
+separate human transcription review to the intake bytes. It makes no network or
+model calls.
 
 This first version accepts fabricated data only. The explicit `--synthetic`
 flag records the caller's declaration; it cannot prove that a file is fabricated.
@@ -13,15 +13,15 @@ its normal trial balance, control exports and self-review.
 
 ## Run the example
 
-Run from `packages/review-ready-gate` using the repository's development environment.
+Run `cargo install --path . --locked` from `packages/review-ready-gate`.
 Choose a new absolute output directory outside every version-control checkout.
 The following PowerShell commands use the system temporary directory. Change
 the directory name if it already exists; intake refuses to overwrite a bundle.
 
 ```powershell
 $documentDemo = Join-Path ([System.IO.Path]::GetTempPath()) 'review-document-demo'
-uv run --locked --extra dev review-ready intake --synthetic --source examples/document-intake/invoice.txt --text examples/document-intake/invoice.txt --text-origin manual --entity 'Cedar and Pine Consulting Pty Ltd' --period-end 2026-03-31 --output $documentDemo
-uv run --locked --extra dev review-ready view-document --bundle $documentDemo
+review-ready intake --synthetic --source examples/document-intake/invoice.txt --text examples/document-intake/invoice.txt --text-origin manual --entity 'Cedar and Pine Consulting Pty Ltd' --period-end 2026-03-31 --output $documentDemo
+review-ready view-document --bundle $documentDemo
 ```
 
 The entity above is the fabricated tenant in `examples/bas-ready`. `--period-end`
@@ -50,8 +50,8 @@ Attach the bundle to the normal gate and display its bound evidence:
 
 ```powershell
 $documentPack = Join-Path ([System.IO.Path]::GetTempPath()) 'review-document-pack'
-uv run --locked --extra dev review-ready gate --profile bas --pack examples/bas-ready --document $documentDemo --output $documentPack
-uv run --locked --extra dev review-ready view --pack-dir $documentPack --document $documentDemo
+review-ready gate --profile bas --pack examples/bas-ready --document $documentDemo --output $documentPack
+review-ready view --pack-dir $documentPack --document $documentDemo
 ```
 
 Before human transcription review, the first command returns `NOT_READY`, exit 2.
@@ -148,7 +148,7 @@ gate/view workflow.
 Run the normal component command:
 
 ```powershell
-uv run --locked --extra dev pytest --cov --cov-branch --cov-report=term-missing --cov-report=xml
+cargo test --locked --all-features
 ```
 
 This is a deterministic text and evidence benchmark. It does not measure OCR,

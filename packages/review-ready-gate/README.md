@@ -1,5 +1,19 @@
 # Workpaper Review Gate
 
+Workpaper Review Gate checks whether an Australian accounting workpaper pack is
+ready for manager review. Version 1.0.0 provides the `review-ready` Rust binary.
+
+From this component directory, install with Rust stable and run the fabricated demo:
+
+```bash
+cargo install --path . --locked
+review-ready gate --profile bas --pack examples/bas-ready --output ../../../review-ready-demo/bas-ready
+```
+
+The demo exits `0` for `READY`. A human still decides whether the pack may proceed.
+Python imports and the Python runtime were removed in this major version.
+Native release publishing is not configured; see [RELEASING.md](RELEASING.md).
+
 ```
 +----------------------------------------------------------------------+
 |                        Workpaper Review Gate                         |
@@ -14,17 +28,17 @@
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
-[![PyPI](https://img.shields.io/pypi/v/review-ready-gate.svg?color=66023C&labelColor=000000&style=flat)](https://pypi.org/project/review-ready-gate/)
-[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-66023C?logo=python&logoColor=E5E4E2&labelColor=000000&style=flat&color=66023C)](https://www.python.org/downloads/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
+[![Rust stable](https://img.shields.io/badge/rust-stable-66023C?logo=rust&labelColor=000000&style=flat-square)](https://www.rust-lang.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
 
 [Browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) · [Reproduce locally](evaluation/manager_review_gate/README.md) · [Quick demo](#quick-demo) · [Release notes](RELEASE_NOTES.md)
 
 The maintained source is under
 [`packages/review-ready-gate`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate)
-in the Accounting Review Pipeline. The `review-ready-gate` distribution,
-`review-ready` command and `reviewready` import remain compatibility identifiers.
+in the Accounting Review Pipeline. The `review-ready` command retains the five
+commands, flags, readiness statuses and payload formats of the Python baseline.
+There is no supported `reviewready` Python import API.
 
 A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team, or an AI agent. It tells you whether that folder is allowed to enter manager review.
 
@@ -86,7 +100,7 @@ fabricated data, with nothing at stake. Learn the flags here before pointing
 it at a real pack.
 
 ```bash
-python -m pip install -e ".[dev]"
+cargo install --path . --locked
 
 review-ready gate \
   --profile bas \
@@ -293,7 +307,7 @@ numbered document label that contradicts its filename also prevents comparison.
 
 ## Design
 
-- Exact `Decimal` arithmetic for money, never binary floating point. The gate fixes its own 28-digit context, ignoring the caller's, and refuses a pack whose trial-balance totals or BAS tie-out amounts would round instead of comparing them inexactly.
+- Decimal arithmetic preserves money values and uses a 28-digit, half-even context for control calculations. The gate refuses trial-balance totals or BAS tie-out amounts that would round.
 - Schema, duplicate-key, date, and numeric gates fail closed: a malformed file is exit `1` and writes no pack.
 - Missing or empty required artefacts are findings, not crashes, so the cover sheet can tell the preparer what to send back.
 - Source SHA-256 digests travel with the pack. Each digest is taken from the same immutable byte snapshot the loader parsed.
@@ -304,7 +318,7 @@ numbered document label that contradicts its filename also prevents comparison.
 ## Data boundary
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
+- A generated pack cannot be written into a version-control checkout. The writer walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory. A level it cannot examine is refused.
 - Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Do not use this as tax, financial, audit, or legal advice.
 
@@ -317,19 +331,30 @@ numbered document label that contradicts its filename also prevents comparison.
 
 ## Development
 
-Use the locked toolchain. `python -m pytest` is not what CI runs.
+Use Rust stable and the committed Cargo lockfile:
 
 ```bash
-uv lock --check
-uv sync --locked --all-extras
-uv run --locked --extra dev pytest
-uv run ruff check reviewready tests
-uv run mypy reviewready
-uv build
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --locked --release
 ```
 
 The test suite covers schema gates, the 3 fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
 
-Continuous integration verifies the committed `uv.lock`, runs the test suite on Python 3.14 and 3.15, then builds and smoke-tests the wheel with the fabricated demo. CodeQL scans the Python source, and Dependabot is configured to propose updates for `uv` dependencies and pinned GitHub Actions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local verification and data-handling requirements. To cut a release, follow [RELEASING.md](RELEASING.md). Do not tag until you intend to publish.
+CI runs Cargo format, lint and tests on Linux and Windows, builds the release
+binary and exercises it from an empty directory. The feature-gated differential
+tool compares fabricated cases with Python source frozen at commit
+`8061079d0b4206d064c54751aa047af8588fa265`; Python is needed only for that oracle.
+CodeQL does not cover the Rust implementation.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
+
+### Deliberate major-version differences
+
+- Help, usage and JSON syntax diagnostics have native wording. Exit codes retain their command meaning.
+- `review-ready --version` prints the native package version for producer identity checks.
+- JSON nesting is bounded at 1,000 containers. Decimal rendering refuses an output above its 1 GiB resource ceiling.
+- SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
+- Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
 
 Apache-2.0 licensed; keep the attribution in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).

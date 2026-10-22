@@ -29,17 +29,8 @@ REQUIRED = {
         ".github/workflows/codeql.yml: Analyze Python",
         ".github/workflows/codeql.yml: codeql-gates"
     ],
-    "release-review-ready-gate.yml": [
-        ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
-        ".github/workflows/ci.yml: packages/review-ready-gate / build",
-        ".github/workflows/ci.yml: packages/review-ready-gate / dependency-audit",
-        ".github/workflows/ci.yml: packages/review-ready-gate / lint",
-        ".github/workflows/ci.yml: packages/review-ready-gate / test (3.14)",
-        ".github/workflows/joined-conformance.yml: verify",
-        ".github/workflows/codeql.yml: Analyze Python",
-        ".github/workflows/codeql.yml: codeql-gates"
-    ],
 }
+BLOCKED = {"release-review-ready-gate.yml"}
 
 
 class ReleaseChecksTests(unittest.TestCase):
@@ -48,7 +39,7 @@ class ReleaseChecksTests(unittest.TestCase):
         callers = sorted(
             path.name for path in workflows.glob("release*") if path.suffix in {".yml", ".yaml"}
         )
-        self.assertEqual(callers, sorted(REQUIRED))
+        self.assertEqual(callers, sorted(set(REQUIRED) | BLOCKED))
         for filename, expected in REQUIRED.items():
             with self.subTest(workflow=filename):
                 text = (workflows / filename).read_text(encoding="utf-8")
@@ -105,7 +96,7 @@ class ReleaseChecksTests(unittest.TestCase):
                 match = re.search(r"(?m)^      source-directory: (\S+)$", text)
                 assert match is not None, path.name
                 components.append(match.group(1))
-        self.assertEqual(len(components), 2, components)
+        self.assertEqual(len(components), 1, components)
         for component in components:
             with self.subTest(component=component):
                 project = tomllib.loads((ROOT / component / "pyproject.toml").read_text(encoding="utf-8"))

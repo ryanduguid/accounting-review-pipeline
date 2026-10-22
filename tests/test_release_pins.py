@@ -19,12 +19,14 @@ CLAIM = re.compile(
     r"through a root caller pinned to the independently reviewed Release Policy commit\n"
     r"`([0-9a-f]{40})`"
 )
-CURRENT_CALLERS = re.compile(r"Every root release caller now pins `([0-9a-f]{7})`")
+CURRENT_CALLERS = re.compile(r"Every active root release caller now pins `([0-9a-f]{7})`")
 
 
 def caller_pins() -> dict[str, str]:
     pins: dict[str, str] = {}
     for workflow in sorted(WORKFLOWS.glob("release-*.yml")):
+        if workflow.name == "release-review-ready-gate.yml":
+            continue  # The Rust publisher is explicitly blocked and has no policy caller.
         match = PIN.search(workflow.read_text(encoding="utf-8"))
         if match is None:
             raise AssertionError(f"{workflow.name} does not pin release-policy by full commit")
@@ -35,7 +37,7 @@ def caller_pins() -> dict[str, str]:
 class ReleasePinTests(unittest.TestCase):
     def test_every_release_caller_pins_a_full_commit(self) -> None:
         pins = caller_pins()
-        self.assertEqual(len(pins), 3, sorted(pins))
+        self.assertEqual(len(pins), 2, sorted(pins))
 
     def test_readme_names_the_pin_the_callers_run(self) -> None:
         """One claim, one pin: if the callers diverge, the README has to say so."""
@@ -60,6 +62,9 @@ class ReleasePinTests(unittest.TestCase):
         pins = set(caller_pins().values())
         for recipe in recipes:
             text = recipe.read_text(encoding="utf-8")
+            if recipe.parent.name == "review-ready-gate":
+                self.assertIn("Native release publishing is not configured", text)
+                continue
             with self.subTest(recipe=str(recipe.relative_to(ROOT))):
                 for pin in pins:
                     self.assertNotIn(f"--signer-digest {pin}", text, "literal current pin")

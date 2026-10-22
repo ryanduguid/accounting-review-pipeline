@@ -33,7 +33,7 @@ on:
         required: true
         type: string
       import_name:
-        description: An import the built wheel must provide, for example reviewready.
+        description: An import the built wheel must provide, for example closecontrol.
         required: true
         type: string
 
@@ -51,7 +51,7 @@ concurrency:
 
 env:
   UV_PYTHON: "3.15"
-  UV_VERSION: "0.12.0"
+  UV_VERSION: "0.13.0"
 
 jobs:
   changes:

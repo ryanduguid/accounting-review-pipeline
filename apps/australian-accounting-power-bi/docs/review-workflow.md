@@ -6,7 +6,19 @@ and compares two verified runs. All demonstration assertions are fabricated.
 
 ## Build the shared case
 
-From the repository root, install the existing components with `uv sync --locked`.
+From the repository root, install Monthly Close Controls with `uv sync --locked`
+and build the Rust readiness binary. On Windows, put it beside the installed
+close-control launcher:
+
+```powershell
+Set-Location packages/review-ready-gate
+cargo build --locked --release
+Set-Location ../..
+Copy-Item packages/review-ready-gate/target/release/review-ready.exe .venv/Scripts/review-ready.exe
+```
+
+On Linux, copy `target/release/review-ready` into the environment's `bin`
+directory. Rebuild and copy after a native producer change.
 Run these commands from this component directory, with new output directories
 outside every Git checkout:
 
@@ -21,11 +33,13 @@ Use `--bin-dir` for another installed CLI directory. On Linux, supply the
 environment's `bin` directory explicitly. The workflow invokes `review-ready`
 and `close-control` as independent commands. It imports no sibling runtime.
 It retains the commands, producer manifests, timestamps, exit codes and logs.
-Each manifest binds the supported launcher, its declared Python interpreter,
-selected distribution and entry point, and all resolved first-party package
-files, including empty files and typing markers. Normal uv and PyPA console launchers
-are supported. Unknown launchers, linked package paths and changed identities
-are refused. Rebuild any earlier demonstration run that lacks these manifests.
+The close-control manifest binds its Python launcher, interpreter, distribution,
+entry point and first-party package files. The version 2 review-ready manifest
+binds the native package version and executable hash. Normal uv and PyPA
+close-control launchers are supported; review-ready requires the native binary.
+Unknown launchers, linked paths and changed identities are refused.
+Historical version 1 manifests can be read, but a live run must match the current
+installed producer identity. Rebuild earlier demonstration runs after migration.
 
 The case is ENT001, Varrock Ventures Pty Ltd, in AUD on an accrual basis.
 August and September 2024 share the original ledger's first financial year and

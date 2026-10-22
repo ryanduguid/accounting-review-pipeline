@@ -1,6 +1,6 @@
 # Workspace root. This file is a development entrypoint only: it is not a
 # distributable package, carries no name or version, and ships nothing to PyPI.
-# Each component under packages/ keeps its own pyproject.toml, uv.lock, version,
+# Each Python component keeps its own pyproject.toml, uv.lock, version,
 # release notes and licence, and is still built and released on its own from its
 # own directory through its root release caller.
 #
@@ -8,15 +8,15 @@
 # shared test toolchain in one command and run the whole suite from the top. See
 # the justfile for the setup, lint, typecheck and test entrypoints.
 #
-# Only the 2 Python distributions are members. The Xero Ledger Review Gate,
-# evatt and exporter are Rust crates checked with cargo and are excluded. The Excel adapter and the
+# Only Monthly Close Controls is a Python workspace member. The Xero Ledger Review Gate,
+# review readiness gate, evatt and exporter are Rust crates checked with cargo and are excluded. The Excel adapter and the
 # Power BI application have no pyproject.toml and no Python dependencies, and
 # the grant workpapers application keeps its pyproject.toml for standalone use;
 # the justfile runs their standard-library unittest suites from the same .venv.
 
 [tool.uv.workspace]
 members = ["packages/*"]
-exclude = ["packages/elizabeth-anne-alexander", "packages/evatt", "packages/xero-trial-balance-export"]
+exclude = ["packages/elizabeth-anne-alexander", "packages/evatt", "packages/xero-trial-balance-export", "packages/review-ready-gate"]
 
 # The shared toolchain for running every component's checks from one
 # environment: the union of what the component `dev` extras and test suites
@@ -24,7 +24,7 @@ exclude = ["packages/elizabeth-anne-alexander", "packages/evatt", "packages/xero
 # for their own CI. The 5 check tools carry the same exact pin in every
 # member's `dev` extra and here, so one workspace resolution holds them all and
 # `just lint`, `just typecheck` and `just test` run the versions CI runs. Move
-# a pin in the root and both workspace members together.
+# a pin in the root and the workspace member together.
 [dependency-groups]
 dev = [
   "ruff==0.16.10",
@@ -41,7 +41,6 @@ dev = [
 addopts = "--import-mode=importlib"
 pythonpath = [
   ".",
-  "packages/review-ready-gate",
   "packages/monthly-close-control-plane/tests",
   "apps/grant-acquittal-workpapers",
 ]
@@ -58,7 +57,6 @@ select = ["E4", "E7", "E9", "F"]
 python_version = "3.14"
 files = [
   "packages/monthly-close-control-plane/closecontrol",
-  "packages/review-ready-gate/reviewready",
 ]
 ignore_missing_imports = true
 pretty = true

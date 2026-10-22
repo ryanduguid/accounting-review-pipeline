@@ -57,7 +57,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [Workpaper Review Gate](../packages/review-ready-gate/README.md) (`review-ready-gate`) 0.3.0, a readiness gate for workpaper packs before manager review |
+| Name and version | [Workpaper Review Gate](../packages/review-ready-gate/README.md) (`review-ready-gate`) 1.0.0, a Rust readiness gate for workpaper packs before manager review |
 | Source and updates | Ryan Duguid, the sole maintainer, under the Apache License 2.0, with no warranty or support agreement. Each release has [release notes](../packages/review-ready-gate/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Stops an incomplete, untied or unbalanced pack reaching manager review, however it was prepared |
 | Known limitations and prohibited use | Not tax, financial, audit or legal advice, and not a sign-off. `READY` means no configured control tripped, not that every control ran; the pack lists the optional controls that had no input. Tie-out tolerance is an input to each gate run. The bank reconciliation is checked against the GL balance it records itself, not the pack's trial balance, and the GST control file only for postings after `period_end`. The command refuses to write a pack inside a version-control checkout it can detect, but a work tree chosen by `--work-tree` or `core.worktree` in another repository cannot be detected, so the check is a backstop, not proof that a directory is untracked. |
@@ -66,7 +66,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 | Key stakeholders affected | May include the clients whose workpapers pass through the gate, and the reviewers who rely on its status |
 | Contains an AI model | No. A firm lists it as a control on workpapers, whether a person or an AI tool prepared them. |
 | Datasets and training | Tested on fabricated example and evaluation packs only. It trains, fine-tunes and evaluates no model. |
-| Technical requirements | Python 3.14 or later, run locally, with packs written to a working directory outside any version-control checkout |
+| Technical requirements | Rust stable to build the native binary, run locally, with packs written to a working directory outside any version-control checkout |
 | Network access | None |
 | Where a person decides | `READY` only admits a pack to manager review. The reviewer decides whether the work is correct, and an acknowledgement never changes a computed status. |
 | Acceptance and testing | A change reaches `main` only when the required CI checks pass, and they run the component's test suite and its fabricated evaluation packs |

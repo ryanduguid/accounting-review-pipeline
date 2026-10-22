@@ -105,7 +105,7 @@ the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7f
 5 September 2026 and then `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`, and left the earlier
 commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
-produced no release. Every root release caller now pins `0f7ca4c`, a later policy commit
+produced no release. Every active root release caller now pins `0f7ca4c`, a later policy commit
 that descends from the squash-landed Python 3.14 migration (the callers pinned `a601f1d`
 before it). The reusable workflows remain reachable at that immutable commit.
 `tests/test_release_pins.py` holds the README and the release recipes to whatever the
@@ -139,7 +139,7 @@ disagree.
 | Component | Caller | Trigger | Reusable workflow | `source-directory` | `tag-prefix` | Publisher environment |
 |---|---|---|---|---|---|---|
 | Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
-| Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-python.yml` | `packages/review-ready-gate` | `review-ready-gate` | `pypi-review-ready-gate` (https://pypi.org/p/review-ready-gate) |
+| Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | explicitly blocked after the Rust 1.0.0 port | `packages/review-ready-gate` | `review-ready-gate` | native publisher not configured |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
 

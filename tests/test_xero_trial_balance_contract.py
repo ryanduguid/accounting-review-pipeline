@@ -19,6 +19,7 @@ import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from tests.native_review_ready import probe
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,13 +86,10 @@ class CanonicalContractTest(unittest.TestCase):
 
     def test_all_offline_review_consumers_keep_the_same_accept_reject_boundary(self) -> None:
         sys.path[:0] = [
-            str(ROOT / "packages" / "review-ready-gate"),
             str(ROOT / "packages" / "monthly-close-control-plane"),
         ]
         from closecontrol.engine import _integrity_exceptions
         from closecontrol.loader import load_canonical_tb as load_monthly
-        from reviewready.engine import _tb_balanced
-        from reviewready.loader import SourceSnapshot, load_canonical_tb as load_readiness
 
         expected = {
             "passing.csv": (True, Decimal("0"), Decimal("0")),
@@ -103,12 +101,10 @@ class CanonicalContractTest(unittest.TestCase):
                 fixture = CONTRACT / "fixtures" / name
 
                 # Readiness gate: exact Decimal movement and YTD differences, no tolerance.
-                readiness_rows = load_readiness(
-                    SourceSnapshot.capture(fixture, label="Trial-balance file")
-                )
-                self.assertEqual(_tb_balanced(readiness_rows), (movement, ytd))
-                self.assertEqual(tuple((row.tenant, row.account_id) for row in readiness_rows), IDENTITY)
-                self.assertEqual(tuple(row.account_code for row in readiness_rows), ACCOUNT_CODES)
+                readiness = probe({"op": "tb_integrity", "path": str(fixture)})["ok"]
+                self.assertEqual((Decimal(readiness["movement"]), Decimal(readiness["ytd"])), (movement, ytd))
+                self.assertEqual(tuple((row["tenant"], row["account_id"]) for row in readiness["rows"]), IDENTITY)
+                self.assertEqual(tuple(row["account_code"] for row in readiness["rows"]), ACCOUNT_CODES)
 
                 # Monthly close: a blocked integrity exception carries the exact 0.01 difference.
                 monthly_rows = load_monthly(fixture)

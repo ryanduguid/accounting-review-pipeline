@@ -1,5 +1,13 @@
 version: 2
 updates:
+  - package-ecosystem: "cargo"
+    directory: "/packages/review-ready-gate"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+
   # Native exporter dependencies retain the existing weekly update cycle.
   - package-ecosystem: "cargo"
     directory: "/packages/xero-trial-balance-export"
