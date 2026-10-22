@@ -8,6 +8,7 @@ autoexamples = false
 description = "Offline monthly close controls and verified review evidence"
 license = "Apache-2.0"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+homepage = "https://duguid.com.au/tools/monthly-close-controls/"
 
 [dependencies]
 num-bigint = "0.5.1"

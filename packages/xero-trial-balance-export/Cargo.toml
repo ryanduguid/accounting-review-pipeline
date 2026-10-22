@@ -7,6 +7,7 @@ publish = false
 description = "Read-only Xero trial-balance export with exact balance controls"
 license = "Apache-2.0"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+homepage = "https://duguid.com.au/tools/xero-trial-balance/"
 
 [dependencies]
 num-bigint = "0.5.1"
