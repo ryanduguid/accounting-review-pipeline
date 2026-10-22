@@ -57,12 +57,16 @@ fn check_snapshot(directory: &Path, original: &Path, pack: &Path) -> Result<()> 
 }
 
 fn run() -> Result<i32> {
+    // The fixture locates its own executable so the rehearsal can replace that file.
+    // nosemgrep: rust.lang.security.current-exe.current-exe
     let executable = std::env::current_exe()?;
     let directory = executable.parent().ok_or("Fixture directory missing")?;
     let command = executable
         .file_stem()
         .ok_or("Fixture command missing")?
         .to_string_lossy();
+    // Fixture arguments record the producer invocation; they grant nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     record(
         directory,

@@ -26,6 +26,8 @@ struct Settings {
 
 fn settings() -> Result<Settings> {
     let mut values = std::collections::BTreeMap::new();
+    // Oracle paths come from the developer running the comparison; they grant nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let mut args = std::env::args_os().skip(1);
     while let Some(name) = args.next() {
         if !["--python", "--oracle", "--bin-dir", "--seed"]
