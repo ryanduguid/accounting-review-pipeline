@@ -328,6 +328,11 @@ mod tests {
         let link = temp.join("link");
         fs::create_dir(&safe).unwrap();
         fs::create_dir(&checkout).unwrap();
+        // The runner's temporary directory can sit behind a short-name or linked
+        // prefix (RUNNER~1 on GitHub's Windows images); write_review_pack_with
+        // works with the canonicalised approved directory, so compare against
+        // the same resolution it applies rather than the aliased spelling.
+        let safe = crate::pypath::resolve(&safe, true).unwrap();
         fs::write(checkout.join(".git"), b"marker").unwrap();
         #[cfg(unix)]
         let symlink = std::os::unix::fs::symlink;
