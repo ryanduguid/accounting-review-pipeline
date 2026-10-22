@@ -47,6 +47,10 @@ These repository-wide rules apply everywhere:
   The approved binary-only exception also applies to the Power BI review workflow
   in 1.0.0. Its six commands use the native review-workflow binary and an embedded
   fabricated case; the previous Python workflow module is removed.
+  The same approved binary-only scope permits incremental Rust replacements of
+  the Excel adapter's Python tools and import APIs. Native commands preserve
+  file and status contracts with documented diagnostic differences; the source
+  archive version remains 0.1.8 while these unreleased tooling ports proceed.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,
@@ -95,7 +99,7 @@ Run every check from the owning component directory with its documented commands
 | Workpaper Review Gate | `packages/review-ready-gate/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and its frozen Python 3.15 differential, on Linux and Windows |
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, its frozen Python 3.15 differential and native binary smoke on Linux and Windows; RustSec dependency audit |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked`, on Linux and Windows; `tests/differential/differential.py` compares the binary with the 0.2.6 Python release |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, `cargo run --locked --release --bin check-vba-encoding`, frozen Python 3.15 guard, account-transactions and aged-review differentials on Linux and Windows, and `python -B -m unittest discover -s tests -v`; optional `tools/native_excel_acceptance.ps1` on Windows with Excel |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and its frozen Python 3.15 workflow differential on Linux and Windows; `npm ci --ignore-scripts` then `npx --no-install powerbi-report-author validate australian-accounting-power-bi.Report` |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked` for the Rust workpaper; `python -B -m unittest discover -s tests -v` for the setup and replay utility; both on Linux and Windows; Ruff from its `pyproject.toml` and mypy from its `mypy.ini` |
 | evatt | `packages/evatt/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked --all-features`; the differential probe is enabled only with `--features probe` |

@@ -121,4 +121,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit("Frozen benchmark reference; use the native debtor-evidence command.")

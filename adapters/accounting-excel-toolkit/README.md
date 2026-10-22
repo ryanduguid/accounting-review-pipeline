@@ -45,14 +45,35 @@ The existing `CompareKeyedRanges` remains the amount-reconciliation workflow.
 Native VBA acceptance for this new diagnostic has not been recorded; see
 [the disposable-workbook cases](CONTRIBUTING.md#formula-comparison-cases).
 
+## VBA source checks
+
+The VBA encoding guard is now the Rust `check-vba-encoding` binary. From this
+adapter directory, run `cargo run --locked --release --bin check-vba-encoding`.
+It checks all `.bas`, `.cls` and `.frm` sources recursively for pure ASCII,
+CRLF and absence of a BOM. Explicit file arguments retain their supplied order
+and are checked regardless of suffix. Success exits 0; a refusal exits 1.
+
+Default source discovery follows the executable: place an installed binary
+beside `vba/` or in `tools/`. The standard Cargo `target/debug` and
+`target/release` layouts also locate this adapter's `vba/`. A custom target
+directory needs explicit file arguments or an installed copy. The current
+working directory never selects a different source tree. Native path formatting,
+operating-system error text and directory-listing failures can differ from the
+Python guard. Byte diagnostics and stdout/stderr separation are retained.
+
+The account-transactions converter also uses Rust; see its
+[inspection and conversion guide](docs/account-transactions-import.md).
+The aged verifier, debtor evidence and replay tools also use Rust. The retained
+benchmark measures a frozen Python reference.
+
 ## Offline aged receivables review
 
-The [standard-library verifier](tools/xero_aged_receivables.py) checks a supplied
-Aged Receivables Summary CSV with Python 3.14 or later and no installed dependencies.
+The `xero-aged-receivables` binary checks a supplied Aged Receivables Summary CSV.
 Run this fabricated example from `adapters/accounting-excel-toolkit/`:
 
 ```powershell
-python tools/xero_aged_receivables.py samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json
+cargo build --locked --release --bins
+./target/release/xero-aged-receivables samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json
 ```
 
 Retain the [source manifest](samples/sample-aged-receivables-manifest.json), exact
@@ -74,11 +95,18 @@ The output keeps each contact, signed credit and duplicate label, including a
 contact named `Total`. It reports separate ties for contact buckets, footer
 buckets, every supplied ageing column, contact totals, the recorded screen total
 and the comparable [independent control](samples/sample-aged-receivables-control.json).
-`Current` remains optional. Decimal differences are compared before rounding,
+`Current` remains optional. Signed decimal differences are compared before rounding,
 with `abs(difference) < 0.005`; the fixed tolerance assumes a two-decimal currency
 convention such as AUD. Supplied amounts accept at most 15 integer digits and
 4 decimal places. A comparable control is required for summary `PASS`, although
 `--control` is optional at the command line.
+
+The native tools replace the three Python scripts and their import APIs. They
+retain signed zero, decimal scale, logical CSV record numbers and JSON field
+order. CSV fields are limited to 131,072 characters. JSON accepts at most 1,000
+nested containers and 4,300 digits per integer. Help, usage, malformed JSON and
+OS diagnostics can differ from Python. JSON written as literal Unicode requires
+encodable Unicode scalar values; evidence files use ASCII escapes.
 
 For a valid invocation, exits are `0` for summary `PASS`, `2` for `REVIEW` and
 `1` for invalid source or evidence input. Command-line usage errors also exit `2`.
@@ -108,9 +136,9 @@ The optional helpers use the existing verifier and fabricated sample. Give each
 command a new output outside the checkout:
 
 ```powershell
-python tools/debtor_evidence.py draft samples/sample-aged-receivables-review.csv --output $env:TEMP/manifest-draft
-python tools/debtor_evidence.py review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output $env:TEMP/debtor-review
-python tools/replay_aged_review.py --case all --output $env:TEMP/aged-replay.json
+./target/release/debtor-evidence draft samples/sample-aged-receivables-review.csv --output $env:TEMP/manifest-draft
+./target/release/debtor-evidence review samples/sample-aged-receivables-review.csv --manifest samples/sample-aged-receivables-manifest.json --control samples/sample-aged-receivables-control.json --output $env:TEMP/debtor-review
+./target/release/replay-aged-review --case all --output $env:TEMP/aged-replay.json
 python tools/benchmark_aged_review.py --output $env:TEMP/aged-measurements.json
 ```
 
@@ -121,9 +149,16 @@ The review command writes the verifier's result and separate evidence requests
 with an owner, source record and next action. It preserves duplicate contacts
 and signed amounts; debtor decisions remain `REVIEW`. Its exits follow the
 verifier: `0` for summary `PASS`, `2` for `REVIEW`, and `1` for invalid input.
+Output paths must resolve outside the checkout and must be new. Files are
+created exclusively. If a later write fails, earlier evidence files remain for
+inspection; the command does not promise an atomic evidence directory.
 
 Replay exercises 12 success and failure cases through the actual verifier CLI,
-checking statuses, messages and exits. The benchmark measures file loading,
+checking statuses, messages and exits. Install `replay-aged-review` beside
+`xero-aged-receivables`; the fabricated inputs are embedded in the replay binary.
+The benchmark needs Python 3.14 or newer and measures the frozen Python reference
+under `tests/differential/python_reference/`. Schema 1 includes Python allocation
+tracing, so these results do not measure the Rust commands. It measures file loading,
 validation, rendering and writing for 10, 1,000 and 10,000 fabricated zero-value
 contacts. It reports three warm runs after a warm-up and one fresh process per
 size. Python allocation tracing excludes other process memory, and filesystem
