@@ -14,6 +14,8 @@ impl Temporary {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| error.to_string())?
             .as_nanos();
+        // Disposable comparison directory outside the checkout, not a security decision.
+        // nosemgrep: rust.lang.security.temp-dir.temp-dir
         let path = std::env::temp_dir().join(format!("power-bi-differential-{}-{stamp}", std::process::id()));
         fs::create_dir(&path).map_err(|error| error.to_string())?;
         Ok(Self(path))
@@ -73,6 +75,8 @@ impl Commands<'_> {
 }
 
 pub fn run(settings: &Settings, root: &Path) -> Result<[PathBuf; 2]> {
+    // This comparison binary's sibling is the workflow under test.
+    // nosemgrep: rust.lang.security.current-exe.current-exe
     let binary = std::env::current_exe()
         .map_err(|error| error.to_string())?
         .with_file_name(format!("review-workflow{}", std::env::consts::EXE_SUFFIX));

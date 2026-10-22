@@ -3,6 +3,11 @@ use ledger::{Row, Snapshot};
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, path::Path};
 
+/// Sealed report policy. The rendered page, including the copy stored in an
+/// export, matches the frozen Python report byte for byte. Every interpolated
+/// value is escaped and the page loads no script.
+const REPORT_POLICY: &str = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+
 fn esc(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -135,7 +140,8 @@ fn document(projected: &Snapshot, receipt: &Value, comparison: Option<&(String, 
         metadata = metadata,
         comparison_html = comparison_html,
         comparison_record = comparison_record,
-        hashes = esc(&json::pretty(&receipt["files"]))
+        hashes = esc(&json::pretty(&receipt["files"])),
+        content_security_policy = REPORT_POLICY,
     ))
 }
 
@@ -360,7 +366,6 @@ mod tests {
         assert!(values.contains("&lt;script&gt;"));
         let template = include_str!("review.html");
         for retained in [
-            "default-src 'none'",
             ":focus-visible",
             "aria-label=\"Report sections\"",
             "prefers-color-scheme:dark",
@@ -368,6 +373,24 @@ mod tests {
         ] {
             assert!(template.contains(retained));
         }
+        assert!(!template.contains("unsafe-inline"));
+        let rendered = format!(
+            include_str!("review.html"),
+            heading_context = "",
+            boundary = "",
+            finding_count = 0,
+            currency = "",
+            index_links = "",
+            sections = "",
+            metadata = "",
+            comparison_html = "",
+            comparison_record = "",
+            hashes = "",
+            content_security_policy = REPORT_POLICY,
+        );
+        let marker = format!("Content-Security-Policy\" content=\"{REPORT_POLICY}\"");
+        assert_eq!(rendered.matches(&marker).count(), 1);
+        assert_eq!(rendered.matches("unsafe-inline").count(), 1);
     }
 
     #[test]

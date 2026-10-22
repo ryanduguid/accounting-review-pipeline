@@ -316,6 +316,8 @@ mod tests {
     #[test]
     fn deadline_stops_and_reaps_its_owned_child() {
         let cache = Temporary::new("pbi-producer-test-").unwrap();
+        // Re-invokes this test binary. The path is not a trust decision.
+        // nosemgrep: rust.lang.security.current-exe.current-exe
         let mut child = Command::new(std::env::current_exe().unwrap());
         child.args(["--ignored", "--exact", "workflow::producer::tests::slow_child"]);
         let start = Instant::now();

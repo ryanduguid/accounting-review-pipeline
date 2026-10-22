@@ -160,10 +160,12 @@ fn information(file: &File) -> Result<windows_sys::Win32::Storage::FileSystem::B
     use windows_sys::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
     let mut information = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
     // SAFETY: the file owns its handle and the output has the required size.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), information.as_mut_ptr()) } == 0 {
         return Err(std::io::Error::last_os_error().to_string());
     }
     // SAFETY: the successful call initialised information.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     Ok(unsafe { information.assume_init() })
 }
 
@@ -244,6 +246,8 @@ impl Temporary {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| error.to_string())?
             .as_nanos();
+        // Unique private directory: Unix mode 0700, and creation fails when the name exists.
+        // nosemgrep: rust.lang.security.temp-dir.temp-dir
         let base = ordinary(&std::env::temp_dir())?;
         for _ in 0..100 {
             let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -405,10 +409,12 @@ mod tests {
         let temporary = Temporary::new("pbi-path-spelling-").unwrap();
         let wide: Vec<_> = temporary.0.as_os_str().encode_wide().chain(Some(0)).collect();
         // SAFETY: the input is terminated; the first call requests the output length.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let size = unsafe { GetShortPathNameW(wide.as_ptr(), std::ptr::null_mut(), 0) };
         assert_ne!(size, 0);
         let mut short = vec![0; size as usize];
         // SAFETY: both buffers have their declared sizes and remain live.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let length = unsafe { GetShortPathNameW(wide.as_ptr(), short.as_mut_ptr(), size) };
         assert!(length > 0 && length < size);
         let alias = PathBuf::from(std::ffi::OsString::from_wide(&short[..length as usize]));

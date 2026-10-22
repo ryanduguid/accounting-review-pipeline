@@ -25,6 +25,8 @@ fn answer<const P: u32>(op: &str, a: &str, b: &str) -> String {
 
 fn main() {
     std::panic::set_hook(Box::new(|_| {}));
+    // Only an optional precision flag. The oracle reads its cases from stdin.
+    // nosemgrep: rust.lang.security.args.args
     let args: Vec<_> = std::env::args().skip(1).collect();
     assert!(
         args.is_empty() || args == ["--precision", "40"],

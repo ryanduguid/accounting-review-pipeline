@@ -152,6 +152,8 @@ fn execute(args: &Arguments) -> Result<String> {
         }
         return Ok(json::inline(&export::verify(run)?));
     }
+    // The executable directory locates sibling producers. It grants no privilege.
+    // nosemgrep: rust.lang.security.current-exe.current-exe
     let default = std::env::current_exe()
         .map_err(|error| error.to_string())?
         .parent()
