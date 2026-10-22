@@ -12,8 +12,18 @@ REPOSITORY_ROOT = ROOT.parents[1]
 RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
     "release-monthly-close-control-plane.yml",
-    "release-review-ready-gate.yml",
 )
+
+
+def test_release_policy_caller_inventory() -> None:
+    """Every release-policy caller stays listed; the blocked gate stub is not one."""
+    workflows = REPOSITORY_ROOT / ".github" / "workflows"
+    actual_callers = {
+        path.name
+        for path in workflows.glob("release-*.yml")
+        if "ryanduguid/release-policy/.github/workflows/" in path.read_text(encoding="utf-8")
+    }
+    assert actual_callers == set(RELEASE_CALLERS)
 
 EXPECTED_POLICY = """\
 # Agent instructions

@@ -1,4 +1,13 @@
-"""Contracts for the active namespaced release boundary."""
+"""Contracts for the blocked native release boundary.
+
+review-ready-gate 1.0.0 is a Rust binary with no native publisher. The
+release workflow deliberately refuses every publication until a native
+release policy is configured and approved, so these tests pin the exact
+permitted shape: reachable on namespaced tags and manual dispatch only,
+read-only permissions, a single refusing job with no action, reusable
+workflow, upload or success path. Restoring an active publisher requires
+replacing this file and these tests together.
+"""
 
 import re
 from pathlib import Path
@@ -15,44 +24,50 @@ def _workflow_text() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_release_is_triggered_only_by_namespaced_tags() -> None:
+def test_release_triggers_exactly_namespaced_tags_and_manual_dispatch() -> None:
     workflow = _workflow_text()
 
-    assert 'tags:\n      - "review-ready-gate/v*"' in workflow
-    assert "workflow_dispatch:" not in workflow
-    assert "inputs.tag" not in workflow
-    assert "group: release-${{ github.repository }}-${{ github.ref_name }}" in workflow
-    assert "cancel-in-progress: false" in workflow
-
-
-def test_release_uses_the_hardened_shared_policy_contract() -> None:
-    workflow = _workflow_text()
-    release_job = workflow.split("  release:\n", 1)[1].split("\n  pypi:", 1)[0]
-
-    # The pin itself is the callers' to set; tests/test_release_pins.py holds them together.
     assert re.search(
-        r"(?m)^    uses: ryanduguid/release-policy/\.github/workflows/release-python\.yml@[0-9a-f]{40}$",
-        release_job,
+        r"(?ms)^on:\n  push:\n    tags: \['review-ready-gate/v\*'\]\n  workflow_dispatch:\n",
+        workflow,
     )
-    assert "actions: read" in release_job
-    assert "source-directory: packages/review-ready-gate" in release_job
-    assert "tag-prefix: review-ready-gate" in release_job
-    assert "upload-dist-artifact: true" in release_job
-    assert "version-command:" not in release_job
-    assert "version-parser:" not in release_job
-    assert "version-file:" not in release_job
+    # Exactly the two sanctioned events; nothing else may trigger publication attempts.
+    assert workflow.count("push:") == 1
+    assert workflow.count("workflow_dispatch:") == 1
+    for forbidden in ("pull_request", "schedule", "inputs."):
+        assert forbidden not in workflow
 
 
-def test_pypi_uses_only_the_exact_attested_distribution() -> None:
+def test_release_permissions_stay_read_only() -> None:
     workflow = _workflow_text()
-    pypi_job = workflow.split("  pypi:\n", 1)[1]
 
-    assert "needs: release" in pypi_job
-    assert "name: pypi-review-ready-gate" in pypi_job
-    assert "id-token: write" in pypi_job
-    assert "artifact-ids: ${{ needs.release.outputs.dist-id }}" in pypi_job
-    assert "python policy/scripts/python_release.py verify-candidate" in pypi_job
-    # Full commit SHAs, so Dependabot can advance them without editing this test.
-    assert re.search(r"actions/download-artifact@[0-9a-f]{40} # v\d", pypi_job)
-    assert re.search(r"pypa/gh-action-pypi-publish@[0-9a-f]{40} # v\d", pypi_job)
-    assert "python -m build" not in pypi_job
+    permissions = workflow.split("permissions:", 1)[1].split("jobs:", 1)[0]
+    assert permissions.strip() == "contents: read"
+    assert "id-token" not in workflow
+    assert "write" not in workflow
+
+
+def test_release_is_one_refusing_job() -> None:
+    workflow = _workflow_text()
+    jobs = workflow.split("jobs:", 1)[1]
+
+    assert re.search(r"(?m)^  release-blocked:\n", jobs)
+    # No release, pypi or other job key may exist alongside the refusal.
+    assert not re.search(r"(?m)^  (?!release-blocked:)[a-z][a-z-]*:\n", jobs)
+    assert "runs-on: ubuntu-latest" in jobs
+    assert "timeout-minutes: 2" in jobs
+    # No reusable workflow or action call anywhere in the job.
+    assert "uses:" not in jobs
+
+
+def test_release_refuses_publication_unconditionally() -> None:
+    workflow = _workflow_text()
+    steps = workflow.split("steps:", 1)[1]
+
+    assert steps.count("- name:") == 1
+    assert "Refuse publication until the native release policy is configured" in steps
+    assert "::error::" in steps
+    assert "exit 1" in steps
+    # The refusal must not be conditional or bypassable.
+    assert "if:" not in steps
+    assert "continue-on-error" not in workflow
