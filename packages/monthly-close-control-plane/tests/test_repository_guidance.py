@@ -12,6 +12,7 @@ REPOSITORY_ROOT = ROOT.parents[1]
 RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
     "release-monthly-close-control-plane.yml",
+    "release-review-ready-gate.yml",
 )
 
 EXPECTED_POLICY = """\

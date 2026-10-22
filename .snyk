@@ -3,6 +3,13 @@
 # Its copyleft applies to modified MPL files only, and nothing here modifies these packages.
 version: v1.25.0
 ignore:
+  'SNYK-PYTHON-CERTIFI-21280764':
+    - '*':
+        reason: >-
+          Test-only dependency (packages/xero-trial-balance-export/tests/differential).
+          No fixed certifi release exists (2026.7.22 is latest and affected; the
+          advisory covers emSign root CAs with compromised intermediate CA keys,
+          same family as RUSTSEC-2026-0382). Revisit when certifi ships a fix.
   'snyk:lic:pip:certifi:MPL-2.0':
     - '*':
         reason: MPL-2.0 accepted for unmodified dependencies (owner decision, 18 October 2026)
