@@ -14,8 +14,12 @@
 +----------------------------------+-----------------------------------+
 ```
 
+<div align="center">
+
 [![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/standard-library-components.yml?branch=main&label=Verify&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml)<br>
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
+
+</div>
 
 Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 
