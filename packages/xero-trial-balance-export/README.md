@@ -2,10 +2,14 @@
 
 ![xero-trial-balance-export](assets/banner.svg)
 
+<div align="center">
+
 [![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=Verify&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/xero-trial-balance-export.svg?color=66023C&labelColor=000000&style=flat)](https://pypi.org/project/xero-trial-balance-export/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat)](LICENSE)
 [![Rust 1.99](https://img.shields.io/badge/Rust-1.99-66023C?logo=rust&logoColor=E5E4E2&labelColor=000000&style=flat)](https://www.rust-lang.org/tools/install)
+
+</div>
 
 Export a validated Xero trial balance to CSV for Power BI and Excel. Version 1.0.0 supplies the native Rust commands `export-tb` and `xero-tb-auth`. Build and install them from this component directory:
 
