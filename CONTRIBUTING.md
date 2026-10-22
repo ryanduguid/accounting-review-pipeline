@@ -6,47 +6,32 @@ does not change where a component is developed or released from.
 
 ## Quick start
 
-From a fresh clone, with [uv](https://docs.astral.sh/uv/) installed:
+From a fresh clone, with Rust and [uv](https://docs.astral.sh/uv/) installed:
 
 ```bash
-uv sync        # install every Python component and the shared toolchain
+uv sync --locked --group dev  # install retained Python development tooling
 just test      # every component's suite, plus the joined conformance test
 ```
 
-`uv sync` creates one `.venv` at the root and installs the 4 Python distributions into it
-as editable workspace members. The Excel adapter and the Power BI application have no
-`pyproject.toml`, and the grant workpapers application is not a member; their
-standard-library unittest suites run from the same `.venv`. The Xero Ledger Review Gate
-is a Rust crate: `just test` runs `cargo test --locked` in its directory, which needs a
-Rust toolchain (its `rust-toolchain.toml` names the version).
+The root is a virtual workspace with no Python package members. Its `.venv`
+holds the test, lint and type-check tools for retained Python consumers.
+`just test` also runs each native crate's Cargo tests; each crate pins its
+toolchain in `rust-toolchain.toml`.
 
 `just` is optional tooling; install it with `uv tool install rust-just`. The recipes are
 `setup`, `lint`, `typecheck`, `test` and `check` (the last 3 together). Each loops over
 the per-component commands in the `AGENTS.md` command-routing table, which remain the
 authority; `just` runs them from one place, it does not replace them.
 
-`just check` is the fast local pass, not a CI equivalent. It runs Ruff, mypy, pytest and
-unittest. CI additionally runs the tests with branch coverage on Python 3.14 and 3.15, verifies each component lockfile, audits each locked environment with pip-audit,
-installs the exporter's hash-locked requirements, builds each distribution and imports it
-from a clean environment, validates
-the Power BI report with Microsoft's PBIR CLI, checks the contract digests and runs CodeQL.
-The shared component gates are defined once in `.github/workflows/ci-package.yml`; the
-`AGENTS.md` command-routing table lists them. A green `just check` is not a green CI.
+`just check` runs Ruff, mypy, Cargo fmt/clippy/tests and retained unittest suites.
+CI also checks frozen Python differentials, native release builds and smokes,
+dependency advisories, workflow policy, Power BI structural validation and
+contract digests. CodeQL covers Python and Actions here, not Rust. Follow the
+`AGENTS.md` routing table for each component's complete checks.
 
-Every member's `dev` extra and the root `dev` group carry the same exact pins for `ruff`,
-`mypy`, `pytest`, `pytest-cov` and `coverage`, so one workspace resolution holds them all
-and the versions `just` runs are the versions CI runs. Move a pin in all 6 places
-together, then regenerate the root and component lockfiles.
-
-Two consequences of the workspace are worth knowing before you run a component's own
-commands:
-
-- `uv run --locked` from a component directory now validates the root `uv.lock`, not the
-  component's. Regenerate it with `uv lock` at the root after changing any component's
-  dependencies, and commit it. The component's own `uv.lock` stays the authority for
-  building and releasing that component alone, so update both.
-- A change to the root `pyproject.toml`, `uv.lock` or `justfile` runs every component
-  workflow, for the same reason.
+The root `dev` group pins Python development tools; regenerate root `uv.lock`
+after changing it. Native crates use their own `Cargo.lock`. Changes to root
+development files select every component workflow.
 
 ## Pull request rules
 
@@ -73,9 +58,8 @@ changes.
 
 Review components may not gain a network or Xero dependency or import the exporter or
 a sibling component. Preserve their documented status and exit-code boundaries and
-the review packages' exact `Decimal` arithmetic, which the Rust ledger-review gate reproduces. Document native Excel and
-Power BI numeric types separately. One shared `.venv` makes every Python component importable from
-every other; that does not relax the rule. Only Xero Trial Balance Export may handle Xero
+the native review commands' exact decimal arithmetic. Document native Excel and
+Power BI numeric types separately. Only Xero Trial Balance Export may handle Xero
 OAuth, HTTP, credentials or tokens. Keep client data and generated workpapers outside the
 checkout.
 

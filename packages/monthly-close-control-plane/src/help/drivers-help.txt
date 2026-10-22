@@ -1,0 +1,14 @@
+usage: close-control drivers [-h] --pack-dir PACK_DIR
+                             --transactions TRANSACTIONS --currency CURRENCY
+                             [--top TOP] --output OUTPUT
+
+options:
+  -h, --help            show this help message and exit
+  --pack-dir PACK_DIR   verified review pack directory
+  --transactions TRANSACTIONS
+                        transaction CSV with the reconcile columns; see
+                        docs/variance-drivers.md
+  --currency CURRENCY   trial-balance currency; every transaction row must use
+                        it
+  --top TOP             transactions listed per account (default 5)
+  --output OUTPUT       new directory outside version control

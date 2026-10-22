@@ -11,8 +11,8 @@
 | Component | Directory | Identity |
 |---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | distribution `xero-trial-balance-export`, commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer |
-| Workpaper Review Gate | `packages/review-ready-gate/` | distribution `review-ready-gate`, import `reviewready`, command `review-ready` |
-| Monthly Close Controls | `packages/monthly-close-control-plane/` | distribution `monthly-close-control-plane`, import `closecontrol`, command `close-control` (the `openaccountants-au` entry point is quarantined: it prints a redirect and exits 2) |
+| Workpaper Review Gate | `packages/review-ready-gate/` | native Rust `review-ready` 1.0.0 (unreleased), no Python runtime or import API; publication blocked |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust `close-control` 1.0.0 (unreleased), no Python runtime or import API; publication blocked |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0; the released 0.2.6 Python distribution also had import `elizabeth_anne_alexander` |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA), no Python distribution |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release |
@@ -27,7 +27,7 @@ The exporter, or a manual Excel export, produces the 10-column Xero trial-balanc
 ## Architectural boundaries
 1. **One network producer.** Only the exporter may touch OAuth, Xero, HTTP or credentials. Every other component is offline and ships fabricated data only.
 2. **Review, not authority.** A pack is deterministic evidence for a human reviewer. Nothing here approves a close, posts a journal, makes a payment, lodges a return or locks a period. An acknowledgement records that a human looked; it never changes a status.
-3. **Exact money in Python.** The Python review packages use `Decimal` arithmetic, and the Rust ledger-review gate reproduces it exactly. The Excel adapter and the Power BI application use their native numeric types, including VBA `Double`, so that guarantee does not cover them.
+3. **Exact decimal money.** Native review commands preserve the original decimal rules. The Excel adapter and Power BI application use their native numeric types, including VBA `Double`, so that guarantee does not cover them.
 4. **Separate status domains.** Pack state means the Monthly Close `PackState` (`PASS`, `REVIEW`, `BLOCKED`). The readiness gate emits a separate `ReadinessStatus` (`READY`, `NOT_READY`, `BLOCKED`), and the ledger gateway uses result and receipt statuses rather than pack states.
 5. **One exit-code convention.** Exit `0` is the clean result, `2` is the reviewable or blocked result, and `1` is malformed input or an operational error.
 6. **One tag, one component.** Each component releases on its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`, through a root caller pinned to a reviewed Release Policy commit. The identity gate refuses a tag whose prefix does not equal the component directory leaf and its distribution name or archive stem.

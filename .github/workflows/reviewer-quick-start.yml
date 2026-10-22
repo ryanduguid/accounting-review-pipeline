@@ -1,9 +1,8 @@
 name: reviewer-quick-start
 
 # Follows packages/monthly-close-control-plane/docs/reviewer-quick-start.md as a
-# reviewer would: the guide's own bash download block and uvx commands, run
-# against the published release in an empty directory outside the checkout.
-# Package tests stay offline, so the published path is checked here.
+# reviewer would: build the native command from source, then use the guide's
+# download block and commands in an empty directory outside the checkout.
 
 on:
   workflow_dispatch:
@@ -22,7 +21,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  UV_VERSION: "0.13.0"
   GUIDE: packages/monthly-close-control-plane/docs/reviewer-quick-start.md
 
 jobs:
@@ -35,9 +33,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with:
-          version: ${{ env.UV_VERSION }}
+      - name: Install the native command from the checkout
+        working-directory: packages/monthly-close-control-plane
+        run: cargo install --locked --path . --bin close-control
       - name: Follow the guide in an empty directory
         run: |
           set -euo pipefail
@@ -48,8 +46,8 @@ jobs:
           awk '/^bash:$/{f=1; next} f && /^```bash$/{g=1; next} g && /^```$/{exit} g' "$guide" > download.sh
           test -s download.sh
           bash download.sh
-          review="$(grep '^uvx --from monthly-close-control-plane==0.1.5 close-control review ' "$guide")"
-          view="$(grep '^uvx --from monthly-close-control-plane==0.1.5 close-control view ' "$guide")"
+          review="$(grep '^close-control review ' "$guide")"
+          view="$(grep '^close-control view ' "$guide")"
           # shellcheck disable=SC2016 # the backticks are literal Markdown
           expected="$(grep -o 'It prints `[^`]*`' "$guide" | sed 's/^It prints `//; s/`$//')"
           set +e

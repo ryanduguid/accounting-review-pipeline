@@ -233,13 +233,13 @@ def comparison_document(value: Any) -> dict[str, Any]:
 
 def producer_document(value: Any, command: str) -> dict[str, Any]:
     if isinstance(value, dict) and value.get("manifest_version") == 2:
-        if type(value["manifest_version"]) is not int or command != "review-ready" or set(value) != {"manifest_version", "command", "launcher_name", "launcher_sha256", "native"} or value["command"] != command:
+        if type(value["manifest_version"]) is not int or command not in PRODUCERS or set(value) != {"manifest_version", "command", "launcher_name", "launcher_sha256", "native"} or value["command"] != command:
             raise ValueError("Unsupported native producer manifest.")
         string_fields(value, ("launcher_name", "launcher_sha256"), "Native producer")
         identity = string_fields(value["native"], ("package", "version"), "Native producer identity")
         if value["launcher_name"] not in (command, command + ".exe") or not re.fullmatch(r"[a-f0-9]{64}", value["launcher_sha256"]):
             raise ValueError("Native producer executable identity differs.")
-        if set(identity) != {"package", "version"} or identity["package"] != "review-ready-gate" or not re.fullmatch(r"[1-9][0-9]*\.[0-9]+\.[0-9]+", identity["version"]):
+        if set(identity) != {"package", "version"} or identity["package"] != PRODUCERS[command][0] or not re.fullmatch(r"[1-9][0-9]*\.[0-9]+\.[0-9]+", identity["version"]):
             raise ValueError("Native producer version contract differs.")
         return value
     if not isinstance(value, dict) or set(value) != {"manifest_version", "command", "launcher_name", "launcher_sha256", "interpreter", "distribution", "package"}:
@@ -570,36 +570,23 @@ def package_files(root: Path) -> dict[str, str]:
 
 
 def producer_manifest(bin_dir: Path, command: str) -> dict[str, Any]:
+    if command not in PRODUCERS:
+        raise ValueError("Unsupported producer command.")
     executable = ordinary(bin_dir / (command + (".exe" if os.name == "nt" else "")))
     launcher = executable.read_bytes()
-    if command == "review-ready":
-        if not launcher.startswith((b"MZ", b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca")):
-            raise ValueError("Review readiness requires its native Rust executable.")
-        with producer_environment() as environment:
-            try:
-                result = subprocess.run([str(executable), "--version"], capture_output=True, timeout=20, cwd=environment["PYTHONPYCACHEPREFIX"], env=environment, check=False)  # nosemgrep
-            except subprocess.TimeoutExpired as exc:
-                raise ValueError("Native producer version probe exceeded its deadline.") from exc
-        match = re.fullmatch(rb"review-ready ([1-9][0-9]*\.[0-9]+\.[0-9]+)\r?\n", result.stdout)
-        if result.returncode or result.stderr or match is None:
-            raise ValueError("Native producer version probe refused the installation.")
-        if executable.read_bytes() != launcher:
-            raise ValueError("Producer executable changed during identity inspection.")
-        return producer_document({"manifest_version": 2, "command": command, "launcher_name": executable.name, "launcher_sha256": digest(launcher), "native": {"package": "review-ready-gate", "version": match[1].decode("ascii")}}, command)
-    interpreter, target = interpreter_file(declared_interpreter(executable, launcher, command))
-    interpreter_hash = digest(target.read_bytes())
-    distribution, package, entry = PRODUCERS[command]
+    if not launcher.startswith((b"MZ", b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca")):
+        raise ValueError(f"{command} requires its native Rust executable.")
     with producer_environment() as environment:
-        probe = subprocess.run([str(interpreter), "-B", "-c", PRODUCER_PROBE, distribution, package, entry, str(executable.parent)], capture_output=True, cwd=environment["PYTHONPYCACHEPREFIX"], env=environment, check=False)  # nosemgrep
-    if probe.returncode:
-        raise ValueError("Producer installed identity probe refused the installation.")
-    identity = string_fields(strict_json(probe.stdout, "Producer identity"), ("executable", "root", "implementation", "version", "cache_tag"), "Producer identity")
-    if interpreter_file(Path(identity["executable"]))[1] != target:
-        raise ValueError("Producer interpreter identity differs from its declared path.")
-    manifest = {"manifest_version": 1, "command": command, "launcher_name": executable.name, "launcher_sha256": digest(launcher), "interpreter": {name: identity[name] for name in ("implementation", "version", "cache_tag")} | {"executable_sha256": interpreter_hash}, "distribution": identity.get("distribution"), "package": {"name": package, "files": package_files(Path(identity["root"]))}}
-    if executable.read_bytes() != launcher or digest(target.read_bytes()) != interpreter_hash:
+        try:
+            result = subprocess.run([str(executable), "--version"], capture_output=True, timeout=20, cwd=environment["PYTHONPYCACHEPREFIX"], env=environment, check=False)  # nosemgrep
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("Native producer version probe exceeded its deadline.") from exc
+    match = re.fullmatch(re.escape(command.encode("ascii")) + rb" ([1-9][0-9]*\.[0-9]+\.[0-9]+)\r?\n", result.stdout)
+    if result.returncode or result.stderr or match is None:
+        raise ValueError("Native producer version probe refused the installation.")
+    if executable.read_bytes() != launcher:
         raise ValueError("Producer executable changed during identity inspection.")
-    return producer_document(manifest, command)
+    return producer_document({"manifest_version": 2, "command": command, "launcher_name": executable.name, "launcher_sha256": digest(launcher), "native": {"package": PRODUCERS[command][0], "version": match[1].decode("ascii")}}, command)
 
 
 def sources(app: Path = APP) -> tuple[dict[str, Any], dict[str, bytes]]:

@@ -1,0 +1,4 @@
+usage: close-control compare [-h] --previous-pack PREVIOUS_PACK
+                             --current-pack CURRENT_PACK
+                             --previous-tb PREVIOUS_TB --current-tb CURRENT_TB
+                             [--responses RESPONSES]

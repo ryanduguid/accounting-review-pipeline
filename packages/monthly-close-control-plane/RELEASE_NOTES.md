@@ -1,3 +1,32 @@
+# v1.0.0 (unreleased)
+
+- Breaking: replace the Python runtime and `closecontrol` import API with the
+  native Rust `close-control` command. Install from this directory with
+  `cargo install --locked --path . --bin close-control`. Python callers must
+  invoke the command and read its files. Native publication is blocked until
+  a separate publisher is approved.
+- Retain review/workbench, view, queue, reconcile, drivers, compare, classify
+  and schedule, their status/exit contracts and platform-specific output bytes.
+  `close-control --version` now reports `close-control 1.0.0`.
+- Preserve the original decimal contexts, input validation, source hashes,
+  spreadsheet guards, four-file rollback and read-only pack verification.
+- Match Python's shortest floating-point spelling when hashing calculation
+  evidence, including exact decimal ties whose adjacent spelling round-trips.
+- Deliberate divergence: `drivers` refuses non-finite variance differences in
+  coherently hand-edited packs. The Python implementation could emit non-finite
+  amounts for those packs; generated review packs contain finite values.
+- Parser and failure diagnostics are checked against frozen CPython 3.15 over
+  the migration corpus. That corpus does not establish every possible argparse,
+  operating-system error or Python test behaviour. Rust uses a fixed JSON
+  nesting limit of 1,000; Python's recursion limit depends on its runtime stack.
+  Help uses fixed captured text and does not adapt its width or colour to the
+  terminal. Interactive terminal presentation remains unverified.
+- Port the clearing and equity demos to optional Rust tools. Retain the
+  cross-repository Python utility driver pending its separate migration; it
+  invokes the native close command and records its Cargo lock and version.
+- Native release publication, macOS, Aikido scans and hosted CI remain
+  unverified for this candidate. CodeQL here does not analyse Rust.
+
 # v0.2.0
 
 - Breaking: requires Python 3.11 or later. CPython 3.10 reached end of life on 1 October 2026; 0.1.8 remains the last release that installs on Python 3.10 ([#318](https://github.com/ryanduguid/accounting-review-pipeline/pull/318)).

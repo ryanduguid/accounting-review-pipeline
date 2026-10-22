@@ -35,7 +35,7 @@ Both dates sit in FY2025 (1 July 2025 to 30 June 2026). Close-control should rep
 
 ## Command 1: close-control review
 
-From this package root, after `python -m pip install -e ".[dev]"`:
+From this package root, after `cargo install --locked --path . --bin close-control`:
 
 ```bash
 close-control review \

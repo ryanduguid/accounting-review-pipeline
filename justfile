@@ -8,19 +8,6 @@
 # Requires just, uv and cargo:
 #     uv tool install rust-just
 #
-# Monthly Close Controls is the Python workspace member. The readiness gate,
-# Xero Ledger Review Gate, evatt and Xero exporter use cargo from their directories. The Excel adapter and
-# the Power BI application have no pyproject.toml, and the grant workpapers
-# application is not a member; its workpaper is a Rust crate run with cargo from
-# its directory. Their standard-library unittest suites run from
-# the same .venv. Adding a component means adding it to
-# the matching list below and to the root pyproject.toml workspace members.
-
-# pytest components: directory:import package
-pytest_components := trim(replace('''
-packages/monthly-close-control-plane:closecontrol
-''', "\n", " "))
-
 # unittest components: directory only
 unittest_components := trim(replace('''
 adapters/accounting-excel-toolkit
@@ -29,32 +16,25 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export packages/review-ready-gate"
+rust_components := "apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export packages/review-ready-gate packages/monthly-close-control-plane"
 
 # List the available recipes.
 default:
     @just --list
 
-# Install every Python component and the shared toolchain into one workspace .venv.
+# Install the shared development toolchain.
 setup:
-    uv sync
+    uv sync --locked --group dev
 
 # Reproduce the fictional close pack outside this checkout. REVIEW preserves exit 2.
 demo:
-    uv run --locked close-control review --current packages/monthly-close-control-plane/examples/current_trial_balance.csv --prior packages/monthly-close-control-plane/examples/prior_trial_balance.csv --mapping packages/monthly-close-control-plane/examples/account_mapping.csv --subledger packages/monthly-close-control-plane/examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note packages/monthly-close-control-plane/examples/review_note.json --output ../close-control-demo
+    cargo run --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control -- review --current packages/monthly-close-control-plane/examples/current_trial_balance.csv --prior packages/monthly-close-control-plane/examples/prior_trial_balance.csv --mapping packages/monthly-close-control-plane/examples/account_mapping.csv --subledger packages/monthly-close-control-plane/examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note packages/monthly-close-control-plane/examples/review_note.json --output ../close-control-demo
 
 # Run every component's test suite, then the joined trial-balance conformance
 # test and the shared behavioural conformance check.
 test: setup
     #!/usr/bin/env bash
     set -euo pipefail
-    # No -q here: each component's pyproject addopts already supplies it, and a
-    # second one is -qq, which drops the "N passed" summary.
-    for entry in {{ pytest_components }}; do
-        directory="${entry%%:*}"
-        echo "==> ${directory}"
-        (cd "${directory}" && uv run --no-sync pytest)
-    done
     for directory in {{ unittest_components }}; do
         echo "==> ${directory}"
         (cd "${directory}" && uv run --no-sync python -B -m unittest discover -s tests -v)
@@ -68,30 +48,23 @@ test: setup
     echo "==> shared blocks"
     uv run --no-sync python -B -m unittest tests.test_shared_blocks -v
 
-# Lint every Python component with Ruff.
+# Lint retained Python tooling and native components.
 lint: setup
     #!/usr/bin/env bash
     set -euo pipefail
-    for entry in {{ pytest_components }}; do
-        directory="${entry%%:*}"
-        package="${entry##*:}"
-        echo "==> ${directory}"
-        (cd "${directory}" && uv run --no-sync ruff check "${package}" tests)
-    done
+    uv run --no-sync ruff check .
     for directory in {{ rust_components }}; do
         echo "==> ${directory}"
         (cd "${directory}" && cargo fmt --check && cargo clippy --locked --all-targets --all-features -- -D warnings)
     done
 
-# Type-check every Python component with mypy.
+# Type-check the standard library consumers with their component settings.
 typecheck: setup
     #!/usr/bin/env bash
     set -euo pipefail
-    for entry in {{ pytest_components }}; do
-        directory="${entry%%:*}"
-        package="${entry##*:}"
-        echo "==> ${directory}"
-        (cd "${directory}" && uv run --no-sync mypy "${package}")
+    python="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+    for directory in {{ unittest_components }}; do
+        (cd "${directory}" && "${python}" -m mypy)
     done
 
 # Regenerate the root lock and each Python component's standalone release lock.
@@ -120,8 +93,8 @@ relock:
     done
 
 # Not a CI equivalent. The component workflows also verify the component
-# lockfile, run the exporter's pinned Python comparison, build each
-# distribution, install and smoke-test the built wheel outside the checkout,
+# lockfile, run the frozen Python comparisons, build and smoke-test native
+# binaries outside the checkout,
 # run actionlint, validate the Power BI
 # report with Microsoft's PBIR CLI, check the contract digests and run CodeQL.
 # None of those run here. A green `just check` is not a green CI.

@@ -4,18 +4,17 @@
 
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane
-- **Distribution name**: `monthly-close-control-plane`
-- **CLI commands**: `close-control`. The `openaccountants-au` entry point is
-  quarantined: it prints a redirect on stderr and exits 2. Use `close-control`
-  for the close pack and `ato-benchmark-compare` for range tests.
+- **Crate name**: `monthly-close-control-plane`, version 1.0.0 (unreleased).
+- **CLI command**: native Rust `close-control`; no Python runtime or import API.
+  Native publication is blocked pending an approved publisher. Build with Cargo.
 - **Domain**: Local, deterministic review-pack generation for current and prior validated trial-balance exports.
 - **Control basis**: Double-entry balance checks, material year-to-date variance review, account-change review, mapping checks, and optional subledger reconciliation.
 
 ## Core modules and controls
-- `closecontrol.engine`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
-- `closecontrol.loader`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
-- `closecontrol.report`: Writes JSON, Markdown, and CSV review-pack files, including source evidence and any supplied human acknowledgement.
-- `closecontrol.pipeline_cli`: Holds the quarantined `openaccountants-au` entry point. It runs no review; it prints where to go instead and exits 2.
+- `src/engine.rs`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
+- `src/loader.rs`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
+- `src/report.rs` and `src/publication.rs`: Render and publish JSON, Markdown and CSV review-pack files, including source evidence and any supplied human acknowledgement.
+- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify and schedule.
 
 ## Architectural boundaries
 1. **Review-first policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.

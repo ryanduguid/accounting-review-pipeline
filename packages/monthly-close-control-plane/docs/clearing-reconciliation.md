@@ -9,7 +9,7 @@ with one account and one currency. This command ships from 0.1.5.
 From `packages/monthly-close-control-plane` in an installed development checkout:
 
 ```bash
-uv run --locked --extra dev python examples/clearing_demo.py --output ../../../clearing-demo
+cargo run --locked --release --features tools --bin close-control-clearing-demo -- --output ../../../clearing-demo
 ```
 
 Choose a new output directory. Open `clearing-demo/july-reviewed/review.html` in
@@ -63,7 +63,7 @@ before use; renumbering or inventing fresh IDs each month defeats duplicate chec
 For example, to reproduce July before recording decisions:
 
 ```bash
-uv run --locked --extra dev close-control reconcile --transactions examples/clearing-july.csv --tenant Demo --account-id clearing --currency AUD --period-start 2026-07-01 --period-end 2026-07-31 --opening-balance 100 --closing-balance 25 --opening-items ../../../clearing-demo/june/carry-forward.json --output ../../../july-new-review
+cargo run --locked --release --bin close-control -- reconcile --transactions examples/clearing-july.csv --tenant Demo --account-id clearing --currency AUD --period-start 2026-07-01 --period-end 2026-07-31 --opening-balance 100 --closing-balance 25 --opening-items ../../../clearing-demo/june/carry-forward.json --output ../../../july-new-review
 ```
 
 Exit 2 is the expected REVIEW result. Open the generated `review.html` and

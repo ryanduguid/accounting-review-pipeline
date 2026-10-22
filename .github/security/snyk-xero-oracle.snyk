@@ -1,0 +1,17 @@
+ignore:
+  'SNYK-PYTHON-CERTIFI-21280764':
+    - '* > certifi@2026.7.22':
+        reason: >-
+          Test-only dependency (the frozen exporter test oracle). No fixed
+          certifi release exists (2026.7.22 is latest and affected; the
+          advisory covers emSign root CAs with compromised intermediate CA
+          keys, same family as RUSTSEC-2026-0382). Revisit when certifi ships
+          a fix.
+  'snyk:lic:pip:certifi:MPL-2.0':
+    - '* > certifi@2026.7.22':
+        reason: >-
+          Accept MPL-2.0 for the unmodified certifi 2026.7.22 Python package
+          used by requests in the frozen exporter test oracle only. This
+          exception does not cover the native exporter's embedded CA bundle.
+          Review before redistribution, modification or use outside this scope.
+        expires: '2026-11-15T00:00:00.000Z'

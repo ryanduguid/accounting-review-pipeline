@@ -7,7 +7,7 @@ standard output and changes no source, close finding or pack status.
 From the component's locked source environment:
 
 ```text
-uv run --locked close-control classify --original-transactions examples/classification/transactions.csv --current-transactions examples/classification/transactions.csv --coding-evidence examples/classification/coding-evidence.json --currency AUD
+cargo run --locked --release --bin close-control -- classify --original-transactions examples/classification/transactions.csv --current-transactions examples/classification/transactions.csv --coding-evidence examples/classification/coding-evidence.json --currency AUD
 ```
 
 The fabricated example has 12 software fees posted to Office Expenses and 12

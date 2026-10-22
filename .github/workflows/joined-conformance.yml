@@ -2,8 +2,7 @@ name: Joined Xero Trial Balance Conformance
 
 # Runs the exporter-owned integrity runner and the three offline review
 # implementations against every root contract fixture. Only the exporter's
-# Rust integrity runner and readiness probe are built; Monthly Close Controls
-# is imported from its directory. The checks use no credentials.
+# Rust integrity runner and both native review probes are built.
 #
 # It also runs the root check on the blocks Monthly Close Controls and the
 # Workpaper Review Gate share. The check compares their observable behaviour.
@@ -50,6 +49,8 @@ jobs:
             contracts/xero-trial-balance-v1/**
             tests/test_xero_trial_balance_contract.py
             tests/test_shared_blocks.py
+            tests/native_monthly_close.py
+            tests/native_review_ready.py
             packages/xero-trial-balance-export/**
             packages/review-ready-gate/**
             packages/monthly-close-control-plane/**

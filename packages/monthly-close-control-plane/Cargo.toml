@@ -1,0 +1,60 @@
+[package]
+name = "monthly-close-control-plane"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+autoexamples = false
+description = "Offline monthly close controls and verified review evidence"
+license = "Apache-2.0"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+
+[dependencies]
+num-bigint = "0.5.1"
+num-integer = "0.1"
+num-traits = "0.2"
+sha2 = "0.11"
+getrandom = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO"] }
+
+[features]
+probe = []
+tools = []
+
+[[bin]]
+name = "close-control-fuzz"
+path = "tools/fuzz.rs"
+required-features = ["tools"]
+
+[[bin]]
+name = "close-control-clearing-demo"
+path = "examples/clearing_demo.rs"
+required-features = ["tools"]
+
+[[bin]]
+name = "close-control-equity-demo"
+path = "examples/equity_demo.rs"
+required-features = ["tools"]
+
+[[bin]]
+name = "close-control"
+path = "src/main.rs"
+
+[[bin]]
+name = "close-control-probe"
+path = "src/probe_main.rs"
+required-features = ["probe"]
+
+[[bin]]
+name = "close-control-differential"
+path = "tools/differential.rs"
+required-features = ["probe"]
+
+[profile.release]
+lto = true
+codegen-units = 1
