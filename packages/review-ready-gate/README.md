@@ -28,9 +28,9 @@ Native release publishing is not configured; see [RELEASING.md](RELEASING.md).
 +----------------------------------+-----------------------------------+
 ```
 
-[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat-square)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
-[![Rust stable](https://img.shields.io/badge/rust-stable-66023C?logo=rust&labelColor=000000&style=flat-square)](https://www.rust-lang.org/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat-square)](LICENSE)
+[![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
+[![Rust stable](https://img.shields.io/badge/rust-stable-66023C?logo=rust&labelColor=000000&style=flat&logoColor=E5E4E2)](https://www.rust-lang.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat)](LICENSE)
 
 [Browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) · [Reproduce locally](evaluation/manager_review_gate/README.md) · [Quick demo](#quick-demo) · [Release notes](RELEASE_NOTES.md)
 
