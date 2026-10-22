@@ -6,7 +6,7 @@ from their directories; nothing here installs them, reaches a network, or reads
 a credential. The Rust ledger-review gate runs the same accept/reject boundary,
 identity and account-code checks in its own cargo test
 (test_gateway_satisfies_the_pinned_exporter_contract), which
-joined-conformance.yml runs beside this file. The only runtime dependency is the exporter's hash-locked lock file.
+joined-conformance.yml runs beside this file. The exporter integrity runner is Rust.
 """
 
 from __future__ import annotations
@@ -23,14 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "contracts" / "xero-trial-balance-v1"
-EXPORTER_RUNNER = (
-    ROOT
-    / "packages"
-    / "xero-trial-balance-export"
-    / "evaluation"
-    / "xero_tb_integrity"
-    / "run.py"
-)
+EXPORTER_MANIFEST = ROOT / "packages" / "xero-trial-balance-export" / "Cargo.toml"
 HEADER = (
     "ReportDate",
     "Tenant",
@@ -80,8 +73,8 @@ class CanonicalContractTest(unittest.TestCase):
                 with fixture.open(encoding="utf-8-sig", newline="") as source:
                     self.assertEqual(tuple(next(csv.reader(source))), HEADER)
                 result = subprocess.run(
-                    [sys.executable, str(EXPORTER_RUNNER), str(fixture)],
-                    cwd=ROOT,
+                    ["cargo", "run", "--quiet", "--locked", "--features", "tools", "--bin", "xero-tb-evaluate", "--manifest-path", str(EXPORTER_MANIFEST), "--", str(fixture)],
+                    cwd=EXPORTER_MANIFEST.parent,
                     text=True,
                     capture_output=True,
                     check=False,

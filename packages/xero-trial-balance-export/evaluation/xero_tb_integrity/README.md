@@ -14,20 +14,19 @@ The 3 CSVs in the repository root's `contracts/xero-trial-balance-v1/fixtures/` 
 
 ## Reproduce the result
 
-From `packages/xero-trial-balance-export/`, install the locked dependencies and run the offline pack:
+From `packages/xero-trial-balance-export/`, build and test the offline pack:
 
 ```bash
-python -m pip install --require-hashes -r requirements.lock
-python -B -m unittest tests.test_evaluation_pack -v
-python -B -m unittest discover -s tests -v
+cargo build --locked --features tools --bin xero-tb-evaluate
+cargo test --locked --all-features
 ```
 
-Dependency installation may download the hash-locked packages. Once dependencies are installed, the 3 evaluation runner commands are fully offline, make no network request and write no output file:
+The build may download Cargo.lock dependencies. The 3 evaluation commands run offline and write no output file:
 
 ```bash
-python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/passing.csv
-python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/failing_movement.csv
-python evaluation/xero_tb_integrity/run.py ../../contracts/xero-trial-balance-v1/fixtures/failing_ytd.csv
+cargo run --quiet --locked --features tools --bin xero-tb-evaluate -- ../../contracts/xero-trial-balance-v1/fixtures/passing.csv
+cargo run --quiet --locked --features tools --bin xero-tb-evaluate -- ../../contracts/xero-trial-balance-v1/fixtures/failing_movement.csv
+cargo run --quiet --locked --features tools --bin xero-tb-evaluate -- ../../contracts/xero-trial-balance-v1/fixtures/failing_ytd.csv
 ```
 
 They use only the fabricated local fixtures and need no credentials.

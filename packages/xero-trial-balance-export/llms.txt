@@ -1,19 +1,19 @@
 # xero-trial-balance-export
 
-> Read-only CLI and Python utility that exports Xero trial balances through OAuth 2.0 into validated CSV files, writing nothing unless movement and year-to-date totals both balance. The only component in the pipeline that touches the network or credentials.
+> Read-only native Rust CLI that exports Xero trial balances through OAuth 2.0 into validated CSV files, writing nothing unless movement and year-to-date totals both balance. The only component in the pipeline that touches the network or credentials.
 
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export
 - **Distribution name**: `xero-trial-balance-export`
 - **CLI commands**: `export-tb`, `xero-tb-auth`
-- **Domain**: Read-only CLI and Python utility for exporting Xero trial balances via OAuth 2.0 into structured, validated CSV files for Power BI, Excel, and pandas.
+- **Domain**: Read-only native Rust CLI for exporting Xero trial balances via OAuth 2.0 into structured, validated CSV files for Power BI, Excel, and pandas.
 - **Standards**: Xero API OAuth 2.0 authorization-code flow (confidential client with client secret; no PKCE), double-entry trial balance movement gates.
 
-## Core modules and APIs
-- `auth`: Runs the initial browser consent flow and saves the token pair.
-- `xero_client`: Resilient API client handling rate limiting, 401 retry after refresh, and multi-tenant organisation context. Trial Balance is a single report request; this client does not paginate.
-- `export_tb`: Core extractor enforcing the movement and year-to-date mathematical balance gate before CSV generation.
-- `token_store`: Resolves `token.json` (`--token-file`, `XERO_TOKEN_FILE`, existing module-adjacent file, then the per-user state directory).
+## Internal modules
+- `src/auth.rs`: Runs the initial browser consent flow and saves the token pair.
+- `src/http.rs` and `src/tokens.rs`: Resilient API client handling rate limiting, 401 retry after refresh, and multi-tenant organisation context. Trial Balance is a single report request; this client does not paginate.
+- `src/report.rs`: Core extractor enforcing the movement and year-to-date mathematical balance gate before CSV generation.
+- `src/paths.rs`: Resolves `token.json` (`--token-file`, `XERO_TOKEN_FILE`, existing executable-adjacent file, then the per-user state directory).
 
 ## Architectural invariants
 1. **Balance gate integrity**: Never writes a CSV file unless the current-month Debit/Credit totals and the year-to-date YTDDebit/YTDCredit totals each balance and all required report columns are present.

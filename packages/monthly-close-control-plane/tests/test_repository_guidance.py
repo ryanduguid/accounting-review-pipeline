@@ -13,7 +13,6 @@ RELEASE_CALLERS = (
     "release-accounting-excel-toolkit.yml",
     "release-monthly-close-control-plane.yml",
     "release-review-ready-gate.yml",
-    "release-xero-trial-balance-export.yml",
 )
 
 EXPECTED_POLICY = """\

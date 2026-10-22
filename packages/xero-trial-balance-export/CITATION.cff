@@ -15,4 +15,4 @@ keywords:
   - CSV
 license: Apache-2.0
 repository-code: "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export"
-version: 0.1.15
+version: 1.0.0

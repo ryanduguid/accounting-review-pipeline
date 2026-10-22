@@ -17,5 +17,5 @@
   <rect x="742" y="238" width="168" height="58" rx="29" fill="#66023C" stroke="#E5E4E2"/>
   <text x="826" y="274" text-anchor="middle" fill="#FFFFF0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="700">BALANCED</text>
   <line x1="68" y1="330" x2="932" y2="330" stroke="#606060"/>
-  <text x="68" y="360" fill="#C8C8C8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15">python tools/render_quick_proof.py --check</text>
+  <text x="68" y="360" fill="#C8C8C8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15">cargo run --locked --features tools --bin xero-tb-proof -- --check</text>
 </svg>
