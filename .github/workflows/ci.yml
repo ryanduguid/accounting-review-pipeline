@@ -170,7 +170,7 @@ jobs:
           import subprocess
 
           python = Path(".venv/Scripts/python.exe").resolve()
-          for component in ("adapters/accounting-excel-toolkit", "apps/australian-accounting-power-bi", "apps/grant-acquittal-workpapers"):
+          for component in ("adapters/accounting-excel-toolkit", "apps/grant-acquittal-workpapers"):
               subprocess.run([str(python), "-m", "mypy"], cwd=component, check=True)
       - name: run the full suite
         run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels

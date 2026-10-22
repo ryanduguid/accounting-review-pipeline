@@ -9,10 +9,9 @@ name: Standard-library components
 # grant workpaper itself is a Rust binary from 0.2.0; the rust job checks it on
 # Linux and Windows, whose exclusive-rename publication differs. The grant
 # application's Python suite also runs on Windows. The Power BI application's
-# fixture generator and structural checks are a Rust crate that the same job
-# checks; its review workflow and that workflow's tests stay Python until the
-# two producers it inspects are Rust. The Power BI report also runs Microsoft's
-# PBIR validator once.
+# fixture generator, review workflow and structural checks are Rust. Its frozen
+# Python oracle runs only in the native differential job. The report also runs
+# Microsoft's PBIR validator once.
 
 on:
   push:
@@ -77,7 +76,6 @@ jobs:
       matrix:
         component:
           - adapters/accounting-excel-toolkit
-          - apps/australian-accounting-power-bi
           - apps/grant-acquittal-workpapers
     defaults:
       run:
@@ -116,7 +114,6 @@ jobs:
       matrix:
         component:
           - adapters/accounting-excel-toolkit
-          - apps/australian-accounting-power-bi
           - apps/grant-acquittal-workpapers
         python: ["3.14", "3.15"]
     defaults:
@@ -137,8 +134,19 @@ jobs:
       - name: Run the component's standard-library suite
         run: python -B -m unittest discover -s tests -v
 
-      # The PBIR structural validation does not depend on the Python version,
-      # so it runs once, on the leg that matches the lint job.
+  pbir:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/australian-accounting-power-bi
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Node.js
         if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.14'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -147,11 +155,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install the pinned PBIR validator
-        if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.14'
         run: npm ci --ignore-scripts
 
       - name: Validate the report with Microsoft's PBIR authoring CLI
-        if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.14'
         run: >-
           npx --no-install powerbi-report-author
           validate australian-accounting-power-bi.Report
@@ -214,9 +220,38 @@ jobs:
       - name: Format
         run: cargo fmt --check
       - name: Lint
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Test
-        run: cargo test --locked
+        run: cargo test --locked --all-features
+      - name: Check out the frozen pre-port Power BI workflow
+        if: matrix.component == 'apps/australian-accounting-power-bi'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: d48b9fe681f3a3ae278a90c43cfdce9b863589d4
+          path: .workflow-oracle
+          persist-credentials: false
+      - name: Set up CPython for the frozen workflow oracle
+        if: matrix.component == 'apps/australian-accounting-power-bi'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.15"
+      - name: Build the workflow and independent native producers
+        if: matrix.component == 'apps/australian-accounting-power-bi'
+        run: |
+          cargo build --locked --all-features --bins
+          cargo build --locked --release --manifest-path ../../packages/review-ready-gate/Cargo.toml --bin review-ready
+          cargo build --locked --release --manifest-path ../../packages/monthly-close-control-plane/Cargo.toml --bin close-control
+          suffix=
+          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
+          mkdir "$RUNNER_TEMP/pbi-producers"
+          cp "../../packages/review-ready-gate/target/release/review-ready$suffix" "$RUNNER_TEMP/pbi-producers/"
+          cp "../../packages/monthly-close-control-plane/target/release/close-control$suffix" "$RUNNER_TEMP/pbi-producers/"
+      - name: Compare the workflow with its frozen Python implementation
+        if: matrix.component == 'apps/australian-accounting-power-bi'
+        run: |
+          oracle_python="$(python -c 'import sys; print(sys.executable)')"
+          target/debug/workflow-differential --python "$oracle_python" --oracle "$GITHUB_WORKSPACE/.workflow-oracle/apps/australian-accounting-power-bi" --bin-dir "$RUNNER_TEMP/pbi-producers" --seed 16
+          target/debug/workflow-differential --python "$oracle_python" --oracle "$GITHUB_WORKSPACE/.workflow-oracle/apps/australian-accounting-power-bi" --bin-dir "$RUNNER_TEMP/pbi-producers" --seed 17
       - name: Regenerate the fixtures and require the committed bytes
         if: matrix.component == 'apps/australian-accounting-power-bi'
         run: |
@@ -233,7 +268,7 @@ jobs:
           test -f "$RUNNER_TEMP/grant-example/workpaper.json"
 
   standard-library-gates:
-    needs: [changes, lint, verify, verify-windows, rust]
+    needs: [changes, lint, verify, verify-windows, rust, pbir]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

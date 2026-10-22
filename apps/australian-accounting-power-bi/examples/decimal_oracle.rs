@@ -5,10 +5,10 @@
 use std::io::{BufRead, Write};
 use std::panic::catch_unwind;
 
-use australian_accounting_power_bi::decimal::Decimal;
+use australian_accounting_power_bi::decimal::ContextDecimal;
 
-fn answer(op: &str, a: &str, b: &str) -> String {
-    let (x, y) = (Decimal::parse(a), || Decimal::parse(b));
+fn answer<const P: u32>(op: &str, a: &str, b: &str) -> String {
+    let (x, y) = (ContextDecimal::<P>::parse(a), || ContextDecimal::<P>::parse(b));
     match op {
         "parse" => x.to_fixed(60),
         "add" => x.add(&y()).to_fixed(60),
@@ -25,11 +25,25 @@ fn answer(op: &str, a: &str, b: &str) -> String {
 
 fn main() {
     std::panic::set_hook(Box::new(|_| {}));
+    // Only an optional precision flag. The oracle reads its cases from stdin.
+    // nosemgrep: rust.lang.security.args.args
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    assert!(
+        args.is_empty() || args == ["--precision", "40"],
+        "Use --precision 40 or no arguments"
+    );
+    let forty = !args.is_empty();
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for line in std::io::stdin().lock().lines() {
         let request: Vec<String> = serde_json::from_str(&line.expect("readable input")).expect("a JSON array");
-        let result =
-            catch_unwind(|| answer(&request[0], &request[1], &request[2])).unwrap_or_else(|_| "error".to_owned());
+        let result = catch_unwind(|| {
+            if forty {
+                answer::<40>(&request[0], &request[1], &request[2])
+            } else {
+                answer::<28>(&request[0], &request[1], &request[2])
+            }
+        })
+        .unwrap_or_else(|_| "error".to_owned());
         writeln!(out, "{result}").expect("writable output");
     }
 }

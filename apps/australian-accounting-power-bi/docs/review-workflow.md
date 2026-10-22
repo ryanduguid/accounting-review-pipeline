@@ -6,32 +6,35 @@ and compares two verified runs. All demonstration assertions are fabricated.
 
 ## Build the shared case
 
-From the repository root, build both native producer commands. On Windows,
-install them into the shared development environment's command directory:
+From the repository root, build the workflow and both independent producers
+with Rust stable. On Windows, copy the binaries to a local command directory:
 
 ```powershell
-uv sync --locked --group dev
+cargo build --locked --release --manifest-path apps/australian-accounting-power-bi/Cargo.toml --bin review-workflow
 cargo build --locked --release --manifest-path packages/review-ready-gate/Cargo.toml --bin review-ready
 cargo build --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control
-Copy-Item packages/review-ready-gate/target/release/review-ready.exe .venv/Scripts/review-ready.exe
-Copy-Item packages/monthly-close-control-plane/target/release/close-control.exe .venv/Scripts/close-control.exe
+$bin = 'C:/Users/-/Documents/review-demo/bin'
+New-Item -ItemType Directory -Path $bin -Force
+Copy-Item apps/australian-accounting-power-bi/target/release/review-workflow.exe $bin
+Copy-Item packages/review-ready-gate/target/release/review-ready.exe $bin
+Copy-Item packages/monthly-close-control-plane/target/release/close-control.exe $bin
+$env:PATH = "$bin;$env:PATH"
 ```
 
-On Linux, copy each component's `target/release/review-ready` or
-`target/release/close-control` into the environment's `bin` directory.
-Rebuild and copy after a native producer change.
+On Linux, copy the three binaries without the `.exe` suffix to a directory on
+PATH. Rebuild and copy after a workflow or producer change. The workflow looks
+for producers beside its own executable; `--bin-dir` selects another directory.
 Run these commands from this component directory, with new output directories
 outside every Git checkout:
 
 ```powershell
-python -B tools/review_workflow.py build --run C:/Users/-/Documents/review-demo/august --month 8
-python -B tools/review_workflow.py build --run C:/Users/-/Documents/review-demo/september
-python -B tools/review_workflow.py html --run C:/Users/-/Documents/review-demo/september --previous C:/Users/-/Documents/review-demo/august --output C:/Users/-/Documents/review-demo/review.html
-python -B tools/review_workflow.py verify --run C:/Users/-/Documents/review-demo/september
+review-workflow build --run C:/Users/-/Documents/review-demo/august --month 8
+review-workflow build --run C:/Users/-/Documents/review-demo/september
+review-workflow html --run C:/Users/-/Documents/review-demo/september --previous C:/Users/-/Documents/review-demo/august --output C:/Users/-/Documents/review-demo/review.html
+review-workflow verify --run C:/Users/-/Documents/review-demo/september
 ```
 
-Use `--bin-dir` for another installed CLI directory. On Linux, supply the
-environment's `bin` directory explicitly. The workflow invokes `review-ready`
+The workflow invokes `review-ready`
 and `close-control` as independent commands. It imports no sibling runtime.
 It retains the commands, producer manifests, timestamps, exit codes and logs.
 Each version 2 producer manifest binds that command's native package version
@@ -145,8 +148,8 @@ inventory. Use a new local destination outside version control and outside the
 sealed run directory:
 
 ```powershell
-python -B tools/review_workflow.py export --run C:/Users/-/Documents/review-demo/september --output C:/Users/-/Documents/review-demo/september-evidence.zip
-python -B tools/review_workflow.py verify-export --run C:/Users/-/Documents/review-demo/september-evidence.zip
+review-workflow export --run C:/Users/-/Documents/review-demo/september --output C:/Users/-/Documents/review-demo/september-evidence.zip
+review-workflow verify-export --run C:/Users/-/Documents/review-demo/september-evidence.zip
 ```
 
 The export supports one fixed fabricated run. It refuses free-form review notes,
@@ -159,7 +162,7 @@ uses their exact bytes. The archive includes the synthetic preparer assertions
 in `run/inputs/self_review.json`; it creates no reviewer approval.
 
 Recipients can run `verify-export` with an independently obtained copy of
-`tools/review_workflow.py`, Python and the ZIP. They need no samples, installed
+the `review-workflow` binary and the ZIP. They need no samples, installed
 producers or original run directory. Verification reads members without
 extracting them and checks the exact inventory, sizes, hashes and nested receipt.
 The verification command refuses `--previous`, `--review-note` and `--output`.
@@ -176,7 +179,7 @@ limits are 64 files, 512 KiB per member and 2 MiB for the archive and payload.
 August and September payloads fit these limits. Logs retain their original local
 output paths. Inspect the archive before sharing it; the export sends nothing.
 Retain the raw ZIP and the exact verifier revision. This profile has been checked
-with Python 3.14.8; compatibility with other runtime serializers is unverified.
+against the frozen Python 3.15 workflow; other archive profiles are refused.
 Cleanup uses the created file's descriptor identity and checks it before removing
 a failed output. A partial file may remain when identity cannot be established.
 Publication and cleanup assume cooperating local processes; they do not isolate

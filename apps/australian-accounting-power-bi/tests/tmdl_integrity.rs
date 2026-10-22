@@ -28,6 +28,48 @@ fn relationships_text() -> String {
     read(&definition().join("relationships.tmdl"))
 }
 
+#[test]
+fn review_account_mapping_matches_the_pinned_case() {
+    let case = read_json(&samples().join("shared-review-case.json"));
+    let text = read(&tables_dir().join("Review_Evidence.tmdl"));
+    let mapping = text
+        .split_once("AccountMap = #table")
+        .unwrap()
+        .1
+        .split_once("Run = Review_Run")
+        .unwrap()
+        .0;
+    let pattern = Regex::new(r#"\{"([^"]+)", "([^"]+)"\}"#).unwrap();
+    let pairs: Vec<_> = pattern
+        .captures_iter(mapping)
+        .map(|pair| (pair[1].to_owned(), serde_json::Value::String(pair[2].to_owned())))
+        .collect();
+    assert_eq!(pairs.len(), case["account_ids"].as_object().unwrap().len());
+    let pairs: serde_json::Map<_, _> = pairs.into_iter().collect();
+    assert_eq!(serde_json::Value::Object(pairs), case["account_ids"]);
+}
+
+#[test]
+fn review_island_has_only_its_own_single_direction_relationship_and_text_amounts() {
+    let text = relationships_text();
+    let selected: Vec<_> = text
+        .split("relationship ")
+        .filter(|block| block.contains("Review_"))
+        .collect();
+    assert_eq!(selected.len(), 1);
+    assert!(selected[0].contains("fromColumn: Review_Evidence.ExceptionKey"));
+    assert!(selected[0].contains("toColumn: Review_Exception.ExceptionKey"));
+    assert!(!selected[0].contains("BothDirections"));
+    for path in table_files()
+        .into_iter()
+        .filter(|path| file_name(path).starts_with("Review_"))
+    {
+        let text = read(&path);
+        assert!(!text.contains("dataType: double"), "{}", path.display());
+        assert!(!text.contains("SUM("), "{}", path.display());
+    }
+}
+
 fn declared_edges() -> BTreeSet<(String, String)> {
     let pattern = Regex::new(r"fromColumn:\s+([\w\.]+)\s+toColumn:\s+([\w\.]+)").unwrap();
     pattern
