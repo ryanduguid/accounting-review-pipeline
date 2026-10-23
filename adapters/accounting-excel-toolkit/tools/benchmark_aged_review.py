@@ -47,9 +47,10 @@ def workload(count):
 def measure(root):
     tracemalloc.start()
     started = time.perf_counter_ns()
-    content = (root / "source.csv").read_bytes()
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    control = json.loads((root / "control.json").read_text(encoding="utf-8"))
+    # The worker reads fixed names under the temporary directory benchmark() created for it.
+    content = (root / "source.csv").read_bytes()  # NOSONAR
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))  # NOSONAR
+    control = json.loads((root / "control.json").read_text(encoding="utf-8"))  # NOSONAR
     loaded = time.perf_counter_ns()
     result = inspect_export(content, manifest, control)
     reviewed = time.perf_counter_ns()
