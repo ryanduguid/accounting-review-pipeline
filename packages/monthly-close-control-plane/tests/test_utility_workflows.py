@@ -287,3 +287,92 @@ def test_linked_wip_sources_are_protected(tmp_path, destination):
     with pytest.raises(ValueError, match="outside"):
         PREPARE(output, fpa, accounting, None, env, "job-cash")
     assert not output.exists()
+
+
+def _wip_checkout(root, *, native):
+    accounting = root / "accounting"
+    wip = accounting / "packages/the-wip-tally"
+    wip.mkdir(parents=True)
+    if native:
+        (wip / "Cargo.toml").write_text('[package]\nname = "the-wip-tally"\n')
+        (wip / "examples").mkdir()
+        (wip / "examples/job_to_cash.rs").write_text("fn main() {}\n")
+    else:
+        (wip / "pyproject.toml").write_text("[project]")
+        (wip / "examples").mkdir()
+        (wip / "examples/job_to_cash.py").write_text("print('fixture')\n")
+    return accounting, wip
+
+
+def test_native_wip_manifest_is_accepted(tmp_path):
+    accounting, wip = _wip_checkout(tmp_path, native=True)
+    fpa = tmp_path / "fpa"
+    fpa.mkdir()
+    (fpa / "pyproject.toml").write_text("[project]")
+    output = tmp_path / "output"
+    prepared = PREPARE(output, fpa, accounting, None, None, "job-cash")
+    assert prepared["projects"]["wip"] == wip.resolve()
+    assert not output.exists()
+
+
+def test_native_wip_without_example_fails_before_outputs(tmp_path):
+    accounting, wip = _wip_checkout(tmp_path, native=True)
+    (wip / "examples/job_to_cash.rs").unlink()
+    fpa = tmp_path / "fpa"
+    fpa.mkdir()
+    (fpa / "pyproject.toml").write_text("[project]")
+    output = tmp_path / "output"
+    with pytest.raises(ValueError, match="job_to_cash.rs"):
+        PREPARE(output, fpa, accounting, None, None, "job-cash")
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("native", [True, False])
+def test_wip_runner_follows_the_package_manifest(tmp_path, monkeypatch, native):
+    run = MODULE["run_workflows"]
+    scope = run.__globals__
+    output = tmp_path / "output"
+    wip = tmp_path / "wip"
+    wip.mkdir()
+    if native:
+        (wip / "Cargo.toml").write_text('[package]\nname = "the-wip-tally"\n')
+    projects = {"close": ROOT, "fpa": tmp_path, "wip": wip}
+    monkeypatch.setitem(scope, "prepare", lambda *args: {"projects": projects, "output": output, "environment_root": None})
+    monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "fixture"})
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: None)
+    commands = []
+
+    def completed(command, **kwargs):
+        commands.append(command)
+        if "--output" in command:
+            Path(command[command.index("--output") + 1]).mkdir(parents=True, exist_ok=True)
+        if "wip-tally" in command:
+            return subprocess.CompletedProcess(command, 0, "wip-tally 1.0.0\n", "")
+        if "close-control" in command:
+            return subprocess.CompletedProcess(command, 0, "close-control 1.0.0\n", "")
+        if command[-1] == "--version":
+            return subprocess.CompletedProcess(command, 0, "uv fixture", "")
+        if "-c" in command:
+            return subprocess.CompletedProcess(command, 0, "{}", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setitem(scope, "captured", completed)
+    with pytest.raises(ValueError, match="Fixture result validation failed"):
+        run(output=output, fpa=tmp_path, accounting=tmp_path, workflow="job-cash")
+    if native:
+        assert commands[2] == ["cargo", "run", "--locked", "--quiet", "--bin", "wip-tally", "--", "--version"]
+        assert [command for command in commands if "--example" in command] == [
+            ["cargo", "run", "--locked", "--quiet", "--example", "job_to_cash", "--",
+             "--output", str(output / "job-base"), "--extra-cost-to-complete", "0"],
+            ["cargo", "run", "--locked", "--quiet", "--example", "job_to_cash", "--",
+             "--output", str(output / "job-extra-cost"), "--extra-cost-to-complete", "100000"],
+        ]
+    else:
+        script = [command for command in commands if "examples/job_to_cash.py" in command]
+        assert script == [
+            ["uv", "run", "--project", str(wip), "--locked", "--python", "3.14", "python",
+             "examples/job_to_cash.py", "--output", str(output / "job-base"), "--extra-cost-to-complete", "0"],
+            ["uv", "run", "--project", str(wip), "--locked", "--python", "3.14", "python",
+             "examples/job_to_cash.py", "--output", str(output / "job-extra-cost"), "--extra-cost-to-complete", "100000"],
+        ]
+        assert all("wip-tally" not in part for command in commands for part in command)

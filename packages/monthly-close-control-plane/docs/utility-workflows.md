@@ -1,10 +1,11 @@
 # Run the joined accounting examples
 
-Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and australian-accounting; the grant workpapers live in this repository at `apps/grant-acquittal-workpapers/`. Install Python 3.14 or later, Git, uv and Rust. The retained Python driver runs companions through uv and builds the close and grant commands through Cargo. Initial setup may download public dependencies. The calculations use local fabricated inputs.
+Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and australian-accounting; the grant workpapers live in this repository at `apps/grant-acquittal-workpapers/`. Install Python 3.14 or later, Git, uv and Rust. The retained Python driver runs Python companions through uv and builds the close command, the grant command and the native WIP example through Cargo. Initial setup may download public dependencies. The calculations use local fabricated inputs.
 
 The joined examples are available on all three repositories' `main` branches.
-The driver refuses an older WIP checkout without `examples/job_to_cash.py`
-before creating outputs or environments.
+The driver refuses a WIP checkout without its job-to-cash example
+(`examples/job_to_cash.rs` for the native crate, `examples/job_to_cash.py` for
+the earlier Python package) before creating outputs or environments.
 
 For one-command setup, run this from `apps/grant-acquittal-workpapers` in a
 pipeline checkout:
@@ -14,7 +15,8 @@ python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
 The setup command needs Python 3.14 or later, Git, uv and cargo on PATH; cargo
-builds the native close and grant commands from their component `Cargo.lock` files. It clones the
+builds the native close and grant commands, and the native WIP example, from
+their component lockfiles. It clones the
 two companions at `main`, uses the enclosing pipeline checkout for the close
 controls, the runner and the grant workpapers, creates isolated environments and
 runs every joined example. The workspace must be new and outside existing Git checkouts.
@@ -34,7 +36,8 @@ tool versions are not. Replay cannot recover uncommitted edits or unavailable
 commits. It requires a runner revision with the fixture checks described below.
 
 Close control uses its component `Cargo.lock`; its manifest records project lock
-scope. Python companions use their own lock, or the workspace root lock when
+scope. The native WIP tally uses its package `Cargo.lock` and records project
+lock scope. Python companions use their own lock, or the workspace root lock when
 they belong to a uv workspace. The manifest records each resolved lock path,
 scope and digest. Separate environment directories do not establish standalone
 component-lock compatibility.
@@ -85,7 +88,7 @@ publishes subprocess output. Review the retained diagnostics locally.
 A successful all-route run writes `manifest.json` with 19 workflow commands,
 4 runtime probes, expected and actual exits, elapsed times and output hashes.
 It records Git revisions, uncommitted status, source and lock hashes, the native
-close version, Python companion versions and the uv version. Source hashes cover
+close and WIP versions, Python companion versions and the uv version. Source hashes cover
 Git-listed Rust, Python, TOML, lock, JSON, CSV, YAML, Markdown, manifest and text
 files, excluding environments, secret directories, symlinks and ignored files.
 The driver compares source evidence before and after execution and refuses a

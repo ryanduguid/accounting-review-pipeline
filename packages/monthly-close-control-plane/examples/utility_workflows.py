@@ -16,6 +16,8 @@ from pathlib import Path
 
 COMPONENT = Path(__file__).resolve().parents[1]
 RESULTS = runpy.run_path(str(Path(__file__).with_name("utility_results.py")))
+WIP_BIN = ["cargo", "run", "--locked", "--quiet", "--bin", "wip-tally", "--"]
+WIP_EXAMPLE = ["cargo", "run", "--locked", "--quiet", "--example", "job_to_cash", "--"]
 
 
 def captured(command, *, cwd, env=None, timeout=300):
@@ -91,6 +93,11 @@ def project_evidence(project):
             "source_scope": "Git-listed source and fixtures with documented text extensions; local secrets, symlinks and ignored files excluded."}
 
 
+def native_wip(project):
+    """The WIP tally crate replaced its Python project in australian-accounting PR #430."""
+    return (project / "Cargo.toml").is_file()
+
+
 def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | None, environment_root: Path | None, workflow: str) -> dict:
     projects = {"close": COMPONENT, "fpa": fpa.resolve()}
     if accounting is not None:
@@ -101,7 +108,8 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
     if required - projects.keys():
         raise ValueError("This workflow needs --accounting and/or --grants checkouts")
     for owner, project in projects.items():
-        if not (project / ("Cargo.toml" if owner == "close" else "pyproject.toml")).is_file():
+        manifest = "Cargo.toml" if owner == "close" or (owner == "wip" and native_wip(project)) else "pyproject.toml"
+        if not (project / manifest).is_file():
             raise ValueError(f"Missing project manifest: {project}")
     output = output.resolve()
     roots = [COMPONENT.parents[1], fpa.resolve(), *([accounting.resolve()] if accounting else []), *([grants.resolve()] if grants else [])]
@@ -121,8 +129,13 @@ def prepare(output: Path, fpa: Path, accounting: Path | None, grants: Path | Non
         raise ValueError("Install uv before running the locked workflow")
     if shutil.which("cargo") is None:
         raise ValueError("Install Rust (cargo) before running the native close workflow")
-    if "wip" in required and not (projects["wip"] / "examples/job_to_cash.py").is_file():
-        raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
+    if "wip" in required:
+        project = projects["wip"]
+        if native_wip(project):
+            if not (project / "examples/job_to_cash.rs").is_file():
+                raise ValueError("The WIP checkout needs examples/job_to_cash.rs")
+        elif not (project / "examples/job_to_cash.py").is_file():
+            raise ValueError("The WIP checkout needs examples/job_to_cash.py from australian-accounting PR #236")
     return {"projects": projects, "output": output, "environment_root": environment_root}
 
 
@@ -189,6 +202,11 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
                 if not re.fullmatch(r"close-control ([1-9][0-9]*\.[0-9]+\.[0-9]+)\r?\n", version):
                     raise ValueError("Native close runtime version differs")
                 runtimes[owner] = {"runtime": "rust", "command": "close-control", "version": version.split()[1]}
+            elif owner == "wip" and native_wip(projects[owner]):
+                version = execute(owner, ["--version"], kind="runtime", runner=WIP_BIN)
+                if not re.fullmatch(r"wip-tally ([1-9][0-9]*\.[0-9]+\.[0-9]+)\r?\n", version):
+                    raise ValueError("Native WIP runtime version differs")
+                runtimes[owner] = {"runtime": "rust", "command": "wip-tally", "version": version.split()[1]}
             else:
                 runtimes[owner] = json.loads(execute(owner, ["-c", "import sys,json,importlib.metadata as m; print(json.dumps({'python':sys.version,'packages':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], kind="runtime"))
         uv_version = captured(["uv", "--version"], cwd=COMPONENT, timeout=30)
@@ -218,9 +236,14 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
                         "--current-tb", current / "trial-balance.csv"])
                     (current / "comparison.json").write_text(comparison, encoding="utf-8")
         if workflow in {"all", "job-cash"}:
+            # The native crate's example writes the same pack as the removed Python script.
+            wip_native = native_wip(projects["wip"])
             for label, extra in (("job-base", "0"), ("job-extra-cost", "100000")):
                 target = output / label
-                execute("wip", ["examples/job_to_cash.py", "--output", target, "--extra-cost-to-complete", extra])
+                if wip_native:
+                    execute("wip", ["--output", target, "--extra-cost-to-complete", extra], runner=WIP_EXAMPLE)
+                else:
+                    execute("wip", ["examples/job_to_cash.py", "--output", target, "--extra-cost-to-complete", extra])
                 forecast = execute("fpa", ["examples/job-to-cash/project_cash.py", "--pack", target])
                 (target / "project-cash.json").write_text(forecast, encoding="utf-8")
         if workflow in {"all", "grant-cash"}:
