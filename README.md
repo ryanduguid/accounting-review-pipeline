@@ -13,7 +13,7 @@
 [![SLSA 3](https://img.shields.io/badge/SLSA-level%203-990024?labelColor=000000&style=flat&color=990024)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 [![VirusTotal](https://img.shields.io/badge/VirusTotal-scanned-990024?labelColor=000000&style=flat&logo=virustotal&logoColor=FFD32A&color=990024)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
 [![licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
-[![Open in GitHub Codespaces](https://img.shields.io/badge/GitHub-Codespaces-66023C?style=flat&labelColor=000000&logo=github&logoColor=E5E4E2)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
+[![Open in GitHub Codespaces](https://img.shields.io/badge/GitHub-Codespaces-66023C?style=flat&labelColor=000000&logo=github&logoColor=FFD32A)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
 </div>
 
