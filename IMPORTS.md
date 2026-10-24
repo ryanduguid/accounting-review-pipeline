@@ -182,6 +182,8 @@ same paths the deleted workflows listed, and the readiness and ledger clean-whee
 demonstrations run as its per-component `smoke` input. evatt originally ran through that Python matrix. From 1.0.0 it runs in
 `ci.yml`'s Rust component matrix beside Elizabeth, on Linux and Windows, and its
 redact, verify, restore, halt and disclosure smoke uses the standalone binary.
+`ci-package.yml` lost its last caller when the review gate moved to Rust (#388) and
+was deleted on 25 October 2026.
 `AGENTS.md` lists the current gates.
 
 ## Whitespace declarations for exact upstream bytes
