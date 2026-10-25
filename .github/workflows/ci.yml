@@ -33,8 +33,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install the current RustSec audit tool
-        run: cargo install cargo-audit --locked
+      - name: Install the pinned RustSec audit tool
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-audit@0.22.2
+          fallback: none
       - name: Audit the native dependency lock
         run: cargo audit --deny warnings
 
@@ -61,6 +64,16 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      # Windows legs set the PR gate. Only main saves, so pull requests cannot
+      # replace the shared entries. shortcut: the key hashes the runner image's
+      # toolchains, so an image Rust update misses until the next main push saves.
+      - name: restore the dependency build cache
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: ${{ matrix.package_dir }}
+          key: ${{ matrix.package_dir }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: format
         run: cargo fmt --check
       - name: lint
@@ -156,7 +169,7 @@ jobs:
                   continue
               subprocess.run(["uv", "lock", "--check"], cwd=component, check=True)
               # Inside a workspace member, uv checks the root lock. Check each
-              # standalone lock outside the workspace as ci-package.yml does.
+              # standalone lock outside the workspace, as `just relock` writes it.
               with tempfile.TemporaryDirectory() as standalone:
                   for name in ("pyproject.toml", "uv.lock"):
                       shutil.copyfile(component / name, Path(standalone) / name)

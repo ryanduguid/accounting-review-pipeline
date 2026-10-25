@@ -1,8 +1,8 @@
 name: Standard-library components
 
 # The Excel adapter, the Power BI application and the grant workpapers
-# application have no Python dependencies and are not uv workspace members, so
-# they cannot run through ci-package.yml. The grant application keeps a
+# application have no Python dependencies and are not uv workspace members.
+# The grant application keeps a
 # pyproject.toml for its setup and replay utility and is never released. Each
 # gets the same lint tools at the same pins (configured in its own ruff and mypy
 # settings) and its standard-library suite runs on the same Python matrix. The
@@ -148,7 +148,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node.js
-        if: matrix.component == 'apps/australian-accounting-power-bi' && matrix.python == '3.14'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
@@ -218,6 +217,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Windows legs are the slowest. Only main saves, so pull requests cannot
+      # replace the shared entries. shortcut: the key hashes the runner image's
+      # toolchains, so an image Rust update misses until the next main push saves.
+      - name: Restore the dependency build cache
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: ${{ matrix.component }}
+          key: ${{ matrix.component }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Format
         run: cargo fmt --check
       - name: Lint

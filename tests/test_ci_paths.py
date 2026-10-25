@@ -123,17 +123,6 @@ class SelectionTests(unittest.TestCase):
         self.assertFalse(select_paths.matches(["docs/note.md"], patterns))
         self.assertFalse(select_paths.matches([], patterns))
 
-    def test_component_workflow_keeps_both_rename_paths(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci-package.yml").read_text(
-            encoding="utf-8"
-        )
-        comparisons = [
-            line for line in workflow.splitlines() if "changed=$(git diff" in line
-        ]
-        # Only the pull_request branch diffs; a push runs every gate.
-        self.assertEqual(len(comparisons), 1)
-        self.assertTrue(all("--no-renames" in line for line in comparisons))
-
 
 if __name__ == "__main__":
     unittest.main()
