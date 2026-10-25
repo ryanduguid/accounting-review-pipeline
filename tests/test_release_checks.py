@@ -69,7 +69,6 @@ class ReleaseChecksTests(unittest.TestCase):
         workflows = ROOT / ".github" / "workflows"
         for filename in (
             "ci.yml",
-            "ci-package.yml",
             "joined-conformance.yml",
             "standard-library-components.yml",
         ):
