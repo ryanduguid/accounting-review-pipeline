@@ -1,4 +1,11 @@
-# Accounting Review Pipeline: Xero month-end close controls
+<p align="center">
+  <picture>
+    <source media="(max-width: 600px) and (prefers-color-scheme: light)" srcset=".github/assets/banner-phone-light.svg">
+    <source media="(max-width: 600px)" srcset=".github/assets/banner-phone.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.svg">
+    <img src=".github/assets/banner.svg" width="100%" alt="Review Pipeline. Month-end close checks, ready for human sign-off. Pixel art of a magnifying glass over a ticked document beside the Review Pipeline wordmark in slab-serif block letters.">
+  </picture>
+</p>
 
 <div align="center">
 
