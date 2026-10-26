@@ -29,7 +29,7 @@ fn oauth_source_and_claims_require_review_before_their_pins_change() {
         (
             "README.md",
             include_bytes!("../README.md").as_slice(),
-            "FFDA52D5977A083442B019C984AAE183FF28ED54C54AE6B18BC7D922E4C6BFBF",
+            "1A8E4E07EC069C9E0427E0B0F76DFCCCA9BC9E1059267A1EAC43F5FB3952ECC0",
         ),
     ] {
         assert_eq!(

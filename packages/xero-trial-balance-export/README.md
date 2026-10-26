@@ -6,7 +6,7 @@
 
 [![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=Verify&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/xero-trial-balance-export.svg?color=66023C&labelColor=000000&style=flat)](https://pypi.org/project/xero-trial-balance-export/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat)](LICENSE)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/License-FSL--1.1--ALv2-66023C?labelColor=000000&style=flat)](LICENSE)
 [![Rust 1.99](https://img.shields.io/badge/Rust-1.99-66023C?logo=rust&logoColor=E5E4E2&labelColor=000000&style=flat)](https://www.rust-lang.org/tools/install)
 
 </div>
@@ -171,7 +171,7 @@ Xero's [Developer Platform terms](https://developer.xero.com/xero-developer-plat
 
 On Windows, `token.json` uses the operating system's current-user [Data Protection API](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata) (`CryptProtectData`/`CryptUnprotectData`) with UI forbidden. It is encrypted at rest and bound to that user's DPAPI security context; there is no repository key and no custom cryptography. Treat the cache as non-portable and re-authorise instead of trying to move it between unrelated accounts or machines. DPAPI does not protect tokens from code already running as that user, an administrator controlling the machine, or a compromised user session. `.env` remains plaintext because it must supply the OAuth client credentials, so keep the clone inside your own user profile. On a shared machine, restrict the clone directory before scheduling anything, for example with `icacls <clone-dir> /inheritance:r /grant:r <your-username>:(OI)(CI)F`.
 
-On non-Windows systems the project retains its existing plaintext JSON cache as an explicit compatibility fallback and forces its mode to owner-read/write only (`0600`) on every save and load. Use a private account and directory, and do not copy a Windows DPAPI envelope to Linux or macOS: it cannot be decrypted there. `token.json.lock` contains only zero-valued lock bytes and no credentials. Apache-2.0 licensed; see [LICENSE](LICENSE) for the terms. Outputs feed professional review like any other workpaper input. Full boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+On non-Windows systems the project retains its existing plaintext JSON cache as an explicit compatibility fallback and forces its mode to owner-read/write only (`0600`) on every save and load. Use a private account and directory, and do not copy a Windows DPAPI envelope to Linux or macOS: it cannot be decrypted there. `token.json.lock` contains only zero-valued lock bytes and no credentials. Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 two years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Outputs feed professional review like any other workpaper input. Full boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
 
 ## Tests
 

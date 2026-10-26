@@ -101,9 +101,10 @@ fabricated. Windows execution remains a separate verification gate.
 
 # Also in v1.0.0: Python changes made after v0.2.0
 
-- Licence: Apache-2.0 replaces MIT. Anyone who redistributes this package or a
-  derivative must keep the attribution in `NOTICE`. Versions already released stay
-  under MIT.
+- Licence: FSL-1.1-ALv2 (Functional Source License, with Apache-2.0 as the
+  future licence) replaces MIT. Anyone who redistributes this package or a
+  derivative must keep the copyright notices in `NOTICE`. Versions already
+  released stay under MIT.
 - Halt on TFN, ABN, ACN and Medicare digits that continue into a next-line
   numbered-list marker, including short fragments and candidates hidden by
   trailing digit pins. Keep genuine hard wraps and index ambiguous `verify`
