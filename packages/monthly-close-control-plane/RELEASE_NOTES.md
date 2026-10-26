@@ -1,5 +1,7 @@
 # v1.0.0 (unreleased)
 
+- Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
+  Apache-2.0 as the future licence). Released versions keep their licence.
 - Breaking: replace the Python runtime and `closecontrol` import API with the
   native Rust `close-control` command. Install from this directory with
   `cargo install --locked --path . --bin close-control`. Python callers must

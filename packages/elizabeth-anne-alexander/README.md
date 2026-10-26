@@ -33,7 +33,7 @@ authorship, source system, origin, time, or immutability.
 [![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=66023C&labelColor=000000&style=flat)](https://pypi.org/project/elizabeth-anne-alexander/)
 [![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-66023C?logo=rust&logoColor=E5E4E2&labelColor=000000&style=flat&color=66023C)](rust-toolchain.toml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/License-FSL--1.1--ALv2-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
 [![No network client](https://img.shields.io/badge/Network-No%20Client-66023C?labelColor=000000&style=flat&color=66023C)](DATA-FLOW.md)
 
 </div>
@@ -158,5 +158,5 @@ Every source manifest, review context, model result, reviewer evidence, and rece
 
 - [`DATA-FLOW.md`](./DATA-FLOW.md) - Formal data-flow and zero-network security specification.
 - [`CITATION.cff`](./CITATION.cff) - Academic and industry citation metadata.
-- [`LICENSE`](./LICENSE) - Apache License 2.0.
+- [`LICENSE`](./LICENSE) - Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2).
 - [`NOTICE`](./NOTICE) - attribution to keep in redistributions and derivative works.

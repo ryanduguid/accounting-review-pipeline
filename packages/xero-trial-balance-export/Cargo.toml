@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.99"
 publish = false
 description = "Read-only Xero trial-balance export with exact balance controls"
-license = "Apache-2.0"
+license = "FSL-1.1-ALv2"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 homepage = "https://duguid.com.au/tools/xero-trial-balance/"
 

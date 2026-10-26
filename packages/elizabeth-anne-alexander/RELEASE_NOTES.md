@@ -1,8 +1,9 @@
 # v1.0.0 (unreleased)
 
-Licence: Apache-2.0 replaces MIT. Anyone who redistributes this package or a
-derivative must keep the attribution in `NOTICE`. Versions already released stay
-under MIT.
+Licence: FSL-1.1-ALv2 (Functional Source License, with Apache-2.0 as the
+future licence) replaces MIT. Anyone who redistributes this package or a
+derivative must keep the copyright notices in `NOTICE`. Versions already
+released stay under MIT.
 
 Breaking changes:
 

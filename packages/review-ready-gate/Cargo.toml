@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.99"
 publish = false
 description = "Offline workpaper completeness and tie-out controls"
-license = "Apache-2.0"
+license = "FSL-1.1-ALv2"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 
 [dependencies]
