@@ -7,6 +7,7 @@
 - Require `HOME` on Unix or `USERPROFILE` on Windows for home-directory resolution. Expand `~` for the current user; named-user forms remain literal paths.
 - Replace the offline Python evaluation and proof scripts with the `tools` feature's `xero-tb-evaluate` and `xero-tb-proof` commands.
 - Report unexpected HTTP statuses and UTF-8 encoding refusals on one line. OS diagnostics use Rust's platform messages. JSON documents deeper than 1,000 containers are refused; the command runs with a bounded 32 MiB parser stack. Custom TLS CA overrides accept PEM bundle files; OpenSSL CA directories are unsupported.
+- Read TLS CA overrides (`REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`) and proxy variables only from the process environment. A `.env` in the working directory can no longer replace the bundled Xero roots or route the Basic-authenticated token request through a proxy; 0.1.15 honoured both through python-dotenv.
 - Remove the Python release caller. No native release or PyPI publication is configured until a Rust release path is approved.
 
 # v0.1.15

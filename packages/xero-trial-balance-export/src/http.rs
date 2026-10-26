@@ -47,9 +47,13 @@ impl NativeHttp {
         let client = {
             let _entered = runtime.enter();
             let custom = environment
-                .get("REQUESTS_CA_BUNDLE")
+                .process_only("REQUESTS_CA_BUNDLE")
                 .filter(|v| !v.is_empty())
-                .or_else(|| environment.get("CURL_CA_BUNDLE").filter(|v| !v.is_empty()));
+                .or_else(|| {
+                    environment
+                        .process_only("CURL_CA_BUNDLE")
+                        .filter(|v| !v.is_empty())
+                });
             let roots=match custom {
                 Some(path)=>std::fs::read(crate::pypath::encode_os(&path)).map_err(|_|Failure::message("error: the configured TLS CA bundle cannot be read; no Xero request was made."))?,
                 None=>include_bytes!("../data/cacert.pem").to_vec(),
@@ -61,7 +65,8 @@ impl NativeHttp {
                     "error: the TLS CA bundle contains no certificates; no Xero request was made.",
                 ));
             }
-            let mut builder = reqwest::Client::builder()
+            // Proxies come from reqwest's process-environment default, never the cwd .env.
+            let builder = reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(30))
                 .read_timeout(Duration::from_secs(30))
                 .retry(reqwest::retry::never())
@@ -69,30 +74,12 @@ impl NativeHttp {
                 .http1_only()
                 .tls_certs_only(certificates)
                 .user_agent("python-requests/2.34.2");
-            if environment.has_dotenv_proxy() {
-                builder = builder.no_proxy();
-                let bypass = environment
-                    .get("no_proxy")
-                    .or_else(|| environment.get("NO_PROXY"))
-                    .and_then(|v| reqwest::NoProxy::from_string(&v));
-                for (lower, upper, kind) in [
-                    ("http_proxy", "HTTP_PROXY", 0),
-                    ("https_proxy", "HTTPS_PROXY", 1),
-                    ("all_proxy", "ALL_PROXY", 2),
-                ] {
-                    let value = environment.get(lower).or_else(|| {
-                        if kind == 0 && environment.get("REQUEST_METHOD").is_some() {
-                            None
-                        } else {
-                            environment.get(upper)
-                        }
-                    });
-                    if let Some(value) = value.filter(|v| !v.is_empty()) {
-                        let proxy=match kind {0=>reqwest::Proxy::http(&value),1=>reqwest::Proxy::https(&value),_=>reqwest::Proxy::all(&value)}.map_err(|_|Failure::message("error: a configured HTTP proxy is invalid; no Xero request was made."))?;
-                        builder = builder.proxy(proxy.no_proxy(bypass.clone()));
-                    }
-                }
-            }
+            #[cfg(test)]
+            let builder = if environment.is_isolated() {
+                builder.no_proxy()
+            } else {
+                builder
+            };
             builder.build().map_err(|e| {
                 Failure::message(format!(
                     "error: could not initialise the Xero HTTP client ({e})"
@@ -545,6 +532,73 @@ mod tests {
             assert_eq!(http.gets.borrow().len(), gets);
             assert_eq!(http.posts.borrow().len(), posts);
         }
+    }
+    #[test]
+    fn working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy() {
+        use std::{
+            io::{BufRead, BufReader, Write},
+            net::TcpListener,
+        };
+        let scratch = Scratch::new();
+        let roots = scratch.0.join("roots");
+        std::fs::write(&roots, "REQUESTS_CA_BUNDLE=missing-synthetic-roots.pem\n").unwrap();
+        // Honouring the planted bundle would refuse to build the client.
+        NativeHttp::new(&crate::config::Environment::load(&roots).unwrap()).unwrap();
+        if ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
+            .iter()
+            .any(|key| std::env::var_os(key).is_some())
+        {
+            return;
+        }
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        proxy.set_nonblocking(true).unwrap();
+        let settings = scratch.0.join("proxy");
+        std::fs::write(
+            &settings,
+            format!("HTTP_PROXY=http://{}\n", proxy.local_addr().unwrap()),
+        )
+        .unwrap();
+        let http = NativeHttp::new(&crate::config::Environment::load(&settings).unwrap()).unwrap();
+        let target = TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let address = target.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            let (socket, _) = loop {
+                match target.accept() {
+                    Ok(socket) => break socket,
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            && std::time::Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(5))
+                    }
+                    Err(e) => panic!("synthetic HTTP accept: {e}"),
+                }
+            };
+            socket.set_nonblocking(false).unwrap();
+            let mut reader = BufReader::new(socket.try_clone().unwrap());
+            let mut line = String::new();
+            while line != "\r\n" {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+            }
+            (&socket)
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .unwrap();
+        });
+        let reply = http.get(
+            &format!("http://{address}/trial"),
+            "synthetic-access",
+            None,
+            &[],
+        );
+        server.join().unwrap();
+        assert_eq!(reply.unwrap().status, 200);
+        assert_eq!(
+            proxy.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
     }
     #[test]
     fn native_request_carries_headers_query_and_basic_auth_without_replaying_a_post() {

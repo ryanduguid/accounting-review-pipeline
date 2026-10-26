@@ -88,18 +88,27 @@ impl Environment {
         }
     }
 
-    pub fn has_dotenv_proxy(&self) -> bool {
-        self.dotenv
-            .keys()
-            .any(|key| key.to_ascii_lowercase().ends_with("_proxy") || key == "REQUEST_METHOD")
+    /// Transport settings (TLS roots and proxies) come only from the process environment, so a
+    /// planted working-directory .env cannot choose who receives the credentials or vouches for Xero.
+    pub fn process_only(&self, key: &str) -> Option<String> {
+        #[cfg(test)]
+        if self.isolated {
+            return None;
+        }
+        std::env::var_os(key).map(|v| crate::pypath::decode_os(&v))
     }
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
         Self {
-            dotenv: HashMap::from([("no_proxy".into(), "*".into())]),
+            dotenv: HashMap::new(),
             isolated: true,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_isolated(&self) -> bool {
+        self.isolated
     }
 }
 
