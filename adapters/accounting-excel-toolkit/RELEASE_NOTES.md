@@ -1,5 +1,7 @@
 # Unreleased Rust tooling
 
+- Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
+  Apache-2.0 as the future licence). Released versions keep their licence.
 - Replace `tools/xero_aged_receivables.py`, `tools/debtor_evidence.py` and
   `tools/replay_aged_review.py` with `xero-aged-receivables`, `debtor-evidence`
   and `replay-aged-review`; their Python import APIs are removed. Build with

@@ -1,5 +1,6 @@
 # v1.0.0 (unreleased)
 
+- Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with Apache-2.0 as the future licence). Released versions keep their licence.
 - Replace the Python runtime with native Rust `export-tb` and `xero-tb-auth` commands. Install from this directory with `cargo install --locked --path .`; Python imports and direct `.py` entrypoints are removed.
 - Keep the CSV and token-cache formats, exact balance controls, current-user Windows DPAPI protection and the POSIX mode-0600 fallback. The compatibility oracle is the 0.1.15 source at `1af8a855578afaec97bd2e56836a8aa8fb15e729` on CPython 3.15.
 - Use `XERO_TOKEN_FILE` to select an earlier Python cache. Automatic legacy selection now checks beside the executable. Authorisation guidance names `xero-tb-auth` and `export-tb`.

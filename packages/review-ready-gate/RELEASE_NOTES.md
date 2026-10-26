@@ -1,5 +1,7 @@
 # v1.0.0
 
+- Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
+  Apache-2.0 as the future licence). Released versions keep their licence.
 - Replace the Python runtime and import API with the `review-ready` Rust binary.
   Preserve the five commands, readiness statuses, exit codes, pack schemas,
   decimal controls, document evidence and publication recovery protocol.
