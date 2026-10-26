@@ -4,7 +4,7 @@
   "features": {
     "ghcr.io/devcontainers/features/rust:1": {}
   },
-  "postCreateCommand": "pipx install uv==0.13.1 && uv sync --locked --group dev",
+  "postCreateCommand": "pipx install uv==0.13.5 && uv sync --locked --group dev",
   "customizations": {
     "vscode": {
       "extensions": ["ms-python.python", "rust-lang.rust-analyzer"]
