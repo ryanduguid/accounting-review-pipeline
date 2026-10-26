@@ -255,3 +255,7 @@ so every push to `main` runs every component's gates; only pull requests filter
 by path. Tag the current `main` commit once its run is green; a successful run
 for an older commit is not evidence for the release. Tags and publication still
 require explicit approval.
+
+---
+
+<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
