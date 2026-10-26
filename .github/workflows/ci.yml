@@ -67,6 +67,7 @@ jobs:
       # Windows legs set the PR gate. Only main saves, so pull requests cannot
       # replace the shared entries. shortcut: the key hashes the runner image's
       # toolchains, so an image Rust update misses until the next main push saves.
+      # Add a scheduled main run to refresh the cache if those misses slow pull requests.
       - name: restore the dependency build cache
         if: runner.os == 'Windows'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
