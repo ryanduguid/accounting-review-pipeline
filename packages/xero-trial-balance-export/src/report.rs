@@ -27,6 +27,8 @@ pub fn text(value: &Json) -> String {
         Json::Null => "None".into(),
         Json::Bool(b) => if *b { "True" } else { "False" }.into(),
         Json::Int(n) => n.to_string(),
+        Json::Float(f) if f.is_nan() => "nan".into(),
+        Json::Float(f) if f.is_infinite() => if *f > 0.0 { "inf" } else { "-inf" }.into(),
         Json::Float(f) => crate::pyjson::float_repr(*f),
         Json::Str(s) => s.os_text(),
         Json::Array(items) => format!(
@@ -338,6 +340,27 @@ pub fn csv_bytes(rows: &[OutputRow]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn non_finite_report_numbers_match_python() {
+        for (raw, expected, csv) in [
+            ("NaN", "nan", "nan"),
+            ("Infinity", "inf", "inf"),
+            ("-Infinity", "-inf", "'-inf"),
+            ("1e999", "inf", "inf"),
+        ] {
+            let value = crate::pyjson::loads(raw).unwrap();
+            assert_eq!(text(&value), expected);
+            assert_eq!(excel_safe(&text(&value)), csv);
+            assert!(to_number(&value).is_err());
+            let report = crate::pyjson::loads(&format!(
+                r#"{{"Rows":[{{"RowType":"Header","Cells":[{{"Value":{raw}}}]}}]}}"#
+            ))
+            .unwrap();
+            let (header, rows) = flatten(&report).unwrap();
+            assert_eq!(header, [expected]);
+            assert!(rows.is_empty());
+        }
+    }
     #[test]
     fn csv_is_bom_crlf_and_escapes_free_text() {
         let row = std::array::from_fn(|i| {
