@@ -1,20 +1,10 @@
 //! Replay fabricated corpus bytes, then apply bounded deterministic mutations.
-use monthly_close_control_plane::loader::{self, SourceSnapshot};
+use monthly_close_control_plane::fuzzing::exercise;
 use std::{
     env, fs,
-    path::Path,
     process::ExitCode,
     time::{Duration, Instant},
 };
-
-fn exercise(bytes: Vec<u8>) {
-    let source = SourceSnapshot::new(Path::new("fuzz.csv"), bytes);
-    let _ = loader::load_canonical_tb(&source);
-    let _ = loader::load_mapping(Some(&source));
-    let _ = loader::load_mapping_policy(&source);
-    let _ = loader::load_balance_policy(&source);
-    let _ = loader::load_subledger(Some(&source));
-}
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
@@ -38,7 +28,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         if bytes.len() > 4096 {
             return Err("corpus seed exceeds 4096 bytes".into());
         }
-        exercise(bytes.clone());
+        exercise(&bytes);
         seeds.push(bytes);
     }
     if seeds.is_empty() {
@@ -62,7 +52,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         } else if bytes.len() < 4096 {
             bytes.push((state >> 24) as u8);
         }
-        exercise(bytes);
+        exercise(&bytes);
         count += 1;
     }
     println!(
@@ -88,7 +78,7 @@ mod tests {
     #[test]
     fn malformed_bytes_are_refused_without_panicking() {
         for bytes in [vec![], vec![0xff, 0x00], b"a,b\n\"unterminated".to_vec()] {
-            exercise(bytes);
+            exercise(&bytes);
         }
     }
 }

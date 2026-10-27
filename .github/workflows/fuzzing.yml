@@ -1,8 +1,9 @@
 name: Fuzzing
 
-# A 60-second mutation pass runs after merge, weekly and on demand. No gate
-# requires it. tests/test_fuzz_harness.py replays the seed corpus on every run
-# of the root suite.
+# The native 60-second mutation pass runs after merge, weekly and on demand;
+# the 60-second libFuzzer pass runs weekly and on demand. No gate requires
+# either. tests/test_fuzz_harness.py replays the seed corpus on every run of
+# the root suite.
 on:
   push:
     branches: [main]
@@ -31,3 +32,46 @@ jobs:
       - name: Fuzz the loaders
         run: >-
           timeout 90s packages/monthly-close-control-plane/target/release/close-control-fuzz fuzz/corpus 60
+
+  cargo-fuzz:
+    name: fuzz the Monthly Close loaders with libFuzzer
+    # The same loaders and corpus under coverage-guided libFuzzer. It needs a
+    # nightly compiler and a longer build, so it runs weekly and on demand and
+    # adds nothing to each push to main.
+    if: github.event_name != 'push'
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/monthly-close-control-plane
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # libFuzzer instrumentation needs a nightly compiler; the date is pinned.
+      - name: Install the pinned fuzzer
+        env:
+          CARGO_FUZZ_VERSION: "0.13.2"
+          # install-action has no cargo-fuzz manifest, so the release asset is
+          # checked against GitHub's digest for it at pin time.
+          CARGO_FUZZ_SHA256: "b5b704018b63e0f151c17a057ac53b5111e1db545d1b9f72fee79f08a545931c"
+        run: |
+          set -euo pipefail
+          rustup toolchain install nightly-2026-10-15 --profile minimal
+          asset="cargo-fuzz-${CARGO_FUZZ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --proto-redir '=https' -sSLO "https://github.com/rust-fuzz/cargo-fuzz/releases/download/${CARGO_FUZZ_VERSION}/$asset"
+          echo "${CARGO_FUZZ_SHA256}  $asset" | sha256sum --check
+          tar -xzf "$asset" -C "${CARGO_HOME:-$HOME/.cargo}/bin" cargo-fuzz
+      - name: Fuzz the loaders
+        # The release binary is built for musl and defaults to that target,
+        # where the address sanitiser cannot build; fuzz on glibc instead.
+        # New inputs go to a scratch directory; the checked-in seeds are read.
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/close-loaders"
+          cargo +nightly-2026-10-15 fuzz run --target x86_64-unknown-linux-gnu close_loaders \
+            "$RUNNER_TEMP/close-loaders" ../../fuzz/corpus -- \
+            -max_total_time=60 -max_len=4096 -timeout=2 -rss_limit_mb=1024

@@ -8,6 +8,9 @@ pub mod decimal;
 pub mod drivers;
 pub mod engine;
 pub mod equity;
+#[cfg(feature = "tools")]
+#[doc(hidden)]
+pub mod fuzzing;
 pub mod isodate;
 pub mod loader;
 pub mod models;
