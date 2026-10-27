@@ -123,8 +123,12 @@ jobs:
           cargo build --locked --features probe --bins
           cargo run --locked --features probe --bin close-control-differential -- "$(command -v python)" "$baseline" 1
       - name: build
+        env:
+          ACCOUNTING_REVIEW_SOURCE_COMMIT: ${{ github.sha }}
         run: cargo build --locked --release
       - name: smoke the release binary from an empty directory
+        env:
+          ACCOUNTING_REVIEW_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           binary="$PWD/target/release"
           component="${PWD##*/}"

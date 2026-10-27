@@ -533,3 +533,96 @@ fn missing_physical_members_fail_without_creating_replacements() {
         physically_refused(&files, name);
     }
 }
+
+fn producer_line() -> String {
+    format!(
+        "- Produced by: monthly-close-control-plane {}, commit {}, pack contract 2.",
+        env!("CARGO_PKG_VERSION"),
+        report::SOURCE_COMMIT
+    )
+}
+
+#[test]
+fn the_command_records_its_producer_and_rewrites_identical_bytes() {
+    let temp = TempDir::new();
+    let mut runs = Vec::new();
+    for name in ["first", "second"] {
+        let output = temp.join(name);
+        let result = review_command(&output).output().unwrap();
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        runs.push(
+            report::PACK_FILE_NAMES
+                .map(|file| fs::read(output.join(file)).unwrap())
+                .to_vec(),
+        );
+    }
+    assert_eq!(runs[0], runs[1]);
+    let files: BTreeMap<_, _> = report::PACK_FILE_NAMES
+        .map(str::to_owned)
+        .into_iter()
+        .zip(runs.remove(0))
+        .collect();
+    assert!(pyjson::py_eq(
+        document(&files).at("producer"),
+        &report::producer(),
+        true
+    ));
+    assert!(summary(&files).contains(&producer_line()));
+    let verified = viewer::verify_payloads(&files).unwrap();
+    assert!(
+        viewer::render_verified(&verified)
+            .unwrap()
+            .contains(&producer_line())
+    );
+}
+
+#[test]
+fn library_packs_carry_no_producer() {
+    let files = evidence_pack();
+    assert!(document(&files).get("producer").is_none());
+    assert!(!summary(&files).contains("Produced by"));
+}
+
+#[test]
+fn the_producer_is_witnessed_by_the_summary_and_fails_closed() {
+    let (_temp, mut pack) = reviewed(GOOD.as_bytes());
+    pack.producer = Some(report::producer());
+    let files = payloads(&pack);
+    viewer::verify_payloads(&files).unwrap();
+
+    let mut edited = files.clone();
+    let mut changed = document(&edited);
+    *part_mut(&mut changed, &["producer", "version"]) = Json::str("9.9.9");
+    save(&mut edited, &changed);
+    refused(&edited, "section disagrees");
+
+    let mut removed = files.clone();
+    let mut changed = document(&removed);
+    let Json::Object(pairs) = &mut changed else {
+        panic!("object")
+    };
+    pairs.retain(|(key, _)| !key.is("producer"));
+    save(&mut removed, &changed);
+    refused(&removed, "section disagrees");
+
+    let mut unwitnessed = files.clone();
+    change_summary(&mut unwitnessed, &format!("{}\n", producer_line()), "");
+    refused(&unwitnessed, "section disagrees");
+
+    let malformed = |path: &[&str], value: Json| {
+        let mut files = files.clone();
+        let mut changed = document(&files);
+        *part_mut(&mut changed, path) = value;
+        save(&mut files, &changed);
+        refused(&files, "producer must hold exactly");
+    };
+    malformed(&["producer"], Json::str("close-control"));
+    malformed(&["producer", "component"], Json::str("review-ready-gate"));
+    malformed(&["producer", "pack_contract"], Json::str("3"));
+    malformed(&["producer", "commit"], Json::str("abc123"));
+    malformed(&["producer", "version"], Json::str(""));
+    malformed(&["producer", "version"], Json::str("1.0.0 approved"));
+    let mut extra = report::producer();
+    extra.set("built_at", Json::str("2026-10-28"));
+    malformed(&["producer"], extra);
+}

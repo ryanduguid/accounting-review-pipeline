@@ -4,7 +4,7 @@ use crate::{
     decimal::Decimal,
     equity, pycsv,
     pyjson::{self, Json, LoadError, PyStr},
-    pypath, pytext,
+    pypath, pytext, report,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -31,12 +31,14 @@ const REQUIRED: [&str; 7] = [
     "source_sha256",
     "thresholds",
 ];
-const OPTIONAL: [&str; 4] = [
+const OPTIONAL: [&str; 5] = [
     "client_queries",
     "calculation_evidence",
     "controls_not_run",
     "equity_reconciliation",
+    "producer",
 ];
+const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const THRESHOLDS: [&str; 3] = [
     "absolute_variance",
     "percentage_variance",
@@ -176,7 +178,36 @@ fn parse_threshold(value: &Json, key: &str) -> Result<Decimal> {
     }
     Ok(number)
 }
+fn verify_producer(producer: &Json) -> Result<()> {
+    let text = |key| {
+        producer
+            .get(key)
+            .and_then(Json::as_pystr)
+            .map(PyStr::os_text)
+    };
+    let version = text("version").unwrap_or_default();
+    if !producer.has_exact_keys(&PRODUCER_FIELDS)
+        || text("component").as_deref() != Some(report::COMPONENT)
+        || text("pack_contract").as_deref() != Some(report::PACK_CONTRACT)
+        || !text("commit").is_some_and(|c| c == "unknown" || report::is_commit(&c))
+        || version.is_empty()
+        || !version
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b".+-".contains(&c))
+    {
+        return Err(format!(
+            "{J}: producer must hold exactly {}, naming {} and pack contract {} with a version and a full commit or unknown",
+            PRODUCER_FIELDS.join(", "),
+            report::COMPONENT,
+            report::PACK_CONTRACT
+        ));
+    }
+    Ok(())
+}
 fn verify_schema(document: &Json) -> Result<()> {
+    if let Some(producer) = document.get("producer") {
+        verify_producer(producer)?;
+    }
     if !is_status(document.at("overall_status")) {
         return Err(format!(
             "{J}: overall_status must be one of PASS, REVIEW, BLOCKED; got {}",
@@ -624,6 +655,7 @@ fn expected_scope(document: &Json, register: bool) -> Result<Vec<String>> {
             if skipped.is_empty() { "none" } else { &skipped }
         ));
     }
+    lines.extend(document.get("producer").map(report::producer_line));
     Ok(lines)
 }
 fn exception_lines(exceptions: &[Json]) -> Vec<String> {
@@ -1363,6 +1395,7 @@ pub fn render_verified(pack: &VerifiedPack) -> Result<String> {
             if skipped.is_empty() { "none" } else { &skipped }
         ));
     }
+    lines.extend(document.get("producer").map(report::producer_line));
     lines.extend([String::new(), "Source evidence".into(), String::new()]);
     let sources = document.at("source_sha256");
     for key in keys(sources) {

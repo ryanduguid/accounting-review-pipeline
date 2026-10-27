@@ -332,7 +332,7 @@ fn gate(args: &Arguments) -> i32 {
         || Decimal::parse("0.01").unwrap(),
         |text| parse_tolerance(text).unwrap(),
     );
-    let pack = match engine::review_pack(
+    let mut pack = match engine::review_pack(
         args.text("--profile"),
         &pack_dir,
         note.as_deref(),
@@ -345,6 +345,13 @@ fn gate(args: &Arguments) -> i32 {
             return 1;
         }
     };
+    #[cfg(feature = "probe")]
+    let record = !crate::probe::OMIT_PRODUCER.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(feature = "probe"))]
+    let record = true;
+    if record {
+        pack.producer = Some(report::producer());
+    }
     let outputs = {
         let _managed = publication::ManagedPublication::new();
         report::write_review_pack(&pack, &output)

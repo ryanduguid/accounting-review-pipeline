@@ -30,6 +30,8 @@ const JSON_MEMBERS: [&str; 9] = [
     "source_sha256",
     "thresholds",
 ];
+const OPTIONAL_MEMBERS: [&str; 2] = ["controls_not_run", "producer"];
+const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const FINDING_HEADER: &str = "| Status | Code | Slot | Repeat | Reason |";
 const FINDING_DIVIDER: &str = "| --- | --- | --- | --- | --- |";
 
@@ -74,7 +76,7 @@ pub(crate) fn parse_json(payload: &[u8]) -> Result<Json> {
     let members: BTreeSet<_> = pairs.iter().map(|(k, _)| k.os_text()).collect();
     let unknown: Vec<_> = members
         .iter()
-        .filter(|s| !JSON_MEMBERS.contains(&s.as_str()) && s.as_str() != "controls_not_run")
+        .filter(|s| !JSON_MEMBERS.contains(&s.as_str()) && !OPTIONAL_MEMBERS.contains(&s.as_str()))
         .cloned()
         .collect();
     if !unknown.is_empty() {
@@ -119,7 +121,36 @@ fn digest(value: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
+fn verify_producer(producer: &Json) -> Result<()> {
+    let text = |key| {
+        producer
+            .get(key)
+            .and_then(Json::as_pystr)
+            .map(PyStr::os_text)
+    };
+    let version = text("version").unwrap_or_default();
+    if !producer.has_exact_keys(&PRODUCER_FIELDS)
+        || text("component").as_deref() != Some(report::COMPONENT)
+        || text("pack_contract").as_deref() != Some(report::PACK_CONTRACT)
+        || !text("commit").is_some_and(|c| c == "unknown" || report::is_commit(&c))
+        || version.is_empty()
+        || !version
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b".+-".contains(&c))
+    {
+        return Err(format!(
+            "{JSON_NAME}: producer must hold exactly {}, naming {} and pack contract {} with a version and a full commit or unknown",
+            PRODUCER_FIELDS.join(", "),
+            report::COMPONENT,
+            report::PACK_CONTRACT
+        ));
+    }
+    Ok(())
+}
 pub(crate) fn verify_schema(document: &Json) -> Result<()> {
+    if let Some(producer) = document.get("producer") {
+        verify_producer(producer)?;
+    }
     let status = document.at("overall_status");
     if !["READY", "NOT_READY", "BLOCKED"]
         .iter()
@@ -678,6 +709,7 @@ pub(crate) fn canonical_pack(
         tieout_tolerance: threshold(document.at("thresholds").at("tieout_tolerance"))?,
         acknowledgement,
         controls_not_run,
+        producer: document.get("producer").cloned(),
     })
 }
 pub struct VerifiedPack {
