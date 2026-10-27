@@ -18,7 +18,52 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 OLD_GATE = "pipeline-gates"
-NEEDS = "    needs: [component, test, dependency-audit, package, lint, windows, rust, windows-workspace]\n"
+NEEDS = "    needs: [dependency-audit, rust, windows-workspace]\n"
+REMOVALS = "dependency-audit, rust, windows-workspace, pipeline-gates"
+# The repository no longer has a reusable workflow, so the callable lineage
+# tests use this fixture in place of the retired ci-package.yml.
+CALLABLE = """name: package
+
+on:
+  workflow_call:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  test:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  lint:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  dependency-audit:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  build:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  codecov:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+  gates:
+    needs: [changes, test, lint, dependency-audit, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 .github/ci/check_gates.py .github/workflows/ci-package.yml gates --no-results --exempt codecov
+"""
 SPEC = importlib.util.spec_from_file_location("check_gates", ROOT / ".github/ci/check_gates.py")
 assert SPEC is not None and SPEC.loader is not None
 checker = importlib.util.module_from_spec(SPEC)
@@ -177,7 +222,7 @@ class PipelineGatePredecessorTests(unittest.TestCase):
     def run_fixture(self, gate, context, declaration="", destination="renamed.yml", reusable=False, quoted_path=False, tab_comment=False, control_paths=False):
         source_name = "ci-package.yml" if reusable else "ci.yml"
         old_gate = "gates" if reusable else OLD_GATE
-        base = (ROOT / ".github/workflows" / source_name).read_text(encoding="utf-8")
+        base = CALLABLE if reusable else (ROOT / ".github/workflows" / source_name).read_text(encoding="utf-8")
         base_name = "ci\r.yml" if control_paths else "c\u00ed.yml" if quoted_path else source_name
         if quoted_path:
             base = base.replace(f".github/workflows/{source_name}", f".github/workflows/{base_name}")
@@ -231,6 +276,7 @@ class PipelineGatePredecessorTests(unittest.TestCase):
             source_workflows = ROOT / ".github/workflows"
             for source in sorted([*source_workflows.glob("*.yml"), *source_workflows.glob("*.yaml")]):
                 (workflows / source.name).write_bytes(source.read_bytes())
+            (workflows / "ci-package.yml").write_text(CALLABLE, encoding="utf-8")
             if quoted_path or control_paths:
                 (workflows / source_name).unlink()
                 (workflows / base_name).write_text(base, encoding="utf-8")
@@ -294,18 +340,18 @@ class PipelineGatePredecessorTests(unittest.TestCase):
     def test_declared_removals_allow_the_renamed_context(self):
         result = self.run_fixture(
             "replacement", OLD_GATE,
-            "component, test, dependency-audit, package, lint, windows, rust, windows-workspace, codecov, pipeline-gates",
+            REMOVALS,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_existing_destination_preserves_context_source_removals(self):
         result = self.run_fixture("replacement", OLD_GATE, destination="devcontainer.yml")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("component", result.stderr)
+        self.assertIn("windows-workspace", result.stderr)
 
     def test_existing_destination_accepts_declared_source_removals(self):
         result = self.run_fixture("replacement", OLD_GATE,
-            "component, test, dependency-audit, package, lint, windows, rust, windows-workspace, codecov, pipeline-gates",
+            REMOVALS,
             destination="devcontainer.yml")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -338,19 +384,19 @@ class PipelineGatePredecessorTests(unittest.TestCase):
 
     def test_git_quoted_workflow_accepts_declared_removals(self):
         result = self.run_fixture("replacement", OLD_GATE,
-            "component, test, dependency-audit, package, lint, windows, rust, windows-workspace, codecov, pipeline-gates", quoted_path=True)
+            REMOVALS, quoted_path=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipIf(os.name == "nt", "CR/LF filenames require a POSIX working tree")
     def test_distinct_cr_lf_paths_retain_predecessor_removals(self):
         result = self.run_fixture("replacement", OLD_GATE, control_paths=True)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("component", result.stderr)
+        self.assertIn("windows-workspace", result.stderr)
 
     @unittest.skipIf(os.name == "nt", "CR/LF filenames require a POSIX working tree")
     def test_distinct_cr_lf_paths_accept_declared_removals(self):
         result = self.run_fixture("replacement", OLD_GATE,
-            "component, test, dependency-audit, package, lint, windows, rust, windows-workspace, codecov, pipeline-gates", control_paths=True)
+            REMOVALS, control_paths=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipIf(os.name == "nt", "CR/LF filenames require a POSIX working tree")
