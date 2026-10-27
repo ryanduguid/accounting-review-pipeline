@@ -8,6 +8,15 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
 
+  # The separately locked cargo-fuzz crate.
+  - package-ecosystem: "cargo"
+    directory: "/packages/monthly-close-control-plane/fuzz"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+
   - package-ecosystem: "cargo"
     directory: "/packages/review-ready-gate"
     schedule:

@@ -1,0 +1,23 @@
+[package]
+name = "monthly-close-control-plane-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+monthly-close-control-plane = { path = "..", features = ["tools"] }
+
+# A separate workspace, so the component's own build never compiles the fuzzer.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "close_loaders"
+path = "fuzz_targets/close_loaders.rs"
+test = false
+doc = false
+bench = false
