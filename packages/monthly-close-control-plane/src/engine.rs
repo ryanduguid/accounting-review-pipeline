@@ -33,6 +33,9 @@ pub struct CloseReviewPack {
     pub controls_not_run: Vec<String>,
     pub relied_on: BTreeSet<String>,
     pub equity_reconciliation: Option<Json>,
+    /// The build that wrote the pack. Only the command line sets it; the
+    /// library leaves it unset so its output matches the frozen Python baseline.
+    pub producer: Option<Json>,
 }
 impl CloseReviewPack {
     pub fn client_queries(&self) -> Result<Vec<ClientQuery>> {
@@ -741,5 +744,6 @@ pub fn review_with(
         controls_not_run,
         relied_on,
         equity_reconciliation: equity_result,
+        producer: None,
     })
 }

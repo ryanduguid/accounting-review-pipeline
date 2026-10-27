@@ -147,6 +147,14 @@ monthly-close pack carries a second CSV holding the questions for the client tha
 raise. The producing command writes every file in one pass; the component's `view` command
 consumes and cross-checks an existing pack without changing it.
 
+Packs written by the native commands carry a `producer` block naming the component, its version,
+the source commit (or `unknown`) and the pack contract, `2`; the summary's Scope section repeats it,
+and `view` refuses a pack whose two copies disagree. It holds no time, host or path, so the same
+build and inputs still write byte-identical packs. A pack without the block is contract 1, written
+before it existed; `view` still reads one, but a `view` from before the block refuses packs that
+carry it. Building with `ACCOUNTING_REVIEW_SOURCE_COMMIT` set to a full lowercase commit SHA
+records that commit; any other value fails the build.
+
 ### Readiness-gate output
 
 `review-ready gate`, called with `--profile <profile> --pack <directory> --output <directory>`, produces
@@ -162,6 +170,7 @@ consumes and cross-checks an existing pack without changing it.
 | `thresholds` | The tie-out tolerance applied during the run. |
 | `review_boundary` | The fixed statement that readiness is not approval, advice or lodgement authority. |
 | `acknowledgement` | Optional evidence of a later human review; it cannot change readiness or approve a file. |
+| `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 
 ### Monthly-close pack
 
@@ -178,6 +187,7 @@ consumes and cross-checks an existing pack without changing it.
 | `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
 | `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
 | `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |
+| `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 
 ### Ledger-review evidence
 

@@ -176,6 +176,11 @@ generated pack, proves the 4 files still agree with each other, and prints
 a review sheet. It never writes, renames or deletes anything, and it cannot
 change what the engine computed.
 
+Packs `close-control review` writes record a `producer` block: the component,
+its version, the source commit or `unknown`, and pack contract `2`. The Scope
+section repeats it, and `view` refuses a pack whose block is malformed or
+disagrees with that line. A pack without the block (contract 1) still verifies.
+
 ```bash
 close-control view --pack-dir C:\\close-data\\review-pack
 ```

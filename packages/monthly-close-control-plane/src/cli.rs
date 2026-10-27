@@ -465,13 +465,20 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.reconciliation_tolerance = args.decimal("--reconciliation-tolerance", "0.01");
         engine::review_close(&config)
     };
-    let pack = match input() {
+    let mut pack = match input() {
         Ok(pack) => pack,
         Err(error) => {
             crate::errln!("close-control: input error: {error}");
             return 1;
         }
     };
+    #[cfg(feature = "probe")]
+    let record = !crate::probe::OMIT_PRODUCER.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(feature = "probe"))]
+    let record = true;
+    if record {
+        pack.producer = Some(report::producer());
+    }
     let outputs = match publication::write_review_pack(&pack, &output) {
         Ok(outputs) => outputs,
         Err(error) => {

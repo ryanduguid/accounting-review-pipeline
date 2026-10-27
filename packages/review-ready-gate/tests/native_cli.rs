@@ -579,3 +579,95 @@ fn managed_sigterm_finishes_rollback_and_keeps_postcommit_generation() {
         }
     }
 }
+
+#[test]
+fn the_gate_records_its_producer_and_view_refuses_an_edited_one() {
+    let tmp = TempDir::new();
+    let mut runs = Vec::new();
+    for name in ["first", "second"] {
+        let output = tmp.join(name);
+        assert!(
+            gate_command("bas-ready", &output)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+        runs.push(payloads(&output));
+    }
+    assert_eq!(runs[0], runs[1]);
+    let output = tmp.join("first");
+    let json = fs::read_to_string(output.join("readiness-pack.json")).unwrap();
+    let version = format!("\"version\": \"{}\"", env!("CARGO_PKG_VERSION"));
+    for member in [
+        "\"producer\": {",
+        "\"component\": \"review-ready-gate\"",
+        "\"pack_contract\": \"2\"",
+        &version,
+    ] {
+        assert!(json.contains(member), "{member} missing from {json}");
+    }
+    let line = format!(
+        "- Produced by: review-ready-gate {}, commit ",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(
+        fs::read_to_string(output.join("readiness-summary.md"))
+            .unwrap()
+            .contains(&line)
+    );
+    let view = |path: &std::path::Path| {
+        Command::new(env!("CARGO_BIN_EXE_review-ready"))
+            .args(["view", "--pack-dir"])
+            .arg(path)
+            .output()
+            .unwrap()
+    };
+    let shown = view(&output);
+    assert!(shown.status.success(), "{shown:?}");
+    assert!(String::from_utf8_lossy(&shown.stdout).contains(&line));
+    for (index, (before, after, diagnostic)) in [
+        (
+            version.as_str(),
+            "\"version\": \"9.9.9\"",
+            "verification failed",
+        ),
+        (
+            "\"pack_contract\": \"2\"",
+            "\"pack_contract\": \"3\"",
+            "producer must hold exactly",
+        ),
+        (
+            "\"component\": \"review-ready-gate\"",
+            "\"component\": \"monthly-close-control-plane\"",
+            "producer must hold exactly",
+        ),
+        (
+            "\"producer\": {",
+            "\"producer\": {\"built_at\": \"2026-10-28\",",
+            "producer must hold exactly",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let edited = tmp.join(format!("edited-{index}"));
+        fs::create_dir(&edited).unwrap();
+        for name in ["readiness-summary.md", "findings.csv"] {
+            fs::copy(output.join(name), edited.join(name)).unwrap();
+        }
+        assert!(json.contains(before));
+        fs::write(
+            edited.join("readiness-pack.json"),
+            json.replacen(before, after, 1),
+        )
+        .unwrap();
+        let shown = view(&edited);
+        assert_eq!(shown.status.code(), Some(1), "{shown:?}");
+        assert!(shown.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&shown.stderr).contains(diagnostic),
+            "{shown:?}"
+        );
+    }
+}

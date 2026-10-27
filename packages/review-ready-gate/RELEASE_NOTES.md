@@ -12,6 +12,12 @@
 - Decode publication control files as UTF-8. Unix SIGTERM is managed at writer
   checkpoints; SIGINT and Windows process termination can leave unresolved state
   that requires review before retrying.
+- Record a `producer` block (component, version, source commit or `unknown`,
+  pack contract `2`) in packs the command writes, repeated in the summary's
+  Scope section and cross-checked by `view`. Set
+  `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time to record the commit. Packs
+  without the block still verify; a `view` from before it refuses packs that
+  carry it. The library and the Python differential probe write none.
 - Native release publishing is not configured. The release workflow fails
   explicitly and cannot publish Python or native artefacts.
 

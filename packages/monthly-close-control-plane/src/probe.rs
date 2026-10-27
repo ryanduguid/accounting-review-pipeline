@@ -886,7 +886,11 @@ pub fn evaluate(request: &Json) -> Json {
         Err(error) => Json::object([("error", Json::str(&error))]),
     }
 }
+/// Set by the probe binary: the frozen Python baseline predates the pack's
+/// `producer` block, so CLI runs compared with it record none.
+pub static OMIT_PRODUCER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 pub fn main() -> i32 {
+    OMIT_PRODUCER.store(true, std::sync::atomic::Ordering::Relaxed);
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
     for line in stdin.lock().lines() {
