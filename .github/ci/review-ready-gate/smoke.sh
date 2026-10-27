@@ -5,6 +5,7 @@ set -euo pipefail
 
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-ready" --output pack
 [[ -f pack/readiness-pack.json ]]
+python -c "import json, os, sys; p = json.load(open(sys.argv[1]))['producer']; assert p['commit'] == os.environ['ACCOUNTING_REVIEW_SOURCE_COMMIT'], p" pack/readiness-pack.json
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-not-ready" --output pack-nr && nr=0 || nr=$?
 [[ "$nr" = "2" ]]
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-blocked" --output pack-bl && bl=0 || bl=$?

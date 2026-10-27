@@ -134,4 +134,7 @@ pub struct ReadinessPack {
     pub acknowledgement: Option<ReviewerAcknowledgement>,
     /// None means a legacy pack states no control coverage.
     pub controls_not_run: Option<Vec<ControlNotRun>>,
+    /// The build that wrote the pack. Only the command line sets it; the
+    /// library leaves it unset so its output matches the frozen Python baseline.
+    pub producer: Option<crate::pyjson::Json>,
 }

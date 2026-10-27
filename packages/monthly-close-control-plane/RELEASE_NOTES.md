@@ -26,6 +26,12 @@
 - Port the clearing and equity demos to optional Rust tools. Retain the
   cross-repository Python utility driver pending its separate migration; it
   invokes the native close command and records its Cargo lock and version.
+- Record a `producer` block (component, version, source commit or `unknown`,
+  pack contract `2`) in packs the command writes, repeated in the summary's
+  Scope section and cross-checked by `view`. Set
+  `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time to record the commit. Packs
+  without the block still verify; a `view` from before it refuses packs that
+  carry it. The library and the Python differential probe write none.
 - Native release publication, macOS, Aikido scans and hosted CI remain
   unverified for this candidate. CodeQL here does not analyse Rust.
 

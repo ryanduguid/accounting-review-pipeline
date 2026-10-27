@@ -267,6 +267,7 @@ pub fn review_pack(
         tieout_tolerance: tolerance,
         acknowledgement,
         controls_not_run: Some(controls),
+        producer: None,
     })
 }
 

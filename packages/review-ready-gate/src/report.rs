@@ -18,6 +18,50 @@ pub const PACK_NAMES: [&str; 3] = [
     "readiness-summary.md",
     "findings.csv",
 ];
+pub const COMPONENT: &str = "review-ready-gate";
+/// The pack layout a `producer` block declares. Packs without the block are contract 1.
+pub const PACK_CONTRACT: &str = "2";
+/// The commit recorded in `producer`: the full SHA given in
+/// `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time, otherwise `unknown`.
+pub const SOURCE_COMMIT: &str = match option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT") {
+    Some(commit) => commit,
+    None => "unknown",
+};
+const _: () = assert!(
+    option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT").is_none() || is_commit(SOURCE_COMMIT),
+    "ACCOUNTING_REVIEW_SOURCE_COMMIT must be a 40-character lowercase hexadecimal commit"
+);
+pub const fn is_commit(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if !matches!(bytes[index], b'0'..=b'9' | b'a'..=b'f') {
+            return false;
+        }
+        index += 1;
+    }
+    bytes.len() == 40
+}
+/// Identifies the build that wrote a pack. It holds no time, host or path, so
+/// the same build and inputs still write byte-identical packs.
+pub fn producer() -> Json {
+    Json::object([
+        ("commit", Json::str(SOURCE_COMMIT)),
+        ("component", Json::str(COMPONENT)),
+        ("pack_contract", Json::str(PACK_CONTRACT)),
+        ("version", Json::str(env!("CARGO_PKG_VERSION"))),
+    ])
+}
+fn producer_line(producer: &Json) -> String {
+    let field = |key| producer.at(key).as_pystr().unwrap().os_text();
+    format!(
+        "- Produced by: {} {}, commit {}, pack contract {}.",
+        field("component"),
+        field("version"),
+        field("commit"),
+        field("pack_contract")
+    )
+}
 pub const CSV_FIELDS: [&str; 6] = [
     "code",
     "status",
@@ -145,6 +189,9 @@ pub fn as_json(pack: &ReadinessPack) -> Result<Json> {
             ),
         ));
     }
+    if let Some(producer) = &pack.producer {
+        pairs.push((PyStr::from("producer"), producer.clone()));
+    }
     Ok(Json::Object(pairs))
 }
 pub fn as_markdown(pack: &ReadinessPack) -> Result<String> {
@@ -194,6 +241,7 @@ pub fn as_markdown(pack: &ReadinessPack) -> Result<String> {
     if let Some(controls) = &pack.controls_not_run {
         lines.push(format!("- Controls not run: {}.", controls.len()));
     }
+    lines.extend(pack.producer.as_ref().map(producer_line));
     lines.extend(["".into(), "## Source evidence".into(), "".into()]);
     if pack.source_evidence.is_empty() {
         lines.push("No source files were present in the pack directory.".into());

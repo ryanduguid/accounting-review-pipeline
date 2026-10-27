@@ -15,6 +15,7 @@ review() {
 review review pack
 review workbench workbench
 close-control view --pack-dir pack > review-sheet.md
+python -c "import json, os, sys; p = json.load(open(sys.argv[1]))['producer']; assert p['commit'] == os.environ['ACCOUNTING_REVIEW_SOURCE_COMMIT'], p" pack/close-review-pack.json
 close-control queue --pack-dir pack --pack-dir workbench --status REVIEW > queue.md
 close-control compare --previous-pack pack --current-pack pack \
   --previous-tb "$COMPONENT/examples/current_trial_balance.csv" \

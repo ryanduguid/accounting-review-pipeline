@@ -266,6 +266,8 @@ review-ready view --pack-dir outputs/bas-ready
 
 Before displaying anything it fails closed on: a missing artefact; JSON that is not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated top-level members; a threshold or nested source digest that no longer parses as the writer rendered it; a `readiness-summary.md` whose overall status, source-evidence digests or review-boundary statement disagree with the JSON (including a second, conflicting status line); and a `findings.csv` whose header, row count or any cell disagrees with the JSON findings, honouring the writer's formula-injection guard exactly. On success the sheet ends with the SHA-256 of each artefact's exact bytes, so the displayed evidence can itself be archived. Exit code is 0 when a pack was verified and shown, 1 when verification failed.
 
+Packs `review-ready gate` writes record a `producer` block: the component, its version, the source commit or `unknown`, and pack contract `2`. The Scope section repeats it, and `view` refuses a pack whose block is malformed or disagrees with that line. A pack without the block (contract 1) still verifies.
+
 Payload entries must be regular files with a single hard link. The viewer rejects
 links, directories and special files before reading them. For a pack carrying
 `.reviewready`, it also refuses unresolved publication and a revision change while
