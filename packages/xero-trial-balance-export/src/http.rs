@@ -47,9 +47,13 @@ impl NativeHttp {
         let client = {
             let _entered = runtime.enter();
             let custom = environment
-                .get("REQUESTS_CA_BUNDLE")
+                .process_only("REQUESTS_CA_BUNDLE")
                 .filter(|v| !v.is_empty())
-                .or_else(|| environment.get("CURL_CA_BUNDLE").filter(|v| !v.is_empty()));
+                .or_else(|| {
+                    environment
+                        .process_only("CURL_CA_BUNDLE")
+                        .filter(|v| !v.is_empty())
+                });
             let roots=match custom {
                 Some(path)=>std::fs::read(crate::pypath::encode_os(&path)).map_err(|_|Failure::message("error: the configured TLS CA bundle cannot be read; no Xero request was made."))?,
                 None=>include_bytes!("../data/cacert.pem").to_vec(),
@@ -61,7 +65,8 @@ impl NativeHttp {
                     "error: the TLS CA bundle contains no certificates; no Xero request was made.",
                 ));
             }
-            let mut builder = reqwest::Client::builder()
+            // Proxies come from reqwest's process-environment default, never the cwd .env.
+            let builder = reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(30))
                 .read_timeout(Duration::from_secs(30))
                 .retry(reqwest::retry::never())
@@ -69,30 +74,12 @@ impl NativeHttp {
                 .http1_only()
                 .tls_certs_only(certificates)
                 .user_agent("python-requests/2.34.2");
-            if environment.has_dotenv_proxy() {
-                builder = builder.no_proxy();
-                let bypass = environment
-                    .get("no_proxy")
-                    .or_else(|| environment.get("NO_PROXY"))
-                    .and_then(|v| reqwest::NoProxy::from_string(&v));
-                for (lower, upper, kind) in [
-                    ("http_proxy", "HTTP_PROXY", 0),
-                    ("https_proxy", "HTTPS_PROXY", 1),
-                    ("all_proxy", "ALL_PROXY", 2),
-                ] {
-                    let value = environment.get(lower).or_else(|| {
-                        if kind == 0 && environment.get("REQUEST_METHOD").is_some() {
-                            None
-                        } else {
-                            environment.get(upper)
-                        }
-                    });
-                    if let Some(value) = value.filter(|v| !v.is_empty()) {
-                        let proxy=match kind {0=>reqwest::Proxy::http(&value),1=>reqwest::Proxy::https(&value),_=>reqwest::Proxy::all(&value)}.map_err(|_|Failure::message("error: a configured HTTP proxy is invalid; no Xero request was made."))?;
-                        builder = builder.proxy(proxy.no_proxy(bypass.clone()));
-                    }
-                }
-            }
+            #[cfg(test)]
+            let builder = if environment.is_isolated() {
+                builder.no_proxy()
+            } else {
+                builder
+            };
             builder.build().map_err(|e| {
                 Failure::message(format!(
                     "error: could not initialise the Xero HTTP client ({e})"
@@ -544,6 +531,94 @@ mod tests {
             assert!(scripted_get(&http).is_err());
             assert_eq!(http.gets.borrow().len(), gets);
             assert_eq!(http.posts.borrow().len(), posts);
+        }
+    }
+    #[test]
+    fn working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy() {
+        use std::{net::TcpListener, time::Instant};
+        // Rerun in a child without process-level proxy, NO_PROXY, REQUEST_METHOD or CA
+        // settings, so the runner's own environment cannot mask or fake a regression.
+        const CHILD: &str = "XERO_TB_DOTENV_TRANSPORT_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "http::tests::working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy",
+                ])
+                .env(CHILD, "1");
+            for (key, _) in std::env::vars_os() {
+                let name = key.to_string_lossy().to_ascii_uppercase();
+                if name.ends_with("_PROXY")
+                    || name.ends_with("_CA_BUNDLE")
+                    || name == "REQUEST_METHOD"
+                {
+                    child.env_remove(&key);
+                }
+            }
+            let output = child.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let scratch = Scratch::new();
+        let settings = scratch.0.join("settings");
+        for key in ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"] {
+            std::fs::write(&settings, format!("{key}=missing-synthetic-roots.pem\n")).unwrap();
+            // Honouring the planted bundle would refuse to build the client.
+            NativeHttp::new(&crate::config::Environment::load(&settings).unwrap()).unwrap();
+        }
+        let listener = || {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            listener
+        };
+        for (key, scheme) in [
+            ("HTTP_PROXY", "http"),
+            ("HTTPS_PROXY", "https"),
+            ("ALL_PROXY", "https"),
+        ] {
+            let (proxy, target) = (listener(), listener());
+            let address = target.local_addr().unwrap();
+            let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
+            std::fs::write(&settings, format!("{key}={proxy_url}\n")).unwrap();
+            let http =
+                NativeHttp::new(&crate::config::Environment::load(&settings).unwrap()).unwrap();
+            // The target accepts and drops the connection, so the request fails fast.
+            let reached = std::thread::spawn(move || {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                loop {
+                    match target.accept() {
+                        Ok(_) => return true,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if Instant::now() >= deadline {
+                                return false;
+                            }
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(e) => panic!("synthetic target accept: {e}"),
+                    }
+                }
+            });
+            let _ = http.get(
+                &format!("{scheme}://{address}/trial"),
+                "synthetic-access",
+                None,
+                &[],
+            );
+            assert!(
+                reached.join().unwrap(),
+                "{key}: the request never reached the target"
+            );
+            assert_eq!(
+                proxy.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock,
+                "{key}: the request went through the planted proxy"
+            );
         }
     }
     #[test]
