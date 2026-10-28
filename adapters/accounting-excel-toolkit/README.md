@@ -23,7 +23,7 @@
 
 Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 
-The `accounting-excel-toolkit/v0.1.8` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
+The `accounting-excel-toolkit/v1.0.0` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
 
 Maintain this adapter at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit). Run the commands below from `adapters/accounting-excel-toolkit/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical API CSV header, fixtures and expected results; the interactive-export parser fixtures under `samples/` cover a separate format.
 

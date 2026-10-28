@@ -50,7 +50,7 @@ diagnostics and exact CLI exits/stdout/stderr. Native tests cover the original
 20 test behaviours, offset truncation, installed-binary discovery and source
 checking from an unrelated working directory. The guard uses only the standard
 library; the converter uses the existing repository choices, `serde_json` and
-`sha2`. The Cargo version follows the existing source-archive version, 0.1.8.
+`sha2`. The Cargo version follows the source-archive version, 1.0.0.
 
 Use the same frozen checkout for the converter comparison:
 
