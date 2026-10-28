@@ -50,7 +50,7 @@ These repository-wide rules apply everywhere:
   The same approved binary-only scope permits incremental Rust replacements of
   the Excel adapter's Python tools and import APIs. Native commands preserve
   file and status contracts with documented diagnostic differences; the source
-  archive version remains 0.1.8 while these unreleased tooling ports proceed.
+  archive moved to 1.0.0 with these ports.
 - The root `pyproject.toml`, `uv.lock` and `justfile` are a development entrypoint only.
   The root is a virtual uv workspace: it declares no package, no version and no runtime
   dependency, and publishes nothing. Do not add a root distribution, shared runtime library,

@@ -1,8 +1,17 @@
-# Unreleased Rust tooling
+# v1.0.0
 
-- Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
-  Apache-2.0 as the future licence). Released versions keep their licence.
-- Replace `tools/xero_aged_receivables.py`, `tools/debtor_evidence.py` and
+The Power Query and VBA files keep their behaviour; the major version marks the
+removal of the Python tools' import APIs.
+
+- Relicensed from MIT to FSL-1.1-ALv2 (Functional Source License, with
+  Apache-2.0 as the future licence) (#358, #434). Released versions keep their
+  licence.
+- `vba/modFormulaCompare.bas` adds `CompareFormulaRanges`, which reports formulas
+  removed, added or changed between 2 equally shaped ranges of at most 100,000
+  cells, and new workbook links, even when displayed values match. It compares
+  exact `Formula2` text, does not recalculate or write, and has no recorded
+  native VBA acceptance yet (#390).
+- Breaking: replace `tools/xero_aged_receivables.py`, `tools/debtor_evidence.py` and
   `tools/replay_aged_review.py` with `xero-aged-receivables`, `debtor-evidence`
   and `replay-aged-review`; their Python import APIs are removed. Build with
   `cargo build --locked --release --bins` and use the same flags and subcommands.
@@ -12,21 +21,23 @@
   differ; literal Unicode JSON output requires encodable scalar values.
   JSON parsing limits are 1,000 nested containers and 4,300 integer digits.
   New evidence files are created exclusively; a later write failure can leave
-  partial evidence. The source archive remains version 0.1.8.
+  partial evidence.
 - Keep `tools/benchmark_aged_review.py` measuring the frozen Python reference.
   Schema 1's Python allocation tracing cannot measure the Rust commands.
 - Replace the Python encoding guard with `check-vba-encoding`. Its source lookup
   follows the executable's installed or standard Cargo layout. Custom target
   layouts need explicit file arguments or an installed copy. Native path, OS
   and directory-listing diagnostics can differ.
-- Replace `tools/xero_account_transactions.py` with `xero-account-transactions`;
+- Breaking: replace `tools/xero_account_transactions.py` with `xero-account-transactions`;
   its Python import API is removed. Preserve exact amounts, source hashes,
   logical-row mappings, inspection JSON and clearing CSV. Native help, usage,
   JSON parser and OS diagnostics can differ; invalid amounts use JSON quotation,
   and text option values require valid Unicode scalar values. See the
   [migration commands](docs/account-transactions-import.md).
 - Require native Windows/Linux checks and frozen Python comparisons alongside
-  the retained source-archive release gates. No release is created by this port.
+  the retained source-archive release gates.
+- Development checks and the aged receivables benchmark need Python 3.14 or
+  newer (#321).
 
 # v0.1.8
 
