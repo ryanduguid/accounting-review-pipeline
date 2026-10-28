@@ -183,10 +183,8 @@ fn cli(request: &Json) -> Result<Json> {
         ),
     ]))
 }
-fn decimal_json(value: &Option<Decimal>) -> Json {
-    value
-        .as_ref()
-        .map_or(Json::Null, |value| Json::str(&value.to_sci_string()))
+fn decimal_json(value: Option<&Decimal>) -> Json {
+    value.map_or(Json::Null, |value| Json::str(&value.to_sci_string()))
 }
 pub fn row_json(row: TrialBalanceRow) -> Json {
     Json::object([
@@ -210,11 +208,14 @@ pub fn exception_json(item: ExceptionItem) -> Json {
         ("account_id", Json::str(&item.account_id)),
         ("account_code", Json::str(&item.account_code)),
         ("account_name", Json::str(&item.account_name)),
-        ("current_value", decimal_json(&item.current_value)),
-        ("prior_value", decimal_json(&item.prior_value)),
-        ("difference", decimal_json(&item.difference)),
-        ("threshold", decimal_json(&item.threshold)),
-        ("percentage_change", decimal_json(&item.percentage_change)),
+        ("current_value", decimal_json(item.current_value.as_ref())),
+        ("prior_value", decimal_json(item.prior_value.as_ref())),
+        ("difference", decimal_json(item.difference.as_ref())),
+        ("threshold", decimal_json(item.threshold.as_ref())),
+        (
+            "percentage_change",
+            decimal_json(item.percentage_change.as_ref()),
+        ),
         ("reason", Json::str(&item.reason)),
         ("reviewer_action", Json::str(&item.reviewer_action)),
         ("review_group", Json::str(&item.review_group)),
@@ -229,7 +230,7 @@ fn query_json(item: ClientQuery) -> Json {
         ("account_code", Json::str(&item.account_code)),
         ("account_name", Json::str(&item.account_name)),
         ("review_group", Json::str(&item.review_group)),
-        ("difference", decimal_json(&item.difference)),
+        ("difference", decimal_json(item.difference.as_ref())),
         ("question", Json::str(&item.question)),
         ("evidence_requested", Json::str(&item.evidence_requested)),
     ])

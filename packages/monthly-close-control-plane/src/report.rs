@@ -110,12 +110,8 @@ pub fn money(value: &Decimal) -> Result<String> {
         .format_places(2.max(-value.exponent()))
         .ok_or_else(|| "decimal fixed-point output exceeds available memory".into())
 }
-fn optional_money(value: &Option<Decimal>) -> Result<String> {
-    value
-        .as_ref()
-        .map(money)
-        .transpose()
-        .map(Option::unwrap_or_default)
+fn optional_money(value: Option<&Decimal>) -> Result<String> {
+    value.map(money).transpose().map(Option::unwrap_or_default)
 }
 pub fn percentage(value: &Decimal) -> Result<String> {
     decimal::with_precision(28, || {
@@ -185,14 +181,20 @@ pub fn exception_dict(item: &ExceptionItem) -> Result<Json> {
         ("review_group", Json::str(&item.review_group)),
         (
             "current_value",
-            Json::str(&optional_money(&item.current_value)?),
+            Json::str(&optional_money(item.current_value.as_ref())?),
         ),
         (
             "prior_value",
-            Json::str(&optional_money(&item.prior_value)?),
+            Json::str(&optional_money(item.prior_value.as_ref())?),
         ),
-        ("difference", Json::str(&optional_money(&item.difference)?)),
-        ("threshold", Json::str(&optional_money(&item.threshold)?)),
+        (
+            "difference",
+            Json::str(&optional_money(item.difference.as_ref())?),
+        ),
+        (
+            "threshold",
+            Json::str(&optional_money(item.threshold.as_ref())?),
+        ),
         ("percentage_change", Json::str(&percentage_cell(item)?)),
         ("reason", Json::str(&item.reason)),
         ("reviewer_action", Json::str(&item.reviewer_action)),
@@ -207,7 +209,10 @@ pub fn query_dict(item: &ClientQuery) -> Result<Json> {
         ("account_code", Json::str(&item.account_code)),
         ("account_name", Json::str(&item.account_name)),
         ("review_group", Json::str(&item.review_group)),
-        ("difference", Json::str(&optional_money(&item.difference)?)),
+        (
+            "difference",
+            Json::str(&optional_money(item.difference.as_ref())?),
+        ),
         ("question", Json::str(&item.question)),
         ("evidence_requested", Json::str(&item.evidence_requested)),
     ]))
@@ -459,7 +464,7 @@ pub fn as_markdown(pack: &CloseReviewPack) -> Result<PyStr> {
                     &item.account_name,
                     &item.account_id
                 )),
-                absent(&optional_money(&item.difference)?),
+                absent(&optional_money(item.difference.as_ref())?),
                 md_cell(&item.reason)
             ));
         }
@@ -485,7 +490,7 @@ pub fn as_markdown(pack: &CloseReviewPack) -> Result<PyStr> {
                     &item.account_name,
                     &item.account_id
                 )),
-                absent(&optional_money(&item.difference)?),
+                absent(&optional_money(item.difference.as_ref())?),
                 md_cell(&item.question),
                 md_cell(&item.evidence_requested)
             ));
