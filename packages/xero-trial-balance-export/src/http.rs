@@ -535,70 +535,91 @@ mod tests {
     }
     #[test]
     fn working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy() {
-        use std::{
-            io::{BufRead, BufReader, Write},
-            net::TcpListener,
-        };
-        let scratch = Scratch::new();
-        let roots = scratch.0.join("roots");
-        std::fs::write(&roots, "REQUESTS_CA_BUNDLE=missing-synthetic-roots.pem\n").unwrap();
-        // Honouring the planted bundle would refuse to build the client.
-        NativeHttp::new(&crate::config::Environment::load(&roots).unwrap()).unwrap();
-        if ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
-            .iter()
-            .any(|key| std::env::var_os(key).is_some())
-        {
+        use std::{net::TcpListener, time::Instant};
+        // Rerun in a child without process-level proxy, NO_PROXY, REQUEST_METHOD or CA
+        // settings, so the runner's own environment cannot mask or fake a regression.
+        const CHILD: &str = "XERO_TB_DOTENV_TRANSPORT_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "http::tests::working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy",
+                ])
+                .env(CHILD, "1");
+            for (key, _) in std::env::vars_os() {
+                let name = key.to_string_lossy().to_ascii_uppercase();
+                if name.ends_with("_PROXY")
+                    || name.ends_with("_CA_BUNDLE")
+                    || name == "REQUEST_METHOD"
+                {
+                    child.env_remove(&key);
+                }
+            }
+            let output = child.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
             return;
         }
-        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
-        proxy.set_nonblocking(true).unwrap();
-        let settings = scratch.0.join("proxy");
-        std::fs::write(
-            &settings,
-            format!("HTTP_PROXY=http://{}\n", proxy.local_addr().unwrap()),
-        )
-        .unwrap();
-        let http = NativeHttp::new(&crate::config::Environment::load(&settings).unwrap()).unwrap();
-        let target = TcpListener::bind("127.0.0.1:0").unwrap();
-        target.set_nonblocking(true).unwrap();
-        let address = target.local_addr().unwrap();
-        let server = std::thread::spawn(move || {
-            let deadline = std::time::Instant::now() + Duration::from_secs(5);
-            let (socket, _) = loop {
-                match target.accept() {
-                    Ok(socket) => break socket,
-                    Err(e)
-                        if e.kind() == std::io::ErrorKind::WouldBlock
-                            && std::time::Instant::now() < deadline =>
-                    {
-                        std::thread::sleep(Duration::from_millis(5))
+        let scratch = Scratch::new();
+        let settings = scratch.0.join("settings");
+        for key in ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"] {
+            std::fs::write(&settings, format!("{key}=missing-synthetic-roots.pem\n")).unwrap();
+            // Honouring the planted bundle would refuse to build the client.
+            NativeHttp::new(&crate::config::Environment::load(&settings).unwrap()).unwrap();
+        }
+        let listener = || {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            listener
+        };
+        for (key, scheme) in [
+            ("HTTP_PROXY", "http"),
+            ("HTTPS_PROXY", "https"),
+            ("ALL_PROXY", "https"),
+        ] {
+            let (proxy, target) = (listener(), listener());
+            let address = target.local_addr().unwrap();
+            let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
+            std::fs::write(&settings, format!("{key}={proxy_url}\n")).unwrap();
+            let http =
+                NativeHttp::new(&crate::config::Environment::load(&settings).unwrap()).unwrap();
+            // The target accepts and drops the connection, so the request fails fast.
+            let reached = std::thread::spawn(move || {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                loop {
+                    match target.accept() {
+                        Ok(_) => return true,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if Instant::now() >= deadline {
+                                return false;
+                            }
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(e) => panic!("synthetic target accept: {e}"),
                     }
-                    Err(e) => panic!("synthetic HTTP accept: {e}"),
                 }
-            };
-            socket.set_nonblocking(false).unwrap();
-            let mut reader = BufReader::new(socket.try_clone().unwrap());
-            let mut line = String::new();
-            while line != "\r\n" {
-                line.clear();
-                reader.read_line(&mut line).unwrap();
-            }
-            (&socket)
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
-                .unwrap();
-        });
-        let reply = http.get(
-            &format!("http://{address}/trial"),
-            "synthetic-access",
-            None,
-            &[],
-        );
-        server.join().unwrap();
-        assert_eq!(reply.unwrap().status, 200);
-        assert_eq!(
-            proxy.accept().unwrap_err().kind(),
-            std::io::ErrorKind::WouldBlock
-        );
+            });
+            let _ = http.get(
+                &format!("{scheme}://{address}/trial"),
+                "synthetic-access",
+                None,
+                &[],
+            );
+            assert!(
+                reached.join().unwrap(),
+                "{key}: the request never reached the target"
+            );
+            assert_eq!(
+                proxy.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock,
+                "{key}: the request went through the planted proxy"
+            );
+        }
     }
     #[test]
     fn native_request_carries_headers_query_and_basic_auth_without_replaying_a_post() {
