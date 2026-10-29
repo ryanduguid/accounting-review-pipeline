@@ -59,3 +59,6 @@ required-features = ["probe"]
 [profile.release]
 lto = true
 codegen-units = 1
+
+[lints.clippy]
+ref_option = "warn"
