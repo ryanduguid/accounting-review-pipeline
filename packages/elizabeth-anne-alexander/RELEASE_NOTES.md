@@ -19,6 +19,7 @@ Differences from 0.2.6:
 - Where 0.2.6 stopped with a Python traceback (exit `1`), the binary exits `1` with one `internal error:` line: a JSON integer over 4,300 digits, and a zero amount whose fixed-point form would need over 1 GiB of digits.
 - JSON nested more than 10,000 levels deep also exits `1` with one `internal error:` line. 0.2.6's nesting limit came from the C stack, so it varied by platform and stack size: under Python 3.15 it read about 13,800 nested arrays on Windows and 65,000 on Linux with an 8 MiB stack. Between 10,000 levels and that limit, 0.2.6 read the file and the binary stops.
 - Operating-system error text inside a refusal message (the part after the path) can be worded differently, particularly on Windows.
+- An unwritable stdout or stderr gives 0.2.6's exit code: `120` when buffered output cannot be flushed at exit, `1` when an unbuffered (`PYTHONUNBUFFERED`) status line cannot be written. Where 0.2.6 printed a traceback for that failure, the binary prints one `internal error:` line ending in the exception line, which names `BrokenPipeError` for a broken pipe outside Windows and `OSError` otherwise.
 
 
 # v0.2.6

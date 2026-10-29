@@ -14,6 +14,17 @@ const GIT_ENV: &[&str] = &[
     "GIT_OBJECT_DIRECTORY",
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
 ];
+/// The system temp directory, resolved as pytest's `tmp_path` is. Windows
+/// runners spell TEMP with an 8.3 short name (`RUNNER~1`), which git does not
+/// match against the resolved working directory in `GIT_CEILING_DIRECTORIES`.
+fn resolved_temp_dir() -> PathBuf {
+    let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    match temp.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+        Some(rest) if !rest.starts_with("UNC\\") => PathBuf::from(rest),
+        _ => temp,
+    }
+}
+
 struct Repo {
     root: PathBuf,
 }
@@ -25,7 +36,7 @@ impl Drop for Repo {
 impl Repo {
     fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let root = std::env::temp_dir().join(format!(
+        let root = resolved_temp_dir().join(format!(
             "evatt-rust-cli-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)

@@ -194,18 +194,38 @@ fn message(error: &io::Error) -> String {
 pub fn file_error(error: &io::Error, path: &str) -> String {
     match error.raw_os_error() {
         Some(code) if cfg!(windows) => {
-            let (errno, text) = match code {
-                2 | 3 | 15 | 161 => (2, "No such file or directory"),
-                5 | 32 | 33 | 19 => (13, "Permission denied"),
-                80 | 183 => (17, "File exists"),
-                267 => (20, "Not a directory"),
-                112 => (28, "No space left on device"),
-                _ => (22, "Invalid argument"),
-            };
+            let (errno, text) = crt_errno(code);
             format!("[Errno {errno}] {text}: {}", quoted(path))
         }
         Some(code) => format!("[Errno {code}] {}: {}", message(error), quoted(path)),
         None => message(error),
+    }
+}
+
+/// The C runtime errno and its text for a Windows system error code.
+fn crt_errno(code: i32) -> (i32, &'static str) {
+    match code {
+        2 | 3 | 15 | 161 => (2, "No such file or directory"),
+        5 | 32 | 33 | 19 => (13, "Permission denied"),
+        80 | 183 => (17, "File exists"),
+        267 => (20, "Not a directory"),
+        112 => (28, "No space left on device"),
+        _ => (22, "Invalid argument"),
+    }
+}
+
+/// `f"{type(exc).__name__}: {exc}"` for a failed write to a standard stream,
+/// which names no file: `OSError: [Errno 22] Invalid argument` for a closed
+/// pipe on Windows, `BrokenPipeError: [Errno 32] Broken pipe` elsewhere.
+pub fn stream_error(error: &io::Error) -> String {
+    match error.raw_os_error() {
+        Some(code) if cfg!(windows) => {
+            let (errno, text) = crt_errno(code);
+            format!("OSError: [Errno {errno}] {text}")
+        }
+        Some(32) => format!("BrokenPipeError: [Errno 32] {}", message(error)),
+        Some(code) => format!("OSError: [Errno {code}] {}", message(error)),
+        None => format!("OSError: {}", message(error)),
     }
 }
 
