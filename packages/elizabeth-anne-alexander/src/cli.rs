@@ -651,8 +651,31 @@ fn parse_options(
 }
 
 /// Write one line; the text is already free of unencodable characters.
-fn emit(stream: &mut dyn Write, text: &str) {
-    let _ = writeln!(stream, "{text}");
+fn emit(stream: &mut dyn Write, text: &str) -> std::io::Result<()> {
+    writeln!(stream, "{text}")
+}
+
+/// A report line that cannot be written: `_emit` catches only
+/// UnicodeEncodeError, so the OSError escaped `main` as a traceback (exit 1).
+fn unwritten(error: std::io::Error) -> Failure {
+    Failure::Crash(stream_error(&error))
+}
+
+/// `f"{type(exc).__name__}: {exc}"` for a failed write to a standard stream,
+/// which names no file: `OSError: [Errno 22] Invalid argument` for a closed
+/// pipe on Windows, `BrokenPipeError: [Errno 32] Broken pipe` elsewhere.
+pub fn stream_error(error: &std::io::Error) -> String {
+    let mut text = error.to_string();
+    if let Some(at) = text.rfind(" (os error ") {
+        text.truncate(at);
+    }
+    match error.raw_os_error() {
+        Some(112) if cfg!(windows) => "OSError: [Errno 28] No space left on device".into(),
+        Some(_) if cfg!(windows) => "OSError: [Errno 22] Invalid argument".into(),
+        Some(32) => format!("BrokenPipeError: [Errno 32] {text}"),
+        Some(code) => format!("OSError: [Errno {code}] {text}"),
+        None => format!("OSError: {text}"),
+    }
 }
 
 /// Refuse a validation output that names one of the files validate_review just read.
@@ -738,13 +761,14 @@ fn run_evaluate(
     emit(
         stdout,
         &format!("elizabeth-anne-alexander: REVIEW_READY; {shown} bounded finding(s){truncation}"),
-    );
+    )
+    .map_err(unwritten)?;
     for (name, path) in [
         ("model", &outputs.model),
         ("evidence", &outputs.evidence),
         ("receipt", &outputs.receipt),
     ] {
-        emit(stdout, &format!("  {name}: {}", crate::pypath::text(path)));
+        emit(stdout, &format!("  {name}: {}", crate::pypath::text(path))).map_err(unwritten)?;
     }
     Ok(())
 }
@@ -782,7 +806,8 @@ fn run_validate(
             text("decision_count"),
             text("undecided_count")
         ),
-    );
+    )
+    .map_err(unwritten)?;
     Ok(())
 }
 
@@ -791,6 +816,7 @@ pub fn main(args: &[String], env: &Env, stdout: &mut dyn Write, stderr: &mut dyn
     let prog = "elizabeth-anne-alexander";
     let parsed = match parse(prog, args) {
         Ok(parsed) => parsed,
+        // argparse's _print_message ignores an OSError from either stream.
         Err(Exit::Help(text)) => {
             let _ = write!(stdout, "{text}");
             return 0;
@@ -807,12 +833,16 @@ pub fn main(args: &[String], env: &Env, stdout: &mut dyn Write, stderr: &mut dyn
     };
     match run(env, parsed, stdout) {
         Ok(()) => 0,
+        // A diagnostic that cannot be written raised from the handler (exit 1);
+        // main settles what that leaves pending on stderr.
         Err(Failure::Gateway(message)) => {
-            emit(stderr, &format!("elizabeth-anne-alexander: blocked: {message}"));
-            2
+            match emit(stderr, &format!("elizabeth-anne-alexander: blocked: {message}")) {
+                Ok(()) => 2,
+                Err(_) => 1,
+            }
         }
         Err(Failure::Crash(message)) => {
-            emit(stderr, &format!("elizabeth-anne-alexander: internal error: {message}"));
+            let _ = emit(stderr, &format!("elizabeth-anne-alexander: internal error: {message}"));
             1
         }
     }

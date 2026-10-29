@@ -6,8 +6,8 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::argtheme::{self, Stream, Theme};
-use crate::pytext;
 use crate::workpaper::{self, Failure};
+use crate::{oserror, pytext};
 
 const DESCRIPTION: &str = "Local grant allocation and funding workpapers from explicitly reviewed inputs.";
 const FLAGS: [&str; 4] = ["-h", "--help", "--input", "--output"];
@@ -303,10 +303,38 @@ fn help_exit(flag: &str, explicit: Option<(String, bool)>) -> Exit {
     }
 }
 
+/// The status line for a written workpaper, and its exit code.
+fn report(result: &crate::pyjson::Json, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
+    let status = result.get("status").and_then(|s| match s {
+        crate::pyjson::Json::Str(text) => text.to_utf8(),
+        _ => None,
+    });
+    let count = match result.get("findings") {
+        Some(crate::pyjson::Json::Array(items)) => items.len(),
+        _ => 0,
+    };
+    if let Err(error) = writeln!(
+        stdout,
+        "grant-workpaper: {}; {count} review items",
+        status.unwrap_or_default()
+    ) {
+        // The script's last print sat outside its handler, so a failed write
+        // ended it with a traceback.
+        let _ = writeln!(
+            stderr,
+            "grant-workpaper: internal error: {}",
+            oserror::stream_error(&error)
+        );
+        return 1;
+    }
+    if count > 0 { 2 } else { 0 }
+}
+
 /// `main(argv)`: the process exit code.
 pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
     let (input, output) = match parse(args) {
         Ok(parsed) => parsed,
+        // argparse's _print_message ignores an OSError from either stream.
         Err(Exit::Help) => {
             let _ = write!(stdout, "{}", help(prog, argtheme::theme(Stream::Stdout)));
             return 0;
@@ -331,22 +359,9 @@ pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, std
     let result = workpaper::review(&input, cwd);
     let outcome = result.and_then(|result| workpaper::write(&result, &output, cwd).map(|()| result));
     match outcome {
-        Ok(result) => {
-            let status = result.get("status").and_then(|s| match s {
-                crate::pyjson::Json::Str(text) => text.to_utf8(),
-                _ => None,
-            });
-            let count = match result.get("findings") {
-                Some(crate::pyjson::Json::Array(items)) => items.len(),
-                _ => 0,
-            };
-            let _ = writeln!(
-                stdout,
-                "grant-workpaper: {}; {count} review items",
-                status.unwrap_or_default()
-            );
-            if count > 0 { 2 } else { 0 }
-        }
+        Ok(result) => report(&result, stdout, stderr),
+        // A diagnostic that cannot be written raised from the handler: exit 1,
+        // as here. main settles what that leaves pending on stderr.
         Err(Failure::Error(message)) => {
             let _ = writeln!(stderr, "grant-workpaper: {message}");
             1
