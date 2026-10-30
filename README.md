@@ -15,7 +15,7 @@
 [![Snyk](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml/badge.svg?branch=main)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml)
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=ryanduguid_accounting-review-pipeline&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
 [![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)<br>
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/ryanduguid/accounting-review-pipeline?label=Scorecard&labelColor=000000&style=flat)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
+[![OpenSSF Scorecard](https://raw.githubusercontent.com/ryanduguid/.github/badges/ryanduguid/accounting-review-pipeline.svg)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15430/badge)](https://www.bestpractices.dev/projects/15430)
 [![SLSA 3](.github/assets/badges/slsa.svg)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 [![VirusTotal](.github/assets/badges/virustotal.svg)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
