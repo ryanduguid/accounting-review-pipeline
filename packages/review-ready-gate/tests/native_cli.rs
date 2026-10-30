@@ -402,7 +402,6 @@ fn deeply_nested_json_is_a_named_input_error_in_the_real_process() {
     }
 }
 
-#[cfg(feature = "probe")]
 fn payloads(path: &std::path::Path) -> [Option<Vec<u8>>; 3] {
     review_ready_gate::report::PACK_NAMES.map(|name| fs::read(path.join(name)).ok())
 }
