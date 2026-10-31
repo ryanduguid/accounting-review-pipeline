@@ -12,7 +12,6 @@
 [![tests](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/ryanduguid/accounting-review-pipeline/graph/badge.svg)](https://codecov.io/gh/ryanduguid/accounting-review-pipeline)
 [![CodeQL](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/codeql.yml)
-[![Snyk](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml/badge.svg?branch=main)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/snyk.yml)
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=ryanduguid_accounting-review-pipeline&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ryanduguid_accounting-review-pipeline)
 [![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)<br>
 [![OpenSSF Scorecard](https://raw.githubusercontent.com/ryanduguid/.github/badges/ryanduguid/accounting-review-pipeline.svg)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
