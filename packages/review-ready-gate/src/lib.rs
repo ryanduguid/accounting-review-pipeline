@@ -8,6 +8,9 @@ pub mod documents;
 pub mod engine;
 #[cfg(test)]
 mod evaluation_tests;
+#[cfg(any(test, feature = "tools"))]
+#[doc(hidden)]
+pub mod fuzzing;
 mod isodate;
 pub mod loader;
 pub mod models;

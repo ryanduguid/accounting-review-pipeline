@@ -25,9 +25,17 @@ default:
 setup:
     uv sync --locked --group dev
 
-# Reproduce the fictional close pack outside this checkout. REVIEW preserves exit 2.
+# Reproduce the fictional close pack outside this checkout. The sample needs
+# review, so the CLI exits 2; the recipe succeeds on that exit alone.
 demo:
+    #!/usr/bin/env bash
+    set -uo pipefail
     cargo run --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control -- review --current packages/monthly-close-control-plane/examples/current_trial_balance.csv --prior packages/monthly-close-control-plane/examples/prior_trial_balance.csv --mapping packages/monthly-close-control-plane/examples/account_mapping.csv --subledger packages/monthly-close-control-plane/examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note packages/monthly-close-control-plane/examples/review_note.json --output ../close-control-demo
+    status=$?
+    if [ "${status}" -ne 2 ]; then
+        echo "demo: expected exit 2 (REVIEW), got ${status}" >&2
+        exit 1
+    fi
 
 # Run every component's test suite, then the joined trial-balance conformance
 # test and the shared behavioural conformance check.

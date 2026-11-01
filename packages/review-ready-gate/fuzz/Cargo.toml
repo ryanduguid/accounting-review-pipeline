@@ -1,0 +1,23 @@
+[package]
+name = "review-ready-gate-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+review-ready-gate = { path = "..", features = ["tools"] }
+
+# A separate workspace, so the component's own build never compiles the fuzzer.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "pack_loaders"
+path = "fuzz_targets/pack_loaders.rs"
+test = false
+doc = false
+bench = false

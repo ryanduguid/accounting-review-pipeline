@@ -1,0 +1,8 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Assets,100,Operating Bank,1000,15000.00,0.00,120000.00,0.00
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Assets,110,Trade Debtors,1100,12000.00,0.00,85000.00,0.00
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Liabilities,200,Trade Creditors,2000,0.00,9000.00,0.00,65000.00
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Revenue,300,Sales Revenue,4000,0.00,14000.00,0.00,130000.00
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Expenses,400,Cost of Sales,5000,8000.00,0.00,80000.00,0.00
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Expenses,500,Operating Expenses,6000,12000.00,0.00,90000.00,0.00
+2026-03-31,Cedar and Pine Consulting Pty Ltd,Equity,900,Retained Earnings,3000,0.00,24000.00,0.00,180000.00

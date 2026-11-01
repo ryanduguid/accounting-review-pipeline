@@ -36,9 +36,9 @@ jobs:
   cargo-fuzz:
     name: fuzz ${{ matrix.target }} with libFuzzer
     # The Monthly Close loaders and corpus under coverage-guided libFuzzer,
-    # with the Xero Trial Balance response path. It needs a nightly compiler
-    # and a longer build, so it runs weekly and on demand and adds nothing to
-    # each push to main.
+    # with the Review Ready pack loaders and the Xero Trial Balance response
+    # path. It needs a nightly compiler and a longer build, so it runs weekly
+    # and on demand and adds nothing to each push to main.
     if: github.event_name != 'push'
     timeout-minutes: 20
     runs-on: ubuntu-latest
@@ -51,6 +51,9 @@ jobs:
           - package: monthly-close-control-plane
             target: close_loaders
             seeds: ../../fuzz/corpus
+          - package: review-ready-gate
+            target: pack_loaders
+            seeds: fuzz/seeds
           - package: xero-trial-balance-export
             target: report_json
             seeds: fuzz/seeds
