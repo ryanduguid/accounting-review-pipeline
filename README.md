@@ -25,8 +25,8 @@
 
 Eight independently versioned components that carry an Australian month end from a
 Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
-close controls, a workpaper readiness gate, an Excel toolkit, a Power BI project and
-grant acquittal workpapers.
+close controls, a workpaper readiness gate, a ledger review gate, an Excel toolkit, a
+Power BI project, grant acquittal workpapers and evatt, a local pseudonymisation tool.
 They are joined by local files and commands, not by a shared runtime, and each keeps
 its own distribution name, version, licence and command.
 
@@ -34,7 +34,7 @@ They produce exception reports and review packs for an accountant to work throug
 Close-control components read local files and refuse rather than guessing: a trial balance
 that does not tie is not exported, and an incomplete pack does not reach manager
 review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
-before writing its CSV (see packages/xero-trial-balance-export/README.md).
+before writing its CSV (see its [README](packages/xero-trial-balance-export/README.md)).
 None of them approves a close, locks a period or lodges anything.
 
 For a Xero Activity Statement transaction GST review, use the
@@ -74,13 +74,13 @@ This calls the existing `close-control review` command with the supplied fiction
 
 The CLI exits 2 because the sample needs review. `just demo` accepts that exit alone: it succeeds on exit 2 and fails on any other status, including 0. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
 
-Check that the four result files agree before reviewing the pack:
+Check that the 4 result files agree before reviewing the pack:
 
 ```bash
 cargo run --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control -- view --pack-dir ../close-control-demo
 ```
 
-The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all four result files together and record each review decision in your workpaper. The [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md) explains installation from source.
+The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all 4 result files together and record each review decision in your workpaper. The [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md) explains installation from source.
 
 The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. The [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) configuration includes Rust and the Python development tools; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota. The updated container has not been built locally.
 
@@ -97,16 +97,16 @@ This repository brings together Monthly Close Controls and its related tools. It
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
 It holds 8 independently versioned components joined only by local files and commands:
 
-| Component | Directory | Identity | Version |
-|---|---|---|---|
-| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | native Rust commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 1.0.0 (unreleased) |
-| Workpaper Review Gate | `packages/review-ready-gate/` | native Rust command `review-ready`; Python runtime and import API removed | 1.0.0 (unreleased) |
-| Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust command `close-control`; Python runtime and import API removed | 1.0.0 (unreleased) |
-| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander` from 1.0.0 (unreleased); 0.2.6 is the released Python distribution with import `elizabeth_anne_alexander` | 0.2.6 |
-| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 1.0.0 |
-| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application, no release | none |
-| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo, no release | 0.2.0 |
-| evatt | `packages/evatt/` | Rust binary `evatt` from 1.0.0 (unreleased); a local pseudonymisation boundary, no network of any kind | 0.2.0 |
+| Component | Directory | Identity | Source version | Latest release |
+|---|---|---|---|---|
+| Xero Trial Balance Export | `packages/xero-trial-balance-export/` | native Rust commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 1.0.0 (unreleased) | 0.1.15, Python, PyPI |
+| Workpaper Review Gate | `packages/review-ready-gate/` | native Rust command `review-ready`; Python runtime and import API removed | 1.0.0 (unreleased) | 0.3.0, Python, PyPI |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust command `close-control`; Python runtime and import API removed | 1.0.0 (unreleased) | 0.2.0, Python, PyPI |
+| Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander`; the released Python distribution imports `elizabeth_anne_alexander` | 1.0.0 (unreleased) | 0.2.6, Python, PyPI |
+| Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 1.0.0 | 1.0.0, GitHub release archive |
+| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application | none | none |
+| Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo | 0.2.0 | none |
+| evatt | `packages/evatt/` | Rust binary `evatt`; a local pseudonymisation boundary, no network of any kind | 1.0.0 (unreleased) | 0.2.0, GitHub release only |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly
@@ -241,8 +241,10 @@ To check a downloaded release's checksum and SLSA provenance, follow [Verify a r
 The Rust Monthly Close Controls and Workpaper Review Gate 1.0.0 explicitly block publication until a native
 publisher is approved. The Xero exporter also has no native publisher.
 The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
-until their Rust release paths are approved. Version 0.2.6 remains the released
-ledger-review Python distribution on PyPI; evatt 0.2.0 was never on PyPI.
+until their Rust release paths are approved. The PyPI releases in the component table
+(Xero exporter 0.1.15, Workpaper Review Gate 0.3.0, Monthly Close Controls 0.2.0 and the
+ledger review gate 0.2.6) are the earlier Python distributions; they predate the native
+commands documented here. evatt 0.2.0 was released on GitHub only, never on PyPI.
 
 ## Contract
 
