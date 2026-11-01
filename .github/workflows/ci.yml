@@ -1,7 +1,7 @@
 name: tests
 # removed-jobs: component, test, package, lint, windows, codecov
 # Native component checks run on Linux and Windows. The dependency audit checks
-# Monthly Close Controls against RustSec; the Windows workspace keeps the joined
+# every tracked Cargo.lock, including fuzz tools; the Windows workspace keeps the joined
 # Python conformance consumers. pipeline-gates reports for every pull request.
 
 on:
@@ -26,9 +26,6 @@ jobs:
       contents: read
     timeout-minutes: 15
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/monthly-close-control-plane
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,8 +35,23 @@ jobs:
         with:
           tool: cargo-audit@0.22.2
           fallback: none
-      - name: Audit the native dependency lock
-        run: cargo audit --deny warnings
+      - name: Audit every native dependency lock
+        shell: bash
+        run: |
+          lock_list="$RUNNER_TEMP/native-audit-locks"
+          git ls-files -z -- Cargo.lock '**/Cargo.lock' > "$lock_list"
+          if [[ ! -s "$lock_list" ]]; then
+            echo "No tracked Cargo.lock files found" >&2
+            exit 1
+          fi
+          status=0
+          while IFS= read -r -d '' lock; do
+            echo "Auditing $lock"
+            if ! cargo audit --file "$lock" --deny warnings; then
+              status=1
+            fi
+          done < "$lock_list"
+          exit "$status"
 
   rust:
     # These five packages are native Rust crates from 1.0.0.

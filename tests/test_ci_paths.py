@@ -5,9 +5,12 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import os
 import re
+import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +30,88 @@ def configured_ci_paths(workflow: str) -> list[str]:
     match = re.search(r"(?m)^(\s+)CI_PATHS: \|\n((?:\1  .*\n)+)", text)
     assert match is not None, f"{workflow} declares no CI_PATHS block"
     return [line.strip() for line in match.group(2).splitlines() if line.strip()]
+
+
+class NativeAuditTests(unittest.TestCase):
+    def run_audit(self, locks: list[str], *, failed_lock: str = "", broken_git: bool = False):
+        """Run the workflow's real shell step against a disposable tracked tree."""
+        text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = re.search(r"(?ms)^  dependency-audit:\n(.*?)(?=^  \S|\Z)", text)
+        self.assertIsNotNone(job)
+        step = re.search(r"(?m)^        run: (.+)\n((?:          .*\n)*)", job[1])
+        self.assertIsNotNone(step)
+        script = textwrap.dedent(step[2]) if step[1] == "|" else step[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "--quiet", directory], check=True)
+            for name in locks:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# fabricated lock fixture\n", encoding="utf-8")
+                subprocess.run(["git", "-C", directory, "add", "--", name], check=True)
+            untracked = root / "untracked/Cargo.lock"
+            untracked.parent.mkdir()
+            untracked.write_text("# not a maintained lock\n", encoding="utf-8")
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            cargo = bin_dir / "cargo"
+            cargo.write_text(
+                '#!/usr/bin/env bash\nfile=Cargo.lock\n'
+                'while (($#)); do\n'
+                '  if [[ "$1" == --file ]]; then file=$2; shift; fi\n'
+                '  shift\ndone\n'
+                'printf "%s\\0" "$file" >> "$AUDIT_LOG"\n'
+                '[[ -f "$file" && "$file" != "$FAIL_LOCK" ]]\n',
+                encoding="utf-8", newline="\n",
+            )
+            cargo.chmod(0o755)
+            if broken_git:
+                # A function, not a PATH entry: Git Bash on Windows puts its own git first on PATH.
+                script = 'git() { printf "packages/first/Cargo.lock\\0"; return 42; }\n' + script
+            log = root / "audit.log"
+            env = {
+                **os.environ,
+                "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                "RUNNER_TEMP": root.as_posix(),
+                "AUDIT_LOG": log.as_posix(),
+                "FAIL_LOCK": failed_lock,
+            }
+            working = re.search(r"(?m)^        working-directory: (.+)$", job[1])
+            cwd = root / working[1] if working else root
+            cwd.mkdir(parents=True, exist_ok=True)
+            result = subprocess.run(
+                [shutil.which("bash"), "-eo", "pipefail", "-c", script],
+                cwd=cwd, env=env, capture_output=True, text=True,
+                timeout=30,
+            )
+            audited = log.read_bytes().decode().split("\0")[:-1] if log.exists() else []
+            return result, audited
+
+    def test_audits_all_tracked_locks_including_fuzz_and_new_components(self):
+        inventory = subprocess.run(
+            ["git", "ls-files", "-z", "--", "Cargo.lock", "**/Cargo.lock"],
+            cwd=ROOT, capture_output=True, check=True, timeout=30,
+        )
+        locks = inventory.stdout.decode("utf-8").split("\0")[:-1]
+        self.assertTrue(locks)
+        locks.append("packages/new component/Cargo.lock")
+        result, audited = self.run_audit(locks)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertCountEqual(audited, locks)
+
+    def test_one_failed_audit_fails_job_and_keeps_checking_other_locks(self):
+        locks = ["packages/first/Cargo.lock", "packages/second/Cargo.lock"]
+        result, audited = self.run_audit(locks, failed_lock=locks[0])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertCountEqual(audited, locks)
+
+    def test_missing_inventory_or_failed_git_cannot_pass(self):
+        for broken_git in (False, True):
+            with self.subTest(broken_git=broken_git):
+                locks = ["packages/first/Cargo.lock"] if broken_git else []
+                result, audited = self.run_audit(locks, broken_git=broken_git)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(audited, [])
 
 
 class SelectionTests(unittest.TestCase):
