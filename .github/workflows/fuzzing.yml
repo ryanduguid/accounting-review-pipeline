@@ -34,18 +34,29 @@ jobs:
           timeout 90s packages/monthly-close-control-plane/target/release/close-control-fuzz fuzz/corpus 60
 
   cargo-fuzz:
-    name: fuzz the Monthly Close loaders with libFuzzer
-    # The same loaders and corpus under coverage-guided libFuzzer. It needs a
-    # nightly compiler and a longer build, so it runs weekly and on demand and
-    # adds nothing to each push to main.
+    name: fuzz ${{ matrix.target }} with libFuzzer
+    # The Monthly Close loaders and corpus under coverage-guided libFuzzer,
+    # with the Review Ready pack loaders. It needs a nightly compiler and a
+    # longer build, so it runs weekly and on demand and adds nothing to each
+    # push to main.
     if: github.event_name != 'push'
     timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: monthly-close-control-plane
+            target: close_loaders
+            seeds: ../../fuzz/corpus
+          - package: review-ready-gate
+            target: pack_loaders
+            seeds: fuzz/seeds
     defaults:
       run:
-        working-directory: packages/monthly-close-control-plane
+        working-directory: packages/${{ matrix.package }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,13 +76,16 @@ jobs:
           curl --proto '=https' --proto-redir '=https' -sSLO "https://github.com/rust-fuzz/cargo-fuzz/releases/download/${CARGO_FUZZ_VERSION}/$asset"
           echo "${CARGO_FUZZ_SHA256}  $asset" | sha256sum --check
           tar -xzf "$asset" -C "${CARGO_HOME:-$HOME/.cargo}/bin" cargo-fuzz
-      - name: Fuzz the loaders
+      - name: Fuzz the target
         # The release binary is built for musl and defaults to that target,
         # where the address sanitiser cannot build; fuzz on glibc instead.
         # New inputs go to a scratch directory; the checked-in seeds are read.
+        env:
+          TARGET: ${{ matrix.target }}
+          SEEDS: ${{ matrix.seeds }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/close-loaders"
-          cargo +nightly-2026-10-15 fuzz run --target x86_64-unknown-linux-gnu close_loaders \
-            "$RUNNER_TEMP/close-loaders" ../../fuzz/corpus -- \
+          mkdir -p "$RUNNER_TEMP/$TARGET"
+          cargo +nightly-2026-10-15 fuzz run --target x86_64-unknown-linux-gnu "$TARGET" \
+            "$RUNNER_TEMP/$TARGET" "$SEEDS" -- \
             -max_total_time=60 -max_len=4096 -timeout=2 -rss_limit_mb=1024

@@ -72,7 +72,7 @@ just demo
 
 This calls the existing `close-control review` command with the supplied fictional trial balances, mapping, subledger and review note. It writes `../close-control-demo/`, outside the checkout, and replaces any files with the same output names. Keep this directory for the fictional demo. Open `../close-control-demo/close-summary.md` to read the findings.
 
-The CLI and `just demo` both exit 2 because the sample needs review. The recipe is reported as unsuccessful, but the generated `REVIEW` pack is the expected result. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
+The CLI exits 2 because the sample needs review. `just demo` accepts that exit alone: it succeeds on exit 2 and fails on any other status, including 0. The command does not record a new human decision. The [demo recipe](justfile) shows every input and threshold.
 
 Check that the four result files agree before reviewing the pack:
 

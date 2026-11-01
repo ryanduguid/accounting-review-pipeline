@@ -42,6 +42,7 @@ required-features = ["probe"]
 
 [features]
 probe = []
+tools = []
 
 [profile.release]
 lto = true

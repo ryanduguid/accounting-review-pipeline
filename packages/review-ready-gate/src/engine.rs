@@ -633,4 +633,268 @@ mod tests {
                 .ends_with("by 1000000000000000000000000000.")
         );
     }
+    fn amount(text: &str) -> Decimal {
+        Decimal::parse(text).unwrap()
+    }
+    fn codes(findings: &[Finding]) -> Vec<&str> {
+        findings.iter().map(|f| f.code.as_str()).collect()
+    }
+    #[test]
+    fn tolerance_may_be_zero_but_not_negative_or_non_finite() {
+        let pack = test_support::examples().join("bas-ready");
+        let run = |tolerance: &str| review_pack("bas", &pack, None, amount(tolerance), &[]);
+        assert_eq!(run("0").unwrap().status, "READY");
+        for refused in ["-0.01", "NaN", "Infinity"] {
+            assert_eq!(
+                run(refused).unwrap_err(),
+                "tie-out tolerance must be a finite non-negative decimal.",
+                "{refused}"
+            );
+        }
+    }
+    #[test]
+    fn bas_and_bank_differences_equal_to_the_tolerance_tie() {
+        let tolerance = amount("0.01");
+        let mut loaded = Loaded {
+            activity_statement: Some(vec![
+                ActivityLabel {
+                    label: "1A".into(),
+                    amount: amount("100.50"),
+                },
+                ActivityLabel {
+                    label: "1B".into(),
+                    amount: Decimal::zero(),
+                },
+            ]),
+            gst_control_gl: Some(vec![GstControlRow {
+                posted_on: crate::isodate::Date::new(2026, 3, 31).unwrap(),
+                account_id: "1".into(),
+                account_name: "GST".into(),
+                debit: Decimal::zero(),
+                credit: amount("100.49"),
+                description: "".into(),
+            }]),
+            bank_rec: Some(vec![BankRecRow {
+                account_id: "bank".into(),
+                statement_balance: amount("100.01"),
+                gl_balance: amount("100.00"),
+            }]),
+            ..Loaded::default()
+        };
+        let mut findings = Vec::new();
+        apply_bas(&loaded, &mut findings, &tolerance).unwrap();
+        apply_bank_rec(&loaded, &mut findings, &tolerance);
+        assert!(findings.is_empty(), "{:?}", codes(&findings));
+        loaded.gst_control_gl.as_mut().unwrap()[0].credit = amount("100.48");
+        loaded.bank_rec.as_mut().unwrap()[0].statement_balance = amount("100.02");
+        apply_bas(&loaded, &mut findings, &tolerance).unwrap();
+        apply_bank_rec(&loaded, &mut findings, &tolerance);
+        assert_eq!(codes(&findings), ["TIEOUT_BREAK", "BANK_REC_BREAK"]);
+    }
+    #[test]
+    fn bas_allowance_needs_both_labels_in_whole_dollars() {
+        // 1A whole and 1B in cents: the 50-cent difference is not the allowance.
+        let loaded = Loaded {
+            activity_statement: Some(vec![
+                ActivityLabel {
+                    label: "1A".into(),
+                    amount: amount("100"),
+                },
+                ActivityLabel {
+                    label: "1B".into(),
+                    amount: amount("0.50"),
+                },
+            ]),
+            gst_control_gl: Some(vec![GstControlRow {
+                posted_on: crate::isodate::Date::new(2026, 3, 31).unwrap(),
+                account_id: "1".into(),
+                account_name: "GST".into(),
+                debit: Decimal::zero(),
+                credit: amount("99.00"),
+                description: "".into(),
+            }]),
+            ..Loaded::default()
+        };
+        let mut findings = Vec::new();
+        apply_bas(&loaded, &mut findings, &amount("0.01")).unwrap();
+        assert_eq!(codes(&findings), ["TIEOUT_BREAK"]);
+    }
+    #[test]
+    fn prior_trial_balance_must_balance_on_movement_and_ytd_alike() {
+        let source = SourceSnapshot::capture(
+            &test_support::examples().join("month-end-ready/prior_trial_balance.csv"),
+            "tb",
+        )
+        .unwrap();
+        let balanced = load_canonical_tb(&source).unwrap();
+        let mut findings = Vec::new();
+        let mut loaded = Loaded {
+            prior_trial_balance: Some(balanced.clone()),
+            ..Loaded::default()
+        };
+        apply_trial_balance(&loaded, &mut findings).unwrap();
+        assert!(findings.is_empty(), "{:?}", codes(&findings));
+        for movement_only in [true, false] {
+            let mut rows = balanced.clone();
+            if movement_only {
+                rows[0].debit = rows[0].debit.add(&amount("1")).value;
+            } else {
+                rows[0].ytd_debit = rows[0].ytd_debit.add(&amount("1")).value;
+            }
+            loaded.prior_trial_balance = Some(rows);
+            findings.clear();
+            apply_trial_balance(&loaded, &mut findings).unwrap();
+            assert_eq!(codes(&findings), ["TB_UNBALANCED"], "{movement_only}");
+        }
+    }
+    #[test]
+    fn only_unresolved_blocking_open_items_block() {
+        let item = |severity: &str, status: &str, resolution: &str| OpenItem {
+            item_id: format!("{severity}-{status}-{resolution}"),
+            severity: severity.into(),
+            owner: "AB".into(),
+            due_date: crate::isodate::Date::new(2026, 4, 5).unwrap(),
+            status: status.into(),
+            description: "fabricated".into(),
+            resolution: resolution.into(),
+        };
+        for (row, expected) in [
+            (item("BLOCKING", "OPEN", ""), vec!["OPEN_ITEM_BLOCKING"]),
+            (item("EXPLAIN", "OPEN", ""), vec![]),
+            (item("BLOCKING", "OPEN", "Resolved by AB"), vec![]),
+            (
+                item("BLOCKING", "CLEARED", ""),
+                vec!["OPEN_ITEM_INCOMPLETE"],
+            ),
+            (item("BLOCKING", "CLEARED", "Filed"), vec![]),
+        ] {
+            let loaded = Loaded {
+                open_items: Some(vec![row.clone()]),
+                ..Loaded::default()
+            };
+            let mut findings = Vec::new();
+            apply_open_items(&loaded, &mut findings);
+            assert_eq!(codes(&findings), expected, "{}", row.item_id);
+        }
+    }
+    #[test]
+    fn late_gst_postings_show_three_dates_then_a_count() {
+        for (late, suffix) in [(3, "2026-04-03."), (4, "2026-04-03 and 1 more.")] {
+            let tmp = TempDir::new();
+            let pack_dir = tmp.join("pack");
+            test_support::copy_example("bas-ready", &pack_dir);
+            let mut rows = String::from("Date,AccountID,AccountName,Debit,Credit,Description\n");
+            for day in 1..=late {
+                rows.push_str(&format!("2026-04-0{day},820,GST Payable,0.00,0.00,late\n"));
+            }
+            fs::write(pack_dir.join("gst_control_gl.csv"), rows).unwrap();
+            let pack = review("bas", &pack_dir).unwrap();
+            let finding = pack
+                .findings
+                .iter()
+                .find(|f| f.code == "PERIOD_ORDER" && f.slot == "gst_control_gl")
+                .unwrap();
+            assert!(
+                finding
+                    .reason
+                    .contains("2026-04-01, 2026-04-02, 2026-04-03")
+                    && finding.reason.contains(suffix),
+                "{late}: {}",
+                finding.reason
+            );
+        }
+    }
+    #[test]
+    fn year_end_lines_need_a_tie_with_its_workpaper_and_source() {
+        let row = |status: &str, workpaper_ref: &str, source_file: &str| TieOutRow {
+            statement_line: "Cash".into(),
+            workpaper_ref: workpaper_ref.into(),
+            source_file: source_file.into(),
+            status: status.into(),
+        };
+        for (line, expected) in [
+            (row("TIED", "WP-100", "trial_balance.csv"), vec![]),
+            (
+                row("TIED", "", "trial_balance.csv"),
+                vec!["TIEOUT_UNSUPPORTED"],
+            ),
+            (row("TIED", "WP-100", ""), vec!["TIEOUT_UNSUPPORTED"]),
+            (
+                row("UNSUPPORTED", "WP-100", "trial_balance.csv"),
+                vec!["TIEOUT_UNSUPPORTED"],
+            ),
+            (
+                row("EXCEPTION", "WP-100", "trial_balance.csv"),
+                vec!["TIEOUT_BREAK"],
+            ),
+        ] {
+            let loaded = Loaded {
+                tie_out_matrix: Some(vec![line.clone()]),
+                ..Loaded::default()
+            };
+            let mut findings = Vec::new();
+            apply_year_end(&loaded, &mut findings);
+            assert_eq!(codes(&findings), expected, "{line:?}");
+        }
+    }
+    #[test]
+    fn only_findings_open_on_the_prior_pack_are_repeats() {
+        let pack = review("bas", &test_support::examples().join("bas-not-ready")).unwrap();
+        assert!(pack.findings.iter().any(|f| !f.repeat));
+        for finding in &pack.findings {
+            assert_eq!(
+                finding.repeat,
+                finding.code == "MISSING_ARTEFACT" && finding.slot == "gst_control_gl",
+                "{} {}",
+                finding.code,
+                finding.slot
+            );
+        }
+    }
+    #[test]
+    fn a_review_note_may_be_dated_on_the_period_end_but_not_before() {
+        let tmp = TempDir::new();
+        let pack = test_support::examples().join("bas-ready");
+        for (reviewed_on, accepted) in [("2026-03-31", true), ("2026-03-30", false)] {
+            let note = tmp.join(format!("note-{reviewed_on}.json"));
+            fs::write(
+                &note,
+                format!(r#"{{"reviewer_initials": "RD", "reviewed_on": "{reviewed_on}", "comment": "fabricated"}}"#),
+            )
+            .unwrap();
+            let result = review_pack("bas", &pack, Some(&note), amount("0.01"), &[]);
+            assert_eq!(result.is_ok(), accepted, "{reviewed_on}: {result:?}");
+        }
+    }
+    #[test]
+    fn documents_are_checked_against_the_pack_entity_and_period() {
+        let pack = test_support::examples().join("bas-ready");
+        let invoice = test_support::examples().join("document-intake/invoice.txt");
+        for (period, mismatch) in [("2026-03-31", false), ("2026-06-30", true)] {
+            let tmp = TempDir::new();
+            let bundle = crate::documents::create_intake(crate::documents::IntakeOptions {
+                source: &invoice,
+                text: &invoice,
+                output: &tmp.join("bundle"),
+                entity: "Cedar and Pine Consulting Pty Ltd",
+                period,
+                origin: "manual",
+                version: "",
+            })
+            .unwrap();
+            let result = review_pack("bas", &pack, None, amount("0.01"), &[bundle]).unwrap();
+            assert!(
+                result.source_evidence.len() > test_support::ready_pack().source_evidence.len(),
+                "{period}"
+            );
+            assert_eq!(
+                result
+                    .findings
+                    .iter()
+                    .any(|f| f.code == "DOCUMENT_CONTEXT_MISMATCH"),
+                mismatch,
+                "{period}"
+            );
+        }
+    }
 }

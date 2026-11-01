@@ -1,0 +1,8 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-05-31,Varrock Ventures Pty Ltd,Assets,100,Operating Bank,1000,10000.00,0.00,105000.00,0.00
+2026-05-31,Varrock Ventures Pty Ltd,Assets,110,Trade Debtors,1100,8000.00,0.00,73000.00,0.00
+2026-05-31,Varrock Ventures Pty Ltd,Liabilities,200,Trade Creditors,2000,0.00,6000.00,0.00,56000.00
+2026-05-31,Varrock Ventures Pty Ltd,Revenue,300,Sales Revenue,4000,0.00,11000.00,0.00,116000.00
+2026-05-31,Varrock Ventures Pty Ltd,Expenses,400,Cost of Sales,5000,5000.00,0.00,72000.00,0.00
+2026-05-31,Varrock Ventures Pty Ltd,Expenses,500,Operating Expenses,6000,9000.00,0.00,78000.00,0.00
+2026-05-31,Varrock Ventures Pty Ltd,Equity,900,Retained Earnings,3000,0.00,15000.00,0.00,156000.00

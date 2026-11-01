@@ -10,7 +10,7 @@ on:
     branches: [main]
   pull_request:
     paths:
-      - "packages/monthly-close-control-plane/docs/reviewer-quick-start.md"
+      - "packages/monthly-close-control-plane/**"
       - ".github/workflows/reviewer-quick-start.yml"
 
 permissions:
