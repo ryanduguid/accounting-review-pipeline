@@ -105,7 +105,9 @@ Run every check from the owning component directory with its documented commands
 | evatt | `packages/evatt/` | `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings` and `cargo test --locked --all-features`; the differential probe is enabled only with `--features probe` |
 
 `ci.yml`'s `rust` job runs native package checks on Linux and Windows. Its
-`dependency-audit` job checks Monthly Close Controls against RustSec. The Excel
+`dependency-audit` job checks every tracked `Cargo.lock` against RustSec, including
+the Monthly Close fuzz tool. New component locks enter the same audit automatically;
+an empty or failed inventory fails the job. The Excel
 adapter and grant application retain Python tooling checked with their own
 Ruff, mypy and unittest settings. The application Rust crates run in the
 standard-library workflow. Power BI uses native commands for its generator,
