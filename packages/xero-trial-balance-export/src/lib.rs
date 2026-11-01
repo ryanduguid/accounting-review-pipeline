@@ -5,6 +5,9 @@ pub mod cli;
 pub mod config;
 pub mod dpapi;
 pub mod export;
+#[cfg(any(test, feature = "tools"))]
+#[doc(hidden)]
+pub mod fuzzing;
 pub mod http;
 mod http_date;
 #[cfg(any(test, feature = "tools"))]

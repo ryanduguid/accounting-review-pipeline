@@ -34,6 +34,15 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
 
+  # The separately locked cargo-fuzz crate.
+  - package-ecosystem: "cargo"
+    directory: "/packages/xero-trial-balance-export/fuzz"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+
   # The root uv workspace lock. `uv run --locked` inside every component
   # directory validates this lock, not the component's, so it must move too.
   # The workspace declares no package of its own: its only direct requirements

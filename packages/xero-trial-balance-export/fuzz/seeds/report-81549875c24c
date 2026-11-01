@@ -1,0 +1,1 @@
+{"Reports": [{"ReportID": "TrialBalance", "ReportType": "TrialBalance", "ReportTitles": ["Trial Balance", "As at 30 June 2026"], "Rows": [{"RowType": "Header", "Cells": [{"Value": "Account"}, {"Value": "Debit"}, {"Value": "Credit"}, {"Value": "YTD Debit"}, {"Value": "YTD Credit"}]}]}]}

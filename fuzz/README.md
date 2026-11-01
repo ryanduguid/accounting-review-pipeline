@@ -38,6 +38,23 @@ defaults to that target, so add `--target x86_64-unknown-linux-gnu` when using
 it, as the workflow does. The workflow runs this target weekly and on demand, not after
 each push, with a 20-minute job limit.
 
+## Xero Trial Balance target
+
+`packages/xero-trial-balance-export/fuzz/` is a cargo-fuzz crate in the same
+pattern, calling the component's `fuzzing::exercise` function from its `tools`
+feature. Its `report_json` target reads the bytes as a Trial Balance response
+body, then validates the report, builds the output rows and checks that they
+balance. Its seeds are in `fuzz/seeds/`, and the component's `cargo test`
+replays them. From `packages/xero-trial-balance-export`:
+
+```sh
+mkdir -p /path/to/scratch
+cargo +nightly-2026-10-15 fuzz run --target x86_64-unknown-linux-gnu report_json /path/to/scratch fuzz/seeds -- -max_total_time=60 -max_len=4096 -timeout=2 -rss_limit_mb=1024
+```
+
+The workflow's libFuzzer job runs this target with `close_loaders` weekly and
+on demand.
+
 Both workflow jobs retain read-only repository access and neither is a merge
 gate. Successful runs are bounded evidence, not proof that every input is
 handled.
