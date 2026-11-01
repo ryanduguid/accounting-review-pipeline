@@ -236,6 +236,7 @@ One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
+To check a downloaded release's checksum and SLSA provenance, follow [Verify a release](https://github.com/ryanduguid/release-policy/blob/main/docs/verify-a-release.md).
 
 The Rust Monthly Close Controls and Workpaper Review Gate 1.0.0 explicitly block publication until a native
 publisher is approved. The Xero exporter also has no native publisher.
