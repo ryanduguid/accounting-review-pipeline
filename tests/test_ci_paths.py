@@ -66,12 +66,8 @@ class NativeAuditTests(unittest.TestCase):
             )
             cargo.chmod(0o755)
             if broken_git:
-                git = bin_dir / "git"
-                git.write_text(
-                    '#!/usr/bin/env bash\nprintf "packages/first/Cargo.lock\\0"\nexit 42\n',
-                    encoding="utf-8", newline="\n",
-                )
-                git.chmod(0o755)
+                # A function, not a PATH entry: Git Bash on Windows puts its own git first on PATH.
+                script = 'git() { printf "packages/first/Cargo.lock\\0"; return 42; }\n' + script
             log = root / "audit.log"
             env = {
                 **os.environ,
