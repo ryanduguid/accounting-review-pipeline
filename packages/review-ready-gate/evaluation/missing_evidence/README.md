@@ -2,8 +2,8 @@
 
 ## Accounting problem
 
-A month-end pack can look finished while evidence is absent, empty, for the
-wrong period, or edited after the gate ran. This evaluation records what the
+A month-end pack can look finished whilst evidence is absent, empty, for the
+wrong period or edited after the gate ran. This evaluation records what the
 gate does in each of those cases, so a reviewer can compare it with their own
 checklist before trusting the status.
 
@@ -31,8 +31,8 @@ example in any other file. No pack contains client data.
 
 `no_bank_reconciliation` is the case to read twice. The bank reconciliation is
 optional in the month-end profile, so a balanced pack without it reaches
-`READY`. The status is true of the controls that ran; the summary's "Controls
-not run" section says the bank control did not run. A reviewer who reads only
+`READY`. The status is true of the controls that ran; the summary's 'Controls
+not run' section says the bank control did not run. A reviewer who reads only
 the status misses that.
 
 `prior_findings` appears in every row because none of these packs carries a
@@ -43,7 +43,7 @@ prior review's findings, so the repeat-finding control has nothing to compare.
 The gate writes `readiness-pack.json`, `readiness-summary.md` and
 `findings.csv`. If the summary is edited afterwards (here, the preparer
 initials changed from `CD` to `XY`), `review-ready view` refuses the pack and
-exits 1 with `preparer initials disagrees`. The viewer checks that the three
+exits 1 with `preparer initials disagrees`. The viewer checks that the 3
 files agree; it does not re-read the source files, so rerun the gate when a
 source may have changed since the pack was written.
 

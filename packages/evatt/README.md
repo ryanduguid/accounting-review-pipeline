@@ -116,7 +116,7 @@ entities.json
 *.disclosure.json
 ```
 
-The first 2 are the map itself, under whichever of the two names you use.
+The first 2 are the map itself, under whichever of the 2 names you use.
 The triage rule covers the worklist a halt writes beside `--out`. The
 disclosure rule covers local evidence records, whose metadata and map digest
 must also stay local. evatt reads the map and never writes it.
@@ -187,7 +187,7 @@ replaced by `redact` is gone, and nothing records its value.
 
 Detection is regular expressions and check digits. It has no idea what a
 document is about, and the trade-offs below all favour over-detection, because
-an extra placeholder costs a triage decision while a miss leaks.
+an extra placeholder costs a triage decision whilst a miss leaks.
 
 - **`BSB` fires on any hyphenated 3-three digit pair**, and accepts a space or
   tab between the groups when labelled, as in `BSB 062 000`. There is no check
@@ -204,7 +204,7 @@ an extra placeholder costs a triage decision while a miss leaks.
   cannot see coming out. A clean `verify` says the output agrees with the
   detector, not that the output is clean.
 - **Replacement can add a space at a touching junction.** A punctuation-starting
-  phone beside a name becomes `PERSON_01 PHONE_01`; two touching mapped values
+  phone beside a name becomes `PERSON_01 PHONE_01`; 2 touching mapped values
   become separate placeholders. Restore retains that space. Existing emphasis
   between accepted matches keeps its spacing.
 - **Some mapped junctions remain unsupported.** A punctuation-edged value after
@@ -273,7 +273,7 @@ an extra placeholder costs a triage decision while a miss leaks.
   indices and Unicode spaces around the marker also reach triage. The ambiguity
   halts when each line has fewer than 8 digits or an entity map targets
   the label or digits. Genuine hard wraps such as `TFN: 123` followed by
-  `456 782` still replace. This guard covers these four identifier families;
+  `456 782` still replace. This guard covers these 4 identifier families;
   phone numbers retain their existing detection rules.
 - **Medicare replaces the card and an optional individual reference number
   together on the same line.** A reference from 1 to 9 joined by up to 2 spaces,
@@ -371,7 +371,7 @@ can leave an incomplete record, which checking rejects. On Windows, directory
 permissions control access; POSIX creation uses owner-only file permissions.
 
 The CLI operates on one immutable snapshot of the supplied payload bytes.
-The Python library API is removed in 1.0.0; use the two commands above.
+The Python library API is removed in 1.0.0; use the 2 commands above.
 
 **Matching evidence is not permission.** The record is unsigned and can be edited
 consistently. An outer sender must independently authenticate the external human
@@ -389,4 +389,4 @@ copying or authenticate the external decision.
 
 ## Licence
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 two years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). If you redistribute this work or build on it, keep the copyright notices in [NOTICE](NOTICE).
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). If you redistribute this work or build on it, keep the copyright notices in [NOTICE](NOTICE).

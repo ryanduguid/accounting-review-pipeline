@@ -148,7 +148,7 @@ consumes and cross-checks an existing pack without changing it.
 
 Packs written by the native commands carry a `producer` block naming the component, its version,
 the source commit (or `unknown`) and the pack contract, `2`; the summary's Scope section repeats it,
-and `view` refuses a pack whose two copies disagree. It holds no time, host or path, so the same
+and `view` refuses a pack whose 2 copies disagree. It holds no time, host or path, so the same
 build and inputs still write byte-identical packs. A pack without the block is contract 1, written
 before it existed; `view` still reads one, but a `view` from before the block refuses packs that
 carry it. Building with `ACCOUNTING_REVIEW_SOURCE_COMMIT` set to a full lowercase commit SHA
