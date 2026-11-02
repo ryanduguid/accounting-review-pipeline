@@ -1,4 +1,4 @@
-//! Seeded-misstatement benchmark. Each case plants one labelled misstatement in a clean,
+//! Seeded-condition benchmark. Each case seeds one labelled condition in a clean,
 //! fabricated close and records which controls should raise. The counts measure these planted
 //! cases only, never real-world accuracy, and the README's Detection benchmark table must match
 //! them.
@@ -49,8 +49,9 @@ impl Close {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
-    /// Inside the target control's contract: it should raise.
-    Planted,
+    /// Inside the target control's contract: it should raise an exception naming this
+    /// account, or an empty account for a file-level exception.
+    Planted(&'static str),
     /// From the target control's 'Cannot detect' column: it should not raise.
     BlindSpot,
 }
@@ -256,14 +257,14 @@ const CASES: &[Case] = &[
     Case {
         id: "period-debits-off-by-a-cent",
         control: TrialBalanceIntegrity,
-        kind: Kind::Planted,
+        kind: Kind::Planted(""),
         expected: &[TrialBalanceIntegrity],
         plant: |c| c.account("100").debit += 1,
     },
     Case {
         id: "ytd-credits-off-by-5",
         control: TrialBalanceIntegrity,
-        kind: Kind::Planted,
+        kind: Kind::Planted(""),
         expected: &[TrialBalanceIntegrity],
         plant: |c| c.account("300").ytd_credit += dollars(5),
     },
@@ -283,14 +284,14 @@ const CASES: &[Case] = &[
     Case {
         id: "prior-period-in-the-previous-financial-year",
         control: FinancialYearReset,
-        kind: Kind::Planted,
+        kind: Kind::Planted(""),
         expected: &[FinancialYearReset],
         plant: |c| c.prior_date = "2026-06-30",
     },
     Case {
         id: "new-account-in-the-current-period",
         control: PeriodComparison,
-        kind: Kind::Planted,
+        kind: Kind::Planted("510"),
         expected: &[PeriodComparison],
         plant: |c| {
             c.current
@@ -301,19 +302,14 @@ const CASES: &[Case] = &[
     Case {
         id: "account-dropped-from-the-current-period",
         control: PeriodComparison,
-        kind: Kind::Planted,
+        kind: Kind::Planted("210"),
         expected: &[PeriodComparison],
-        plant: |c| {
-            c.current.retain(|a| a.id != "210");
-            let equity = c.account("900");
-            equity.credit += dollars(100);
-            equity.ytd_credit += dollars(900);
-        },
+        plant: drop_gst_payable,
     },
     Case {
         id: "expenses-overstated-by-20000",
         control: PeriodVariance,
-        kind: Kind::Planted,
+        kind: Kind::Planted("500"),
         expected: &[PeriodVariance],
         plant: |c| overstate_expenses(c, 20000),
     },
@@ -340,14 +336,14 @@ const CASES: &[Case] = &[
     Case {
         id: "account-renamed",
         control: AccountMetadata,
-        kind: Kind::Planted,
+        kind: Kind::Planted("400"),
         expected: &[AccountMetadata],
         plant: |c| c.account("400").name = "Purchases",
     },
     Case {
         id: "account-code-changed",
         control: AccountMetadata,
-        kind: Kind::Planted,
+        kind: Kind::Planted("500"),
         expected: &[AccountMetadata],
         plant: |c| c.account("500").code = "6100",
     },
@@ -361,21 +357,31 @@ const CASES: &[Case] = &[
     Case {
         id: "account-with-no-mapping-row",
         control: AccountMapping,
-        kind: Kind::Planted,
+        kind: Kind::Planted("500"),
         expected: &[AccountMapping],
         plant: |c| c.mapping.retain(|(id, _)| *id != "500"),
     },
     Case {
+        id: "prior-only-account-with-no-mapping-row",
+        control: AccountMapping,
+        kind: Kind::BlindSpot,
+        expected: &[PeriodComparison],
+        plant: |c| {
+            drop_gst_payable(c);
+            c.mapping.retain(|(id, _)| *id != "210");
+        },
+    },
+    Case {
         id: "expense-account-mapped-to-revenue",
         control: MappingCompatibility,
-        kind: Kind::Planted,
+        kind: Kind::Planted("500"),
         expected: &[MappingCompatibility],
         plant: |c| remap(c, "500", "Revenue"),
     },
     Case {
         id: "account-mapped-to-a-group-with-no-policy-entry",
         control: MappingCompatibility,
-        kind: Kind::Planted,
+        kind: Kind::Planted("500"),
         expected: &[MappingCompatibility],
         plant: |c| remap(c, "500", "Sundry"),
     },
@@ -389,7 +395,7 @@ const CASES: &[Case] = &[
     Case {
         id: "bank-account-with-no-movement",
         control: BalancePolicy,
-        kind: Kind::Planted,
+        kind: Kind::Planted("100"),
         expected: &[BalancePolicy],
         plant: |c| {
             c.account("100").debit = 0;
@@ -399,7 +405,7 @@ const CASES: &[Case] = &[
     Case {
         id: "gst-payable-on-the-debit-side",
         control: BalancePolicy,
-        kind: Kind::Planted,
+        kind: Kind::Planted("210"),
         expected: &[BalancePolicy],
         plant: gst_debit_balance,
     },
@@ -416,14 +422,14 @@ const CASES: &[Case] = &[
     Case {
         id: "debtors-ledger-differs-by-100",
         control: SubledgerReconciliation,
-        kind: Kind::Planted,
+        kind: Kind::Planted("110"),
         expected: &[SubledgerReconciliation],
         plant: |c| c.subledger[0].1 += dollars(100),
     },
     Case {
         id: "subledger-row-with-no-account",
         control: SubledgerReconciliation,
-        kind: Kind::Planted,
+        kind: Kind::Planted("999"),
         expected: &[SubledgerReconciliation],
         plant: |c| c.subledger.push(("999", dollars(100))),
     },
@@ -448,6 +454,14 @@ fn overstate_expenses(c: &mut Close, amount: i64) {
     let sales = c.account("300");
     sales.credit += dollars(amount);
     sales.ytd_credit += dollars(amount);
+}
+
+/// GST Payable leaves the current period; equity absorbs its balance and movement.
+fn drop_gst_payable(c: &mut Close) {
+    c.current.retain(|a| a.id != "210");
+    let equity = c.account("900");
+    equity.credit += dollars(100);
+    equity.ytd_credit += dollars(900);
 }
 
 fn remap(c: &mut Close, id: &str, group: &'static str) {
@@ -480,8 +494,9 @@ fn trial_balance(date: &str, accounts: &[Account]) -> String {
     csv
 }
 
-/// The controls that raised at least one exception for a close.
-fn raised(close: &Close) -> BTreeSet<&'static str> {
+/// Each control that raised, with the account its exception names (empty for a
+/// file-level exception).
+fn raised(close: &Close) -> BTreeSet<(&'static str, String)> {
     let temp = TempDir::new();
     let write = |name: &str, contents: String| {
         let path = temp.join(name);
@@ -541,11 +556,20 @@ fn raised(close: &Close) -> BTreeSet<&'static str> {
         ),
     ));
     let pack = engine::review_close(&config).unwrap();
-    Control::ALL
+    pack.exceptions
         .iter()
-        .map(|control| control.as_str())
-        .filter(|control| pack.exceptions.iter().any(|e| e.control == *control))
+        .map(|e| {
+            let control = Control::ALL
+                .iter()
+                .map(|c| c.as_str())
+                .find(|c| *c == e.control);
+            (control.unwrap(), e.account_id.clone())
+        })
         .collect()
+}
+
+fn controls(raised: &BTreeSet<(&'static str, String)>) -> BTreeSet<&'static str> {
+    raised.iter().map(|(control, _)| *control).collect()
 }
 
 fn planted(case: &Case) -> Close {
@@ -554,53 +578,67 @@ fn planted(case: &Case) -> Close {
     close
 }
 
-/// The benchmark results, one table row per benchmarked control in `models::Control` order.
-/// The clean close counts towards false alarms too.
+const HEADER: [&str; 2] = [
+    "| Control | Planted cases detected | Blind-spot cases missed, as documented | False alarms |",
+    "| --- | --- | --- | --- |",
+];
+
+/// The benchmark table: the header, one row per benchmarked control in `models::Control`
+/// order, then the totals. The clean close counts towards false alarms too.
 fn results() -> Vec<String> {
-    let outcomes: Vec<(&Case, BTreeSet<&str>)> = CASES
+    let outcomes: Vec<(&Case, BTreeSet<(&str, String)>)> = CASES
         .iter()
         .map(|case| (case, raised(&planted(case))))
         .collect();
-    let clean_raised = raised(&clean());
-    Control::ALL
-        .iter()
-        .filter(|control| CASES.iter().any(|case| case.control == **control))
-        .map(|control| {
-            let name = control.as_str();
-            let of_kind = |kind| {
-                outcomes
-                    .iter()
-                    .filter(|(case, _)| case.control == *control && case.kind == kind)
-                    .collect::<Vec<_>>()
-            };
-            let planted = of_kind(Kind::Planted);
-            let detected = planted
-                .iter()
-                .filter(|(_, raised)| raised.contains(name))
-                .count();
-            let blind = of_kind(Kind::BlindSpot);
-            let missed = blind
-                .iter()
-                .filter(|(_, raised)| !raised.contains(name))
-                .count();
-            let false_alarms = outcomes
-                .iter()
-                .filter(|(case, raised)| {
-                    raised.contains(name) && !case.expected.iter().any(|c| c.as_str() == name)
-                })
-                .count()
-                + usize::from(clean_raised.contains(name));
-            let blind_cell = if blind.is_empty() {
-                "none planted".to_owned()
-            } else {
-                format!("{missed} of {}", blind.len())
-            };
-            format!(
-                "| `{name}` | {detected} of {} | {blind_cell} | {false_alarms} |",
-                planted.len()
-            )
-        })
-        .collect()
+    let clean_raised = controls(&raised(&clean()));
+    let mut table: Vec<String> = HEADER.iter().map(|line| (*line).to_owned()).collect();
+    let mut totals = [0; 5];
+    for control in Control::ALL {
+        let name = control.as_str();
+        let cases: Vec<_> = outcomes
+            .iter()
+            .filter(|(case, _)| case.control == *control)
+            .collect();
+        if cases.is_empty() {
+            continue;
+        }
+        // Planted, detected, blind spots, missed, false alarms.
+        let mut counts = [0; 5];
+        for (case, raised) in &cases {
+            match case.kind {
+                Kind::Planted(account) => {
+                    counts[0] += 1;
+                    counts[1] += usize::from(raised.contains(&(name, account.to_owned())));
+                }
+                Kind::BlindSpot => {
+                    counts[2] += 1;
+                    counts[3] += usize::from(!controls(raised).contains(name));
+                }
+            }
+        }
+        counts[4] = outcomes
+            .iter()
+            .filter(|(case, raised)| {
+                controls(raised).contains(name) && !case.expected.iter().any(|c| c.as_str() == name)
+            })
+            .count()
+            + usize::from(clean_raised.contains(name));
+        for (total, count) in totals.iter_mut().zip(counts) {
+            *total += count;
+        }
+        table.push(row(&format!("`{name}`"), counts));
+    }
+    table.push(row("Total", totals));
+    table
+}
+
+fn row(label: &str, [planted, detected, blind, missed, false_alarms]: [usize; 5]) -> String {
+    let blind_cell = if blind == 0 {
+        "none planted".to_owned()
+    } else {
+        format!("{missed} of {blind}")
+    };
+    format!("| {label} | {detected} of {planted} | {blind_cell} | {false_alarms} |")
 }
 
 fn documented_results() -> Vec<&'static str> {
@@ -617,7 +655,6 @@ fn documented_results() -> Vec<&'static str> {
     section
         .into_iter()
         .filter(|line| line.starts_with('|'))
-        .skip(2)
         .collect()
 }
 
@@ -625,8 +662,18 @@ fn documented_results() -> Vec<&'static str> {
 fn each_case_raises_exactly_its_expected_controls() {
     assert_eq!(raised(&clean()), BTreeSet::new(), "the clean close raised");
     for case in CASES {
+        let raised = raised(&planted(case));
         let expected: BTreeSet<&str> = case.expected.iter().map(|c| c.as_str()).collect();
-        assert_eq!(raised(&planted(case)), expected, "case {}", case.id);
+        assert_eq!(controls(&raised), expected, "case {}", case.id);
+        if let Kind::Planted(account) = case.kind {
+            let target = (case.control.as_str(), account.to_owned());
+            assert!(
+                raised.contains(&target),
+                "case {}: no {} exception names account '{account}'; raised {raised:?}",
+                case.id,
+                target.0,
+            );
+        }
     }
 }
 

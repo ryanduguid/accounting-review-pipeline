@@ -390,16 +390,19 @@ run, and the pack names the optional controls it tracks under
 
 ## Detection benchmark
 
-`tests/benchmark.rs` plants 22 labelled misstatements, one at a time, in a clean
-fabricated close: a balanced July to August trial balance with a mapping, mapping
-policy, balance policy and subledger, on which no control raises. 15 cases sit
-inside a control's contract and should raise it. 7 come from a control's 'Cannot
-detect' column in [Controls](#controls) and should not. Each case also names every
-other control it should raise, and any other control that raises counts as a false
-alarm, as does any control raised on the clean close. The counts measure these
-planted cases only, not accuracy on real ledgers. `cargo test --test benchmark`
-fails when a case raises a different set of controls or this table drifts from the
-cases.
+`tests/benchmark.rs` seeds labelled conditions one at a time in a clean fabricated
+close: a balanced July to August trial balance with a mapping, mapping policy,
+balance policy and subledger, on which no control raises. A planted case sits inside
+a control's contract, and the control must raise an exception naming the seeded
+account, or the file for a file-level control. A blind-spot case comes from the
+control's 'Cannot detect' cell in [Controls](#controls), and the control must stay
+silent. Each case also names every other control it should raise; any other control
+that raises counts as a false alarm, as does any control raised on the clean close.
+'None planted' marks a control whose 'Cannot detect' cell describes what a raised
+exception cannot tell the reviewer, not a condition that passes silently. The counts
+measure these seeded cases only, not accuracy on real ledgers. `cargo test --test
+benchmark` fails when a case raises a different set of controls, or when this table,
+its header or its totals drift from the cases.
 
 | Control | Planted cases detected | Blind-spot cases missed, as documented | False alarms |
 | --- | --- | --- | --- |
@@ -408,15 +411,16 @@ cases.
 | `period_comparison` | 2 of 2 | none planted | 0 |
 | `period_variance` | 1 of 1 | 2 of 2 | 0 |
 | `account_metadata` | 2 of 2 | 1 of 1 | 0 |
-| `account_mapping` | 1 of 1 | none planted | 0 |
+| `account_mapping` | 1 of 1 | 1 of 1 | 0 |
 | `mapping_compatibility` | 2 of 2 | 1 of 1 | 0 |
 | `balance_policy` | 2 of 2 | 1 of 1 | 0 |
 | `subledger_reconciliation` | 2 of 2 | 1 of 1 | 0 |
+| Total | 15 of 15 | 8 of 8 | 0 |
 
-`calculation_evidence` and `equity_reconciliation` read evidence files and equity
-schedules rather than trial-balance rows, so the benchmark leaves them out.
-`tests/calculation_evidence.rs` covers the first, and the frozen Python differential
-(`tools/differential.rs`) exercises the second.
+`calculation_evidence` and `equity_reconciliation` need inputs this fixture does not
+supply, calculation evidence files and an equity schedule with its currency evidence,
+so the benchmark leaves them out. `tests/calculation_evidence.rs` covers the first,
+and the frozen Python differential (`tools/differential.rs`) exercises the second.
 
 ## Client queries
 
