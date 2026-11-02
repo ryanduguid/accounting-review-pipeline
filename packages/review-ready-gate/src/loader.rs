@@ -202,6 +202,7 @@ impl CsvRow {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "reads and validates one CSV's rows")]
 fn csv_rows(snapshot: &SourceSnapshot, required: &[&str], label: &str) -> Result<Vec<CsvRow>> {
     let path = pypath::text(&snapshot.path);
     let csv_error =
@@ -527,6 +528,7 @@ fn checked_initials(value: &Json, name: &str, path: &str) -> Result<String> {
     Ok(pytext::strip(&text).into())
 }
 
+#[expect(clippy::too_many_lines, reason = "validates every self-review field")]
 pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<SelfReview> {
     let path = pypath::text(&snapshot.path);
     let value = json(snapshot, false)?;

@@ -1,6 +1,10 @@
 use crate::{Failure, Result};
 
 #[cfg(windows)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one DPAPI call with its buffer handling"
+)]
 fn transform(data: &[u8], protect: bool) -> Result<Vec<u8>> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, LocalFree},

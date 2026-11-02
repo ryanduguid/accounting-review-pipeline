@@ -138,6 +138,10 @@ fn decimal(value: &Json, name: &str, path: &Path) -> Result<Decimal> {
         .map_err(|_| format!("{path}: {name} is not a decimal."))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates the whole evidence file in one place"
+)]
 pub fn load(snapshot: &SourceSnapshot) -> Result<CalculationEvidence> {
     let source = &snapshot.path;
     let path = pypath::text(source);

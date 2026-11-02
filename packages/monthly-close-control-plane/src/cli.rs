@@ -64,6 +64,10 @@ fn usage_error(command: &str, message: &str) -> i32 {
     );
     1
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match arm per command's option lists"
+)]
 fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) {
     match command {
         "review" | "workbench" => (
@@ -268,6 +272,10 @@ fn threshold(value: &str, fraction: bool) -> Result<Decimal> {
     }
     Ok(result)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "parses every option of a command in one loop"
+)]
 fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
     let (flags, required) = options(command);
     let mut result = Arguments(BTreeMap::new());
@@ -396,6 +404,10 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
     Ok(Some(result))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs review or workbench with its error paths"
+)]
 fn review(command: &str, args: &Arguments) -> i32 {
     let output = args.path("--output");
     let checked = || -> Result<()> {
@@ -522,6 +534,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
     }
     if pack.status == Status::Pass { 0 } else { 2 }
 }
+#[expect(clippy::too_many_lines, reason = "dispatches every other command")]
 fn run(command: &str, args: &Arguments) -> i32 {
     if ["review", "workbench"].contains(&command) {
         return review(command, args);
@@ -684,6 +697,10 @@ fn run(command: &str, args: &Arguments) -> i32 {
         }
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "handles --version, help and dispatch"
+)]
 pub fn main(args: Vec<OsString>) -> i32 {
     let args: Vec<_> = args.iter().map(|arg| pypath::decode_os(arg)).collect();
     if args == ["--version"] {

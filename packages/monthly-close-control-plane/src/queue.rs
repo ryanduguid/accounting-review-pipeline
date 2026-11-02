@@ -49,6 +49,10 @@ fn joined(values: &[Json], empty: &str) -> PyStr {
     }
     PyStr(result)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds one queue entry from its pack fields"
+)]
 fn entry(path: PathBuf, pack: VerifiedPack) -> Entry {
     let document = &pack.document;
     let dates = document.at("current_report_dates").as_array().unwrap();
@@ -133,6 +137,10 @@ fn validate(filters: &Filters) -> Result<()> {
 pub fn render_review_queue(paths: &[PathBuf], filters: &Filters) -> Result<String> {
     render_with(paths, filters, &mut viewer::verify_pack)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "verifies each pack and renders the queue"
+)]
 pub fn render_with(
     paths: &[PathBuf],
     filters: &Filters,

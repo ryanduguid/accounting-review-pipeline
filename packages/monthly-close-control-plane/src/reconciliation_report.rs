@@ -38,6 +38,10 @@ fn decision_csv_safe(value: &str) -> String {
         report::csv_safe(value)
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes the HTML report sections in order"
+)]
 pub fn render_html(pack: &Json) -> Result<String> {
     decimal::with_precision(40, || {
         let end = reconciliation::date(&field(pack, "period_end"))?;
@@ -163,6 +167,10 @@ pub fn render_html(pack: &Json) -> Result<String> {
         ))
     })
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "renders each report file from one pack"
+)]
 pub fn rendered(pack: &Json) -> Result<Vec<(String, Vec<u8>)>> {
     let end = reconciliation::date(&field(pack, "period_end"))?;
     let notes = pack.at("notes");

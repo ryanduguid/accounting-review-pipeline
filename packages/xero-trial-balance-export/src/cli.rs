@@ -170,6 +170,10 @@ fn negative_number(value: &str) -> bool {
         && value.bytes().any(|b| b.is_ascii_digit())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "parses every command-line option in one loop"
+)]
 pub fn parse(args: &[OsString], prog: &str, auth: bool) -> Result<Option<Options>> {
     let mut options = Options {
         date: chrono::Local::now()
@@ -307,6 +311,10 @@ pub fn parse(args: &[OsString], prog: &str, auth: bool) -> Result<Option<Options
     Ok(Some(options))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one date validation with its error messages"
+)]
 pub fn iso_date(value: &str) -> Result<String> {
     let failure = || {
         Failure::message(format!(
@@ -372,6 +380,7 @@ pub fn iso_date(value: &str) -> Result<String> {
         .ok_or_else(failure)
 }
 
+#[expect(clippy::too_many_lines, reason = "runs the export or sign-in command")]
 pub fn run(args: &[OsString], auth: bool) -> Result<()> {
     let prog = if auth { "xero-tb-auth" } else { "export-tb" };
     let Some(options) = parse(args, prog, auth)? else {

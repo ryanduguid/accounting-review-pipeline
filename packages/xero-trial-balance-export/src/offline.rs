@@ -117,6 +117,10 @@ pub struct Summary {
     pub movement: String,
     pub ytd: String,
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "summarises the fabricated sample in one pass"
+)]
 pub fn summary(text: &str) -> Result<Summary> {
     let mut reader = pycsv::DictReader::new(text.trim_start_matches('\u{feff}'))
         .map_err(|_| Failure::message("the fabricated sample has malformed CSV"))?;

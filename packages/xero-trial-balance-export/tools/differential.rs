@@ -300,6 +300,10 @@ fn command_output(command: &mut Command) -> Result<CapturedOutput, Box<dyn std::
     ))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "compares the CLI outputs case by case"
+)]
 fn compare_cli(
     python: &std::ffi::OsStr,
     baseline: &Path,
@@ -398,6 +402,10 @@ fn compare_cli(
     Ok(differences)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the differential stages in order"
+)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     if args.len() != 5 {

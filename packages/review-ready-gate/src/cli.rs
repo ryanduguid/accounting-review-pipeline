@@ -136,6 +136,10 @@ fn negative_number(text: &str) -> bool {
         && digits(before)
         && after.map_or(!before.is_empty(), |a| !a.is_empty() && digits(a))
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "parses every option of a command in one loop"
+)]
 fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments>, String> {
     let (flags, required) = options(command);
     let mut result = Arguments {
@@ -300,6 +304,10 @@ fn source_safe(
     }
     Ok(())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the gate and reports its failures"
+)]
 fn gate(args: &Arguments) -> i32 {
     let output = args.path("--output");
     if let Err(e) = report::require_output_outside_repository(&output) {
@@ -389,6 +397,10 @@ fn gate(args: &Arguments) -> i32 {
     }
     if pack.status == "READY" { 0 } else { 2 }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "handles --version, help and dispatch"
+)]
 pub fn main(args: Vec<OsString>) -> i32 {
     let args: Vec<_> = args.iter().map(|arg| pypath::decode_os(arg)).collect();
     if args == ["--version"] {

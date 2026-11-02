@@ -107,7 +107,8 @@ Run every check from the owning component directory with its documented commands
 `ci.yml`'s `rust` job runs native package checks on Linux and Windows. Its
 `dependency-audit` job checks every tracked `Cargo.lock` against RustSec, including
 the Monthly Close fuzz tool. New component locks enter the same audit automatically;
-an empty or failed inventory fails the job. The Excel
+an empty or failed inventory fails the job. The same job runs shellcheck over the
+tracked shell scripts and actionlint over the workflows. The Excel
 adapter and grant application retain Python tooling checked with their own
 Ruff, mypy and unittest settings. The application Rust crates run in the
 standard-library workflow. Power BI uses native commands for its generator,

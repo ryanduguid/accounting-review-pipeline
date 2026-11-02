@@ -147,6 +147,10 @@ fn verify_producer(producer: &Json) -> Result<()> {
     }
     Ok(())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks every review pack field in schema order"
+)]
 pub(crate) fn verify_schema(document: &Json) -> Result<()> {
     if let Some(producer) = document.get("producer") {
         verify_producer(producer)?;
@@ -382,6 +386,10 @@ fn scope_values(summary: &str, label: &str) -> Vec<String> {
         .filter_map(|line| line.strip_prefix(&prefix).map(str::to_owned))
         .collect()
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each summary section against the pack"
+)]
 fn verify_agreement(
     document: &Json,
     summary: &str,
@@ -642,6 +650,10 @@ fn verify_agreement(
     }
     Ok(evidence)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "rebuilds the pack from its document fields"
+)]
 pub(crate) fn canonical_pack(
     document: &Json,
     evidence: Vec<SourceEvidence>,
@@ -717,6 +729,7 @@ pub struct VerifiedPack {
     pub summary: String,
     pub artefact_sha256: BTreeMap<String, String>,
 }
+#[expect(clippy::too_many_lines, reason = "reads and verifies each pack file")]
 pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
     let revision = publication::snapshot_revision(directory).map_err(|e| e.to_string())?;
     let mut payloads = Vec::new();

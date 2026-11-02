@@ -8,6 +8,7 @@ pub struct Environment {
 }
 
 impl Environment {
+    #[expect(clippy::too_many_lines, reason = "reads and validates the config file")]
     pub fn load(path: &Path) -> Result<Self> {
         let bytes = match std::fs::read(path) {
             Ok(bytes) => bytes,

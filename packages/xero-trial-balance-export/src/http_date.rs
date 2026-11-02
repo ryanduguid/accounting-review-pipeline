@@ -15,6 +15,10 @@ fn integer(value: &str) -> Option<i64> {
     value.parse().ok()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "parses every accepted HTTP date form"
+)]
 pub fn parse(value: &str) -> Option<DateTime<Utc>> {
     let mut fields: Vec<String> = value.split_whitespace().map(str::to_owned).collect();
     let first = fields.first()?;

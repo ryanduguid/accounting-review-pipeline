@@ -47,3 +47,7 @@ tools = []
 [profile.release]
 lto = true
 codegen-units = 1
+
+[lints.clippy]
+# The repository's 50-line function limit (clippy.toml), denied in CI.
+too_many_lines = "warn"

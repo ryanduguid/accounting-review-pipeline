@@ -15,6 +15,10 @@ fn write(path: &Path, text: &str) -> Result<()> {
     };
     fs::write(path, text).map_err(|e| e.to_string())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds, runs and hashes the equity demo"
+)]
 fn run(output: &Path) -> Result<()> {
     let output = publication::require_output_outside_repository(output)?;
     fs::create_dir(&output).map_err(|e| e.to_string())?;

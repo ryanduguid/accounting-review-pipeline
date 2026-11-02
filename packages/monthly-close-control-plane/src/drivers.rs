@@ -48,6 +48,10 @@ pub(crate) struct Selection {
 pub(crate) fn field(value: &Json, key: &str) -> String {
     value.at(key).as_pystr().unwrap().to_utf8().unwrap()
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "selects the window's transactions in one pass"
+)]
 pub(crate) fn transactions(source: &SourceSnapshot, currency: &str) -> Result<Selection> {
     let mut by_account: BTreeMap<(String, String), Vec<Transaction>> = BTreeMap::new();
     let mut order = Vec::new();
@@ -153,6 +157,10 @@ pub fn variance_drivers(
         &mut SourceSnapshot::capture,
     )
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds every driver row from one verified pack"
+)]
 pub fn drivers_with(
     pack: &VerifiedPack,
     path: &Path,
@@ -320,6 +328,10 @@ pub fn write_drivers(result: &Json, output: &Path) -> Result<PathBuf> {
 mod tests {
     use super::*;
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one driver scenario with its assertions"
+    )]
     fn top_limits_display_while_all_window_transactions_determine_the_remainder() {
         let mut pack = VerifiedPack {
             document: Json::object([

@@ -21,6 +21,10 @@ pub struct CallbackConfig {
     pub path: String,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates the callback URI as one sequence"
+)]
 pub fn callback_config(uri: &str) -> Result<CallbackConfig> {
     let normalised: String = uri
         .trim_start_matches(|ch: char| ch as u32 <= 32)
@@ -160,6 +164,10 @@ pub struct Callback {
     pub state: Option<String>,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "reads one OAuth callback within its budget"
+)]
 fn receive(
     stream: &mut TcpStream,
     config: &CallbackConfig,

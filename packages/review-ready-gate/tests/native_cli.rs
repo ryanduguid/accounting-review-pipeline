@@ -197,6 +197,10 @@ fn refused_view(path: &std::path::Path) {
     }
 }
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one refusal case per special file type"
+)]
 fn viewer_refuses_directory_hardlink_symlink_and_fifo_payloads_before_reading() {
     for name in [
         "readiness-pack.json",
@@ -307,6 +311,10 @@ fn failed_stdout_device_returns_failure() {
 
 #[cfg(feature = "probe")]
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one Unicode path scenario with its checks"
+)]
 fn native_intake_preserves_private_use_unicode_arguments_and_paths() {
     let tmp = TempDir::new();
     let source = tmp.join("original-\u{10f800}.txt");
@@ -461,6 +469,10 @@ fn paused(path: &std::path::Path, point: &str) -> Child {
 
 #[cfg(feature = "probe")]
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one crash point per publication stage"
+)]
 fn abrupt_death_keeps_precommit_evidence_and_preserves_a_settled_commit() {
     for point in [
         "in-progress",
@@ -580,6 +592,10 @@ fn managed_sigterm_finishes_rollback_and_keeps_postcommit_generation() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one producer scenario with its assertions"
+)]
 fn the_gate_records_its_producer_and_view_refuses_an_edited_one() {
     let tmp = TempDir::new();
     let mut runs = Vec::new();

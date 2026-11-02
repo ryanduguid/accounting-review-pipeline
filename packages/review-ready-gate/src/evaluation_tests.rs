@@ -45,6 +45,7 @@ fn files(path: &Path) -> BTreeMap<String, Vec<u8>> {
         .collect()
 }
 #[test]
+#[expect(clippy::too_many_lines, reason = "one scenario per evaluation folder")]
 fn manager_review_and_missing_evidence_scenarios_remain_deterministic() {
     for folder in ["manager_review_gate", "missing_evidence"] {
         let contract = contract(folder);
@@ -101,6 +102,10 @@ fn manager_review_and_missing_evidence_scenarios_remain_deterministic() {
     }
 }
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each fixture delta against the base"
+)]
 fn missing_evidence_fixtures_contain_only_the_declared_deltas() {
     let contract = contract("missing_evidence");
     let base = files(&root().join(text(contract.at("base_fixture"))));

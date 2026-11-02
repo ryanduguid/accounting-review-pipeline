@@ -6,6 +6,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "parses its arguments, then runs the mutations"
+)]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     if args.len() != 2 {

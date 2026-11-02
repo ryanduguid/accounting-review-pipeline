@@ -121,6 +121,10 @@ pub fn finding_json(f: &Finding) -> Json {
         ("reviewer_action", Json::str(&f.reviewer_action)),
     ])
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one JSON field per pack field, in order"
+)]
 pub fn as_json(pack: &ReadinessPack) -> Result<Json> {
     let acknowledgement = pack.acknowledgement.as_ref().map_or(Json::Null, |a| {
         Json::object([
@@ -194,6 +198,10 @@ pub fn as_json(pack: &ReadinessPack) -> Result<Json> {
     }
     Ok(Json::Object(pairs))
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes the summary sections in output order"
+)]
 pub fn as_markdown(pack: &ReadinessPack) -> Result<String> {
     let absent = |s: &str| {
         if s.is_empty() {

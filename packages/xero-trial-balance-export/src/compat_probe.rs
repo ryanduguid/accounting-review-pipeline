@@ -61,6 +61,10 @@ fn amounts(value: &Json) -> Result<amount::Totals> {
     ])
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs one compatibility probe request"
+)]
 pub fn execute(input: &Json) -> Result<Json> {
     let op = report::text(input.at("op"));
     let args = match input.get("args") {

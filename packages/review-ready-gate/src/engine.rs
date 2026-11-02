@@ -93,6 +93,10 @@ pub fn tb_balanced(rows: &[TrialBalanceRow]) -> Result<(Decimal, Decimal)> {
     Ok((movement, ytd))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the readiness checks on one pack"
+)]
 pub fn review_pack(
     profile: &str,
     pack_dir: &Path,
