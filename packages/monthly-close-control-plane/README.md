@@ -388,6 +388,36 @@ run, and the pack names the optional controls it tracks under
 | `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
 | `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
 
+## Detection benchmark
+
+`tests/benchmark.rs` plants 22 labelled misstatements, one at a time, in a clean
+fabricated close: a balanced July to August trial balance with a mapping, mapping
+policy, balance policy and subledger, on which no control raises. 15 cases sit
+inside a control's contract and should raise it. 7 come from a control's 'Cannot
+detect' column in [Controls](#controls) and should not. Each case also names every
+other control it should raise, and any other control that raises counts as a false
+alarm, as does any control raised on the clean close. The counts measure these
+planted cases only, not accuracy on real ledgers. `cargo test --test benchmark`
+fails when a case raises a different set of controls or this table drifts from the
+cases.
+
+| Control | Planted cases detected | Blind-spot cases missed, as documented | False alarms |
+| --- | --- | --- | --- |
+| `trial_balance_integrity` | 2 of 2 | 1 of 1 | 0 |
+| `financial_year_reset` | 1 of 1 | none planted | 0 |
+| `period_comparison` | 2 of 2 | none planted | 0 |
+| `period_variance` | 1 of 1 | 2 of 2 | 0 |
+| `account_metadata` | 2 of 2 | 1 of 1 | 0 |
+| `account_mapping` | 1 of 1 | none planted | 0 |
+| `mapping_compatibility` | 2 of 2 | 1 of 1 | 0 |
+| `balance_policy` | 2 of 2 | 1 of 1 | 0 |
+| `subledger_reconciliation` | 2 of 2 | 1 of 1 | 0 |
+
+`calculation_evidence` and `equity_reconciliation` read evidence files and equity
+schedules rather than trial-balance rows, so the benchmark leaves them out.
+`tests/calculation_evidence.rs` covers the first, and the frozen Python differential
+(`tools/differential.rs`) exercises the second.
+
 ## Client queries
 
 An exception says what a control found. A query says what somebody has to ask,
