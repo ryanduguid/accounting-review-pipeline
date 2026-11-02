@@ -18,6 +18,9 @@
   `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time to record the commit. Packs
   without the block still verify; a `view` from before it refuses packs that
   carry it. The library and the Python differential probe write none.
+- Breaking: the `month_end` profile requires `bank_rec.csv`. A balanced pack
+  without its bank reconciliation used to reach `READY`, with the control listed
+  only under 'Controls not run'; it is now `NOT_READY` with `MISSING_ARTEFACT`.
 - Native release publishing is not configured. The release workflow fails
   explicitly and cannot publish Python or native artefacts.
 

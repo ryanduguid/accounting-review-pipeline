@@ -97,7 +97,7 @@ existing pack without replacing its trial balance or changing the readiness outp
 For the manager-facing, reproducible BAS evaluation, see the [manager review gate evaluation pack](evaluation/manager_review_gate/README.md).
 The [missing evidence evaluation](evaluation/missing_evidence/README.md) shows what the gate
 does when a month-end source is absent, empty, for the wrong period or edited after the gate
-ran, including a balanced pack that reaches `READY` without its bank reconciliation.
+ran, including a balanced pack that is `NOT_READY` without its bank reconciliation.
 
 [`examples/`](examples/README.md) is the assault course: every move the tool has, run against
 fabricated data, with nothing at stake. Learn the flags here before pointing
@@ -167,7 +167,7 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
 | `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; no GST posting dated after `period_end` |
-| `month_end` | current TB, prior TB, open items, self-review | optional bank rec (statement against its own GL balance); prior date earlier; same tenant |
+| `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its own GL balance; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines |
 
 Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`.
@@ -183,9 +183,13 @@ the self-review carries no period start.
 A `READY` status means no configured control tripped, and only the controls that
 ran can trip. Every optional slot with no usable input is therefore listed under
 'Controls not run' in the pack JSON and the summary, and counted in the summary's
-scope block: a `month_end` pack with no `bank_rec.csv` in it is `READY` with the
-bank reconciliation control not run, which is a different claim from `READY` with
-every control run. An optional file that exists but holds no bytes is a finding
+scope block. An otherwise compliant pack can still reach `READY` without
+`prior_findings.csv`, with the repeat-finding control not run, which is a
+different claim from `READY` with every control run. The `month_end` profile
+is for entities with bank accounts and requires their bank reconciliation.
+Entities without a bank account are outside this profile and cannot reach
+`READY`; it has no applicability waiver. An optional file that exists but
+holds no bytes is a finding
 as well, because an empty file is not evidence; its digest is still recorded, so a
 reviewer can see which bytes the finding is about.
 

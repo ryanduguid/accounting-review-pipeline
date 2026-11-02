@@ -537,22 +537,22 @@ mod tests {
         let tmp = TempDir::new();
         let dir = tmp.join("pack");
         test_support::copy_example("month-end-ready", &dir);
-        fs::write(dir.join("bank_rec.csv"), "").unwrap();
+        fs::write(dir.join("prior_findings.csv"), "").unwrap();
         let pack = review("month_end", &dir).unwrap();
         assert_eq!(pack.status, "NOT_READY");
         assert!(
             pack.findings
                 .iter()
-                .any(|f| f.code == "EMPTY_ARTEFACT" && f.slot == "bank_rec")
+                .any(|f| f.code == "EMPTY_ARTEFACT" && f.slot == "prior_findings")
         );
         assert!(
             pack.controls_not_run
                 .as_ref()
                 .unwrap()
                 .iter()
-                .any(|c| c.slot == "bank_rec" && c.reason == "the file supplied is empty")
+                .any(|c| c.slot == "prior_findings" && c.reason == "the file supplied is empty")
         );
-        fs::remove_file(dir.join("bank_rec.csv")).unwrap();
+        fs::remove_file(dir.join("prior_findings.csv")).unwrap();
         let pack = review("month_end", &dir).unwrap();
         assert_eq!(pack.status, "READY");
         assert!(
@@ -560,7 +560,29 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .iter()
-                .any(|c| c.slot == "bank_rec" && c.reason == "no file was supplied")
+                .any(|c| c.slot == "prior_findings" && c.reason == "no file was supplied")
+        );
+    }
+    #[test]
+    fn month_end_without_its_bank_reconciliation_is_not_ready() {
+        let tmp = TempDir::new();
+        let dir = tmp.join("pack");
+        test_support::copy_example("month-end-ready", &dir);
+        fs::remove_file(dir.join("bank_rec.csv")).unwrap();
+        let pack = review("month_end", &dir).unwrap();
+        assert_eq!(pack.status, "NOT_READY");
+        assert!(
+            pack.findings
+                .iter()
+                .any(|f| f.code == "MISSING_ARTEFACT" && f.slot == "bank_rec")
+        );
+        assert!(
+            !pack
+                .controls_not_run
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|c| c.slot == "bank_rec")
         );
     }
     #[test]

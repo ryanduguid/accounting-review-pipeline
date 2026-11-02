@@ -58,7 +58,7 @@ const BAS: &[Slot] = &[
 const MONTH: &[Slot] = &[
     TB,
     OLD_TB,
-    slot("bank_rec", "bank_rec.csv", false, "bank_rec"),
+    slot("bank_rec", "bank_rec.csv", true, "bank_rec"),
     OPEN,
     SELF,
     PRIOR,

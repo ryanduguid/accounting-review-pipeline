@@ -60,7 +60,7 @@ fn manager_review_and_missing_evidence_scenarios_remain_deterministic() {
                 .is_str(if folder == "manager_review_gate" {
                     "0.1.5"
                 } else {
-                    "0.1.8"
+                    "1.0.0"
                 })
         );
         if folder == "missing_evidence" {
