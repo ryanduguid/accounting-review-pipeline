@@ -29,7 +29,7 @@ fn oauth_source_and_claims_require_review_before_their_pins_change() {
         (
             "README.md",
             include_bytes!("../README.md").as_slice(),
-            "1A8E4E07EC069C9E0427E0B0F76DFCCCA9BC9E1059267A1EAC43F5FB3952ECC0",
+            "B3C4BC45B40D3AE493E61AB24E066BC9582A036B23BBA75EC2CB80635FB534B5",
         ),
     ] {
         assert_eq!(
@@ -47,7 +47,7 @@ fn oauth_source_and_claims_require_review_before_their_pins_change() {
     assert_eq!(digest(b"canonical\r\n"), digest(b"canonical\n"));
 }
 
-const SCOPE_PARAGRAPH: &str = "Read-only (`accounting.reports.trialbalance.read`); this tool cannot write to any ledger. Web and PKCE apps created on or after 2 March 2026 use granular scopes, while existing apps using the broad `accounting.reports.read` scope must migrate by 13 September 2027. Xero's [OAuth scope list](https://developer.xero.com/documentation/guides/oauth2/scopes/), [Granular Scopes FAQ](https://developer.xero.com/faq/granular-scopes) and [developer changelog](https://developer.xero.com/changelog) were checked on 20 August 2026 (`2026-08-20`); recheck them for apps created or used after that date. `token.json` and `.env` are gitignored. They are credentials, so treat them like passwords.";
+const SCOPE_PARAGRAPH: &str = "Read-only (`accounting.reports.trialbalance.read`); this tool cannot write to any ledger. Web and PKCE apps created on or after 2 March 2026 use granular scopes, whilst existing apps using the broad `accounting.reports.read` scope must migrate by 13 September 2027. Xero's [OAuth scope list](https://developer.xero.com/documentation/guides/oauth2/scopes/), [Granular Scopes FAQ](https://developer.xero.com/faq/granular-scopes) and [developer changelog](https://developer.xero.com/changelog) were checked on 20 August 2026 (`2026-08-20`); recheck them for apps created or used after that date. `token.json` and `.env` are gitignored. They are credentials, so treat them like passwords.";
 const REFRESH_PARAGRAPH: &str = "Xero refresh tokens **rotate on use**: every refresh returns a replacement refresh token. If the refresh response does not arrive, Xero permits retrying the previous token for up to a 30-minute grace period; outside that window, the user must re-authorise. The [Xero OAuth FAQ](https://developer.xero.com/faq/oauth2) was checked on 20 August 2026 (`2026-08-20`); recheck it for apps created or used after that date.";
 
 #[test]
