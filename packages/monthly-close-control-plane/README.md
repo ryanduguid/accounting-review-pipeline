@@ -38,7 +38,7 @@ A small, **review-first** monthly-close control pack for a validated trial-balan
 - `client-queries.csv` answers 'what do I have to ask the client?': the exceptions only a client can settle, turned into a question and the evidence that would answer it, with the ones the firm resolves itself left out.
 - `close-review-pack.json` answers 'what exactly did this run look at?': structured evidence, thresholds, source hashes and any supplied review acknowledgement, for archiving or downstream tooling.
 
-The pack surfaces material YTD variances, new and missing accounts, account metadata changes, unmapped accounts and supplied subledger differences as explicit exceptions. Output has only `PASS`, `REVIEW` and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
+The pack raises each finding as an explicit exception; [Controls](#controls) says what each control detects and what it cannot see. Output has only `PASS`, `REVIEW` and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 
 It is intentionally narrow:
 
@@ -366,6 +366,28 @@ The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.0
 }
 ```
 
+## Controls
+
+Every exception names the control that raised it. The first 5 controls run on
+every review; the others run only when their input is supplied. A control that
+ran and raised nothing has passed. One whose input was not supplied did not
+run, and the pack names the optional controls it tracks under
+`controls_not_run`. The pack takes the most severe status any control raised.
+
+| Control | Detects | Cannot detect | Reviewer use |
+| --- | --- | --- | --- |
+| `trial_balance_integrity` | `BLOCKED` when the current or prior file's `Debit` and `Credit` totals, or its `YTDDebit` and `YTDCredit` totals, differ by any amount. | An error that leaves the totals equal, such as an amount posted to the wrong account: only totals are compared. | Correct or re-export the trial balance before relying on any other result. No client query. |
+| `financial_year_reset` | `REVIEW` when the current and prior `ReportDate` fall in different Australian financial years (1 July to 30 June). | Which rows reset: without section rules it flags the whole comparison. | Set aside `period_variance` results for revenue and expense rows, or compare 2 dates in one financial year. No client query; every `period_variance` query carries a caveat. |
+| `period_comparison` | `REVIEW` for an account, keyed by `Tenant` and `AccountID`, present in only one of the 2 periods. | That a missing and a new account are one account under a new `AccountID`, or why an account is absent: Xero leaves out an account with no balance and no movement. | Confirm the account was closed, reclassified or omitted intentionally, or confirm a new account's setup and mapping. Drafts a client query. |
+| `period_variance` | `REVIEW` when an account's YTD net balance (`YTDDebit - YTDCredit`) moves by at least `--absolute-threshold` (default 1000) and by at least `--percentage-threshold` (default 0.10). A nil prior balance is tested on the absolute threshold alone. | A movement below either threshold, or offsetting entries that leave the YTD balance where it was: only YTD balances are compared. | Investigate the driver ([variance drivers](docs/variance-drivers.md) rank the transactions behind it), retain evidence and record a conclusion. Drafts a client query. |
+| `account_metadata` | `REVIEW` when an account present in both periods has a changed `AccountCode`, `AccountName` or `Section`. | A changed `AccountID`, which `period_comparison` reports as one missing and one new account. | Confirm the chart-of-accounts change and its reporting impact were reviewed. Drafts a client query. |
+| `account_mapping` | With `--mapping`: `REVIEW` for each current-period account with no row in the mapping file. A blank `ReviewGroup` is refused when the file loads. | Whether a mapped group suits the account (`mapping_compatibility` tests that), or an account in the prior period only. | Assign and review a reporting group before using a grouped pack. No client query. Named under `controls_not_run` when `--mapping` is absent. |
+| `mapping_compatibility` | With `--mapping-policy`, which requires `--mapping`: `REVIEW` when a mapped current-period account's `Section` is not permitted for its `ReviewGroup`, or the group has no policy entry. | An unmapped account (`account_mapping` covers it), or a wrong group the policy permits for that section: it infers nothing from names or balances. | Compare the chart of accounts, mapping and policy, and retain evidence before changing either file; the exception reclassifies nothing. No client query. |
+| `balance_policy` | With `--balance-policy`: `REVIEW` when a listed account's YTD balance sits on the other side from a declared `debit` or `credit`, an account declared `nil` carries a balance, or an account expecting movement has none this period. | An account the policy does not list; it infers nothing from `Section` or account names. | Trace the balance or the missing entries to the ledger; change the policy only if the account's expected behaviour changed. No client query. |
+| `subledger_reconciliation` | With `--subledger`: `REVIEW` when a current YTD net balance differs from its `SubledgerBalance` by more than `--reconciliation-tolerance` (default 0.01), or a subledger row has no matching trial-balance account. | An account with no subledger row: only supplied rows are compared. | Reconcile the difference to timing, mapping or source records and retain support. Drafts a client query for a difference, not for an unmatched row. |
+| `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
+| `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
+
 ## Client queries
 
 An exception says what a control found. A query says what somebody has to ask,
@@ -542,8 +564,7 @@ A close can be technically balanced and still need review. This tool keeps the e
 
 - Exact `Decimal` arithmetic for money controls, never binary floating point. Totals are summed under a fixed 28-digit context with rounding trapped, so a file whose amounts would round a control total is refused as malformed input rather than compared inexactly.
 - Schema, duplicate-key, date and numeric gates fail closed.
-- Current-period and YTD debits must exactly equal credits.
-- Material YTD variances, new/missing accounts, account metadata changes, unmapped accounts and supplied subledger differences become explicit exceptions.
+- Each control in [Controls](#controls) reports what it finds as an explicit exception and changes no source figure.
 - A YTD variance is raised only when it clears both the absolute and the percentage threshold, with one carve-out: an account whose prior YTD balance is nil has no percentage change to compute, so the absolute threshold decides alone. Those exceptions name the absolute threshold only and render `percentage_change` as `n/a (prior period zero)`, rather than reporting that a percentage test passed that never ran. The sentinel is used instead of a blank cell because a blank reads as 'no change', whilst no consumer can read `n/a (prior period zero)` as a zero percentage. `percentage_change` is unsigned, so when the prior and current YTD balances are both non-zero with opposite signs the reason also says the balance changed sign: a 20,000 credit becoming a 30,000 debit reads as 250%.
 - Output has only `PASS`, `REVIEW` and `BLOCKED` states. A reviewer, not the tool, decides whether a close is acceptable.
 - Source SHA-256 digests travel with the generated review pack so its source files can be identified later. Each digest is calculated from the same immutable byte snapshot the loader parses, so a file replaced during a run cannot be misidentified as the source of the calculations.

@@ -1,5 +1,8 @@
 use super::*;
-use monthly_close_control_plane::{decimal::Decimal, models::ExceptionItem};
+use monthly_close_control_plane::{
+    decimal::Decimal,
+    models::{Control, ExceptionItem},
+};
 use std::time::SystemTime;
 
 const JSON: &str = "close-review-pack.json";
@@ -15,7 +18,7 @@ fn evidence_pack() -> BTreeMap<String, Vec<u8>> {
 
 fn query_pack(comment: Option<&str>) -> BTreeMap<String, Vec<u8>> {
     let (_temp, mut pack) = reviewed(GOOD.as_bytes());
-    pack.exceptions = ["subledger_reconciliation", "period_variance"]
+    pack.exceptions = [Control::SubledgerReconciliation, Control::PeriodVariance]
         .into_iter()
         .map(|control| {
             let mut item = ExceptionItem::new(

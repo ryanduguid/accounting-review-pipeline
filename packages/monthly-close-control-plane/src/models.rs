@@ -45,6 +45,42 @@ impl Status {
     }
 }
 
+macro_rules! controls {
+    ($($variant:ident => $id:literal,)+) => {
+        /// Every control the review engine raises, in the order it runs them.
+        /// `ExceptionItem::new` accepts nothing else, and a test holds the
+        /// README's Controls table to `Control::ALL`.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum Control {
+            $($variant,)+
+        }
+
+        impl Control {
+            pub const ALL: &[Self] = &[$(Self::$variant,)+];
+
+            pub fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $id,)+
+                }
+            }
+        }
+    };
+}
+
+controls! {
+    TrialBalanceIntegrity => "trial_balance_integrity",
+    FinancialYearReset => "financial_year_reset",
+    PeriodComparison => "period_comparison",
+    PeriodVariance => "period_variance",
+    AccountMetadata => "account_metadata",
+    AccountMapping => "account_mapping",
+    MappingCompatibility => "mapping_compatibility",
+    BalancePolicy => "balance_policy",
+    SubledgerReconciliation => "subledger_reconciliation",
+    CalculationEvidence => "calculation_evidence",
+    EquityReconciliation => "equity_reconciliation",
+}
+
 #[derive(Clone, Debug)]
 pub struct ExceptionItem {
     pub control: String,
@@ -65,14 +101,14 @@ pub struct ExceptionItem {
 
 impl ExceptionItem {
     pub fn new(
-        control: &str,
+        control: Control,
         status: Status,
         row: Option<&TrialBalanceRow>,
         reason: &str,
         action: &str,
     ) -> Self {
         Self {
-            control: control.into(),
+            control: control.as_str().into(),
             status,
             tenant: row.map_or_else(String::new, |r| r.tenant.clone()),
             account_id: row.map_or_else(String::new, |r| r.account_id.clone()),

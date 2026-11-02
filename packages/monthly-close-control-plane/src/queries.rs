@@ -98,17 +98,18 @@ pub fn derive_client_queries(exceptions: &[ExceptionItem]) -> Result<Vec<ClientQ
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::Control;
 
     #[test]
     fn query_identity_is_length_bound_and_duplicates_fail_closed() {
-        let mut first = ExceptionItem::new("period_variance", Status::Review, None, "", "");
+        let mut first = ExceptionItem::new(Control::PeriodVariance, Status::Review, None, "", "");
         first.tenant = "A|B".into();
         first.account_id = "C".into();
         let mut other = first.clone();
         other.tenant = "A".into();
         other.account_id = "B|C".into();
         assert_ne!(query_id(&first, ""), query_id(&other, ""));
-        let reset = ExceptionItem::new("financial_year_reset", Status::Review, None, "", "");
+        let reset = ExceptionItem::new(Control::FinancialYearReset, Status::Review, None, "", "");
         let alone = derive_client_queries(&[first.clone()]).unwrap();
         let with_reset = derive_client_queries(&[reset, first.clone()]).unwrap();
         assert_eq!(alone[0].query_id, with_reset[0].query_id);
