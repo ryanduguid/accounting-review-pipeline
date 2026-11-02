@@ -21,6 +21,8 @@
 [![licence: FSL-1.1-ALv2](.github/assets/badges/licence.svg)](LICENSE)
 [![Open in GitHub Codespaces](.github/assets/badges/github.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
+[Sample pack](#reproduce-the-sample-pack) · [Review packs](#review-pack-contract) · [Statuses](#status-contract) · [Exit codes](#exit-code-contract) · [Release checks](#release-checks) · [Licence](#licence)
+
 </div>
 
 Eight independently versioned components that carry an Australian month end from a
@@ -91,7 +93,7 @@ Every invented entity the components share, and the proposal to consolidate them
 A firm keeping an AI register can draw on the supplier information for evatt, the Xero Ledger Review Gate and the Workpaper Review Gate in [docs/ai-register-entries.md](docs/ai-register-entries.md).
 
 <details>
-<summary>Setup, component identities, file contracts and reference</summary>
+<summary>Setup, component identities, releases and the exporter data contract</summary>
 
 This repository brings together Monthly Close Controls and its related tools. Its canonical GitHub repository
 is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
@@ -131,6 +133,36 @@ entrypoint only: `uv sync` then `just test` sets up and verifies a fresh clone f
 (see `CONTRIBUTING.md`). Run a component's own checks from its directory with its documented
 commands. Only the root `.github/workflows/` are active. `IMPORTS.md` records source identities, tree digests
 and import records. Historical releases and tags remain owned by the source repositories.
+
+## Releases
+
+Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
+through a root caller pinned to the independently reviewed Release Policy commit
+`0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c`: `accounting-excel-toolkit/v*`.
+One tag publishes exactly one component; the
+identity gate refuses a tag whose prefix does not equal the component directory leaf and its
+distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
+is the only difference. `IMPORTS.md` lists the callers and publisher environments.
+To check a downloaded release's checksum and SLSA provenance, follow [Verify a release](https://github.com/ryanduguid/release-policy/blob/main/docs/verify-a-release.md).
+
+The Rust Monthly Close Controls and Workpaper Review Gate 1.0.0 explicitly block publication until a native
+publisher is approved. The Xero exporter also has no native publisher.
+The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
+until their Rust release paths are approved. The PyPI releases in the component table
+(Xero exporter 0.1.15, Workpaper Review Gate 0.3.0, Monthly Close Controls 0.2.0 and the
+ledger review gate 0.2.6) are the earlier Python distributions; they predate the native
+commands documented here. evatt 0.2.0 was released on GitHub only, never on PyPI.
+
+## Contract
+
+`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
+`xero-tb-csv.v1` corpus: the exact 10-column schema, 3 fabricated fixtures, the expected
+accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
+runtime package. `tests/test_xero_trial_balance_contract.py` and the
+`joined-conformance.yml` workflow run the exporter runner and all 3 offline review
+implementations against it.
+
+</details>
 
 ## Review-pack contract
 
@@ -226,36 +258,6 @@ The read-only [close review queue](packages/monthly-close-control-plane/docs/rev
 also exits `0` after verified display and `1` for invalid arguments or verification
 failure. It filters supplied packs by recorded period, state and reviewer without
 changing their status.
-
-## Releases
-
-Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
-through a root caller pinned to the independently reviewed Release Policy commit
-`0f7ca4ce0ba2e7ea52fc611149a42cd5d0a26f6c`: `accounting-excel-toolkit/v*`.
-One tag publishes exactly one component; the
-identity gate refuses a tag whose prefix does not equal the component directory leaf and its
-distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
-is the only difference. `IMPORTS.md` lists the callers and publisher environments.
-To check a downloaded release's checksum and SLSA provenance, follow [Verify a release](https://github.com/ryanduguid/release-policy/blob/main/docs/verify-a-release.md).
-
-The Rust Monthly Close Controls and Workpaper Review Gate 1.0.0 explicitly block publication until a native
-publisher is approved. The Xero exporter also has no native publisher.
-The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
-until their Rust release paths are approved. The PyPI releases in the component table
-(Xero exporter 0.1.15, Workpaper Review Gate 0.3.0, Monthly Close Controls 0.2.0 and the
-ledger review gate 0.2.6) are the earlier Python distributions; they predate the native
-commands documented here. evatt 0.2.0 was released on GitHub only, never on PyPI.
-
-## Contract
-
-`contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
-`xero-tb-csv.v1` corpus: the exact 10-column schema, 3 fabricated fixtures, the expected
-accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
-runtime package. `tests/test_xero_trial_balance_contract.py` and the
-`joined-conformance.yml` workflow run the exporter runner and all 3 offline review
-implementations against it.
-
-</details>
 
 ## Release checks
 
