@@ -149,7 +149,7 @@ fn verify_producer(producer: &Json) -> Result<()> {
 }
 #[expect(
     clippy::too_many_lines,
-    reason = "checks every pack field in schema order"
+    reason = "checks every review pack field in schema order"
 )]
 pub(crate) fn verify_schema(document: &Json) -> Result<()> {
     if let Some(producer) = document.get("producer") {

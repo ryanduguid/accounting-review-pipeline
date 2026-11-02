@@ -119,7 +119,7 @@ impl Corpus {
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
-#[expect(clippy::too_many_lines, reason = "one corpus table of money inputs")]
+#[expect(clippy::too_many_lines, reason = "one review table of money inputs")]
 fn money(c: &mut Corpus, seed: u64) {
     for (i, value) in [
         "",
@@ -1212,7 +1212,7 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
 
 #[expect(
     clippy::too_many_lines,
-    reason = "drives one oracle exchange over stdio"
+    reason = "drives one review oracle exchange over stdio"
 )]
 fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
     let mut child = command
