@@ -183,10 +183,13 @@ the self-review carries no period start.
 A `READY` status means no configured control tripped, and only the controls that
 ran can trip. Every optional slot with no usable input is therefore listed under
 'Controls not run' in the pack JSON and the summary, and counted in the summary's
-scope block: a pack with no `prior_findings.csv` in it is `READY` with the
-repeat-finding control not run, which is a different claim from `READY` with
-every control run. The bank reconciliation is required in `month_end`, so a
-month-end pack for an entity with no bank account cannot reach `READY`. An optional file that exists but holds no bytes is a finding
+scope block. An otherwise compliant pack can still reach `READY` without
+`prior_findings.csv`, with the repeat-finding control not run, which is a
+different claim from `READY` with every control run. The `month_end` profile
+is for entities with bank accounts and requires their bank reconciliation.
+Entities without a bank account are outside this profile and cannot reach
+`READY`; it has no applicability waiver. An optional file that exists but
+holds no bytes is a finding
 as well, because an empty file is not evidence; its digest is still recorded, so a
 reviewer can see which bytes the finding is about.
 
