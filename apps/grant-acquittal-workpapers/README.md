@@ -45,7 +45,7 @@ Choose a new workspace outside every Git checkout. Setup never updates existing
 checkouts or reuses an output directory. An inconclusive Git check stops setup
 before it creates the workspace. Results are in `results/`, cloned sources
 in `sources/` and isolated environments in `environments/`. The results manifest
-records all 19 workflow commands, four runtime probes, source revisions, locks
+records all 19 workflow commands, 4 runtime probes, source revisions, locks
 and output hashes. A failed run retains its workspace and any workflow diagnostics;
 correct the cause and use a new workspace path to retry.
 
@@ -72,8 +72,8 @@ python setup_utility.py --workspace ../../../accounting-utility-replay --replay-
 ```
 
 Replay accepts only full commit IDs from an all-route `utility-workflows.v2`
-manifest whose four source checkouts were clean, with the close controls and the
-grant workpapers at one pipeline commit. It fetches the two companion commits
+manifest whose 4 source checkouts were clean, with the close controls and the
+grant workpapers at one pipeline commit. It fetches the 2 companion commits
 from their fixed public repositories and the pipeline commit from this local
 checkout, each into a new directory. It does not change this checkout. The
 pipeline commit must still be available locally; unavailable commits fail

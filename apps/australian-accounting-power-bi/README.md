@@ -8,14 +8,14 @@
 
 Maintain this application at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/apps/australian-accounting-power-bi). Run the commands below from `apps/australian-accounting-power-bi/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical CSV header, fixtures and expected results, and [Xero Trial Balance Export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) for its producer. The report's native smoke uses its own fabricated `samples/` model; the contract checks do not prove a native model refresh.
 
-**Status: incubating.** This source-controlled Power BI Project (`.pbip`) is an evolving reference implementation, not a production-ready Power BI solution. It demonstrates Australian accounting domain modelling, dimensional star schema design, Tabular Model Definition Language (TMDL), calculation groups, and automated GitHub Actions CI verification.
+**Status: incubating.** This source-controlled Power BI Project (`.pbip`) is an evolving reference implementation, not a production-ready Power BI solution. It demonstrates Australian accounting domain modelling, dimensional star schema design, Tabular Model Definition Language (TMDL), calculation groups and automated GitHub Actions CI verification.
 
 ---
 
 ## What this project solves
 
 This project keeps Power BI models and reports in text files so changes can be reviewed in git:
-1. **Plain-Text Version Control**: Built entirely on the Power BI Project format (`.pbip`), using Tabular Model Definition Language (`.tmdl`) and Enhanced Report Format (`.pbir`). Measures, visuals, relationships, and M expressions produce reviewable git diffs.
+1. **Plain-Text Version Control**: Built entirely on the Power BI Project format (`.pbip`), using Tabular Model Definition Language (`.tmdl`) and Enhanced Report Format (`.pbir`). Measures, visuals, relationships and M expressions produce reviewable git diffs.
 2. **Multi-Entity Consolidation & Financial Statements**: P&L matrix reporting and balance sheet measures across a multi-entity corporate group (operating company, trading subsidiary, logistics entity, property trust) with refresh checks for paired intercompany entries and eliminations limited to the complete group.
 3. **ATO Small Business Benchmarks Diagnostic**: Selects one sample benchmark band using an entity's industry and full financial-year turnover. Gross profit is compared with that band's inclusive lower and upper bounds. The result describes a sample variance and does not estimate audit risk.
 4. **Payroll receipt review with sample data**: Compares recorded receipt dates with supplied deadlines and displays modelled charge estimates. Full payment is assumed because the source has no receipt amount. Missing receipts are refused; partial payments and statutory exceptions need a separate assessment.
@@ -53,7 +53,7 @@ erDiagram
     class Review_Exception decision
 ```
 
-See [docs/data-model.md](docs/data-model.md) for table grain, schema descriptions, and dimension attributes.
+See [docs/data-model.md](docs/data-model.md) for table grain, schema descriptions and dimension attributes.
 
 ---
 
@@ -61,13 +61,13 @@ See [docs/data-model.md](docs/data-model.md) for table grain, schema description
 
 1. **Close review**: Opens on the verified September 2024 fabricated case. A compact findings list sits beside the selected finding's full action, question, reason and evidence request. Amounts use thousands grouping and parentheses for negative values; controls not run have readable labels. Select a finding row, then View journal evidence. The optional Finding filter keeps an account choice after Back.
 2. **Financial performance**: Entity, financial year, month and reporting-basis selectors; actual and prior-year profit and loss; revenue against budget; working capital and net assets. The initial period is FY25-26. Budgets are available only on the gross basis.
-3. **Group balances**: Gross, elimination and net account balances with an intercompany-only journal trail. Recorded equity excludes unclosed earnings. Net and elimination amounts require the complete wholly owned AUD group. Clear Reporting basis to compare all three columns.
+3. **Group balances**: Gross, elimination and net account balances with an intercompany-only journal trail. Recorded equity excludes unclosed earnings. Net and elimination amounts require the complete wholly owned AUD group. Clear Reporting basis to compare all 3 columns.
 4. **Industry comparison**: A selected entity's gross profit range and total expense ratio against fabricated references, with labelled bars for actual and sample ratios. The initial selection is Draynor Fresh Foods in FY25-26. These values are not published ATO benchmarks.
-5. **Payroll receipts**: Entity, year, regime and receipt-status selectors. Late Payday sample receipts in FY26-27 are selected initially. The cards and detail follow those selections. Part-day holiday cases require calendar review, and total charge and interest estimates are withheld while such cases are selected. Rates after December 2026 are projected.
+5. **Payroll receipts**: Entity, year, regime and receipt-status selectors. Late Payday sample receipts in FY26-27 are selected initially. The cards and detail follow those selections. Part-day holiday cases require calendar review, and total charge and interest estimates are withheld whilst such cases are selected. Rates after December 2026 are projected.
 
 6. **Supporting journal rows**: Receives the selected exception, entity, period, basis and run through native drillthrough. A separate audit details table shows the complete run identifier. Back retains the optional Finding filter; a directly selected table row clears on return. This page is hidden from the page navigator.
 
-The five main pages use native navigation, a shared theme, descriptive alt text and an authored spatial tab order. The context strip names the selected entities and dates. Each page keeps its own selections. All six pages also have portrait layouts for phone use. Results stack vertically, navigation uses two columns and selected-finding text wraps within the canvas. Swipe dense tables horizontally for supporting columns. Desktop phone preview is checked; behaviour on a physical phone remains unverified. Clearing the year includes all loaded years, including fabricated future periods. Expand account groups to inspect detail. The [model controls](docs/model-controls.md) explain input rejection, supported calculations and limits. The [report design record](docs/report-design.md) links the dashboard references and records the accessibility and performance checks still needed.
+The 5 main pages use native navigation, a shared theme, descriptive alt text and an authored spatial tab order. The context strip names the selected entities and dates. Each page keeps its own selections. All 6 pages also have portrait layouts for phone use. Results stack vertically, navigation uses 2 columns and selected-finding text wraps within the canvas. Swipe dense tables horizontally for supporting columns. Desktop phone preview is checked; behaviour on a physical phone remains unverified. Clearing the year includes all loaded years, including fabricated future periods. Expand account groups to inspect detail. The [model controls](docs/model-controls.md) explain input rejection, supported calculations and limits. The [report design record](docs/report-design.md) links the dashboard references and records the accessibility and performance checks still needed.
 
 ---
 
@@ -75,8 +75,8 @@ The five main pages use native navigation, a shared theme, descriptive alt text 
 
 The semantic model uses calculation groups to dynamically apply time intelligence and consolidation filters across the measures each calculation supports:
 
-- **`CalcGroup_TimeIntelligence`**: Supports Base Period, MTD, QTD, FYTD (1 July to 30 June Australian financial year), Prior Year (PY), YoY Variance (\$), and YoY Variance (%).
-- **`CalcGroup_Consolidation`**: Supports Gross Group Total, Intercompany Eliminations, and Consolidated Group Net.
+- **`CalcGroup_TimeIntelligence`**: Supports Base Period, MTD, QTD, FYTD (1 July to 30 June Australian financial year), Prior Year (PY), YoY Variance (\$) and YoY Variance (%).
+- **`CalcGroup_Consolidation`**: Supports Gross Group Total, Intercompany Eliminations and Consolidated Group Net.
 
 See [docs/dax-patterns.md](docs/dax-patterns.md) for full DAX formulas and precedence rules.
 
@@ -147,7 +147,7 @@ cargo test --locked --all-features
 
 Regenerate the fixtures with `cargo run --locked --bin generate-fixtures`; it rewrites `samples/` and should leave Git with no changes.
 
-The generator replaced `tools/generate_fixtures.py` with the same successful output: the six files byte for byte and the same confirmation line, with CRLF on Windows as Python's stdout wrote it. It ignores arguments, as the script did. Three differences are deliberate. It writes to the `samples/` directory of the checkout it was built from, where the script used its own location; both are this directory when run from the checkout. A failed directory creation or file write prints one `OSError: ...` line and exits 1 where Python printed a traceback and exited 1. A failed write of the confirmation line exits 1 without a message.
+The generator replaced `tools/generate_fixtures.py` with the same successful output: the 6 files byte for byte and the same confirmation line, with CRLF on Windows as Python's stdout wrote it. It ignores arguments, as the script did. Three differences are deliberate. It writes to the `samples/` directory of the checkout it was built from, where the script used its own location; both are this directory when run from the checkout. A failed directory creation or file write prints one `OSError: ...` line and exits 1 where Python printed a traceback and exited 1. A failed write of the confirmation line exits 1 without a message.
 
 The generator and structural Rust tests replaced their earlier Python suites. `tests/differential/` holds the harnesses that check this against the earlier Python release. One input bound applies: numbers in the fixture CSVs use ASCII digits with exponents up to 10,000, and PBIR integers stay within 2^53. Python also accepted other Unicode decimal digits and compared larger integers exactly. The BPA rule test evaluates the rule language the committed rules use: property names, string, integer and float literals, `True`, `False` and `None`, comparisons, `&&`, `||`, `!`, `string.IsNullOrEmpty`, unary signs and brackets. Python's `eval` also accepted arithmetic, attribute access, `in`, `is` and integer literals beyond 64 bits, which the Rust test refuses.
 
@@ -165,10 +165,10 @@ The test suite verifies:
 - Every relationship the ER diagrams document exists, and `Dim_ANZSIC` declares every industry code the entity and benchmark fixtures join on.
 - Every DAX measure uses supported `///` description syntax, and every numeric measure has an explicit format string.
 - All relationships enforce strict single-direction star schema filtering.
-- All embedded Power Query expressions use balanced `let ... in` blocks, valid fixture widths, and valid ABN algorithm weights.
+- All embedded Power Query expressions use balanced `let ... in` blocks, valid fixture widths and valid ABN algorithm weights.
 - The semantic model uses the supported TMDL folder contract and resolves every import partition.
 - All 6 report pages and 59 visuals are materialised, and every visual field binding resolves to a declared model column or measure. Regression checks cover alignment, overlap, shared component styles and unique query aliases.
-- Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation, and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
+- Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
 The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs the Rust checks and frozen workflow comparison on Linux and Windows, plus the pinned Microsoft PBIR validator. The [1.0 migration notes](docs/review-workflow-rust-migration.md) explain native command setup, compatibility limits and local comparison commands.
 
@@ -194,7 +194,7 @@ The [native verification record](docs/native-verification.md) includes the 25 Se
 
 ## Disclaimer
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 two years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Outputs and calculations require professional review. All sample data is fabricated.
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Outputs and calculations require professional review. All sample data is fabricated.
 
 ---
 

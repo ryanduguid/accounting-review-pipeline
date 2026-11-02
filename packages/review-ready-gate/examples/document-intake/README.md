@@ -63,7 +63,7 @@ Repeat `--document` to attach several bundles. Supply all of them in the same
 order to `view`. The viewer verifies their recorded digests against the saved
 readiness pack before showing document evidence. Changing a review requires a
 new gate run; viewing the old pack with the revised bundle fails. A normal
-`view` without document arguments continues to verify only the three readiness
+`view` without document arguments continues to verify only the 3 readiness
 files and displays the recorded source digests.
 
 ## Extraction contract
@@ -78,7 +78,7 @@ pages. Other lines are inert text, including apparent instructions.
 
 Dates must use `YYYY-MM-DD`. Currency must explicitly be `AUD`. Monetary values
 are decimal strings with an optional minus sign, up to 18 integer digits and at
-most two fractional digits. Grouping commas, dollar signs, exponents, `NaN`,
+most 2 fractional digits. Grouping commas, dollar signs, exponents, `NaN`,
 trailing text and extra precision are unresolved rather than guessed or rounded.
 Negative credit notes and an explicit zero tax amount are supported. Mixed tax
 lines are not classified; `GST` records only the stated document total.
@@ -98,14 +98,14 @@ bytes must be identical.
 
 The intake schema is `document-intake.v1`, mode `synthetic`. It records
 `entity_ref`, `period_end`, `extractor`, `text_origin`, `text_version`,
-`source` and `text` filename/digest pairs, and the six `fields` observation lists.
+`source` and `text` filename/digest pairs, and the 6 `fields` observation lists.
 Each observation contains `page`, `line`, `raw`, `value` and `error`.
 Loading regenerates this structure from the captured bytes and rejects any
 different schema or proposal. Corrections belong only in the review record.
 
 The review schema is `document-review.v1`. Its exact members are `schema_version`,
 `intake_sha256`, `reviewer_initials`, `reviewed_on`, `source_text_checked` and
-`fields`. Its field map contains the same six field names. The generated
+`fields`. Its field map contains the same 6 field names. The generated
 example supplies the complete editable shape. Duplicate JSON members are rejected.
 
 ## Controls and limits

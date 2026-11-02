@@ -40,11 +40,11 @@ Native release publishing is not configured; see [RELEASING.md](RELEASING.md).
 
 The maintained source is under
 [`packages/review-ready-gate`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate)
-in the Accounting Review Pipeline. The `review-ready` command retains the five
+in the Accounting Review Pipeline. The `review-ready` command retains the 5
 commands, flags, readiness statuses and payload formats of the Python baseline.
 There is no supported `reviewready` Python import API.
 
-A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team, or an AI agent. It tells you whether that folder is allowed to enter manager review.
+A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team or an AI agent. It tells you whether that folder is allowed to enter manager review.
 
 A public evaluation pack reproduces the v0.1.5 manager-review result on fabricated BAS fixtures. It is a local review aid, not an approval system.
 
@@ -82,7 +82,7 @@ It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, 
 
 ## Why this exists
 
-Preparation got cheaper. Review did not. Software, offshore capacity, and AI all increase the number of files that hit the review desk. The scarce resource in a firm is the manager who can actually sign.
+Preparation got cheaper. Review did not. Software, offshore capacity and AI all increase the number of files that hit the review desk. The scarce resource in a firm is the manager who can actually sign.
 
 Missing tie-outs, open questions in email, an unbalanced trial balance and unresolved findings from last period send a pack back for more preparation. This gate checks for those gaps before the pack reaches the manager.
 
@@ -96,7 +96,7 @@ existing pack without replacing its trial balance or changing the readiness outp
 
 For the manager-facing, reproducible BAS evaluation, see the [manager review gate evaluation pack](evaluation/manager_review_gate/README.md).
 The [missing evidence evaluation](evaluation/missing_evidence/README.md) shows what the gate
-does when a month-end source is absent, empty, for the wrong period, or edited after the gate
+does when a month-end source is absent, empty, for the wrong period or edited after the gate
 ran, including a balanced pack that reaches `READY` without its bank reconciliation.
 
 [`examples/`](examples/README.md) is the assault course: every move the tool has, run against
@@ -116,7 +116,7 @@ The ready demo exits `0` and writes 3 files:
 
 - `readiness-summary.md`: cover sheet a manager reads top to bottom
 - `findings.csv`: one row per finding, for Excel or Power BI
-- `readiness-pack.json`: structured evidence, source hashes, and any supplied acknowledgement
+- `readiness-pack.json`: structured evidence, source hashes and any supplied acknowledgement
 
 The output also reserves `.reviewready` for writer admission and publication state.
 Keep it with the pack when copying a directory. The 3 returned payload paths and
@@ -131,7 +131,7 @@ review-ready gate \
   --output ../../../review-ready-demo/bas-not-ready
 ```
 
-The not-ready demo exits `2`. The GST control export is missing, the preparer has not certified the pack, a blocking open item is still OPEN, and the same missing artefact was OPEN on the prior pack, so it is flagged as a repeat.
+The not-ready demo exits `2`. The GST control export is missing, the preparer has not certified the pack, a blocking open item is still OPEN and the same missing artefact was OPEN on the prior pack, so it is flagged as a repeat.
 
 ```bash
 review-ready view --pack-dir ../../../review-ready-demo/bas-ready
@@ -160,7 +160,7 @@ writing only: `review-ready view` still opens a pack wherever it already is.
 Use exit code `0` only for `READY`, `2` for `NOT_READY` or `BLOCKED`, and `1` for a malformed file, an invalid command, an `--output` path inside a version-control checkout, or an `--output` path that cannot be written.
 
 To run the gate on a schedule in CI, copy [examples/github-actions-readiness-check.yml](examples/github-actions-readiness-check.yml) into `.github/workflows/`.
-It runs against a repo-stored synthetic pack, fails the job when the pack is `BLOCKED`, and reports `NOT_READY` for a human. A `READY` result is still not an approval.
+It runs against a repo-stored synthetic pack, fails the job when the pack is `BLOCKED` and reports `NOT_READY` for a human. A `READY` result is still not an approval.
 
 ## What gets gated
 
@@ -211,7 +211,7 @@ Filenames inside the pack directory are fixed. Header-only CSV schemas live unde
 }
 ```
 
-`engagement_type` must match `--profile`. `prepared_on` must not be earlier than `period_end`. Any assertion that is not `true` is `NOT_READY`. The assertions are necessary, not sufficient: a preparer who ticks `pack_complete` while the GST control file is missing still gets `MISSING_ARTEFACT`. The JSON Schema is [schemas/self_review.json](schemas/self_review.json).
+`engagement_type` must match `--profile`. `prepared_on` must not be earlier than `period_end`. Any assertion that is not `true` is `NOT_READY`. The assertions are necessary, not sufficient: a preparer who ticks `pack_complete` whilst the GST control file is missing still gets `MISSING_ARTEFACT`. The JSON Schema is [schemas/self_review.json](schemas/self_review.json).
 
 ### Open items
 
@@ -219,7 +219,7 @@ Filenames inside the pack directory are fixed. Header-only CSV schemas live unde
 ItemID,Severity,Owner,DueDate,Status,Description,Resolution
 ```
 
-`Severity` is `BLOCKING`, `EXPLAIN`, or `TRIVIAL`. `Status` is `OPEN` or `CLEARED`. A `BLOCKING` item that is still `OPEN` with no resolution blocks the gate. A `CLEARED` item with no resolution text also fails: cleared means someone wrote down what happened.
+`Severity` is `BLOCKING`, `EXPLAIN` or `TRIVIAL`. `Status` is `OPEN` or `CLEARED`. A `BLOCKING` item that is still `OPEN` with no resolution blocks the gate. A `CLEARED` item with no resolution text also fails: cleared means someone wrote down what happened.
 
 ### Trial balance
 
@@ -258,7 +258,7 @@ Optional `--review-note` JSON:
 
 ## Viewing an existing pack
 
-`review-ready view` is the read-only half of the gate: it loads a generated pack, proves the 3 files still agree with each other, and prints the cover sheet. It never writes, renames or deletes anything, and it cannot change what the engine computed.
+`review-ready view` is the read-only half of the gate: it loads a generated pack, proves the 3 files still agree with each other and prints the cover sheet. It never writes, renames or deletes anything, and it cannot change what the engine computed.
 
 ```bash
 review-ready view --pack-dir outputs/bas-ready
@@ -270,7 +270,7 @@ Packs `review-ready gate` writes record a `producer` block: the component, its v
 
 Payload entries must be regular files with a single hard link. The viewer rejects
 links, directories and special files before reading them. For a pack carrying
-`.reviewready`, it also refuses unresolved publication and a revision change while
+`.reviewready`, it also refuses unresolved publication and a revision change whilst
 reading. Legacy packs without that directory retain schema and cross-file checks;
 they have no publication revision witness.
 
@@ -285,7 +285,7 @@ its state reference.
 If publication is unresolved or recovery evidence is retained, stop writers and
 preserve the complete output directory, including `.reviewready`. Do not delete
 control files or retry into that directory without investigating the error. To
-regenerate from the same inputs while retaining evidence, choose a new output
+regenerate from the same inputs whilst retaining evidence, choose a new output
 directory. Process death is detected when its state remains unresolved; physical
 power-loss durability is unverified.
 
@@ -314,7 +314,7 @@ numbered document label that contradicts its filename also prevents comparison.
 ## Design
 
 - Decimal arithmetic preserves money values and uses a 28-digit, half-even context for control calculations. The gate refuses trial-balance totals or BAS tie-out amounts that would round.
-- Schema, duplicate-key, date, and numeric gates fail closed: a malformed file is exit `1` and writes no pack.
+- Schema, duplicate-key, date and numeric gates fail closed: a malformed file is exit `1` and writes no pack.
 - Missing or empty required artefacts are findings, not crashes, so the cover sheet can tell the preparer what to send back.
 - Source SHA-256 digests travel with the pack. Each digest is taken from the same immutable byte snapshot the loader parsed.
 - Spreadsheet-facing finding text whose first non-whitespace character is `=`, `+`, `-` or `@` is prefixed with an apostrophe.
@@ -326,7 +326,7 @@ numbered document label that contradicts its filename also prevents comparison.
 - Use a separate, access-controlled working directory for client source files and outputs.
 - A generated pack cannot be written into a version-control checkout. The writer walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory. A level it cannot examine is refused.
 - Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
-- Do not use this as tax, financial, audit, or legal advice.
+- Do not use this as tax, financial, audit or legal advice.
 
 ## Related
 
@@ -363,4 +363,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 two years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).

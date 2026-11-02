@@ -25,7 +25,7 @@ Both modules are self-contained: no library references to add (`modReconCompare`
 | Module | What it does |
 |---|---|
 | `modWorkpaperFormat` | Standard workpaper header block, reviewer sign-off line, accounting number format, freeze panes |
-| `modReconCompare` | Keyed 2-way reconciliation between two (key, amount) ranges with tolerance; subledger versus GL pattern. It replaces only a prior result sheet that it marked itself; a user-created sheet named `Recon Result` is left untouched and the macro stops with instructions |
+| `modReconCompare` | Keyed 2-way reconciliation between 2 (key, amount) ranges with tolerance; subledger versus GL pattern. It replaces only a prior result sheet that it marked itself; a user-created sheet named `Recon Result` is left untouched and the macro stops with instructions |
 
 ## Contributing your own
 

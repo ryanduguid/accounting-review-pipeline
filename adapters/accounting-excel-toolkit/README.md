@@ -91,7 +91,7 @@ entity record before the header, excluding the title, `As at` and `Ageing by`
 records. That entity and the unique cut-off record must confirm the manifest
 before a control tie is supported. Their positions may vary; extra or
 contradictory entity records require review. Subtitles may move the header.
-Unsupported titles require review while supported arithmetic continues.
+Unsupported titles require review whilst supported arithmetic continues.
 The title and digest establish declarations and byte consistency, not Xero
 origin or the truthfulness of the source, manifest or footer identification.
 
@@ -105,7 +105,7 @@ convention such as AUD. Supplied amounts accept at most 15 integer digits and
 4 decimal places. A comparable control is required for summary `PASS`, although
 `--control` is optional at the command line.
 
-The native tools replace the three Python scripts and their import APIs. They
+The native tools replace the 3 Python scripts and their import APIs. They
 retain signed zero, decimal scale, logical CSV record numbers and JSON field
 order. CSV fields are limited to 131,072 characters. JSON accepts at most 1,000
 nested containers and 4,300 digits per integer. Help, usage, malformed JSON and
@@ -124,7 +124,7 @@ describes the review pack and human decision boundary.
 ## Power Query functions
 
 The aged importers identify a summary footer by its position and shape. With
-`HasSummaryFooter` omitted, they remove only the last two nonblank labelled
+`HasSummaryFooter` omitted, they remove only the last 2 nonblank labelled
 records when these are amount-bearing `Total` and `Percentage of total` rows.
 A lone terminal row with either label requires explicit confirmation. Use
 `Xero.AgedReceivables(path, true)` for a confirmed footer or
@@ -152,7 +152,7 @@ exits `2` for review. A person must supply and confirm those observations.
 The review command writes the verifier's result and separate evidence requests
 with an owner, source record and next action. It preserves duplicate contacts
 and signed amounts; debtor decisions remain `REVIEW`. Its exits follow the
-verifier: `0` for summary `PASS`, `2` for `REVIEW`, and `1` for invalid input.
+verifier: `0` for summary `PASS`, `2` for `REVIEW` and `1` for invalid input.
 Output paths must resolve outside the checkout and must be new. Files are
 created exclusively. If a later write fails, earlier evidence files remain for
 inspection; the command does not promise an atomic evidence directory.
@@ -164,7 +164,7 @@ The benchmark needs Python 3.14 or newer and measures the frozen Python referenc
 under `tests/differential/python_reference/`. Schema 1 includes Python allocation
 tracing, so these results do not measure the Rust commands. It measures file loading,
 validation, rendering and writing for 10, 1,000 and 10,000 fabricated zero-value
-contacts. It reports three warm runs after a warm-up and one fresh process per
+contacts. It reports 3 warm runs after a warm-up and one fresh process per
 size. Python allocation tracing excludes other process memory, and filesystem
 caching is uncontrolled. These measurements establish neither human time saved
 nor a production performance guarantee.
@@ -180,7 +180,7 @@ One `.pq` file per function. To load one into Excel:
 1. Open the `.pq` file in any text editor (Notepad works) and copy all of it.
 2. In Excel, open the **Data** tab, click **Get Data**, then **From Other Sources**, then **Blank Query**. The Power Query Editor window opens.
 3. On the Power Query Editor's **Home** tab, click **Advanced Editor**.
-4. Delete the placeholder text in the editor, paste the copied contents, and click **Done**.
+4. Delete the placeholder text in the editor, paste the copied contents and click **Done**.
 5. In the **Query Settings** pane on the right, type the file's name (for example `Xero.TrialBalance`) into the **Name** box. Other queries call the function by this exact name, so match it.
 6. Click **Close & Load** on the **Home** tab to save it into the workbook.
 
@@ -189,7 +189,7 @@ Power BI is the same from step 3 onward: **Get Data**, **Blank Query**, then **A
 | Function | Category | What it does |
 |---|---|---|
 | [`Xero.TrialBalance`](powerquery/Xero.TrialBalance.pq) | Xero | Parse a Xero TB CSV: skips metadata rows, picks the right Debit/Credit pair (plain pair = period movement, YTD pair = as-at balances; default returns as-at, `useYTD = false` for movement), drops Total row, splits account code as text (alphanumeric up to 10 chars with at least one digit, leading zeros survive). Handles 2 observed CSV layouts, a combined account cell (`Business Bank Account (090)`) and separate `Account Code` / `Account Name` columns, plus the Excel export saved as CSV (`Account Code`, `Account`, `Account Type`, `Debit - Year to date`, `Credit - Year to date` and a comparative column named for the prior date), whose labels are mapped onto the separate-column names before the pair is chosen |
-| [`Xero.AgedReceivables`](powerquery/Xero.AgedReceivables.pq) | Xero | Parse a Xero Aged Receivables Summary CSV: skips metadata rows, finds the header by name (`Contact` or `Customer`, returned as `Contact`), identifies the terminal summary footer as described above and removes it and any section row (every amount cell blank) together with its `Total <section>` subtotal, keeps the contact key as text, and types every ageing bucket and the Total under a pinned en-AU culture (a blank cell is a genuine zero; any other cell that will not parse errors and names the column and the value). Every record from the header down must carry the same field count as the header: a present empty cell is valid, while a missing or extra field raises a named error instead of loading as a zero or being dropped. Buckets and Total come back as Xero exported them, so the bucket-to-total tie-out stays the caller's |
+| [`Xero.AgedReceivables`](powerquery/Xero.AgedReceivables.pq) | Xero | Parse a Xero Aged Receivables Summary CSV: skips metadata rows, finds the header by name (`Contact` or `Customer`, returned as `Contact`), identifies the terminal summary footer as described above and removes it and any section row (every amount cell blank) together with its `Total <section>` subtotal, keeps the contact key as text, and types every ageing bucket and the Total under a pinned en-AU culture (a blank cell is a genuine zero; any other cell that will not parse errors and names the column and the value). Every record from the header down must carry the same field count as the header: a present empty cell is valid, whilst a missing or extra field raises a named error instead of loading as a zero or being dropped. Buckets and Total come back as Xero exported them, so the bucket-to-total tie-out stays the caller's |
 | [`Xero.AgedPayables`](powerquery/Xero.AgedPayables.pq) | Xero | The same contract on the payables side: header by name (`Contact`, `Supplier` or `Vendor`, returned as `Supplier`), the identified summary footer, section and section-subtotal rows removed (the observed export groups suppliers under `Aged Payables` and closes it with `Total Aged Payables`), supplier key forced to text, ageing buckets and Total typed under en-AU with the same blank-is-zero, matching-record-width and refuse-to-guess rules, and returned as exported |
 | [`PaydaySuper.Report`](powerquery/PaydaySuper.Report.pq) | Close inputs | Load the fixed 18-column `payday-super-checker` report contract by header name. It keeps IDs as text, retains the producer's raw `verdict`, caveats, notes and unassessable range, types producer amounts without recalculating them, and returns the terminal provenance separately as metadata |
 | [`Fx.PromoteHeaderAt`](powerquery/Fx.PromoteHeaderAt.pq) | Generic | Find-and-promote the real header row in any ledger export that buries it below title rows; errors clearly when the format changed |
@@ -256,7 +256,7 @@ The aged-summary and Payday Super adapters use `Currency.Type` (4 decimal places
 
 `PaydaySuper.Report` accepts the named, 18-column CSV producer contract from `payday-super-checker`; additional producer columns are ignored, but a renamed, missing or duplicate contract header raises an error. [`samples/sample-payday-super-report.csv`](samples/sample-payday-super-report.csv) is a wholly fabricated Payday Super report. It includes a leading-zero ID and a formula-like ID already escaped with an apostrophe so both remain text through the adapter.
 
-The full-width terminal provenance record has `employee_id = NOTE`, provenance in `notes`, and blank values in every other contract field. The function removes only that shape from the returned table and retains its `notes` value in table metadata as `PaydaySuperProvenance` (for example, `Value.Metadata(PaydaySuper_Report(path))[PaydaySuperProvenance]`). A contribution whose literal employee identifier is `NOTE` remains data when its contribution fields are populated. Ordinary table loads reject an absent, duplicate, non-terminal or empty-provenance record, a report with no contribution rows, and a CSV ending inside a quoted field without requiring the caller to inspect metadata. This includes malformed quoting in an otherwise ignored extra producer column. Every CSV record must contain the same number of fields as the header: a present empty trailing field is valid, while an absent field is malformed. The adapter does not convert `UNKNOWN` into exposure, derive a replacement verdict or recompute any amount: the raw `verdict` and every producer caveat, note and amount remain authoritative for professional review.
+The full-width terminal provenance record has `employee_id = NOTE`, provenance in `notes` and blank values in every other contract field. The function removes only that shape from the returned table and retains its `notes` value in table metadata as `PaydaySuperProvenance` (for example, `Value.Metadata(PaydaySuper_Report(path))[PaydaySuperProvenance]`). A contribution whose literal employee identifier is `NOTE` remains data when its contribution fields are populated. Ordinary table loads reject an absent, duplicate, non-terminal or empty-provenance record, a report with no contribution rows, and a CSV ending inside a quoted field without requiring the caller to inspect metadata. This includes malformed quoting in an otherwise ignored extra producer column. Every CSV record must contain the same number of fields as the header: a present empty trailing field is valid, whilst an absent field is malformed. The adapter does not convert `UNKNOWN` into exposure, derive a replacement verdict or recompute any amount: the raw `verdict` and every producer caveat, note and amount remain authoritative for professional review.
 
 For the contracts that remain deliberately unimplemented, see [the close-input contract roadmap](docs/close-input-contract-roadmap.md). It separates the contracts that have shipped, this producer contract and the 2 Xero aged summary parsers above, from the MYOB-specific parsers still behind an evidence gate.
 
@@ -273,7 +273,7 @@ Importable `.bas` source in [`vba/`](vba/). See [`vba/README.md`](vba/README.md)
 
 To import a module into Excel:
 
-1. If the ribbon has no **Developer** tab: click **File**, then **Options**, then **Customize Ribbon**, tick **Developer** in the right-hand list, and click **OK**.
+1. If the ribbon has no **Developer** tab: click **File**, then **Options**, then **Customize Ribbon**, tick **Developer** in the right-hand list and click **OK**.
 2. On the **Developer** tab, click **Visual Basic** (or press `Alt+F11`). The Visual Basic Editor opens.
 3. In the Visual Basic Editor, click **File**, then **Import File...**, and pick the `.bas` file.
 4. Close the Visual Basic Editor. Save the workbook with **File**, **Save As**, choosing **Excel Macro-Enabled Workbook (*.xlsm)** as the file type. A plain `.xlsx` save silently drops the module.
@@ -289,7 +289,7 @@ Three layers check this repository, and each covers different ground:
 ## Principles
 
 1. **Source as text.** M in `.pq` files, VBA in `.bas` files. Nothing lives only inside a binary workbook.
-2. **Exports are hostile input.** Parsers find the header row instead of assuming row counts, force account codes to text, and fail loudly when the format changed.
+2. **Exports are hostile input.** Parsers find the header row instead of assuming row counts, force account codes to text and fail loudly when the format changed.
 3. **No client data, ever.** Fixtures are fabricated and follow the `samples/sample-*.csv` naming convention. The `.gitignore` allowlists only the 6 reviewed fixture filenames, so a real export dropped into `samples/` stays blocked. Real exports stay outside any repo.
 
 ## Roadmap
@@ -304,7 +304,7 @@ See [the close-input contract roadmap](docs/close-input-contract-roadmap.md) for
 
 ## Disclaimer
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 two years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Review outputs like any workpaper input. Xero and MYOB are trademarks of their respective owners.
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Review outputs like any workpaper input. Xero and MYOB are trademarks of their respective owners.
 
 ## Author
 
