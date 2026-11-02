@@ -289,7 +289,7 @@ regenerate from the same inputs whilst retaining evidence, choose a new output
 directory. Process death is detected when its state remains unresolved; physical
 power-loss durability is unverified.
 
-## Comparing 2 runs of a pack
+## Comparing two runs of a pack
 
 A pack sent back to the preparer is gated again. `review-ready compare` verifies both runs with the same checks as `view`, then prints JSON showing what moved between them: the overall status, each source file's digest, and each group of findings by code and slot. It writes nothing.
 
