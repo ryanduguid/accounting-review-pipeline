@@ -93,7 +93,8 @@ flowchart TD
 ## Quick Demo
 
 ```bash
-# Build the binary (rust-toolchain.toml names the Rust version) and put it on PATH
+# From packages/elizabeth-anne-alexander, build the binary (rust-toolchain.toml
+# names the Rust version) and put it on PATH
 cargo build --release
 export PATH="$PWD/target/release:$PATH"
 
@@ -141,7 +142,7 @@ records the current Rust binary's differences from Python 0.2.6.
 - Monetary values use exact decimal arithmetic, never binary floating point: the binary reproduces Python's `decimal` module at a fixed 28-digit precision, and a CSV whose totals would round in it is refused instead of compared inexactly.
 - `evaluate` writes amount strings in the model result and reviewer evidence with at least 2 decimal places, padded and never rounded, so a whole-dollar source emits `"200.00"` rather than `"200"`. `validate-review` still accepts reviewer-evidence amounts in any decimal notation, subject to the same finiteness and supported-magnitude checks as source amounts, so evidence written by earlier versions continues to validate. The disclosure check holds `current_ytd_net`, `prior_ytd_net`, `delta` and `percent_change` to those number formats instead of comparing them with source values, so an account code that happens to equal an amount does not refuse the pack.
 - `percent_change` in the model result is expressed in per cent and quantised to 4 decimal places (`"18.3333"` means 18.3333%). It is `null` when there is no prior balance to compare against.
-- The model result states its own `currency` and `sign_convention`. Amounts are debit-positive (`ytd_net = YTDDebit - YTDCredit`), so a revenue, liability, or equity balance is negative and a revenue increase shows as a negative `delta`.
+- The model result states its own `currency` and `sign_convention`. Amounts are debit-positive (`ytd_net = YTDDebit - YTDCredit`), so a revenue, liability or equity balance is negative and a revenue increase shows as a negative `delta`.
 - Current and prior reports must sit in the same Australian financial year, or be the same day and month in different years. YTD columns reset on 1 July, so a comparison across the reset would report a whole prior-year balance as a movement.
 - Current/prior trial balances are joined by stable `AccountID`, not account display name or code.
 - An account changing section between periods fails closed instead of disappearing from, or being silently reclassified within, a section-scoped comparison.

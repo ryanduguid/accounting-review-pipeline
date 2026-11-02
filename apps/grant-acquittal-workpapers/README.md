@@ -15,7 +15,7 @@ exits 1. These describe the supplied arithmetic and evidence, never grant
 eligibility or acquittal approval. Choose a new output folder for each run.
 
 `rust-toolchain.toml` pins the Rust toolchain, which rustup installs on first
-use, and `Cargo.lock` pins the one dependency, `sha2`. From 0.2.0 the Python
+use, and `Cargo.lock` pins its 2 dependencies, `sha2` and, on Unix, `libc`. From 0.2.0 the Python
 script `grant_workpaper.py` is gone. The Rust command reads the same inputs and
 writes byte-identical files, exit codes and messages, matching the script under
 Python 3.15 (a date outside the calendar reports the range error that version's
@@ -54,7 +54,7 @@ The pipeline's `Joined accounting examples` workflow
 Windows daily at 19:23 UTC and on manual runs. Each run follows the companions'
 latest `main` revisions, so their changes are checked by the next scheduled run.
 Pull requests and pushes run the pinned public joined fixtures instead, which
-include the grant cash route. Logs and seven-day fabricated result artefacts are
+include the grant cash route. Logs and 7-day fabricated result artefacts are
 public with the repository. Component tests remain separate from the joined
 integration run.
 
@@ -187,7 +187,7 @@ publication, and runs the bundled example from a release build. The utility's
 unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
 `RENAME_EXCL` path is untested there.
 It also runs Ruff with a pinned version on the utility. Local lint uses
-`uv run --with ruff==0.16.7 ruff check .`.
+`uv run --with ruff==0.16.6 ruff check .`.
 
 `tests/differential/differential.py` compares the binary with the 0.1.0 Python
 script on generated inputs, mutated CSV and JSON, output paths and command lines:

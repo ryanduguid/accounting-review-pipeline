@@ -189,7 +189,7 @@ Detection is regular expressions and check digits. It has no idea what a
 document is about, and the trade-offs below all favour over-detection, because
 an extra placeholder costs a triage decision whilst a miss leaks.
 
-- **`BSB` fires on any hyphenated 3-three digit pair**, and accepts a space or
+- **`BSB` fires on any hyphenated pair of 3-digit groups**, and accepts a space or
   tab between the groups when labelled, as in `BSB 062 000`. There is no check
   digit for a BSB. An Australian
   general ledger account code written `410-100` is therefore replaced with a
@@ -277,12 +277,12 @@ an extra placeholder costs a triage decision whilst a miss leaks.
   phone numbers retain their existing detection rules.
 - **Medicare replaces the card and an optional individual reference number
   together on the same line.** A reference from 1 to 9 joined by up to 2 spaces,
-  tabs, slashes or hyphens is consumed, as in `2123 45670 1/1`. The ten-digit card
+  tabs, slashes or hyphens is consumed, as in `2123 45670 1/1`. The 10-digit card
   core determines its check digit and placeholder, so the same card with and
   without a reference gets one placeholder. A malformed reference reaches triage.
   **Accepted limit:** an individual reference written alone on the next line
   remains in the output. `Medicare: 2123456701` followed by a line containing `1`
-  becomes `Medicare: MEDICARE_01` followed by that same `1`. The ten-digit card
+  becomes `Medicare: MEDICARE_01` followed by that same `1`. The 10-digit card
   is replaced; the reference alone is below the number sweep's 8-digit floor.
   Ryan accepted this limit on 11 October 2026 (DECISIONS.md ruling 47).
 - **Three or more spaces between digit groups remain unsupported.** Short

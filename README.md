@@ -82,7 +82,7 @@ cargo run --locked --release --manifest-path packages/monthly-close-control-plan
 
 The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all 4 result files together and record each review decision in your workpaper. The [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md) explains installation from source.
 
-The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. The [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) configuration includes Rust and the Python development tools; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota. The updated container has not been built locally.
+The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. The [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) configuration includes Rust and the Python development tools; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota. The `devcontainer` workflow builds the container and runs the fabricated close review inside it on every push to `main`.
 
 [Read the 5-minute close case](packages/monthly-close-control-plane/docs/manager-case-study.md) · [Workpaper Review Gate](packages/review-ready-gate/README.md)
 
@@ -104,7 +104,7 @@ It holds 8 independently versioned components joined only by local files and com
 | Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust command `close-control`; Python runtime and import API removed | 1.0.0 (unreleased) | 0.2.0, Python, PyPI |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander`; the released Python distribution imports `elizabeth_anne_alexander` | 1.0.0 (unreleased) | 0.2.6, Python, PyPI |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 1.0.0 | 1.0.0, GitHub release archive |
-| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application | none | none |
+| Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application | 1.0.0 | none |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo | 0.2.0 | none |
 | evatt | `packages/evatt/` | Rust binary `evatt`; a local pseudonymisation boundary, no network of any kind | 1.0.0 (unreleased) | 0.2.0, GitHub release only |
 
@@ -267,6 +267,12 @@ so every push to `main` runs every component's gates; only pull requests filter
 by path. Tag the current `main` commit once its run is green; a successful run
 for an older commit is not evidence for the release. Tags and publication still
 require explicit approval.
+
+## Licence
+
+All 8 components are licensed under the Functional Source License, Version 1.1,
+ALv2 Future License (FSL-1.1-ALv2), as is the repository's [LICENSE](LICENSE).
+Each component directory carries its own `LICENSE` and `NOTICE`.
 
 ---
 

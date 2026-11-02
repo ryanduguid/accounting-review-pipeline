@@ -55,7 +55,7 @@ Explicit exception queue
 Human review and workpaper acknowledgement
 ```
 
-The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report, or claim that a close has been approved.
+The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report or claim that a close has been approved.
 
 ## Quick demo
 
@@ -146,18 +146,18 @@ access-controlled directory outside this repository:
 
 ```bash
 close-control workbench \
-  --current C:\close-data\current.csv \
-  --prior C:\close-data\prior.csv \
-  --mapping C:\close-data\account-mapping.csv \
-  --subledger C:\close-data\subledger.csv \
-  --output C:\close-data\review-pack
+  --current C:/close-data/current.csv \
+  --prior C:/close-data/prior.csv \
+  --mapping C:/close-data/account-mapping.csv \
+  --subledger C:/close-data/subledger.csv \
+  --output C:/close-data/review-pack
 ```
 
 It writes exactly `close-summary.md`, `exceptions.csv`, `client-queries.csv`
 and `close-review-pack.json`. Open or import `exceptions.csv` in Excel or Power
 Query if useful, then investigate and document conclusions through your normal
 workpaper process. The command never starts Excel, creates a workbook, calls
-Xero, reads OAuth credentials or tokens, calls an AI service, posts anything,
+Xero, reads OAuth credentials or tokens, calls an AI service, posts anything
 or copies the supplied sources. It records review evidence only; it does not
 approve or close a period.
 
@@ -182,7 +182,7 @@ section repeats it, and `view` refuses a pack whose block is malformed or
 disagrees with that line. A pack without the block (contract 1) still verifies.
 
 ```bash
-close-control view --pack-dir C:\\close-data\\review-pack
+close-control view --pack-dir C:/close-data/review-pack
 ```
 
 Before displaying anything it fails closed on: a missing artefact; JSON that is
@@ -512,7 +512,7 @@ that call. Something else does, writes an evidence file, and you hand the file
 to the close.
 
 ```bash
-close-control review   --current examples/current_trial_balance.csv   --prior examples/prior_trial_balance.csv   --calculation-evidence examples/calculation-evidence-coal-lsl-levy.json   --require-calculation coal-lsl-levy   --output outputs/demo
+close-control review   --current examples/current_trial_balance.csv   --prior examples/prior_trial_balance.csv   --calculation-evidence examples/calculation-evidence-coal-lsl-levy.json   --require-calculation coal-lsl-levy   --output ../../../close-control-calculation-demo
 ```
 
 The control is off unless you use one of those 2 flags, and a pack produced
@@ -639,7 +639,7 @@ cargo test --locked --all-features
 cargo build --locked --release --bin close-control
 ```
 
-The test suite covers schema gates, exact balancing, variance and metadata exceptions, mapping and subledger checks, deterministic pack generation, acknowledgement parsing, and the command-line exit contract.
+The test suite covers schema gates, exact balancing, variance and metadata exceptions, mapping and subledger checks, deterministic pack generation, acknowledgement parsing and the command-line exit contract.
 
 Continuous integration runs Rust checks, frozen Python 3.15 differential cases
 and native binary smokes on Linux and Windows, plus a RustSec dependency audit.
@@ -651,7 +651,7 @@ the breaking API removal and compatibility limits.
 
 The next layers remain separate components. This project stays a local review-pack generator; it does not grow a Xero client or a tax-advice engine.
 
-- [Workpaper Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate) - the upstream pack-readiness gate. It answers whether a BAS, month-end, or year-end folder is allowed onto the review desk. This tool still answers a later question: what material exceptions exist on these trial balances. Run the gate first.
+- [Workpaper Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate) - the upstream pack-readiness gate. It answers whether a BAS, month-end or year-end folder is allowed onto the review desk. This tool still answers a later question: what material exceptions exist on these trial balances. Run the gate first.
 - [Xero Ledger Review Gate](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander) - a fixed-policy, synthetic-data review boundary for AI-assisted trial-balance analysis. No OAuth, no mutation tools.
 - [Tax Radar AU](https://github.com/ryanduguid/au-tax-legislation-corpus/blob/main/RADAR.md) - a provenance-first monitor that turns source-version metadata into a technical-review queue, now maintained inside the Australian tax legislation corpus.
 
@@ -661,5 +661,6 @@ The next layers remain separate components. This project stays a local review-pa
 
 The next layers are deliberately separated from the control engine. The pipeline components above are co-located without sharing runtime authority, and Tax Radar AU remains separate. The close-loop example runs the gateway on local files only.
 
+## Licence
 
 Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
