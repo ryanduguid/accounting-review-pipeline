@@ -99,6 +99,10 @@ fn account(
 
 /// A balanced July to August close in one financial year, with every movement under the
 /// variance thresholds and every optional input consistent, so no control raises.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one literal fixture of a balanced close"
+)]
 fn clean() -> Close {
     Close {
         current_date: "2026-08-31",
@@ -496,6 +500,10 @@ fn trial_balance(date: &str, accounts: &[Account]) -> String {
 
 /// Each control that raised, with the account its exception names (empty for a
 /// file-level exception).
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes the close inputs, then runs the review"
+)]
 fn raised(close: &Close) -> BTreeSet<(&'static str, String)> {
     let temp = TempDir::new();
     let write = |name: &str, contents: String| {

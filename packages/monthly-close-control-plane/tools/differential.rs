@@ -208,6 +208,7 @@ impl Corpus {
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+#[expect(clippy::too_many_lines, reason = "one corpus table of money inputs")]
 fn money(c: &mut Corpus, seed: u64) {
     for (i, value) in [
         "",
@@ -295,6 +296,10 @@ fn dates(c: &mut Corpus) {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "drives one oracle exchange over stdio"
+)]
 fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
     let mut child = command
         .stdin(Stdio::piped())
@@ -367,6 +372,7 @@ fn put(object: &mut Json, key: &str, value: Json) {
         pairs.push((PyStr::from(key), value));
     }
 }
+#[expect(clippy::too_many_lines, reason = "one corpus table of CSV templates")]
 fn csvs(c: &mut Corpus) {
     let templates = [
         (
@@ -507,6 +513,10 @@ fn arithmetic(c: &mut Corpus) {
 fn tb(date: &str, amount: &str, id: &str, name: &str) -> Vec<u8> {
     format!("ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n{date},Demo,Assets,{id},{name},090,{amount},0,{amount},0\n").into_bytes()
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one corpus table of core review inputs"
+)]
 fn core(c: &mut Corpus, seed: u64) {
     for amount in [
         "0",
@@ -660,6 +670,10 @@ fn notes(c: &mut Corpus) {
         c.push(format!("note-structure-{index}"),"review_note",vec![("path",Json::str("input.json")),("hex",Json::str(&hex(value.as_bytes())))]);
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds the calculation evidence corpus"
+)]
 fn evidence(c: &mut Corpus, root: &Path) -> Result<()> {
     let mut bits = 0x3e60_0000_0000_0000u64;
     for index in 0..12000 {
@@ -831,6 +845,7 @@ fn evidence(c: &mut Corpus, root: &Path) -> Result<()> {
     }
     Ok(())
 }
+#[expect(clippy::too_many_lines, reason = "builds the equity corpus cases")]
 fn equity(c: &mut Corpus, seed: u64) -> Result<()> {
     use monthly_close_control_plane::sha256;
     fn source(name: &str, bytes: &[u8]) -> Json {
@@ -1208,6 +1223,7 @@ fn equity(c: &mut Corpus, seed: u64) -> Result<()> {
     Ok(())
 }
 
+#[expect(clippy::too_many_lines, reason = "builds the review corpus cases")]
 fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     fn source(name: &str, bytes: &[u8]) -> Json {
         Json::object([("path", Json::str(name)), ("hex", Json::str(&hex(bytes)))])
@@ -1693,6 +1709,10 @@ fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds the reconciliation corpus cases"
+)]
 fn reconciliation(c: &mut Corpus, seed: u64) -> Result<()> {
     use monthly_close_control_plane::{pycsv, reconciliation::COLUMNS};
     fn source(name: &str, bytes: &[u8]) -> Json {
@@ -2112,6 +2132,7 @@ fn reconciliation(c: &mut Corpus, seed: u64) -> Result<()> {
     Ok(())
 }
 
+#[expect(clippy::too_many_lines, reason = "builds the schedule corpus cases")]
 fn schedules(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     let values = [
         "null", "true", "false", "0", "1", "1.0", r#""""#, r#"" ""#, r#""1""#, r#""\n""#, r#""é""#,
@@ -2350,6 +2371,10 @@ fn schedules(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds the classification corpus cases"
+)]
 fn classification_cases(c: &mut Corpus, seed: u64) -> Result<()> {
     use monthly_close_control_plane::{pycsv, reconciliation::COLUMNS, sha256};
     fn csv(rows: &[Vec<String>]) -> String {
@@ -2639,6 +2664,10 @@ fn classification_cases(c: &mut Corpus, seed: u64) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "derives the driver cases from responses"
+)]
 fn driver_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
     use monthly_close_control_plane::{pycsv, reconciliation::COLUMNS, viewer::PACK_NAMES};
     let mut result = Corpus(Vec::new());
@@ -2776,6 +2805,10 @@ fn driver_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
     Ok(result)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "derives the read utility cases from responses"
+)]
 fn read_utility_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
     use monthly_close_control_plane::{sha256, viewer::PACK_NAMES};
     fn unhex(value: &Json) -> Vec<u8> {
@@ -3062,6 +3095,10 @@ fn read_utility_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
     Ok(result)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "derives the verification cases from responses"
+)]
 fn verification_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
     use monthly_close_control_plane::viewer::PACK_NAMES;
     use std::collections::BTreeMap;
@@ -3298,6 +3335,10 @@ fn verification_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
     Ok(c)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "derives the CLI cases from the other corpora"
+)]
 fn cli_cases(corpus: &Corpus, drivers: &Corpus, reads: &Corpus) -> Result<Corpus> {
     use monthly_close_control_plane::viewer::PACK_NAMES;
     use std::collections::BTreeMap;
@@ -3645,6 +3686,10 @@ fn cli_cases(corpus: &Corpus, drivers: &Corpus, reads: &Corpus) -> Result<Corpus
     Ok(result)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each legacy financial case in turn"
+)]
 fn assert_legacy_financial_cases(corpus: &Corpus, responses: &[Json]) -> Result<()> {
     let mut checked = 0;
     let mut rendered = 0;
@@ -3737,6 +3782,10 @@ fn assert_legacy_financial_cases(corpus: &Corpus, responses: &[Json]) -> Result<
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each legacy comparison case in turn"
+)]
 fn assert_legacy_comparison_cases(corpus: &Corpus, responses: &[Json]) -> Result<()> {
     let mut checked = 0;
     for (request, response) in corpus.0.iter().zip(responses) {
@@ -3888,6 +3937,10 @@ fn run_batch(corpus: &Corpus, python: &Path, root: &Path, executable: &Path) -> 
     Ok(parsed)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the differential stages in order"
+)]
 fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     if !(2..=3).contains(&args.len()) {
         return Err("usage: close-control-differential CPYTHON ORACLE_COMPONENT [SEED]".into());

@@ -69,6 +69,10 @@ fn document_slot(slot: &str) -> bool {
     };
     digits.len() >= 3 && digits.bytes().all(|b| b.is_ascii_digit())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "collects each finding's sources in one pass"
+)]
 fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
     let mut originals: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut order = Vec::new();
@@ -153,6 +157,10 @@ fn unmatched_documents(previous: &Json, current: &Json) -> Result<BTreeSet<Strin
     }
     Ok(unmatched)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each scope field of the 2 packs"
+)]
 fn scope_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
     let mut changes = Vec::new();
     if thresholds_differ(previous, current) {

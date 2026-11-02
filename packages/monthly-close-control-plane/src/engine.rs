@@ -162,6 +162,10 @@ pub fn integrity_exceptions(rows: &[TrialBalanceRow], period: &str) -> Result<Ve
     Ok(result)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "raises each period comparison exception"
+)]
 pub fn period_comparison_exceptions(
     current: &RowMap,
     prior: &RowMap,
@@ -428,6 +432,10 @@ pub fn overall_status(exceptions: &[ExceptionItem]) -> Status {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "raises each calculation evidence exception"
+)]
 pub fn calculation_evidence_exceptions(
     evidence: &[CalculationEvidence],
     unreadable: &[String],
@@ -523,6 +531,10 @@ pub fn review_close(config: &ReviewConfig) -> Result<CloseReviewPack> {
 
 /// One capture per input keeps parsing and provenance bound to the same bytes.
 /// The capture boundary also allows the frozen-oracle probe to supply snapshots.
+#[expect(
+    clippy::too_many_lines,
+    reason = "captures each input once, then reviews"
+)]
 pub fn review_with(
     config: &ReviewConfig,
     capture: &mut impl FnMut(&Path, &str) -> Result<SourceSnapshot>,

@@ -211,6 +211,10 @@ fn evidence_effect_required_members_and_source_digest_cannot_be_rewritten() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one tamper scenario with its assertions"
+)]
 fn evidence_cannot_be_removed_or_duplicated_while_its_witness_remains() {
     let mut files = evidence_pack();
     let mut doc = document(&files);
@@ -302,6 +306,10 @@ fn evidence_section_rejects_instructions_fabricated_rows_and_changed_preamble() 
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one summary grammar scenario and its checks"
+)]
 fn evidence_summary_grammar_is_checked_by_the_physical_view_command() {
     let baseline = evidence_pack();
     let text = summary(&baseline);
@@ -357,6 +365,10 @@ fn evidence_summary_grammar_is_checked_by_the_physical_view_command() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one JSON type scenario with its assertions"
+)]
 fn evidence_json_container_and_scalar_types_are_checked_by_physical_view() {
     let mut files = evidence_pack();
     let mut doc = document(&files);

@@ -70,6 +70,10 @@ fn payloads(value: &Json) -> Result<std::collections::BTreeMap<String, Vec<u8>>>
         })
         .collect()
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs one CLI probe in a temporary directory"
+)]
 fn cli(request: &Json) -> Result<Json> {
     use std::fs;
     let directory = crate::test_support::TempDir::new();
@@ -267,6 +271,10 @@ pub fn evidence_json(item: calculation_evidence::CalculationEvidence) -> Json {
 fn strings(values: Vec<String>) -> Json {
     Json::Array(values.into_iter().map(|value| Json::str(&value)).collect())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one JSON field per pack field, in order"
+)]
 fn pack_json(pack: engine::CloseReviewPack) -> Json {
     Json::object([
         ("status", Json::str(pack.status.as_str())),
@@ -325,6 +333,10 @@ fn pack_json(pack: engine::CloseReviewPack) -> Json {
         ),
     ])
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "maps a probe request onto a review config"
+)]
 fn review(request: &Json) -> Result<engine::CloseReviewPack> {
     let current = snapshot(request.at("current"))?;
     let prior = snapshot(request.at("prior"))?;
@@ -438,6 +450,7 @@ fn csv(request: &Json) -> Result<Json> {
         _ => return Err("unsupported probe CSV kind".into()),
     })
 }
+#[expect(clippy::too_many_lines, reason = "one branch per probe operation")]
 fn operation(request: &Json) -> Result<Json> {
     if request.at("op").is_str("cli") {
         return cli(request);

@@ -448,6 +448,10 @@ mod tests {
         }
     }
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one concurrent refresh scenario and checks"
+    )]
     fn concurrent_expiry_refreshes_once_and_returns_the_persisted_pair() {
         use std::sync::{
             Arc, Barrier,
@@ -572,6 +576,10 @@ mod tests {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one save failure case per write stage"
+    )]
     fn check_save_failure(migration: bool) {
         for stage in [Stage::Write, Stage::Flush, Stage::Replace] {
             let scratch = Scratch::new();

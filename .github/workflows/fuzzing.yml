@@ -1,12 +1,10 @@
 name: Fuzzing
 
-# The native 60-second mutation pass runs after merge, weekly and on demand;
-# the 60-second libFuzzer pass runs weekly and on demand. No gate requires
-# either. tests/test_fuzz_harness.py replays the seed corpus on every run of
-# the root suite.
+# The native 60-second mutation pass and the 60-second libFuzzer pass run
+# weekly and on demand, not on pushes. No gate requires either.
+# tests/test_fuzz_harness.py replays the seed corpus on every run of the root
+# suite.
 on:
-  push:
-    branches: [main]
   schedule:
     - cron: "53 5 * * 2"
   workflow_dispatch:
@@ -37,9 +35,7 @@ jobs:
     name: fuzz ${{ matrix.target }} with libFuzzer
     # The Monthly Close loaders and corpus under coverage-guided libFuzzer,
     # with the Review Ready pack loaders and the Xero Trial Balance response
-    # path. It needs a nightly compiler and a longer build, so it runs weekly
-    # and on demand and adds nothing to each push to main.
-    if: github.event_name != 'push'
+    # path. It needs a nightly compiler and a longer build.
     timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions:

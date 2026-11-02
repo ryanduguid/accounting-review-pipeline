@@ -114,6 +114,10 @@ fn joined(values: &[PyStr], separator: &str) -> PyStr {
 pub fn review_schedule(path: &Path, kind: &str) -> Result<Json> {
     review_snapshot(&SourceSnapshot::capture(path, "schedule")?, kind)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "parses and reviews one schedule snapshot"
+)]
 pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
     let parse = || -> Result<Json> {
         let raw = snapshot.text("schedule", true)?;
@@ -169,6 +173,10 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
     Ok(output)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates the expenses schedule in order"
+)]
 fn expenses(data: &Json) -> Result<Json> {
     object(
         data,
@@ -341,6 +349,10 @@ fn expenses(data: &Json) -> Result<Json> {
 }
 
 type MigrationKey = (PyStr, PyStr, PyStr, PyStr);
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates the migration schedule in order"
+)]
 fn migration(data: &Json) -> Result<Json> {
     object(
         data,
@@ -500,6 +512,10 @@ fn migration(data: &Json) -> Result<Json> {
     ]))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates the interentity schedule in order"
+)]
 fn interentity(data: &Json) -> Result<Json> {
     object(
         data,

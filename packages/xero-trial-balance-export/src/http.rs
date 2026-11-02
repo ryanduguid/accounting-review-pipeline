@@ -347,6 +347,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one table of token endpoint refusals"
+    )]
     fn token_endpoint_refusals_are_reported_without_replaying_single_use_inputs() {
         for authorization in [false, true] {
             for (status, body, message) in [
@@ -534,6 +538,10 @@ mod tests {
         }
     }
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one child process scenario with its checks"
+    )]
     fn working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy() {
         use std::{net::TcpListener, time::Instant};
         // Rerun in a child without process-level proxy, NO_PROXY, REQUEST_METHOD or CA
@@ -622,6 +630,10 @@ mod tests {
         }
     }
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one loopback request scenario and its checks"
+    )]
     fn native_request_carries_headers_query_and_basic_auth_without_replaying_a_post() {
         use std::{
             io::{BufRead, BufReader, Write},

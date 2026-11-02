@@ -150,6 +150,10 @@ fn account_id(row: &Json, where_: &str) -> Result<String> {
     Ok(String::new())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "flattens the report sections in one pass"
+)]
 pub fn flatten(report: &Json) -> Result<(Vec<String>, Vec<Record>)> {
     let mut header = Vec::new();
     let mut flat = Vec::new();

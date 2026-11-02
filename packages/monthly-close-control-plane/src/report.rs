@@ -253,6 +253,10 @@ pub fn entry_digest(entry: &Json) -> Result<String> {
             .as_bytes(),
     ))
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one JSON field per pack field, in order"
+)]
 pub fn as_json(pack: &CloseReviewPack) -> Result<Json> {
     let acknowledgement = pack.acknowledgement.as_ref().map_or(Json::Null, |a| {
         Json::object([
@@ -352,6 +356,10 @@ pub fn account_name(code: &str, name: &str, id: &str) -> String {
         pieces.join(" / ")
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes the summary sections in output order"
+)]
 pub fn as_markdown(pack: &CloseReviewPack) -> Result<PyStr> {
     let queries = pack.client_queries()?;
     let blocked = pack

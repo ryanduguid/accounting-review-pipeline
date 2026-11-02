@@ -205,6 +205,10 @@ impl State {
         ])
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "reads and validates the publication state"
+)]
 fn read_state(control: &Path) -> io::Result<State> {
     directory(control)?;
     regular(&control.join("state.json"), false)?;
@@ -566,6 +570,10 @@ fn recover(
 pub fn publish(output: &Path, rendered: &[Vec<u8>; 3]) -> io::Result<()> {
     publish_observed(output, rendered, &mut |_| Ok(()))
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks the observed publication in one place"
+)]
 fn publish_observed(
     output: &Path,
     rendered: &[Vec<u8>; 3],

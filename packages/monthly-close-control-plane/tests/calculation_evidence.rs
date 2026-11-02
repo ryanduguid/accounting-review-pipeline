@@ -285,6 +285,10 @@ fn present_non_boolean_flags_are_unreadable_and_block_the_full_review() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one refusal case per malformed shape"
+)]
 fn schema_text_money_and_array_shapes_are_refused() {
     let mut wrong_block = record();
     wrong_block.set("calculation", Json::str("wrong type"));
@@ -422,6 +426,10 @@ fn directional_format_and_control_characters_are_not_hidden_in_evidence_text() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one table of nested findings and checks"
+)]
 fn nested_advisory_manifest_and_validation_findings_are_preserved() {
     let cases = [
         (
@@ -534,6 +542,10 @@ fn a_refusal_needs_no_advisory_but_cannot_clear_other_producer_findings() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one table of advisory notes and checks"
+)]
 fn advisory_blanks_and_substantive_notes_preserve_the_original_findings() {
     for notes in [
         vec![],
@@ -750,6 +762,10 @@ fn missing_rates_or_figures_are_never_saved_as_relied_upon() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one table of period boundaries and checks"
+)]
 fn period_coverage_distinguishes_invalid_nonmatching_and_inclusive_boundaries() {
     let evidence = loaded(GOOD.as_bytes()).unwrap();
     for (period, date, expected) in [

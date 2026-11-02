@@ -200,6 +200,10 @@ fn as_at_date(title: &str) -> Option<String> {
     Some(date.format("%Y-%m-%d").to_string())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates the response before building rows"
+)]
 pub fn validated_rows(payload: &Json, date: &str) -> Result<Vec<report::Record>> {
     if !matches!(payload, Json::Object(_)) {
         return Err(Failure::message(

@@ -204,6 +204,10 @@ fn verify_producer(producer: &Json) -> Result<()> {
     }
     Ok(())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks every pack field in schema order"
+)]
 fn verify_schema(document: &Json) -> Result<()> {
     if let Some(producer) = document.get("producer") {
         verify_producer(producer)?;
@@ -708,6 +712,7 @@ fn query_counts(summary: &str) -> Vec<String> {
         .map(str::to_owned)
         .collect()
 }
+#[expect(clippy::too_many_lines, reason = "checks the client queries section")]
 fn verify_queries(summary: &str, queries: &[Json]) -> Result<()> {
     let section = section(summary, "## Client queries")?;
     if !normalise(&section.join(" ")).contains("These are draft questions for the preparer, derived from the exceptions above. Nothing has been sent to anyone.") {return Err(format!("{S}: the client-query boundary statement is missing or altered"));}
@@ -861,6 +866,7 @@ fn slug(value: &str) -> bool {
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
     })
 }
+#[expect(clippy::too_many_lines, reason = "parses the evidence section rows")]
 fn evidence_rows(summary: &str) -> Result<(Vec<String>, EvidenceRows)> {
     let section = section(summary, EVIDENCE_HEADING)?;
     let lead = ["", EVIDENCE_PREAMBLE, ""];
@@ -1011,6 +1017,10 @@ fn encoded_str(value: &Json) -> String {
         _ => PyStr::from(pyjson::repr(value).as_str()).os_text(),
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks the evidence block against the summary"
+)]
 fn verify_evidence(block: &Json, summary: &str, sources: &Json) -> Result<()> {
     if matches!(block, Json::Null) {
         if pytext::split_lines(summary)
@@ -1158,6 +1168,10 @@ fn verify_evidence(block: &Json, summary: &str, sources: &Json) -> Result<()> {
     }
     Ok(())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each summary section against the pack"
+)]
 fn verify_agreement(
     document: &Json,
     summary: &str,
@@ -1364,6 +1378,10 @@ pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
     verify_payloads(&payloads)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "renders the verified pack sections in order"
+)]
 pub fn render_verified(pack: &VerifiedPack) -> Result<String> {
     let document = &pack.document;
     let thresholds = document.at("thresholds");

@@ -44,6 +44,10 @@ pub fn date_fromisoformat(text: &str) -> Option<Date> {
 
 /// CPython's accepted basic and week-date forms. Schema loaders can then
 /// distinguish a valid non-canonical date from an invalid calendar date.
+#[expect(
+    clippy::too_many_lines,
+    reason = "mirrors CPython's accepted date forms"
+)]
 pub fn python_date_fromisoformat(text: &str) -> Option<Date> {
     if let Some(date) = date_fromisoformat(text) {
         return Some(date);

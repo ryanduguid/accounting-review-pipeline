@@ -80,6 +80,7 @@ pub fn money(value: &str, field: &str, path: &Path, row: usize) -> Result<Decima
 pub fn fixed(value: &Decimal) -> String {
     value.format_places(2).expect("bounded transaction amount")
 }
+#[expect(clippy::too_many_lines, reason = "validates every column of one row")]
 fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> {
     if !value.has_exact_keys(&COLUMNS)
         || COLUMNS.iter().any(|key| value.at(key).as_pystr().is_none())
@@ -178,6 +179,10 @@ impl Notes {
         )
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "loads and validates the opening items file"
+)]
 fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec<Json>, Notes)> {
     let raw = source.text("Opening items", true)?;
     let payload = pyjson::loads_detailed(raw).map_err(|(e, diagnostic)| {
@@ -274,6 +279,10 @@ impl Allocation {
         ])
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "loads and validates the decisions file"
+)]
 fn decisions(
     source: Option<&SourceSnapshot>,
     items: &BTreeMap<String, Json>,
@@ -359,6 +368,10 @@ pub struct ReconcileConfig {
 pub fn reconcile(config: &ReconcileConfig) -> Result<Json> {
     reconcile_with(config, &mut SourceSnapshot::capture)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one reconciliation at 40-digit precision"
+)]
 pub fn reconcile_with(
     config: &ReconcileConfig,
     capture: &mut impl FnMut(&Path, &str) -> Result<SourceSnapshot>,
@@ -696,6 +709,10 @@ mod tests {
         );
     }
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one carry scenario with its assertions"
+    )]
     fn rendered_carry_retains_partial_groups_and_unrelated_net_zero_items() {
         let mut config = config();
         config.period_start = "2026-07-01".into();

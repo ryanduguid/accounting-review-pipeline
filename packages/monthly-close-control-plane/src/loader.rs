@@ -468,6 +468,10 @@ fn strip_points(points: &[u32]) -> &[u32] {
     &points[start..end]
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates every acknowledgement field"
+)]
 pub fn load_reviewer_acknowledgement(
     snapshot: Option<&SourceSnapshot>,
 ) -> Result<Option<ReviewerAcknowledgement>> {

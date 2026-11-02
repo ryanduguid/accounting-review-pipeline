@@ -110,6 +110,10 @@ fn remove_quietly(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "stages and publishes the pack files together"
+)]
 fn publish_with(
     output: &Path,
     rendered: &[Vec<u8>; 4],

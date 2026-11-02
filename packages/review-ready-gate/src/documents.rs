@@ -236,6 +236,10 @@ pub struct IntakeOptions<'a> {
     pub origin: &'a str,
     pub version: &'a str,
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "validates and writes one document intake"
+)]
 pub fn create_intake(options: IntakeOptions<'_>) -> Result<std::path::PathBuf> {
     let output = crate::report::require_output_outside_repository(options.output)?;
     if output.exists() {
@@ -392,6 +396,7 @@ pub fn load_document(root: &Path) -> Result<DocumentBundle> {
         issues,
     })
 }
+#[expect(clippy::too_many_lines, reason = "checks every human review field")]
 fn review_issues(
     review: &Json,
     digest: &str,
@@ -532,6 +537,10 @@ pub fn document_controls(
     }
     (findings, evidence)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes the document evidence lines in order"
+)]
 pub fn render_document(bundle: &DocumentBundle) -> String {
     let m = &bundle.manifest;
     let mut lines = vec![
@@ -675,6 +684,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one table of the 15 benchmark documents"
+    )]
     fn all_fifteen_fabricated_transcription_benchmarks() {
         let benchmark = SourceSnapshot::capture(
             &test_support::examples().join("document-intake/benchmark.json"),
@@ -803,6 +816,10 @@ mod tests {
         assert!(sheet.contains("\"unreadable\""));
     }
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one table of malformed review values"
+    )]
     fn malformed_human_review_values_and_pages_fail_closed() {
         for (keys, value, expected) in [
             (

@@ -197,6 +197,10 @@ fn random_chars(length: usize, alphabet: &[u8]) -> Result<String> {
     Ok(middle)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the ignored-output check as one sequence"
+)]
 pub fn require_ignored_output(
     output: &Path,
     manifest: bool,

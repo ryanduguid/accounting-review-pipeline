@@ -104,6 +104,10 @@ pub fn classify(original: &Path, current: &Path, evidence: &Path, currency: &str
         &mut SourceSnapshot::capture,
     )
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "captures the 3 sources and classifies them"
+)]
 pub fn classify_with(
     paths: &[PathBuf; 3],
     currency: &str,
@@ -349,6 +353,10 @@ pub fn classify_with(
 mod tests {
     use super::*;
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one recoding scenario with its assertions"
+    )]
     fn recoding_retains_the_original_discrepancy_and_captures_each_path_once() {
         let paths = ["original.csv", "current.csv", "coding.json"]
             .map(|name| pypath::resolve(Path::new(name), false).unwrap());

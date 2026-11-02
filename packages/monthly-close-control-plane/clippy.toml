@@ -1,2 +1,3 @@
 # Let ref_option and similar lints check public items too: the crate is publish = false.
 avoid-breaking-exported-api = false
+too-many-lines-threshold = 50

@@ -55,6 +55,10 @@ fn verified(pack: VerifiedPack, source: SourceSnapshot) -> Result<Run> {
 fn same(a: Option<&Json>, b: Option<&Json>) -> bool {
     pyjson::py_eq(a.unwrap_or(&Json::Null), b.unwrap_or(&Json::Null), true)
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks each scope field of the 2 packs"
+)]
 fn scope_changes(previous: &Json, current: &Json) -> Vec<&'static str> {
     let mut changes = Vec::new();
     for field in ["controls_not_run", "thresholds"] {
@@ -167,6 +171,10 @@ fn queries(document: &Json) -> BTreeMap<PyStr, Json> {
         .map(|row| (row.at("query_id").as_pystr().unwrap().clone(), row.clone()))
         .collect()
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "loads and validates the responses file"
+)]
 fn responses(
     path: Option<&Path>,
     hash: &str,
@@ -250,6 +258,10 @@ pub fn compare_packs(config: &CompareConfig) -> Result<Json> {
         &mut SourceSnapshot::capture,
     )
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "verifies both packs, then compares them"
+)]
 pub fn compare_with(
     config: &CompareConfig,
     verify: &mut impl FnMut(&Path) -> Result<VerifiedPack>,

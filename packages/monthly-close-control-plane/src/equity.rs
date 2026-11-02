@@ -145,6 +145,7 @@ fn sum(values: impl IntoIterator<Item = Decimal>) -> Result<Decimal> {
         .try_fold(Decimal::zero(), |a, b| exact(a.add(&b)))
 }
 
+#[expect(clippy::too_many_lines, reason = "validates the whole equity schedule")]
 pub fn load_schedule(snapshot: &SourceSnapshot) -> Result<Json> {
     let raw = snapshot.text("Equity schedule", true)?;
     let document = pyjson::loads_detailed(raw).map_err(|(error, diagnostic)| match error {
@@ -267,6 +268,10 @@ pub struct Inputs<'a> {
     pub tolerance: &'a Decimal,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "reconciles one equity schedule end to end"
+)]
 pub fn reconcile(
     snapshot: &SourceSnapshot,
     inputs: Inputs<'_>,
@@ -472,6 +477,10 @@ fn cell(value: &str) -> String {
         .replace('`', "\\`")
         .replace('*', "\\*")
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes the equity summary lines in order"
+)]
 pub fn summary_lines(result: &Json) -> Vec<String> {
     // Keep Python code points until the complete Markdown is encoded as UTF-8.
     let encoded = |value: &Json| value.as_pystr().unwrap().os_text();
@@ -563,6 +572,10 @@ pub fn summary_lines(result: &Json) -> Vec<String> {
 }
 
 /// Verify the saved evidence independently of its claimed status and amounts.
+#[expect(
+    clippy::too_many_lines,
+    reason = "checks every saved result field independently"
+)]
 pub fn validate_result(value: &Json, sources: &Json, exceptions: &[Json]) -> Result<()> {
     let status = value.get("status");
     if !value.has_exact_keys(RESULT_FIELDS)

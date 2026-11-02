@@ -1,4 +1,8 @@
 use xero_trial_balance_export::{Failure, Result, offline, stdio};
+#[expect(
+    clippy::too_many_lines,
+    reason = "the proof tool's arguments and steps together"
+)]
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {

@@ -751,6 +751,10 @@ pub fn canonical(value: &Json) -> String {
 }
 
 /// Canonical calculation evidence uses UTF-8 strings and refuses non-finite numbers.
+#[expect(
+    clippy::too_many_lines,
+    reason = "encoder with its nested writer functions"
+)]
 pub fn canonical_utf8(value: &Json) -> Result<String, &'static str> {
     fn string(out: &mut String, text: &PyStr) -> Result<(), &'static str> {
         out.push('"');
@@ -859,6 +863,10 @@ pub fn pretty_utf8(value: &Json) -> Result<String, String> {
     encode_utf8(&pretty_points(value, false, false))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "printer with its nested writer functions"
+)]
 fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {
     fn append(out: &mut Vec<u32>, text: &str) {
         out.extend(text.chars().map(u32::from));

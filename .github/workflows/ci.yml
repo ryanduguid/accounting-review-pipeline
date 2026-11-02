@@ -26,6 +26,13 @@ jobs:
       contents: read
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+      SHELLCHECK_VERSION: "0.11.0"
+      # digest computed from the v0.11.0 release tarball at pin time
+      # (koalaman does not publish a checksums file)
+      SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,6 +59,25 @@ jobs:
             fi
           done < "$lock_list"
           exit "$status"
+      # pipeline-gates needs this job, so the workflow and script lints block too.
+      - name: Download and verify shellcheck and actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --proto '=https' --proto-redir '=https' -sSLO "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | sha256sum --check
+          tar -xJf "shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          curl --proto '=https' --proto-redir '=https' -sSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | sha256sum --check
+          tar -xzf "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" actionlint
+      - name: Shellcheck the tracked shell scripts
+        shell: bash
+        run: git ls-files -z -- '*.sh' | xargs -0 "$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" -x
+      - name: Actionlint the workflows
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/actionlint" -shellcheck "$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
 
   rust:
     # These five packages are native Rust crates from 1.0.0.

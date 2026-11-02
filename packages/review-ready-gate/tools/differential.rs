@@ -119,6 +119,7 @@ impl Corpus {
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+#[expect(clippy::too_many_lines, reason = "one corpus table of money inputs")]
 fn money(c: &mut Corpus, seed: u64) {
     for (i, value) in [
         "",
@@ -205,6 +206,7 @@ fn dates(c: &mut Corpus) {
         c.scalar(&format!("date-other-{value:?}"), "date", value);
     }
 }
+#[expect(clippy::too_many_lines, reason = "one corpus table of CSV templates")]
 fn csvs(c: &mut Corpus) {
     let templates = [
         (
@@ -316,6 +318,10 @@ fn csvs(c: &mut Corpus) {
         );
     }
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one corpus table of self-review inputs"
+)]
 fn self_reviews(c: &mut Corpus) {
     let valid = Json::object([
         ("preparer_initials", Json::str("AB")),
@@ -399,6 +405,10 @@ fn self_reviews(c: &mut Corpus) {
     bom.extend(probe::encode(&valid).as_bytes());
     add("self-review-bom".into(), bom);
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one corpus table of document field values"
+)]
 fn document_values(c: &mut Corpus) {
     for field in [
         "supplier",
@@ -625,6 +635,7 @@ fn save_pack(scratch: &Path, name: &str, files: &[Vec<u8>; 3]) -> Result<PathBuf
     }
     Ok(path)
 }
+#[expect(clippy::too_many_lines, reason = "builds the saved pack corpus cases")]
 fn saved_packs(c: &mut Corpus, oracle: &Path, scratch: &Path) -> Result<()> {
     let ready = probe::example_document("bas", &oracle.join("examples/bas-ready"), "0.01")?;
     let not_ready = probe::example_document("bas", &oracle.join("examples/bas-not-ready"), "0.01")?;
@@ -896,6 +907,10 @@ fn saved_packs(c: &mut Corpus, oracle: &Path, scratch: &Path) -> Result<()> {
     }
     Ok(())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds the acknowledgement corpus cases"
+)]
 fn acknowledgements(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     let base = Json::object([
         ("reviewer_initials", Json::str("XY")),
@@ -964,6 +979,10 @@ fn acknowledgements(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     }
     Ok(())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "builds the document pack corpus cases"
+)]
 fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     use review_ready_gate::documents::{self, IntakeOptions};
     let text = fs::read_to_string(root.join("examples/document-intake/invoice.txt"))?;
@@ -1191,6 +1210,10 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "drives one oracle exchange over stdio"
+)]
 fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
     let mut child = command
         .stdin(Stdio::piped())
@@ -1249,6 +1272,10 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
         .map(str::to_owned)
         .collect())
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the differential stages in order"
+)]
 fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     if args.len() < 2 || args.len() > 3 {
         return Err("usage: review-ready-differential CPYTHON ORACLE_COMPONENT [SEED]".into());

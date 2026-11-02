@@ -72,6 +72,10 @@ fn tb_json(r: TrialBalanceRow) -> Json {
         ("ytd_credit", Json::str(&r.ytd_credit.to_sci_string())),
     ])
 }
+#[expect(
+    clippy::too_many_lines,
+    reason = "one branch per CSV kind the probe reads"
+)]
 fn csv(request: &Json) -> Result<Json> {
     let snapshot = snapshot(request)?;
     let kind = text(request.at("kind"))?;
@@ -154,6 +158,7 @@ fn csv(request: &Json) -> Result<Json> {
     };
     Ok(Json::Array(rows))
 }
+#[expect(clippy::too_many_lines, reason = "one match arm per probe operation")]
 fn operation(request: &Json) -> Result<Json> {
     match text(request.at("op"))?.as_str() {
         "cli" => {

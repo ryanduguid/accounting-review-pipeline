@@ -1,6 +1,10 @@
 use monthly_close_control_plane::{Result, cli, pypath};
 use std::{ffi::OsString, path::Path};
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "writes and checks each demo month in one pass"
+)]
 fn run(output: &Path) -> Result<()> {
     let output = pypath::resolve(output, false).map_err(|_| "Cannot resolve demo output.")?;
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");

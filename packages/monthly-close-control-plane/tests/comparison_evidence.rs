@@ -46,6 +46,10 @@ fn inventory(directory: &Path) -> BTreeMap<String, (Vec<u8>, SystemTime)> {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one comparison scenario with its assertions"
+)]
 fn absent_findings_preserve_scope_and_source_boundaries_without_mutating_packs() {
     let temp = TempDir::new();
     for (name, date, amount) in [
