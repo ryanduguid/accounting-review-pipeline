@@ -23,13 +23,13 @@ The result is REVIEW, with 8 exceptions and none blocked. These 3 rows introduce
 ## Reproduce
 
 Without a clone, follow the [reviewer quick start](reviewer-quick-start.md). From
-`packages/monthly-close-control-plane`, with uv installed:
+`packages/monthly-close-control-plane`, with Rust installed through rustup (the directory's `rust-toolchain.toml` pins 1.99.0):
 
 ```bash
 cargo run --locked --release --bin close-control -- review --current examples/current_trial_balance.csv --prior examples/prior_trial_balance.csv --mapping examples/account_mapping.csv --subledger examples/subledger_balances.csv --absolute-threshold 10000 --percentage-threshold 0.10 --reconciliation-tolerance 0.01 --review-note examples/review_note.json --output ../../../close-control-demo
 ```
 
-The output directory is outside the repository, alongside its clone directory. Exit 2 is the expected attention result. Open `../../../close-control-demo/close-summary.md`, inspect `exceptions.csv`, and use `close-review-pack.json` to check the recorded thresholds and input hashes. [The existing worked example](../README.md#worked-example) shows the complete output contract.
+The output directory is outside the repository, alongside its clone directory. Exit 2 is the expected attention result. Open `../../../close-control-demo/close-summary.md`, inspect `exceptions.csv` and use `close-review-pack.json` to check the recorded thresholds and input hashes. [The existing worked example](../README.md#worked-example) shows the complete output contract.
 
 ## Interpretation
 
