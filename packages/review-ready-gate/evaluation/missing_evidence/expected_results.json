@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "product_release": "0.1.8",
+  "product_release": "1.0.0",
   "published_release_differs": {
-    "release": "0.1.7",
-    "empty_bank_reconciliation": "READY with no finding",
-    "all_scenarios": "no controls not run are reported"
+    "release": "0.3.0",
+    "no_bank_reconciliation": "READY with no finding",
+    "bank_reconciliation_scenarios": "bank_rec is also listed under controls not run"
   },
   "fixture_version": "1",
   "base_fixture": "examples/month-end-ready",
@@ -24,9 +24,9 @@
       "profile": "month_end",
       "fixture": "evaluation/missing_evidence/packs/no_bank_reconciliation",
       "change": {"removed": ["bank_rec.csv"]},
-      "expected_status": "READY",
-      "expected_findings": [],
-      "expected_controls_not_run": ["bank_rec", "prior_findings"]
+      "expected_status": "NOT_READY",
+      "expected_findings": ["MISSING_ARTEFACT"],
+      "expected_controls_not_run": ["prior_findings"]
     },
     {
       "id": "empty_bank_reconciliation",
@@ -35,7 +35,7 @@
       "change": {"emptied": ["bank_rec.csv"]},
       "expected_status": "NOT_READY",
       "expected_findings": ["EMPTY_ARTEFACT"],
-      "expected_controls_not_run": ["bank_rec", "prior_findings"]
+      "expected_controls_not_run": ["prior_findings"]
     },
     {
       "id": "wrong_period",

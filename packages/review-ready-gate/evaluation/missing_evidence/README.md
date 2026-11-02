@@ -25,15 +25,15 @@ example in any other file. No pack contains client data.
 | Scenario | Change to the ready pack | Status | Finding | Controls not run |
 | --- | --- | --- | --- | --- |
 | `absent_prior_trial_balance` | `prior_trial_balance.csv` removed | `NOT_READY` | `MISSING_ARTEFACT` | `prior_findings` |
-| `no_bank_reconciliation` | `bank_rec.csv` removed | `READY` | none | `bank_rec`, `prior_findings` |
-| `empty_bank_reconciliation` | `bank_rec.csv` left with no bytes | `NOT_READY` | `EMPTY_ARTEFACT` | `bank_rec`, `prior_findings` |
+| `no_bank_reconciliation` | `bank_rec.csv` removed | `NOT_READY` | `MISSING_ARTEFACT` | `prior_findings` |
+| `empty_bank_reconciliation` | `bank_rec.csv` left with no bytes | `NOT_READY` | `EMPTY_ARTEFACT` | `prior_findings` |
 | `wrong_period` | self-review declares 31 May for a 30 June trial balance | `BLOCKED` | `PERIOD_ORDER` | `prior_findings` |
 
-`no_bank_reconciliation` is the case to read twice. The bank reconciliation is
-optional in the month-end profile, so a balanced pack without it reaches
-`READY`. The status is true of the controls that ran; the summary's 'Controls
-not run' section says the bank control did not run. A reviewer who reads only
-the status misses that.
+`no_bank_reconciliation` is the case to read twice. Until 1.0.0 the bank
+reconciliation was optional in the month-end profile, so a balanced pack
+without it reached `READY`, and only the summary's 'Controls not run' section
+said the bank control had not run. The month-end profile now requires it, so
+the pack is returned to the preparer like any other missing artefact.
 
 `prior_findings` appears in every row because none of these packs carries a
 prior review's findings, so the repeat-finding control has nothing to compare.
@@ -71,15 +71,15 @@ behaviour, not as a benchmark.
 
 ## Product and fixture version
 
-Product release `0.1.8`. The results come from the source after release 0.1.7
-and first ship in 0.1.8; fixture version `1`.
+Product release `1.0.0`. The results come from the source after release 0.3.0
+and first ship in 1.0.0; fixture version `1`.
 
-Published 0.1.7 gives different results, checked on 24 September 2026 UTC (25 September AEST) with
-`uvx --from review-ready-gate==0.1.7`. It reports the empty bank
-reconciliation as `READY` with no finding, and it lists no controls not run
-in any scenario, so the `no_bank_reconciliation` pack reaches `READY` with
-nothing to show the bank control was skipped. The other statuses and findings
-match.
+Published 0.3.0 gives different results, checked on 2 November 2026 UTC (3 November AEST) with
+`uvx --from review-ready-gate==0.3.0`. It reports the `no_bank_reconciliation`
+pack as `READY` with no finding, and it lists `bank_rec` under controls not run
+in both bank reconciliation scenarios. The other statuses, findings and controls
+not run match. Published 0.1.7 also reported the empty bank reconciliation as
+`READY` and listed no controls not run.
 
 ## Limitations and non-claims
 
