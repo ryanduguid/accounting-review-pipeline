@@ -15,10 +15,21 @@ fn documented_controls() -> Vec<&'static str> {
         !section.is_empty(),
         "README.md has no '## Controls' section"
     );
+    // Every data row counts, so a row whose first cell is not a backticked ID
+    // fails here instead of escaping the comparison.
     section
         .into_iter()
-        .filter_map(|line| line.strip_prefix("| `"))
-        .map(|row| row.split_once('`').expect("unclosed control ID").0)
+        .filter(|line| line.starts_with('|'))
+        .skip(2)
+        .map(|row| {
+            let cell = row.split('|').nth(1).unwrap_or_default().trim();
+            cell.strip_prefix('`')
+                .and_then(|rest| rest.strip_suffix('`'))
+                .filter(|id| !id.is_empty() && !id.contains('`'))
+                .unwrap_or_else(|| {
+                    panic!("Controls row's first cell is not a backticked control ID: {row}")
+                })
+        })
         .collect()
 }
 
