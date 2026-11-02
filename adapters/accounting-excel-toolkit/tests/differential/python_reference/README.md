@@ -1,6 +1,6 @@
 # Python benchmark reference
 
-These two modules preserve the Python functions from pipeline commit
+These 2 modules preserve the Python functions from pipeline commit
 `e06647062efaf4410f7d4a414a0559ca51147267` for `benchmark_aged_review.py`.
 Only their executable guards change, to refuse direct CLI use.
 

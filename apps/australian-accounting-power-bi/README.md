@@ -107,7 +107,7 @@ australian-accounting-power-bi/
 │       ├── expressions.tmdl             # SampleFolder, supported horizon and M queries/functions
 │       └── tables/                      # Dimensions, facts, and calculation groups
 ├── samples/                             # Deterministic fabricated CSV fixtures
-│   ├── sample-entities.csv              # Varrock Ventures, Draynor Produce, Falador Freight
+│   ├── sample-entities.csv              # Varrock Ventures, Draynor Produce, Falador Freight, Ardougne Holdings Trust
 │   ├── sample-chart-of-accounts.csv     # Standard Australian Chart of Accounts
 │   ├── sample-general-ledger.csv        # Balanced double-entry GL journals (FY25-FY27)
 │   ├── sample-budgets.csv               # Monthly departmental budgets
@@ -188,7 +188,7 @@ The turnover band uses revenue for the complete selected financial year, even wh
 
 You can also inspect the semantic model directory in **Tabular Editor 3 / 2**, or edit TMDL files in **Visual Studio Code** with the Microsoft TMDL extension.
 
-The [native verification record](docs/native-verification.md) includes the 25 September 2026 fabricated-data refresh and inspection of all 4 pages in Desktop 2.157.1354.0. Automated checks cover structure and bindings; repeat the native check after model or report changes. This smoke test does not establish production readiness or validate every accounting calculation.
+The [native verification record](docs/native-verification.md) includes the 25 September 2026 fabricated-data refresh and inspection of the 4 pages the report then had, in Desktop 2.157.1354.0. It predates the Close review and Supporting journal rows pages. Automated checks cover structure and bindings; repeat the native check after model or report changes. This smoke test does not establish production readiness or validate every accounting calculation.
 
 ---
 

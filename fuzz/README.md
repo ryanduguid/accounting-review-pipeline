@@ -2,7 +2,9 @@ Two harnesses replay fabricated bytes through Monthly Close Controls'
 trial-balance, mapping, mapping-policy, balance-policy and subledger loaders.
 Both call the same `monthly_close_control_plane::fuzzing::exercise` function
 from the component's `tools` feature. Expected validation errors are returned;
-a panic fails the run. Seeds are at most 4 KiB.
+a panic fails the run. Seeds are at most 4 KiB. Workpaper Review Gate and
+Xero Trial Balance Export each have their own cargo-fuzz target, described
+after these 2.
 
 ## Native mutation harness
 
@@ -14,7 +16,7 @@ cargo run --locked --release --manifest-path packages/monthly-close-control-plan
 
 Use `0` seconds for corpus replay only. A non-zero duration adds deterministic
 single-byte changes, deletions and appends until its deadline. The workflow
-adds an external 90-second process timeout and a five-minute job limit.
+adds an external 90-second process timeout and a 5-minute job limit.
 `tests/test_fuzz_harness.py` checks native corpus replay in the root suite.
 This mutation pass does not measure code coverage; the former Python Atheris
 coverage does not establish Rust coverage.

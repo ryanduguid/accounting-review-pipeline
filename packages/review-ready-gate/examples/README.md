@@ -15,8 +15,14 @@ Varrock Ventures Pty Ltd (month-end and year-end).
 | `month-end-ready/` | `month_end` | `READY` | Current and prior TB, same tenant, prior date earlier, bank rec within tolerance |
 | `year-end-ready/` | `year_end` | `READY` | Tie-out matrix with no `UNSUPPORTED` lines; TIED rows name workpaper and source |
 
+[`document-intake/`](document-intake/README.md) prepares a fabricated invoice
+with `review-ready intake` and attaches it to a `bas-ready/` gate run with
+`--document`.
+
 `review_note.json` is an optional acknowledgement. Supplying it never changes
 status.
+
+From `packages/review-ready-gate`:
 
 ```bash
 review-ready gate --profile bas --pack examples/bas-ready --output ../../../review-ready-demo/bas-ready

@@ -75,7 +75,7 @@ Monthly Close Controls / payday-super-checker / other engines
 
 [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) answers 'what material exceptions exist on these trial balances?'. This tool answers a prior question: **'is the pack even allowed onto the review desk?'** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
 
-It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM, or claim that a file is correct.
+It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM or claim that a file is correct.
 
 > [!WARNING]
 > A `READY` result means no configured gate tripped on the files that were present. A human still decides. See [DISCLAIMER.md](DISCLAIMER.md).
@@ -261,7 +261,7 @@ Optional `--review-note` JSON:
 `review-ready view` is the read-only half of the gate: it loads a generated pack, proves the 3 files still agree with each other and prints the cover sheet. It never writes, renames or deletes anything, and it cannot change what the engine computed.
 
 ```bash
-review-ready view --pack-dir outputs/bas-ready
+review-ready view --pack-dir ../../../review-ready-demo/bas-ready
 ```
 
 Before displaying anything it fails closed on: a missing artefact; JSON that is not valid UTF-8, not valid JSON, or carries unknown, missing or duplicated top-level members; a threshold or nested source digest that no longer parses as the writer rendered it; a `readiness-summary.md` whose overall status, source-evidence digests or review-boundary statement disagree with the JSON (including a second, conflicting status line); and a `findings.csv` whose header, row count or any cell disagrees with the JSON findings, honouring the writer's formula-injection guard exactly. On success the sheet ends with the SHA-256 of each artefact's exact bytes, so the displayed evidence can itself be archived. Exit code is 0 when a pack was verified and shown, 1 when verification failed.
@@ -289,7 +289,7 @@ regenerate from the same inputs whilst retaining evidence, choose a new output
 directory. Process death is detected when its state remains unresolved; physical
 power-loss durability is unverified.
 
-## Comparing two runs of a pack
+## Comparing 2 runs of a pack
 
 A pack sent back to the preparer is gated again. `review-ready compare` verifies both runs with the same checks as `view`, then prints JSON showing what moved between them: the overall status, each source file's digest, and each group of findings by code and slot. It writes nothing.
 
@@ -325,7 +325,7 @@ numbered document label that contradicts its filename also prevents comparison.
 
 - Use a separate, access-controlled working directory for client source files and outputs.
 - A generated pack cannot be written into a version-control checkout. The writer walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory. A level it cannot examine is refused.
-- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
+- Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/`, `schemas/` and `evaluation/missing_evidence/packs/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Do not use this as tax, financial, audit or legal advice.
 
 ## Related
@@ -346,7 +346,7 @@ cargo test --locked --all-features
 cargo build --locked --release
 ```
 
-The test suite covers schema gates, the 3 fabricated engagement packs, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing, and the command-line exit contract.
+The test suite covers schema gates, fabricated packs for all 3 engagement profiles, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing and the command-line exit contract.
 
 CI runs Cargo format, lint and tests on Linux and Windows, builds the release
 binary and exercises it from an empty directory. The feature-gated differential
@@ -362,5 +362,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - JSON nesting is bounded at 1,000 containers. Decimal rendering refuses an output above its 1 GiB resource ceiling.
 - SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
+
+## Licence
 
 Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
