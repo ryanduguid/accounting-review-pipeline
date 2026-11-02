@@ -4,7 +4,7 @@ use crate::{
     decimal::{self, Decimal, Outcome},
     isodate::{self, Date},
     loader::SourceSnapshot,
-    models::{ExceptionItem, Status, TrialBalanceRow},
+    models::{Control, ExceptionItem, Status, TrialBalanceRow},
     pyjson::{self, Json, LoadError, PyStr},
     pytext,
 };
@@ -244,7 +244,7 @@ fn finding(
     tolerance: Option<Decimal>,
 ) -> ExceptionItem {
     let mut item = ExceptionItem::new(
-        "equity_reconciliation",
+        Control::EquityReconciliation,
         status,
         row,
         reason,

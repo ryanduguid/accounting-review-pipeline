@@ -6,7 +6,9 @@ use crate::{
     equity,
     isodate::Date,
     loader::{self, SourceSnapshot},
-    models::{ClientQuery, ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow},
+    models::{
+        ClientQuery, Control, ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow,
+    },
     pyjson::Json,
     pytext, queries,
 };
@@ -96,7 +98,7 @@ pub fn financial_year_reset_exceptions(current: Date, prior: Date) -> Vec<Except
         return Vec::new();
     }
     vec![ExceptionItem::new(
-        "financial_year_reset",
+        Control::FinancialYearReset,
         Status::Review,
         None,
         &format!(
@@ -145,7 +147,7 @@ pub fn integrity_exceptions(rows: &[TrialBalanceRow], period: &str) -> Result<Ve
             continue;
         }
         let mut item = ExceptionItem::new(
-            "trial_balance_integrity",
+            Control::TrialBalanceIntegrity,
             Status::Blocked,
             None,
             &format!("{period} {label} debit and credit totals do not balance."),
@@ -174,7 +176,7 @@ pub fn period_comparison_exceptions(
         match (current, prior) {
             (None, Some(prior)) => {
                 let mut item = ExceptionItem::new(
-                    "period_comparison",
+                    Control::PeriodComparison,
                     Status::Review,
                     Some(prior),
                     "Account was present in the prior period but is absent from the current period.",
@@ -185,7 +187,7 @@ pub fn period_comparison_exceptions(
             }
             (Some(current), None) => {
                 let mut item = ExceptionItem::new(
-                    "period_comparison",
+                    Control::PeriodComparison,
                     Status::Review,
                     Some(current),
                     "New account is present in the current period only.",
@@ -214,7 +216,7 @@ pub fn period_comparison_exceptions(
                         "YTD net balance movement met or exceeded both configured materiality thresholds."
                     };
                     let mut item = ExceptionItem::new(
-                        "period_variance",
+                        Control::PeriodVariance,
                         Status::Review,
                         Some(current),
                         reason,
@@ -239,7 +241,7 @@ pub fn period_comparison_exceptions(
                 }
                 if !changed.is_empty() {
                     let mut item = ExceptionItem::new(
-                        "account_metadata",
+                        Control::AccountMetadata,
                         Status::Review,
                         Some(current),
                         &format!(
@@ -271,7 +273,7 @@ pub fn mapping_exceptions(
     mapping: &BTreeMap<String, String>,
 ) -> Vec<ExceptionItem> {
     ordered_rows(rows).into_iter().filter(|row| !mapping.contains_key(&row.account_id)).map(|row| {
-        let mut item = ExceptionItem::new("account_mapping", Status::Review, Some(row),
+        let mut item = ExceptionItem::new(Control::AccountMapping, Status::Review, Some(row),
             "Current account has no supplied review-group mapping.",
             "Assign and review an appropriate reporting group before using a grouped close pack.");
         item.current_value = Some(row.ytd_net()); item
@@ -305,7 +307,7 @@ pub fn mapping_compatibility_exceptions(
             "The supplied policy declares no permitted Section for this group.".into()
         };
         let mut item = ExceptionItem::new(
-            "mapping_compatibility",
+            Control::MappingCompatibility,
             Status::Review,
             Some(row),
             &format!(
@@ -356,7 +358,7 @@ pub fn balance_policy_exceptions(
         }
         for reason in reasons {
             let mut item = ExceptionItem::new(
-                "balance_policy",
+                Control::BalancePolicy,
                 Status::Review,
                 row,
                 &reason,
@@ -386,7 +388,7 @@ pub fn subledger_exceptions(
             let difference = balance.sub(value).value;
             if difference.abs() > *tolerance {
                 let mut item = ExceptionItem::new(
-                    "subledger_reconciliation",
+                    Control::SubledgerReconciliation,
                     Status::Review,
                     Some(row),
                     "Current trial-balance balance differs from the supplied subledger beyond tolerance.",
@@ -400,7 +402,7 @@ pub fn subledger_exceptions(
             }
         } else {
             let mut item = ExceptionItem::new(
-                "subledger_reconciliation",
+                Control::SubledgerReconciliation,
                 Status::Review,
                 None,
                 "Supplied subledger balance has no matching current trial-balance account.",
@@ -435,7 +437,7 @@ pub fn calculation_evidence_exceptions(
     let mut result = Vec::new();
     let mut add = |status, reason: String, action: &str| {
         result.push(ExceptionItem::new(
-            "calculation_evidence",
+            Control::CalculationEvidence,
             status,
             None,
             &reason,
