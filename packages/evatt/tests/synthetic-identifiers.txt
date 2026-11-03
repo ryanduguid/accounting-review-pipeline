@@ -1,0 +1,14 @@
+# Checksum-valid digits the fixture screen accepts, one per line: the digits,
+# a space, then why the value is synthetic or is not an identifier.
+# tests/fixture_screen.rs reads this file. Add only a documented test value or
+# a number that is not an identifier, never a value taken from real data.
+123456782 TFN test vector documented in CONTRIBUTING.md, used in evatt/samples and tests/fixtures/python-0.2.0.json
+123456780 ACN test vector documented in CONTRIBUTING.md
+2123456701 Medicare test vector 2123 45670 1 documented in CONTRIBUTING.md
+212345670 the Medicare test vector's first 9 digits, cut by a list marker in tests/fixtures/python-0.2.0.json; the ACN check passes by chance
+000000019 check-digit vector in tests/fixtures/python-0.2.0.json, whose vectors CONTRIBUTING.md calls documented ATO and ASIC test identifiers; it also passes the TFN check
+202253616 digits inside hex-encoded record bytes in tests/fixtures/python-0.2.0.json, not an identifier
+652054656 digits inside hex-encoded record bytes in tests/fixtures/python-0.2.0.json, not an identifier
+135242732 a float exponent and the next line's hex bits in each tests/data/float_repr.txt, not an identifier
+972065339 hex float bits in each tests/data/float_repr.txt, not an identifier
+122598565 a float exponent and the next line's hex bits in each tests/data/float_repr.txt, not an identifier
