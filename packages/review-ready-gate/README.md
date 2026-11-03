@@ -75,10 +75,7 @@ Monthly Close Controls / payday-super-checker / other engines
 
 [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) answers 'what material exceptions exist on these trial balances?'. This tool answers a prior question: **'is the pack even allowed onto the review desk?'** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
 
-It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM or claim that a file is correct.
-
-> [!WARNING]
-> A `READY` result means no configured gate tripped on the files that were present. A human still decides. See [DISCLAIMER.md](DISCLAIMER.md).
+It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM or claim that a file is correct. A `READY` result means no configured gate tripped on the files that were present; a human still decides.
 
 ## Why this exists
 
@@ -330,7 +327,6 @@ numbered document label that contradicts its filename also prevents comparison.
 - Use a separate, access-controlled working directory for client source files and outputs.
 - A generated pack cannot be written into a version-control checkout. The writer walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory. A level it cannot examine is refused.
 - Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/`, `schemas/` and `evaluation/missing_evidence/packs/`, and blocks all 3 generated pack files by name. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
-- Do not use this as tax, financial, audit or legal advice.
 
 ## Related
 
@@ -369,4 +365,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 
 ## Licence
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it.
+
+<sub>Not tax, financial, audit or legal advice. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).</sub>

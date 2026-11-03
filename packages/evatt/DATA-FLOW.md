@@ -3,8 +3,8 @@
 ## 1. Purpose
 
 evatt performs pseudonymisation with local key retention over markdown files.
-**This does not take the data outside the Privacy Act.** It reduces what a
-recipient receives; it does not change the character of the data.
+This does not take the data outside the Privacy Act. It reduces what a recipient
+receives; it does not change the character of the data.
 
 ## 2. Zero-network contract
 

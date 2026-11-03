@@ -18,12 +18,18 @@ fn normalise(text: &str) -> String {
 }
 
 #[test]
-fn test_readme_states_the_assurance_boundary_before_product_claims() {
+fn test_readme_states_the_assurance_boundary_once_as_its_final_line() {
     let readme = read("README.md");
-    let opening = normalise(&readme[..readme.find("```").unwrap()]);
-    assert!(opening.contains("synthetic-only"));
-    assert!(opening.contains("unkeyed"));
-    assert!(opening.contains("anyone who can replace the artefacts can replace the receipt"));
+    let last = readme.trim_end().lines().last().unwrap();
+    assert!(last.starts_with("<sub>") && last.ends_with("</sub>"), "{last}");
+    let boundary = normalise(last);
+    assert!(boundary.contains("synthetic-only"));
+    assert!(boundary.contains("unkeyed"));
+    let receipt = "anyone who can replace the artefacts can replace the receipt";
+    assert!(boundary.contains(receipt));
+    let text = normalise(&readme);
+    assert_eq!(text.matches("synthetic-only").count(), 1);
+    assert_eq!(text.matches(receipt).count(), 1);
 }
 
 #[test]

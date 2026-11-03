@@ -278,6 +278,8 @@ All 8 components are licensed under the Functional Source License, Version 1.1,
 ALv2 Future License (FSL-1.1-ALv2), as is the repository's [LICENSE](LICENSE).
 Each component directory carries its own `LICENSE` and `NOTICE`.
 
+<sub>Review aids only: not tax, financial, audit or legal advice, not a tax or BAS agent service and not an audit or review engagement. A human reviewer decides. Component DISCLAIMER.md files state each tool's limits.</sub>
+
 ---
 
 <p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
