@@ -86,4 +86,4 @@ If any gate fails, leave the tag and any draft release untouched until the failu
 
 ## Rollback
 
-Rollback of the caller requires a reviewed pull request that repins the root caller to a reviewed 40-character commit in `ryanduguid/release-policy`. Preserve existing tags, releases and assets. The structural check in `tests/test_release_archives.py` validates the active caller's immutable pin and component boundary.
+Rollback of the caller requires a reviewed pull request that repins the root caller to a reviewed 40-character commit in `ryanduguid/release-policy`. Preserve existing tags, releases and assets. The structural check in `tests/release_archives.rs` validates the active caller's immutable pin and component boundary.
