@@ -1,0 +1,32 @@
+name: CA bundle freshness
+
+# The Xero exporter embeds certifi's CA bundle, which Dependabot cannot see.
+# This job compares it with the current certifi release weekly and on demand,
+# and fails with the refresh step when they differ. It reaches PyPI, so it
+# runs outside pull requests and no gate requires it: a red run here is the
+# signal. tests/test_ci_ca_bundle.py checks its NOTICE reader on every run of
+# the joined conformance workflow.
+on:
+  schedule:
+    - cron: "29 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certifi:
+    name: compare the exporter's CA bundle with certifi
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Standard library only. The wheel is checked against the SHA-256 PyPI
+      # lists for it; it cannot be pinned, because the newest release is the
+      # point of the check.
+      - name: Compare the embedded bundle with the current certifi release
+        run: python3 -I .github/ci/check_ca_bundle.py
