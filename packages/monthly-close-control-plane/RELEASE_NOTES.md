@@ -33,7 +33,7 @@
   without the block still verify; a `view` from before it refuses packs that
   carry it. The library and the Python differential probe write none.
 - Native release publication, macOS, Aikido scans and hosted CI remain
-  unverified for this candidate. CodeQL here does not analyse Rust.
+  unverified for this candidate.
 
 # v0.2.0
 

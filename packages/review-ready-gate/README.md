@@ -356,7 +356,7 @@ CI runs Cargo format, lint and tests on Linux and Windows, builds the release
 binary and exercises it from an empty directory. The feature-gated differential
 tool compares fabricated cases with Python source frozen at commit
 `8061079d0b4206d064c54751aa047af8588fa265`; Python is needed only for that oracle.
-CodeQL does not cover the Rust implementation.
+CodeQL analyses the Rust implementation.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 
 ### Deliberate major-version differences

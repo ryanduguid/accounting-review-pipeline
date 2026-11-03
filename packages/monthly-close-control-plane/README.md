@@ -643,7 +643,7 @@ The test suite covers schema gates, exact balancing, variance and metadata excep
 
 Continuous integration runs Rust checks, frozen Python 3.15 differential cases
 and native binary smokes on Linux and Windows, plus a RustSec dependency audit.
-CodeQL does not analyse Rust here. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+CodeQL analyses the Rust source. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 verification and data handling, and [RELEASE_NOTES.md](RELEASE_NOTES.md) for
 the breaking API removal and compatibility limits.
 
