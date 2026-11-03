@@ -44,18 +44,6 @@ fn public_docs_keep_the_assurance_boundary_and_no_retired_claims() {
     ] {
         assert!(readme.contains(required), "{required}");
     }
-    // The Privacy Act boundary is stated in DISCLAIMER.md and DATA-FLOW.md and
-    // once in the README, as its final small-print line. SECURITY.md keeps the
-    // compliance limit.
-    let boundary = "this does not take the data outside the privacy act";
-    for document in [DISCLAIMER, DATA_FLOW] {
-        assert!(normalise(document).contains(boundary));
-    }
-    assert!(normalise(SECURITY).contains("it is not a compliance determination"));
-    assert_eq!(readme.matches(boundary).count(), 1);
-    let last = README.trim_end().lines().last().unwrap();
-    assert!(last.starts_with("<sub>") && last.ends_with("</sub>"), "{last}");
-    assert!(normalise(last).contains(boundary));
     for document in [README, DATA_FLOW] {
         assert!(normalise(document).contains("ato client reference"));
     }
@@ -80,6 +68,21 @@ fn public_docs_keep_the_assurance_boundary_and_no_retired_claims() {
         }
         assert!(!document.contains('\u{2014}'));
     }
+}
+
+/// The Privacy Act boundary is stated in DISCLAIMER.md and DATA-FLOW.md and once in the
+/// README, as its final small-print line. SECURITY.md keeps the compliance limit.
+#[test]
+fn privacy_boundary_is_kept_and_stated_once_in_the_readme_small_print() {
+    let boundary = "this does not take the data outside the privacy act";
+    for document in [DISCLAIMER, DATA_FLOW] {
+        assert!(normalise(document).contains(boundary));
+    }
+    assert!(normalise(SECURITY).contains("it is not a compliance determination"));
+    assert_eq!(normalise(README).matches(boundary).count(), 1);
+    let last = README.trim_end().lines().last().unwrap();
+    assert!(last.starts_with("<sub>") && last.ends_with("</sub>"), "{last}");
+    assert!(normalise(last).contains(boundary));
 }
 
 #[test]
