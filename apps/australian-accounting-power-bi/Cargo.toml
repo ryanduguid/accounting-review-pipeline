@@ -26,7 +26,7 @@ path = "tools/workflow_differential.rs"
 required-features = ["probe"]
 
 [dependencies]
-num-bigint = "0.4"
+num-bigint = "0.5"
 num-integer = "0.1"
 num-traits = "0.2"
 serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
