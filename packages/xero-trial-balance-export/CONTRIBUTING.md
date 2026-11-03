@@ -38,6 +38,18 @@ The OAuth source and README have canonical UTF-8/LF SHA-256 pins in
 `tests/provenance.rs`. Review changes to that source and its claims before
 updating the pins; the tests refuse BOMs, invalid UTF-8 and bare carriage returns.
 
+## CA bundle refresh
+
+The commands embed `data/cacert.pem`, the certifi CA bundle named in `NOTICE`.
+Dependabot does not track it. To move it to a newer certifi release:
+
+1. Download the release from [PyPI](https://pypi.org/project/certifi/#files) and
+   check the file against the SHA-256 PyPI lists.
+2. Copy its `certifi/cacert.pem` unchanged to `data/cacert.pem` and its `LICENSE`
+   to `data/certifi-LICENSE`.
+3. In `NOTICE`, update the certifi version, the bundle's SHA-256 and the PyPI link.
+4. Run the local verification above.
+
 ## Pull requests
 
 Say which failure mode your change closes and include the test that reproduces it. For anything touching the OAuth or token-cache flow, describe what happens when the token endpoint returns an error mid-rotation, DPAPI refuses a payload, or an atomic migration/write fails.
