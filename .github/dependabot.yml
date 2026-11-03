@@ -67,6 +67,11 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    ignore:
+      # Pinned exactly: evatt freezes CPython 3.14's Unicode 16 tables, and
+      # later releases carry newer Unicode (0.1.26 is Unicode 18, #476). It
+      # moves by hand with the compatibility reference.
+      - dependency-name: "unicode-normalization"
 
   - package-ecosystem: "cargo"
     directory: "/adapters/accounting-excel-toolkit"
