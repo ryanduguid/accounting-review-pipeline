@@ -22,7 +22,7 @@ packages/evatt/tests/fixtures/python-0.2.0.json acn 000000019 check-digit vector
 packages/evatt/tests/fixtures/python-0.2.0.json tfn 202253616 digits inside hex-encoded record bytes, not an identifier
 packages/evatt/tests/fixtures/python-0.2.0.json acn 652054656 digits inside hex-encoded record bytes, not an identifier
 packages/evatt/tests/fixtures/python-0.2.0.json abn 51824753556 the ATO's own ABN, its published example (Commonwealth entity on ABN Lookup, 4 November 2026); not personal information
-packages/evatt/tests/fixtures/python-0.2.0.json abn 53004085616 a company's public ABN (Australian private company on ABN Lookup, 4 November 2026); not personal information
+packages/evatt/tests/fixtures/python-0.2.0.json abn 33087542991 a checksum-valid ABN that is not issued (not found on ABN Lookup, 4 November 2026), in place of the company ABN the Python 0.2.0 recording used
 apps/australian-accounting-power-bi/samples/sample-entities.csv abn 51824753556 the ATO's own ABN, its published example (Commonwealth entity on ABN Lookup, 4 November 2026); not personal information
 apps/australian-accounting-power-bi/samples/sample-entities.csv abn 82147609350 sample ABN, checksum-valid but not issued (not found on ABN Lookup, 4 November 2026)
 apps/australian-accounting-power-bi/samples/sample-entities.csv abn 33087542991 sample ABN, checksum-valid but not issued (not found on ABN Lookup, 4 November 2026)
