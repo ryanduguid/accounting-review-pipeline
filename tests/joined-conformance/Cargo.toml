@@ -1,0 +1,18 @@
+[package]
+name = "joined-conformance"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+description = "Joined conformance checks for the independently released review commands"
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/ryanduguid/accounting-review-pipeline"
+
+# Test-only: each command's conformance probe, linked in process.
+[dev-dependencies]
+monthly-close-control-plane = { path = "../../packages/monthly-close-control-plane", features = ["probe"] }
+review-ready-gate = { path = "../../packages/review-ready-gate", features = ["probe"] }
+
+[lints.clippy]
+# The repository's 50-line function limit (clippy.toml), denied in CI.
+too_many_lines = "warn"

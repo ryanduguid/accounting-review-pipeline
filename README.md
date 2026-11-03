@@ -160,7 +160,7 @@ commands documented here. evatt 0.2.0 was released on GitHub only, never on PyPI
 `contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
 `xero-tb-csv.v1` corpus: the exact 10-column schema, 3 fabricated fixtures, the expected
 accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
-runtime package. `tests/test_xero_trial_balance_contract.py` and the
+runtime package. The `tests/joined-conformance` crate and the
 `joined-conformance.yml` workflow run the exporter runner and all 3 offline review
 implementations against it.
 

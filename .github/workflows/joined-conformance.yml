@@ -1,11 +1,12 @@
 name: Joined Xero Trial Balance Conformance
 
 # Runs the exporter-owned integrity runner and the three offline review
-# implementations against every root contract fixture. Only the exporter's
-# Rust integrity runner and both native review probes are built.
+# implementations against every root contract fixture: the exporter's
+# root_contract test, the joined conformance crate in tests/joined-conformance
+# and the ledger-review gate's own contract test.
 #
-# It also runs the root check on the blocks Monthly Close Controls and the
-# Workpaper Review Gate share. The check compares their observable behaviour.
+# The joined crate also compares the observable behaviour of the blocks Monthly
+# Close Controls and the Workpaper Review Gate share, through their probes.
 on:
   push:
     branches: [main]
@@ -51,10 +52,7 @@ jobs:
           CI_HEAD: ${{ github.sha }}
           CI_PATHS: |
             contracts/xero-trial-balance-v1/**
-            tests/test_xero_trial_balance_contract.py
-            tests/test_shared_blocks.py
-            tests/native_monthly_close.py
-            tests/native_review_ready.py
+            tests/joined-conformance/**
             packages/xero-trial-balance-export/**
             packages/review-ready-gate/**
             packages/monthly-close-control-plane/**
@@ -82,23 +80,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.15"
-          allow-prereleases: true
-      - name: Build the exporter-owned offline integrity runner
-        working-directory: packages/xero-trial-balance-export
-        run: cargo build --locked --features tools --bin xero-tb-evaluate
       - name: Verify the contract digests
         working-directory: contracts/xero-trial-balance-v1
         run: sha256sum --check --strict SHA256SUMS
-      - name: Run joined offline conformance
-        run: python -B -m unittest tests.test_xero_trial_balance_contract -v
+      - name: Run the exporter-owned integrity runner against the contract
+        working-directory: packages/xero-trial-balance-export
+        run: cargo test --locked --features tools --test root_contract
       - name: Run the Rust ledger-review gate against the same contract
         working-directory: packages/elizabeth-anne-alexander
         run: cargo test --locked test_gateway_satisfies_the_pinned_exporter_contract
-      - name: Check shared review behaviour
-        run: python -B -m unittest tests.test_shared_blocks -v
+      - name: Check the joined conformance crate
+        working-directory: tests/joined-conformance
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
 
   conformance-gates:
     needs: [changes, verify]

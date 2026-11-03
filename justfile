@@ -15,7 +15,7 @@ apps/grant-acquittal-workpapers
 ''', "\n", " "))
 
 # cargo components: directory only
-rust_components := "adapters/accounting-excel-toolkit apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export packages/review-ready-gate packages/monthly-close-control-plane"
+rust_components := "adapters/accounting-excel-toolkit apps/australian-accounting-power-bi apps/grant-acquittal-workpapers packages/elizabeth-anne-alexander packages/evatt packages/xero-trial-balance-export packages/review-ready-gate packages/monthly-close-control-plane tests/joined-conformance"
 
 # List the available recipes.
 default:
@@ -37,8 +37,8 @@ demo:
         exit 1
     fi
 
-# Run every component's test suite, then the joined trial-balance conformance
-# test and the shared behavioural conformance check.
+# Run every component's test suite; tests/joined-conformance, among the Rust
+# components, holds the joined trial-balance and shared-block conformance checks.
 test: setup
     #!/usr/bin/env bash
     set -euo pipefail
@@ -50,10 +50,6 @@ test: setup
         echo "==> ${directory}"
         (cd "${directory}" && cargo test --locked --all-features)
     done
-    echo "==> joined conformance"
-    uv run --no-sync python -B -m unittest tests.test_xero_trial_balance_contract -v
-    echo "==> shared blocks"
-    uv run --no-sync python -B -m unittest tests.test_shared_blocks -v
 
 # Lint retained Python tooling and native components.
 lint: setup
