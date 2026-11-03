@@ -10,7 +10,6 @@ import hashlib
 import importlib.util
 import io
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -343,7 +342,6 @@ class PipelineGatePredecessorTests(unittest.TestCase):
             results = {name.strip(): {"result": "success"} for name in needs.split("[", 1)[1].split("]", 1)[0].split(",")}
         if declaration:
             head = f"# removed-jobs: {declaration}\n" + head
-        git_command = [rtk, "proxy", "git"] if (rtk := shutil.which("rtk")) else ["git"]
         with tempfile.TemporaryDirectory(prefix="gate-proof-") as directory:
             outer = Path(directory).resolve()
             repo, home = outer / "repo", outer / "home"
@@ -362,7 +360,7 @@ class PipelineGatePredecessorTests(unittest.TestCase):
 
             def git(*args, raw=False):
                 return subprocess.run(
-                    [*git_command, *args], cwd=repo, env=env,
+                    ["git", *args], cwd=repo, env=env,
                     capture_output=True, text=not raw, encoding=None if raw else "utf-8", check=True, timeout=10,
                 )
 

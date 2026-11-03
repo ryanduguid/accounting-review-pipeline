@@ -31,6 +31,8 @@ jobs:
         include:
           - language: python
             name: Python
+          - language: rust
+            name: Rust
           - language: actions
             name: Actions
     steps:

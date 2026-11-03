@@ -111,7 +111,7 @@ def test_native_runtime_probe_keeps_the_close_process_boundary(tmp_path, monkeyp
     output = tmp_path / "output"
     monkeypatch.setitem(scope, "prepare", lambda *args: {"projects": {"close": ROOT, "fpa": tmp_path}, "output": output, "environment_root": None})
     monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "fixture"})
-    monkeypatch.setattr(scope["shutil"], "which", lambda name: None)
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: name)
     commands = []
 
     def completed(command, **kwargs):
@@ -135,10 +135,10 @@ def test_native_runtime_probe_keeps_the_close_process_boundary(tmp_path, monkeyp
     assert sum(call["kind"] == "runtime" for call in calls) == 2
 
 
-def test_git_evidence_does_not_require_optional_rtk(tmp_path, monkeypatch):
+def test_git_evidence_runs_plain_git_even_with_rtk_on_path(tmp_path, monkeypatch):
     scope = MODULE["git_output"].__globals__
     commands = []
-    monkeypatch.setattr(scope["shutil"], "which", lambda name: None)
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: name)
 
     def completed(command, **kwargs):
         commands.append(command)
@@ -339,7 +339,7 @@ def test_wip_runner_follows_the_package_manifest(tmp_path, monkeypatch, native):
     projects = {"close": ROOT, "fpa": tmp_path, "wip": wip}
     monkeypatch.setitem(scope, "prepare", lambda *args: {"projects": projects, "output": output, "environment_root": None})
     monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "fixture"})
-    monkeypatch.setattr(scope["shutil"], "which", lambda name: None)
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: name)
     commands = []
 
     def completed(command, **kwargs):

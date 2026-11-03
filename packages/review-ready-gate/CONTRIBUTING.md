@@ -26,7 +26,7 @@ cargo test --locked --all-features
 cargo build --locked --release
 ```
 
-CI runs the native checks on Linux and Windows. CodeQL does not cover this Rust
+CI runs the native checks on Linux and Windows, and CodeQL analyses this Rust
 source. Python 3.15 with Unicode 17.0.0 is required only for the frozen baseline
 comparison, which uses fabricated inputs.
 

@@ -26,7 +26,7 @@ authority; `just` runs them from one place, it does not replace them.
 `just check` runs Ruff, mypy, Cargo fmt/clippy/tests and retained unittest suites.
 CI also checks frozen Python differentials, native release builds and smokes,
 dependency advisories, workflow policy, Power BI structural validation and
-contract digests. CodeQL covers Python and Actions here, not Rust. Follow the
+contract digests. CodeQL covers Python, Rust and Actions here. Follow the
 `AGENTS.md` routing table for each component's complete checks.
 
 The root `dev` group pins Python development tools; regenerate root `uv.lock`

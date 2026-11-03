@@ -20,8 +20,7 @@ COMPANIONS = ("au-fpa-pack", "australian-accounting")
 
 
 def git_command(*arguments: str) -> list[str]:
-    prefix = ["rtk", "proxy", "git"] if shutil.which("rtk") else ["git"]
-    return [*prefix, *arguments]
+    return ["git", *arguments]
 
 
 def replay_revisions(manifest: Path) -> dict[str, str]:
