@@ -199,6 +199,8 @@ exactly these paths:
 | `packages/elizabeth-anne-alexander/DATA-FLOW.md` | trailing whitespace on line 21 | `whitespace=-blank-at-eol` |
 | `adapters/accounting-excel-toolkit/tests/test_static_guards.py` | blank line at end of file (line 1676) | `whitespace=-blank-at-eof` |
 
+Cargo tests later replaced `test_static_guards.py`, and its attribute was removed with it.
+
 ## Contract provenance
 
 `contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
