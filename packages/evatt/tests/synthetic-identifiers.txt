@@ -1,0 +1,38 @@
+# Checksum-valid values the fixture screen accepts, one per line:
+#   path kind digits reason
+# The path is from the repository root and the kind is tfn, abn, acn or
+# medicare. An entry covers its value in that file only; list each file
+# separately. An entry that matches no finding fails the screen.
+# tests/fixture_screen.rs reads this file. List only:
+# - a documented test vector;
+# - a digit run that is not an identifier, such as hex bytes or float bits;
+# - in a recorded fixture, a public organisation's ABN or an unissued number,
+#   with the date it was checked on ABN Lookup.
+# Never list a value taken from client or personal data.
+packages/evatt/evatt/samples/identifiers.md tfn 123456782 TFN test vector documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/evatt/samples/identifiers.md acn 123456780 ACN test vector documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/evatt/samples/identifiers.md medicare 2123456701 Medicare test vector 2123 45670 1 documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/evatt/samples/research-question.md tfn 123456782 TFN test vector documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/tests/fixtures/python-0.2.0.json tfn 123456782 TFN test vector documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/tests/fixtures/python-0.2.0.json acn 123456780 ACN test vector documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/tests/fixtures/python-0.2.0.json medicare 2123456701 Medicare test vector 2123 45670 1 documented in packages/evatt/CONTRIBUTING.md
+packages/evatt/tests/fixtures/python-0.2.0.json acn 212345670 the Medicare test vector's first 9 digits before an escaped newline; the ACN check passes by chance
+packages/evatt/tests/fixtures/python-0.2.0.json tfn 000000019 check-digit vector, which packages/evatt/CONTRIBUTING.md counts among documented ATO and ASIC test identifiers
+packages/evatt/tests/fixtures/python-0.2.0.json acn 000000019 check-digit vector, which packages/evatt/CONTRIBUTING.md counts among documented ATO and ASIC test identifiers
+packages/evatt/tests/fixtures/python-0.2.0.json tfn 202253616 digits inside hex-encoded record bytes, not an identifier
+packages/evatt/tests/fixtures/python-0.2.0.json acn 652054656 digits inside hex-encoded record bytes, not an identifier
+packages/evatt/tests/fixtures/python-0.2.0.json abn 51824753556 the ATO's own ABN, its published example (Commonwealth entity on ABN Lookup, 4 November 2026); not personal information
+packages/evatt/tests/fixtures/python-0.2.0.json abn 53004085616 a company's public ABN (Australian private company on ABN Lookup, 4 November 2026); not personal information
+apps/australian-accounting-power-bi/samples/sample-entities.csv abn 51824753556 the ATO's own ABN, its published example (Commonwealth entity on ABN Lookup, 4 November 2026); not personal information
+apps/australian-accounting-power-bi/samples/sample-entities.csv abn 82147609350 sample ABN, checksum-valid but not issued (not found on ABN Lookup, 4 November 2026)
+apps/australian-accounting-power-bi/samples/sample-entities.csv abn 33087542991 sample ABN, checksum-valid but not issued (not found on ABN Lookup, 4 November 2026)
+apps/australian-accounting-power-bi/samples/sample-entities.csv abn 12325678901 sample ABN, checksum-valid but not issued (not found on ABN Lookup, 4 November 2026)
+packages/evatt/tests/data/float_repr.txt acn 135242732 a float exponent and the next line's hex bits, not an identifier
+packages/evatt/tests/data/float_repr.txt acn 972065339 hex float bits, not an identifier
+packages/evatt/tests/data/float_repr.txt acn 122598565 a float exponent and the next line's hex bits, not an identifier
+packages/elizabeth-anne-alexander/tests/data/float_repr.txt acn 135242732 a float exponent and the next line's hex bits, not an identifier
+packages/elizabeth-anne-alexander/tests/data/float_repr.txt acn 972065339 hex float bits, not an identifier
+packages/elizabeth-anne-alexander/tests/data/float_repr.txt acn 122598565 a float exponent and the next line's hex bits, not an identifier
+apps/grant-acquittal-workpapers/tests/data/float_repr.txt acn 135242732 a float exponent and the next line's hex bits, not an identifier
+apps/grant-acquittal-workpapers/tests/data/float_repr.txt acn 972065339 hex float bits, not an identifier
+apps/grant-acquittal-workpapers/tests/data/float_repr.txt acn 122598565 a float exponent and the next line's hex bits, not an identifier

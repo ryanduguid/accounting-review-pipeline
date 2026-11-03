@@ -54,6 +54,13 @@ generated packs or screenshots containing client data. Keep fixture expectations
 run the owning component's checks, and run joined conformance whenever the shared contract
 changes.
 
+evatt's `tests/fixture_screen.rs` runs in CI on every pull request. It screens every tracked
+file under a `corpus`, `evaluation`, `examples`, `fixtures`, `samples` or `seeds` directory,
+and each CSV, JSON or text file under a `contracts`, `policy` or `tests` directory. It fails
+when a screened file is not UTF-8 text or holds a checksum-valid TFN, ABN, ACN or Medicare
+number. Use a value whose check digit fails, or list a documented test value for its file,
+with its reason, in `packages/evatt/tests/synthetic-identifiers.txt`.
+
 ## Data handling
 
 Review components may not gain a network or Xero dependency or import the exporter or
