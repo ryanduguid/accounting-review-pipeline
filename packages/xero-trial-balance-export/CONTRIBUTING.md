@@ -41,14 +41,22 @@ updating the pins; the tests refuse BOMs, invalid UTF-8 and bare carriage return
 ## CA bundle refresh
 
 The commands embed `data/cacert.pem`, the certifi CA bundle named in `NOTICE`.
-Dependabot does not track it. To move it to a newer certifi release:
+Dependabot does not track it. Instead, the weekly
+[CA bundle freshness](../../.github/workflows/ca-bundle-freshness.yml) workflow
+compares it with the current certifi release and fails when they differ; it can
+also be run on demand. To move it to a newer certifi release:
 
 1. Download the release from [PyPI](https://pypi.org/project/certifi/#files) and
    check the file against the SHA-256 PyPI lists.
 2. Copy its `certifi/cacert.pem` unchanged to `data/cacert.pem` and its `LICENSE`
    to `data/certifi-LICENSE`.
 3. In `NOTICE`, update the certifi version, the bundle's SHA-256 and the PyPI link.
-4. Run the local verification above.
+   The freshness check reads the version and SHA-256 from that paragraph, so
+   keep its wording.
+4. Run the local verification above, then from the repository root
+   `python -m unittest tests.test_ci_ca_bundle` and
+   `python -I .github/ci/check_ca_bundle.py`, which downloads the current
+   certifi release and must report a match.
 
 ## Pull requests
 
