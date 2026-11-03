@@ -63,7 +63,7 @@ fn abn_is_valid(value: &str) -> bool {
         .enumerate()
         .map(|(index, (digit, weight))| (digit - u32::from(index == 0)) * weight)
         .sum();
-    total % 89 == 0
+    total.is_multiple_of(89)
 }
 
 /// This does not execute the M (there is no Power Query host in CI), so it is a

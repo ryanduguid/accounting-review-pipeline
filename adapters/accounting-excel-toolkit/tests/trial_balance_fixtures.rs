@@ -180,36 +180,37 @@ fn parse_rows(
         .iter()
         .position(|field| field == "Account Type")
         .unwrap_or_else(|| panic!("{name} has no Account Type column"));
-    let mut accounts = Vec::new();
-    for row in rows[start + 1..].iter().filter(|row| !row.is_empty()) {
-        let (code, account_name) = if split_layout {
-            let (code_cell, name_cell) = (cell(row, 0).trim(), cell(row, 1).trim());
-            if (code_cell.is_empty() && name_cell.is_empty())
-                || code_cell == "Total"
-                || name_cell == "Total"
-            {
-                continue;
-            }
-            (
-                (!code_cell.is_empty()).then(|| code_cell.to_owned()),
-                name_cell.to_owned(),
-            )
-        } else {
-            let account = cell(row, 0).trim();
-            if account.is_empty() || account == "Total" {
-                continue;
-            }
-            split_combined_account(account)
-        };
-        accounts.push(Account {
-            code,
-            name: account_name,
-            kind: cell(row, kind).trim().to_owned(),
-            debit: parse_amount(cell(row, debit)),
-            credit: parse_amount(cell(row, credit)),
-        });
+    Ok(rows[start + 1..]
+        .iter()
+        .filter(|row| !row.is_empty())
+        .filter_map(|row| {
+            let (code, name) = account_identity(row, split_layout)?;
+            Some(Account {
+                code,
+                name,
+                kind: cell(row, kind).trim().to_owned(),
+                debit: parse_amount(cell(row, debit)),
+                credit: parse_amount(cell(row, credit)),
+            })
+        })
+        .collect())
+}
+
+/// The row's code and name, or `None` for a blank or Total row.
+fn account_identity(row: &[String], split_layout: bool) -> Option<(Option<String>, String)> {
+    if split_layout {
+        let (code, name) = (cell(row, 0).trim(), cell(row, 1).trim());
+        if (code.is_empty() && name.is_empty()) || code == "Total" || name == "Total" {
+            return None;
+        }
+        Some(((!code.is_empty()).then(|| code.to_owned()), name.to_owned()))
+    } else {
+        let account = cell(row, 0).trim();
+        if account.is_empty() || account == "Total" {
+            return None;
+        }
+        Some(split_combined_account(account))
     }
-    Ok(accounts)
 }
 
 fn parsed(relative: &str, use_ytd: Option<bool>) -> Vec<Account> {
