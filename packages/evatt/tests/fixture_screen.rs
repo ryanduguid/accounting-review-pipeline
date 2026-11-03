@@ -36,7 +36,28 @@ fn is_fixture(path: &str) -> bool {
     let name = dirs.pop().unwrap_or_default();
     let data = name.rsplit_once('.').is_some_and(|(_, e)| DATA_EXTENSIONS.contains(&e));
     path != ALLOWLIST
-        && (dirs.iter().any(|d| FIXTURE_DIRS.contains(d)) || data && dirs.iter().any(|d| INPUT_DIRS.contains(d)))
+        && (dirs.iter().any(|d| FIXTURE_DIRS.contains(d))
+            || dirs.windows(2).any(|w| w == ["tests", "data"])
+            || data && dirs.iter().any(|d| INPUT_DIRS.contains(d)))
+}
+
+#[test]
+fn every_file_under_tests_data_is_screened_whatever_its_extension() {
+    for path in [
+        "packages/p/tests/data/notes.md",
+        "packages/p/tests/data/sub/record",
+        "tools/tests/data/case.yaml",
+    ] {
+        assert!(is_fixture(path), "{path} must be screened");
+    }
+    assert!(is_fixture("contracts/c/schema.csv"));
+    for path in [
+        "packages/p/tests/screen.rs",
+        "packages/p/src/data/table.json",
+        ALLOWLIST,
+    ] {
+        assert!(!is_fixture(path), "{path} must not be screened");
+    }
 }
 
 /// Each checksum-valid identifier evatt detects.
