@@ -11,7 +11,7 @@ keywords = ["xero", "accounting", "privacy", "controls"]
 include = ["src/**", "elizabeth_anne_alexander/policy/**", "elizabeth_anne_alexander/samples/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "NOTICE"]
 
 [dependencies]
-num-bigint = "0.4"
+num-bigint = "0.5"
 num-integer = "0.1"
 num-traits = "0.2"
 sha2 = "0.11"
