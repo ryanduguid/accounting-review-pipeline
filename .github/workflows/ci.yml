@@ -93,6 +93,19 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate, packages/monthly-close-control-plane]
+        # Each floor is the crate's measured line coverage on Linux, rounded down
+        # (3 November 2026). Raise it with the tests, never lower it to pass.
+        include:
+          - package_dir: packages/elizabeth-anne-alexander
+            coverage_floor: 90
+          - package_dir: packages/evatt
+            coverage_floor: 81
+          - package_dir: packages/xero-trial-balance-export
+            coverage_floor: 76
+          - package_dir: packages/review-ready-gate
+            coverage_floor: 71
+          - package_dir: packages/monthly-close-control-plane
+            coverage_floor: 56
     defaults:
       run:
         shell: bash
@@ -118,7 +131,22 @@ jobs:
       - name: lint
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: test
+        if: runner.os == 'Windows'
         run: cargo test --locked --all-features
+      - name: add the coverage instrumentation tools
+        if: runner.os == 'Linux'
+        run: |
+          rustup toolchain install
+          rustup component add llvm-tools
+      - name: install the pinned coverage tool
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-llvm-cov@0.9.1
+          fallback: none
+      - name: test with line coverage
+        if: runner.os == 'Linux'
+        run: cargo llvm-cov --locked --all-features --fail-under-lines ${{ matrix.coverage_floor }}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane'
         with:
