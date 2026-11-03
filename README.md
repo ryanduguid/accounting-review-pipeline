@@ -132,7 +132,9 @@ unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a devel
 entrypoint only: `uv sync` then `just test` sets up and verifies a fresh clone from the top
 (see `CONTRIBUTING.md`). Run a component's own checks from its directory with its documented
 commands. Only the root `.github/workflows/` are active. `IMPORTS.md` records source identities, tree digests
-and import records. Historical releases and tags remain owned by the source repositories.
+and import records. The source repositories are retired, so their GitHub releases and tags
+are no longer hosted; some of those versions remain on PyPI. Later releases use
+namespaced tags in this repository.
 
 ## Releases
 
