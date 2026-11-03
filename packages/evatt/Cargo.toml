@@ -12,7 +12,7 @@ readme = "README.md"
 [dependencies]
 fancy-regex = "=0.19.2"
 unicode-normalization = "=0.1.24"
-num-bigint = "0.4"
+num-bigint = "0.5"
 num-traits = "0.2"
 sha2 = "0.11"
 
