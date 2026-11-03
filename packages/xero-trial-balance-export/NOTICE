@@ -20,14 +20,14 @@ conditions.
 This product includes work by Ryan Duguid
 (https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export).
 
-The Rust exporter includes the public CA bundle from certifi 2026.7.22 to
+The Rust exporter includes the public CA bundle from certifi 2026.10.23 to
 preserve the Python exporter's TLS trust roots. That bundle is licensed under
 the Mozilla Public License 2.0; see data/certifi-LICENSE. Its SHA-256 is
-9cc2a774b5198dcff14d9be1e66091f538975d867ce029a96bce15a55dfd730f.
+2ef52ad56b4803e264045c915e55c236cbfa045b84b81efefc218a19eb44bd2b.
 
 The bundle's unmodified Source Code Form is included as data/cacert.pem.
 The matching upstream source is available from
-https://pypi.org/project/certifi/2026.7.22/#files.
+https://pypi.org/project/certifi/2026.10.23/#files.
 The exporter's FSL-1.1-ALv2 licence does not replace MPL-2.0 for the bundle.
 See https://mozilla.org/MPL/2.0/.
 Native distributions must include this NOTICE, data/cacert.pem and
