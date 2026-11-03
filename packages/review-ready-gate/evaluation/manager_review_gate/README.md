@@ -33,7 +33,7 @@ The corrected pack exits 0 with `READY` and no configured findings.
 
 ## Human decision still required
 
-READY means no configured gate tripped; it is not approval, not a tax or BAS agent service, not advice and not lodgement authority. A human remains accountable for professional judgement, approval, client impact and lodgement decisions.
+READY means no configured gate tripped; it is not approval and not lodgement authority. A human remains accountable for professional judgement, approval, client impact and lodgement decisions.
 
 ## Primary sources and review date
 
@@ -48,4 +48,4 @@ Product release `0.1.5`; fixture version `1`.
 
 ## Limitations and non-claims
 
-This is a deterministic evaluation of configured gates against fabricated inputs. It is not approval, tax advice, lodgement authority or a conclusion that a pack is correct.
+This is a deterministic evaluation of configured gates against fabricated inputs. It is not approval, lodgement authority or a conclusion that a pack is correct.

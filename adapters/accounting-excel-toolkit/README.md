@@ -303,7 +303,7 @@ See [the close-input contract roadmap](docs/close-input-contract-roadmap.md) for
 
 [`xero-trial-balance-export`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export): the API path for the same trial balance; use it when OAuth app access is on the table and skip the CSV cleanup entirely.
 
-## Disclaimer
+## Licence
 
 Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Review outputs like any workpaper input. Xero and MYOB are trademarks of their respective owners.
 

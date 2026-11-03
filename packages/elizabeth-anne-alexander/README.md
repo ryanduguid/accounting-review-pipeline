@@ -6,14 +6,6 @@
 
 From 1.0.0 the gate is a standalone Rust binary. Its command, subcommands, flags, exit codes and output files match 0.2.6; the `elizabeth_anne_alexander` Python import no longer exists. 1.0.0 is unreleased and has no release workflow yet, so `pip install elizabeth-anne-alexander` still installs the Python 0.2.6. [RELEASE_NOTES.md](RELEASE_NOTES.md) lists the differences from 0.2.6.
 
-## Scope and assurance boundary
-
-This is a **synthetic-only** design demonstration. It accepts synthetic
-Xero-shaped trial-balance fixtures, not client exports or evidence from Xero.
-`receipt.json` is an adjacent, unkeyed local SHA-256 checksum binding. Anyone
-who can replace the artefacts can replace the receipt. It does not prove
-authorship, source system, origin, time, or immutability.
-
 ```
 +----------------------------------------------------------------------+
 |                       Xero Ledger Review Gate                        |
@@ -153,7 +145,7 @@ records the current Rust binary's differences from Python 0.2.6.
 
 ## Scope and limitation
 
-Every source manifest, review context, model result, reviewer evidence, and receipt is marked `mode: synthetic`. The policy, request and human-decision files carry no `mode` key: each is validated against an exact key set, so adding one is rejected. The `validate-review` output carries no `mode` key either; it reports the decision status for a run whose artefacts were already checked. It is a local design demonstration, not a client-data processor, production security system, accounting service or professional opinion. The reviewer evidence/model-result file split demonstrates disclosure minimisation only; it is not an access-control mechanism by itself.
+Every source manifest, review context, model result, reviewer evidence, and receipt is marked `mode: synthetic`. The policy, request and human-decision files carry no `mode` key: each is validated against an exact key set, so adding one is rejected. The `validate-review` output carries no `mode` key either; it reports the decision status for a run whose artefacts were already checked. The reviewer evidence/model-result file split demonstrates disclosure minimisation only; it is not an access-control mechanism by itself.
 
 ## Documentation and governance
 
@@ -161,3 +153,5 @@ Every source manifest, review context, model result, reviewer evidence, and rece
 - [`CITATION.cff`](./CITATION.cff) - Academic and industry citation metadata.
 - [`LICENSE`](./LICENSE) - Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2).
 - [`NOTICE`](./NOTICE) - attribution to keep in redistributions and derivative works.
+
+<sub>A synthetic-only design demonstration: it accepts synthetic Xero-shaped trial-balance fixtures, not client exports or evidence from Xero, and is not a client-data processor, production security system, accounting service or professional opinion. `receipt.json` is an adjacent, unkeyed local SHA-256 checksum binding. Anyone who can replace the artefacts can replace the receipt. It does not prove authorship, source system, origin, time, or immutability. See [DISCLAIMER.md](DISCLAIMER.md).</sub>

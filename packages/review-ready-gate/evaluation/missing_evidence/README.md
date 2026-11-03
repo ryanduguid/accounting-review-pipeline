@@ -84,5 +84,5 @@ not run match. Published 0.1.7 also reported the empty bank reconciliation as
 ## Limitations and non-claims
 
 This is a deterministic evaluation of configured gates against fabricated
-inputs. It does not test the BAS or year-end profiles, and it is not approval,
-advice or a conclusion that a pack is correct.
+inputs. It does not test the BAS or year-end profiles, and it is not approval
+or a conclusion that a pack is correct.

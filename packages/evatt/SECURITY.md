@@ -4,7 +4,7 @@ This v0.1 package is a local, offline pseudonymisation boundary. It has no OAuth
 
 The entity map is the key, and it stays on the local disk. Do not place a real entity map, real workpapers, client data, tokens or `.env` files in this repository. Every command refuses to read a map that git tracks or would not ignore, and the shipped rules cover the map, its `.tmp` and any triage file; those rules are a guard against a mistake, not a substitute for keeping real client data out of a public repository.
 
-Pseudonymisation reduces what a recipient receives. It is not a compliance determination, and the residual risk is contextual re-identification. See `DISCLAIMER.md`.
+Pseudonymisation reduces what a recipient receives, and the residual risk is contextual re-identification. See `DISCLAIMER.md`.
 
 Disclosure records are unsigned local evidence. Matching hashes and supplied
 identifiers do not authenticate an approver or grant disclosure permission.

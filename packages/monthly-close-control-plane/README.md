@@ -628,7 +628,7 @@ Passed through unchanged:
 - A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
 - Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, names `close-review-pack.json` and `close-summary.md`, and names `exceptions.csv` and `client-queries.csv` inside those 2 re-included directories, so all 4 generated pack files are covered. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
 - Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage and client authorisation are deliberately outside this MVP.
-- Do not use this as tax, financial, audit or legal advice. It is a configurable review aid that requires professional judgement.
+- The tool is a configurable review aid that requires professional judgement.
 
 ## Development
 
@@ -663,4 +663,6 @@ The next layers are deliberately separated from the control engine. The pipeline
 
 ## Licence
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it.
+
+<sub>Not tax, financial, audit or legal advice. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).</sub>

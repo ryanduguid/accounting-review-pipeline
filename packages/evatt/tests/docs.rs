@@ -44,9 +44,14 @@ fn public_docs_keep_the_assurance_boundary_and_no_retired_claims() {
     ] {
         assert!(readme.contains(required), "{required}");
     }
-    for document in [README, DATA_FLOW, DISCLAIMER] {
-        assert!(normalise(document).contains("this does not take the data outside the privacy act"));
-    }
+    // The Privacy Act boundary is stated in full in DISCLAIMER.md and once in
+    // the README, as its final small-print line.
+    let boundary = "this does not take the data outside the privacy act";
+    assert!(normalise(DISCLAIMER).contains(boundary));
+    assert_eq!(readme.matches(boundary).count(), 1);
+    let last = README.trim_end().lines().last().unwrap();
+    assert!(last.starts_with("<sub>") && last.ends_with("</sub>"), "{last}");
+    assert!(normalise(last).contains(boundary));
     for document in [README, DATA_FLOW] {
         assert!(normalise(document).contains("ato client reference"));
     }

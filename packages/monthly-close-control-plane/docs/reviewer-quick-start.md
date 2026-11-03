@@ -2,8 +2,7 @@
 
 This guide runs native Monthly Close Controls 1.0.0 on fabricated trial balances.
 Build it from an Accounting Review Pipeline checkout; native release publication
-is not configured. Review aid, not
-professional advice; the reviewer decides whether a close is acceptable.
+is not configured. The reviewer decides whether a close is acceptable.
 
 ## What you need
 

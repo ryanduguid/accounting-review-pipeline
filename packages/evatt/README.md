@@ -26,18 +26,14 @@ Putting 2 redacted documents in front of one model is putting 2 meanings of
 
 **The key never leaves the local machine.** The entity map is a gitignored file
 on disk. It is not transmitted, and no network client exists in this package.
-
-**This does not take the data outside the Privacy Act.** Pseudonymised data
-remains personal information in the hands of anyone holding the key. The
-recipient does not receive the map needed to reverse the entity substitutions.
+The recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
 a client through surviving detail alone, such as an industry, a location, a
 balance date and a turnover figure appearing together. evatt does not solve
 this. A human check before sending is the only mitigation.
 
-evatt is a control that makes a policy enforceable. It is not authority to
-disclose anything.
+evatt is a control that makes a policy enforceable.
 
 Firms deciding where client data may go usually compare a model running inside
 their Microsoft 365 tenant, a model hosted in Australian data centres and a
@@ -390,3 +386,5 @@ copying or authenticate the external decision.
 ## Licence
 
 Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). If you redistribute this work or build on it, keep the copyright notices in [NOTICE](NOTICE).
+
+<sub>This does not take the data outside the Privacy Act: pseudonymised data remains personal information in the hands of anyone holding the key. evatt is not authority to disclose anything. See [DISCLAIMER.md](DISCLAIMER.md).</sub>
