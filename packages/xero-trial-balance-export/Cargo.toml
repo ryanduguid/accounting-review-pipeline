@@ -59,6 +59,11 @@ name = "xero-tb-proof"
 path = "tools/proof.rs"
 required-features = ["tools"]
 
+# The root contract's fixtures through xero-tb-evaluate.
+[[test]]
+name = "root_contract"
+required-features = ["tools"]
+
 [profile.release]
 lto = true
 codegen-units = 1

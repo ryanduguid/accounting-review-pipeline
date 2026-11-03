@@ -2,7 +2,8 @@ name: tests
 # removed-jobs: component, test, package, lint, windows, codecov
 # Native component checks run on Linux and Windows. The dependency audit checks
 # every tracked Cargo.lock, including fuzz tools; the Windows workspace keeps the joined
-# Python conformance consumers. pipeline-gates reports for every pull request.
+# Python conformance consumers and runs tests/joined-conformance on Windows.
+# pipeline-gates reports for every pull request.
 
 on:
   push:
@@ -258,6 +259,9 @@ jobs:
               subprocess.run([str(python), "-m", "mypy"], cwd=component, check=True)
       - name: run the full suite
         run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+      - name: run the joined conformance crate
+        working-directory: tests/joined-conformance
+        run: cargo test --locked
 
   pipeline-gates:
     needs: [dependency-audit, rust, windows-workspace]
