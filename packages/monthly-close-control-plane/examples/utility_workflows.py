@@ -41,10 +41,7 @@ def captured(command, *, cwd, env=None, timeout=300):
 
 
 def git_output(root, *arguments):
-    command = ["git", *arguments]
-    if shutil.which("rtk"):
-        command = ["rtk", "proxy", *command]
-    result = captured(command, cwd=root, timeout=30)
+    result = captured(["git", *arguments], cwd=root, timeout=30)
     if result.returncode:
         raise ValueError(f"Git evidence failed: {result.stderr}")
     return result.stdout
@@ -158,9 +155,6 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         runner = runner or (["cargo", "run", "--locked", "--release", "--quiet", "--bin", "close-control", "--"]
                             if owner == "close" else ["uv", "run", "--project", str(project), "--locked", "--python", "3.14", "python"])
         command = [*runner, *map(str, arguments)]
-        # RTK is optional for users. Preserve exact JSON when it is installed locally.
-        if shutil.which("rtk"):
-            command = ["rtk", "proxy", *command]
         env = os.environ.copy()
         if environment_root is not None:
             env["UV_PROJECT_ENVIRONMENT"] = str(environment_root / owner)

@@ -24,7 +24,7 @@ class SetupUtilityTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
         patch.object(setup_utility, "SOURCE", self.source).start()
         patch.object(setup_utility.sys, "version_info", (3, 14)).start()
-        patch.object(setup_utility.shutil, "which", side_effect=lambda name: None if name == "rtk" else name).start()
+        patch.object(setup_utility.shutil, "which", side_effect=lambda name: name).start()
 
     def command(self, arguments, **kwargs):
         self.calls.append((arguments, kwargs))
@@ -148,7 +148,6 @@ class SetupUtilityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "success manifest"):
                 setup_utility.setup(self.workspace)
 
-    def test_git_uses_optional_rtk_without_requiring_it(self):
-        self.assertEqual(setup_utility.git_command("status"), ["git", "status"])
+    def test_git_runs_plain_git_even_with_rtk_on_path(self):
         with patch.object(setup_utility.shutil, "which", return_value="rtk"):
-            self.assertEqual(setup_utility.git_command("status"), ["rtk", "proxy", "git", "status"])
+            self.assertEqual(setup_utility.git_command("status"), ["git", "status"])
