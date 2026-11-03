@@ -162,11 +162,14 @@ fn native_unterminated_quote_checks_pin_the_adapter_error() {
     ]);
 }
 
-/// `shutil.which("powershell.exe")`: Windows PowerShell 5.1 on PATH.
-fn windows_powershell() -> Option<PathBuf> {
-    std::env::split_paths(&std::env::var_os("PATH")?)
+/// `shutil.which("powershell.exe")`: Windows PowerShell 5.1 on PATH. These tests run only
+/// on Windows, where it ships with the system, so a missing one fails rather than passing
+/// without running.
+fn windows_powershell() -> PathBuf {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
         .map(|directory| directory.join("powershell.exe"))
         .find(|candidate| candidate.is_file())
+        .expect("Windows PowerShell 5.1 (powershell.exe) is not on PATH")
 }
 
 /// Run a copy of the runner, returning its exit code and its stdout followed by stderr.
@@ -198,10 +201,7 @@ fn run(
 #[test]
 #[cfg_attr(not(windows), ignore = "requires Windows PowerShell 5.1")]
 fn native_child_modes_require_a_private_result_path_before_excel() {
-    let Some(powershell) = windows_powershell() else {
-        eprintln!("skipped: requires Windows PowerShell 5.1");
-        return;
-    };
+    let powershell = windows_powershell();
     let (status, output) = run(
         &powershell,
         &root().join(RUNNER),
@@ -287,10 +287,7 @@ fn assert_missing_powerquery(
 #[test]
 #[cfg_attr(not(windows), ignore = "requires Windows PowerShell 5.1")]
 fn repository_root_binding_reaches_required_path_preflight() {
-    let Some(powershell) = windows_powershell() else {
-        eprintln!("skipped: requires Windows PowerShell 5.1");
-        return;
-    };
+    let powershell = windows_powershell();
     let script = root().join(RUNNER);
     let scratch = Scratch::new();
     let temporary_root = resolved(&scratch.0);

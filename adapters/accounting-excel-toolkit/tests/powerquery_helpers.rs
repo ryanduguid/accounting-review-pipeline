@@ -114,7 +114,11 @@ fn abn_checksum_is_implemented_once() {
     let mut implementations: Vec<_> = fs::read_dir(root().join("powerquery"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|suffix| suffix == "pq"))
+        // Any case, as Python's Path.glob("*.pq") matched on Windows.
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|suffix| suffix.eq_ignore_ascii_case("pq"))
+        })
         .filter(|path| common::read(path).contains("Number.Mod(total, 89)"))
         .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
         .collect();

@@ -6,15 +6,16 @@ use common::{Source, regex};
 
 const POLICY_REF: &str = "ryanduguid/release-policy/.github/workflows/release-archive.yml@";
 
-/// The words `shlex.split` returns for a shell line: whitespace separates words, single
-/// quotes are literal, and inside double quotes a backslash escapes only `"` and `\`.
+/// The words `shlex.split` returns for a shell line: ASCII space, tab, CR and LF separate
+/// words (other Unicode spaces stay inside a word, as in the shell), single quotes are
+/// literal, and inside double quotes a backslash escapes only `"` and `\`.
 fn shell_words(line: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut word: Option<String> = None;
     let mut characters = line.chars();
     let unclosed = || panic!("no closing quotation in {line:?}");
     while let Some(character) = characters.next() {
-        if character.is_whitespace() {
+        if matches!(character, ' ' | '\t' | '\r' | '\n') {
             words.extend(word.take());
             continue;
         }
@@ -104,4 +105,9 @@ fn shell_words_follow_shlex_quoting() {
         ["a b", "c d", "e f", "g\"h", "i\\$j"]
     );
     assert_eq!(shell_words(r#""" x"#), ["", "x"]);
+    // shlex.split('a\xa0b\tc d e') == ['a\xa0b', 'c d', 'e']
+    assert_eq!(
+        shell_words("a\u{a0}b\tc\u{2003}d e"),
+        ["a\u{a0}b", "c\u{2003}d", "e"]
+    );
 }
