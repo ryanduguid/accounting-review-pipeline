@@ -127,14 +127,58 @@ fn both_saved_json_parsers_refuse_ambiguous_or_unreadable_documents() {
         b"\xef\xbb\xbf{}",
     ];
     for payload in payloads {
-        let hex: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
-        let request = Json::object([
-            ("op", Json::str("parse_pack_json")),
-            ("hex", Json::str(&hex)),
-        ]);
+        let request = parse_pack(payload);
         assert!(is_error(&monthly(&request)), "{payload:?}");
         assert!(is_error(&ready(&request)), "{payload:?}");
     }
+}
+
+fn parse_pack(payload: &[u8]) -> Json {
+    let hex: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
+    Json::object([
+        ("op", Json::str("parse_pack_json")),
+        ("hex", Json::str(&hex)),
+    ])
+}
+
+/// A pack holding each named member once, then the first again when
+/// `duplicate` is set.
+fn pack(members: &[&str], duplicate: bool) -> Json {
+    let mut fields: Vec<String> = members.iter().map(|m| format!("\"{m}\":0")).collect();
+    if duplicate {
+        fields.push(fields[0].clone());
+    }
+    parse_pack(format!("{{{}}}", fields.join(",")).as_bytes())
+}
+
+/// The documents above also fail the member checks, so they alone would not
+/// notice a parser that stopped refusing duplicates.
+#[test]
+fn each_saved_json_parser_refuses_a_duplicate_its_member_checks_would_accept() {
+    let close = [
+        "acknowledgement",
+        "current_report_dates",
+        "exceptions",
+        "overall_status",
+        "prior_report_dates",
+        "source_sha256",
+        "thresholds",
+    ];
+    let gate = [
+        "acknowledgement",
+        "engagement_type",
+        "findings",
+        "overall_status",
+        "period_end",
+        "preparer_initials",
+        "review_boundary",
+        "source_sha256",
+        "thresholds",
+    ];
+    assert!(!is_error(&monthly(&pack(&close, false))));
+    assert!(is_error(&monthly(&pack(&close, true))));
+    assert!(!is_error(&ready(&pack(&gate, false))));
+    assert!(is_error(&ready(&pack(&gate, true))));
 }
 
 fn output_guard(path: &Path) -> Json {
