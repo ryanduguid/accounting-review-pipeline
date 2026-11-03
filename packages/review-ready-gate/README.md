@@ -75,7 +75,7 @@ Monthly Close Controls / payday-super-checker / other engines
 
 [Monthly Close Controls](https://github.com/ryanduguid/accounting-review-pipeline) answers 'what material exceptions exist on these trial balances?'. This tool answers a prior question: **'is the pack even allowed onto the review desk?'** A file can have material variances and still be READY, because the variances are documented. A file with a missing GST control export is NOT_READY even if the numbers look tidy.
 
-It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM or claim that a file is correct. A `READY` result means no configured gate tripped on the files that were present.
+It does **not** connect to Xero, store OAuth tokens, write journals, lodge BAS, lock a period, call an LLM or claim that a file is correct. A `READY` result means no configured gate tripped on the files that were present; a human still decides.
 
 ## Why this exists
 
