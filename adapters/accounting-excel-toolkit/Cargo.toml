@@ -34,6 +34,9 @@ sha2 = "0.11"
 num-bigint = "0.5"
 num-traits = "0.2"
 
+[dev-dependencies]
+regex = "1"
+
 [[example]]
 name = "encoding-differential"
 path = "tests/differential/encoding_differential.rs"

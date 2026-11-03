@@ -3,7 +3,7 @@ Option Explicit
 
 ' Kept byte-identical to ACCOUNTING_NUMBER_FORMAT in modReconCompare.bas -
 ' each module imports stand-alone, so each carries its own copy of the
-' accounting format; tests/test_static_guards.py pins the two together.
+' accounting format; tests/vba_modules.rs pins the two together.
 Private Const ACCOUNTING_NUMBER_FORMAT As String = "#,##0.00_);(#,##0.00);""-""??_)"
 
 ' modWorkpaperFormat
