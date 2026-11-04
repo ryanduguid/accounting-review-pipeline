@@ -21,7 +21,7 @@
 [![licence: Ryan Duguid Public Attribution Licence 1.0](.github/assets/badges/licence.svg)](LICENSE)
 [![Open in GitHub Codespaces](.github/assets/badges/github.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
-[Sample pack](#reproduce-the-sample-pack) · [Review packs](#review-pack-contract) · [Statuses](#status-contract) · [Exit codes](#exit-code-contract) · [Release checks](#release-checks) · [Licence](#licence)
+[Install](#install) · [Sample pack](#reproduce-the-sample-pack) · [Review packs](#review-pack-contract) · [Statuses](#status-contract) · [Exit codes](#exit-code-contract) · [Release checks](#release-checks) · [Development](#development) · [Licence](#licence)
 
 </div>
 
@@ -64,7 +64,11 @@ Synthetic examples. A human decides whether the close is acceptable.
 | Creditors reconciliation | $250 difference | Trace and explain the difference before sign-off. |
 | Financial-year reset | 30 June compared with 31 July | Reconsider P&L YTD comparisons across the reset. |
 
-### Reproduce the sample pack
+## Install
+
+The native commands are not published yet, so build them from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
+
+## Reproduce the sample pack
 
 From the repository root, with Rust and [just](https://github.com/casey/just) installed, run:
 
@@ -202,6 +206,8 @@ records that commit; any other value fails the build.
 | `source_sha256` | Filenames and SHA-256 digests identifying the exact input byte snapshots assessed. |
 | `thresholds` | The tie-out tolerance applied during the run. |
 | `review_boundary` | The fixed statement that readiness is not approval, advice or lodgement authority. |
+| `preparer_initials` | The initials on the preparer's self-review; empty when none was loaded. |
+| `controls_not_run` | Each optional slot with no usable input, with its filename and reason. `READY` says nothing about the controls listed here. |
 | `acknowledgement` | Optional evidence of a later human review; it cannot change readiness or approve a file. |
 | `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 
@@ -219,6 +225,7 @@ records that commit; any other value fails the build.
 | `client_queries` | Draft questions derived from the exceptions only a client can answer, with the evidence each one asks for. Nothing is sent, and answering them approves nothing. |
 | `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
 | `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
+| `controls_not_run` | The optional controls whose input was not supplied, so they did not run. `PASS` or `REVIEW` says nothing about them. |
 | `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |
 | `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 
@@ -271,6 +278,10 @@ so every push to `main` runs every component's gates; only pull requests filter
 by path. Tag the current `main` commit once its run is green; a successful run
 for an older commit is not evidence for the release. Tags and publication still
 require explicit approval.
+
+## Development
+
+From a fresh clone, with Rust, [uv](https://docs.astral.sh/uv/) and just installed, `uv sync --locked --group dev` then `just test` runs every component's suite and the joined conformance test. [CONTRIBUTING.md](CONTRIBUTING.md) covers pull requests, and the command routing in [AGENTS.md](AGENTS.md#command-routing) lists each component's complete checks.
 
 ## Licence
 
