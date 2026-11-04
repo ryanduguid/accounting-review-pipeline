@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! CPython 3.14's native text-stream encoding, independent of installed Python.
 //! Data files are always explicitly UTF-8; this applies only to CLI diagnostics.
 use crate::pytext;

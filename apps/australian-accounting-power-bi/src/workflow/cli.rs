@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 use super::{Result, export, files, html, json, projection, run};
 use std::{collections::BTreeMap, ffi::OsString, fs, io::Write, path::Path};
 

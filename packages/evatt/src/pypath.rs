@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Copied from packages/elizabeth-anne-alexander/src/pypath.rs; adapted for evatt CPython 3.14.
 //! The `pathlib` behaviour the gateway's guards rely on: how a path prints,
 //! `Path.resolve()` (which is `os.path.realpath`), and containment.

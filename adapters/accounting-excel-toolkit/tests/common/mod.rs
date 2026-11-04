@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Shared readers, assertions and exact decimals for the static source checks.
 //!
 //! CI has no Excel or Power Query host, so these checks read the adapter's sources and

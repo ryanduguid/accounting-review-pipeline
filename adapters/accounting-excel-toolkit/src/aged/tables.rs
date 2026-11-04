@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 // CPython 3.15 / Unicode 17 table copied from Monthly Close's generated tables.
 pub const PY_NOT_PRINTABLE: &[(u32, u32)] = &[
     (0x0, 0x1F),

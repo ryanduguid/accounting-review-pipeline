@@ -1,6 +1,3 @@
-# Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: FSL-1.1-ALv2
-
 """Compare the Rust decimal module with CPython's decimal on random operands.
 
     python decimal_differential.py <path to target/debug/examples/decimal_oracle> [--cases N] [--seed S]

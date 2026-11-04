@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! `datetime.date.fromisoformat` (CPython 3.11+ C implementation) and the
 //! gateway's own timestamp grammar, which ends in `datetime.fromisoformat`.
 

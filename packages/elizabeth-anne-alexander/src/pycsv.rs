@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! `csv.DictReader` over `io.StringIO(text, newline="")` with the default
 //! excel dialect, ported from CPython's `_csv.c` reader (strict off).
 

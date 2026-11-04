@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! `csv.DictReader(io.StringIO(text), strict=True)` and `csv.DictWriter` with
 //! the default excel dialect, ported from CPython's `_csv.c`. `io.StringIO`
 //! splits lines only after `\n`, so a lone `\r` stays inside a line.

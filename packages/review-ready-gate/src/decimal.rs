@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! The subset of Python's `decimal` module the gateway uses.
 //!
 //! Parsing follows CPython's `Decimal(str)` (the C `_decimal` module): exact,

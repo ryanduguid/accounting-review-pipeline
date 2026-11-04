@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Seeded, offline comparison with the pinned CPython release.
 use std::{
     env, fs,

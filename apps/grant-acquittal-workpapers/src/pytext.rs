@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! CPython text rules the workpaper depends on: `str.isspace`, decimal digit
 //! values, `unicodedata.category` and `repr()` of a string.
 

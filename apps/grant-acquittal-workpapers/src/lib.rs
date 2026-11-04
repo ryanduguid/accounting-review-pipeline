@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Grant acquittal workpapers: local evidence schedules for reviewed grant
 //! allocations. The modules prefixed `py` reproduce the CPython behaviour the
 //! Python script relied on, so outputs and messages stay identical.

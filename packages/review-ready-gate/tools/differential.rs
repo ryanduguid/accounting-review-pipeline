@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Compare generated fabricated inputs with the frozen CPython 3.15 source.
 //! Python runs only as the original implementation oracle, never inside review-ready.
 use review_ready_gate::probe::{self, Json, PyStr};

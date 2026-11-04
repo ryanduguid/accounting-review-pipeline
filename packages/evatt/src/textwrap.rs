@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Copied from packages/elizabeth-anne-alexander/src/textwrap.rs; adapted for evatt CPython 3.14.
 //! `textwrap.wrap(text, width)` with the defaults argparse uses: whitespace
 //! collapsed, words split after hyphens, and words longer than a line broken.

@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Xero Ledger Review Gate: a fixed-policy, synthetic-data review boundary.
 //!
 //! The modules prefixed `py` reproduce the CPython behaviour the released

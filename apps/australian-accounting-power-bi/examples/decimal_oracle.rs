@@ -1,6 +1,3 @@
-// Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
-
 //! Reads one JSON array per line, `["op", "a", "b"]`, applies the generator's decimal
 //! module and prints each result at 60 places, or `error` where it refuses.
 //! tests/differential/decimal_differential.py compares it with CPython.
