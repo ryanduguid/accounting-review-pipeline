@@ -48,7 +48,7 @@ A local, **review-first readiness gate** for Australian public-practice packs. Y
 
 A public evaluation pack reproduces the v0.1.5 manager-review result on fabricated BAS fixtures. It is a local review aid, not an approval system.
 
-### Fabricated proof
+## Fabricated proof
 
 | Pack | Result | What the gate reports |
 | --- | --- | --- |
