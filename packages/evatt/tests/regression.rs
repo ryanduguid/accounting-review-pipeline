@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Fabricated vectors recorded from every reachable core call in the original
 //! 0.2.0 suite, not generated from the Rust implementation. Version alone is

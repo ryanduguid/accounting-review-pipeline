@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! EMAIL's leftmost-first regex semantics with bounded scanning.
 //! The original `\b[\w.+-]+@...` retries the entire suffix at every word

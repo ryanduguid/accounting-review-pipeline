@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: FSL-1.1-ALv2
+# SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 # Release-binary smoke for elizabeth-anne-alexander. ci.yml's rust job runs this
 # from an empty directory with the release binary on PATH, so it proves the

@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Frozen evatt/patterns.py at snapshot efa253847e4ecdca5ae9b4abec045c0b16b6835c. Expressions originally copied
 //! from au-tax-legislation-corpus/fadden/pii_patterns.py; preserve that provenance.

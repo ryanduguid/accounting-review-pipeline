@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! A standard stream that cannot be written fails as it did for the Python
 //! script, measured against it on a closed pipe: buffered output still pending

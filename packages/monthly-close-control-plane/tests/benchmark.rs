@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Seeded-condition benchmark. Each case seeds one labelled condition in a clean,
 //! fabricated close and records which controls should raise. The counts measure these planted

@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Fabricated bytes to every review-ready pack loader as one source snapshot.
 //! A refusal is a result; a panic is a crash.

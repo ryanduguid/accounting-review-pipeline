@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Keep the documented read-only OAuth boundary tied to the inspected native source.
 use sha2::{Digest, Sha256};
@@ -32,7 +32,7 @@ fn oauth_source_and_claims_require_review_before_their_pins_change() {
         (
             "README.md",
             include_bytes!("../README.md").as_slice(),
-            "0B38B5D9C86BFF4A419FDD5605C67CF67A719AEC8B61645E31A09CF2A1CC31DC",
+            "AF12872A1148371BBFAA3C62D38230DB6F363DCC4B7B994D98D029E582A6A658",
         ),
     ] {
         assert_eq!(

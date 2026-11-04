@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! `main(argv)` with the argparse behaviour the script had: usage, help,
 //! option abbreviations, and exit 2 for a refused command line.
