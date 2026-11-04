@@ -57,7 +57,7 @@ Reproduce the offline movement and YTD gate with the fabricated fixtures in the 
 
 ## Setup
 
-1. Create an app at [developer.xero.com](https://developer.xero.com/app/manage) → New app → Web app. Redirect URI: `http://localhost:8400/callback`. The command intentionally accepts `localhost` only: it runs a local plain-HTTP callback and does not expose an OAuth listener to your LAN.
+1. Create an app at [developer.xero.com](https://developer.xero.com/app/manage) → New app → Web app. Redirect URI: `http://localhost:8400/callback`. The command intentionally accepts `localhost` only: it runs a local plain-HTTP callback and does not expose an OAuth listener to your LAN. Xero's free [Starter plan](https://developer.xero.com/pricing) lets an app connect up to 5 organisations, at 1,000 API calls a day each. Core allows up to 50 for A$35 a month excluding tax. An integration an accountant or bookkeeper builds for their own practice or a single client is [exempt from this pricing](https://developer.xero.com/faq/pricing-and-policy-updates), as Xero determines. (Both pages read on 4 November 2026.)
 2. Install Rust 1.99 stable, then run `cargo install --locked --path .` from this component directory.
 3. Copy `.env.example` to `.env`, fill in the app's client ID and secret.
 4. `xero-tb-auth`: browser opens, consent, done. On Windows, `token.json` is protected immediately with current-user DPAPI. Works with Xero's free Demo Company; no paid subscription needed.
@@ -101,7 +101,7 @@ A ready-made query is committed at [`samples/power-bi-query.pq`](samples/power-b
 
 When a run hits a locked destination, a concurrent export, or a disk that refuses the final flush, see the 'Power BI failure modes' appendix below.
 
-Two Xero platform limits worth knowing, checked against Xero's [OAuth 2.0 API limits](https://developer.xero.com/documentation/guides/oauth2/limits/) on 13 September 2026: a new app starts in the Starter tier with 5 connections and Core raises that to 50, whilst a listing on the Xero App Store needs the Plus tier or above; and each organisation or practice can connect at most 2 uncertified apps, with no limit on certified ones. Read the current tiers from that page rather than from this line.
+Two more Xero platform limits worth knowing, checked against Xero's [OAuth 2.0 API limits](https://developer.xero.com/documentation/guides/oauth2/limits/) on 4 November 2026: a listing on the Xero App Store needs the Plus tier or above, and each organisation or practice can connect at most 5 uncertified apps, with no limit on certified ones. Read the current tiers and limits from Xero's pages rather than from this README.
 
 ## Scheduled runs
 
