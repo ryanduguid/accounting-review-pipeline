@@ -132,7 +132,7 @@ pub fn render_html(pack: &Json) -> Result<String> {
         let carried = pack.get("carried_over").map_or_else(String::new, |ids| {
             let ids = ids.as_array().unwrap().iter().map(text).collect::<Vec<_>>();
             format!(
-                "<p class='notice'>{} item(s) carried over more than one period: {}. Check why each has not cleared.</p>",
+                "<p class='notice'>{} item(s) carried over more than one period: {}. This assumes the previous period had this one's length. Check why each has not cleared.</p>",
                 ids.len(),
                 escaped(&ids.join(", "))
             )
