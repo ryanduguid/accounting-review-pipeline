@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Joined conformance for the independently released review commands.
 //! Monthly Close Controls and the Workpaper Review Gate must agree on the
 //! blocks they share, and both must keep the root Xero trial-balance contract's

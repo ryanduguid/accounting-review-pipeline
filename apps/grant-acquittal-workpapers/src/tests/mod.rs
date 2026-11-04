@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Rust ports of tests/test_workpaper.py and tests/test_contributions.py.
 //! Each test keeps the Python test's name.
 

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Test-only value probe; never compiled into either distributed command.
 use crate::{
     Failure, Result,

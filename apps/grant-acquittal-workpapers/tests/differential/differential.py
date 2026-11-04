@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Differential test: grant_workpaper.py against the Rust grant-workpaper binary.
 
     python differential.py --script <grant_workpaper.py from the Python release> \

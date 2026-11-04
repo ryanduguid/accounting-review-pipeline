@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use accounting_excel_toolkit::{default_vba_dir, run};
 use std::io::{self, Write};
 use std::process::ExitCode;

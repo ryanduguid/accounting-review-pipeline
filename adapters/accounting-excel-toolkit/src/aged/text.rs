@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Python string representation reused from Monthly Close.
 use super::tables::PY_NOT_PRINTABLE;
 fn in_ranges(table: &[(u32, u32)], cp: u32) -> bool {

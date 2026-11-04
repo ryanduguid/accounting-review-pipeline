@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Measure the original timing families at 1, 2, 4, 8 and 16 times size.
 
 python3.14 tests/differential/performance.py --probe target/release/evatt-probe

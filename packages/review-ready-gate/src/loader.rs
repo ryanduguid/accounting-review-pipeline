@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Validate one immutable byte snapshot, then retain the digest of those bytes.
 use crate::{
     Result,

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 fn main() {
     let result = std::thread::Builder::new()
         .name("close-control-probe".into())

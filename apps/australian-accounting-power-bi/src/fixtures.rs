@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Deterministic synthetic fixtures for the Australian Accounting Power BI model.
 //!
 //! Generates balanced double-entry general ledger journals, the chart of accounts,

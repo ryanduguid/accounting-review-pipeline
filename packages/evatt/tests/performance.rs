@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The original timing constructions, asserting bounded growth rather than
 //! absolute times. Warm compiled regexes before measuring three-run minima.
 use evatt::{patterns, redact};

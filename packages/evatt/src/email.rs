@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! EMAIL's leftmost-first regex semantics with bounded scanning.
 //! The original `\b[\w.+-]+@...` retries the entire suffix at every word
 //! boundary of a failing `9-9-...` run, giving quadratic work. Index a maximal

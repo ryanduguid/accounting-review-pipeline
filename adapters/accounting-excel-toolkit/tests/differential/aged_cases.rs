@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::Oracle;
 use accounting_excel_toolkit::{aged, transactions};
 use serde_json::{Value, json};

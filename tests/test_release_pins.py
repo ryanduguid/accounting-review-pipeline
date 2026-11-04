@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """The Release Policy pin the callers run is the one the documentation claims.
 
 README.md describes the current callers' pin in the present tense, and each

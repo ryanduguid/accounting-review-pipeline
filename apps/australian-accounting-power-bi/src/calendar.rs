@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The verified sample business-day calendar behind Payday Super due dates.
 //!
 //! Reference snapshot checked 25 September 2026; see docs/compliance-methodology.md.

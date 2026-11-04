@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{convert, inspect_export, output_csv, text};
 use std::{
     collections::BTreeMap,

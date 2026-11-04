@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Source pins on the shared Power Query helpers: `Fx.ABNIsValid`, `Fx.PromoteHeaderAt`
 //! and `Fx.AUFinancialYear`, with specification ports where a vector documents the
 //! contract.

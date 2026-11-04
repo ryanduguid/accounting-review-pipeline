@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Verify every explicitly supplied pack before applying display filters.
 use crate::{
     Result, isodate,

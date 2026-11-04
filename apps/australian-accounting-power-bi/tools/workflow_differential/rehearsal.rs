@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{Result, Settings, Value};
 use sha2::{Digest, Sha256};
 use std::{

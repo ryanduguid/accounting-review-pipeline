@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Signed four-place amounts; scale and negative zero follow Decimal.
 use crate::transactions::text::{digit, space};
 use num_bigint::BigInt;

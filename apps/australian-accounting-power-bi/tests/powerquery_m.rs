@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Static syntax and fixture checks for TMDL-embedded Power Query expressions.
 
 mod common;

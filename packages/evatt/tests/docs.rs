@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Preserve the former assurance and fabricated-sample assertions in Rust.
 use evatt::{
     entities, patterns,

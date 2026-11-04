@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Native guard regression using fabricated CSVs and a disposable script copy.
 
 #![cfg(windows)]

@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Compare the frozen Python implementation with the feature-gated Rust probe.
 
 python3.14 tests/differential/detectors.py --python-root /work/tmp/evatt-oracle/packages/evatt \

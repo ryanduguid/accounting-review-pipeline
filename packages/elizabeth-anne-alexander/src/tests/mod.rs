@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Rust ports of the Python package's test suite. Each test keeps the Python
 //! test's name; a comment marks the few whose subject no longer exists.
 

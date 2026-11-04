@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{
     BOUNDARY, CLOSE_FILES, READY_FILES, Result, digest, files, json,
     ledger::{self, Money, Row, Snapshot},

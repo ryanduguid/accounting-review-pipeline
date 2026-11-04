@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 #[cfg(any(test, feature = "probe"))]
 use super::files;
 use super::{Result, digest, json, pycsv, schema};
