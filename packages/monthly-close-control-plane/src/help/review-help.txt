@@ -56,7 +56,8 @@ options:
                         reasonableness control
   --gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE
                         GST difference in dollars allowed before review,
-                        added to the percentage tolerance
+                        added to the percentage tolerance; a review heuristic,
+                        not a rounding bound
   --gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE
                         GST difference allowed before review, as a fraction
                         of the expected GST on sales and purchases, e.g. 0.01

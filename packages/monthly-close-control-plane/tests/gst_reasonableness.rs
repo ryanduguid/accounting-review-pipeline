@@ -200,7 +200,7 @@ fn matching_gst_raises_nothing_and_the_pack_records_the_tolerance() {
     assert_eq!(view.status.code(), Some(0));
     assert!(
         String::from_utf8(view.stdout).unwrap().contains(
-            "- GST reasonableness tolerance: $1.00 plus 1.00% of the expected GST on sales and purchases"
+            "- GST reasonableness review heuristic, not a rounding bound: $1.00 plus 1.00% of the expected GST on sales and purchases"
         )
     );
     // A tolerance edited out of the JSON alone no longer verifies.
@@ -245,7 +245,7 @@ fn under_collected_gst_beyond_tolerance_is_raised_with_both_figures() {
     assert!(finding.at("threshold").is_str("16.0000"));
     assert_eq!(
         text(finding.at("reason")),
-        "Net GST recorded this period is 600.00, against 700.00 expected: GST collected 1100.00 (1/10 of taxable sales 11000.00) less GST paid 400.00 (1/10 of creditable purchases 4000.00). The difference of -100.00 exceeds the 16.0000 tolerance. Amounts are net GST payable; a negative amount is a net refund."
+        "Net GST recorded this period is 600.00, against 700.00 expected: GST collected 1100.00 (1/10 of taxable sales 11000.00) less GST paid 400.00 (1/10 of creditable purchases 4000.00). The difference of -100.00 is beyond the 16.0000 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund."
     );
     assert!(!not_run(&pack));
     let queries = pack.at("client_queries").as_array().unwrap();
@@ -389,4 +389,41 @@ fn a_non_creditable_purchase_is_accepted_and_expects_no_gst_paid() {
     assert_eq!(run.code, 2, "{}", run.stderr);
     let pack = run.pack.unwrap();
     assert!(gst_findings(&pack)[0].at("prior_value").is_str("545.00"));
+}
+
+#[test]
+fn rounding_on_many_small_sales_can_exceed_the_heuristic_and_is_raised_for_review() {
+    // 300 taxable sales of 0.06, each invoice's 0.006 of GST rounded to the
+    // nearest cent: 3.00 recorded against 1.80 expected. The 1.20 is legitimate
+    // rounding, and the 1.0180 heuristic still asks for a review of it.
+    let lines = vec![
+        Line {
+            credit: 300,
+            ..line("210", "Liabilities", "GST", "gst")
+        },
+        Line {
+            credit: 1_800,
+            ..line("300", "Revenue", "Sales", "taxable_sales")
+        },
+    ];
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    let found = gst_findings(&pack);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].at("status").is_str("REVIEW"));
+    assert!(found[0].at("difference").is_str("1.20"));
+    assert!(found[0].at("threshold").is_str("1.0180"));
+    assert_eq!(
+        text(found[0].at("reason")),
+        "Net GST recorded this period is 3.00, against 1.80 expected: GST collected 1.80 (1/10 of taxable sales 18.00) less GST paid 0.00 (1/10 of creditable purchases 0.00). The difference of 1.20 is beyond the 1.0180 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund."
+    );
+    let view = Command::new(BIN)
+        .args(["view", "--pack-dir"])
+        .arg(&run.dir)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8(view.stdout).unwrap().contains(
+        "- GST reasonableness review heuristic, not a rounding bound: $1.00 plus 1.00% of the expected GST on sales and purchases"
+    ));
 }

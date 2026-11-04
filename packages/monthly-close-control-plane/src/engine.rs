@@ -466,8 +466,8 @@ pub fn gst_reasonableness_exceptions(
 }
 
 /// The exception for a net GST movement further from expectation than the
-/// tolerance: the absolute amount plus the percentage of the expected GST
-/// on sales and on purchases.
+/// review heuristic: the absolute amount plus the percentage of the expected
+/// GST on sales and on purchases. It is not a rounding bound.
 fn gst_difference(
     sales: &[Decimal],
     purchases: &[Decimal],
@@ -493,7 +493,7 @@ fn gst_difference(
         Status::Review,
         None,
         &format!(
-            "Net GST recorded this period is {}, against {} expected: GST collected {} (1/10 of taxable sales {}) less GST paid {} (1/10 of creditable purchases {}). The difference of {} exceeds the {} tolerance. Amounts are net GST payable; a negative amount is a net refund.",
+            "Net GST recorded this period is {}, against {} expected: GST collected {} (1/10 of taxable sales {}) less GST paid {} (1/10 of creditable purchases {}). The difference of {} is beyond the {} review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund.",
             money(&recorded)?,
             money(&expected)?,
             money(&collected)?,
@@ -503,7 +503,7 @@ fn gst_difference(
             money(&difference)?,
             money(&tolerance)?,
         ),
-        "Trace the difference through the GST account's postings and the tax codes on sales and purchases: a BAS payment or refund, a manual GST journal, a sale or purchase coded with the wrong GST treatment, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
+        "Trace the difference through the GST account's postings and the tax codes on sales and purchases: rounding across many small invoices, a BAS payment or refund, a manual GST journal, a sale or purchase coded with the wrong GST treatment, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
     );
     item.current_value = Some(recorded);
     item.prior_value = Some(expected);

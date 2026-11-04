@@ -36,7 +36,7 @@
   finding when the period's net GST movement differs from 1/10 of taxable
   sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance`
   (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST
-  expected. An account with movement and no class, or classed `mixed`, stops
+  expected, a review heuristic rather than a rounding bound. An account with movement and no class, or classed `mixed`, stops
   the control with its reason and names it under `controls_not_run`. Packs
   without the option are unchanged; the differential probe drops the 3 new
   options from the help it compares with the frozen baseline.

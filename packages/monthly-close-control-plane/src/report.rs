@@ -94,10 +94,10 @@ pub fn producer() -> Json {
         ("version", Json::str(env!("CARGO_PKG_VERSION"))),
     ])
 }
-/// The scope line for a pack's GST tolerance, from its 2 rendered thresholds.
+/// The scope line for a pack's GST review heuristic, from its 2 rendered thresholds.
 pub fn gst_tolerance_line(absolute: &str, percentage: &str) -> String {
     format!(
-        "- GST reasonableness tolerance: ${absolute} plus {percentage} of the expected GST on sales and purchases"
+        "- GST reasonableness review heuristic, not a rounding bound: ${absolute} plus {percentage} of the expected GST on sales and purchases"
     )
 }
 pub fn producer_line(producer: &Json) -> String {
