@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! `generate-fixtures`: rewrites the six fabricated sample CSVs beside this crate.
 //!
 //! Like `tools/generate_fixtures.py` before it, it takes no options and ignores any

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Read-only entity map. No Python import API, assign, save or temporary writes.
 use crate::{
     patterns::{self, Result},

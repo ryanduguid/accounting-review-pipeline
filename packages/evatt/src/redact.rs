@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! evatt/redact.py, preserving code-point masks and the two line conventions.
 use crate::{
     entities::{self, Entity},

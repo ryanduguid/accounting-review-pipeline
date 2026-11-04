@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Explicitly check Python's buffered-write and context-manager close failures.
 //! Never remove an exclusively-created partial disclosure record on failure.
 use std::io::{self, BufWriter, Write};

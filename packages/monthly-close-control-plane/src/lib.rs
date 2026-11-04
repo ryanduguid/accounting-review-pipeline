@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Offline monthly close controls. An acknowledgement never changes a status.
 
 pub mod calculation_evidence;

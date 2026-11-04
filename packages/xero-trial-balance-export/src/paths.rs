@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Destination and token-cache containment, including non-existing link tails.
 use crate::{Failure, Result, pypath, pytext};
 use std::{

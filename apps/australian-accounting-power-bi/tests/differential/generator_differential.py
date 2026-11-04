@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Differential test: generate_fixtures.py against the Rust generator.
 
     python generator_differential.py --script <tools/generate_fixtures.py from the Python base> \

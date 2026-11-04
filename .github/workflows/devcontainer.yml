@@ -4,17 +4,14 @@ name: devcontainer
 # commands with the same semantics as Codespaces, then runs the README's
 # fabricated close review inside it. A broken Codespaces setup fails here
 # instead of for a visitor. The push run on main also catches drift in the
-# image tag.
+# image tag. Every pull request runs the workflow so devcontainer-gates always
+# reports; the changes job skips setup when none of its paths changed.
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - ".devcontainer/**"
-      - ".github/workflows/devcontainer.yml"
-      - "uv.lock"
 
 permissions:
   contents: read
@@ -28,7 +25,37 @@ env:
   DEVCONTAINER_CLI: "@devcontainers/cli@0.89.0"
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+    steps:
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select affected checks
+        id: select
+        env:
+          # Only a pull request filters by path. A push to main or a manual run
+          # leaves CI_BASE empty so select_paths.py runs setup.
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          CI_HEAD: ${{ github.sha }}
+          CI_PATHS: |
+            .devcontainer/**
+            .github/workflows/devcontainer.yml
+            uv.lock
+        run: python .github/ci/select_paths.py >> "$GITHUB_OUTPUT"
+
   setup:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -63,3 +90,40 @@ jobs:
           status=$?
           set -e
           test "$status" -eq 2
+
+  devcontainer-gates:
+    needs: [changes, setup]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - name: Require the selected checks to complete
+        shell: python
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          changes = results.pop("changes")
+          selected = changes.get("outputs", {}).get("run")
+          if changes["result"] != "success" or selected not in {"true", "false"}:
+              raise SystemExit("Change selection did not complete")
+          expected = "success" if selected == "true" else "skipped"
+          failed = [name for name, value in results.items() if value["result"] != expected]
+          if failed:
+              raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit's first parent holds the base branch's workflow.
+          fetch-depth: 2
+          sparse-checkout: .github
+      - name: Require every job to be listed and kept
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/ci/check_gates.py .github/workflows/devcontainer.yml devcontainer-gates --no-results

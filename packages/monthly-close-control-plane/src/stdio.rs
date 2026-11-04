@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! UTF-8 with replacement and the platform's text newline convention.
 use std::io::Write;
 thread_local! {

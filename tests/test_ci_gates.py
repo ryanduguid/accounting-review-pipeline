@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Exercise the current Python gate CLI with isolated Git workflow fixtures.
 
 Adapted from Ozzit's test_check_gates.py real-parent regression. This tests the
@@ -332,11 +335,14 @@ class PipelineGatePredecessorTests(unittest.TestCase):
         if tab_comment:
             head = head.replace(f"  {gate}:\n", f"  {gate}:\n\t# separator\n", 1)
         occupied = destination == "devcontainer.yml"
+        # An occupied destination keeps every job it already has, so only the source's jobs go.
+        kept = sorted(checker.job_ids((ROOT / ".github/workflows" / destination).read_text(encoding="utf-8"))) if occupied else []
         if occupied:
-            head = head.replace("jobs:\n", "jobs:\n  setup:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n", 1)
-            head = head.replace(f"    name: {context}\n", f"    name: {context}\n    needs: [setup]\n", 1)
+            stubs = "".join(f"  {job}:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n" for job in kept)
+            head = head.replace("jobs:\n", "jobs:\n" + stubs, 1)
+            head = head.replace(f"    name: {context}\n", f"    name: {context}\n    needs: [{', '.join(kept)}]\n", 1)
         unchanged = destination == source_name and gate == old_gate and context == old_gate and not declaration
-        results = {"setup": {"result": "success"}} if occupied else {}
+        results = {job: {"result": "success"} for job in kept}
         if unchanged:
             head = base
             results = {name.strip(): {"result": "success"} for name in needs.split("[", 1)[1].split("]", 1)[0].split(",")}

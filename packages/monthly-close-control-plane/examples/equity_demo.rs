@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use monthly_close_control_plane::{
     Result, cli,
     engine::{self, ReviewConfig},

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Public workflow checks requiring an actual, harmless native producer process.
 
 use australian_accounting_power_bi::workflow::{self, probe};

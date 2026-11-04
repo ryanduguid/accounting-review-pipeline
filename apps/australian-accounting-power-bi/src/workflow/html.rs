@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{BOUNDARY, Result, json, ledger, producer, projection, run, schema};
 use ledger::{Row, Snapshot};
 use serde_json::{Value, json};

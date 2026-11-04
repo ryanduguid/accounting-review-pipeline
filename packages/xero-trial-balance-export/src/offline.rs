@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Development tools read only the declared fabricated fixtures and sample.
 use crate::{
     Failure, Result,

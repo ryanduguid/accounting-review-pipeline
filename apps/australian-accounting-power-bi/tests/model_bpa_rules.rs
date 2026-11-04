@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Each Best Practice Analyzer rule selects violations, not compliant objects.
 //!
 //! A BPA rule expression selects the objects that break the rule, so a predicate written

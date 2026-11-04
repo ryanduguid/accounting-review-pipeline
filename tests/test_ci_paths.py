@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Exercise CI path selection against actual Git trees and shared file patterns."""
 
 from __future__ import annotations
@@ -207,6 +210,26 @@ class SelectionTests(unittest.TestCase):
             self.assertTrue(select_paths.matches([path], patterns))
         self.assertFalse(select_paths.matches(["docs/note.md"], patterns))
         self.assertFalse(select_paths.matches([], patterns))
+
+    def test_gated_workflows_select_their_former_trigger_paths(self) -> None:
+        # These workflows dropped on.pull_request.paths for a changes job, so their
+        # CI_PATHS must still select every path the trigger filter selected.
+        for workflow, paths in (
+            ("devcontainer.yml", (
+                ".devcontainer/devcontainer.json",
+                ".github/workflows/devcontainer.yml",
+                "uv.lock",
+            )),
+            ("reviewer-quick-start.yml", (
+                "packages/monthly-close-control-plane/docs/reviewer-quick-start.md",
+                ".github/workflows/reviewer-quick-start.yml",
+            )),
+        ):
+            with self.subTest(workflow=workflow):
+                patterns = configured_ci_paths(workflow)
+                for path in paths:
+                    self.assertTrue(select_paths.matches([path], patterns), path)
+                self.assertFalse(select_paths.matches(["docs/note.md"], patterns))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 # Native binary smoke from an empty directory, with COMPONENT naming the source.
 set -euo pipefail
 [[ "$(review-ready --version)" = "review-ready 1.0.0" ]]

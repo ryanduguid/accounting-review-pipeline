@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Hold the README's Controls table to the controls the engine raises.
 use monthly_close_control_plane::models::Control;
 

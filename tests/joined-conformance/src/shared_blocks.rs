@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Behavioural conformance for the blocks Monthly Close Controls and the
 //! Workpaper Review Gate share.
 

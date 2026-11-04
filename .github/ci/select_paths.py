@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Select workflow jobs from a Git diff without losing the source of a rename."""
 
 from __future__ import annotations

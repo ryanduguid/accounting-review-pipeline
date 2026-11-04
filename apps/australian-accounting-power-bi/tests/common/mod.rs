@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Shared readers for the static PBIP, TMDL and fixture checks.
 
 #![allow(dead_code)]

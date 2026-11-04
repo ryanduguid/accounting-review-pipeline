@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Contracts for a loadable, source-controlled Power BI project.
 //!
 //! JSON is read with Python's access rules (`Py::at`, `Py::py_get`) and in the

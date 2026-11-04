@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{MAX_EXPORT_BYTES, MAX_EXPORT_FILES, MAX_EXPORT_MEMBER, Result};
 use std::collections::BTreeMap;
 

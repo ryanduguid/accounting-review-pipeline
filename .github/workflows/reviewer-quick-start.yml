@@ -3,15 +3,14 @@ name: reviewer-quick-start
 # Follows packages/monthly-close-control-plane/docs/reviewer-quick-start.md as a
 # reviewer would: build the native command from source, then use the guide's
 # download block and commands in an empty directory outside the checkout.
+# Every pull request runs the workflow so reviewer-quick-start-gates always
+# reports; the changes job skips guide when none of its paths changed.
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - "packages/monthly-close-control-plane/**"
-      - ".github/workflows/reviewer-quick-start.yml"
 
 permissions:
   contents: read
@@ -24,7 +23,36 @@ env:
   GUIDE: packages/monthly-close-control-plane/docs/reviewer-quick-start.md
 
 jobs:
+  changes:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+    steps:
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select affected checks
+        id: select
+        env:
+          # Only a pull request filters by path. A push to main or a manual run
+          # leaves CI_BASE empty so select_paths.py runs guide.
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          CI_HEAD: ${{ github.sha }}
+          CI_PATHS: |
+            packages/monthly-close-control-plane/**
+            .github/workflows/reviewer-quick-start.yml
+        run: python .github/ci/select_paths.py >> "$GITHUB_OUTPUT"
+
   guide:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -61,3 +89,40 @@ jobs:
           sed -i '0,/REVIEW/s//PASS/' close-pack/close-summary.md
           if bash -c "$view" > /dev/null 2> view.err; then exit 1; fi
           grep -q 'verification failed' view.err
+
+  reviewer-quick-start-gates:
+    needs: [changes, guide]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - name: Require the selected checks to complete
+        shell: python
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          changes = results.pop("changes")
+          selected = changes.get("outputs", {}).get("run")
+          if changes["result"] != "success" or selected not in {"true", "false"}:
+              raise SystemExit("Change selection did not complete")
+          expected = "success" if selected == "true" else "skipped"
+          failed = [name for name, value in results.items() if value["result"] != expected]
+          if failed:
+              raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit's first parent holds the base branch's workflow.
+          fetch-depth: 2
+          sparse-checkout: .github
+      - name: Require every job to be listed and kept
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/ci/check_gates.py .github/workflows/reviewer-quick-start.yml reviewer-quick-start-gates --no-results

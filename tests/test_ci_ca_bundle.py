@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """The CA bundle freshness check reads the real NOTICE and fails on any difference.
 
 The check itself runs weekly against PyPI; these offline cases run on every

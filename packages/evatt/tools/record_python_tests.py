@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Record fabricated Python 0.2.0 test calls for standalone Rust regression tests.
 
 This developer tool requires pytest and a pristine external oracle copy. It

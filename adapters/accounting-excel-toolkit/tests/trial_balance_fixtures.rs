@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The fabricated Xero trial-balance fixtures and the source pins on `Xero.TrialBalance.pq`.
 //!
 //! CI has no Power Query host, so a port of the parser's documented contract runs over

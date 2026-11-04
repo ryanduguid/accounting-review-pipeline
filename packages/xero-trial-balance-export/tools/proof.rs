@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use xero_trial_balance_export::{Failure, Result, offline, stdio};
 #[expect(
     clippy::too_many_lines,
