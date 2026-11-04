@@ -370,3 +370,23 @@ fn malformed_gst_mappings_are_refused_before_any_pack_is_written() {
         assert!(run.pack.is_none(), "{csv}");
     }
 }
+
+#[test]
+fn a_non_creditable_purchase_is_accepted_and_expects_no_gst_paid() {
+    // 550.00 spent on a purchase whose GST cannot be claimed: left out, so the
+    // 600.00 net GST still matches.
+    let mut lines = matching();
+    lines.push(Line {
+        debit: 55_000,
+        ..line("430", "Expenses", "Private Use", "non_creditable")
+    });
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(gst_findings(run.pack.as_ref().unwrap()).is_empty());
+    // Classed creditable, the same purchase would expect 55.00 of GST paid.
+    lines.last_mut().unwrap().class = "creditable_purchases";
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    assert!(gst_findings(&pack)[0].at("prior_value").is_str("545.00"));
+}

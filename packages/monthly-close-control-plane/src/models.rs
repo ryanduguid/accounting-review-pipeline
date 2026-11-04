@@ -87,6 +87,8 @@ controls! {
 pub enum GstClass {
     TaxableSales,
     CreditablePurchases,
+    /// Purchases whose GST cannot be claimed: no GST paid is expected.
+    NonCreditable,
     GstFree,
     InputTaxed,
     BasExcluded,
@@ -99,6 +101,7 @@ impl GstClass {
         Some(match name {
             "taxable_sales" => Self::TaxableSales,
             "creditable_purchases" => Self::CreditablePurchases,
+            "non_creditable" => Self::NonCreditable,
             "gst_free" => Self::GstFree,
             "input_taxed" => Self::InputTaxed,
             "bas_excluded" => Self::BasExcluded,

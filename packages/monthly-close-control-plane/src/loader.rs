@@ -442,7 +442,7 @@ pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, Gs
         let name = row.text("GSTClass", false)?;
         let class = GstClass::parse(&name).ok_or_else(|| {
             format!(
-                "{path}: row {} GSTClass {} is not one of taxable_sales, creditable_purchases, gst_free, input_taxed, bas_excluded, mixed, gst.",
+                "{path}: row {} GSTClass {} is not one of taxable_sales, creditable_purchases, non_creditable, gst_free, input_taxed, bas_excluded, mixed, gst.",
                 row.number,
                 pytext::repr(&name)
             )

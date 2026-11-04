@@ -294,6 +294,7 @@ repeated `AccountID` and a mapping with no `gst` account fail with exit code 1.
 | --- | --- | --- |
 | `taxable_sales` | Taxable sales, recorded GST-exclusive | Credits less debits; 1/10 is the GST expected to be collected |
 | `creditable_purchases` | Purchases, expenses and assets whose GST is claimed, recorded GST-exclusive | Debits less credits; 1/10 is the GST expected to be paid |
+| `non_creditable` | Purchases whose GST cannot be claimed, such as the private-use part of a purchase, recorded with any GST they bore | Left out: no GST paid is expected |
 | `gst_free` | GST-free sales or purchases, such as exports or most basic food | Left out |
 | `input_taxed` | Input-taxed sales or purchases, such as interest or residential rent | Left out |
 | `bas_excluded` | Movements outside GST: bank, receivables, payables, wages, superannuation, depreciation, loans and equity | Left out |
@@ -328,7 +329,11 @@ so 1/10 of a GST-exclusive price;
 carry no GST, though GST on purchases used to make them can still be claimed;
 [input-taxed sales](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/when-to-charge-gst-and-when-not-to/input-taxed-sales),
 mainly financial supplies and residential premises, carry no GST and their
-inputs carry no credit; and a
+inputs carry no credit;
+[a GST credit](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/claiming-gst-credits/when-you-can-claim-a-gst-credit)
+needs a business purpose unrelated to input-taxed sales, a price that included
+GST and, above $82.50, a tax invoice, and the private-use part of a purchase
+carries none; and a
 [partly taxable sale](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/when-to-charge-gst-and-when-not-to/taxable-sales)
 bears GST on its taxable part only. The mapping records the firm's treatment;
 the tool infers nothing from `Section`, names or tax codes, and it computes no
