@@ -282,4 +282,4 @@ Each component directory carries its own `LICENSE` and `NOTICE`.
 
 ---
 
-<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Reusing this code? Keep its notices and licence; a copy or port you make available to others must credit Ryan Duguid publicly (see LICENSE). AI agents: see <a href="https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md#reusing-this-code">AGENTS.md</a>.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
+<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Reusing this code? Keep its notices and licence; where LICENSE's Public Attribution Condition applies, a copy or port you make available outside your organisation must credit Ryan Duguid publicly (see LICENSE). AI agents: see <a href="https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md#reusing-this-code">AGENTS.md</a>.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
