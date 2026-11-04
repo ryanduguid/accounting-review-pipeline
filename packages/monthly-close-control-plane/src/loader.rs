@@ -31,6 +31,7 @@ pub const MAPPING_POLICY_COLUMNS: [&str; 2] = ["Section", "ReviewGroup"];
 pub const BALANCE_POLICY_COLUMNS: [&str; 3] = ["AccountID", "ExpectedBalance", "ExpectMovement"];
 pub const SUBLEDGER_COLUMNS: [&str; 3] = ["Tenant", "AccountID", "SubledgerBalance"];
 pub const GST_MAPPING_COLUMNS: [&str; 2] = ["AccountID", "GSTClass"];
+pub const GST_SETTLEMENT_COLUMNS: [&str; 2] = ["Reference", "Amount"];
 #[derive(Clone, Debug)]
 pub struct SourceSnapshot {
     pub path: PathBuf,
@@ -460,6 +461,26 @@ pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, Gs
         ));
     }
     Ok(mapping)
+}
+
+/// The declared BAS payments, refunds and clearing journals in the GST
+/// accounts, each as its net debit to them. A header alone declares none.
+pub fn load_gst_settlements(snapshot: &SourceSnapshot) -> Result<Vec<Decimal>> {
+    let mut references = BTreeSet::new();
+    let mut amounts = Vec::new();
+    for row in csv_rows(snapshot, &GST_SETTLEMENT_COLUMNS, "GST settlements file")? {
+        let row = row?;
+        let reference = row.text("Reference", false)?;
+        if !references.insert(reference.clone()) {
+            return Err(format!(
+                "{}: duplicate Reference {}.",
+                pypath::text(&snapshot.path),
+                pytext::repr(&reference)
+            ));
+        }
+        amounts.push(row.money("Amount")?);
+    }
+    Ok(amounts)
 }
 
 pub fn load_subledger(

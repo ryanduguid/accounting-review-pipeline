@@ -119,10 +119,27 @@ struct Run {
     dir: std::path::PathBuf,
 }
 
+/// A declaration that no BAS payment, refund or clearing journal reached the
+/// GST accounts this period.
+const NO_SETTLEMENTS: &str = "Reference,Amount\n";
+
 /// Run `close-control review` on the month, with `gst` as the GST mapping when
-/// supplied. The variance threshold is set out of reach: every account doubles
-/// its YTD balance, and this file tests GST alone.
+/// supplied and, with it, a declaration of no settlements.
 fn review(lines: &[Line], gst: Option<String>, extra: &[&str]) -> Run {
+    let settlements = gst.as_ref().map(|_| NO_SETTLEMENTS.to_owned());
+    review_settled(lines, gst, settlements, extra)
+}
+
+/// Run `close-control review` on the month, with `gst` as the GST mapping and
+/// `settlements` as the GST settlements declaration, each when supplied. The
+/// variance threshold is set out of reach: every account doubles its YTD
+/// balance, and this file tests GST alone.
+fn review_settled(
+    lines: &[Line],
+    gst: Option<String>,
+    settlements: Option<String>,
+    extra: &[&str],
+) -> Run {
     let temp = TempDir::new();
     let write = |name: &str, contents: String| {
         let path = temp.join(name);
@@ -144,6 +161,11 @@ fn review(lines: &[Line], gst: Option<String>, extra: &[&str]) -> Run {
         command
             .arg("--gst-mapping")
             .arg(write("gst-mapping.csv", gst));
+    }
+    if let Some(settlements) = settlements {
+        command
+            .arg("--gst-settlements")
+            .arg(write("gst-settlements.csv", settlements));
     }
     let output = command.output().unwrap();
     let pack = fs::read_to_string(dir.join("close-review-pack.json"))
@@ -200,7 +222,7 @@ fn matching_gst_raises_nothing_and_the_pack_records_the_tolerance() {
     assert_eq!(view.status.code(), Some(0));
     assert!(
         String::from_utf8(view.stdout).unwrap().contains(
-            "- GST reasonableness review heuristic, not a rounding bound: $1.00 plus 1.00% of the expected GST on sales and purchases"
+            "- GST reasonableness review heuristic, not a rounding bound: $1.00 plus 1.00% of the expected GST on sales and purchases, after the declared GST settlements, which the trial balance cannot verify"
         )
     );
     // A tolerance edited out of the JSON alone no longer verifies.
@@ -245,7 +267,7 @@ fn under_collected_gst_beyond_tolerance_is_raised_with_both_figures() {
     assert!(finding.at("threshold").is_str("16.0000"));
     assert_eq!(
         text(finding.at("reason")),
-        "Net GST recorded this period is 600.00, against 700.00 expected: GST collected 1100.00 (1/10 of taxable sales 11000.00) less GST paid 400.00 (1/10 of creditable purchases 4000.00). The difference of -100.00 is beyond the 16.0000 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund."
+        "Net GST recorded this period is 600.00 (600.00 of movement in the GST accounts plus 0.00 of declared settlements), against 700.00 expected: GST collected 1100.00 (1/10 of taxable sales 11000.00) less GST paid 400.00 (1/10 of creditable purchases 4000.00). The difference of -100.00 is beyond the 16.0000 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund. The settlements are as declared; the trial balance cannot verify them."
     );
     assert!(!not_run(&pack));
     let queries = pack.at("client_queries").as_array().unwrap();
@@ -416,7 +438,7 @@ fn rounding_on_many_small_sales_can_exceed_the_heuristic_and_is_raised_for_revie
     assert!(found[0].at("threshold").is_str("1.0180"));
     assert_eq!(
         text(found[0].at("reason")),
-        "Net GST recorded this period is 3.00, against 1.80 expected: GST collected 1.80 (1/10 of taxable sales 18.00) less GST paid 0.00 (1/10 of creditable purchases 0.00). The difference of 1.20 is beyond the 1.0180 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund."
+        "Net GST recorded this period is 3.00 (3.00 of movement in the GST accounts plus 0.00 of declared settlements), against 1.80 expected: GST collected 1.80 (1/10 of taxable sales 18.00) less GST paid 0.00 (1/10 of creditable purchases 0.00). The difference of 1.20 is beyond the 1.0180 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund. The settlements are as declared; the trial balance cannot verify them."
     );
     let view = Command::new(BIN)
         .args(["view", "--pack-dir"])
@@ -424,6 +446,234 @@ fn rounding_on_many_small_sales_can_exceed_the_heuristic_and_is_raised_for_revie
         .output()
         .unwrap();
     assert!(String::from_utf8(view.stdout).unwrap().contains(
-        "- GST reasonableness review heuristic, not a rounding bound: $1.00 plus 1.00% of the expected GST on sales and purchases"
+        "- GST reasonableness review heuristic, not a rounding bound: $1.00 plus 1.00% of the expected GST on sales and purchases, after the declared GST settlements, which the trial balance cannot verify"
     ));
+}
+
+/// The matching month with its 600.00 of net GST paid to the ATO: a debit to
+/// the GST account with no sale or purchase behind it.
+fn paid_to_the_ato() -> Vec<Line> {
+    let mut lines = matching();
+    set(&mut lines, "210", 100_000, 100_000);
+    lines
+}
+
+/// Purchases of 13000.00 expect 1300.00 of GST paid against 1000.00 collected,
+/// a 300.00 refund, and the ATO's refund is credited to the GST account.
+fn refunded_by_the_ato() -> Vec<Line> {
+    let mut lines = matching();
+    set(&mut lines, "400", 1_300_000, 0);
+    set(&mut lines, "210", 130_000, 130_000);
+    lines
+}
+
+/// The matching month's 600.00 of net GST journalled out of the GST account
+/// into the ATO integrated client account.
+fn cleared_to_the_ato_account() -> Vec<Line> {
+    let mut lines = matching();
+    set(&mut lines, "210", 100_000, 100_000);
+    lines.push(Line {
+        credit: 60_000,
+        ..line(
+            "220",
+            "Liabilities",
+            "ATO Integrated Client Account",
+            "bas_excluded",
+        )
+    });
+    lines
+}
+
+#[test]
+fn a_declared_bas_payment_refund_or_clearing_journal_is_set_aside() {
+    for (lines, declared) in [
+        (
+            paid_to_the_ato(),
+            "BAS July 2026 payment (ATO account),600.00\n",
+        ),
+        (
+            refunded_by_the_ato(),
+            "BAS July 2026 refund (ATO account),-300.00\n",
+        ),
+        (
+            cleared_to_the_ato_account(),
+            "GST cleared to ICA (journal 41),600.00\n",
+        ),
+    ] {
+        let settlements = format!("{NO_SETTLEMENTS}{declared}");
+        let run = review_settled(&lines, Some(mapping(&lines)), Some(settlements), &[]);
+        assert_eq!(run.code, 0, "{declared}: {}", run.stderr);
+        let pack = run.pack.unwrap();
+        assert!(gst_findings(&pack).is_empty(), "{declared}");
+        assert!(!not_run(&pack), "{declared}");
+        assert!(pack.at("source_sha256").get("gst_settlements").is_some());
+        // Declared as none, the same entry moves the GST account with no sale
+        // or purchase behind it, and the control raises it.
+        let run = review(&lines, Some(mapping(&lines)), &[]);
+        assert_eq!(run.code, 2, "{declared}: {}", run.stderr);
+        assert_eq!(
+            gst_findings(run.pack.as_ref().unwrap()).len(),
+            1,
+            "{declared}"
+        );
+    }
+}
+
+#[test]
+fn a_declared_payment_does_not_hide_gst_recorded_twice() {
+    // 1200.00 of GST recorded against 600.00 expected, then 600.00 paid to the
+    // ATO: the account moves 600.00 net, as if it agreed.
+    let mut lines = matching();
+    set(&mut lines, "210", 100_000, 160_000);
+    let declared = format!("{NO_SETTLEMENTS}BAS July 2026 payment (ATO account),600.00\n");
+    let run = review_settled(&lines, Some(mapping(&lines)), Some(declared), &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    let found = gst_findings(&pack);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].at("current_value").is_str("1200.00"));
+    assert!(found[0].at("prior_value").is_str("600.00"));
+    assert!(found[0].at("difference").is_str("600.00"));
+    assert!(found[0].at("threshold").is_str("15.0000"));
+    assert_eq!(
+        text(found[0].at("reason")),
+        "Net GST recorded this period is 1200.00 (600.00 of movement in the GST accounts plus 600.00 of declared settlements), against 600.00 expected: GST collected 1000.00 (1/10 of taxable sales 10000.00) less GST paid 400.00 (1/10 of creditable purchases 4000.00). The difference of 600.00 is beyond the 15.0000 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund. The settlements are as declared; the trial balance cannot verify them."
+    );
+    // Declared as none, the payment hides the error: the control relies on
+    // the declaration and cannot check it against the trial balance.
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+}
+
+#[test]
+fn a_gst_mapping_without_a_settlements_declaration_does_not_run() {
+    let lines = matching();
+    let run = review_settled(&lines, Some(mapping(&lines)), None, &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    assert!(pack.at("overall_status").is_str("REVIEW"));
+    assert!(not_run(&pack));
+    let found = gst_findings(&pack);
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        text(found[0].at("reason")),
+        "No GST settlements declaration was supplied, so a BAS payment, refund or clearing journal in the GST accounts cannot be told from GST on sales and purchases. The GST reasonableness control did not run, so this pack carries no GST result; this is not a pass."
+    );
+}
+
+#[test]
+fn a_malformed_or_absent_settlements_file_does_not_run_and_says_why() {
+    let lines = matching();
+    for (csv, message) in [
+        (
+            "Reference,Amount\nBAS July 2026,six hundred\n",
+            "row 2 has invalid Amount: 'six hundred'.",
+        ),
+        (
+            "Reference,Amount\nBAS July 2026,600.00\nBAS July 2026,600.00\n",
+            "duplicate Reference 'BAS July 2026'.",
+        ),
+        (
+            "Reference,Amount\n,600.00\n",
+            "row 2 has an empty Reference.",
+        ),
+        (
+            "Reference,Value\nBAS July 2026,600.00\n",
+            "canonical schema mismatch (missing Amount; unexpected Value).",
+        ),
+        ("", "CSV has no header row."),
+    ] {
+        let run = review_settled(&lines, Some(mapping(&lines)), Some(csv.into()), &[]);
+        assert_eq!(run.code, 2, "{csv}: {}", run.stderr);
+        let pack = run.pack.unwrap();
+        assert!(not_run(&pack), "{csv}");
+        assert!(pack.at("source_sha256").get("gst_settlements").is_some());
+        let reason = text(gst_findings(&pack)[0].at("reason"));
+        assert!(
+            reason.starts_with("The GST settlements declaration cannot be used: "),
+            "{reason}"
+        );
+        assert!(reason.contains(message), "{csv}: {reason}");
+        assert!(reason.ends_with("this is not a pass."), "{reason}");
+    }
+    let absent = TempDir::new();
+    let path = absent.join("gst-settlements.csv");
+    let run = review_settled(
+        &lines,
+        Some(mapping(&lines)),
+        None,
+        &["--gst-settlements", path.to_str().unwrap()],
+    );
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    assert!(not_run(&pack));
+    assert!(pack.at("source_sha256").get("gst_settlements").is_none());
+    let reason = text(gst_findings(&pack)[0].at("reason"));
+    assert!(
+        reason.contains("GST settlements file does not exist"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn a_settlements_declaration_without_a_gst_mapping_is_refused() {
+    let run = review_settled(&matching(), None, Some(NO_SETTLEMENTS.into()), &[]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr
+            .contains("A GST settlements declaration requires a GST mapping."),
+        "{}",
+        run.stderr
+    );
+    assert!(run.pack.is_none());
+}
+
+/// The review command's GST usage and help lines, checked here on their own as
+/// well as through the differential probe, which drops them before comparing
+/// its output with the frozen baseline.
+const GST_USAGE: &str = concat!(
+    "                            [--reconciliation-tolerance RECONCILIATION_TOLERANCE]\n",
+    "                            [--gst-mapping GST_MAPPING]\n",
+    "                            [--gst-settlements GST_SETTLEMENTS]\n",
+    "                            [--gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE]\n",
+    "                            [--gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE]\n",
+);
+const GST_HELP: &str = concat!(
+    "  --reconciliation-tolerance RECONCILIATION_TOLERANCE\n",
+    "                        maximum permitted GL/subledger difference\n",
+    "  --gst-mapping GST_MAPPING\n",
+    "                        optional AccountID,GSTClass CSV; runs the GST\n",
+    "                        reasonableness control\n",
+    "  --gst-settlements GST_SETTLEMENTS\n",
+    "                        Reference,Amount CSV of BAS payments, refunds and\n",
+    "                        clearing journals in the GST accounts, each as its\n",
+    "                        net debit; required with --gst-mapping, header only\n",
+    "                        when there were none\n",
+    "  --gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE\n",
+    "                        GST difference in dollars allowed before review,\n",
+    "                        added to the percentage tolerance; a review heuristic,\n",
+    "                        not a rounding bound\n",
+    "  --gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE\n",
+    "                        GST difference allowed before review, as a fraction\n",
+    "                        of the expected GST on sales and purchases, e.g. 0.01\n",
+    "                        for 1%\n",
+);
+
+#[test]
+fn review_and_workbench_help_and_usage_show_the_gst_options() {
+    let lf = |bytes: Vec<u8>| String::from_utf8(bytes).unwrap().replace("\r\n", "\n");
+    for command in ["review", "workbench"] {
+        let help = Command::new(BIN)
+            .args([command, "--help"])
+            .output()
+            .unwrap();
+        assert_eq!(help.status.code(), Some(0), "{command}");
+        let help = lf(help.stdout);
+        assert!(help.contains(GST_USAGE), "{command}: {help}");
+        assert!(help.ends_with(GST_HELP), "{command}: {help}");
+        let usage = Command::new(BIN).arg(command).output().unwrap();
+        assert_eq!(usage.status.code(), Some(1), "{command}");
+        let usage = lf(usage.stderr);
+        assert!(usage.contains(GST_USAGE), "{command}: {usage}");
+    }
 }

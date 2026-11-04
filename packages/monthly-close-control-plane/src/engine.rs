@@ -57,6 +57,7 @@ pub struct ReviewConfig {
     pub balance_policy_path: Option<PathBuf>,
     pub subledger_path: Option<PathBuf>,
     pub gst_mapping_path: Option<PathBuf>,
+    pub gst_settlements_path: Option<PathBuf>,
     pub acknowledgement_path: Option<PathBuf>,
     pub equity_schedule_path: Option<PathBuf>,
     pub equity_currency: Option<String>,
@@ -79,6 +80,7 @@ impl ReviewConfig {
             balance_policy_path: None,
             subledger_path: None,
             gst_mapping_path: None,
+            gst_settlements_path: None,
             acknowledgement_path: None,
             equity_schedule_path: None,
             equity_currency: None,
@@ -431,12 +433,15 @@ pub fn subledger_exceptions(
     result
 }
 
-/// Compares the period's net GST movement with 1/10 of the GST-exclusive taxable
-/// sales less 1/10 of the creditable purchases, and says whether the control ran.
-/// Sales and GST amounts are credits less debits; purchases are debits less credits.
+/// Compares the period's net GST movement, with the declared settlements added
+/// back, with 1/10 of the GST-exclusive taxable sales less 1/10 of the
+/// creditable purchases, and says whether the control ran. Sales and GST
+/// amounts are credits less debits; purchases and settlements are debits less
+/// credits. `settlements` is the declaration, or why there is none to use.
 pub fn gst_reasonableness_exceptions(
     rows: &[TrialBalanceRow],
     mapping: &BTreeMap<String, GstClass>,
+    settlements: std::result::Result<&[Decimal], &str>,
     absolute: &Decimal,
     percentage: &Decimal,
 ) -> Result<(Vec<ExceptionItem>, bool)> {
@@ -453,11 +458,12 @@ pub fn gst_reasonableness_exceptions(
             _ => {}
         }
     }
-    let ran = unclassed.is_empty() && mixed.is_empty();
-    let mut result = if ran {
-        gst_difference(&sales, &purchases, &recorded, absolute, percentage)?
-    } else {
-        Some(gst_not_run(&unclassed, &mixed))
+    let ran = settlements.is_ok() && unclassed.is_empty() && mixed.is_empty();
+    let mut result = match settlements {
+        Ok(settled) if ran => {
+            gst_difference(&sales, &purchases, &recorded, settled, absolute, percentage)?
+        }
+        _ => Some(gst_not_run(&unclassed, &mixed, settlements.err())),
     };
     if let Some(item) = &mut result {
         item.tenant.clone_from(&rows[0].tenant);
@@ -465,19 +471,23 @@ pub fn gst_reasonableness_exceptions(
     Ok((result.into_iter().collect(), ran))
 }
 
-/// The exception for a net GST movement further from expectation than the
-/// review heuristic: the absolute amount plus the percentage of the expected
-/// GST on sales and on purchases. It is not a rounding bound.
+/// The exception for a net GST movement, with the declared settlements added
+/// back, further from expectation than the review heuristic: the absolute
+/// amount plus the percentage of the expected GST on sales and on purchases.
+/// It is not a rounding bound.
 fn gst_difference(
     sales: &[Decimal],
     purchases: &[Decimal],
-    recorded: &[Decimal],
+    movement: &[Decimal],
+    settled: &[Decimal],
     absolute: &Decimal,
     percentage: &Decimal,
 ) -> Result<Option<ExceptionItem>> {
     let sales = exact_total(sales, "Current", "taxable sales movement")?;
     let purchases = exact_total(purchases, "Current", "creditable purchases movement")?;
-    let recorded = exact_total(recorded, "Current", "GST account movement")?;
+    let movement = exact_total(movement, "Current", "GST account movement")?;
+    let settled = exact_total(settled, "Declared", "GST settlements")?;
+    let recorded = exact_total([&movement, &settled], "Current", "GST recorded")?;
     let ten = Decimal::parse("10").unwrap();
     let (collected, paid) = (sales.div(&ten), purchases.div(&ten));
     let expected = collected.sub(&paid).value;
@@ -493,8 +503,10 @@ fn gst_difference(
         Status::Review,
         None,
         &format!(
-            "Net GST recorded this period is {}, against {} expected: GST collected {} (1/10 of taxable sales {}) less GST paid {} (1/10 of creditable purchases {}). The difference of {} is beyond the {} review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund.",
+            "Net GST recorded this period is {} ({} of movement in the GST accounts plus {} of declared settlements), against {} expected: GST collected {} (1/10 of taxable sales {}) less GST paid {} (1/10 of creditable purchases {}). The difference of {} is beyond the {} review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund. The settlements are as declared; the trial balance cannot verify them.",
             money(&recorded)?,
+            money(&movement)?,
+            money(&settled)?,
             money(&expected)?,
             money(&collected)?,
             money(&sales)?,
@@ -503,7 +515,7 @@ fn gst_difference(
             money(&difference)?,
             money(&tolerance)?,
         ),
-        "Trace the difference through the GST account's postings and the tax codes on sales and purchases: rounding across many small invoices, a BAS payment or refund, a manual GST journal, a sale or purchase coded with the wrong GST treatment, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
+        "Check the declared settlements against the BAS and the ATO account, then trace the rest through the GST accounts' postings and the tax codes on sales and purchases: rounding across many small invoices, an undeclared BAS payment, refund or clearing journal, a manual GST journal, a sale or purchase coded with the wrong GST treatment, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
     );
     item.current_value = Some(recorded);
     item.prior_value = Some(expected);
@@ -512,8 +524,13 @@ fn gst_difference(
     Ok(Some(item))
 }
 
-/// The mapping cannot tell taxable amounts from the rest, so the comparison is not made.
-fn gst_not_run(unclassed: &[&TrialBalanceRow], mixed: &[&TrialBalanceRow]) -> ExceptionItem {
+/// The comparison is not made: the mapping cannot tell taxable amounts from the
+/// rest, or `settlements` says why no settlements declaration can be used.
+fn gst_not_run(
+    unclassed: &[&TrialBalanceRow],
+    mixed: &[&TrialBalanceRow],
+    settlements: Option<&str>,
+) -> ExceptionItem {
     let names = |rows: &[&TrialBalanceRow]| {
         rows.iter()
             .map(|r| report::account_name(&r.account_code, &r.account_name, &r.account_id))
@@ -535,13 +552,14 @@ fn gst_not_run(unclassed: &[&TrialBalanceRow], mixed: &[&TrialBalanceRow]) -> Ex
             names(mixed)
         ));
     }
+    reason.extend(settlements.map(str::to_owned));
     reason.push("The GST reasonableness control did not run, so this pack carries no GST result; this is not a pass.".into());
     ExceptionItem::new(
         Control::GstReasonableness,
         Status::Review,
         None,
         &reason.join(" "),
-        "Class each listed account in the GST mapping, or move a mixed account's taxable and other amounts into separate accounts, then run the review again.",
+        "Class each listed account in the GST mapping, move a mixed account's taxable and other amounts into separate accounts, or supply a well-formed GST settlements declaration, as the reason requires, then run the review again.",
     )
 }
 
@@ -665,6 +683,9 @@ pub fn review_with(
     if config.mapping_policy_path.is_some() && config.mapping_path.is_none() {
         return Err("A mapping policy requires a supplied account mapping.".into());
     }
+    if config.gst_settlements_path.is_some() && config.gst_mapping_path.is_none() {
+        return Err("A GST settlements declaration requires a GST mapping.".into());
+    }
     if config.equity_schedule_path.is_none()
         && [
             config.equity_currency.as_deref(),
@@ -720,6 +741,19 @@ pub fn review_with(
         .transpose()?;
     let acknowledgement_source = optional(&config.acknowledgement_path, "Review-note file")?;
     let acknowledgement = loader::load_reviewer_acknowledgement(acknowledgement_source.as_ref())?;
+    // An absent or unusable declaration stops only the GST control, which says why.
+    let gst_settlements_source = config
+        .gst_settlements_path
+        .as_deref()
+        .map(|p| capture(p, "GST settlements file"));
+    let gst_settlements = match &gst_settlements_source {
+        None => Err("No GST settlements declaration was supplied, so a BAS payment, refund or clearing journal in the GST accounts cannot be told from GST on sales and purchases.".to_owned()),
+        Some(source) => source
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(loader::load_gst_settlements)
+            .map_err(|error| format!("The GST settlements declaration cannot be used: {error}")),
+    };
     let (evidence, unreadable) =
         calculation_evidence::load_all_with(&config.calculation_evidence_paths, capture);
     let current_tenant = &current_rows[0].tenant;
@@ -776,6 +810,7 @@ pub fn review_with(
             let (found, ran) = gst_reasonableness_exceptions(
                 &current_rows,
                 mapping,
+                gst_settlements.as_deref().map_err(String::as_str),
                 &config.gst_absolute_tolerance,
                 &config.gst_percentage_tolerance,
             )?;
@@ -834,6 +869,10 @@ pub fn review_with(
         ("balance_policy", balance_policy_source),
         ("subledger", subledger_source),
         ("gst_mapping", gst_mapping_source),
+        (
+            "gst_settlements",
+            gst_settlements_source.and_then(Result::ok),
+        ),
         ("review_note", acknowledgement_source),
         ("equity_schedule", equity_source),
     ] {

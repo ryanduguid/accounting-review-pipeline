@@ -89,6 +89,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
                 "--percentage-threshold",
                 "--reconciliation-tolerance",
                 "--gst-mapping",
+                "--gst-settlements",
                 "--gst-absolute-tolerance",
                 "--gst-percentage-tolerance",
             ],
@@ -435,6 +436,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
             "--balance-policy",
             "--subledger",
             "--gst-mapping",
+            "--gst-settlements",
             "--review-note",
             "--equity-schedule",
         ]
@@ -476,6 +478,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.balance_policy_path = args.optional_path("--balance-policy");
         config.subledger_path = args.optional_path("--subledger");
         config.gst_mapping_path = args.optional_path("--gst-mapping");
+        config.gst_settlements_path = args.optional_path("--gst-settlements");
         config.acknowledgement_path = args.optional_path("--review-note");
         config.equity_schedule_path = args.optional_path("--equity-schedule");
         config.equity_currency = args.optional_literal("--equity-currency")?;

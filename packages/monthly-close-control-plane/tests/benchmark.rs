@@ -639,6 +639,8 @@ fn raised(close: &Close) -> BTreeSet<(&'static str, String)> {
                 .collect(),
         ),
     ));
+    // No BAS payment, refund or clearing journal reaches the GST account.
+    config.gst_settlements_path = Some(write("gst_settlements.csv", "Reference,Amount\n".into()));
     let pack = engine::review_close(&config).unwrap();
     pack.exceptions
         .iter()

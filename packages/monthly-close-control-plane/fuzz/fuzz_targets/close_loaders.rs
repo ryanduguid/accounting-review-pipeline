@@ -1,6 +1,6 @@
 //! Fabricated bytes to the trial-balance, mapping, mapping-policy,
-//! balance-policy, subledger and GST-mapping loaders. A refusal is a result; a
-//! panic is a crash.
+//! balance-policy, subledger, GST-mapping and GST-settlements loaders. A
+//! refusal is a result; a panic is a crash.
 #![no_main]
 
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {

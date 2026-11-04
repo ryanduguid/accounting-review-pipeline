@@ -1,6 +1,6 @@
 Two harnesses replay fabricated bytes through Monthly Close Controls'
-trial-balance, mapping, mapping-policy, balance-policy, subledger and
-GST-mapping loaders.
+trial-balance, mapping, mapping-policy, balance-policy, subledger,
+GST-mapping and GST-settlements loaders.
 Both call the same `monthly_close_control_plane::fuzzing::exercise` function
 from the component's `tools` feature. Expected validation errors are returned;
 a panic fails the run. Seeds are at most 4 KiB. Workpaper Review Gate and

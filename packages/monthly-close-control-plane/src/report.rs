@@ -97,7 +97,7 @@ pub fn producer() -> Json {
 /// The scope line for a pack's GST review heuristic, from its 2 rendered thresholds.
 pub fn gst_tolerance_line(absolute: &str, percentage: &str) -> String {
     format!(
-        "- GST reasonableness review heuristic, not a rounding bound: ${absolute} plus {percentage} of the expected GST on sales and purchases"
+        "- GST reasonableness review heuristic, not a rounding bound: ${absolute} plus {percentage} of the expected GST on sales and purchases, after the declared GST settlements, which the trial balance cannot verify"
     )
 }
 pub fn producer_line(producer: &Json) -> String {

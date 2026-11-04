@@ -13,5 +13,6 @@ usage: close-control review [-h] --current CURRENT --prior PRIOR
                             [--percentage-threshold PERCENTAGE_THRESHOLD]
                             [--reconciliation-tolerance RECONCILIATION_TOLERANCE]
                             [--gst-mapping GST_MAPPING]
+                            [--gst-settlements GST_SETTLEMENTS]
                             [--gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE]
                             [--gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE]

@@ -200,6 +200,7 @@ fn cli(request: &Json) -> Result<Json> {
 /// The review command's GST reasonableness options, in its usage and its help.
 const GST_USAGE: &str = concat!(
     "                            [--gst-mapping GST_MAPPING]\n",
+    "                            [--gst-settlements GST_SETTLEMENTS]\n",
     "                            [--gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE]\n",
     "                            [--gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE]\n",
 );
@@ -207,6 +208,11 @@ const GST_OPTIONS: &str = concat!(
     "  --gst-mapping GST_MAPPING\n",
     "                        optional AccountID,GSTClass CSV; runs the GST\n",
     "                        reasonableness control\n",
+    "  --gst-settlements GST_SETTLEMENTS\n",
+    "                        Reference,Amount CSV of BAS payments, refunds and\n",
+    "                        clearing journals in the GST accounts, each as its\n",
+    "                        net debit; required with --gst-mapping, header only\n",
+    "                        when there were none\n",
     "  --gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE\n",
     "                        GST difference in dollars allowed before review,\n",
     "                        added to the percentage tolerance; a review heuristic,\n",
