@@ -305,10 +305,10 @@ The mapping needs a settlements declaration beside it, described below.
 For the current period's `Debit` and `Credit` movement, the control expects net
 GST payable of 1/10 of taxable sales less 1/10 of creditable purchases, and
 compares it with the net movement of the `gst` accounts, with the declared
-settlements added back. A `gst` account absent
-from the trial balance counts as no movement, as it does for the balance
-policy. Amounts are net GST payable, so a negative amount is a net refund. When
-the difference is more than the tolerance, the pack raises one `REVIEW`
+settlements added back. A `gst` account absent from the trial balance counts as
+no movement, as it does for the balance policy. Amounts are net GST payable, so
+a negative amount is a net refund. When the difference is more than the
+tolerance, the pack raises one `REVIEW`
 exception under `gst_reasonableness` with the recorded figure as
 `current_value`, the expected figure as `prior_value`, their `difference` and
 the tolerance applied as `threshold`; its reason gives the sales, purchases and
