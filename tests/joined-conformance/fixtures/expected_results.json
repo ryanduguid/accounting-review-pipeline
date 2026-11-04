@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "corpus_id": "xero-tb-joined-vectors.v1",
+  "contract": "xero-tb-csv.v1",
+  "scenarios": [
+    {
+      "id": "quoted_csv",
+      "fixture": "quoted_csv.csv",
+      "tenant": "Catherby Fisheries, \"Boats\" Pty Ltd",
+      "account_codes": [
+        "090",
+        "800"
+      ],
+      "review_commands": {
+        "accept": true
+      },
+      "ledger_gate": {
+        "accept": true
+      }
+    },
+    {
+      "id": "leading_zero_codes",
+      "fixture": "leading_zero_codes.csv",
+      "tenant": "Catherby Fisheries Pty Ltd",
+      "account_codes": [
+        "007",
+        "0000",
+        "0800"
+      ],
+      "review_commands": {
+        "accept": true
+      },
+      "ledger_gate": {
+        "accept": true
+      }
+    },
+    {
+      "id": "unicode_text",
+      "fixture": "unicode_text.csv",
+      "tenant": "Catherby Fishéries Pty Ltd",
+      "account_codes": [
+        "090",
+        "800"
+      ],
+      "review_commands": {
+        "accept": true
+      },
+      "ledger_gate": {
+        "accept": true
+      }
+    },
+    {
+      "id": "plain_spellings",
+      "fixture": "plain_spellings.csv",
+      "tenant": "Catherby Fisheries Pty Ltd",
+      "account_codes": [
+        "090",
+        "800"
+      ],
+      "review_commands": {
+        "accept": true
+      },
+      "ledger_gate": {
+        "accept": true
+      }
+    },
+    {
+      "id": "grouped_spellings",
+      "fixture": "grouped_spellings.csv",
+      "tenant": "Catherby Fisheries Pty Ltd",
+      "account_codes": [
+        "090",
+        "800"
+      ],
+      "review_commands": {
+        "accept": true
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "not a valid decimal"
+      }
+    },
+    {
+      "id": "exponent_spelling",
+      "fixture": "exponent_spelling.csv",
+      "tenant": "Catherby Fisheries Pty Ltd",
+      "account_codes": [
+        "090",
+        "800"
+      ],
+      "review_commands": {
+        "accept": false,
+        "error_contains": "invalid Debit"
+      },
+      "ledger_gate": {
+        "accept": true
+      }
+    }
+  ],
+  "human_decision": "Accepting a spelling passes the loaders only; a human still decides completeness, classification and accounting treatment."
+}

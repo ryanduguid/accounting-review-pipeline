@@ -162,7 +162,9 @@ commands documented here. evatt 0.2.0 was released on GitHub only, never on PyPI
 accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
 runtime package. The `tests/joined-conformance` crate and the
 `joined-conformance.yml` workflow run the exporter runner and all 3 offline review
-implementations against it.
+implementations against it. [`tests/joined-conformance/fixtures/`](tests/joined-conformance/fixtures/README.md)
+adds fabricated vectors for quoted CSV, leading-zero codes, Unicode text and numeric
+spellings, and records where the consumers differ.
 
 </details>
 

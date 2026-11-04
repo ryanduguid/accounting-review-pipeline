@@ -9,6 +9,8 @@
 !contracts/xero-trial-balance-v1/fixtures/failing_movement.csv
 !contracts/xero-trial-balance-v1/fixtures/failing_ytd.csv
 !contracts/xero-trial-balance-v1/expected_results.json
+# The joined conformance vectors are fabricated too.
+!tests/joined-conformance/fixtures/*.csv
 outputs/
 review-notes/
 
