@@ -69,7 +69,12 @@ fn scope_changes(previous: &Json, current: &Json) -> Vec<&'static str> {
     if previous.get("controls_not_run").is_none() || current.get("controls_not_run").is_none() {
         changes.push("control_coverage_unknown");
     }
-    for label in ["account_mapping", "mapping_policy", "balance_policy"] {
+    for label in [
+        "account_mapping",
+        "mapping_policy",
+        "balance_policy",
+        "gst_mapping",
+    ] {
         if !same(
             previous.at("source_sha256").get(label),
             current.at("source_sha256").get(label),
@@ -452,6 +457,32 @@ mod tests {
                 "periods_not_contiguous",
                 "blocked_run"
             ]
+        );
+    }
+    #[test]
+    fn a_changed_gst_mapping_is_a_scope_change() {
+        let pack = |prior: &str, current: &str, mapping: &str| {
+            Json::object([
+                ("controls_not_run", Json::Array(vec![])),
+                ("thresholds", Json::object([])),
+                (
+                    "source_sha256",
+                    Json::object([("gst_mapping", Json::str(mapping))]),
+                ),
+                ("exceptions", Json::Array(vec![])),
+                (
+                    "current_report_dates",
+                    Json::Array(vec![Json::str(current)]),
+                ),
+                ("prior_report_dates", Json::Array(vec![Json::str(prior)])),
+                ("overall_status", Json::str("PASS")),
+            ])
+        };
+        let previous = pack("2026-08-31", "2026-09-30", "a");
+        assert!(scope_changes(&previous, &pack("2026-09-30", "2026-10-31", "a")).is_empty());
+        assert_eq!(
+            scope_changes(&previous, &pack("2026-09-30", "2026-10-31", "b")),
+            vec!["gst_mapping"]
         );
     }
 }
