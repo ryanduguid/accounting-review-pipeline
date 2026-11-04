@@ -44,6 +44,7 @@ const THRESHOLDS: [&str; 3] = [
     "percentage_variance",
     "reconciliation_tolerance",
 ];
+const GST_THRESHOLDS: [&str; 2] = ["gst_absolute_tolerance", "gst_percentage_tolerance"];
 const ACK_FIELDS: [&str; 4] = ["reviewer_initials", "reviewed_on", "comment", "effect"];
 const EXCEPTION_FIELDS: [&str; 14] = [
     "control",
@@ -221,13 +222,20 @@ fn verify_schema(document: &Json) -> Result<()> {
     string_list(document, "current_report_dates")?;
     string_list(document, "prior_report_dates")?;
     let thresholds = document.at("thresholds");
-    if !thresholds.has_exact_keys(&THRESHOLDS) {
+    // A pack whose sources name a GST mapping carries its 2 tolerances; any other carries neither.
+    let gst = document.at("source_sha256").get("gst_mapping").is_some();
+    let expected: Vec<&str> = THRESHOLDS
+        .iter()
+        .chain(if gst { &GST_THRESHOLDS[..] } else { &[] })
+        .copied()
+        .collect();
+    if !thresholds.has_exact_keys(&expected) {
         return Err(format!(
             "{J}: thresholds must hold exactly {}",
-            THRESHOLDS.join(", ")
+            expected.join(", ")
         ));
     }
-    for key in THRESHOLDS {
+    for key in expected {
         parse_threshold(thresholds.at(key), key)?;
     }
     let sources = document.at("source_sha256");
@@ -659,8 +667,18 @@ fn expected_scope(document: &Json, register: bool) -> Result<Vec<String>> {
             if skipped.is_empty() { "none" } else { &skipped }
         ));
     }
+    lines.extend(gst_tolerance_line(document));
     lines.extend(document.get("producer").map(report::producer_line));
     Ok(lines)
+}
+fn gst_tolerance_line(document: &Json) -> Option<String> {
+    let thresholds = document.at("thresholds");
+    thresholds.get(GST_THRESHOLDS[0]).map(|_| {
+        report::gst_tolerance_line(
+            &field(thresholds, GST_THRESHOLDS[0]),
+            &field(thresholds, GST_THRESHOLDS[1]),
+        )
+    })
 }
 fn exception_lines(exceptions: &[Json]) -> Vec<String> {
     if exceptions.is_empty() {
@@ -1413,6 +1431,7 @@ pub fn render_verified(pack: &VerifiedPack) -> Result<String> {
             if skipped.is_empty() { "none" } else { &skipped }
         ));
     }
+    lines.extend(gst_tolerance_line(document));
     lines.extend(document.get("producer").map(report::producer_line));
     lines.extend([String::new(), "Source evidence".into(), String::new()]);
     let sources = document.at("source_sha256");

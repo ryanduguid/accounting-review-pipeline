@@ -77,8 +77,36 @@ controls! {
     MappingCompatibility => "mapping_compatibility",
     BalancePolicy => "balance_policy",
     SubledgerReconciliation => "subledger_reconciliation",
+    GstReasonableness => "gst_reasonableness",
     CalculationEvidence => "calculation_evidence",
     EquityReconciliation => "equity_reconciliation",
+}
+
+/// How a GST mapping classes an account for `gst_reasonableness`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GstClass {
+    TaxableSales,
+    CreditablePurchases,
+    GstFree,
+    InputTaxed,
+    BasExcluded,
+    Mixed,
+    Gst,
+}
+
+impl GstClass {
+    pub fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "taxable_sales" => Self::TaxableSales,
+            "creditable_purchases" => Self::CreditablePurchases,
+            "gst_free" => Self::GstFree,
+            "input_taxed" => Self::InputTaxed,
+            "bas_excluded" => Self::BasExcluded,
+            "mixed" => Self::Mixed,
+            "gst" => Self::Gst,
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]

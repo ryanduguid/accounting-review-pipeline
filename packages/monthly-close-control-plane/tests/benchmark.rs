@@ -39,6 +39,7 @@ struct Close {
     mapping_policy: Vec<(&'static str, &'static str)>,
     balance_policy: Vec<(&'static str, &'static str, &'static str)>,
     subledger: Vec<(&'static str, i64)>,
+    gst_mapping: Vec<(&'static str, &'static str)>,
 }
 
 impl Close {
@@ -172,7 +173,7 @@ fn clean() -> Close {
             ),
         ],
         current: vec![
-            account("Assets", "100", "Operating Bank", "1000", 500, 0, 105500, 0),
+            account("Assets", "100", "Operating Bank", "1000", 430, 0, 105430, 0),
             account("Assets", "110", "Trade Debtors", "1100", 300, 0, 73300, 0),
             account(
                 "Liabilities",
@@ -184,7 +185,7 @@ fn clean() -> Close {
                 0,
                 58400,
             ),
-            account("Liabilities", "210", "GST Payable", "2100", 0, 100, 0, 900),
+            account("Liabilities", "210", "GST Payable", "2100", 0, 30, 0, 830),
             account(
                 "Revenue",
                 "300",
@@ -252,6 +253,17 @@ fn clean() -> Close {
             ("900", "credit", "no"),
         ],
         subledger: vec![("110", dollars(73300)), ("200", dollars(-58400))],
+        // 6300 of taxable sales less 6000 of creditable purchases: 30 of net GST.
+        gst_mapping: vec![
+            ("100", "bas_excluded"),
+            ("110", "bas_excluded"),
+            ("200", "bas_excluded"),
+            ("210", "gst"),
+            ("300", "taxable_sales"),
+            ("400", "creditable_purchases"),
+            ("500", "creditable_purchases"),
+            ("900", "bas_excluded"),
+        ],
     }
 }
 
@@ -307,7 +319,7 @@ const CASES: &[Case] = &[
         id: "account-dropped-from-the-current-period",
         control: PeriodComparison,
         kind: Kind::Planted("210"),
-        expected: &[PeriodComparison],
+        expected: &[PeriodComparison, GstReasonableness],
         plant: drop_gst_payable,
     },
     Case {
@@ -355,7 +367,7 @@ const CASES: &[Case] = &[
         id: "account-id-changed",
         control: AccountMetadata,
         kind: Kind::BlindSpot,
-        expected: &[PeriodComparison, AccountMapping],
+        expected: &[PeriodComparison, AccountMapping, GstReasonableness],
         plant: |c| c.account("400").id = "401",
     },
     Case {
@@ -369,7 +381,7 @@ const CASES: &[Case] = &[
         id: "prior-only-account-with-no-mapping-row",
         control: AccountMapping,
         kind: Kind::BlindSpot,
-        expected: &[PeriodComparison],
+        expected: &[PeriodComparison, GstReasonableness],
         plant: |c| {
             drop_gst_payable(c);
             c.mapping.retain(|(id, _)| *id != "210");
@@ -403,7 +415,7 @@ const CASES: &[Case] = &[
         expected: &[BalancePolicy],
         plant: |c| {
             c.account("100").debit = 0;
-            c.account("300").credit -= dollars(500);
+            c.account("110").debit += dollars(430);
         },
     },
     Case {
@@ -448,7 +460,60 @@ const CASES: &[Case] = &[
             c.account("300").ytd_credit += dollars(500);
         },
     },
+    Case {
+        id: "taxable-sale-recorded-without-gst",
+        control: GstReasonableness,
+        kind: Kind::Planted(""),
+        expected: &[GstReasonableness],
+        plant: |c| sell_through_the_bank(c, 1000),
+    },
+    Case {
+        id: "gst-paid-recorded-with-no-purchase",
+        control: GstReasonableness,
+        kind: Kind::Planted(""),
+        expected: &[GstReasonableness],
+        plant: |c| {
+            let gst = c.account("210");
+            gst.debit += dollars(100);
+            gst.ytd_debit += dollars(100);
+            let bank = c.account("100");
+            bank.credit += dollars(100);
+            bank.ytd_credit += dollars(100);
+        },
+    },
+    Case {
+        id: "gst-charged-on-a-gst-free-sale-in-taxable-sales",
+        control: GstReasonableness,
+        kind: Kind::BlindSpot,
+        expected: &[],
+        plant: |c| {
+            sell_through_the_bank(c, 1000);
+            let gst = c.account("210");
+            gst.credit += dollars(100);
+            gst.ytd_credit += dollars(100);
+            let bank = c.account("100");
+            bank.debit += dollars(100);
+            bank.ytd_debit += dollars(100);
+        },
+    },
+    Case {
+        id: "gst-short-by-the-same-on-a-sale-and-a-purchase",
+        control: GstReasonableness,
+        kind: Kind::BlindSpot,
+        expected: &[],
+        plant: |c| overstate_expenses(c, 1000),
+    },
 ];
+
+/// A taxable sale banked with no GST recorded, in the period and year to date.
+fn sell_through_the_bank(c: &mut Close, amount: i64) {
+    let sales = c.account("300");
+    sales.credit += dollars(amount);
+    sales.ytd_credit += dollars(amount);
+    let bank = c.account("100");
+    bank.debit += dollars(amount);
+    bank.ytd_debit += dollars(amount);
+}
 
 /// Overstate operating expenses against sales, in the period and year to date.
 fn overstate_expenses(c: &mut Close, amount: i64) {
@@ -464,15 +529,15 @@ fn overstate_expenses(c: &mut Close, amount: i64) {
 fn drop_gst_payable(c: &mut Close) {
     c.current.retain(|a| a.id != "210");
     let equity = c.account("900");
-    equity.credit += dollars(100);
-    equity.ytd_credit += dollars(900);
+    equity.credit += dollars(30);
+    equity.ytd_credit += dollars(830);
 }
 
 fn remap(c: &mut Close, id: &str, group: &'static str) {
     c.mapping.iter_mut().find(|(row, _)| *row == id).unwrap().1 = group;
 }
 
-/// GST Payable moves to a 100.00 debit balance, balanced against sales.
+/// GST Payable moves to a 170.00 debit balance, balanced against sales.
 fn gst_debit_balance(c: &mut Close) {
     c.account("210").ytd_debit += dollars(1000);
     c.account("300").ytd_credit += dollars(1000);
@@ -560,6 +625,17 @@ fn raised(close: &Close) -> BTreeSet<(&'static str, String)> {
                 .subledger
                 .iter()
                 .map(|(id, cents)| format!("{TENANT},{id},{}", money(*cents)))
+                .collect(),
+        ),
+    ));
+    config.gst_mapping_path = Some(write(
+        "gst_mapping.csv",
+        table(
+            "AccountID,GSTClass",
+            close
+                .gst_mapping
+                .iter()
+                .map(|(id, class)| format!("{id},{class}"))
                 .collect(),
         ),
     ));

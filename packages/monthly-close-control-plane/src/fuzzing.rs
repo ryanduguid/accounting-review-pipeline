@@ -13,4 +13,5 @@ pub fn exercise(bytes: &[u8]) {
     let _ = loader::load_mapping_policy(&source);
     let _ = loader::load_balance_policy(&source);
     let _ = loader::load_subledger(Some(&source));
+    let _ = loader::load_gst_mapping(&source);
 }

@@ -88,6 +88,9 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
                 "--absolute-threshold",
                 "--percentage-threshold",
                 "--reconciliation-tolerance",
+                "--gst-mapping",
+                "--gst-absolute-tolerance",
+                "--gst-percentage-tolerance",
             ],
             &["--current", "--prior", "--output"],
         ),
@@ -367,11 +370,16 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
             "--absolute-threshold",
             "--percentage-threshold",
             "--reconciliation-tolerance",
+            "--gst-absolute-tolerance",
+            "--gst-percentage-tolerance",
         ]
         .contains(&flag)
         {
-            threshold(&value, flag == "--percentage-threshold")
-                .map_err(|error| format!("argument {flag}: {error}"))?;
+            threshold(
+                &value,
+                ["--percentage-threshold", "--gst-percentage-tolerance"].contains(&flag),
+            )
+            .map_err(|error| format!("argument {flag}: {error}"))?;
         }
         if flag == "--top" && integer(&value).is_none() {
             return Err(format!(
@@ -426,6 +434,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
             "--mapping-policy",
             "--balance-policy",
             "--subledger",
+            "--gst-mapping",
             "--review-note",
             "--equity-schedule",
         ]
@@ -466,6 +475,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.mapping_policy_path = args.optional_path("--mapping-policy");
         config.balance_policy_path = args.optional_path("--balance-policy");
         config.subledger_path = args.optional_path("--subledger");
+        config.gst_mapping_path = args.optional_path("--gst-mapping");
         config.acknowledgement_path = args.optional_path("--review-note");
         config.equity_schedule_path = args.optional_path("--equity-schedule");
         config.equity_currency = args.optional_literal("--equity-currency")?;
@@ -475,6 +485,8 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.absolute_threshold = args.decimal("--absolute-threshold", "1000");
         config.percentage_threshold = args.decimal("--percentage-threshold", "0.10");
         config.reconciliation_tolerance = args.decimal("--reconciliation-tolerance", "0.01");
+        config.gst_absolute_tolerance = args.decimal("--gst-absolute-tolerance", "1.00");
+        config.gst_percentage_tolerance = args.decimal("--gst-percentage-tolerance", "0.01");
         engine::review_close(&config)
     };
     let mut pack = match input() {

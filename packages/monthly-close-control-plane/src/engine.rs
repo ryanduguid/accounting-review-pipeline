@@ -7,10 +7,11 @@ use crate::{
     isodate::Date,
     loader::{self, SourceSnapshot},
     models::{
-        ClientQuery, Control, ExceptionItem, ReviewerAcknowledgement, Status, TrialBalanceRow,
+        ClientQuery, Control, ExceptionItem, GstClass, ReviewerAcknowledgement, Status,
+        TrialBalanceRow,
     },
     pyjson::Json,
-    pytext, queries,
+    pytext, queries, report,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -28,6 +29,8 @@ pub struct CloseReviewPack {
     pub absolute_threshold: Decimal,
     pub percentage_threshold: Decimal,
     pub reconciliation_tolerance: Decimal,
+    /// The GST tolerance, absolute then percentage, when a GST mapping was supplied.
+    pub gst_tolerance: Option<(Decimal, Decimal)>,
     pub exceptions: Vec<ExceptionItem>,
     pub acknowledgement: Option<ReviewerAcknowledgement>,
     pub calculation_evidence: Vec<CalculationEvidence>,
@@ -53,6 +56,7 @@ pub struct ReviewConfig {
     pub mapping_policy_path: Option<PathBuf>,
     pub balance_policy_path: Option<PathBuf>,
     pub subledger_path: Option<PathBuf>,
+    pub gst_mapping_path: Option<PathBuf>,
     pub acknowledgement_path: Option<PathBuf>,
     pub equity_schedule_path: Option<PathBuf>,
     pub equity_currency: Option<String>,
@@ -62,6 +66,8 @@ pub struct ReviewConfig {
     pub absolute_threshold: Decimal,
     pub percentage_threshold: Decimal,
     pub reconciliation_tolerance: Decimal,
+    pub gst_absolute_tolerance: Decimal,
+    pub gst_percentage_tolerance: Decimal,
 }
 impl ReviewConfig {
     pub fn new(current: PathBuf, prior: PathBuf) -> Self {
@@ -72,6 +78,7 @@ impl ReviewConfig {
             mapping_policy_path: None,
             balance_policy_path: None,
             subledger_path: None,
+            gst_mapping_path: None,
             acknowledgement_path: None,
             equity_schedule_path: None,
             equity_currency: None,
@@ -81,6 +88,8 @@ impl ReviewConfig {
             absolute_threshold: Decimal::parse("1000").unwrap(),
             percentage_threshold: Decimal::parse("0.10").unwrap(),
             reconciliation_tolerance: Decimal::parse("0.01").unwrap(),
+            gst_absolute_tolerance: Decimal::parse("1.00").unwrap(),
+            gst_percentage_tolerance: Decimal::parse("0.01").unwrap(),
         }
     }
 }
@@ -422,6 +431,120 @@ pub fn subledger_exceptions(
     result
 }
 
+/// Compares the period's net GST movement with 1/10 of the GST-exclusive taxable
+/// sales less 1/10 of the creditable purchases, and says whether the control ran.
+/// Sales and GST amounts are credits less debits; purchases are debits less credits.
+pub fn gst_reasonableness_exceptions(
+    rows: &[TrialBalanceRow],
+    mapping: &BTreeMap<String, GstClass>,
+    absolute: &Decimal,
+    percentage: &Decimal,
+) -> Result<(Vec<ExceptionItem>, bool)> {
+    let (mut unclassed, mut mixed) = (Vec::new(), Vec::new());
+    let (mut sales, mut purchases, mut recorded) = (Vec::new(), Vec::new(), Vec::new());
+    for row in ordered_rows(rows) {
+        let moved = !(row.debit.is_zero() && row.credit.is_zero());
+        match mapping.get(&row.account_id) {
+            None if moved => unclassed.push(row),
+            Some(GstClass::Mixed) if moved => mixed.push(row),
+            Some(GstClass::TaxableSales) => sales.push(row.credit.sub(&row.debit).value),
+            Some(GstClass::CreditablePurchases) => purchases.push(row.current_net()),
+            Some(GstClass::Gst) => recorded.push(row.credit.sub(&row.debit).value),
+            _ => {}
+        }
+    }
+    let ran = unclassed.is_empty() && mixed.is_empty();
+    let mut result = if ran {
+        gst_difference(&sales, &purchases, &recorded, absolute, percentage)?
+    } else {
+        Some(gst_not_run(&unclassed, &mixed))
+    };
+    if let Some(item) = &mut result {
+        item.tenant.clone_from(&rows[0].tenant);
+    }
+    Ok((result.into_iter().collect(), ran))
+}
+
+/// The exception for a net GST movement further from expectation than the
+/// tolerance: the absolute amount plus the percentage of the expected GST
+/// on sales and on purchases.
+fn gst_difference(
+    sales: &[Decimal],
+    purchases: &[Decimal],
+    recorded: &[Decimal],
+    absolute: &Decimal,
+    percentage: &Decimal,
+) -> Result<Option<ExceptionItem>> {
+    let sales = exact_total(sales, "Current", "taxable sales movement")?;
+    let purchases = exact_total(purchases, "Current", "creditable purchases movement")?;
+    let recorded = exact_total(recorded, "Current", "GST account movement")?;
+    let ten = Decimal::parse("10").unwrap();
+    let (collected, paid) = (sales.div(&ten), purchases.div(&ten));
+    let expected = collected.sub(&paid).value;
+    let difference = recorded.sub(&expected).value;
+    let gross = collected.abs().add(&paid.abs()).value;
+    let tolerance = absolute.add(&percentage.mul(&gross)).value;
+    if difference.abs() <= tolerance {
+        return Ok(None);
+    }
+    let money = report::money;
+    let mut item = ExceptionItem::new(
+        Control::GstReasonableness,
+        Status::Review,
+        None,
+        &format!(
+            "Net GST recorded this period is {}, against {} expected: GST collected {} (1/10 of taxable sales {}) less GST paid {} (1/10 of creditable purchases {}). The difference of {} exceeds the {} tolerance. Amounts are net GST payable; a negative amount is a net refund.",
+            money(&recorded)?,
+            money(&expected)?,
+            money(&collected)?,
+            money(&sales)?,
+            money(&paid)?,
+            money(&purchases)?,
+            money(&difference)?,
+            money(&tolerance)?,
+        ),
+        "Trace the difference through the GST account's postings and the tax codes on sales and purchases: a BAS payment or refund, a manual GST journal, a sale or purchase coded with the wrong GST treatment, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
+    );
+    item.current_value = Some(recorded);
+    item.prior_value = Some(expected);
+    item.difference = Some(difference);
+    item.threshold = Some(tolerance);
+    Ok(Some(item))
+}
+
+/// The mapping cannot tell taxable amounts from the rest, so the comparison is not made.
+fn gst_not_run(unclassed: &[&TrialBalanceRow], mixed: &[&TrialBalanceRow]) -> ExceptionItem {
+    let names = |rows: &[&TrialBalanceRow]| {
+        rows.iter()
+            .map(|r| report::account_name(&r.account_code, &r.account_name, &r.account_id))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    let mut reason = Vec::new();
+    if !unclassed.is_empty() {
+        reason.push(format!(
+            "The GST mapping does not class {} account(s) with movement this period, so their taxable amounts cannot be told from GST-free, input-taxed or excluded ones: {}.",
+            unclassed.len(),
+            names(unclassed)
+        ));
+    }
+    if !mixed.is_empty() {
+        reason.push(format!(
+            "{} account(s) classed mixed moved this period, so their taxable amounts cannot be separated from the rest: {}.",
+            mixed.len(),
+            names(mixed)
+        ));
+    }
+    reason.push("The GST reasonableness control did not run, so this pack carries no GST result; this is not a pass.".into());
+    ExceptionItem::new(
+        Control::GstReasonableness,
+        Status::Review,
+        None,
+        &reason.join(" "),
+        "Class each listed account in the GST mapping, or move a mixed account's taxable and other amounts into separate accounts, then run the review again.",
+    )
+}
+
 pub fn overall_status(exceptions: &[ExceptionItem]) -> Status {
     if exceptions.iter().any(|item| item.status == Status::Blocked) {
         Status::Blocked
@@ -556,6 +679,8 @@ pub fn review_with(
         ("absolute_threshold", &config.absolute_threshold),
         ("percentage_threshold", &config.percentage_threshold),
         ("reconciliation_tolerance", &config.reconciliation_tolerance),
+        ("gst_absolute_tolerance", &config.gst_absolute_tolerance),
+        ("gst_percentage_tolerance", &config.gst_percentage_tolerance),
     ] {
         if !value.is_finite() || value < &Decimal::zero() {
             return Err(format!("{name} must be a finite non-negative decimal."));
@@ -563,6 +688,9 @@ pub fn review_with(
     }
     if config.percentage_threshold > Decimal::parse("1").unwrap() {
         return Err("percentage_threshold is a fraction from 0 to 1: 0.10 means 10%.".into());
+    }
+    if config.gst_percentage_tolerance > Decimal::parse("1").unwrap() {
+        return Err("gst_percentage_tolerance is a fraction from 0 to 1: 0.01 means 1%.".into());
     }
     let current_source = capture(&config.current_path, "Trial-balance file")?;
     let current_rows = loader::load_canonical_tb(&current_source)?;
@@ -585,6 +713,11 @@ pub fn review_with(
         .transpose()?;
     let subledger_source = optional(&config.subledger_path, "Subledger file")?;
     let subledger = loader::load_subledger(subledger_source.as_ref())?;
+    let gst_mapping_source = optional(&config.gst_mapping_path, "GST mapping")?;
+    let gst_mapping = gst_mapping_source
+        .as_ref()
+        .map(loader::load_gst_mapping)
+        .transpose()?;
     let acknowledgement_source = optional(&config.acknowledgement_path, "Review-note file")?;
     let acknowledgement = loader::load_reviewer_acknowledgement(acknowledgement_source.as_ref())?;
     let (evidence, unreadable) =
@@ -610,6 +743,7 @@ pub fn review_with(
     }
     let current: RowMap = current_rows.iter().map(|r| (r.key(), r.clone())).collect();
     let prior: RowMap = prior_rows.iter().map(|r| (r.key(), r.clone())).collect();
+    let mut gst_ran = true;
     let mut exceptions = decimal::with_precision(28, || -> Result<Vec<ExceptionItem>> {
         let mut exceptions = integrity_exceptions(&current_rows, "Current")?;
         exceptions.extend(integrity_exceptions(&prior_rows, "Prior")?);
@@ -638,6 +772,16 @@ pub fn review_with(
             &subledger,
             &config.reconciliation_tolerance,
         ));
+        if let Some(mapping) = &gst_mapping {
+            let (found, ran) = gst_reasonableness_exceptions(
+                &current_rows,
+                mapping,
+                &config.gst_absolute_tolerance,
+                &config.gst_percentage_tolerance,
+            )?;
+            exceptions.extend(found);
+            gst_ran = ran;
+        }
         for name in &config.required_calculations {
             if !calculation_evidence::valid_label(name) {
                 return Err(format!(
@@ -689,6 +833,7 @@ pub fn review_with(
         ("mapping_policy", mapping_policy_source),
         ("balance_policy", balance_policy_source),
         ("subledger", subledger_source),
+        ("gst_mapping", gst_mapping_source),
         ("review_note", acknowledgement_source),
         ("equity_schedule", equity_source),
     ] {
@@ -706,6 +851,8 @@ pub fn review_with(
         ("account_mapping", config.mapping_path.is_some()),
         ("balance_policy", balance_policy.is_some()),
         ("subledger", !subledger.is_empty()),
+        // Tracked only once a GST mapping is supplied, so packs without one are unchanged.
+        ("gst_reasonableness", gst_ran),
         (
             "calculation_evidence",
             !evidence.is_empty()
@@ -751,6 +898,12 @@ pub fn review_with(
         absolute_threshold: config.absolute_threshold.clone(),
         percentage_threshold: config.percentage_threshold.clone(),
         reconciliation_tolerance: config.reconciliation_tolerance.clone(),
+        gst_tolerance: gst_mapping.as_ref().map(|_| {
+            (
+                config.gst_absolute_tolerance.clone(),
+                config.gst_percentage_tolerance.clone(),
+            )
+        }),
         exceptions,
         acknowledgement,
         calculation_evidence: evidence,

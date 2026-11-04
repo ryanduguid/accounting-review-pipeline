@@ -283,6 +283,81 @@ has no movement. Keep real policy files outside the checkout. The pack's
 `source_sha256.balance_policy` records the exact bytes read, and a run without
 the option lists `balance_policy` under `controls_not_run`.
 
+## GST reasonableness
+
+The native command accepts optional `--gst-mapping` on `review` and
+`workbench`: a local UTF-8 CSV with exactly `AccountID,GSTClass` columns that
+classes each account for GST. Blank fields, a class not listed below, a
+repeated `AccountID` and a mapping with no `gst` account fail with exit code 1.
+
+| `GSTClass` | Use it for | Counted as |
+| --- | --- | --- |
+| `taxable_sales` | Taxable sales, recorded GST-exclusive | Credits less debits; 1/10 is the GST expected to be collected |
+| `creditable_purchases` | Purchases, expenses and assets whose GST is claimed, recorded GST-exclusive | Debits less credits; 1/10 is the GST expected to be paid |
+| `gst_free` | GST-free sales or purchases, such as exports or most basic food | Left out |
+| `input_taxed` | Input-taxed sales or purchases, such as interest or residential rent | Left out |
+| `bas_excluded` | Movements outside GST: bank, receivables, payables, wages, superannuation, depreciation, loans and equity | Left out |
+| `mixed` | An account that holds taxable and other amounts together | Stops the control when it moves |
+| `gst` | Each account that records GST, whether one account holds GST collected and paid or each has its own | Credits less debits: the net GST recorded |
+
+For the current period's `Debit` and `Credit` movement, the control expects net
+GST payable of 1/10 of taxable sales less 1/10 of creditable purchases, and
+compares it with the net movement of the `gst` accounts. A `gst` account absent
+from the trial balance counts as no movement, as it does for the balance
+policy. Amounts are net GST payable, so a negative amount is a net refund. When
+the difference is more than the tolerance, the pack raises one `REVIEW`
+exception under `gst_reasonableness` with the recorded figure as
+`current_value`, the expected figure as `prior_value`, their `difference` and
+the tolerance applied as `threshold`; its reason gives the sales, purchases and
+GST behind both figures. The exception changes no figure, posts nothing and
+blocks nothing, and the firm traces it, so it drafts no client question.
+
+Every account that moved in the period must be classed. When one is not, or
+one classed `mixed` moved, the mapping cannot tell taxable amounts from
+GST-free, input-taxed or excluded ones, so the control does not compare
+anything. It raises a `REVIEW` exception naming those accounts and saying the
+control did not run, and the pack names `gst_reasonableness` under
+`controls_not_run`, so a close in that state never reads as a pass. A run
+without `--gst-mapping` leaves the control out of `controls_not_run` and is
+unchanged from one made before the control existed.
+
+The expectation rests on these ATO pages, checked on 4 November 2026: GST is
+[10% on most goods and services](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/how-gst-works),
+so 1/10 of a GST-exclusive price;
+[GST-free sales](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/when-to-charge-gst-and-when-not-to/gst-free-sales)
+carry no GST, though GST on purchases used to make them can still be claimed;
+[input-taxed sales](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/when-to-charge-gst-and-when-not-to/input-taxed-sales),
+mainly financial supplies and residential premises, carry no GST and their
+inputs carry no credit; and a
+[partly taxable sale](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/when-to-charge-gst-and-when-not-to/taxable-sales)
+bears GST on its taxable part only. The mapping records the firm's treatment;
+the tool infers nothing from `Section`, names or tax codes, and it computes no
+BAS figure.
+
+The default tolerance is $1.00 plus 1% of the GST expected on sales and
+purchases (`--gst-absolute-tolerance 1.00`, `--gst-percentage-tolerance 0.01`),
+and the basis is cent rounding. The ATO's
+[tax invoice rules](https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/tax-invoices)
+round GST to the nearest cent, per invoice or per taxable sale, so each one's
+GST can sit up to half a cent from an exact tenth. Half a cent is 1% of the 50
+cents of GST on a $5.00 GST-exclusive sale, so the percentage covers rounding
+on lines of $5.00 or more, and the $1.00 covers it on up to 200 smaller ones.
+A difference beyond both is more than that rounding explains. The control does
+not see an error smaller than the tolerance; where lines are $50.00 or more,
+`--gst-percentage-tolerance 0.001` keeps the same rounding cover and sees
+errors a tenth the size. Both options take the same validation as the other
+thresholds, and the percentage is a fraction from 0 to 1.
+
+The comparison assumes sales and purchase accounts hold GST-exclusive amounts
+with the GST in the `gst` accounts; an account holding GST-inclusive amounts
+reads as GST under-recorded. A BAS payment, refund or clearing journal posted
+to a `gst` account moves it without a sale or purchase, so a month carrying one
+raises the control until the reviewer sets that entry aside. The pack records
+the mapping's bytes as `source_sha256.gst_mapping`, the 2 tolerances as
+`thresholds.gst_absolute_tolerance` and `thresholds.gst_percentage_tolerance`,
+and a `GST reasonableness tolerance` line in the summary's scope, all only when
+the option was used. Keep real mapping files outside the checkout.
+
 ## Worked example
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
@@ -385,6 +460,7 @@ run, and the pack names the optional controls it tracks under
 | `mapping_compatibility` | With `--mapping-policy`, which requires `--mapping`: `REVIEW` when a mapped current-period account's `Section` is not permitted for its `ReviewGroup`, or the group has no policy entry. | An unmapped account (`account_mapping` covers it), or a wrong group the policy permits for that section: it infers nothing from names or balances. | Compare the chart of accounts, mapping and policy, and retain evidence before changing either file; the exception reclassifies nothing. No client query. |
 | `balance_policy` | With `--balance-policy`: `REVIEW` when a listed account's YTD balance sits on the other side from a declared `debit` or `credit`, an account declared `nil` carries a balance, or an account expecting movement has none this period. | An account the policy does not list; it infers nothing from `Section` or account names. | Trace the balance or the missing entries to the ledger; change the policy only if the account's expected behaviour changed. No client query. |
 | `subledger_reconciliation` | With `--subledger`: `REVIEW` when a current YTD net balance differs from its `SubledgerBalance` by more than `--reconciliation-tolerance` (default 0.01), or a subledger row has no matching trial-balance account. | An account with no subledger row: only supplied rows are compared. | Reconcile the difference to timing, mapping or source records and retain support. Drafts a client query for a difference, not for an unmatched row. |
+| `gst_reasonableness` | With `--gst-mapping`: `REVIEW` when the period's net GST movement differs from 1/10 of taxable sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance` (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST expected on sales and purchases. `REVIEW`, with the control named under `controls_not_run`, when an account that moved has no GST class or is classed `mixed`: the mapping cannot tell its taxable amounts from the rest, so the control did not run. | A sale or purchase in the wrong class, such as GST charged on a GST-free sale in a taxable sales account; equal shortfalls on sales and purchases, since only the net is compared; a difference within the tolerance; and whether GST on imports, GST adjustments or the taxable part of a mixed supply is right, since the trial balance does not separate them from other GST. | Set aside any BAS payment, refund or clearing entry in the GST account, then trace the rest to tax codes and postings ([GST reasonableness](#gst-reasonableness)). No client query. |
 | `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
 | `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
 
@@ -392,7 +468,7 @@ run, and the pack names the optional controls it tracks under
 
 `tests/benchmark.rs` seeds labelled conditions one at a time in a clean fabricated
 close: a balanced July to August trial balance with a mapping, mapping policy,
-balance policy and subledger, on which no control raises. A planted case sits inside
+balance policy, subledger and GST mapping, on which no control raises. A planted case sits inside
 a control's contract, and the control must raise an exception naming the seeded
 account, or the file for a file-level control. A blind-spot case comes from the
 control's 'Cannot detect' cell in [Controls](#controls), and the control must stay
@@ -415,7 +491,8 @@ its header or its totals drift from the cases.
 | `mapping_compatibility` | 2 of 2 | 1 of 1 | 0 |
 | `balance_policy` | 2 of 2 | 1 of 1 | 0 |
 | `subledger_reconciliation` | 2 of 2 | 1 of 1 | 0 |
-| Total | 15 of 15 | 8 of 8 | 0 |
+| `gst_reasonableness` | 2 of 2 | 2 of 2 | 0 |
+| Total | 17 of 17 | 10 of 10 | 0 |
 
 `calculation_evidence` and `equity_reconciliation` need inputs this fixture does not
 supply, calculation evidence files and an equity schedule with its currency evidence,

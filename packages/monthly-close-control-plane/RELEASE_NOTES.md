@@ -32,6 +32,14 @@
   `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time to record the commit. Packs
   without the block still verify; a `view` from before it refuses packs that
   carry it. The library and the Python differential probe write none.
+- New optional `gst_reasonableness` control: with `--gst-mapping`, a REVIEW
+  finding when the period's net GST movement differs from 1/10 of taxable
+  sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance`
+  (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST
+  expected. An account with movement and no class, or classed `mixed`, stops
+  the control with its reason and names it under `controls_not_run`. Packs
+  without the option are unchanged; the differential probe drops the 3 new
+  options from the help it compares with the frozen baseline.
 - Native release publication, macOS, Aikido scans and hosted CI remain
   unverified for this candidate.
 

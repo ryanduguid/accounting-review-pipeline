@@ -30,6 +30,7 @@ pub const MAPPING_COLUMNS: [&str; 2] = ["AccountID", "ReviewGroup"];
 pub const MAPPING_POLICY_COLUMNS: [&str; 2] = ["Section", "ReviewGroup"];
 pub const BALANCE_POLICY_COLUMNS: [&str; 3] = ["AccountID", "ExpectedBalance", "ExpectMovement"];
 pub const SUBLEDGER_COLUMNS: [&str; 3] = ["Tenant", "AccountID", "SubledgerBalance"];
+pub const GST_MAPPING_COLUMNS: [&str; 2] = ["AccountID", "GSTClass"];
 #[derive(Clone, Debug)]
 pub struct SourceSnapshot {
     pub path: PathBuf,
@@ -430,6 +431,35 @@ pub fn load_balance_policy(snapshot: &SourceSnapshot) -> Result<BTreeMap<String,
         return Err(format!("{path}: balance policy has no accounts."));
     }
     Ok(policy)
+}
+
+pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, GstClass>> {
+    let path = pypath::text(&snapshot.path);
+    let mut mapping = BTreeMap::new();
+    for row in csv_rows(snapshot, &GST_MAPPING_COLUMNS, "GST mapping")? {
+        let row = row?;
+        let id = row.text("AccountID", false)?;
+        let name = row.text("GSTClass", false)?;
+        let class = GstClass::parse(&name).ok_or_else(|| {
+            format!(
+                "{path}: row {} GSTClass {} is not one of taxable_sales, creditable_purchases, gst_free, input_taxed, bas_excluded, mixed, gst.",
+                row.number,
+                pytext::repr(&name)
+            )
+        })?;
+        if mapping.insert(id.clone(), class).is_some() {
+            return Err(format!(
+                "{path}: duplicate AccountID {}.",
+                pytext::repr(&id)
+            ));
+        }
+    }
+    if !mapping.values().any(|class| *class == GstClass::Gst) {
+        return Err(format!(
+            "{path}: GST mapping classes no account gst, so there is no recorded GST to compare."
+        ));
+    }
+    Ok(mapping)
 }
 
 pub fn load_subledger(
