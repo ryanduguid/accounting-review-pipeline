@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use super::*;
+use crate::decimal::Decimal;
 use crate::gateway::{CANONICAL_COLUMNS, load_tb_snapshot};
 use crate::util::{Location, sha256_hex, snapshot_file};
 
@@ -104,6 +105,49 @@ fn test_root_corpus_preserves_the_exporter_owned_bytes() {
         let content = std::fs::read(corpus().join(relative)).unwrap();
         assert!(!content.windows(2).any(|w| w == b"\r\n"));
         assert_eq!(sha256_hex(&content), expected);
+    }
+}
+
+/// The joined vectors: this gate's own outcome for each spelling, which differs
+/// from the review commands' on grouped and exponent numbers.
+#[test]
+fn test_gateway_satisfies_the_joined_vectors() {
+    let vectors = Path::new(COMPONENT).join("../../tests/joined-conformance/fixtures");
+    let expected = parse(&std::fs::read_to_string(vectors.join("expected_results.json")).unwrap());
+    let Json::Array(scenarios) = expected.at("scenarios") else {
+        panic!()
+    };
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    for scenario in scenarios {
+        let fixture = vectors.join(text(scenario.at("fixture")));
+        let loaded = snapshot_file(&env, &Location::Disk(fixture), "source CSV").and_then(|s| load_tb_snapshot(&s));
+        let outcome = scenario.at("ledger_gate");
+        if matches!(outcome.at("accept"), Json::Bool(true)) {
+            let rows = loaded.unwrap();
+            assert!(rows.iter().all(|r| r.tenant == text(scenario.at("tenant"))));
+            let Json::Array(codes) = scenario.at("account_codes") else {
+                panic!()
+            };
+            let got: Vec<&str> = rows.iter().map(|r| r.account_code.as_str()).collect();
+            assert_eq!(got, codes.iter().map(text).collect::<Vec<_>>());
+            let Json::Array(amounts) = scenario.at("amounts") else {
+                panic!()
+            };
+            assert_eq!(rows.len(), amounts.len());
+            for (row, want) in rows.iter().zip(amounts) {
+                let Json::Array(want) = want else { panic!() };
+                let want: Vec<Decimal> = want.iter().map(|v| Decimal::parse(&text(v)).unwrap()).collect();
+                assert_eq!(
+                    [&row.debit, &row.credit, &row.ytd_debit, &row.ytd_credit],
+                    [&want[0], &want[1], &want[2], &want[3]],
+                    "{}",
+                    text(scenario.at("id"))
+                );
+            }
+        } else {
+            assert_refused(loaded, &text(outcome.at("error_contains")));
+        }
     }
 }
 

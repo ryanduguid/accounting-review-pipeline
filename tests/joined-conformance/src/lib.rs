@@ -11,6 +11,7 @@
 
 mod loader_dates;
 mod shared_blocks;
+mod vectors;
 mod xero_contract;
 
 use monthly_close_control_plane::probe as close_probe;

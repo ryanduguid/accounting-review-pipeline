@@ -1,0 +1,3 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-06-30,"Catherby Fisheries, ""Boats"" Pty Ltd",Assets,00000000-0000-0000-0000-000000000001,"Bank, ""Main"" Account",090,1200.00,0.00,15234.50,0.00
+2026-06-30,"Catherby Fisheries, ""Boats"" Pty Ltd",Liabilities,00000000-0000-0000-0000-000000000002,"Trade Creditors, Domestic",800,0.00,1200.00,0.00,15234.50
