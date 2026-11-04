@@ -68,7 +68,7 @@ Synthetic examples. A human decides whether the close is acceptable.
 
 The native commands are not published yet, so build them from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
 
-### Reproduce the sample pack
+## Reproduce the sample pack
 
 From the repository root, with Rust and [just](https://github.com/casey/just) installed, run:
 
