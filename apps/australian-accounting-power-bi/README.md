@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/standard-library-components.yml?label=Standard-library%20components&style=flat&labelColor=000000)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: FSL-1.1-ALv2](https://img.shields.io/badge/License-FSL--1.1--ALv2-blue.svg?style=flat&labelColor=000000&color=66023C)](LICENSE)
+[![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/standard-library-components.yml?label=Standard-library%20components&style=flat&labelColor=000000)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml) [![License: Ryan Duguid Public Attribution Licence 1.0](https://img.shields.io/badge/License-Public%20Attribution%201.0-66023C?labelColor=000000&style=flat)](LICENSE)
 
 </div>
 
@@ -127,7 +127,7 @@ australian-accounting-power-bi/
 │   ├── workflow_differential.rs         # Compares the native workflow with its frozen Python oracle
 │   └── *.ps1                            # Power BI Desktop native checks
 ├── Cargo.toml                           # Rust crate for the generator and the checks above
-├── LICENSE                              # FSL-1.1-ALv2
+├── LICENSE                              # Ryan Duguid Public Attribution Licence 1.0
 ├── DISCLAIMER.md                        # Professional disclaimer
 ├── CONTRIBUTING.md                      # Contribution guidelines
 └── SECURITY.md                          # Security policy
@@ -194,7 +194,7 @@ The [native verification record](docs/native-verification.md) includes the 25 Se
 
 ## Licence
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Outputs and calculations require professional review. All sample data is fabricated.
+Licensed under the [Ryan Duguid Public Attribution Licence 1.0](LICENSE), the FSL-1.1-ALv2 text with a public attribution condition. You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. Anyone who makes a copy, port or derivative available to others must credit Ryan Duguid publicly with a link to this repository, as LICENSE requires. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Outputs and calculations require professional review. All sample data is fabricated.
 
 ---
 

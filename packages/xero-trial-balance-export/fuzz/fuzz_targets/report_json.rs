@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Fabricated bytes as a Xero Trial Balance response body: JSON decoding,
 //! report validation, row building and the balance check. A refusal is a

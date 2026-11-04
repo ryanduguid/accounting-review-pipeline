@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Money as the Python script held it: `Decimal` values with at most 2
 //! places, added and subtracted exactly. Python's sums keep the smallest

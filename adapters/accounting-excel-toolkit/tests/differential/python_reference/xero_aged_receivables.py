@@ -1,5 +1,5 @@
 # Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: FSL-1.1-ALv2
+# SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 """Reconcile a supplied Xero aged summary without making debtor decisions."""
 from __future__ import annotations

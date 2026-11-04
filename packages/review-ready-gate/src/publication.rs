@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Cooperating writers publish three fixed slots using persisted transaction evidence.
 //! State replacement gives atomic visibility, without a power-loss durability claim.

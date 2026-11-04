@@ -1,5 +1,5 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: FSL-1.1-ALv2
+// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Stage and replace a synthetic evaluation pack (model, evidence, receipt),
 //! and write a validation summary (`persist.py`).

@@ -1,5 +1,5 @@
 # Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: FSL-1.1-ALv2
+# SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 """Record fabricated Python 0.2.0 test calls for standalone Rust regression tests.
 

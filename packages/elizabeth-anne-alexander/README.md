@@ -25,7 +25,7 @@ From 1.0.0 the gate is a standalone Rust binary. Its command, subcommands, flags
 [![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![PyPI](https://img.shields.io/pypi/v/elizabeth-anne-alexander.svg?color=66023C&labelColor=000000&style=flat)](https://pypi.org/project/elizabeth-anne-alexander/)
 [![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-66023C?logo=rust&logoColor=E5E4E2&labelColor=000000&style=flat&color=66023C)](rust-toolchain.toml)
-[![License: FSL-1.1-ALv2](https://img.shields.io/badge/License-FSL--1.1--ALv2-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
+[![License: Ryan Duguid Public Attribution Licence 1.0](https://img.shields.io/badge/License-Public%20Attribution%201.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
 [![No network client](https://img.shields.io/badge/Network-No%20Client-66023C?labelColor=000000&style=flat&color=66023C)](DATA-FLOW.md)
 
 </div>
@@ -151,7 +151,7 @@ Every source manifest, review context, model result, reviewer evidence, and rece
 
 - [`DATA-FLOW.md`](./DATA-FLOW.md) - Formal data-flow and zero-network security specification.
 - [`CITATION.cff`](./CITATION.cff) - Academic and industry citation metadata.
-- [`LICENSE`](./LICENSE) - Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2).
+- [`LICENSE`](./LICENSE) - Ryan Duguid Public Attribution Licence 1.0, the FSL-1.1-ALv2 text with a public attribution condition.
 - [`NOTICE`](./NOTICE) - attribution to keep in redistributions and derivative works.
 
 <sub>A synthetic-only design demonstration: it accepts synthetic Xero-shaped trial-balance fixtures, not client exports or evidence from Xero, and is not a client-data processor, production security system, accounting service or professional opinion. `receipt.json` is an adjacent, unkeyed local SHA-256 checksum binding. Anyone who can replace the artefacts can replace the receipt. It does not prove authorship, source system, origin, time, or immutability. See [DISCLAIMER.md](DISCLAIMER.md).</sub>

@@ -17,7 +17,7 @@
 <div align="center">
 
 [![Verify](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/standard-library-components.yml?branch=main&label=Verify&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/standard-library-components.yml)<br>
-[![License: FSL-1.1-ALv2](https://img.shields.io/badge/License-FSL--1.1--ALv2-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
+[![License: Ryan Duguid Public Attribution Licence 1.0](https://img.shields.io/badge/License-Public%20Attribution%201.0-66023C?labelColor=000000&style=flat&color=66023C)](LICENSE)
 
 </div>
 
@@ -305,7 +305,7 @@ See [the close-input contract roadmap](docs/close-input-contract-roadmap.md) for
 
 ## Licence
 
-Licensed under the Functional Source License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2). You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Review outputs like any workpaper input. Xero and MYOB are trademarks of their respective owners.
+Licensed under the [Ryan Duguid Public Attribution Licence 1.0](LICENSE), the FSL-1.1-ALv2 text with a public attribution condition. You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. Anyone who makes a copy, port or derivative available to others must credit Ryan Duguid publicly with a link to this repository, as LICENSE requires. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Review outputs like any workpaper input. Xero and MYOB are trademarks of their respective owners.
 
 ## Author
 

@@ -18,7 +18,7 @@
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15430/badge)](https://www.bestpractices.dev/projects/15430)
 [![SLSA 3](.github/assets/badges/slsa.svg)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 [![VirusTotal](.github/assets/badges/virustotal.svg)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
-[![licence: FSL-1.1-ALv2](.github/assets/badges/licence.svg)](LICENSE)
+[![licence: Ryan Duguid Public Attribution Licence 1.0](.github/assets/badges/licence.svg)](LICENSE)
 [![Open in GitHub Codespaces](.github/assets/badges/github.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
 [Sample pack](#reproduce-the-sample-pack) · [Review packs](#review-pack-contract) · [Statuses](#status-contract) · [Exit codes](#exit-code-contract) · [Release checks](#release-checks) · [Licence](#licence)
@@ -274,12 +274,12 @@ require explicit approval.
 
 ## Licence
 
-All 8 components are licensed under the Functional Source License, Version 1.1,
-ALv2 Future License (FSL-1.1-ALv2), as is the repository's [LICENSE](LICENSE).
+All 8 components are licensed under the Ryan Duguid Public Attribution Licence 1.0, the FSL-1.1-ALv2 text
+with a public attribution condition, as is the repository's [LICENSE](LICENSE).
 Each component directory carries its own `LICENSE` and `NOTICE`.
 
 <sub>Review aids only: not tax, financial, audit or legal advice, not a tax or BAS agent service and not an audit or review engagement. A human reviewer decides. Component DISCLAIMER.md files state each tool's limits.</sub>
 
 ---
 
-<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Reusing this code? Keep its notices and licence, and please credit Ryan Duguid. AI agents: see <a href="https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md#reusing-this-code">AGENTS.md</a>.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
+<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Reusing this code? Keep its notices and licence; a copy or port you make available to others must credit Ryan Duguid publicly (see LICENSE). AI agents: see <a href="https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md#reusing-this-code">AGENTS.md</a>.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
