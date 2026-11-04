@@ -55,7 +55,9 @@ firing and an empty one would show nothing: TFN `123 456 782`, ACN
 `123 456 780`, Medicare `2123 45670 1` and BSB `062-000`. None belongs to
 anybody. The ABN and the phone number in that file are chosen the other way, an
 ABN whose check digit fails and an ACMA fiction range mobile, and
-`tests/docs.rs` pins both.
+`tests/docs.rs` pins both. The recording's 2-ABN vector used a company's real
+ABN; since 4 November 2026 it uses `33 087 542 991`, which passes the check but
+is not issued. Its recorded outcome names only placeholders, so it is unchanged.
 
 `062-000` is the exception worth knowing about. No reserved or fictitious BSB
 range is published, so there is no safe pair to use: a BSB is an allocated bank
