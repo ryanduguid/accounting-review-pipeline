@@ -12,6 +12,8 @@ use monthly_close_control_plane::decimal::Decimal;
 use std::collections::BTreeSet;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures");
+/// The order of each row in a scenario's `amounts`.
+const AMOUNT_FIELDS: [&str; 4] = ["debit", "credit", "ytd_debit", "ytd_credit"];
 
 fn scenarios() -> Vec<Json> {
     let path = Path::new(FIXTURES).join("expected_results.json");
@@ -49,6 +51,15 @@ fn assert_outcome(answer: &Json, outcome: &Json, scenario: &Json) {
         .map(text)
         .collect();
     assert_eq!(codes, want, "{name}");
+    let amounts = scenario.at("amounts").as_array().unwrap();
+    assert_eq!(rows.len(), amounts.len(), "{name}");
+    for (row, want) in rows.iter().zip(amounts) {
+        for (field, want) in AMOUNT_FIELDS.iter().zip(want.as_array().unwrap()) {
+            let got = Decimal::parse(&text(row.at(field))).unwrap();
+            let want = Decimal::parse(&text(want)).unwrap();
+            assert_eq!(got, want, "{name} {field}");
+        }
+    }
 }
 
 #[test]

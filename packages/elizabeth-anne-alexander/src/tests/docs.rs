@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use super::*;
+use crate::decimal::Decimal;
 use crate::gateway::{CANONICAL_COLUMNS, load_tb_snapshot};
 use crate::util::{Location, sha256_hex, snapshot_file};
 
@@ -130,6 +131,20 @@ fn test_gateway_satisfies_the_joined_vectors() {
             };
             let got: Vec<&str> = rows.iter().map(|r| r.account_code.as_str()).collect();
             assert_eq!(got, codes.iter().map(text).collect::<Vec<_>>());
+            let Json::Array(amounts) = scenario.at("amounts") else {
+                panic!()
+            };
+            assert_eq!(rows.len(), amounts.len());
+            for (row, want) in rows.iter().zip(amounts) {
+                let Json::Array(want) = want else { panic!() };
+                let want: Vec<Decimal> = want.iter().map(|v| Decimal::parse(&text(v)).unwrap()).collect();
+                assert_eq!(
+                    [&row.debit, &row.credit, &row.ytd_debit, &row.ytd_credit],
+                    [&want[0], &want[1], &want[2], &want[3]],
+                    "{}",
+                    text(scenario.at("id"))
+                );
+            }
         } else {
             assert_refused(loaded, &text(outcome.at("error_contains")));
         }
