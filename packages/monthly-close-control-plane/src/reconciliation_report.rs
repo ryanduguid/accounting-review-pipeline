@@ -129,6 +129,14 @@ pub fn render_html(pack: &Json) -> Result<String> {
         } else {
             ""
         };
+        let carried = pack.get("carried_over").map_or_else(String::new, |ids| {
+            let ids = ids.as_array().unwrap().iter().map(text).collect::<Vec<_>>();
+            format!(
+                "<p class='notice'>{} item(s) carried over more than one period: {}. Check why each has not cleared.</p>",
+                ids.len(),
+                escaped(&ids.join(", "))
+            )
+        });
         let mut totals = String::new();
         for (label, key) in [
             ("Opening ledger balance", "opening_balance"),
@@ -155,6 +163,7 @@ pub fn render_html(pack: &Json) -> Result<String> {
             count = rows.len(),
             boundary = escaped(&field(pack, "review_boundary")),
             blocked = blocked,
+            carried = carried,
             totals = totals,
             outstanding = outstanding,
             suggestions = if suggestions.is_empty() {

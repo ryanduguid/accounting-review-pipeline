@@ -10,6 +10,9 @@
 - Retain review/workbench, view, queue, reconcile, drivers, compare, classify
   and schedule, their status/exit contracts and platform-specific output bytes.
   `close-control --version` now reports `close-control 1.0.0`.
+- `reconcile` names outstanding items carried over more than one period in
+  `review.html` and in a new `carried_over` key in `reconciliation.json`, which
+  appears only when there is such an item. Runs without one keep their bytes.
 - Preserve the original decimal contexts, input validation, source hashes,
   spreadsheet guards, four-file rollback and read-only pack verification.
 - Match Python's shortest floating-point spelling when hashing calculation

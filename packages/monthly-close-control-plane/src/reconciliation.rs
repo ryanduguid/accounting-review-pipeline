@@ -354,6 +354,23 @@ fn decisions(
     }
     Ok(result)
 }
+/// The first day of the period before `start..=end`.
+// shortcut: `clearing-carry-v1` does not record a period start, so this assumes
+// the previous period had this one's shape: the same whole calendar months, or
+// otherwise the same number of days. Recording the start needs a new carry schema.
+fn previous_start(start: Date, end: Date) -> Option<Date> {
+    let next = isodate::from_ordinal(isodate::ordinal(end) + 1)?;
+    if start.day == 1 && next.day == 1 {
+        let month = |d: Date| d.year * 12 + d.month.cast_signed() - 1;
+        let first = month(start) * 2 - month(next);
+        return Date::new(
+            first.div_euclid(12),
+            first.rem_euclid(12).cast_unsigned() + 1,
+            1,
+        );
+    }
+    isodate::from_ordinal(isodate::ordinal(start) * 2 - isodate::ordinal(end) - 1)
+}
 #[derive(Clone, Debug)]
 pub struct ReconcileConfig {
     pub transactions: PathBuf,
@@ -553,6 +570,13 @@ pub fn reconcile_with(
         } else {
             "PASS"
         };
+        let carried_over: Vec<_> = previous_start(start, end).map_or_else(Vec::new, |cutoff| {
+            outstanding
+                .iter()
+                .filter(|row| date(&field(row, "Date")).is_ok_and(|when| when < cutoff))
+                .map(|row| row.at("TransactionID").clone())
+                .collect()
+        });
         let mut sources = vec![(PyStr::from("transactions"), transactions)];
         if let Some(source) = opening_source {
             sources.push((PyStr::from("opening_items"), source));
@@ -579,7 +603,7 @@ pub fn reconcile_with(
                 })
                 .collect(),
         );
-        Ok(Json::object([
+        let mut pack = Json::object([
             ("schema", Json::str("clearing-reconciliation-v1")),
             ("status", Json::str(status)),
             ("identity", identity),
@@ -605,7 +629,11 @@ pub fn reconcile_with(
             ("notes", notes.into_json()),
             ("review_boundary", Json::str(BOUNDARY)),
             ("source_sha256", sources),
-        ]))
+        ]);
+        if !carried_over.is_empty() {
+            pack.set("carried_over", Json::Array(carried_over));
+        }
+        Ok(pack)
     })
 }
 
@@ -628,6 +656,101 @@ mod tests {
         }
     }
     const TRANSACTIONS: &str = "Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit\nSynthetic,CLEAR,AUD,T1,2026-09-01,Shared,Synthetic debit,100,0\nSynthetic,CLEAR,AUD,T2,2026-09-02,Shared,Synthetic credit,0,100\n";
+    #[test]
+    fn previous_start_follows_calendar_months_and_otherwise_days() {
+        for (start, end, want) in [
+            ("2026-08-01", "2026-08-31", "2026-07-01"),
+            ("2026-03-01", "2026-03-31", "2026-02-01"),
+            ("2026-01-01", "2026-01-31", "2025-12-01"),
+            ("2026-10-01", "2026-12-31", "2026-07-01"),
+            ("2026-08-08", "2026-08-14", "2026-08-01"),
+        ] {
+            let got = previous_start(date(start).unwrap(), date(end).unwrap());
+            assert_eq!(got.unwrap().iso(), want, "{start} to {end}");
+        }
+    }
+    /// One fabricated month: its transactions, the carry file it opens from and
+    /// any decisions, as `reconcile` reads them.
+    fn month(
+        (start, end): (&str, &str),
+        (opening, closing): (&str, &str),
+        rows: &str,
+        carry: Option<&[u8]>,
+        decisions: &str,
+    ) -> Json {
+        let config = ReconcileConfig {
+            period_start: start.into(),
+            period_end: end.into(),
+            opening_balance: opening.into(),
+            closing_balance: closing.into(),
+            opening_items: carry.map(|_| "opening.json".into()),
+            decisions: (!decisions.is_empty()).then(|| "decisions.csv".into()),
+            ..config()
+        };
+        let transactions = COLUMNS.join(",") + "\n" + rows;
+        reconcile_with(&config, &mut |path, _| {
+            Ok(SourceSnapshot::new(
+                path,
+                if path == Path::new("transactions.csv") {
+                    transactions.as_bytes().to_vec()
+                } else if path == Path::new("opening.json") {
+                    carry.unwrap().to_vec()
+                } else {
+                    decisions.as_bytes().to_vec()
+                },
+            ))
+        })
+        .unwrap()
+    }
+    fn carried_forward(pack: &Json) -> Vec<u8> {
+        crate::reconciliation_report::rendered(pack)
+            .unwrap()
+            .into_iter()
+            .find(|(name, _)| name == "carry-forward.json")
+            .unwrap()
+            .1
+    }
+    #[test]
+    fn three_months_flag_only_an_item_carried_over_more_than_one_period() {
+        let june = month(
+            ("2026-06-01", "2026-06-30"),
+            ("0", "100"),
+            "Synthetic,CLEAR,AUD,stale,2026-06-12,Stale,Unmatched receipt,100,0\n",
+            None,
+            "",
+        );
+        assert!(june.get("carried_over").is_none());
+        let july = month(
+            ("2026-07-01", "2026-07-31"),
+            ("100", "130"),
+            "Synthetic,CLEAR,AUD,fresh,2026-07-20,Fresh,Later receipt,30,0\n",
+            Some(&carried_forward(&june)),
+            "",
+        );
+        assert!(july.get("carried_over").is_none());
+        let carry = carried_forward(&july);
+        let august = month(
+            ("2026-08-01", "2026-08-31"),
+            ("130", "130"),
+            "",
+            Some(&carry),
+            "",
+        );
+        assert!(august.at("status").is_str("REVIEW"));
+        let flagged = august.at("carried_over").as_array().unwrap();
+        assert_eq!(flagged.len(), 1);
+        assert!(flagged[0].is_str("stale"));
+        let html = crate::reconciliation_report::render_html(&august).unwrap();
+        assert!(html.contains("carried over more than one period: stale."));
+        let settled = month(
+            ("2026-08-01", "2026-08-31"),
+            ("130", "30"),
+            "Synthetic,CLEAR,AUD,paid,2026-08-03,Stale,Settlement,0,100\n",
+            Some(&carry),
+            "Group,TransactionID,Decision,Note\ng,stale,accept,Checked\ng,paid,accept,Checked\n",
+        );
+        assert!(settled.get("carried_over").is_none());
+    }
     #[test]
     fn suggestions_leave_items_outstanding_until_an_explicit_accepted_allocation() {
         let mut config = config();

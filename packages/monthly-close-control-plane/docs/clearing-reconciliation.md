@@ -129,6 +129,15 @@ items gives REVIEW; agreement with no remaining items gives PASS. Exit codes are
 0 for PASS, 2 for REVIEW or BLOCKED, and 1 for malformed input or an output error.
 These are reconciliation results, not accounting approval or period-lock states.
 
+An outstanding item dated before the previous period started has been carried
+over more than one period. `review.html` names these items in a notice, and
+`reconciliation.json` lists their IDs in `carried_over`, a key that appears only
+when there is at least one. The flag changes no status: the items are already
+REVIEW. `carry-forward.json` records no period start, so the command assumes the
+previous period had this period's shape: the same whole calendar months, or
+otherwise the same number of days. After a change of period length, read
+`AgeDays` instead.
+
 Use the preceding period's `carry-forward.json` with `--opening-items`. Its identity
 must agree, its item total must equal its recorded balance, and its period end must
 be the day before the new period starts. Original transaction dates and notes
