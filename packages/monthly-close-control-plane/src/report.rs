@@ -94,6 +94,12 @@ pub fn producer() -> Json {
         ("version", Json::str(env!("CARGO_PKG_VERSION"))),
     ])
 }
+/// The scope line for a pack's GST review heuristic, from its 2 rendered thresholds.
+pub fn gst_tolerance_line(absolute: &str, percentage: &str) -> String {
+    format!(
+        "- GST reasonableness review heuristic, not a rounding bound: ${absolute} plus {percentage} of the expected GST on sales and purchases, after the declared GST settlements, which the trial balance cannot verify"
+    )
+}
 pub fn producer_line(producer: &Json) -> String {
     let field = |key| producer.at(key).as_pystr().unwrap().os_text();
     format!(
@@ -266,6 +272,24 @@ pub fn as_json(pack: &CloseReviewPack) -> Result<Json> {
             ("effect", Json::str(ACKNOWLEDGEMENT_EFFECT)),
         ])
     });
+    let mut thresholds = Json::object([
+        (
+            "absolute_variance",
+            Json::str(&money(&pack.absolute_threshold)?),
+        ),
+        (
+            "percentage_variance",
+            Json::str(&percentage(&pack.percentage_threshold)?),
+        ),
+        (
+            "reconciliation_tolerance",
+            Json::str(&money(&pack.reconciliation_tolerance)?),
+        ),
+    ]);
+    if let Some((absolute, percent)) = &pack.gst_tolerance {
+        thresholds.set("gst_absolute_tolerance", Json::str(&money(absolute)?));
+        thresholds.set("gst_percentage_tolerance", Json::str(&percentage(percent)?));
+    }
     let mut result = Json::object([
         ("acknowledgement", acknowledgement),
         (
@@ -299,23 +323,7 @@ pub fn as_json(pack: &CloseReviewPack) -> Result<Json> {
                     .collect(),
             ),
         ),
-        (
-            "thresholds",
-            Json::object([
-                (
-                    "absolute_variance",
-                    Json::str(&money(&pack.absolute_threshold)?),
-                ),
-                (
-                    "percentage_variance",
-                    Json::str(&percentage(&pack.percentage_threshold)?),
-                ),
-                (
-                    "reconciliation_tolerance",
-                    Json::str(&money(&pack.reconciliation_tolerance)?),
-                ),
-            ]),
-        ),
+        ("thresholds", thresholds),
     ]);
     if !pack.calculation_evidence.is_empty() || !pack.required_calculations.is_empty() {
         let mut evidence: Vec<_> = pack.calculation_evidence.iter().collect();
@@ -380,6 +388,9 @@ pub fn as_markdown(pack: &CloseReviewPack) -> Result<PyStr> {
         format!("- Reconciliation tolerance: ${}",money(&pack.reconciliation_tolerance)?),format!("- Exceptions: {} total; {blocked} blocked; {review} requiring review.",pack.exceptions.len()),
         format!("- Client queries drafted: {}.",queries.len()),format!("- Controls not run: {}.",if controls.is_empty() {"none"} else {&controls}),
     ];
+    if let Some((absolute, percent)) = &pack.gst_tolerance {
+        lines.push(gst_tolerance_line(&money(absolute)?, &percentage(percent)?));
+    }
     lines.extend(pack.producer.as_ref().map(producer_line));
     lines.extend([String::new(), "## Source evidence".into(), String::new()]);
     for (name, digest) in &pack.source_hashes {

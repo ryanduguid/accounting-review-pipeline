@@ -164,8 +164,18 @@ fn cli(request: &Json) -> Result<Json> {
     collect(&directory.0, &directory.0, &mut files)?;
     Ok(Json::object([
         ("code", Json::int(code.into())),
-        ("stdout", Json::Str(PyStr::from_os_text(&normalise(stdout)))),
-        ("stderr", Json::Str(PyStr::from_os_text(&normalise(stderr)))),
+        (
+            "stdout",
+            Json::Str(PyStr::from_os_text(&normalise(without_gst_options(
+                &stdout,
+            )))),
+        ),
+        (
+            "stderr",
+            Json::Str(PyStr::from_os_text(&normalise(without_gst_options(
+                &stderr,
+            )))),
+        ),
         (
             "files",
             Json::Object(
@@ -186,6 +196,36 @@ fn cli(request: &Json) -> Result<Json> {
             ),
         ),
     ]))
+}
+/// The review command's GST reasonableness options, in its usage and its help.
+const GST_USAGE: &str = concat!(
+    "                            [--gst-mapping GST_MAPPING]\n",
+    "                            [--gst-settlements GST_SETTLEMENTS]\n",
+    "                            [--gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE]\n",
+    "                            [--gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE]\n",
+);
+const GST_OPTIONS: &str = concat!(
+    "  --gst-mapping GST_MAPPING\n",
+    "                        optional AccountID,GSTClass CSV; runs the GST\n",
+    "                        reasonableness control\n",
+    "  --gst-settlements GST_SETTLEMENTS\n",
+    "                        Reference,Amount CSV of BAS payments, refunds and\n",
+    "                        clearing journals in the GST accounts, each as its\n",
+    "                        net debit; required with --gst-mapping, header only\n",
+    "                        when there were none\n",
+    "  --gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE\n",
+    "                        GST difference in dollars allowed before review,\n",
+    "                        added to the percentage tolerance; a review heuristic,\n",
+    "                        not a rounding bound\n",
+    "  --gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE\n",
+    "                        GST difference allowed before review, as a fraction\n",
+    "                        of the expected GST on sales and purchases, e.g. 0.01\n",
+    "                        for 1%\n",
+);
+/// The frozen Python baseline predates the GST reasonableness options, so CLI
+/// output compared with it drops their usage and help lines.
+fn without_gst_options(text: &str) -> String {
+    text.replace(GST_USAGE, "").replace(GST_OPTIONS, "")
 }
 fn decimal_json(value: Option<&Decimal>) -> Json {
     value.map_or(Json::Null, |value| Json::str(&value.to_sci_string()))
@@ -926,4 +966,24 @@ pub fn main() -> i32 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::without_gst_options;
+    use crate::{cli, stdio};
+
+    #[test]
+    fn dropping_the_gst_options_leaves_the_frozen_review_help_and_usage() {
+        let (code, help, _) = stdio::capture(|| cli::main(vec!["review".into(), "--help".into()]));
+        assert_eq!(code, 0);
+        assert!(help.contains("--gst-mapping"));
+        let frozen = without_gst_options(&help);
+        assert!(!frozen.to_lowercase().contains("gst"), "{frozen}");
+        assert!(frozen.ends_with("maximum permitted GL/subledger difference\n"));
+        let (code, _, usage) = stdio::capture(|| cli::main(vec!["review".into()]));
+        assert_eq!(code, 1);
+        assert!(usage.contains("--gst-mapping"));
+        assert!(!without_gst_options(&usage).to_lowercase().contains("gst"));
+    }
 }

@@ -12,6 +12,10 @@ usage: close-control review [-h] --current CURRENT --prior PRIOR
                             [--absolute-threshold ABSOLUTE_THRESHOLD]
                             [--percentage-threshold PERCENTAGE_THRESHOLD]
                             [--reconciliation-tolerance RECONCILIATION_TOLERANCE]
+                            [--gst-mapping GST_MAPPING]
+                            [--gst-settlements GST_SETTLEMENTS]
+                            [--gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE]
+                            [--gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE]
 
 options:
   -h, --help            show this help message and exit
@@ -48,3 +52,19 @@ options:
                         fraction from 0 to 1, e.g. 0.10 for 10%
   --reconciliation-tolerance RECONCILIATION_TOLERANCE
                         maximum permitted GL/subledger difference
+  --gst-mapping GST_MAPPING
+                        optional AccountID,GSTClass CSV; runs the GST
+                        reasonableness control
+  --gst-settlements GST_SETTLEMENTS
+                        Reference,Amount CSV of BAS payments, refunds and
+                        clearing journals in the GST accounts, each as its
+                        net debit; required with --gst-mapping, header only
+                        when there were none
+  --gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE
+                        GST difference in dollars allowed before review,
+                        added to the percentage tolerance; a review heuristic,
+                        not a rounding bound
+  --gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE
+                        GST difference allowed before review, as a fraction
+                        of the expected GST on sales and purchases, e.g. 0.01
+                        for 1%
