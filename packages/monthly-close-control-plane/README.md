@@ -378,10 +378,12 @@ on lines of $5.00 or more, and the $1.00 absorbs it on up to 200 smaller ones.
 More small lines can exceed it on rounding alone: 300 sales of $0.06, each
 bearing $0.01 of rounded GST, record $3.00 against $1.80 expected, and the
 $1.20 difference is beyond the $1.018 allowed, so the pack raises it for
-review. The control does not see an error within the tolerance; where lines
+review. The control does not see an error within the tolerance. Where lines
 are $50.00 or more, `--gst-percentage-tolerance 0.001` gives the same rounding
-cover and sees errors a tenth the size. Both options take the same validation
-as the other thresholds, and the percentage is a fraction from 0 to 1.
+cover and cuts the percentage component tenfold, but the $1.00 floor stays:
+with $100.00 of GST expected on sales and purchases, the tolerance falls from
+$2.00 to $1.10, not to $0.20. Both options take the same validation as the
+other thresholds, and the percentage is a fraction from 0 to 1.
 
 The comparison assumes sales and purchase accounts hold GST-exclusive amounts
 with the GST in the `gst` accounts; an account holding GST-inclusive amounts
