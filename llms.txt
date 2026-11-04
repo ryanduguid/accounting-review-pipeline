@@ -45,6 +45,10 @@ The exporter, or a manual Excel export, produces the 10-column Xero trial-balanc
 - [AGENTS.md](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md): the working rules for this repository, including the directory-naming rule the release identity gate depends on.
 - Browser walkthrough: https://duguid.com.au/tools/monthly-close-controls/#worked-example
 
+## Reuse
+
+- [Reusing this code](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md#reusing-this-code): Ryan Duguid's work under FSL-1.1-ALv2; keep its notices and licence; public credit is requested.
+
 ## Optional
 - [IMPORTS.md](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/IMPORTS.md): source identities, tree digests, import records, release callers and publisher environments.
 - [SECURITY.md](https://github.com/ryanduguid/accounting-review-pipeline/blob/main/SECURITY.md): the security boundary and how to report a vulnerability.
