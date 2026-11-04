@@ -1,18 +1,26 @@
 xero-trial-balance-export
 Copyright 2026 Ryan Duguid (https://github.com/ryanduguid)
 
-Ryan Duguid's contributions are licensed under the Functional Source
-License, Version 1.1, ALv2 Future License (FSL-1.1-ALv2); see LICENSE.
-Retained third-party material remains under its own licence, as stated below.
+Ryan Duguid's contributions are licensed under the Ryan Duguid Public
+Attribution Licence, Version 1.0: the Functional Source License, Version 1.1,
+ALv2 Future License (FSL-1.1-ALv2) text with a Public Attribution Condition;
+see LICENSE. Retained third-party material remains under its own licence, as
+stated below.
 
-For each version licensed under FSL-1.1-ALv2, an additional licence under the
-Apache License, Version 2.0 becomes effective on the second anniversary of the
-date that version was made available.
+Public attribution applies when you rely on the FSL grant of a version released
+with the condition (from 4 November 2026) to redistribute or make available a
+copy, modification or derivative: name Ryan Duguid and link to this repository
+in its README or main documentation and in any credits screen. Internal use is
+exempt.
 
-Versions made available before this change remain available under the
-licences they were released with.
+For each version, an additional licence under the Apache License, Version 2.0
+becomes effective on the second anniversary of the date that version was made
+available. The condition does not apply to that licence.
 
-Redistribution under FSL-1.1-ALv2 requires including its terms or a link to
+Versions made available before the condition keep the terms they were released
+with.
+
+Redistribution under the FSL grant requires including its terms or a link to
 them and keeping the copyright notices supplied with the software.
 Redistribution under another applicable licence follows that licence's
 conditions.
@@ -28,7 +36,8 @@ the Mozilla Public License 2.0; see data/certifi-LICENSE. Its SHA-256 is
 The bundle's unmodified Source Code Form is included as data/cacert.pem.
 The matching upstream source is available from
 https://pypi.org/project/certifi/2026.10.23/#files.
-The exporter's FSL-1.1-ALv2 licence does not replace MPL-2.0 for the bundle.
+The exporter's own licence (see LICENSE) does not replace MPL-2.0 for the
+bundle.
 See https://mozilla.org/MPL/2.0/.
 Native distributions must include this NOTICE, data/cacert.pem and
 data/certifi-LICENSE so recipients receive the source and its licence notice.
