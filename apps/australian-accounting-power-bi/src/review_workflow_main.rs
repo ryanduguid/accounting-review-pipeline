@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 fn main() -> std::process::ExitCode {
     // argv is the user's own command line; it grants nothing.
     // nosemgrep: rust.lang.security.args-os.args-os

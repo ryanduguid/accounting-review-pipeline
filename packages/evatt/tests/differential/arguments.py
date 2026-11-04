@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Grammar-generated argparse comparison, with no readable map or writable output.
 
 python3.14 tests/differential/arguments.py --python-root <oracle> --binary <evatt> --seed 1 --cases 1000

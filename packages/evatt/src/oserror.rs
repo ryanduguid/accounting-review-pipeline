@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Copied from apps/grant-acquittal-workpapers/src/oserror.rs; adapted for evatt CPython 3.14.
 //! How CPython prints a path and an `OSError` raised for it.
 

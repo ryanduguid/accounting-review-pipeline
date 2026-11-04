@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The command line (`cli.py`), including the argparse behaviour it relied on:
 //! usage, help and abbreviations. Copied from elizabeth-anne-alexander/src/cli.rs,
 //! adapted for CPython 3.14 and evatt's exit 1 and private disclosure errors.

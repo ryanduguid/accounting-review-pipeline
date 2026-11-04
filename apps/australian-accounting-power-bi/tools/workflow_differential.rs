@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! CPython 3.15 comparison against the frozen pre-port workflow.
 
 #[path = "workflow_differential/adversarial.rs"]

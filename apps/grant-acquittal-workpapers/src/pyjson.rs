@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! CPython's `json` as the workpaper script used it: `json.loads(bytes)` with a
 //! duplicate-field hook, including the decoder's error messages and positions,
 //! and `json.dumps(value, indent=2)` with keys in insertion order.

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Reads one JSON array per line, `["op", "a", "b"]`, applies the operation
 //! with the gateway's decimal module and prints one JSON array of results.
 //! tests/differential/decimal_differential.py compares it with CPython.

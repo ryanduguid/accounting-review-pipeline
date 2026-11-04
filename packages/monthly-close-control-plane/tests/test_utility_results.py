@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Reject incomplete fabricated workflows even when their commands exit normally."""
 import json
 import runpy

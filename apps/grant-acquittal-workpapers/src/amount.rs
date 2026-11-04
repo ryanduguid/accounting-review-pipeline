@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Money as the Python script held it: `Decimal` values with at most 2
 //! places, added and subtracted exactly. Python's sums keep the smallest
 //! exponent of their operands, so `str()` writes "80.00" for 41.25 + 38.75 and

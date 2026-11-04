@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Fabricated bytes to the trial-balance, mapping, mapping-policy,
 //! balance-policy, subledger, GST-mapping and GST-settlements loaders. A
 //! refusal is a result; a panic is a crash.

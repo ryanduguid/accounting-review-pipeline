@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Keep the documented read-only OAuth boundary tied to the inspected native source.
 use sha2::{Digest, Sha256};
 use xero_trial_balance_export::{auth, http};

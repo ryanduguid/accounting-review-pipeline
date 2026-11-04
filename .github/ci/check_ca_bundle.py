@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Compare the Xero exporter's embedded CA bundle with the current certifi release.
 
 usage: python -I .github/ci/check_ca_bundle.py [PACKAGE_DIR]

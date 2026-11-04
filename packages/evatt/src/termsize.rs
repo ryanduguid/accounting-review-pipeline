@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Copied from packages/elizabeth-anne-alexander/src/termsize.rs; adapted for evatt CPython 3.14.
 //! `shutil.get_terminal_size().columns`, which argparse sizes its help with.
 

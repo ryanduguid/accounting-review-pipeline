@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The adapter's Power Query parsers load the exporter's canonical CSV shape.
 //!
 //! These checks read the root data-only contract: the exact 10-column header, the pinned

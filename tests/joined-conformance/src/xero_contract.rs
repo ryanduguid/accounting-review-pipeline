@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Joined offline conformance for the data-only Xero trial-balance contract:
 //! every offline review consumer keeps the root fixtures' accept/reject
 //! boundary, identity and account codes.

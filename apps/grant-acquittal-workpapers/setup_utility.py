@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Set up and run the fabricated accounting examples in a new workspace."""
 from __future__ import annotations
 

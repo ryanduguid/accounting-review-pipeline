@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{
     BOUNDARY, CLOSE_FILES, MAX_EXPORT_BYTES, MAX_EXPORT_MEMBER, READY_FILES, Result, archive, digest, files, html,
     json, projection, run, schema,

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Safety pins on the Excel acceptance runner, `tools/native_excel_acceptance.ps1`.
 //!
 //! The runner needs desktop Excel and stays PowerShell. These checks read it as text,

@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Freeze multi-character Unicode 16 normalisation and casing regressions.
 
 python3.14 tools/gen_unicode_cases.py > tests/fixtures/unicode-16.json

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! CPython's `json` module as the gateway uses it: `json.loads` with a
 //! duplicate-key hook, `json.dumps(sort_keys=True)` in its canonical and
 //! `indent=2` forms, and Python equality over the parsed values.

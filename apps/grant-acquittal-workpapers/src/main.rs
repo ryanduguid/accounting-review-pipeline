@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use grant_acquittal_workpapers::{cli, oserror, pytext};
 
 /// A Python 3.15 text stream in UTF-8 mode: `\r\n` for each newline on

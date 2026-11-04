@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Explicit translations of frozen evatt patterns to fancy-regex.
 
 patterns.json records every pattern from evatt 0.2.0 at repository snapshot

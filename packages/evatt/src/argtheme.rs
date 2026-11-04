@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Copied from packages/elizabeth-anne-alexander/src/argtheme.rs; adapted for evatt CPython 3.14.
 //! argparse's colour theme (Python 3.14+) and `_colorize.can_colorize`, which
 //! decides per stream whether help, usage and errors are coloured.

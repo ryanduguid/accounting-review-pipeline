@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! evatt's standalone implementation. CPython 3.14 and Unicode 16 are frozen.
 pub mod pytext;
 #[rustfmt::skip]

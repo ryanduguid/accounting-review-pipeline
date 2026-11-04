@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Python `decimal` arithmetic with ROUND_HALF_EVEN: 28 significant digits for
 //! the fixture generator and 40 for the review workflow.
 //!

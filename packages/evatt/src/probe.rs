@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Test-only JSON-lines probe. Never part of a default build.
 use evatt::{
     patterns,

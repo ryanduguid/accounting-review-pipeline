@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Run fabricated workflows with explicit lock authority and source evidence."""
 from __future__ import annotations
 

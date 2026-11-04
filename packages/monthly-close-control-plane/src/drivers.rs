@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Rank local transaction evidence without clearing or explaining a variance.
 use crate::{
     Result,

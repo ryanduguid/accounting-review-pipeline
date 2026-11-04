@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 # Local-file monthly close loop. No Xero OAuth.
 #
 # 1. close-control review of the co-located Elizabeth Anne Alexander same-FY

@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """End-to-end parity in fabricated git worktrees at identical paths.
 
 python3.14 tests/differential/cli.py --python-root <base-copy> --binary <evatt> --seed 1 --cases 300

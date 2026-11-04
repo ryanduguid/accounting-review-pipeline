@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use super::{Json, evidence, inspect_export, json, path, replay};
 use crate::transactions::{
     cli::{inline_value, negative},

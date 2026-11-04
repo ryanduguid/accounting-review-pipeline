@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The exporter-owned `xero-tb-csv.v1` contract at the repository root: its
 //! bytes, and this exporter's offline integrity runner's outcome for every
 //! fixture. The offline review consumers meet the same fixtures in the joined

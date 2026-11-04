@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Freeze evatt's CPython 3.14 / Unicode 16 predicates and case mappings.
 
 Adapted from elizabeth-anne-alexander/tools/gen_unicode_tables.py. Output is

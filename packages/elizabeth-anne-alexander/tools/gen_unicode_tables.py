@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Generate src/tables.rs from the running CPython's Unicode database.
 
 The gateway's text rules come from CPython: str.strip() and Decimal() use

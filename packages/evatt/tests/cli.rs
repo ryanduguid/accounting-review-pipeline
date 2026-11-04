@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Real binary and real local git; all documents and maps are fabricated.
 use std::{
     path::PathBuf,

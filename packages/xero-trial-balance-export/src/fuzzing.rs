@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The response path the cargo-fuzz `report_json` target drives.
 
 use crate::{amount, export, pyjson, report};

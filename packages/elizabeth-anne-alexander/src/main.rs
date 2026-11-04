@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 use elizabeth_anne_alexander::util::{Bundle, Env};
 use elizabeth_anne_alexander::{cli, pypath, pytext};
 

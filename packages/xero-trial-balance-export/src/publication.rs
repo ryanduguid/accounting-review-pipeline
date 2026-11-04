@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Publish complete bytes, retaining recovery files after flush and rename failures.
 use crate::{
     Failure, Result, paths,

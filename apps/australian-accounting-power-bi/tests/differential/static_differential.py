@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Mutation differential: the Python static suites against their Rust ports.
 
     python static_differential.py --python-tests <tests directory from the Python base> \

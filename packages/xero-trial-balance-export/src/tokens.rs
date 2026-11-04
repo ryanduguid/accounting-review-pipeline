@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! One owner for the locked load, migration, refresh and durable-save transaction.
 use crate::{
     Failure, Result, cache_json, dpapi, paths,

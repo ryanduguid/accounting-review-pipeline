@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Contracts for the blocked native release boundary.
 
 review-ready-gate 1.0.0 is a Rust binary with no native publisher. The

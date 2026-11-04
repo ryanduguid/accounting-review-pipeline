@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The `pathlib` behaviour the gateway's guards rely on: how a path prints,
 //! `Path.resolve()` (which is `os.path.realpath`), and containment.
 

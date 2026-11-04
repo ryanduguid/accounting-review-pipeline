@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Snapshots, JSON loading and the path guards (`util.py`).
 
 use std::collections::BTreeMap;

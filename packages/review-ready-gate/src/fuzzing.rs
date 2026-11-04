@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The loader calls the cargo-fuzz `pack_loaders` target makes.
 
 use crate::loader::{self, SourceSnapshot};

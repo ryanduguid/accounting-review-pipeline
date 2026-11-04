@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The Xero aged receivables and payables adapters: source pins on each `.pq` file and
 //! the fabricated samples they load.
 //!

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Ports of tests/test_assurance_claims.py, tests/test_trial_balance_conformance.py
 //! and the README grammar check from tests/test_gateway.py.
 

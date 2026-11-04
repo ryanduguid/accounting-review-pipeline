@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! A standard stream that cannot be written fails as it did for the Python
 //! release, measured against it on a closed pipe: buffered output still pending
 //! at exit is exit status 120, a report line that cannot be written is an

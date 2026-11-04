@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The permissive Power BI CSV reader adapted to default StringIO's LF splitting.
 //! LF output quoting is reused from Monthly Close's `write_record_lf`.
 

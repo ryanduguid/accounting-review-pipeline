@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Differential test: the released Python package against the Rust binary.
 
     python differential.py --python-pkg <dir holding elizabeth_anne_alexander/> \

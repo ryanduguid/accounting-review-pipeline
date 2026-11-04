@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Unicode decimal digits reused from the grant workpaper's CPython 3.15 tables.
 // Unicode 17.0.0; keep this list aligned with the frozen Python baseline.
 pub const DECIMAL_ZEROS: &[u32] = &[

@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Port of tests/test_source_gates.py. The Python tests swapped files on disk
 //! under a patched package root; here the bundled data is an in-memory copy the
 //! test edits, so the read-count and path-swap tests reduce to the digest checks.

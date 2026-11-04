@@ -1,3 +1,6 @@
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 """Each supplier record names the version its component currently carries.
 
 docs/ai-register-entries.md is supplier information firms use in their own AI

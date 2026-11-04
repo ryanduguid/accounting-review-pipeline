@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Capture fabricated Python baseline calls as portable Rust regression cases.
 //! CPython is required as the behaviour oracle; it is not a binary dependency.
 use std::{env, process::Command};

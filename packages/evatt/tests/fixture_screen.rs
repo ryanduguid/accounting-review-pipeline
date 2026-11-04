@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! Committed fixtures and test inputs may not carry a checksum-valid
 //! Australian identifier unless `synthetic-identifiers.txt` lists it for that
 //! file. The screen runs evatt's own detectors and check digits over the

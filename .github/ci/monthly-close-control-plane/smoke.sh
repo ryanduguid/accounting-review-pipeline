@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ryan Duguid
+# SPDX-License-Identifier: FSL-1.1-ALv2
+
 # Run the native commands against fabricated files from an empty directory.
 set -euo pipefail
 [[ "$(close-control --version)" = "close-control 1.0.0" ]]

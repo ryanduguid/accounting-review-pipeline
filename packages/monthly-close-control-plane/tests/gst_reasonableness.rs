@@ -1,3 +1,6 @@
+// Copyright 2026 Ryan Duguid
+// SPDX-License-Identifier: FSL-1.1-ALv2
+
 //! The GST reasonableness control, run through the command a reviewer uses.
 
 #[path = "support/temp.rs"]
