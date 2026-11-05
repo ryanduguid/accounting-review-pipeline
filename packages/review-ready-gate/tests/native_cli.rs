@@ -886,7 +886,10 @@ fn a_ready_status_over_a_required_finding_fails_view() {
     ] {
         let path = output.join(name);
         let text = fs::read_to_string(&path).unwrap();
-        let (from, to) = (status.replace("{}", "NOT_READY"), status.replace("{}", "READY"));
+        let (from, to) = (
+            status.replace("{}", "NOT_READY"),
+            status.replace("{}", "READY"),
+        );
         assert!(text.contains(&from), "{name}");
         fs::write(&path, text.replace(&from, &to)).unwrap();
     }
