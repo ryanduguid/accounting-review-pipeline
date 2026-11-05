@@ -287,9 +287,9 @@ require explicit approval.
 ## Alternatives
 
 Accounting Review Pipeline's close controls read local trial balance exports and, for `drivers`,
-`classify` and `reconcile`, supplied transactions; they run no journal-level population tests. The
-Xero trial-balance exporter is the exception to local files, because it pulls through Xero OAuth/API.
-As read on 5 November 2026, these projects cover nearby ground:
+`classify` and `reconcile`, supplied transactions. None of those 3 commands is a journal-level
+population test. The Xero trial-balance exporter is the exception to local files, because it pulls
+through Xero OAuth/API. As read on 5 November 2026, these projects cover nearby ground:
 
 - [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills): agent skills and scripts
   for close, tax and audit work in US practice, which refuse to deliver a workpaper that does not tie.
