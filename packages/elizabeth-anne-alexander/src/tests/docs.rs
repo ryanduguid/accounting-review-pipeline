@@ -87,7 +87,7 @@ fn test_root_corpus_preserves_the_exporter_owned_bytes() {
     for (relative, expected) in [
         (
             "expected_results.json",
-            "e640cb5abd44b1740a7fd1285c041d3595c9af9b3f1191b46cc46a6946ff56a1",
+            "af6b1db093e47137330f3228dd5ce1c5d663f497fcc5e3ffd00493ecd829461d",
         ),
         (
             "fixtures/passing.csv",

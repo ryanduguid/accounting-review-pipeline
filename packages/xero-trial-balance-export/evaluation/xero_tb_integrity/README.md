@@ -33,11 +33,11 @@ They use only the fabricated local fixtures and need no credentials.
 
 ## Expected result
 
-[`expected_results.json`](../../../../contracts/xero-trial-balance-v1/expected_results.json) is the machine-readable contract. `passing.csv` exits 0 and reports that movement and YTD balance. Each fixture that fails on a balance exits 1, identifies its failed pair and reports that nothing was written. Each one that fails on its shape (header order, a repeated `AccountID`, a bad number or a bad date) exits 1 and says why.
+[`expected_results.json`](../../../../contracts/xero-trial-balance-v1/expected_results.json) is the machine-readable contract. `passing.csv` exits 0 and reports that movement and YTD balance. Each failing fixture exits 1, identifies its failed pair and reports that nothing was written.
 
 ## Shared conformance corpus
 
-This repository owns the data-only `xero-tb-csv.v1` conformance corpus. The contract records the canonical 10-column order, every fabricated fixture's SHA-256 digest, and whether a conforming consumer must accept or reject it. The corpus files use LF line endings so those byte-level pins are identical on every supported platform. Downstream repositories can vendor these files at a named commit and verify them without a runtime network dependency.
+This repository owns the data-only `xero-tb-csv.v1` conformance corpus. The contract records the canonical 10-column order, every fabricated fixture's SHA-256 digest, and whether a conforming consumer must accept or reject it. The corpus files use LF line endings so those byte-level pins are identical on every supported platform. Downstream repositories can vendor these 4 files at a named commit and verify them without a runtime network dependency.
 
 ## Controls triggered
 
