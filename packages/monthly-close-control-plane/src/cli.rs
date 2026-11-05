@@ -87,6 +87,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
                 "--equity-currency-evidence",
                 "--calculation-evidence",
                 "--require-calculation",
+                "--require-control",
                 "--output",
                 "--absolute-threshold",
                 "--percentage-threshold",
@@ -391,7 +392,12 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
                 pytext::repr_os(&value)
             ));
         }
-        if ["--calculation-evidence", "--require-calculation"].contains(&flag)
+        if [
+            "--calculation-evidence",
+            "--require-calculation",
+            "--require-control",
+        ]
+        .contains(&flag)
             || command == "queue" && flag == "--pack-dir"
         {
             result.0.entry(flag.into()).or_default().push(value);
@@ -488,6 +494,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.equity_currency_evidence = args.optional_literal("--equity-currency-evidence")?;
         config.calculation_evidence_paths = args.paths("--calculation-evidence");
         config.required_calculations = args.texts("--require-calculation")?;
+        config.required_controls = args.texts("--require-control")?;
         config.absolute_threshold = args.decimal("--absolute-threshold", "1000");
         config.percentage_threshold = args.decimal("--percentage-threshold", "0.10");
         config.reconciliation_tolerance = args.decimal("--reconciliation-tolerance", "0.01");
@@ -532,6 +539,13 @@ fn review(command: &str, args: &Arguments) -> i32 {
     );
     if pack.status == Status::Pass && pack.exceptions.is_empty() {
         crate::outln!("{prefix}: Nothing interesting happens.");
+    }
+    for run in &pack.required_controls {
+        crate::outln!(
+            "{prefix}: required control {}: {}",
+            run.control.as_str(),
+            run.state.as_str()
+        );
     }
     for (name, path) in ["json", "summary", "exceptions", "client_queries"]
         .iter()

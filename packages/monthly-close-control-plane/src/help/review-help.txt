@@ -8,7 +8,8 @@ usage: close-control review [-h] --current CURRENT --prior PRIOR
                             [--equity-currency EQUITY_CURRENCY]
                             [--equity-currency-evidence EQUITY_CURRENCY_EVIDENCE]
                             [--calculation-evidence PATH]
-                            [--require-calculation LABEL] --output OUTPUT
+                            [--require-calculation LABEL]
+                            [--require-control NAME] --output OUTPUT
                             [--absolute-threshold ABSOLUTE_THRESHOLD]
                             [--percentage-threshold PERCENTAGE_THRESHOLD]
                             [--reconciliation-tolerance RECONCILIATION_TOLERANCE]
@@ -44,6 +45,9 @@ options:
                         a calculation this close needs; its absence is an
                         exception, never a silent omission. Repeat for more
                         than one
+  --require-control NAME
+                        a control this close needs; if it did not run the
+                        pack is REVIEW, never PASS. Repeat for more than one
   --output OUTPUT       directory for the generated review pack
   --absolute-threshold ABSOLUTE_THRESHOLD
                         minimum absolute YTD variance for review

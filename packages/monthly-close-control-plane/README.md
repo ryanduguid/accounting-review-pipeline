@@ -485,6 +485,8 @@ every review; the others run only when their input is supplied. A control that
 ran and raised nothing has passed. One whose input was not supplied did not
 run, and the pack names the optional controls it tracks under
 `controls_not_run`. The pack takes the most severe status any control raised.
+[`--require-control`](#requiring-a-control) turns a control that did not run
+into an exception.
 
 | Control | Detects | Cannot detect | Reviewer use |
 | --- | --- | --- | --- |
@@ -500,6 +502,7 @@ run, and the pack names the optional controls it tracks under
 | `gst_reasonableness` | With `--gst-mapping` and `--gst-settlements`: `REVIEW` when the period's net GST movement, with the declared BAS payments, refunds and clearing journals added back, differs from 1/10 of taxable sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance` (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST expected on sales and purchases, a review heuristic rather than a rounding bound. `REVIEW`, with the control named under `controls_not_run`, when an account that moved has no GST class or is classed `mixed`, so the mapping cannot tell its taxable amounts from the rest, or when the settlements declaration is missing, unreadable or malformed: the control did not run. | A sale or purchase in the wrong class, such as GST charged on a GST-free sale in a taxable sales account; equal shortfalls on sales and purchases, since only the net is compared; a difference within the tolerance; and whether GST on imports, GST adjustments or the taxable part of a mixed supply is right, since the trial balance does not separate them from other GST; and whether the settlements declaration is true, since the control relies on it and cannot verify it from trial-balance movements. | Check the declared settlements against the BAS and the ATO account, then trace the rest to tax codes and postings ([GST reasonableness](#gst-reasonableness)). No client query. |
 | `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
 | `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
+| `required_control` | With `--require-control`: `REVIEW` for each named control that was skipped or failed. | Whether a control that ran was fed complete data: a subledger file with one row counts as run. | Supply the input the control needs, or remove the requirement deliberately. No client query. |
 
 ## Detection benchmark
 
@@ -617,6 +620,54 @@ the summary's scope block carries a `Controls not run` line, and
 `PASS` or `REVIEW` covers the controls that ran and says nothing about the rest,
 which is the difference between a mapping that found no exception and a mapping
 nobody supplied.
+
+## Requiring a control
+
+A `PASS` covers the controls that ran. A script that reads only the exit code
+cannot see the rest, so `--require-control NAME`, on `review` and `workbench`,
+names a control this close needs. Repeat it for more than one.
+
+```bash
+close-control review   --current examples/current_trial_balance.csv   --prior examples/prior_trial_balance.csv   --require-control subledger_reconciliation   --require-control gst_reasonableness   --output ../../../close-control-required-demo
+```
+
+Each named control ends in one of 3 states, and the pack records which:
+
+| State | Meaning | Effect |
+| --- | --- | --- |
+| `ran` | The control read its input. Anything it found is in its own exceptions. | None. A control that ran and raised still holds the pack at `REVIEW` or `BLOCKED` through those exceptions. |
+| `skipped` | Its input was not supplied. | `REVIEW` exception, exit 2. |
+| `failed` | Its input was supplied but the control could not finish on it. | `REVIEW` exception, exit 2. |
+
+The rule for each control:
+
+| Control | Counts as `ran` when | `skipped` when | `failed` when |
+| --- | --- | --- | --- |
+| The 5 that run on every review | Always | Never | Never |
+| `account_mapping` | `--mapping` was supplied | It was not | Never |
+| `mapping_compatibility` | `--mapping-policy` was supplied | It was not | Never |
+| `balance_policy` | `--balance-policy` was supplied | It was not | Never |
+| `subledger_reconciliation` | `--subledger` held at least one row | It was not supplied | The file held no rows |
+| `gst_reasonableness` | `--gst-mapping` was supplied and the control finished | No mapping was supplied | The control could not finish, as without `--gst-settlements` |
+| `calculation_evidence` | Evidence or `--require-calculation` was supplied and every file was read | Neither was supplied | A supplied file could not be read |
+| `equity_reconciliation` | `--equity-schedule` was supplied | It was not | Never |
+
+A `skipped` or `failed` control raises a `required_control` exception naming it, so
+the pack cannot reach `PASS`, and the command exits 2, never 0. No new status exists,
+and a review note does not clear the exception. An input a command cannot read at
+all stops the review before any pack is written, with exit 1.
+
+`NAME` is a control ID from [Controls](#controls), other than `required_control`.
+`subledger_reconciliation` is listed as `subledger` under `controls_not_run`;
+only the control ID is accepted here. Any other name is exit 1 with no pack,
+because a mistyped requirement would otherwise require nothing.
+
+The command prints each named control's state. The pack records them under
+`required_controls` as `name` and `state` pairs, sorted and without repeats, and on
+a `Required controls` line in the summary. `view` refuses a pack whose states
+disagree with its `required_control` exceptions. `close-control compare` reports a
+changed requirement or state under `scope_changes`. A run without the flag prints
+and writes none of this, so its output is unchanged.
 
 ## Calculation evidence, optional
 

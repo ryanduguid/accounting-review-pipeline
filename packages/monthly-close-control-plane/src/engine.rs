@@ -38,6 +38,7 @@ pub struct CloseReviewPack {
     pub acknowledgement: Option<ReviewerAcknowledgement>,
     pub calculation_evidence: Vec<CalculationEvidence>,
     pub required_calculations: Vec<String>,
+    pub required_controls: Vec<RequiredControlRun>,
     pub controls_not_run: Vec<String>,
     pub relied_on: BTreeSet<String>,
     pub equity_reconciliation: Option<Json>,
@@ -49,6 +50,33 @@ impl CloseReviewPack {
     pub fn client_queries(&self) -> Result<Vec<ClientQuery>> {
         queries::derive_client_queries(&self.exceptions)
     }
+}
+
+/// How a control named by `--require-control` fared.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunState {
+    /// It read its input. Anything it found is in its own exceptions.
+    Ran,
+    /// Its input was not supplied.
+    Skipped,
+    /// Its input was supplied, but it could not finish on it.
+    Failed,
+}
+
+impl RunState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ran => "ran",
+            Self::Skipped => "skipped",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RequiredControlRun {
+    pub control: Control,
+    pub state: RunState,
 }
 
 #[derive(Clone, Debug)]
@@ -67,6 +95,7 @@ pub struct ReviewConfig {
     pub equity_currency_evidence: Option<String>,
     pub calculation_evidence_paths: Vec<PathBuf>,
     pub required_calculations: Vec<String>,
+    pub required_controls: Vec<String>,
     pub absolute_threshold: Decimal,
     pub percentage_threshold: Decimal,
     pub reconciliation_tolerance: Decimal,
@@ -90,6 +119,7 @@ impl ReviewConfig {
             equity_currency_evidence: None,
             calculation_evidence_paths: Vec::new(),
             required_calculations: Vec::new(),
+            required_controls: Vec::new(),
             absolute_threshold: Decimal::parse("1000").unwrap(),
             percentage_threshold: Decimal::parse("0.10").unwrap(),
             reconciliation_tolerance: Decimal::parse("0.01").unwrap(),
@@ -675,6 +705,59 @@ pub fn review_close(config: &ReviewConfig) -> Result<CloseReviewPack> {
 
 /// One capture per input keeps parsing and provenance bound to the same bytes.
 /// The capture boundary also allows the frozen-oracle probe to supply snapshots.
+/// The controls `--require-control` accepts: all but the one that reports a
+/// required control missing.
+fn requirable_controls() -> impl Iterator<Item = Control> {
+    Control::ALL
+        .iter()
+        .copied()
+        .filter(|control| *control != Control::Required)
+}
+
+/// The named controls, sorted and without repeats, or a refusal: a mistyped
+/// name would otherwise require nothing and pass quietly.
+fn required_controls_named(names: &[String]) -> Result<Vec<Control>> {
+    let mut controls = Vec::new();
+    for name in names {
+        let Some(control) = requirable_controls().find(|c| c.as_str() == name) else {
+            return Err(format!(
+                "--require-control {} is not a control. Name one of: {}.",
+                pytext::repr(name),
+                requirable_controls()
+                    .map(Control::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        };
+        controls.push(control);
+    }
+    controls.sort_by_key(|control| control.as_str());
+    controls.dedup();
+    Ok(controls)
+}
+
+/// `REVIEW` for each required control that did not run to its end.
+fn required_control_exceptions(required: &[RequiredControlRun]) -> Vec<ExceptionItem> {
+    required
+        .iter()
+        .filter_map(|run| {
+            let name = run.control.as_str();
+            let outcome = match run.state {
+                RunState::Ran => return None,
+                RunState::Skipped => "was skipped: its input was not supplied",
+                RunState::Failed => "failed: its input was supplied but it could not finish",
+            };
+            Some(ExceptionItem::new(
+                Control::Required,
+                Status::Review,
+                None,
+                &format!("Required control {name} {outcome}, so this pack says nothing about it."),
+                "Supply a usable input and run the review again, or remove the requirement deliberately.",
+            ))
+        })
+        .collect()
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "captures each input once, then reviews"
@@ -778,6 +861,7 @@ pub fn review_with(
             "Review-note reviewed_on cannot be earlier than the current ReportDate.".into(),
         );
     }
+    let required_controls = required_controls_named(&config.required_controls)?;
     let current: RowMap = current_rows.iter().map(|r| (r.key(), r.clone())).collect();
     let prior: RowMap = prior_rows.iter().map(|r| (r.key(), r.clone())).collect();
     let mut gst_ran = true;
@@ -859,6 +943,46 @@ pub fn review_with(
     } else {
         None
     };
+    let calculation_evidence_ran =
+        !evidence.is_empty() || !unreadable.is_empty() || !config.required_calculations.is_empty();
+    let supplied = |present| {
+        if present {
+            RunState::Ran
+        } else {
+            RunState::Skipped
+        }
+    };
+    // No wildcard, so a new control must say how it can fail to run.
+    let run_state = |control| match control {
+        Control::TrialBalanceIntegrity
+        | Control::FinancialYearReset
+        | Control::PeriodComparison
+        | Control::PeriodVariance
+        | Control::AccountMetadata
+        | Control::Required => RunState::Ran,
+        Control::AccountMapping => supplied(config.mapping_path.is_some()),
+        Control::MappingCompatibility => supplied(mapping_policy.is_some()),
+        Control::BalancePolicy => supplied(balance_policy.is_some()),
+        Control::SubledgerReconciliation
+            if config.subledger_path.is_some() && subledger.is_empty() =>
+        {
+            RunState::Failed
+        }
+        Control::SubledgerReconciliation => supplied(!subledger.is_empty()),
+        Control::GstReasonableness if gst_mapping.is_some() && !gst_ran => RunState::Failed,
+        Control::GstReasonableness => supplied(gst_mapping.is_some()),
+        Control::CalculationEvidence if !unreadable.is_empty() => RunState::Failed,
+        Control::CalculationEvidence => supplied(calculation_evidence_ran),
+        Control::EquityReconciliation => supplied(equity_source.is_some()),
+    };
+    let required_controls: Vec<_> = required_controls
+        .into_iter()
+        .map(|control| RequiredControlRun {
+            control,
+            state: run_state(control),
+        })
+        .collect();
+    exceptions.extend(required_control_exceptions(&required_controls));
     for item in &mut exceptions {
         item.review_group = mapping.get(&item.account_id).cloned().unwrap_or_default();
     }
@@ -895,12 +1019,7 @@ pub fn review_with(
         ("subledger", !subledger.is_empty()),
         // Tracked only once a GST mapping is supplied, so packs without one are unchanged.
         ("gst_reasonableness", gst_ran),
-        (
-            "calculation_evidence",
-            !evidence.is_empty()
-                || !unreadable.is_empty()
-                || !config.required_calculations.is_empty(),
-        ),
+        ("calculation_evidence", calculation_evidence_ran),
     ]
     .into_iter()
     .filter(|(_, ran)| !ran)
@@ -950,6 +1069,7 @@ pub fn review_with(
         acknowledgement,
         calculation_evidence: evidence,
         required_calculations: config.required_calculations.clone(),
+        required_controls,
         controls_not_run,
         relied_on,
         equity_reconciliation: equity_result,

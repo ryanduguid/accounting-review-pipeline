@@ -34,12 +34,13 @@ const REQUIRED: [&str; 7] = [
     "source_sha256",
     "thresholds",
 ];
-const OPTIONAL: [&str; 5] = [
+const OPTIONAL: [&str; 6] = [
     "client_queries",
     "calculation_evidence",
     "controls_not_run",
     "equity_reconciliation",
     "producer",
+    "required_controls",
 ];
 const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const THRESHOLDS: [&str; 3] = [
@@ -95,6 +96,45 @@ fn string_list<'a>(document: &'a Json, member: &str) -> Result<&'a [Json]> {
         .as_array()
         .filter(|v| v.iter().all(|s| s.as_pystr().is_some()))
         .ok_or_else(|| format!("{J}: {member} must be a list of strings"))
+}
+/// Each required control as the summary prints it. A control that did not run
+/// must have its exception, or an edited state could pass off a gap as coverage.
+fn required_control_runs(document: &Json) -> Result<Vec<String>> {
+    let invalid = || format!("{J}: required_controls must be a non-empty list of names and states");
+    let runs = document
+        .at("required_controls")
+        .as_array()
+        .filter(|runs| !runs.is_empty())
+        .ok_or_else(invalid)?;
+    let mut printed = Vec::new();
+    let mut unmet = 0;
+    for run in runs {
+        let strings = ["name", "state"].map(|key| run.get(key).and_then(Json::as_pystr));
+        if !run.has_exact_keys(&["name", "state"]) || strings.contains(&None) {
+            return Err(invalid());
+        }
+        let name = text(run.at("name"));
+        let state = text(run.at("state"));
+        match state.as_str() {
+            "ran" => {}
+            "skipped" | "failed" => unmet += 1,
+            _ => return Err(invalid()),
+        }
+        printed.push(report::required_control_run(&name, &state));
+    }
+    let raised = document
+        .at("exceptions")
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row.at("control").is_str("required_control"))
+        .count();
+    if raised != unmet {
+        return Err(format!(
+            "{J}: required_controls lists {unmet} control(s) that did not run but exceptions hold {raised}"
+        ));
+    }
+    Ok(printed)
 }
 fn keys(value: &Json) -> Vec<PyStr> {
     let mut keys: Vec<_> = value.keys().unwrap().into_iter().cloned().collect();
@@ -669,6 +709,11 @@ fn expected_scope(document: &Json, register: bool) -> Result<Vec<String>> {
             "- Controls not run: {}.",
             if skipped.is_empty() { "none" } else { &skipped }
         ));
+    }
+    if document.get("required_controls").is_some() {
+        lines.push(report::required_controls_line(&required_control_runs(
+            document,
+        )?));
     }
     lines.extend(gst_tolerance_line(document));
     lines.extend(document.get("producer").map(report::producer_line));
@@ -1433,6 +1478,11 @@ pub fn render_verified(pack: &VerifiedPack) -> Result<String> {
             "- Controls not run: {}.",
             if skipped.is_empty() { "none" } else { &skipped }
         ));
+    }
+    if document.get("required_controls").is_some() {
+        lines.push(report::required_controls_line(&required_control_runs(
+            document,
+        )?));
     }
     lines.extend(gst_tolerance_line(document));
     lines.extend(document.get("producer").map(report::producer_line));

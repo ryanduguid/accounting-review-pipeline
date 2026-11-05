@@ -13,6 +13,12 @@
 - `reconcile` names outstanding items carried over more than one period in
   `review.html` and in a new `carried_over` key in `reconciliation.json`, which
   appears only when there is such an item. Runs without one keep their bytes.
+- `review` and `workbench` take a repeatable `--require-control NAME`. A named
+  control that was skipped or failed raises a `REVIEW` exception from the new
+  `required_control` control, so the pack cannot reach `PASS`. An unknown name is
+  exit 1. Packs record each name and state in a new `required_controls` key, which appears
+  only when the flag is used; runs without it keep their bytes. `--require` no
+  longer abbreviates `--require-calculation`, as it now matches 2 options.
 - Preserve the original decimal contexts, input validation, source hashes,
   spreadsheet guards, four-file rollback and read-only pack verification.
 - Match Python's shortest floating-point spelling when hashing calculation
