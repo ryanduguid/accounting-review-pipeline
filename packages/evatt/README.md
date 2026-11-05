@@ -163,10 +163,15 @@ real workpapers, and [Detection benchmark](#detection-benchmark) measures fabric
 ones only. The fabricated `negatives.md` sample now halts on its 8-digit statutory
 reference.
 
-Digit groups further apart than that are joined only to test them. If they pass a
-TFN, ACN, Medicare or ABN check they halt as one number, whether they are split by
-wider spacing, a spaced dash, a soft hyphen, a zero-width space, emphasis marks,
-`<br>` or a line wrap, within a blockquote or not.
+Digit groups further apart than that are joined only to test them, across any
+same-line gap that holds no letter, digit or `#`: wider spacing, a spaced dash, `|`,
+`;`, `:`, brackets, emphasis marks, a soft hyphen, a zero-width or other format
+character, `&nbsp;` or a tag such as `<td>`. Every 9, 10 and 11 digit stretch is
+tested against the TFN, ACN, Medicare and ABN checks, so a digit touching the number
+does not hide it, and a pass halts on the whole span. A line wrap, within a blockquote
+or not, joins whole groups only. An amount with cents, as in `1,234.56`, ends a
+stretch; other numbers sharing a line do not, so a column of whole dollars nearly
+always halts.
 
 This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
@@ -290,14 +295,22 @@ an extra placeholder costs a triage decision whilst a miss leaks.
   is replaced; the reference alone is below the number sweep's 8-digit floor.
   Ryan accepted this limit on 11 October 2026 (DECISIONS.md ruling 47).
 - **Digit groups split wider than a token gap are caught only by their check
-  digit.** `123   456   782` halts because its digits pass a TFN check. Groups
-  that pass no check still go through without a halt, and so does a number split
-  across a blank line. A labelled number with
+  digit.** `123   456   782` halts because its digits pass a TFN check. These pass
+  without a halt, each pinned by `tests/redaction_property.rs`: groups that pass no
+  check, including any 8 digit number such as `12   345   678`; a group written as
+  money, as in `1234.56   782`; a gap holding a letter, a digit or `#`, as in
+  `123 and 456 and 782`; a digit in a tag between groups; a digit touching a number
+  that also wraps across lines, as in `9123   456` above `782`; and a gap holding a
+  blank line, as in `123   456` then a blank line then `782`. Groups written alone
+  on their own paragraphs, `123`, `456`, `782`, and the ABN equivalent are different:
+  the structured pattern replaces them. A labelled number with
   another digit group up to 2 spaces after it, as in `TFN: 123456783 2026`, can fail
   structured detection and now reaches the number halt when the full token
   meets its rules. `Client TFN is 123 456 789` replaces the TFN but still halts
   on the name candidate `Client TFN`; `Tax File Number (TFN)` can likewise
-  report `File Number`. These name false positives need a mapped entity.
+  report `File Number`, and `Net GST`, `Fund ABN` and `Director's TFN` are reported
+  the same way. A name candidate can run across a blank line, so 2 headings can
+  come back as one value. These name false positives need a mapped entity.
 - **A mapped name is matched through the markdown most documents put in it.**
   `_Jane Roe_`, `**Jane Roe**`, `Jane<br>Roe` in a table cell, a name wrapped
   inside a blockquote, `Jane_Roe` and a zero-width joiner between the words are
@@ -317,31 +330,47 @@ document before you send it.
 ## Detection benchmark
 
 `tests/benchmark.rs` fills the fabricated workpapers in `evaluation/workpapers`
-from one seed, 20 documents each: half with every name, address and date in the
+from one seed, 100 documents each: half with every name, address and date in the
 entity map, half with only the client and other entities mapped. A planted value is
 an identifier, name, address or date that must be replaced or named by a halt, and
 a miss is one left in the output with no candidate naming it. A blind-spot value
 comes from the limits above and is expected to pass unnoticed: a 6 or 7 digit
 account number, an initial or a name in lower case. A false halt is a fully mapped
-document that still halts. A false candidate names no planted value. Halt rate is
-the share of documents that halt. The counts measure these fabricated documents
-only, not accuracy on real workpapers. `cargo test --test benchmark` fails when
-this table, its header or its totals drift from the corpus.
+document that halts on a false candidate. A false candidate names no planted value.
+Halt rate is the share of documents that halt. The counts measure these fabricated
+documents only, not accuracy on real workpapers. `cargo test --test benchmark` fails
+when this table, its header or its totals drift from the corpus.
 
 | Workpaper | Documents | Planted values | Misses | Blind-spot values missed | False halts | False candidates | Halt rate |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `bank-reconciliation` | 20 | 120 | 0 | 20 of 20 | 10 | 40 | 100.0% |
-| `client-queries` | 20 | 120 | 0 | 0 of 0 | 10 | 60 | 100.0% |
-| `close-review` | 20 | 60 | 0 | 0 of 0 | 10 | 110 | 100.0% |
-| `director-loan` | 20 | 200 | 0 | 40 of 40 | 10 | 20 | 100.0% |
-| `gst-tie-out` | 20 | 160 | 0 | 20 of 20 | 10 | 40 | 100.0% |
-| `payroll-tie-out` | 20 | 260 | 0 | 0 of 0 | 10 | 40 | 100.0% |
-| Total | 120 | 920 | 0 | 80 of 80 | 60 | 310 | 100.0% |
+| `bank-reconciliation` | 100 | 600 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `client-queries` | 100 | 600 | 0 | 0 of 0 | 50 | 300 | 100.0% |
+| `close-review` | 100 | 300 | 0 | 0 of 0 | 50 | 546 | 100.0% |
+| `columnar-balances` | 100 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
+| `columnar-whole-dollars` | 100 | 0 | 0 | 0 of 0 | 50 | 637 | 100.0% |
+| `director-loan` | 100 | 1000 | 0 | 199 of 200 | 50 | 100 | 100.0% |
+| `gst-tie-out` | 100 | 800 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `payroll-tie-out` | 100 | 1300 | 0 | 0 of 0 | 50 | 200 | 100.0% |
+| `split-identifiers` | 100 | 400 | 0 | 0 of 0 | 0 | 0 | 100.0% |
+| Total | 900 | 5000 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
 
-Every document halts, including all 60 fully mapped ones: expect to triage a
-workpaper before it clears. The false candidates here are capitalised phrases such
-as `Business Bank Account` and `Trade Debtors`, month names, and runs of 8 or more
-digits inside SHA-256 digests. Mapping a phrase as an `entity` clears it.
+0 misses does not mean nothing gets through. Planted values are the shapes the sweep
+was built for; the hard cases are the blind-spot values, and 399 of 400 passed. Each row repeats one
+template with fixed prose and only its slots varying, so the sample behaves like 9
+templates, not 900 independent documents, and a halt rate mostly reports that prose.
+
+`split-identifiers` spells each identifier with one of 7 gaps no structured pattern
+takes, and every document halts as it should. `columnar-balances` holds only amounts
+with cents, in aligned columns, one per line and in a table, and none halts.
+`columnar-whole-dollars` is the same layout without cents, and all 100 halt: joining
+every stretch of digits costs that. Inference, not a measurement of real files: expect
+to triage any workpaper holding capitalised phrases or a column of whole numbers.
+
+The other false candidates here are capitalised phrases such as
+`Business Bank Account`, `Trade Debtors`, `Net GST`, `Fund ABN` and `Director's TFN`,
+month names, and runs of 8 or more digits inside SHA-256 digests. Mapping a phrase or
+a whole-number span as an `entity` clears it. A map cannot clear a run inside a
+digest, because an entry does not match inside a longer word.
 
 ## The entity map
 

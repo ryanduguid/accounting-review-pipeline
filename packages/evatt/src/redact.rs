@@ -230,27 +230,73 @@ enum Gap {
     /// Crossed by the token scan.
     Token,
     /// Too wide for a token, or holding marks a token stops at, yet still inside
-    /// one printed number: PDF text pads digit groups and Markdown wraps them.
+    /// one printed number as far as anyone can tell.
     Split,
+    /// A line break in a wrap's shape. It joins whole groups only.
+    Wrap,
     Break,
 }
 
+/// What lies between 2 digit runs. A letter or a digit ends a number, and so does
+/// `#`, which is what a mask writes over a date, an address or a placeholder. Any
+/// other same-line gap is a possible number; a line break needs a wrap's shape.
 fn gap(text: &str) -> Result<Gap> {
     if text.chars().count() <= 2 && text.chars().all(|c| NUMBER_SEPARATORS.contains(c)) {
         return Ok(Gap::Token);
+    }
+    if text.chars().any(|c| c.is_alphanumeric() || c == '#') {
+        return Ok(Gap::Break);
+    }
+    if !text.contains('\n') {
+        return Ok(Gap::Split);
     }
     let marks: String = text
         .chars()
         .filter(|c| !('\u{2010}'..='\u{2015}').contains(c) && !['-', '\u{2212}', '\u{ad}'].contains(c))
         .collect();
     let one_line = marks.matches('\n').count() <= 1;
-    Ok(
-        if one_line && (marks.is_empty() || patterns::full("_JOIN_SPLIT", &marks)?) {
-            Gap::Split
-        } else {
-            Gap::Break
-        },
-    )
+    Ok(if one_line && patterns::full("_JOIN_SPLIT", &marks)? {
+        Gap::Wrap
+    } else {
+        Gap::Break
+    })
+}
+
+/// `text` with its tags and character references blanked byte for byte, so
+/// offsets still hold. A tag keeps its digits: a number can sit in an attribute.
+fn without_markup(text: &str) -> String {
+    let mut bytes = text.as_bytes().to_vec();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let rest = &text.as_bytes()[cursor..];
+        let length = match rest[0] {
+            b'<' if rest.get(1).is_some_and(|b| b.is_ascii_alphabetic() || *b == b'/') => rest
+                .iter()
+                .position(|b| matches!(b, b'>' | b'\n'))
+                .filter(|end| rest[*end] == b'>')
+                .map(|end| (end + 1, true)),
+            b'&' => rest
+                .iter()
+                .take(12)
+                .skip(1)
+                .position(|b| !(b.is_ascii_alphanumeric() || *b == b'#'))
+                .filter(|end| *end > 0 && rest[end + 1] == b';')
+                .filter(|_| rest[1].is_ascii_alphabetic() || rest[1] == b'#')
+                .map(|end| (end + 2, false)),
+            _ => None,
+        };
+        let Some((length, keep_digits)) = length else {
+            cursor += 1;
+            continue;
+        };
+        for byte in &mut bytes[cursor..cursor + length] {
+            if !(keep_digits && byte.is_ascii_digit()) {
+                *byte = b' ';
+            }
+        }
+        cursor += length;
+    }
+    String::from_utf8(bytes).expect("only whole characters between ASCII marks were blanked")
 }
 
 /// Each run of decimal digits, as byte offsets.
@@ -277,32 +323,118 @@ fn passes_identifier_check(digits: &str) -> Result<bool> {
     Ok(false)
 }
 
-/// Digit runs no token joins that together pass a TFN, ACN, Medicare or ABN
-/// check, as byte offsets. The check digit keeps columns of ordinary numbers out.
-/// Every run is a start, because digits before an identifier can themselves
-/// complete a check, and a start stops after 11 digits, so each run is visited a
-/// bounded number of times.
-fn split_identifiers(text: &str) -> Result<Vec<(usize, usize)>> {
-    let runs = digit_runs(text);
-    let gaps = runs
-        .windows(2)
-        .map(|pair| gap(&text[pair[0].1..pair[1].0]))
-        .collect::<Result<Vec<_>>>()?;
+/// Each 9, 10 and 11 digit window of one chain of runs that crosses a split gap
+/// and passes a check, as the byte span of the runs it touches. A digit touching
+/// the number stays in the span, and a window can start or end inside a run,
+/// unless it crosses a wrap: an invalid number wrapped across lines must not halt
+/// on some part of it.
+fn chain_identifiers(
+    text: &str,
+    runs: &[(usize, usize)],
+    gaps: &[Gap],
+    stats: &mut ScanStats,
+) -> Result<Vec<(usize, usize)>> {
     let mut found = Vec::new();
-    for first in 0..runs.len() {
-        let mut digits = text[runs[first].0..runs[first].1].to_owned();
-        let mut split = false;
-        let mut last = first;
-        while last + 1 < runs.len() && gaps[last] != Gap::Break && digits.chars().count() < 11 {
-            split |= gaps[last] == Gap::Split;
-            last += 1;
-            digits.push_str(&text[runs[last].0..runs[last].1]);
-            if split && passes_identifier_check(&digits)? {
-                found.push((runs[first].0, runs[last].1));
+    if gaps.iter().all(|gap| *gap == Gap::Token) {
+        return Ok(found);
+    }
+    let digits: Vec<(char, usize, usize)> = runs
+        .iter()
+        .enumerate()
+        .flat_map(|(index, run)| {
+            text[run.0..run.1]
+                .char_indices()
+                .map(move |(offset, c)| (c, index, run.0 + offset))
+        })
+        .collect();
+    for width in 9..=11 {
+        for window in digits.windows(width) {
+            stats.candidate();
+            let (first, last) = (window[0], window[width - 1]);
+            let (head, tail) = (first.1, last.1);
+            let crossed = &gaps[head..tail];
+            let whole_runs = first.2 == runs[head].0 && last.2 + last.0.len_utf8() == runs[tail].1;
+            if crossed.iter().any(|gap| *gap != Gap::Token) && (whole_runs || !crossed.contains(&Gap::Wrap)) {
+                let joined: String = window.iter().map(|digit| digit.0).collect();
+                if passes_identifier_check(&joined)? {
+                    found.push((runs[head].0, runs[tail].1));
+                }
             }
         }
     }
     Ok(found)
+}
+
+/// Which runs are written as money, as in `1,234.56`: digits, a point and 2 more,
+/// with any comma groups before them.
+fn money_runs(text: &str, runs: &[(usize, usize)]) -> Vec<bool> {
+    let between = |index: usize| &text[runs[index].1..runs[index + 1].0];
+    let width = |index: usize| runs[index].1 - runs[index].0;
+    let mut money = vec![false; runs.len()];
+    for last in 1..runs.len() {
+        if between(last - 1) == "." && width(last) == 2 {
+            let mut first = last - 1;
+            while first > 0 && between(first - 1) == "," && width(first) == 3 {
+                first -= 1;
+            }
+            money[first..=last].fill(true);
+        }
+    }
+    money
+}
+
+/// Digit runs no token joins that together pass a TFN, ACN, Medicare or ABN
+/// check, as byte offsets. A check digit passes about 1 time in 10, and every
+/// window is a fresh try, so a chain of ordinary numbers would nearly always
+/// halt. Money ends a chain for that reason; other numbers that share a line or
+/// wrap across lines can halt, as the columnar rows of the README's benchmark
+/// show. Each chain is walked once, so the work grows with the digits in the text.
+fn split_identifiers(text: &str, stats: &mut ScanStats) -> Result<Vec<(usize, usize)>> {
+    let text = without_markup(text);
+    let runs = digit_runs(&text);
+    let money = money_runs(&text, &runs);
+    let gaps = runs
+        .windows(2)
+        .zip(money.windows(2))
+        .map(|(pair, money)| {
+            let between = &text[pair[0].1..pair[1].0];
+            let inside = money[0] && money[1] && matches!(between, "." | ",");
+            if (money[0] || money[1]) && !inside {
+                Ok(Gap::Break)
+            } else {
+                gap(between)
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut found = Vec::new();
+    let mut first = 0;
+    while first < runs.len() {
+        let mut last = first;
+        while last < gaps.len() && gaps[last] != Gap::Break {
+            last += 1;
+        }
+        found.extend(chain_identifiers(
+            &text,
+            &runs[first..=last],
+            &gaps[first..last],
+            stats,
+        )?);
+        first = last + 1;
+    }
+    Ok(found)
+}
+
+/// Whether `tokens` already name every digit of `span`, so that a halt quotes
+/// them apart and each stays one value in triage.
+fn named_by_tokens(text: &str, tokens: &[(usize, usize)], span: (usize, usize)) -> bool {
+    text[span.0..span.1]
+        .char_indices()
+        .filter(|(_, c)| pytext::is_decimal(*c as u32))
+        .all(|(offset, _)| {
+            let at = span.0 + offset;
+            let next = tokens.partition_point(|&(_, end)| end <= at);
+            tokens.get(next).is_some_and(|&(start, _)| start <= at)
+        })
 }
 
 pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
@@ -338,7 +470,12 @@ pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
         }
         found.push((start, end));
     }
-    found.extend(split_identifiers(text)?);
+    let split = split_identifiers(text, &mut stats)?;
+    let split: Vec<_> = split
+        .into_iter()
+        .filter(|span| !named_by_tokens(text, &found, *span))
+        .collect();
+    found.extend(split);
     let spans = patterns::merge(found)
         .into_iter()
         .map(|(start, end)| Span {

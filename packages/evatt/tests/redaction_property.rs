@@ -1,17 +1,19 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
-//! A checksum-valid TFN or ABN planted in random Markdown never survives: redact
-//! replaces it, or the run halts on a candidate that holds it. Numbers are made
-//! up as the test runs and persist nowhere, so no failure file can hold one.
+//! A checksum-valid TFN, ABN, ACN or Medicare number planted in random Markdown
+//! never survives: redact replaces it, or the run halts on a candidate that holds
+//! it. Numbers are made up as the test runs and persist nowhere, so no failure
+//! file can hold one.
 use evatt::{patterns, redact};
 use proptest::{prelude::*, test_runner::Config};
 
 const TFN_GROUPS: [usize; 3] = [3, 3, 3];
 const ABN_GROUPS: [usize; 4] = [2, 3, 3, 3];
+const MEDICARE_GROUPS: [usize; 3] = [4, 5, 1];
 
 /// What can sit between digit groups in a workpaper or a PDF conversion.
-const GAPS: [&str; 26] = [
+const GAPS: [&str; 46] = [
     "",
     " ",
     "  ",
@@ -38,6 +40,26 @@ const GAPS: [&str; 26] = [
     "**",
     "_",
     "<br>",
+    " / ",
+    " . ",
+    " , ",
+    ",   ",
+    ".   ",
+    "; ",
+    ":",
+    ") (",
+    " | ",
+    "|",
+    "\u{feff}",
+    "\u{200e}",
+    "\u{180e}",
+    "\u{ff0d}",
+    "~~",
+    "`",
+    "&nbsp;",
+    "&#160;",
+    "<td>",
+    "<span>",
 ];
 
 /// Markdown around the number, as the text before it and the text after it.
@@ -97,6 +119,23 @@ fn abn(tail: Vec<u8>) -> String {
         .expect("the 90 check pairs cover every remainder modulo 89")
 }
 
+fn acn(head: Vec<u8>) -> String {
+    let head: String = head.iter().map(|d| char::from(b'0' + d)).collect();
+    (0..=9)
+        .map(|check| format!("{head}{check}"))
+        .find(|digits| patterns::valid("acn", digits).unwrap())
+        .expect("the check digit is a remainder from 0 to 9")
+}
+
+/// A card number: the check digit sits in the ninth place, before the issue digit.
+fn medicare(digits: Vec<u8>) -> Option<String> {
+    let digits: String = digits.iter().map(|d| char::from(b'0' + d)).collect();
+    let (head, issue) = digits.split_at(8);
+    (0..=9)
+        .map(|check| format!("{head}{check}{issue}"))
+        .find(|number| patterns::valid("medicare", number).unwrap())
+}
+
 /// The digits and the widths of their usual groups.
 fn identifier() -> impl Strategy<Value = (String, &'static [usize])> {
     prop_oneof![
@@ -104,6 +143,21 @@ fn identifier() -> impl Strategy<Value = (String, &'static [usize])> {
             .prop_filter_map("no check digit fits", tfn)
             .prop_map(|digits| (digits, TFN_GROUPS.as_slice())),
         prop::collection::vec(0u8..=9, 9).prop_map(|tail| (abn(tail), ABN_GROUPS.as_slice())),
+        prop::collection::vec(0u8..=9, 8).prop_map(|head| (acn(head), TFN_GROUPS.as_slice())),
+        (2u8..=6, prop::collection::vec(0u8..=9, 8)).prop_filter_map("no check digit fits", |(first, rest)| {
+            let digits = std::iter::once(first).chain(rest).collect();
+            medicare(digits).map(|number| (number, MEDICARE_GROUPS.as_slice()))
+        }),
+    ]
+}
+
+/// A listed gap, or any same-line text that holds no letter or digit.
+fn gap() -> impl Strategy<Value = String> {
+    prop_oneof![
+        prop::sample::select(GAPS.as_slice()).prop_map(str::to_owned),
+        r"[^\p{L}\p{N}#\n]{1,8}".prop_filter("a letter by another name", |gap| {
+            !gap.chars().any(char::is_alphanumeric)
+        }),
     ]
 }
 
@@ -159,7 +213,12 @@ fn surviving_digits(text: &str) -> String {
 #[test]
 fn every_spelling_in_every_context_is_replaced_or_flagged() {
     let mut survivors = Vec::new();
-    for (number, groups) in [("123456782", &TFN_GROUPS[..]), ("51824753556", &ABN_GROUPS[..])] {
+    for (number, groups) in [
+        ("123456782", &TFN_GROUPS[..]),
+        ("51824753556", &ABN_GROUPS[..]),
+        ("004085616", &TFN_GROUPS[..]),
+        ("2123456701", &MEDICARE_GROUPS[..]),
+    ] {
         for gap in GAPS {
             for (open, close) in CONTEXTS {
                 let plant = spelled(number, groups, gap);
@@ -175,21 +234,140 @@ fn every_spelling_in_every_context_is_replaced_or_flagged() {
     assert!(survivors.is_empty(), "{} survived: {survivors:#?}", survivors.len());
 }
 
+/// Each document holds the number, and a candidate must quote all of it.
+fn hidden<'a>(cases: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
+    let mut hidden = cases.to_vec();
+    hidden.retain(|(document, number)| {
+        let result = redact::redact(document, &[]).unwrap();
+        !result.unknowns.iter().any(|u| digits(&u.value).contains(number))
+    });
+    hidden
+}
+
 /// Digits beside the number once chained into a shorter match that hid its tail,
 /// or into a token the number's own candidate was then dropped for.
 #[test]
 fn digits_beside_a_split_number_never_hide_it() {
-    let hidden: Vec<_> = [
+    let found = hidden(&[
         ("1. 63   095   645   545\n", "63095645545"),
         ("12345678 123   456   782\n", "123456782"),
-    ]
-    .into_iter()
-    .filter(|(document, number)| {
+    ]);
+    assert!(found.is_empty(), "{found:?}");
+}
+
+/// A digit run was once atomic, so digits touching the number hid it.
+#[test]
+fn digits_touching_a_split_number_never_hide_it() {
+    let found = hidden(&[
+        ("9123   456   782\n", "123456782"),
+        ("123   456   7829\n", "123456782"),
+        ("2026123   456   782\n", "123456782"),
+        ("951   824   753   556\n", "51824753556"),
+        ("51   824   753   5569\n", "51824753556"),
+    ]);
+    assert!(found.is_empty(), "{found:?}");
+}
+
+/// Gaps with no letter or digit in them, which a list of joiners once missed.
+#[test]
+fn a_gap_with_no_letter_or_digit_never_hides_a_number() {
+    let number = "123456782";
+    let found = hidden(&[
+        ("123 / 456 / 782\n", number),
+        ("123 . 456 . 782\n", number),
+        ("123 , 456 , 782\n", number),
+        ("123,   456,   782\n", number),
+        ("123.   456.   782\n", number),
+        ("123; 456; 782\n", number),
+        ("123:456:782\n", number),
+        ("(123) (456) (782)\n", number),
+        ("| 123 | 456 | 782 |\n", number),
+        ("123|456|782\n", number),
+        ("123\u{feff}456\u{feff}782\n", number),
+        ("123\u{200e}456\u{200e}782\n", number),
+        ("123\u{180e}456\u{180e}782\n", number),
+        ("123\u{ff0d}456\u{ff0d}782\n", number),
+        ("123~~456~~782\n", number),
+        ("123`456`782\n", number),
+        ("123&nbsp;456&nbsp;782\n", number),
+        ("123&456&782;\n", number),
+        ("<td>123</td><td>456</td><td>782</td>\n", number),
+        ("<span>123</span> <span>456</span> <span>782</span>\n", number),
+    ]);
+    assert!(found.is_empty(), "{found:?}");
+    // The halt quotes the span, so the reference's own digits sit inside the value.
+    let spelled = "123&#160;456&#160;782";
+    let unknowns = redact::redact(&format!("{spelled}\n"), &[]).unwrap().unknowns;
+    assert!(unknowns.iter().any(|u| u.value == spelled), "{unknowns:?}");
+}
+
+/// A chain of money would nearly always pass a check somewhere, so money ends one.
+/// The digits of each row hold a valid TFN across the gap.
+#[test]
+fn amounts_side_by_side_do_not_join() {
+    for document in [
+        "$1234.56   $782.00\n",
+        "| 1234.56 | 782.00 |\n",
+        "1,234.56 / 782.00\n",
+        "1234.56\n782.00\n",
+        "(1,234.56)   (782.00)\n",
+    ] {
         let result = redact::redact(document, &[]).unwrap();
-        !result.unknowns.iter().any(|u| digits(&u.value).contains(number))
-    })
-    .collect();
-    assert!(hidden.is_empty(), "{hidden:?}");
+        assert!(result.unknowns.is_empty(), "{document:?}: {:?}", result.unknowns);
+    }
+}
+
+/// A valid number wrapped across lines still halts; a digit beside it does not
+/// make part of an invalid one halt. Python 0.2.0 holds the second half.
+#[test]
+fn a_wrap_joins_whole_groups_only() {
+    assert!(hidden(&[("123   456\n782\n", "123456782")]).is_empty());
+    let result = redact::redact("51 824\n753557. next\n", &[]).unwrap();
+    assert!(result.unknowns.is_empty(), "{:?}", result.unknowns);
+}
+
+/// Tokens the sweep already names stay separate values, line by line.
+#[test]
+fn a_split_window_over_named_tokens_adds_nothing() {
+    let unknowns = redact::redact("1234 5678; 8765 4321\n", &[]).unwrap().unknowns;
+    let values: Vec<_> = unknowns.iter().map(|u| u.value.to_string()).collect();
+    assert_eq!(values, ["1234 5678", "8765 4321"]);
+}
+
+/// The README's limits: each of these leaves redaction with no halt.
+#[test]
+fn the_documented_limits_still_pass() {
+    for document in [
+        "12   345   678\n",
+        "1234.56   782\n",
+        "123 and 456 and 782\n",
+        "123 # 456 # 782\n",
+        "123   456\n\n782\n",
+        "9123   456\n782\n",
+        "<td id=\"7\">123</td><td id=\"7\">456</td><td id=\"7\">782</td>\n",
+    ] {
+        let result = redact::redact(document, &[]).unwrap();
+        assert!(result.unknowns.is_empty(), "{document:?}: {:?}", result.unknowns);
+    }
+}
+
+/// The name pattern is frozen with the Python contract, and it crosses blank lines.
+#[test]
+fn a_name_candidate_can_cross_a_blank_line() {
+    let unknowns = redact::redact("Bank Balance\n\nTrade Debtors\n", &[]).unwrap().unknowns;
+    assert!(
+        unknowns.iter().any(|u| u.value.to_string().contains("\n\n")),
+        "{unknowns:?}"
+    );
+}
+
+/// The structured pattern takes this spelling, so no sweep need hold it.
+#[test]
+fn groups_on_their_own_paragraphs_are_replaced() {
+    for (document, group) in [("123\n\n456\n\n782\n", "456"), ("51\n\n824\n\n753\n\n556\n", "824")] {
+        let result = redact::redact(document, &[]).unwrap();
+        assert!(!surviving_digits(&result.text).contains(group), "{}", result.text);
+    }
 }
 
 proptest! {
@@ -202,14 +380,14 @@ proptest! {
     #[test]
     fn a_planted_tfn_or_abn_never_survives_redaction(
         (number, groups) in identifier(),
-        gap in prop::sample::select(GAPS.as_slice()),
+        gap in gap(),
         context in prop::sample::select(CONTEXTS.as_slice()),
         before in filler(),
         after in filler(),
         crlf: bool,
     ) {
         let (open, close) = context;
-        let plant = spelled(&number, groups, gap);
+        let plant = spelled(&number, groups, &gap);
         let document = format!("{before}\n{open}{plant}{close}\n{after}");
         let document = if crlf { document.replace('\n', "\r\n") } else { document };
         let result = redact::redact(&document, &[]).unwrap();

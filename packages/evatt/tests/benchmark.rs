@@ -13,7 +13,7 @@ use std::path::Path;
 const README: &str = include_str!("../README.md");
 const SEED: u64 = 20_261_106;
 /// Documents per template: half with every name in the map, half without.
-const DOCUMENTS: usize = 20;
+const DOCUMENTS: usize = 100;
 const GIVEN: [&str; 8] = ["Aris", "Bryn", "Cato", "Dara", "Elio", "Fenn", "Galen", "Hana"];
 const FAMILY: [&str; 8] = [
     "Varrock",
@@ -36,6 +36,15 @@ const PHONES: [&str; 6] = [
     "0491 570 159",
 ];
 const STREETS: [&str; 3] = ["Street", "Road", "Avenue"];
+/// Spellings the structured patterns do not take, so only the number sweep can
+/// catch them.
+const SPLIT_GAPS: [&str; 7] = ["   ", " - ", " | ", " / ", "\u{200b}", "<br>", "~~"];
+const IDENTIFIERS: [(&str, usize, &[usize]); 4] = [
+    ("tfn", 9, &[3, 3, 3]),
+    ("abn", 11, &[2, 3, 3, 3]),
+    ("acn", 9, &[3, 3, 3]),
+    ("medicare", 10, &[4, 5, 1]),
+];
 const MONTHS: [&str; 4] = ["March", "June", "October", "December"];
 const HEADER: [&str; 2] = [
     "| Workpaper | Documents | Planted values | Misses | Blind-spot values missed | False halts | False candidates | Halt rate |",
@@ -97,18 +106,27 @@ struct Document {
     entries: Vec<Entity>,
 }
 
-fn grouped(digits: &str, widths: &[usize]) -> String {
+fn spelled(digits: &str, widths: &[usize], gap: &str) -> String {
     let mut parts = Vec::new();
     let mut start = 0;
     for width in widths {
         parts.push(&digits[start..start + width]);
         start += width;
     }
-    parts.join(" ")
+    parts.join(gap)
+}
+
+fn grouped(digits: &str, widths: &[usize]) -> String {
+    spelled(digits, widths, " ")
 }
 
 fn person(rng: &mut Rng) -> String {
     format!("{} {}", rng.pick(&GIVEN), rng.pick(&FAMILY))
+}
+
+fn whole_dollars(rng: &mut Rng) -> String {
+    let whole = rng.below(900_000) + 1_000;
+    format!("{},{:03}", whole / 1_000, whole % 1_000)
 }
 
 fn amount(rng: &mut Rng) -> String {
@@ -116,13 +134,21 @@ fn amount(rng: &mut Rng) -> String {
     format!("${},{:03}.{:02}", whole / 1_000, whole % 1_000, rng.below(100))
 }
 
+/// A checksum-valid number in its groups, wide apart for a `_split` kind.
+fn identifier(kind: &str, rng: &mut Rng) -> Option<String> {
+    let bare = kind.strip_suffix("_split").unwrap_or(kind);
+    let (_, count, widths) = IDENTIFIERS.iter().find(|identifier| identifier.0 == bare)?;
+    let gap = (bare != kind).then(|| rng.pick(&SPLIT_GAPS));
+    let digits = rng.checked(bare, *count);
+    Some(gap.map_or_else(|| grouped(&digits, widths), |gap| spelled(&digits, widths, gap)))
+}
+
 /// A slot's text and class. An `entity` kind is what the map can hold.
 fn fill(kind: &str, rng: &mut Rng) -> (String, Class, Option<&'static str>) {
+    if let Some(number) = identifier(kind, rng) {
+        return (number, Class::Planted, None);
+    }
     match kind {
-        "tfn" => (grouped(&rng.checked("tfn", 9), &[3, 3, 3]), Class::Planted, None),
-        "abn" => (grouped(&rng.checked("abn", 11), &[2, 3, 3, 3]), Class::Planted, None),
-        "acn" => (grouped(&rng.checked("acn", 9), &[3, 3, 3]), Class::Planted, None),
-        "medicare" => (grouped(&rng.checked("medicare", 10), &[4, 5, 1]), Class::Planted, None),
         "bsb" => (format!("{}-{}", rng.digits(3), rng.digits(3)), Class::Planted, None),
         "email" => {
             let (given, family) = (rng.pick(&GIVEN), rng.pick(&FAMILY));
@@ -152,6 +178,7 @@ fn fill(kind: &str, rng: &mut Rng) -> (String, Class, Option<&'static str>) {
         ),
         "lower_name" => (person(rng).to_lowercase(), Class::BlindSpot, None),
         "amount" => (amount(rng), Class::Benign, None),
+        "whole_dollars" => (whole_dollars(rng), Class::Benign, None),
         "digest" => {
             let digest = (0..64)
                 .map(|_| char::from(b"0123456789abcdef"[rng.below(16)]))
@@ -270,7 +297,7 @@ fn measure(document: &Document, mapped: bool, counts: &mut Counts) -> Vec<String
     counts.0[2] += misses.len();
     counts.0[3] += blind;
     counts.0[4] += blind_spots.len();
-    counts.0[5] += usize::from(mapped && halted);
+    counts.0[5] += usize::from(mapped && false_candidates > 0);
     counts.0[6] += false_candidates;
     counts.0[7] += usize::from(halted);
     misses
@@ -348,10 +375,33 @@ fn the_corpus_holds_every_kind_and_only_slots_it_knows() {
                 .collect::<Vec<_>>()
         })
         .collect();
-    assert_eq!(kinds.len(), 18, "{kinds:?}");
+    assert_eq!(kinds.len(), 23, "{kinds:?}");
     let mut rng = Rng(SEED);
     for kind in kinds {
         fill(&kind, &mut rng);
+    }
+}
+
+/// The false candidates are what the README says to map, so mapping them must
+/// clear a document that holds nothing else unmapped. Digit runs inside a digest
+/// are the exception the README names: the map cannot reach inside a hex word.
+#[test]
+fn mapping_the_false_candidates_clears_a_fully_mapped_document() {
+    for (name, template) in templates().iter().filter(|(name, _)| name != "split-identifiers") {
+        let mut document = render(template, SEED, true);
+        let unknowns = redact::redact(&document.text, &document.entries).unwrap().unknowns;
+        assert!(!unknowns.is_empty() || name == "columnar-balances", "{name}");
+        for unknown in &unknowns {
+            let ordinal = document.entries.len() + 1;
+            document.entries.push(entry(&unknown.value, "entity", ordinal));
+        }
+        let left = redact::redact(&document.text, &document.entries).unwrap().unknowns;
+        assert!(
+            left.iter()
+                .all(|u| name == "close-review" && u.value.chars().all(|c| c.is_ascii_digit())),
+            "{name}: {:?}",
+            left.iter().map(|u| u.value.to_string()).collect::<Vec<_>>()
+        );
     }
 }
 
