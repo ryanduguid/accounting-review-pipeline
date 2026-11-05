@@ -16,7 +16,7 @@
 [![Codacy code quality](https://app.codacy.com/project/badge/Grade/361fa65bc2ac4e9eb812e761b0f4e227)](https://app.codacy.com/gh/ryanduguid/accounting-review-pipeline/dashboard)<br>
 [![OpenSSF Scorecard](https://raw.githubusercontent.com/ryanduguid/.github/badges/ryanduguid/accounting-review-pipeline.svg)](https://scorecard.dev/viewer/?uri=github.com/ryanduguid/accounting-review-pipeline)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15430/badge)](https://www.bestpractices.dev/projects/15430)
-[![SLSA 3](.github/assets/badges/slsa.svg)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
+[![SLSA provenance](.github/assets/badges/slsa.svg)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 [![VirusTotal](.github/assets/badges/virustotal.svg)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
 [![licence: Ryan Duguid Public Attribution Licence 1.0](.github/assets/badges/licence.svg)](LICENSE)
 [![Open in GitHub Codespaces](.github/assets/badges/github.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
