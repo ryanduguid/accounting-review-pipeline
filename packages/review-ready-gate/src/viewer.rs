@@ -8,7 +8,7 @@ use crate::{
     engine, isodate,
     loader::json_text,
     models::*,
-    publication, pycsv,
+    profiles, publication, pycsv,
     pyjson::{self, Json, LoadError, PyStr},
     pypath, pytext,
     report::{self, ACKNOWLEDGEMENT_EFFECT, CSV_FIELDS, PACK_NAMES, REVIEW_BOUNDARY},
@@ -283,41 +283,80 @@ pub(crate) fn verify_schema(document: &Json) -> Result<()> {
             }
         }
     }
-    if let Some(required) = document.get("required_controls") {
-        let states = match required {
-            Json::Array(required) if !required.is_empty() => required
-                .iter()
-                .map(|r| {
-                    let keys = r.has_exact_keys(&["name", "state"]);
-                    keys.then(|| string(r.at("name")).and(string(r.at("state"))))
-                        .flatten()
-                })
-                .collect::<Option<Vec<_>>>(),
-            _ => None,
+    verify_required_controls(document, findings)
+}
+type RaisedControl = (Option<String>, Option<String>);
+/// The slot and code each unmet control in `required_controls` must raise.
+fn required_control_findings(required: &Json) -> Result<Vec<RaisedControl>> {
+    let invalid =
+        || format!("{JSON_NAME}: required_controls must be a non-empty list of names and states");
+    let Json::Array(required) = required else {
+        return Err(invalid());
+    };
+    if required.is_empty() {
+        return Err(invalid());
+    }
+    let known = profiles::control_names();
+    let mut expected = Vec::new();
+    let mut previous = String::new();
+    for entry in required {
+        if !entry.has_exact_keys(&["name", "state"]) {
+            return Err(invalid());
         }
-        .filter(|states| {
-            states
-                .iter()
-                .all(|state| ["ran", "skipped", "failed"].contains(&state.as_str()))
-        })
-        .ok_or_else(|| {
-            format!("{JSON_NAME}: required_controls must be a non-empty list of names and states")
-        })?;
-        // A control that did not run must have its finding, or an edited state
-        // could pass off a gap as coverage.
-        let unmet = states.iter().filter(|state| *state != "ran").count();
-        let raised = findings
-            .iter()
-            .filter(|item| {
-                item.at("code").is_str("REQUIRED_CONTROL_SKIPPED")
-                    || item.at("code").is_str("REQUIRED_CONTROL_FAILED")
-            })
-            .count();
-        if raised != unmet {
+        let (Some(name), Some(state)) = (string(entry.at("name")), string(entry.at("state")))
+        else {
+            return Err(invalid());
+        };
+        if !known.contains(name.as_str()) {
             return Err(format!(
-                "{JSON_NAME}: required_controls lists {unmet} control(s) that did not run but findings hold {raised}"
+                "{JSON_NAME}: required_controls names {name}, not a control"
             ));
         }
+        if name <= previous {
+            return Err(format!(
+                "{JSON_NAME}: required_controls must be sorted, without repeats"
+            ));
+        }
+        if !["ran", "skipped", "failed"].contains(&state.as_str()) {
+            return Err(invalid());
+        }
+        if let Some(code) = engine::required_control_code(&state) {
+            expected.push((Some(name.clone()), Some(code.to_owned())));
+        }
+        previous = name;
+    }
+    Ok(expected)
+}
+/// `required_controls` and the `REQUIRED_CONTROL_*` findings must say the same
+/// thing, or an edited state could pass off a gap as coverage.
+fn verify_required_controls(document: &Json, findings: &[Json]) -> Result<()> {
+    let is_requirement = |item: &&Json| {
+        ["skipped", "failed"]
+            .iter()
+            .filter_map(|state| engine::required_control_code(state))
+            .any(|code| item.at("code").is_str(code))
+    };
+    let mut raised: Vec<_> = findings
+        .iter()
+        .filter(is_requirement)
+        .map(|item| (string(item.at("slot")), string(item.at("code"))))
+        .collect();
+    let Some(required) = document.get("required_controls") else {
+        return if raised.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "{JSON_NAME}: a required control finding names no required_controls member"
+            ))
+        };
+    };
+    let mut expected = required_control_findings(required)?;
+    raised.sort();
+    expected.sort();
+    if raised != expected {
+        return Err(format!(
+            "{JSON_NAME}: required_controls disagrees with the required control findings"
+        ));
     }
     Ok(())
 }

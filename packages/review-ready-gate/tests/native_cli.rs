@@ -760,49 +760,88 @@ fn a_required_control_that_ran_leaves_ready_alone() {
     assert!(summary.contains("- Required controls: open_items (ran), trial_balance (ran)."));
 }
 
-#[test]
-fn a_required_control_with_an_empty_file_is_failed_not_skipped() {
-    let tmp = TempDir::new();
-    let pack_dir = tmp.join("pack");
-    fs::create_dir(&pack_dir).unwrap();
-    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/bas-ready");
+/// A copy of a passing example pack.
+fn pack_copy(tmp: &TempDir, example: &str) -> PathBuf {
+    let copy = tmp.join("pack");
+    fs::create_dir(&copy).unwrap();
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join(example);
     for entry in fs::read_dir(example).unwrap() {
         let entry = entry.unwrap();
-        fs::copy(entry.path(), pack_dir.join(entry.file_name())).unwrap();
+        fs::copy(entry.path(), copy.join(entry.file_name())).unwrap();
     }
-    let slot = review_ready_gate::profiles::slots_for("bas")
-        .unwrap()
-        .iter()
-        .find(|slot| slot.name == "prior_findings")
-        .unwrap();
-    fs::write(pack_dir.join(slot.filename), b"").unwrap();
-    let output = tmp.join("failed");
+    copy
+}
+
+fn gate_on(pack: &std::path::Path, profile: &str, output: &std::path::Path, name: &str) -> String {
     let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
-        .args(["gate", "--profile", "bas", "--pack"])
-        .arg(&pack_dir)
-        .args(["--require-control", "prior_findings", "--output"])
-        .arg(&output)
+        .args(["gate", "--profile", profile, "--pack"])
+        .arg(pack)
+        .args(["--require-control", name, "--output"])
+        .arg(output)
         .env_remove("GIT_WORK_TREE")
         .output()
         .unwrap();
-    assert_eq!(result.status.code(), Some(2), "{result:?}");
-    let pack = pack_json(&output);
-    assert!(pack.contains("REQUIRED_CONTROL_FAILED"), "{pack}");
-    assert!(pack.contains("\"state\": \"failed\""), "{pack}");
+    assert_eq!(result.status.code(), Some(2), "{name}: {result:?}");
+    let shown = String::from_utf8_lossy(&result.stdout);
     assert!(
-        String::from_utf8_lossy(&result.stdout).contains("required control prior_findings: failed"),
+        shown.contains(&format!("required control {name}: failed")),
         "{result:?}"
     );
+    pack_json(output)
 }
 
 #[test]
-fn a_pack_edited_to_say_a_skipped_control_ran_fails_view() {
+fn a_required_control_with_an_empty_file_is_failed_not_skipped() {
+    let tmp = TempDir::new();
+    let pack_dir = pack_copy(&tmp, "bas-ready");
+    fs::write(pack_dir.join("prior_findings.csv"), b"").unwrap();
+    let pack = gate_on(&pack_dir, "bas", &tmp.join("failed"), "prior_findings");
+    assert!(pack.contains("REQUIRED_CONTROL_FAILED"), "{pack}");
+    assert!(pack.contains("\"state\": \"failed\""), "{pack}");
+}
+
+#[test]
+fn a_required_control_with_a_header_only_file_is_failed_on_every_profile() {
+    for (profile, example) in [
+        ("bas", "bas-ready"),
+        ("month_end", "month-end-ready"),
+        ("year_end", "year-end-ready"),
+    ] {
+        let tmp = TempDir::new();
+        let pack_dir = pack_copy(&tmp, example);
+        let items = pack_dir.join("open_items.csv");
+        let text = fs::read_to_string(&items).unwrap();
+        fs::write(&items, format!("{}\n", text.lines().next().unwrap())).unwrap();
+        fs::write(
+            pack_dir.join("prior_findings.csv"),
+            "FindingCode,Slot,Status\n",
+        )
+        .unwrap();
+        for name in ["open_items", "prior_findings"] {
+            let output = tmp.join(name);
+            let pack = gate_on(&pack_dir, profile, &output, name);
+            assert!(
+                pack.contains("REQUIRED_CONTROL_FAILED"),
+                "{profile}: {pack}"
+            );
+            assert!(pack.contains("holds no rows"), "{profile}: {pack}");
+            assert!(pack.contains("\"overall_status\": \"NOT_READY\""), "{pack}");
+        }
+    }
+}
+
+/// A pack whose `open_items` ran and whose `prior_findings` was skipped, its
+/// JSON put through `edit`, and what `view` then says.
+fn viewed_after(edit: impl Fn(&str) -> String) -> std::process::Output {
     let tmp = TempDir::new();
     let output = tmp.join("edited");
-    gate_requiring(&output, &["prior_findings"]);
-    let file = output.join("readiness-pack.json");
-    let edited = pack_json(&output).replace("\"state\": \"skipped\"", "\"state\": \"ran\"");
-    fs::write(&file, edited).unwrap();
+    gate_requiring(&output, &["open_items", "prior_findings"]);
+    let text = pack_json(&output);
+    let changed = edit(&text);
+    assert_ne!(changed, text);
+    fs::write(output.join("readiness-pack.json"), changed).unwrap();
     let view = Command::new(env!("CARGO_BIN_EXE_review-ready"))
         .arg("view")
         .arg("--pack-dir")
@@ -810,10 +849,65 @@ fn a_pack_edited_to_say_a_skipped_control_ran_fails_view() {
         .output()
         .unwrap();
     assert_ne!(view.status.code(), Some(0), "{view:?}");
-    assert!(
-        String::from_utf8_lossy(&view.stderr).contains("required_controls lists 0"),
-        "{view:?}"
-    );
+    view
+}
+
+fn assert_view_says(view: &std::process::Output, expected: &str) {
+    let error = String::from_utf8_lossy(&view.stderr);
+    assert!(error.contains(expected), "{error}");
+}
+
+const RAN: &str = "\"state\": \"ran\"";
+const SKIPPED: &str = "\"state\": \"skipped\"";
+
+#[test]
+fn a_pack_whose_states_disagree_with_its_findings_fails_view() {
+    let swapped = viewed_after(|text| {
+        text.replace(RAN, "swap")
+            .replace(SKIPPED, RAN)
+            .replace("swap", SKIPPED)
+    });
+    assert_view_says(&swapped, "disagrees with the required control findings");
+    let failed = viewed_after(|text| text.replace(SKIPPED, "\"state\": \"failed\""));
+    assert_view_says(&failed, "disagrees with the required control findings");
+    let all_ran = viewed_after(|text| text.replace(SKIPPED, RAN));
+    assert_view_says(&all_ran, "disagrees with the required control findings");
+}
+
+#[test]
+fn a_pack_naming_an_unknown_or_repeated_control_fails_view() {
+    let invented =
+        viewed_after(|text| text.replace("\"name\": \"prior_findings\"", "\"name\": \"made_up\""));
+    assert_view_says(&invented, "not a control");
+    let repeated = viewed_after(|text| {
+        text.replace("\"name\": \"prior_findings\"", "\"name\": \"open_items\"")
+    });
+    assert_view_says(&repeated, "without repeats");
+}
+
+#[test]
+fn a_finding_with_no_required_controls_member_fails_view() {
+    let view = viewed_after(|text| {
+        let start = text.find("\"required_controls\"").unwrap();
+        let end = start + text[start..].find(']').unwrap() + 1;
+        let rest = text[end..].trim_start_matches([',', '\r', '\n', ' ']);
+        format!("{}{rest}", &text[..start])
+    });
+    assert_view_says(&view, "names no required_controls");
+}
+
+#[test]
+fn the_new_option_makes_the_shortest_review_note_spellings_ambiguous() {
+    for spelling in ["--r", "--re"] {
+        let tmp = TempDir::new();
+        let result = gate_command("bas-ready", &tmp.join("out"))
+            .args([spelling, "note.json"])
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1), "{spelling}: {result:?}");
+        let error = String::from_utf8_lossy(&result.stderr);
+        assert!(error.contains("ambiguous option"), "{spelling}: {error}");
+    }
 }
 
 #[test]

@@ -27,25 +27,45 @@ struct Loaded {
     prior_findings: Option<Vec<PriorFinding>>,
 }
 
+/// Keeps `rows` in `slot`, and says whether there were any.
+fn held<T>(slot: &mut Option<Vec<T>>, rows: Vec<T>) -> bool {
+    let any = !rows.is_empty();
+    *slot = Some(rows);
+    any
+}
+
 impl Loaded {
-    fn load(&mut self, slot: &Slot, source: &SourceSnapshot, profile: &str) -> Result<()> {
-        match slot.kind {
+    /// Loads the file, and says whether it held anything for its control to read.
+    fn load(&mut self, slot: &Slot, source: &SourceSnapshot, profile: &str) -> Result<bool> {
+        Ok(match slot.kind {
             "trial_balance" if slot.name == "prior_trial_balance" => {
-                self.prior_trial_balance = Some(load_canonical_tb(source)?)
+                held(&mut self.prior_trial_balance, load_canonical_tb(source)?)
             }
-            "trial_balance" => self.trial_balance = Some(load_canonical_tb(source)?),
-            "open_items" => self.open_items = Some(load_open_items(source)?),
-            "self_review" => self.self_review = Some(load_self_review(source, profile)?),
-            "activity_statement" => {
-                self.activity_statement = Some(load_activity_statement(source)?)
+            "trial_balance" => held(&mut self.trial_balance, load_canonical_tb(source)?),
+            "open_items" => held(&mut self.open_items, load_open_items(source)?),
+            "self_review" => {
+                self.self_review = Some(load_self_review(source, profile)?);
+                true
             }
-            "gst_control_gl" => self.gst_control_gl = Some(load_gst_control(source)?),
-            "bank_rec" => self.bank_rec = Some(load_bank_rec(source)?),
-            "tie_out_matrix" => self.tie_out_matrix = Some(load_tie_out_matrix(source)?),
-            "prior_findings" => self.prior_findings = Some(load_prior_findings(source)?),
+            "activity_statement" => held(
+                &mut self.activity_statement,
+                load_activity_statement(source)?,
+            ),
+            "gst_control_gl" => held(&mut self.gst_control_gl, load_gst_control(source)?),
+            "bank_rec" => held(&mut self.bank_rec, load_bank_rec(source)?),
+            "tie_out_matrix" => held(&mut self.tie_out_matrix, load_tie_out_matrix(source)?),
+            "prior_findings" => held(&mut self.prior_findings, load_prior_findings(source)?),
             _ => return Err(format!("unknown slot kind {}.", pytext::repr(slot.kind))),
-        }
-        Ok(())
+        })
+    }
+}
+
+/// The finding code for a required control's state, if it needs a finding.
+pub fn required_control_code(state: &str) -> Option<&'static str> {
+    match state {
+        "skipped" => Some("REQUIRED_CONTROL_SKIPPED"),
+        "failed" => Some("REQUIRED_CONTROL_FAILED"),
+        _ => None,
     }
 }
 
@@ -223,33 +243,25 @@ pub fn review_requiring(
             }
             continue;
         }
-        loaded.load(slot, &source, profile)?;
-        ran.insert(slot.name);
+        if loaded.load(slot, &source, profile)? {
+            ran.insert(slot.name);
+        } else {
+            failed.insert(slot.name);
+        }
     }
     let mut required_controls = Vec::new();
     for name in required_names {
-        let (state, code, outcome) = if ran.contains(name.as_str()) {
-            ("ran", "", String::new())
+        let (state, outcome) = if ran.contains(name.as_str()) {
+            ("ran", String::new())
         } else if failed.contains(name.as_str()) {
-            (
-                "failed",
-                "REQUIRED_CONTROL_FAILED",
-                "failed: its file is empty".to_owned(),
-            )
+            ("failed", "failed: its file holds no rows".to_owned())
         } else if slots.iter().any(|slot| slot.name == name) {
-            (
-                "skipped",
-                "REQUIRED_CONTROL_SKIPPED",
-                "was skipped: no file was supplied".to_owned(),
-            )
+            ("skipped", "was skipped: no file was supplied".to_owned())
         } else {
-            (
-                "skipped",
-                "REQUIRED_CONTROL_SKIPPED",
-                format!("was skipped: the {profile} profile does not run it"),
-            )
+            let outcome = format!("was skipped: the {profile} profile does not run it");
+            ("skipped", outcome)
         };
-        if state != "ran" {
+        if let Some(code) = required_control_code(state) {
             findings.push(Finding::new(
                 code,
                 "NOT_READY",

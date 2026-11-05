@@ -7,8 +7,10 @@
   decimal controls, document evidence and publication recovery protocol.
 - `gate` takes a repeatable `--require-control NAME`. A named control that was
   skipped or failed raises a `NOT_READY` finding, `REQUIRED_CONTROL_SKIPPED` or
-  `REQUIRED_CONTROL_FAILED`. An unknown name is exit 1. Packs record each name and
-  state in a new `required_controls` key, which
+  `REQUIRED_CONTROL_FAILED`. An unknown name is exit 1. The option makes `--r` and
+  `--re` ambiguous: they used to abbreviate `--review-note`, so write `--rev` or
+  longer. A build older than this option refuses a flagged pack in `view`. Packs
+  record each name and state in a new `required_controls` key, which
   appears only when the flag is used; runs without it keep their bytes.
 - Add `--version` for native executable identity checks. Power BI records the
   native version and executable hash alongside the Python close-control identity.
