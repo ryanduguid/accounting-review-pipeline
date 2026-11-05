@@ -274,30 +274,38 @@ impl Counts {
     }
 }
 
-/// How often `fragment` stands alone in `text`.
-fn standing(text: &str, fragment: &str) -> usize {
-    let alone = |at: usize| {
-        !text[..at].chars().next_back().is_some_and(char::is_alphanumeric)
-            && !text[at + fragment.len()..]
-                .chars()
-                .next()
-                .is_some_and(char::is_alphanumeric)
-    };
-    text.match_indices(fragment).filter(|(at, _)| alone(*at)).count()
+/// Whether `fragment`, at `at` in `text`, stands alone.
+fn alone(text: &str, at: usize, fragment: &str) -> bool {
+    !text[..at].chars().next_back().is_some_and(char::is_alphanumeric)
+        && !text[at + fragment.len()..]
+            .chars()
+            .next()
+            .is_some_and(char::is_alphanumeric)
 }
 
-/// `text` with each candidate blanked where it sits, on its own line, so that a
+/// How often `fragment` stands alone in `text`.
+fn standing(text: &str, fragment: &str) -> usize {
+    text.match_indices(fragment)
+        .filter(|(at, _)| alone(text, *at, fragment))
+        .count()
+}
+
+/// `text` with each candidate blanked at its own position. A sweep reports the
+/// first occurrence of a value on a line, so a second one stays visible, and a
 /// candidate elsewhere cannot excuse a fragment.
 fn without_candidates(text: &str, unknowns: &[Unknown]) -> String {
-    let mut bytes = text.as_bytes().to_vec();
+    let mut masked = text.to_owned();
     for unknown in unknowns {
-        for (at, _) in text.match_indices(&unknown.value) {
-            if 1 + text[..at].matches('\n').count() == unknown.line {
-                bytes[at..at + unknown.value.len()].fill(b' ');
-            }
+        let position = masked
+            .match_indices(&unknown.value)
+            .map(|(at, _)| at)
+            .find(|&at| 1 + masked[..at].matches('\n').count() == unknown.line && alone(&masked, at, &unknown.value));
+        if let Some(at) = position {
+            let blank = unknown.value.replace(|c: char| c != '\n', " ");
+            masked.replace_range(at..at + unknown.value.len(), &blank);
         }
     }
-    String::from_utf8_lossy(&bytes).into_owned()
+    masked
 }
 
 /// Whether a word or digit group of 3 or more characters from `value` stays in
@@ -495,6 +503,22 @@ fn a_candidate_elsewhere_does_not_excuse_a_fragment() {
             .iter()
             .any(|u| u.line == 3 && u.value.contains("Falador"))
     );
+    let mut counts = Counts::default();
+    assert!(measure(&document, true, &mut counts).is_empty());
+    assert_eq!((counts.0[2], counts.0[8]), (0, 1));
+}
+
+#[test]
+fn a_candidate_covers_its_own_occurrence_on_a_line() {
+    // The sweep reports this value once, so only the first occurrence is covered.
+    let document = Document {
+        text: "Alice Falador wrote to Alice Falador today\n".into(),
+        values: vec![Value {
+            class: Class::Planted,
+            text: "Alice Falador".into(),
+        }],
+        entries: Vec::new(),
+    };
     let mut counts = Counts::default();
     assert!(measure(&document, true, &mut counts).is_empty());
     assert_eq!((counts.0[2], counts.0[8]), (0, 1));

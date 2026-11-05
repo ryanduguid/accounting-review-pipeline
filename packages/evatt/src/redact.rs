@@ -652,6 +652,11 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
         })
         .collect::<Vec<_>>();
     let protected = patterns::merge(ambiguous.iter().map(|a| (a.digit_start, a.end)).collect());
+    let windows = if protected.is_empty() {
+        Vec::new()
+    } else {
+        patterns::merge(split_identifiers(&numeric.text, &mut ScanStats::default())?)
+    };
     let mut found = Vec::new();
     let mut seen = HashSet::new();
     for a in ambiguous {
@@ -662,9 +667,10 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
     }
     for s in numbers(&numeric.text)? {
         let (start, end) = (numeric.original[s.start], numeric.original[s.end]);
-        // An ambiguous group can sit inside a valid number, and must not hide it.
+        // An ambiguous group can sit inside a valid number, or a window of one.
         let digits: String = s.value.chars().filter(|c| pytext::is_decimal(*c as u32)).collect();
-        if patterns::intersects(&protected, start, end) && !passes_identifier_check(&digits)? {
+        let holds_identifier = patterns::intersects(&windows, s.start, s.end) || passes_identifier_check(&digits)?;
+        if patterns::intersects(&protected, start, end) && !holds_identifier {
             continue;
         }
         let u = lines.unknown("number", &s.value, start);
@@ -761,6 +767,53 @@ fn input_placeholders(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
     Ok(found.into_values().collect())
 }
 
+/// Digit groups that pass an identifier check together, of which pass one replaced
+/// only some: a match can be valid by chance across a wrap. The groups left are too
+/// short for the sweep over `redacted` to read as a number, so the input must name
+/// them. Money spellings count here too, as a needless halt is the safe side.
+fn cut_numbers(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
+    let taken: Vec<_> = patterns::structured_spans(text)?
+        .iter()
+        .map(|s| (s.start, s.end))
+        .collect();
+    if taken.is_empty() {
+        return Ok(Vec::new());
+    }
+    let plain = without_markup(text, &mut ScanStats::default());
+    let left: HashSet<_> = digit_runs(redacted).iter().map(|r| &redacted[r.0..r.1]).collect();
+    let touched = |run: &(usize, usize)| patterns::intersects(&taken, run.0, run.1);
+    let mut cut = Vec::new();
+    for number in numbers(text)? {
+        let runs: Vec<_> = digit_runs(&plain[number.start..number.end])
+            .iter()
+            .map(|r| (number.start + r.0, number.start + r.1))
+            .collect();
+        for group in (2..=runs.len().min(11)).flat_map(|width| runs.windows(width)) {
+            let mut kept = group.iter().filter(|run| !touched(run));
+            if group.iter().any(touched) && kept.any(|r| left.contains(&plain[r.0..r.1])) {
+                let joined: String = group.iter().map(|r| &plain[r.0..r.1]).collect();
+                if passes_identifier_check(&joined)? {
+                    cut.push((group[0].0, group[group.len() - 1].1));
+                }
+            }
+        }
+    }
+    let input_lines = Lines::new(text);
+    let lines = Lines::new(redacted);
+    Ok(patterns::merge(cut)
+        .into_iter()
+        .map(|(start, end)| {
+            let (line, _) = input_lines.locate(start);
+            Unknown {
+                kind: "number".into(),
+                value: text[start..end].into(),
+                line,
+                context: lines.lines.get(line - 1).cloned().unwrap_or_default(),
+            }
+        })
+        .collect())
+}
+
 pub struct Redaction {
     pub text: String,
     pub counts: Counts,
@@ -772,6 +825,7 @@ pub fn redact(text: &str, entries: &[Entity]) -> Result<Redaction> {
     let (redacted, mut counts) = structured(&text)?;
     let (redacted, entities) = replace_entities(&redacted, entries)?;
     let mut unknowns = input_placeholders(&text, &redacted)?;
+    unknowns.extend(cut_numbers(&text, &redacted)?);
     unknowns.extend(residual(&redacted)?);
     for (kind, n) in entities {
         if let Some((_, old)) = counts.iter_mut().find(|(k, _)| k == &kind) {

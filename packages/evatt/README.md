@@ -24,12 +24,12 @@ one workpaper and `TFN_01` in the next are 2 different tax file numbers.
 Putting 2 redacted documents in front of one model is putting 2 meanings of
 `TFN_01` in front of it.
 
-**The key never leaves the local machine.** The entity map is a gitignored file
-on disk, and evatt has no step that sends it. `tests/no_network.rs` checks part of
-that with a denylist, not a proof: it fails CI if the normal dependency tree lists
-one of its named crates or `src` holds one of its socket spellings. An unlisted
-crate, a foreign function or a program started through a subprocess passes it, and
-no audit of those backs this.
+**Evatt reads the map locally and has no step that sends it anywhere.**
+Dependencies, FFI, subprocesses and transfers by other tools have not been fully
+excluded. The entity map is a gitignored file on disk. `tests/no_network.rs` is a
+denylist, not a proof: it fails CI if the normal dependency tree lists one of its
+named crates or `src` holds one of its socket spellings. An unlisted crate, a foreign
+function or a program started through a subprocess passes it.
 The recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
@@ -359,19 +359,23 @@ when this table, its header or its totals drift from the corpus.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `bank-reconciliation` | 100 | 600 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
 | `client-queries` | 100 | 600 | 0 | 0 | 0 of 0 | 50 | 300 | 100.0% |
-| `close-review` | 100 | 300 | 0 | 0 | 0 of 0 | 50 | 546 | 100.0% |
+| `close-review` | 100 | 300 | 0 | 2 | 0 of 0 | 50 | 546 | 100.0% |
 | `columnar-balances` | 100 | 0 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
 | `columnar-whole-dollars` | 100 | 0 | 0 | 0 | 0 of 0 | 50 | 637 | 100.0% |
 | `director-loan` | 100 | 1000 | 0 | 0 | 199 of 200 | 50 | 100 | 100.0% |
 | `gst-tie-out` | 100 | 800 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
 | `payroll-tie-out` | 100 | 1300 | 0 | 0 | 0 of 0 | 50 | 200 | 100.0% |
 | `split-identifiers` | 100 | 400 | 0 | 0 | 0 of 0 | 0 | 0 | 100.0% |
-| Total | 900 | 5000 | 0 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
+| Total | 900 | 5000 | 0 | 2 | 399 of 400 | 350 | 2183 | 88.9% |
 
 0 misses does not mean nothing gets through. Planted values are the shapes the sweep
 was built for; the hard cases are the blind-spot values, and 399 of 400 passed. Each row repeats one
 template with fixed prose and only its slots varying, so the sample behaves like 9
 templates, not 900 independent documents, and a halt rate mostly reports that prose.
+
+The 2 residual fragments are one name written twice on one line of a document that
+halts. A candidate is reported once a line, so the benchmark covers only its first
+occurrence, and a map entry for it replaces both.
 
 `split-identifiers` spells each identifier with one of 7 gaps no structured pattern
 takes, and every document halts as it should. `columnar-balances` holds only amounts
