@@ -213,6 +213,7 @@ records that commit; any other value fails the build.
 | `review_boundary` | The fixed statement that readiness is not approval, advice or lodgement authority. |
 | `preparer_initials` | The initials on the preparer's self-review; empty when none was loaded. |
 | `controls_not_run` | Each optional slot with no usable input, with its filename and reason. `READY` says nothing about the controls listed here. |
+| `required_controls` | With `--require-control`: each slot this run required and its state, `ran`, `skipped` or `failed`. One that did not run is a `NOT_READY` finding. |
 | `acknowledgement` | Optional evidence of a later human review; it cannot change readiness or approve a file. |
 | `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 
@@ -231,6 +232,7 @@ records that commit; any other value fails the build.
 | `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
 | `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
 | `controls_not_run` | The optional controls whose input was not supplied, so they did not run. `PASS` or `REVIEW` says nothing about them. |
+| `required_controls` | With `--require-control`: each control this run required and its state, `ran`, `skipped` or `failed`. One that did not run is a `REVIEW` exception. |
 | `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |
 | `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 

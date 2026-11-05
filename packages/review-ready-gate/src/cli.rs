@@ -14,7 +14,7 @@ use std::{
 fn usage(command: &str) -> String {
     let options = match command {
         "gate" => {
-            "gate [-h] --profile {bas,month_end,year_end} --pack PACK --output OUTPUT [--review-note REVIEW_NOTE] [--document DOCUMENT] [--tieout-tolerance TIEOUT_TOLERANCE]"
+            "gate [-h] --profile {bas,month_end,year_end} --pack PACK --output OUTPUT [--review-note REVIEW_NOTE] [--document DOCUMENT] [--require-control NAME] [--tieout-tolerance TIEOUT_TOLERANCE]"
         }
         "view" => "view [-h] --pack-dir PACK_DIR [--document DOCUMENT]",
         "compare" => {
@@ -71,6 +71,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
                 "--output",
                 "--review-note",
                 "--document",
+                "--require-control",
                 "--tieout-tolerance",
             ],
             &["--profile", "--pack", "--output"],
@@ -108,6 +109,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
 struct Arguments {
     values: BTreeMap<String, String>,
     documents: Vec<PathBuf>,
+    required_controls: Vec<String>,
 }
 impl Arguments {
     fn text(&self, key: &str) -> &str {
@@ -148,6 +150,7 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
     let mut result = Arguments {
         values: BTreeMap::new(),
         documents: Vec::new(),
+        required_controls: Vec::new(),
     };
     let mut unknown = Vec::new();
     let mut i = 0;
@@ -241,6 +244,8 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
             result
                 .documents
                 .push(PathBuf::from(pypath::encode_os(&pypath::display(&value))));
+        } else if flag == "--require-control" {
+            result.required_controls.push(value);
         } else {
             result.values.insert(flag.into(), value);
         }
@@ -343,12 +348,13 @@ fn gate(args: &Arguments) -> i32 {
         || Decimal::parse("0.01").unwrap(),
         |text| parse_tolerance(text).unwrap(),
     );
-    let mut pack = match engine::review_pack(
+    let mut pack = match engine::review_requiring(
         args.text("--profile"),
         &pack_dir,
         note.as_deref(),
         tolerance,
         &args.documents,
+        &args.required_controls,
     ) {
         Ok(pack) => pack,
         Err(e) => {
@@ -379,6 +385,13 @@ fn gate(args: &Arguments) -> i32 {
         pack.status,
         pack.findings.len()
     );
+    for required in &pack.required_controls {
+        crate::outln!(
+            "review-ready: required control {}: {}",
+            required.name,
+            required.state
+        );
+    }
     if let Some(controls) = &pack.controls_not_run
         && !controls.is_empty()
     {

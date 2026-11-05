@@ -8,7 +8,8 @@ usage: close-control review [-h] --current CURRENT --prior PRIOR
                             [--equity-currency EQUITY_CURRENCY]
                             [--equity-currency-evidence EQUITY_CURRENCY_EVIDENCE]
                             [--calculation-evidence PATH]
-                            [--require-calculation LABEL] --output OUTPUT
+                            [--require-calculation LABEL]
+                            [--require-control NAME] --output OUTPUT
                             [--absolute-threshold ABSOLUTE_THRESHOLD]
                             [--percentage-threshold PERCENTAGE_THRESHOLD]
                             [--reconciliation-tolerance RECONCILIATION_TOLERANCE]

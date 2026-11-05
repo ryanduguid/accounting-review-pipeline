@@ -83,6 +83,7 @@ controls! {
     GstReasonableness => "gst_reasonableness",
     CalculationEvidence => "calculation_evidence",
     EquityReconciliation => "equity_reconciliation",
+    Required => "required_control",
 }
 
 /// How a GST mapping classes an account for `gst_reasonableness`.

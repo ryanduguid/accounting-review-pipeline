@@ -8,7 +8,7 @@ use crate::{
     engine, isodate,
     loader::json_text,
     models::*,
-    publication, pycsv,
+    profiles, publication, pycsv,
     pyjson::{self, Json, LoadError, PyStr},
     pypath, pytext,
     report::{self, ACKNOWLEDGEMENT_EFFECT, CSV_FIELDS, PACK_NAMES, REVIEW_BOUNDARY},
@@ -33,7 +33,7 @@ const JSON_MEMBERS: [&str; 9] = [
     "source_sha256",
     "thresholds",
 ];
-const OPTIONAL_MEMBERS: [&str; 2] = ["controls_not_run", "producer"];
+const OPTIONAL_MEMBERS: [&str; 3] = ["controls_not_run", "producer", "required_controls"];
 const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const FINDING_HEADER: &str = "| Status | Code | Slot | Repeat | Reason |";
 const FINDING_DIVIDER: &str = "| --- | --- | --- | --- | --- |";
@@ -282,6 +282,81 @@ pub(crate) fn verify_schema(document: &Json) -> Result<()> {
                 }
             }
         }
+    }
+    verify_required_controls(document, findings)
+}
+type RaisedControl = (Option<String>, Option<String>);
+/// The slot and code each unmet control in `required_controls` must raise.
+fn required_control_findings(required: &Json) -> Result<Vec<RaisedControl>> {
+    let invalid =
+        || format!("{JSON_NAME}: required_controls must be a non-empty list of names and states");
+    let Json::Array(required) = required else {
+        return Err(invalid());
+    };
+    if required.is_empty() {
+        return Err(invalid());
+    }
+    let known = profiles::control_names();
+    let mut expected = Vec::new();
+    let mut previous = String::new();
+    for entry in required {
+        if !entry.has_exact_keys(&["name", "state"]) {
+            return Err(invalid());
+        }
+        let (Some(name), Some(state)) = (string(entry.at("name")), string(entry.at("state")))
+        else {
+            return Err(invalid());
+        };
+        if !known.contains(name.as_str()) {
+            return Err(format!(
+                "{JSON_NAME}: required_controls names {name}, not a control"
+            ));
+        }
+        if name <= previous {
+            return Err(format!(
+                "{JSON_NAME}: required_controls must be sorted, without repeats"
+            ));
+        }
+        if !["ran", "skipped", "failed"].contains(&state.as_str()) {
+            return Err(invalid());
+        }
+        if let Some(code) = engine::required_control_code(&state) {
+            expected.push((Some(name.clone()), Some(code.to_owned())));
+        }
+        previous = name;
+    }
+    Ok(expected)
+}
+/// `required_controls` and the `REQUIRED_CONTROL_*` findings must say the same
+/// thing, or an edited state could pass off a gap as coverage.
+fn verify_required_controls(document: &Json, findings: &[Json]) -> Result<()> {
+    let is_requirement = |item: &&Json| {
+        ["skipped", "failed"]
+            .iter()
+            .filter_map(|state| engine::required_control_code(state))
+            .any(|code| item.at("code").is_str(code))
+    };
+    let mut raised: Vec<_> = findings
+        .iter()
+        .filter(is_requirement)
+        .map(|item| (string(item.at("slot")), string(item.at("code"))))
+        .collect();
+    let Some(required) = document.get("required_controls") else {
+        return if raised.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "{JSON_NAME}: a required control finding names no required_controls member"
+            ))
+        };
+    };
+    let mut expected = required_control_findings(required)?;
+    raised.sort();
+    expected.sort();
+    if raised != expected {
+        return Err(format!(
+            "{JSON_NAME}: required_controls disagrees with the required control findings"
+        ));
     }
     Ok(())
 }
@@ -714,6 +789,16 @@ pub(crate) fn canonical_pack(
             })
             .collect()
     });
+    let required_controls = match document.get("required_controls") {
+        Some(Json::Array(required)) => required
+            .iter()
+            .map(|r| RequiredControl {
+                name: string(r.at("name")).unwrap(),
+                state: string(r.at("state")).unwrap(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     Ok(ReadinessPack {
         status: string(document.at("overall_status")).unwrap(),
         engagement_type: string(document.at("engagement_type")).unwrap(),
@@ -724,6 +809,7 @@ pub(crate) fn canonical_pack(
         tieout_tolerance: threshold(document.at("thresholds").at("tieout_tolerance"))?,
         acknowledgement,
         controls_not_run,
+        required_controls,
         producer: document.get("producer").cloned(),
     })
 }

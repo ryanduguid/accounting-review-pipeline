@@ -111,6 +111,13 @@ pub struct ReviewerAcknowledgement {
     pub comment: String,
 }
 
+/// A control named by `--require-control`. `state` is `ran`, `skipped` or `failed`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequiredControl {
+    pub name: String,
+    pub state: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ControlNotRun {
     pub slot: String,
@@ -137,6 +144,8 @@ pub struct ReadinessPack {
     pub acknowledgement: Option<ReviewerAcknowledgement>,
     /// None means a legacy pack states no control coverage.
     pub controls_not_run: Option<Vec<ControlNotRun>>,
+    /// Sorted, without repeats. Empty on a pack that named none.
+    pub required_controls: Vec<RequiredControl>,
     /// The build that wrote the pack. Only the command line sets it; the
     /// library leaves it unset so its output matches the frozen Python baseline.
     pub producer: Option<crate::pyjson::Json>,

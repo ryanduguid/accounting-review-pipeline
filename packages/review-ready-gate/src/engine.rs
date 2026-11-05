@@ -27,25 +27,45 @@ struct Loaded {
     prior_findings: Option<Vec<PriorFinding>>,
 }
 
+/// Keeps `rows` in `slot`, and says whether there were any.
+fn held<T>(slot: &mut Option<Vec<T>>, rows: Vec<T>) -> bool {
+    let any = !rows.is_empty();
+    *slot = Some(rows);
+    any
+}
+
 impl Loaded {
-    fn load(&mut self, slot: &Slot, source: &SourceSnapshot, profile: &str) -> Result<()> {
-        match slot.kind {
+    /// Loads the file, and says whether it held anything for its control to read.
+    fn load(&mut self, slot: &Slot, source: &SourceSnapshot, profile: &str) -> Result<bool> {
+        Ok(match slot.kind {
             "trial_balance" if slot.name == "prior_trial_balance" => {
-                self.prior_trial_balance = Some(load_canonical_tb(source)?)
+                held(&mut self.prior_trial_balance, load_canonical_tb(source)?)
             }
-            "trial_balance" => self.trial_balance = Some(load_canonical_tb(source)?),
-            "open_items" => self.open_items = Some(load_open_items(source)?),
-            "self_review" => self.self_review = Some(load_self_review(source, profile)?),
-            "activity_statement" => {
-                self.activity_statement = Some(load_activity_statement(source)?)
+            "trial_balance" => held(&mut self.trial_balance, load_canonical_tb(source)?),
+            "open_items" => held(&mut self.open_items, load_open_items(source)?),
+            "self_review" => {
+                self.self_review = Some(load_self_review(source, profile)?);
+                true
             }
-            "gst_control_gl" => self.gst_control_gl = Some(load_gst_control(source)?),
-            "bank_rec" => self.bank_rec = Some(load_bank_rec(source)?),
-            "tie_out_matrix" => self.tie_out_matrix = Some(load_tie_out_matrix(source)?),
-            "prior_findings" => self.prior_findings = Some(load_prior_findings(source)?),
+            "activity_statement" => held(
+                &mut self.activity_statement,
+                load_activity_statement(source)?,
+            ),
+            "gst_control_gl" => held(&mut self.gst_control_gl, load_gst_control(source)?),
+            "bank_rec" => held(&mut self.bank_rec, load_bank_rec(source)?),
+            "tie_out_matrix" => held(&mut self.tie_out_matrix, load_tie_out_matrix(source)?),
+            "prior_findings" => held(&mut self.prior_findings, load_prior_findings(source)?),
             _ => return Err(format!("unknown slot kind {}.", pytext::repr(slot.kind))),
-        }
-        Ok(())
+        })
+    }
+}
+
+/// The finding code for a required control's state, if it needs a finding.
+pub fn required_control_code(state: &str) -> Option<&'static str> {
+    match state {
+        "skipped" => Some("REQUIRED_CONTROL_SKIPPED"),
+        "failed" => Some("REQUIRED_CONTROL_FAILED"),
+        _ => None,
     }
 }
 
@@ -96,10 +116,6 @@ pub fn tb_balanced(rows: &[TrialBalanceRow]) -> Result<(Decimal, Decimal)> {
     Ok((movement, ytd))
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "runs the readiness checks on one pack"
-)]
 pub fn review_pack(
     profile: &str,
     pack_dir: &Path,
@@ -107,6 +123,50 @@ pub fn review_pack(
     tolerance: Decimal,
     document_paths: &[PathBuf],
 ) -> Result<ReadinessPack> {
+    review_requiring(
+        profile,
+        pack_dir,
+        acknowledgement_path,
+        tolerance,
+        document_paths,
+        &[],
+    )
+}
+
+/// The named controls, sorted and without repeats, or a refusal: a mistyped
+/// name would otherwise require nothing and pass quietly.
+fn required_control_names(names: &[String]) -> Result<Vec<String>> {
+    let known = profiles::control_names();
+    if let Some(name) = names.iter().find(|name| !known.contains(name.as_str())) {
+        return Err(format!(
+            "--require-control {} is not a control. Name one of: {}.",
+            pytext::repr(name),
+            known.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(names
+        .iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
+/// `review_pack`, with a `NOT_READY` finding for each named control that was
+/// skipped or failed, including one the engagement profile does not have.
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the readiness checks on one pack"
+)]
+pub fn review_requiring(
+    profile: &str,
+    pack_dir: &Path,
+    acknowledgement_path: Option<&Path>,
+    tolerance: Decimal,
+    document_paths: &[PathBuf],
+    required_controls: &[String],
+) -> Result<ReadinessPack> {
+    let required_names = required_control_names(required_controls)?;
     if !tolerance.is_finite() || tolerance < Decimal::zero() {
         return Err("tie-out tolerance must be a finite non-negative decimal.".into());
     }
@@ -121,6 +181,8 @@ pub fn review_pack(
     let mut findings = Vec::new();
     let mut evidence = Vec::new();
     let mut controls = Vec::new();
+    let mut ran = BTreeSet::new();
+    let mut failed = BTreeSet::new();
     for slot in slots {
         let path = pack_dir.join(slot.filename);
         if !path.exists() {
@@ -161,6 +223,7 @@ pub fn review_pack(
             } else {
                 " Its control did not run."
             };
+            failed.insert(slot.name);
             findings.push(Finding::new(
                 "EMPTY_ARTEFACT",
                 "NOT_READY",
@@ -180,7 +243,37 @@ pub fn review_pack(
             }
             continue;
         }
-        loaded.load(slot, &source, profile)?;
+        if loaded.load(slot, &source, profile)? {
+            ran.insert(slot.name);
+        } else {
+            failed.insert(slot.name);
+        }
+    }
+    let mut required_controls = Vec::new();
+    for name in required_names {
+        let (state, outcome) = if ran.contains(name.as_str()) {
+            ("ran", String::new())
+        } else if failed.contains(name.as_str()) {
+            ("failed", "failed: its file holds no rows".to_owned())
+        } else if slots.iter().any(|slot| slot.name == name) {
+            ("skipped", "was skipped: no file was supplied".to_owned())
+        } else {
+            let outcome = format!("was skipped: the {profile} profile does not run it");
+            ("skipped", outcome)
+        };
+        if let Some(code) = required_control_code(state) {
+            findings.push(Finding::new(
+                code,
+                "NOT_READY",
+                &name,
+                format!("Required control {name} {outcome}, so this pack says nothing about it."),
+                "Return the pack. Supply a usable artefact, or remove the requirement deliberately.",
+            ));
+        }
+        required_controls.push(RequiredControl {
+            name,
+            state: state.into(),
+        });
     }
     let period_end = loaded
         .self_review
@@ -274,6 +367,7 @@ pub fn review_pack(
         tieout_tolerance: tolerance,
         acknowledgement,
         controls_not_run: Some(controls),
+        required_controls,
         producer: None,
     })
 }

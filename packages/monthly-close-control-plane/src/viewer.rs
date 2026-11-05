@@ -5,6 +5,7 @@
 use crate::{
     Result,
     decimal::Decimal,
+    engine::{self, RunState},
     equity, pycsv,
     pyjson::{self, Json, LoadError, PyStr},
     pypath, pytext, report,
@@ -34,12 +35,13 @@ const REQUIRED: [&str; 7] = [
     "source_sha256",
     "thresholds",
 ];
-const OPTIONAL: [&str; 5] = [
+const OPTIONAL: [&str; 6] = [
     "client_queries",
     "calculation_evidence",
     "controls_not_run",
     "equity_reconciliation",
     "producer",
+    "required_controls",
 ];
 const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const THRESHOLDS: [&str; 3] = [
@@ -95,6 +97,88 @@ fn string_list<'a>(document: &'a Json, member: &str) -> Result<&'a [Json]> {
         .as_array()
         .filter(|v| v.iter().all(|s| s.as_pystr().is_some()))
         .ok_or_else(|| format!("{J}: {member} must be a list of strings"))
+}
+/// Each required control as the summary prints it, once verified.
+fn required_control_runs(document: &Json) -> Vec<String> {
+    document
+        .at("required_controls")
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|run| report::required_control_run(&text(run.at("name")), &text(run.at("state"))))
+        .collect()
+}
+/// The reason each unmet control in `required_controls` must raise.
+fn required_control_reasons(runs: &Json) -> Result<Vec<String>> {
+    let invalid = || format!("{J}: required_controls must be a non-empty list of names and states");
+    let runs = runs
+        .as_array()
+        .filter(|runs| !runs.is_empty())
+        .ok_or_else(invalid)?;
+    let mut reasons = Vec::new();
+    let mut previous = String::new();
+    for run in runs {
+        let fields = ["name", "state"].map(|key| run.get(key).and_then(Json::as_pystr));
+        if !run.has_exact_keys(&["name", "state"]) || fields.contains(&None) {
+            return Err(invalid());
+        }
+        let name = text(run.at("name"));
+        if !engine::requirable_controls().any(|control| control.as_str() == name) {
+            return Err(format!(
+                "{J}: required_controls names {name}, not a control"
+            ));
+        }
+        if name <= previous {
+            return Err(format!(
+                "{J}: required_controls must be sorted, without repeats"
+            ));
+        }
+        let state = RunState::parse(&text(run.at("state"))).ok_or_else(invalid)?;
+        reasons.extend(engine::required_control_reason(&name, state));
+        previous = name;
+    }
+    Ok(reasons)
+}
+/// `required_controls` and the `required_control` exceptions must say the same
+/// thing, or an edited state could pass off a gap as coverage.
+fn verify_required_controls(document: &Json) -> Result<()> {
+    let raised: Vec<_> = document
+        .at("exceptions")
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row.at("control").is_str("required_control"))
+        .collect();
+    let Some(runs) = document.get("required_controls") else {
+        return if raised.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "{J}: a required_control exception names no required_controls member"
+            ))
+        };
+    };
+    let mut expected = required_control_reasons(runs)?;
+    if !expected.is_empty() && document.at("overall_status").is_str("PASS") {
+        return Err(format!(
+            "{J}: overall_status is PASS with a required control unmet"
+        ));
+    }
+    if raised.iter().any(|row| !row.at("status").is_str("REVIEW")) {
+        return Err(format!("{J}: a required_control exception must be REVIEW"));
+    }
+    let mut found: Vec<_> = raised
+        .iter()
+        .filter_map(|row| row.at("reason").as_pystr().map(PyStr::os_text))
+        .collect();
+    expected.sort();
+    found.sort();
+    if found != expected {
+        return Err(format!(
+            "{J}: required_controls disagrees with the required_control exceptions"
+        ));
+    }
+    Ok(())
 }
 fn keys(value: &Json) -> Vec<PyStr> {
     let mut keys: Vec<_> = value.keys().unwrap().into_iter().cloned().collect();
@@ -669,6 +753,11 @@ fn expected_scope(document: &Json, register: bool) -> Result<Vec<String>> {
             "- Controls not run: {}.",
             if skipped.is_empty() { "none" } else { &skipped }
         ));
+    }
+    if document.get("required_controls").is_some() {
+        lines.push(report::required_controls_line(&required_control_runs(
+            document,
+        )));
     }
     lines.extend(gst_tolerance_line(document));
     lines.extend(document.get("producer").map(report::producer_line));
@@ -1330,6 +1419,7 @@ pub struct VerifiedPack {
 pub fn verify_payloads(payloads: &BTreeMap<String, Vec<u8>>) -> Result<VerifiedPack> {
     let document = parse_json(&payloads[J])?;
     verify_schema(&document)?;
+    verify_required_controls(&document)?;
     let has_file = payloads.contains_key(Q);
     let has_member = document.get("client_queries").is_some();
     if has_file != has_member {
@@ -1433,6 +1523,11 @@ pub fn render_verified(pack: &VerifiedPack) -> Result<String> {
             "- Controls not run: {}.",
             if skipped.is_empty() { "none" } else { &skipped }
         ));
+    }
+    if document.get("required_controls").is_some() {
+        lines.push(report::required_controls_line(&required_control_runs(
+            document,
+        )));
     }
     lines.extend(gst_tolerance_line(document));
     lines.extend(document.get("producer").map(report::producer_line));
