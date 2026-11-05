@@ -33,7 +33,7 @@ const JSON_MEMBERS: [&str; 9] = [
     "source_sha256",
     "thresholds",
 ];
-const OPTIONAL_MEMBERS: [&str; 2] = ["controls_not_run", "producer"];
+const OPTIONAL_MEMBERS: [&str; 3] = ["controls_not_run", "producer", "required_controls"];
 const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const FINDING_HEADER: &str = "| Status | Code | Slot | Repeat | Reason |";
 const FINDING_DIVIDER: &str = "| --- | --- | --- | --- | --- |";
@@ -281,6 +281,42 @@ pub(crate) fn verify_schema(document: &Json) -> Result<()> {
                     ));
                 }
             }
+        }
+    }
+    if let Some(required) = document.get("required_controls") {
+        let states = match required {
+            Json::Array(required) if !required.is_empty() => required
+                .iter()
+                .map(|r| {
+                    let keys = r.has_exact_keys(&["name", "state"]);
+                    keys.then(|| string(r.at("name")).and(string(r.at("state"))))
+                        .flatten()
+                })
+                .collect::<Option<Vec<_>>>(),
+            _ => None,
+        }
+        .filter(|states| {
+            states
+                .iter()
+                .all(|state| ["ran", "skipped", "failed"].contains(&state.as_str()))
+        })
+        .ok_or_else(|| {
+            format!("{JSON_NAME}: required_controls must be a non-empty list of names and states")
+        })?;
+        // A control that did not run must have its finding, or an edited state
+        // could pass off a gap as coverage.
+        let unmet = states.iter().filter(|state| *state != "ran").count();
+        let raised = findings
+            .iter()
+            .filter(|item| {
+                item.at("code").is_str("REQUIRED_CONTROL_SKIPPED")
+                    || item.at("code").is_str("REQUIRED_CONTROL_FAILED")
+            })
+            .count();
+        if raised != unmet {
+            return Err(format!(
+                "{JSON_NAME}: required_controls lists {unmet} control(s) that did not run but findings hold {raised}"
+            ));
         }
     }
     Ok(())
@@ -714,6 +750,16 @@ pub(crate) fn canonical_pack(
             })
             .collect()
     });
+    let required_controls = match document.get("required_controls") {
+        Some(Json::Array(required)) => required
+            .iter()
+            .map(|r| RequiredControl {
+                name: string(r.at("name")).unwrap(),
+                state: string(r.at("state")).unwrap(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     Ok(ReadinessPack {
         status: string(document.at("overall_status")).unwrap(),
         engagement_type: string(document.at("engagement_type")).unwrap(),
@@ -724,6 +770,7 @@ pub(crate) fn canonical_pack(
         tieout_tolerance: threshold(document.at("thresholds").at("tieout_tolerance"))?,
         acknowledgement,
         controls_not_run,
+        required_controls,
         producer: document.get("producer").cloned(),
     })
 }

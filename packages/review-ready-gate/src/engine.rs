@@ -96,10 +96,6 @@ pub fn tb_balanced(rows: &[TrialBalanceRow]) -> Result<(Decimal, Decimal)> {
     Ok((movement, ytd))
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "runs the readiness checks on one pack"
-)]
 pub fn review_pack(
     profile: &str,
     pack_dir: &Path,
@@ -107,6 +103,50 @@ pub fn review_pack(
     tolerance: Decimal,
     document_paths: &[PathBuf],
 ) -> Result<ReadinessPack> {
+    review_requiring(
+        profile,
+        pack_dir,
+        acknowledgement_path,
+        tolerance,
+        document_paths,
+        &[],
+    )
+}
+
+/// The named controls, sorted and without repeats, or a refusal: a mistyped
+/// name would otherwise require nothing and pass quietly.
+fn required_control_names(names: &[String]) -> Result<Vec<String>> {
+    let known = profiles::control_names();
+    if let Some(name) = names.iter().find(|name| !known.contains(name.as_str())) {
+        return Err(format!(
+            "--require-control {} is not a control. Name one of: {}.",
+            pytext::repr(name),
+            known.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(names
+        .iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
+/// `review_pack`, with a `NOT_READY` finding for each named control that was
+/// skipped or failed, including one the engagement profile does not have.
+#[expect(
+    clippy::too_many_lines,
+    reason = "runs the readiness checks on one pack"
+)]
+pub fn review_requiring(
+    profile: &str,
+    pack_dir: &Path,
+    acknowledgement_path: Option<&Path>,
+    tolerance: Decimal,
+    document_paths: &[PathBuf],
+    required_controls: &[String],
+) -> Result<ReadinessPack> {
+    let required_names = required_control_names(required_controls)?;
     if !tolerance.is_finite() || tolerance < Decimal::zero() {
         return Err("tie-out tolerance must be a finite non-negative decimal.".into());
     }
@@ -121,6 +161,8 @@ pub fn review_pack(
     let mut findings = Vec::new();
     let mut evidence = Vec::new();
     let mut controls = Vec::new();
+    let mut ran = BTreeSet::new();
+    let mut failed = BTreeSet::new();
     for slot in slots {
         let path = pack_dir.join(slot.filename);
         if !path.exists() {
@@ -161,6 +203,7 @@ pub fn review_pack(
             } else {
                 " Its control did not run."
             };
+            failed.insert(slot.name);
             findings.push(Finding::new(
                 "EMPTY_ARTEFACT",
                 "NOT_READY",
@@ -181,6 +224,44 @@ pub fn review_pack(
             continue;
         }
         loaded.load(slot, &source, profile)?;
+        ran.insert(slot.name);
+    }
+    let mut required_controls = Vec::new();
+    for name in required_names {
+        let (state, code, outcome) = if ran.contains(name.as_str()) {
+            ("ran", "", String::new())
+        } else if failed.contains(name.as_str()) {
+            (
+                "failed",
+                "REQUIRED_CONTROL_FAILED",
+                "failed: its file is empty".to_owned(),
+            )
+        } else if slots.iter().any(|slot| slot.name == name) {
+            (
+                "skipped",
+                "REQUIRED_CONTROL_SKIPPED",
+                "was skipped: no file was supplied".to_owned(),
+            )
+        } else {
+            (
+                "skipped",
+                "REQUIRED_CONTROL_SKIPPED",
+                format!("was skipped: the {profile} profile does not run it"),
+            )
+        };
+        if state != "ran" {
+            findings.push(Finding::new(
+                code,
+                "NOT_READY",
+                &name,
+                format!("Required control {name} {outcome}, so this pack says nothing about it."),
+                "Return the pack. Supply a usable artefact, or remove the requirement deliberately.",
+            ));
+        }
+        required_controls.push(RequiredControl {
+            name,
+            state: state.into(),
+        });
     }
     let period_end = loaded
         .self_review
@@ -274,6 +355,7 @@ pub fn review_pack(
         tieout_tolerance: tolerance,
         acknowledgement,
         controls_not_run: Some(controls),
+        required_controls,
         producer: None,
     })
 }

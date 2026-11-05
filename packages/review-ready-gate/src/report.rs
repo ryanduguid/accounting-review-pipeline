@@ -196,6 +196,22 @@ pub fn as_json(pack: &ReadinessPack) -> Result<Json> {
             ),
         ));
     }
+    if !pack.required_controls.is_empty() {
+        pairs.push((
+            PyStr::from("required_controls"),
+            Json::Array(
+                pack.required_controls
+                    .iter()
+                    .map(|required| {
+                        Json::object([
+                            ("name", Json::str(&required.name)),
+                            ("state", Json::str(&required.state)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ));
+    }
     if let Some(producer) = &pack.producer {
         pairs.push((PyStr::from("producer"), producer.clone()));
     }
@@ -251,6 +267,16 @@ pub fn as_markdown(pack: &ReadinessPack) -> Result<String> {
     ];
     if let Some(controls) = &pack.controls_not_run {
         lines.push(format!("- Controls not run: {}.", controls.len()));
+    }
+    if !pack.required_controls.is_empty() {
+        lines.push(format!(
+            "- Required controls: {}.",
+            pack.required_controls
+                .iter()
+                .map(|required| format!("{} ({})", required.name, required.state))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     lines.extend(pack.producer.as_ref().map(producer_line));
     lines.extend(["".into(), "## Source evidence".into(), "".into()]);

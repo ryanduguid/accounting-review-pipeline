@@ -192,6 +192,19 @@ fn scope_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
             ),
         ]));
     }
+    let required = |document: &Json| {
+        document
+            .get("required_controls")
+            .unwrap_or(&Json::Null)
+            .clone()
+    };
+    if !pyjson::py_eq(&required(previous), &required(current), true) {
+        changes.push(Json::object([
+            ("member", Json::str("required_controls")),
+            ("previous", required(previous)),
+            ("current", required(current)),
+        ]));
+    }
     let sorted = |document| -> Result<Vec<String>> {
         let mut sources: Vec<_> = document_sources(document)?
             .into_iter()

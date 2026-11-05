@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 use crate::Result;
+use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Slot {
@@ -79,6 +80,15 @@ const YEAR: &[Slot] = &[
     SELF,
     PRIOR,
 ];
+
+/// The names `--require-control` accepts: every slot of every profile.
+pub fn control_names() -> BTreeSet<&'static str> {
+    [BAS, MONTH, YEAR]
+        .into_iter()
+        .flatten()
+        .map(|slot| slot.name)
+        .collect()
+}
 
 pub fn slots_for(profile: &str) -> Result<&'static [Slot]> {
     match profile {

@@ -190,6 +190,27 @@ holds no bytes is a finding
 as well, because an empty file is not evidence; its digest is still recorded, so a
 reviewer can see which bytes the finding is about.
 
+`--require-control NAME` names a control this pack needs, so a script reading the
+exit code cannot take `READY` for coverage it did not get. Repeat it for more than
+one. `NAME` is a slot name, the name 'Controls not run' uses: `prior_findings` is
+the one every profile can skip. A control counts as having run when its file was
+in the pack, held bytes and loaded. Each named control ends in one of 3 states:
+
+| State | Meaning | Effect |
+| --- | --- | --- |
+| `ran` | The file loaded. Anything wrong with it is in its own findings. | None. |
+| `skipped` | No file was supplied, or the `--profile` has no such slot. | `NOT_READY` finding, `REQUIRED_CONTROL_SKIPPED`, exit `2`. |
+| `failed` | The file is empty. | `NOT_READY` finding, `REQUIRED_CONTROL_FAILED`, exit `2`. |
+
+A file that cannot be loaded stops the gate before any pack is written, with exit
+`1`. The gate's 3 statuses are unchanged, and an unmet requirement can never give
+`READY` or exit `0`. A name that is no profile's slot is exit `1` with no pack,
+because a mistyped requirement would otherwise require nothing. The command prints
+each state. The pack records them under `required_controls` as `name` and `state`
+pairs, sorted and without repeats, and in the summary's scope block. `view` refuses
+a pack whose states disagree with its findings, and `compare` reports a change
+under `scope_changes`. A run without the flag prints and writes none of this.
+
 Filenames inside the pack directory are fixed. Header-only CSV schemas live under `schemas/`, together with the JSON Schema for `self_review.json`.
 
 ### Self-review
