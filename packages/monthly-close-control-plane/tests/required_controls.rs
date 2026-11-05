@@ -322,13 +322,23 @@ fn a_summary_stripped_of_its_requirement_fails_verification() {
 fn a_pack_edited_to_say_a_skipped_control_ran_fails_verification() {
     let temp = TempDir::new();
     let (_, output) = review(&temp, "edited", &["--require-control=account_mapping"]);
-    let file = output.join("close-review-pack.json");
-    let text = fs::read_to_string(&file).unwrap();
-    assert!(text.contains("\"state\": \"skipped\""));
-    fs::write(
-        &file,
-        text.replace("\"state\": \"skipped\"", "\"state\": \"ran\""),
-    )
-    .unwrap();
-    assert!(viewer::verify_pack(&output).is_err());
+    for (name, skipped, ran) in [
+        (
+            "close-review-pack.json",
+            "\"state\": \"skipped\"",
+            "\"state\": \"ran\"",
+        ),
+        (
+            "close-summary.md",
+            "account_mapping (skipped)",
+            "account_mapping (ran)",
+        ),
+    ] {
+        let file = output.join(name);
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(text.contains(skipped), "{name}");
+        fs::write(&file, text.replace(skipped, ran)).unwrap();
+    }
+    let error = viewer::verify_pack(&output).err().unwrap();
+    assert!(error.contains("required_controls lists 0"), "{error}");
 }
