@@ -206,6 +206,138 @@ fn a_control_with_a_supplied_input_it_could_not_finish_on_is_failed_not_skipped(
 }
 
 #[test]
+fn a_header_only_mapping_is_failed() {
+    let temp = TempDir::new();
+    let mapping = temp.join("mapping.csv");
+    fs::write(&mapping, "AccountID,ReviewGroup\n").unwrap();
+    let (result, output) = review(
+        &temp,
+        "mapping",
+        &[
+            "--mapping",
+            mapping.to_str().unwrap(),
+            "--require-control",
+            "account_mapping",
+        ],
+    );
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    assert_eq!(state_of(&pack(&output), "account_mapping"), "failed");
+}
+
+#[test]
+fn a_required_calculation_with_no_evidence_file_is_skipped() {
+    let temp = TempDir::new();
+    let (result, output) = review(
+        &temp,
+        "calculation",
+        &[
+            "--require-calculation",
+            "coal-lsl-levy",
+            "--require-control",
+            "calculation_evidence",
+        ],
+    );
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    assert_eq!(state_of(&pack(&output), "calculation_evidence"), "skipped");
+}
+
+/// A class for every account the example balances move.
+fn gst_classes(path: &Path) {
+    fs::write(
+        path,
+        "AccountID,GSTClass\n100,bas_excluded\n110,bas_excluded\n200,gst\n300,taxable_sales\n\
+         400,creditable_purchases\n500,creditable_purchases\n900,bas_excluded\n",
+    )
+    .unwrap();
+}
+
+/// A complete equity schedule for the 2 balances: a fabricated tenant's account 900.
+fn equity_schedule(path: &Path, prior: &str, current: &str) {
+    let digest = |path: &str| monthly_close_control_plane::sha256(&fs::read(path).unwrap());
+    fs::write(
+        path,
+        format!(
+            r#"{{"schema_version":1,"tenant":"Varrock Ventures Pty Ltd","opening_date":"2026-06-30",
+            "closing_date":"2026-07-31","currency":"AUD","basis":"ledger_equity",
+            "prior_source_sha256":"{}","current_source_sha256":"{}",
+            "equity_account_ids":["900"],"complete":true,"movements":[]}}"#,
+            digest(prior),
+            digest(current)
+        ),
+    )
+    .unwrap();
+}
+
+/// The package's example close with every optional control's input: each runs,
+/// and those that raise hold the pack at `REVIEW` or worse on their own account.
+#[test]
+fn every_optional_control_ran_and_its_own_exceptions_hold_the_pack() {
+    let temp = TempDir::new();
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let example = |name: &str| examples.join(name).to_str().unwrap().to_owned();
+    let current = example("current_trial_balance.csv");
+    let prior = example("prior_trial_balance.csv");
+    let gst = temp.join("gst.csv");
+    gst_classes(&gst);
+    let settlements = temp.join("settlements.csv");
+    fs::write(&settlements, "Reference,Amount\n").unwrap();
+    let schedule = temp.join("equity.json");
+    equity_schedule(&schedule, &prior, &current);
+    let output = temp.join("all");
+    let mut command = Command::new(BIN);
+    command
+        .args(["review", "--current", &current, "--prior", &prior])
+        .args(["--mapping", &example("account_mapping.csv")])
+        .args(["--mapping-policy", &example("mapping_policy.csv")])
+        .args(["--balance-policy", &example("balance_policy.csv")])
+        .args(["--subledger", &example("subledger_balances.csv")])
+        .arg("--gst-mapping")
+        .arg(&gst)
+        .arg("--gst-settlements")
+        .arg(&settlements)
+        .args([
+            "--calculation-evidence",
+            &example("calculation-evidence-coal-lsl-levy.json"),
+        ])
+        .arg("--equity-schedule")
+        .arg(&schedule)
+        .args(["--equity-currency", "AUD"])
+        .args([
+            "--equity-currency-evidence",
+            "Fabricated report metadata: AUD",
+        ])
+        .arg("--output")
+        .arg(&output);
+    for name in OPTIONAL {
+        command.args(["--require-control", name]);
+    }
+    let result = command.output().unwrap();
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    let document = pack(&output);
+    for name in OPTIONAL {
+        assert_eq!(state_of(&document, name), "ran", "{name}");
+    }
+    assert!(required_control_reasons(&document).is_empty());
+    assert!(!document.at("exceptions").as_array().unwrap().is_empty());
+    assert!(!document.at("overall_status").is_str("PASS"));
+    assert!(viewer::verify_pack(&output).is_ok());
+}
+
+#[test]
+fn the_new_option_makes_the_shorter_require_spellings_ambiguous() {
+    let temp = TempDir::new();
+    for spelling in ["--req", "--require", "--require-c"] {
+        let (result, _) = review(&temp, "ambiguous", &[spelling, "x"]);
+        assert_eq!(result.status.code(), Some(1), "{spelling}: {result:?}");
+        let error = String::from_utf8_lossy(&result.stderr);
+        assert!(error.contains("ambiguous option"), "{spelling}: {error}");
+    }
+    let (result, _) = review(&temp, "unique", &["--require-ca", "not a slug"]);
+    let error = String::from_utf8_lossy(&result.stderr);
+    assert!(error.contains("--require-calculation"), "{error}");
+}
+
+#[test]
 fn a_review_note_does_not_clear_an_unmet_requirement() {
     let temp = TempDir::new();
     let note = temp.join("note.json");
@@ -318,27 +450,84 @@ fn a_summary_stripped_of_its_requirement_fails_verification() {
     assert!(viewer::verify_pack(&output).is_err());
 }
 
-#[test]
-fn a_pack_edited_to_say_a_skipped_control_ran_fails_verification() {
+/// A pack whose `account_mapping` ran and whose `balance_policy` was skipped, its
+/// JSON put through `edit`, and what verification then says.
+fn edited(edit: impl Fn(&str) -> String) -> String {
     let temp = TempDir::new();
-    let (_, output) = review(&temp, "edited", &["--require-control=account_mapping"]);
-    for (name, skipped, ran) in [
-        (
-            "close-review-pack.json",
-            "\"state\": \"skipped\"",
-            "\"state\": \"ran\"",
-        ),
-        (
-            "close-summary.md",
-            "account_mapping (skipped)",
-            "account_mapping (ran)",
-        ),
-    ] {
-        let file = output.join(name);
-        let text = fs::read_to_string(&file).unwrap();
-        assert!(text.contains(skipped), "{name}");
-        fs::write(&file, text.replace(skipped, ran)).unwrap();
-    }
-    let error = viewer::verify_pack(&output).err().unwrap();
-    assert!(error.contains("required_controls lists 0"), "{error}");
+    let mapping = temp.join("mapping.csv");
+    fs::write(&mapping, "AccountID,ReviewGroup\nA1,Cash\nE1,Equity\n").unwrap();
+    let (_, output) = review(
+        &temp,
+        "edited",
+        &[
+            "--mapping",
+            mapping.to_str().unwrap(),
+            "--require-control=account_mapping",
+            "--require-control=balance_policy",
+        ],
+    );
+    let file = output.join("close-review-pack.json");
+    let text = fs::read_to_string(&file).unwrap();
+    let changed = edit(&text);
+    assert_ne!(changed, text);
+    fs::write(&file, changed).unwrap();
+    viewer::verify_pack(&output).err().unwrap()
+}
+
+const RAN: &str = "\"state\": \"ran\"";
+const SKIPPED: &str = "\"state\": \"skipped\"";
+
+#[test]
+fn a_pack_whose_states_disagree_with_its_exceptions_fails_verification() {
+    let swapped = edited(|text| {
+        text.replace(RAN, "swap")
+            .replace(SKIPPED, RAN)
+            .replace("swap", SKIPPED)
+    });
+    assert!(swapped.contains("disagrees"), "{swapped}");
+    let failed = edited(|text| text.replace(SKIPPED, "\"state\": \"failed\""));
+    assert!(failed.contains("disagrees"), "{failed}");
+    let all_ran = edited(|text| text.replace(SKIPPED, RAN));
+    assert!(all_ran.contains("disagrees"), "{all_ran}");
+}
+
+#[test]
+fn a_pack_naming_an_unknown_or_repeated_control_fails_verification() {
+    let invented =
+        edited(|text| text.replace("\"name\": \"balance_policy\"", "\"name\": \"made_up\""));
+    assert!(invented.contains("not a control"), "{invented}");
+    let repeated = edited(|text| {
+        text.replace(
+            "\"name\": \"balance_policy\"",
+            "\"name\": \"account_mapping\"",
+        )
+    });
+    assert!(repeated.contains("without repeats"), "{repeated}");
+}
+
+#[test]
+fn an_exception_with_no_required_controls_member_fails_verification() {
+    let error = edited(|text| {
+        let mut document = pyjson::loads(text).unwrap();
+        if let pyjson::Json::Object(pairs) = &mut document {
+            pairs.retain(|(key, _)| !key.is("required_controls"));
+        }
+        pyjson::pretty(&document)
+    });
+    assert!(error.contains("names no required_controls"), "{error}");
+}
+
+#[test]
+fn a_pack_edited_to_pass_with_a_control_unmet_fails_verification() {
+    let error = edited(|text| {
+        text.replace(
+            "\"overall_status\": \"REVIEW\"",
+            "\"overall_status\": \"PASS\"",
+        )
+        .replace("\"status\": \"REVIEW\"", "\"status\": \"PASS\"")
+    });
+    assert!(
+        error.contains("PASS with a required control unmet"),
+        "{error}"
+    );
 }

@@ -644,18 +644,19 @@ The rule for each control:
 | Control | Counts as `ran` when | `skipped` when | `failed` when |
 | --- | --- | --- | --- |
 | The 5 that run on every review | Always | Never | Never |
-| `account_mapping` | `--mapping` was supplied | It was not | Never |
+| `account_mapping` | `--mapping` held at least one row | It was not supplied | The file held no rows |
 | `mapping_compatibility` | `--mapping-policy` was supplied | It was not | Never |
 | `balance_policy` | `--balance-policy` was supplied | It was not | Never |
 | `subledger_reconciliation` | `--subledger` held at least one row | It was not supplied | The file held no rows |
 | `gst_reasonableness` | `--gst-mapping` was supplied and the control finished | No mapping was supplied | The control could not finish, as without `--gst-settlements` |
-| `calculation_evidence` | Evidence or `--require-calculation` was supplied and every file was read | Neither was supplied | A supplied file could not be read |
+| `calculation_evidence` | Evidence was supplied and every file was read | No evidence file was supplied, even with `--require-calculation` | A supplied file could not be read |
 | `equity_reconciliation` | `--equity-schedule` was supplied | It was not | Never |
 
 A `skipped` or `failed` control raises a `required_control` exception naming it, so
 the pack cannot reach `PASS`, and the command exits 2, never 0. No new status exists,
 and a review note does not clear the exception. An input a command cannot read at
-all stops the review before any pack is written, with exit 1.
+all stops the review before any pack is written, with exit 1. A `complete` equity
+schedule with no movements counts as `ran`, because it declares that none happened.
 
 `NAME` is a control ID from [Controls](#controls), other than `required_control`.
 `subledger_reconciliation` is listed as `subledger` under `controls_not_run`;
@@ -665,7 +666,10 @@ because a mistyped requirement would otherwise require nothing.
 The command prints each named control's state. The pack records them under
 `required_controls` as `name` and `state` pairs, sorted and without repeats, and on
 a `Required controls` line in the summary. `view` refuses a pack whose states
-disagree with its `required_control` exceptions. `close-control compare` reports a
+disagree with its `required_control` exceptions, that names a control twice or
+names none it should, or that says `PASS` with a control unmet. A build older than
+this option refuses a flagged pack, because `required_controls` is a member it does
+not know. `close-control compare` reports a
 changed requirement or state under `scope_changes`. A run without the flag prints
 and writes none of this, so its output is unchanged.
 

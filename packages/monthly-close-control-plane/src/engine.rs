@@ -71,6 +71,12 @@ impl RunState {
             Self::Failed => "failed",
         }
     }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        [Self::Ran, Self::Skipped, Self::Failed]
+            .into_iter()
+            .find(|state| state.as_str() == text)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -703,11 +709,9 @@ pub fn review_close(config: &ReviewConfig) -> Result<CloseReviewPack> {
     review_with(config, &mut SourceSnapshot::capture)
 }
 
-/// One capture per input keeps parsing and provenance bound to the same bytes.
-/// The capture boundary also allows the frozen-oracle probe to supply snapshots.
 /// The controls `--require-control` accepts: all but the one that reports a
 /// required control missing.
-fn requirable_controls() -> impl Iterator<Item = Control> {
+pub fn requirable_controls() -> impl Iterator<Item = Control> {
     Control::ALL
         .iter()
         .copied()
@@ -736,28 +740,37 @@ fn required_controls_named(names: &[String]) -> Result<Vec<Control>> {
     Ok(controls)
 }
 
+/// The reason a required control's exception gives, if its state needs one.
+pub fn required_control_reason(name: &str, state: RunState) -> Option<String> {
+    let outcome = match state {
+        RunState::Ran => return None,
+        RunState::Skipped => "was skipped: its input was not supplied",
+        RunState::Failed => "failed: its input was supplied but it could not finish",
+    };
+    Some(format!(
+        "Required control {name} {outcome}, so this pack says nothing about it."
+    ))
+}
+
 /// `REVIEW` for each required control that did not run to its end.
 fn required_control_exceptions(required: &[RequiredControlRun]) -> Vec<ExceptionItem> {
     required
         .iter()
         .filter_map(|run| {
-            let name = run.control.as_str();
-            let outcome = match run.state {
-                RunState::Ran => return None,
-                RunState::Skipped => "was skipped: its input was not supplied",
-                RunState::Failed => "failed: its input was supplied but it could not finish",
-            };
+            let reason = required_control_reason(run.control.as_str(), run.state)?;
             Some(ExceptionItem::new(
                 Control::Required,
                 Status::Review,
                 None,
-                &format!("Required control {name} {outcome}, so this pack says nothing about it."),
+                &reason,
                 "Supply a usable input and run the review again, or remove the requirement deliberately.",
             ))
         })
         .collect()
 }
 
+/// One capture per input keeps parsing and provenance bound to the same bytes.
+/// The capture boundary also allows the frozen-oracle probe to supply snapshots.
 #[expect(
     clippy::too_many_lines,
     reason = "captures each input once, then reviews"
@@ -943,8 +956,6 @@ pub fn review_with(
     } else {
         None
     };
-    let calculation_evidence_ran =
-        !evidence.is_empty() || !unreadable.is_empty() || !config.required_calculations.is_empty();
     let supplied = |present| {
         if present {
             RunState::Ran
@@ -960,6 +971,9 @@ pub fn review_with(
         | Control::PeriodVariance
         | Control::AccountMetadata
         | Control::Required => RunState::Ran,
+        Control::AccountMapping if config.mapping_path.is_some() && mapping.is_empty() => {
+            RunState::Failed
+        }
         Control::AccountMapping => supplied(config.mapping_path.is_some()),
         Control::MappingCompatibility => supplied(mapping_policy.is_some()),
         Control::BalancePolicy => supplied(balance_policy.is_some()),
@@ -972,7 +986,7 @@ pub fn review_with(
         Control::GstReasonableness if gst_mapping.is_some() && !gst_ran => RunState::Failed,
         Control::GstReasonableness => supplied(gst_mapping.is_some()),
         Control::CalculationEvidence if !unreadable.is_empty() => RunState::Failed,
-        Control::CalculationEvidence => supplied(calculation_evidence_ran),
+        Control::CalculationEvidence => supplied(!evidence.is_empty()),
         Control::EquityReconciliation => supplied(equity_source.is_some()),
     };
     let required_controls: Vec<_> = required_controls
@@ -1019,7 +1033,12 @@ pub fn review_with(
         ("subledger", !subledger.is_empty()),
         // Tracked only once a GST mapping is supplied, so packs without one are unchanged.
         ("gst_reasonableness", gst_ran),
-        ("calculation_evidence", calculation_evidence_ran),
+        (
+            "calculation_evidence",
+            !evidence.is_empty()
+                || !unreadable.is_empty()
+                || !config.required_calculations.is_empty(),
+        ),
     ]
     .into_iter()
     .filter(|(_, ran)| !ran)
