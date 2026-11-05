@@ -874,6 +874,33 @@ fn a_pack_whose_states_disagree_with_its_findings_fails_view() {
     assert_view_says(&all_ran, "disagrees with the required control findings");
 }
 
+/// A summary rewritten to match must not carry READY past the pack's own findings.
+#[test]
+fn a_ready_status_over_a_required_finding_fails_view() {
+    let tmp = TempDir::new();
+    let output = tmp.join("edited");
+    gate_requiring(&output, &["open_items", "prior_findings"]);
+    for (name, status) in [
+        ("readiness-pack.json", "\"overall_status\": \"{}\""),
+        ("readiness-summary.md", "**Overall status: {}**"),
+    ] {
+        let path = output.join(name);
+        let text = fs::read_to_string(&path).unwrap();
+        let (from, to) = (status.replace("{}", "NOT_READY"), status.replace("{}", "READY"));
+        assert!(text.contains(&from), "{name}");
+        fs::write(&path, text.replace(&from, &to)).unwrap();
+    }
+    assert!(pack_json(&output).contains("REQUIRED_CONTROL_SKIPPED"));
+    let view = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+        .arg("view")
+        .arg("--pack-dir")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert_ne!(view.status.code(), Some(0), "{view:?}");
+    assert_view_says(&view, "overall_status disagrees with the findings");
+}
+
 #[test]
 fn a_pack_naming_an_unknown_or_repeated_control_fails_view() {
     let invented =
