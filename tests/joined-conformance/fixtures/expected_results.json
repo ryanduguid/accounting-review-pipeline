@@ -101,6 +101,56 @@
       "ledger_gate": {
         "accept": true
       }
+    },
+    {
+      "id": "header_order",
+      "fixture": "failing_header_order.csv",
+      "tenant": "Catherby Fisheries Pty Ltd",
+      "account_codes": ["090", "800"],
+      "amounts": [["1200.0", "0.0", "15234.5", "0.0"], ["0.0", "1200.0", "0.0", "15234.5"]],
+      "review_commands": {
+        "accept": true
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "declared order"
+      }
+    },
+    {
+      "id": "duplicate_account_id",
+      "fixture": "failing_duplicate_account.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "duplicate control key"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "duplicate AccountID"
+      }
+    },
+    {
+      "id": "bad_number",
+      "fixture": "failing_number.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "invalid Debit"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "Debit is not a valid decimal"
+      }
+    },
+    {
+      "id": "bad_date",
+      "fixture": "failing_date.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "ReportDate must be an ISO date"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "ReportDate must be ISO"
+      }
     }
   ],
   "human_decision": "Accepting a spelling passes the loaders only; a human still decides completeness, classification and accounting treatment."

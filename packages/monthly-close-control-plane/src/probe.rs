@@ -169,13 +169,13 @@ fn cli(request: &Json) -> Result<Json> {
         ("code", Json::int(code.into())),
         (
             "stdout",
-            Json::Str(PyStr::from_os_text(&normalise(without_gst_options(
+            Json::Str(PyStr::from_os_text(&normalise(without_native_options(
                 &stdout,
             )))),
         ),
         (
             "stderr",
-            Json::Str(PyStr::from_os_text(&normalise(without_gst_options(
+            Json::Str(PyStr::from_os_text(&normalise(without_native_options(
                 &stderr,
             )))),
         ),
@@ -225,10 +225,26 @@ const GST_OPTIONS: &str = concat!(
     "                        of the expected GST on sales and purchases, e.g. 0.01\n",
     "                        for 1%\n",
 );
-/// The frozen Python baseline predates the GST reasonableness options, so CLI
-/// output compared with it drops their usage and help lines.
-fn without_gst_options(text: &str) -> String {
-    text.replace(GST_USAGE, "").replace(GST_OPTIONS, "")
+/// The review command's required-control option, in its usage and its help.
+const REQUIRED_CONTROL_USAGE: &str = concat!(
+    "[--require-calculation LABEL]\n",
+    "                            [--require-control NAME] --output OUTPUT\n",
+);
+const REQUIRED_CONTROL_OPTION: &str = concat!(
+    "  --require-control NAME\n",
+    "                        a control this close needs; if it did not run the\n",
+    "                        pack is REVIEW, never PASS. Repeat for more than one\n",
+);
+/// The frozen Python baseline predates the GST reasonableness and required
+/// control options, so CLI output compared with it drops their usage and help lines.
+fn without_native_options(text: &str) -> String {
+    text.replace(GST_USAGE, "")
+        .replace(GST_OPTIONS, "")
+        .replace(
+            REQUIRED_CONTROL_USAGE,
+            "[--require-calculation LABEL] --output OUTPUT\n",
+        )
+        .replace(REQUIRED_CONTROL_OPTION, "")
 }
 fn decimal_json(value: Option<&Decimal>) -> Json {
     value.map_or(Json::Null, |value| Json::str(&value.to_sci_string()))
@@ -973,20 +989,27 @@ pub fn main() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::without_gst_options;
+    use super::without_native_options;
     use crate::{cli, stdio};
 
     #[test]
-    fn dropping_the_gst_options_leaves_the_frozen_review_help_and_usage() {
+    fn dropping_the_native_options_leaves_the_frozen_review_help_and_usage() {
         let (code, help, _) = stdio::capture(|| cli::main(vec!["review".into(), "--help".into()]));
         assert_eq!(code, 0);
         assert!(help.contains("--gst-mapping"));
-        let frozen = without_gst_options(&help);
+        let frozen = without_native_options(&help);
         assert!(!frozen.to_lowercase().contains("gst"), "{frozen}");
+        assert!(!frozen.contains("--require-control"), "{frozen}");
+        assert!(frozen.contains(
+            "[--require-calculation LABEL] --output OUTPUT
+"
+        ));
         assert!(frozen.ends_with("maximum permitted GL/subledger difference\n"));
         let (code, _, usage) = stdio::capture(|| cli::main(vec!["review".into()]));
         assert_eq!(code, 1);
         assert!(usage.contains("--gst-mapping"));
-        assert!(!without_gst_options(&usage).to_lowercase().contains("gst"));
+        let frozen = without_native_options(&usage);
+        assert!(!frozen.to_lowercase().contains("gst"));
+        assert!(!frozen.contains("--require-control"));
     }
 }

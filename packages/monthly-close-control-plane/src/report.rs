@@ -328,6 +328,15 @@ pub fn as_json(pack: &CloseReviewPack) -> Result<Json> {
         ),
         ("thresholds", thresholds),
     ]);
+    if !pack.required_controls.is_empty() {
+        let runs = pack.required_controls.iter().map(|run| {
+            Json::object([
+                ("name", Json::str(run.control.as_str())),
+                ("state", Json::str(run.state.as_str())),
+            ])
+        });
+        result.set("required_controls", Json::Array(runs.collect()));
+    }
     if !pack.calculation_evidence.is_empty() || !pack.required_calculations.is_empty() {
         let mut evidence: Vec<_> = pack.calculation_evidence.iter().collect();
         evidence.sort_by(|a, b| a.label.cmp(&b.label));
@@ -355,6 +364,12 @@ pub fn as_json(pack: &CloseReviewPack) -> Result<Json> {
         result.set("producer", producer.clone());
     }
     Ok(result)
+}
+pub fn required_controls_line(runs: &[String]) -> String {
+    format!("- Required controls: {}.", runs.join(", "))
+}
+pub fn required_control_run(name: &str, state: &str) -> String {
+    format!("{name} ({state})")
 }
 fn absent(value: &str) -> &str {
     if value.is_empty() { "n/a" } else { value }
@@ -391,6 +406,14 @@ pub fn as_markdown(pack: &CloseReviewPack) -> Result<PyStr> {
         format!("- Reconciliation tolerance: ${}",money(&pack.reconciliation_tolerance)?),format!("- Exceptions: {} total; {blocked} blocked; {review} requiring review.",pack.exceptions.len()),
         format!("- Client queries drafted: {}.",queries.len()),format!("- Controls not run: {}.",if controls.is_empty() {"none"} else {&controls}),
     ];
+    if !pack.required_controls.is_empty() {
+        let runs: Vec<_> = pack
+            .required_controls
+            .iter()
+            .map(|run| required_control_run(run.control.as_str(), run.state.as_str()))
+            .collect();
+        lines.push(required_controls_line(&runs));
+    }
     if let Some((absolute, percent)) = &pack.gst_tolerance {
         lines.push(gst_tolerance_line(&money(absolute)?, &percentage(percent)?));
     }

@@ -64,7 +64,7 @@ fn same(a: Option<&Json>, b: Option<&Json>) -> bool {
 )]
 fn scope_changes(previous: &Json, current: &Json) -> Vec<&'static str> {
     let mut changes = Vec::new();
-    for field in ["controls_not_run", "thresholds"] {
+    for field in ["controls_not_run", "thresholds", "required_controls"] {
         if !same(previous.get(field), current.get(field)) {
             changes.push(field);
         }
