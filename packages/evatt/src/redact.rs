@@ -7,7 +7,7 @@ use crate::{
     patterns::{self, Result, Span},
     pytext,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
 
 pub type Counts = Vec<(String, usize)>;
 
@@ -25,6 +25,9 @@ pub struct Unknown {
     pub value: String,
     pub line: usize,
     pub context: std::sync::Arc<str>,
+    /// Every place the sweep saw this value, as byte ranges of `Redaction::source`.
+    /// `residual` alone gives ranges of the text it swept.
+    pub spans: Vec<(usize, usize)>,
 }
 
 pub struct Lines {
@@ -65,14 +68,50 @@ impl Lines {
         (index, self.lines[index - 1].clone())
     }
 
-    fn unknown(&self, kind: &str, value: &str, pos: usize) -> Unknown {
-        let (line, context) = self.locate(pos);
+    fn unknown(&self, kind: &str, value: &str, span: (usize, usize)) -> Unknown {
+        let (line, context) = self.locate(span.0);
         Unknown {
             kind: kind.into(),
             value: value.into(),
             line,
             context,
+            spans: vec![span],
         }
+    }
+}
+
+/// One candidate for each value on a line, holding every place the sweep saw it.
+fn once_a_line(found: Vec<Unknown>) -> Vec<Unknown> {
+    let mut first: HashMap<_, usize> = HashMap::new();
+    let mut kept: Vec<Unknown> = Vec::new();
+    for u in found {
+        match first.entry((u.line, u.value.clone())) {
+            Entry::Occupied(at) => kept[*at.get()].spans.extend(u.spans),
+            Entry::Vacant(at) => {
+                at.insert(kept.len());
+                kept.push(u);
+            }
+        }
+    }
+    kept
+}
+
+/// Text built from a source, with the source offset of each byte copied from it.
+#[derive(Default)]
+struct Traced {
+    text: String,
+    origin: Vec<Option<usize>>,
+}
+
+impl Traced {
+    fn copy(&mut self, source: &str, start: usize, end: usize) {
+        self.text.push_str(&source[start..end]);
+        self.origin.extend((start..end).map(Some));
+    }
+
+    fn insert(&mut self, text: &str) {
+        self.text.push_str(text);
+        self.origin.resize(self.text.len(), None);
     }
 }
 
@@ -124,11 +163,11 @@ fn normalise(kind: &str, value: &str) -> String {
     }
 }
 
-fn structured(text: &str) -> Result<(String, Counts)> {
+fn structured(text: &str) -> Result<(Traced, Counts)> {
     let mut assigned = HashMap::new();
     let mut ordinals = HashMap::new();
     let mut counts = Vec::new();
-    let mut out = String::new();
+    let mut out = Traced::default();
     let mut cursor = 0;
     for span in patterns::structured_spans(text)? {
         let key = (span.kind.clone(), normalise(&span.kind, &span.value));
@@ -138,17 +177,17 @@ fn structured(text: &str) -> Result<(String, Counts)> {
             format!("{}_{:02}", span.kind.to_ascii_uppercase(), ordinal)
         });
         count(&mut counts, &span.kind);
-        out.push_str(&text[cursor..span.start]);
+        out.copy(text, cursor, span.start);
         if span.start > 0
             && !pytext::is_space(text[..span.start].chars().next_back().unwrap() as u32)
             && !pytext::is_word(text[span.start..].chars().next().unwrap() as u32)
         {
-            out.push(' ');
+            out.insert(" ");
         }
-        out.push_str(placeholder);
+        out.insert(placeholder);
         cursor = span.end;
     }
-    out.push_str(&text[cursor..]);
+    out.copy(text, cursor, text.len());
     Ok((out, counts))
 }
 
@@ -386,10 +425,11 @@ fn chain_identifiers(
     text: &str,
     runs: &[(usize, usize)],
     gaps: &[Gap],
+    kept: Option<&[bool]>,
     stats: &mut ScanStats,
 ) -> Result<Vec<(usize, usize)>> {
     let mut found = Vec::new();
-    if gaps.iter().all(|gap| *gap == Gap::Token) {
+    if kept.is_none() && gaps.iter().all(|gap| *gap == Gap::Token) {
         return Ok(found);
     }
     let digits: Vec<(char, usize, usize)> = runs
@@ -408,7 +448,10 @@ fn chain_identifiers(
             let (head, tail) = (first.1, last.1);
             let crossed = &gaps[head..tail];
             let whole_runs = first.2 == runs[head].0 && last.2 + last.0.len_utf8() == runs[tail].1;
-            if crossed.iter().any(|gap| *gap != Gap::Token) && (whole_runs || !crossed.contains(&Gap::Wrap)) {
+            let wanted = kept.map_or(crossed.iter().any(|gap| *gap != Gap::Token), |kept| {
+                window.iter().any(|digit| kept[digit.2]) && window.iter().any(|digit| !kept[digit.2])
+            });
+            if wanted && (whole_runs || !crossed.contains(&Gap::Wrap)) {
                 let joined: String = window.iter().map(|digit| digit.0).collect();
                 let span = (runs[head].0, runs[tail].1);
                 if passes_identifier_check(&joined)? && (!crossed.contains(&Gap::Money) || near_label(text, span)) {
@@ -445,7 +488,7 @@ fn money_runs(text: &str, runs: &[(usize, usize)]) -> Vec<bool> {
 /// that share a line or wrap across lines can halt, as the columnar rows of the
 /// README's benchmark show. Each chain is walked once, so the work grows with the
 /// digits in the text.
-fn split_identifiers(text: &str, stats: &mut ScanStats) -> Result<Vec<(usize, usize)>> {
+fn split_identifiers(text: &str, kept: Option<&[bool]>, stats: &mut ScanStats) -> Result<Vec<(usize, usize)>> {
     let text = without_markup(text, stats);
     let runs = digit_runs(&text);
     let money = money_runs(&text, &runs);
@@ -474,6 +517,7 @@ fn split_identifiers(text: &str, stats: &mut ScanStats) -> Result<Vec<(usize, us
             &text,
             &runs[first..=last],
             &gaps[first..last],
+            kept,
             stats,
         )?);
         first = last + 1;
@@ -527,7 +571,7 @@ pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
         }
         found.push((start, end));
     }
-    let split = split_identifiers(text, &mut stats)?;
+    let split = split_identifiers(text, None, &mut stats)?;
     let split: Vec<_> = split
         .into_iter()
         .filter(|span| !named_by_tokens(text, &found, *span))
@@ -597,7 +641,7 @@ fn partial_number(numbers: &[(usize, usize)], start: usize, end: usize) -> bool 
     first < next && (start > numbers[first].0 || end < numbers[next - 1].1)
 }
 
-fn replace_entities(text: &str, entries: &[Entity]) -> Result<(String, Counts)> {
+fn replace_entities(text: &str, entries: &[Entity]) -> Result<(Traced, Counts)> {
     let protected: Vec<_> = patterns::matches("CARRIED_PLACEHOLDER", text)?
         .iter()
         .map(|m| {
@@ -612,7 +656,7 @@ fn replace_entities(text: &str, entries: &[Entity]) -> Result<(String, Counts)> 
     let numbers = mapped_numbers(&numeric)?;
     let ambiguous = patterns::merge(patterns::ambiguous(text)?.iter().map(|a| (a.start, a.end)).collect());
     let mut counts = Vec::new();
-    let mut out = String::new();
+    let mut out = Traced::default();
     let mut cursor = 0;
     let mut previous_close = String::new();
     let mut accepted = false;
@@ -627,17 +671,17 @@ fn replace_entities(text: &str, entries: &[Entity]) -> Result<(String, Counts)> 
         let entity = &entries[m.priority];
         count(&mut counts, &entity.kind);
         if accepted && m.start == cursor && previous_close.is_empty() && m.open.is_empty() {
-            out.push(' ');
+            out.insert(" ");
         }
-        out.push_str(&text[cursor..m.start]);
-        out.push_str(&m.open.replace('_', "*"));
-        out.push_str(&entity.placeholder);
-        out.push_str(&m.close.replace('_', "*"));
+        out.copy(text, cursor, m.start);
+        out.insert(&m.open.replace('_', "*"));
+        out.insert(&entity.placeholder);
+        out.insert(&m.close.replace('_', "*"));
         previous_close = m.close;
         cursor = m.end;
         accepted = true;
     }
-    out.push_str(&text[cursor..]);
+    out.copy(text, cursor, text.len());
     Ok((out, counts))
 }
 
@@ -655,15 +699,11 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
     let windows = if protected.is_empty() {
         Vec::new()
     } else {
-        patterns::merge(split_identifiers(&numeric.text, &mut ScanStats::default())?)
+        patterns::merge(split_identifiers(&numeric.text, None, &mut ScanStats::default())?)
     };
     let mut found = Vec::new();
-    let mut seen = HashSet::new();
     for a in ambiguous {
-        let u = lines.unknown("number", &a.value, a.digit_start);
-        if seen.insert((u.line, u.value.clone())) {
-            found.push(u);
-        }
+        found.push(lines.unknown("number", &a.value, (a.digit_start, a.end)));
     }
     for s in numbers(&numeric.text)? {
         let (start, end) = (numeric.original[s.start], numeric.original[s.end]);
@@ -673,12 +713,9 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
         if patterns::intersects(&protected, start, end) && !holds_identifier {
             continue;
         }
-        let u = lines.unknown("number", &s.value, start);
-        if seen.insert((u.line, u.value.clone())) {
-            found.push(u);
-        }
+        found.push(lines.unknown("number", &s.value, (start, end)));
     }
-    Ok(found)
+    Ok(once_a_line(found))
 }
 
 /// A number whose last group starts an address: the address mask hides that group
@@ -697,7 +734,7 @@ fn numbers_into_addresses(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
         let (start, end) = (numeric.original[s.start], numeric.original[s.end]);
         let next = addresses.partition_point(|&address| address <= start);
         if addresses.get(next).is_some_and(|&address| address < end) {
-            found.push(lines.unknown("number", &s.value, start));
+            found.push(lines.unknown("number", &s.value, (start, end)));
         }
     }
     Ok(found)
@@ -709,23 +746,23 @@ pub fn residual(text: &str) -> Result<Vec<Unknown>> {
     for (kind, name) in [("address", "ADDRESS"), ("date", "DOB")] {
         for m in patterns::matches(name, text)? {
             let m = m.get(0).unwrap();
-            found.push(lines.unknown(kind, m.as_str(), m.start()));
+            found.push(lines.unknown(kind, m.as_str(), (m.start(), m.end())));
         }
     }
     let masked = Mask::new(text).blank("ADDRESS")?.blank("DOB")?;
-    let mut names = BTreeMap::new();
+    let mut names = Vec::new();
     for s in patterns::person_names(&masked.text)? {
         if patterns::has("PLACEHOLDER", &s.value)? {
             continue;
         }
-        let u = lines.unknown("name", &s.value, masked.original[s.start]);
-        names.entry((u.line, u.value.clone())).or_insert(u);
+        names.push(lines.unknown("name", &s.value, (masked.original[s.start], masked.original[s.end])));
     }
+    names.sort_by(|a, b| (a.line, &a.value).cmp(&(b.line, &b.value)));
     let numeric = masked.blank("CARRIED_PLACEHOLDER")?;
     let ambiguous = Mask::new(text).blank("CARRIED_PLACEHOLDER")?;
     found.extend(number_unknowns(&numeric, &ambiguous, &lines)?);
     found.extend(numbers_into_addresses(text, &lines)?);
-    found.extend(names.into_values());
+    found.extend(once_a_line(names));
     Ok(found)
 }
 
@@ -742,8 +779,11 @@ fn input_placeholders(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
         if !carried.contains(t.as_str()) {
             continue;
         }
-        let u = lines.unknown("placeholder", t.as_str(), t.start());
-        found.entry((u.line, u.value.clone())).or_insert(u);
+        let u = lines.unknown("placeholder", t.as_str(), (t.start(), t.end()));
+        found
+            .entry((u.line, u.value.clone()))
+            .and_modify(|first: &mut Unknown| first.spans.extend(u.spans.clone()))
+            .or_insert(u);
     }
     let survived: HashSet<_> = found.keys().map(|(_, v)| v.clone()).collect();
     if survived.len() < carried.len() {
@@ -760,6 +800,7 @@ fn input_placeholders(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
                 value: t.as_str().into(),
                 line,
                 context,
+                spans: Vec::new(),
             };
             found.entry((line, u.value.clone())).or_insert(u);
         }
@@ -767,37 +808,16 @@ fn input_placeholders(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
     Ok(found.into_values().collect())
 }
 
-/// Digit groups that pass an identifier check together, of which pass one replaced
-/// only some: a match can be valid by chance across a wrap. The groups left are too
-/// short for the sweep over `redacted` to read as a number, so the input must name
-/// them. Money spellings count here too, as a needless halt is the safe side.
-fn cut_numbers(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
-    let taken: Vec<_> = patterns::structured_spans(text)?
-        .iter()
-        .map(|s| (s.start, s.end))
-        .collect();
-    if taken.is_empty() {
+/// Digits that pass an identifier check together, of which only some reached the
+/// output: a match can be valid by chance across a wrap. The digits left are too few
+/// for the sweep over `redacted` to read as a number, so the source must name them.
+/// Money spellings count here as they do in the sweep. `kept` holds, for each byte of
+/// `text`, whether it reached the output.
+fn cut_numbers(text: &str, redacted: &str, kept: &[bool]) -> Result<Vec<Unknown>> {
+    if kept.iter().all(|byte| *byte) {
         return Ok(Vec::new());
     }
-    let plain = without_markup(text, &mut ScanStats::default());
-    let left: HashSet<_> = digit_runs(redacted).iter().map(|r| &redacted[r.0..r.1]).collect();
-    let touched = |run: &(usize, usize)| patterns::intersects(&taken, run.0, run.1);
-    let mut cut = Vec::new();
-    for number in numbers(text)? {
-        let runs: Vec<_> = digit_runs(&plain[number.start..number.end])
-            .iter()
-            .map(|r| (number.start + r.0, number.start + r.1))
-            .collect();
-        for group in (2..=runs.len().min(11)).flat_map(|width| runs.windows(width)) {
-            let mut kept = group.iter().filter(|run| !touched(run));
-            if group.iter().any(touched) && kept.any(|r| left.contains(&plain[r.0..r.1])) {
-                let joined: String = group.iter().map(|r| &plain[r.0..r.1]).collect();
-                if passes_identifier_check(&joined)? {
-                    cut.push((group[0].0, group[group.len() - 1].1));
-                }
-            }
-        }
-    }
+    let cut = split_identifiers(text, Some(kept), &mut ScanStats::default())?;
     let input_lines = Lines::new(text);
     let lines = Lines::new(redacted);
     Ok(patterns::merge(cut)
@@ -809,24 +829,63 @@ fn cut_numbers(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
                 value: text[start..end].into(),
                 line,
                 context: lines.lines.get(line - 1).cloned().unwrap_or_default(),
+                spans: vec![(start, end)],
             }
         })
         .collect())
 }
 
+/// The source range that `start..end` of the output came from.
+fn source_span(origin: &[Option<usize>], start: usize, end: usize) -> Option<(usize, usize)> {
+    let mut bytes = origin[start..end].iter().flatten();
+    let first = *bytes.next()?;
+    Some((first, bytes.last().unwrap_or(&first) + 1))
+}
+
 pub struct Redaction {
+    /// The input as redacted: CRLF line ends folded and NFC applied.
+    pub source: String,
     pub text: String,
     pub counts: Counts,
     pub unknowns: Vec<Unknown>,
+    kept: Vec<bool>,
+}
+
+impl Redaction {
+    /// Whether a byte of `start..end` of `source` reached the output outside every
+    /// candidate. This is the coverage rule: replaced, or named where it stands.
+    pub fn exposed(&self, start: usize, end: usize) -> bool {
+        (start..end).any(|at| {
+            self.kept[at]
+                && !self
+                    .unknowns
+                    .iter()
+                    .flat_map(|u| &u.spans)
+                    .any(|span| span.0 <= at && at < span.1)
+        })
+    }
 }
 
 pub fn redact(text: &str, entries: &[Entity]) -> Result<Redaction> {
     let text = pytext::nfc(&text.replace("\r\n", "\n"));
-    let (redacted, mut counts) = structured(&text)?;
-    let (redacted, entities) = replace_entities(&redacted, entries)?;
+    let (first, mut counts) = structured(&text)?;
+    let (second, entities) = replace_entities(&first.text, entries)?;
+    let origin: Vec<_> = second
+        .origin
+        .iter()
+        .map(|at| at.and_then(|at| first.origin[at]))
+        .collect();
+    let mut kept = vec![false; text.len()];
+    for at in origin.iter().flatten() {
+        kept[*at] = true;
+    }
+    let redacted = second.text;
     let mut unknowns = input_placeholders(&text, &redacted)?;
-    unknowns.extend(cut_numbers(&text, &redacted)?);
     unknowns.extend(residual(&redacted)?);
+    for u in &mut unknowns {
+        u.spans = u.spans.iter().filter_map(|s| source_span(&origin, s.0, s.1)).collect();
+    }
+    unknowns.extend(cut_numbers(&text, &redacted, &kept)?);
     for (kind, n) in entities {
         if let Some((_, old)) = counts.iter_mut().find(|(k, _)| k == &kind) {
             *old += n;
@@ -835,8 +894,10 @@ pub fn redact(text: &str, entries: &[Entity]) -> Result<Redaction> {
         }
     }
     Ok(Redaction {
+        source: text,
         text: redacted,
         counts,
         unknowns,
+        kept,
     })
 }

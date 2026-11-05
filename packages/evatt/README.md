@@ -344,13 +344,14 @@ document before you send it.
 from one seed, 100 documents each: half with every name, address and date in the
 entity map, half with only the client and other entities mapped. A planted value is
 an identifier, name, address or date that must be replaced or named by a halt, and
-a miss is one left in the output whole with no candidate naming it. A residual
-fragment counts a planted value that leaves a word or digit group of 3 or more
-characters in the output, beyond what the rest of the document explains, with no
-candidate naming it; a miss counts here too. A blind-spot value
+each occurrence is scored at its own position in the document. A candidate covers
+each place the sweep saw its value, though triage lists a value once a line. A miss
+is an occurrence left in the output whole with no candidate covering it. A residual
+fragment counts an occurrence that leaves any of a word or digit group of 3 or more
+characters in the output with no candidate covering it; a miss counts here too. A blind-spot value
 comes from the limits above and is expected to pass unnoticed: a 6 or 7 digit
 account number, an initial or a name in lower case. A false halt is a fully mapped
-document that halts on a false candidate. A false candidate names no planted value.
+document that halts on a false candidate. A false candidate covers no planted value.
 Halt rate is the share of documents that halt. The counts measure these fabricated
 documents only, not accuracy on real workpapers. `cargo test --test benchmark` fails
 when this table, its header or its totals drift from the corpus.
@@ -359,23 +360,19 @@ when this table, its header or its totals drift from the corpus.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `bank-reconciliation` | 100 | 600 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
 | `client-queries` | 100 | 600 | 0 | 0 | 0 of 0 | 50 | 300 | 100.0% |
-| `close-review` | 100 | 300 | 0 | 2 | 0 of 0 | 50 | 546 | 100.0% |
+| `close-review` | 100 | 300 | 0 | 0 | 0 of 0 | 50 | 546 | 100.0% |
 | `columnar-balances` | 100 | 0 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
 | `columnar-whole-dollars` | 100 | 0 | 0 | 0 | 0 of 0 | 50 | 637 | 100.0% |
 | `director-loan` | 100 | 1000 | 0 | 0 | 199 of 200 | 50 | 100 | 100.0% |
 | `gst-tie-out` | 100 | 800 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
 | `payroll-tie-out` | 100 | 1300 | 0 | 0 | 0 of 0 | 50 | 200 | 100.0% |
 | `split-identifiers` | 100 | 400 | 0 | 0 | 0 of 0 | 0 | 0 | 100.0% |
-| Total | 900 | 5000 | 0 | 2 | 399 of 400 | 350 | 2183 | 88.9% |
+| Total | 900 | 5000 | 0 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
 
 0 misses does not mean nothing gets through. Planted values are the shapes the sweep
 was built for; the hard cases are the blind-spot values, and 399 of 400 passed. Each row repeats one
 template with fixed prose and only its slots varying, so the sample behaves like 9
 templates, not 900 independent documents, and a halt rate mostly reports that prose.
-
-The 2 residual fragments are one name written twice on one line of a document that
-halts. A candidate is reported once a line, so the benchmark covers only its first
-occurrence, and a map entry for it replaces both.
 
 `split-identifiers` spells each identifier with one of 7 gaps no structured pattern
 takes, and every document halts as it should. `columnar-balances` holds only amounts

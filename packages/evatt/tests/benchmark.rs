@@ -10,7 +10,7 @@ use evatt::{
     entities::Entity,
     patterns,
     pyjson::PyStr,
-    redact::{self, Unknown},
+    redact::{self, Redaction},
 };
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -98,10 +98,11 @@ enum Class {
     Benign,
 }
 
-/// A value the document holds, with the text a check looks for.
+/// One occurrence of a value in the document, by its byte offset.
 struct Value {
     class: Class,
     text: String,
+    at: usize,
 }
 
 /// One filled-in template.
@@ -231,8 +232,9 @@ fn render(template: &str, seed: u64, mapped: bool) -> Document {
         {
             entries.push(entry(&text, entity, entries.len() + 1));
         }
+        let at = out.len();
         out.push_str(&text);
-        values.push(Value { class, text });
+        values.push(Value { class, text, at });
     }
     out.push_str(rest);
     Document {
@@ -274,74 +276,54 @@ impl Counts {
     }
 }
 
-/// Whether `fragment`, at `at` in `text`, stands alone.
-fn alone(text: &str, at: usize, fragment: &str) -> bool {
-    !text[..at].chars().next_back().is_some_and(char::is_alphanumeric)
-        && !text[at + fragment.len()..]
-            .chars()
-            .next()
-            .is_some_and(char::is_alphanumeric)
-}
-
-/// How often `fragment` stands alone in `text`.
-fn standing(text: &str, fragment: &str) -> usize {
-    text.match_indices(fragment)
-        .filter(|(at, _)| alone(text, *at, fragment))
-        .count()
-}
-
-/// `text` with each candidate blanked at its own position. A sweep reports the
-/// first occurrence of a value on a line, so a second one stays visible, and a
-/// candidate elsewhere cannot excuse a fragment.
-fn without_candidates(text: &str, unknowns: &[Unknown]) -> String {
-    let mut masked = text.to_owned();
-    for unknown in unknowns {
-        let position = masked
-            .match_indices(&unknown.value)
-            .map(|(at, _)| at)
-            .find(|&at| 1 + masked[..at].matches('\n').count() == unknown.line && alone(&masked, at, &unknown.value));
-        if let Some(at) = position {
-            let blank = unknown.value.replace(|c: char| c != '\n', " ");
-            masked.replace_range(at..at + unknown.value.len(), &blank);
-        }
-    }
-    masked
-}
-
-/// Whether a word or digit group of 3 or more characters from `value` stays in
-/// the output beyond what the rest of the document explains, outside every
-/// candidate. A whole value left behind does this too.
-fn leaves_a_fragment(document: &Document, value: &Value, result: &redact::Redaction) -> bool {
-    let output = without_candidates(&result.text, &result.unknowns);
-    let elsewhere = without_candidates(&document.text, &result.unknowns).replace(&value.text, "");
+/// Whether a word or digit group of 3 or more characters of `value` stays in the
+/// output at the value's own position, outside every candidate.
+fn leaves_a_fragment(value: &Value, result: &Redaction) -> bool {
     value
         .text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|fragment| fragment.chars().count() >= 3)
-        .any(|fragment| standing(&output, fragment) > standing(&elsewhere, fragment))
+        .any(|fragment| {
+            let at = value.at + fragment.as_ptr() as usize - value.text.as_ptr() as usize;
+            result.exposed(at, at + fragment.len())
+        })
+}
+
+/// Whether every letter and digit of `value` stays exposed at its own position.
+fn left_whole(value: &Value, result: &Redaction) -> bool {
+    value
+        .text
+        .char_indices()
+        .filter(|(_, c)| c.is_alphanumeric())
+        .all(|(offset, c)| {
+            let at = value.at + offset;
+            result.exposed(at, at + c.len_utf8())
+        })
 }
 
 fn measure(document: &Document, mapped: bool, counts: &mut Counts) -> Vec<String> {
     let result = redact::redact(&document.text, &document.entries).unwrap();
-    let flagged = |value: &str| result.unknowns.iter().any(|u| u.value.contains(value));
+    score(document, &result, mapped, counts)
+}
+
+/// Scores each planted occurrence by its own position in the source.
+fn score(document: &Document, result: &Redaction, mapped: bool, counts: &mut Counts) -> Vec<String> {
+    assert_eq!(result.source, document.text);
     let planted: Vec<_> = document.values.iter().filter(|v| v.class == Class::Planted).collect();
     let misses: Vec<String> = planted
         .iter()
-        .filter(|v| result.text.contains(&v.text) && !flagged(&v.text))
+        .filter(|v| left_whole(v, result))
         .map(|v| v.text.clone())
         .collect();
     let blind_spots: Vec<_> = document.values.iter().filter(|v| v.class == Class::BlindSpot).collect();
-    let blind = blind_spots
-        .iter()
-        .filter(|v| result.text.contains(&v.text) && !flagged(&v.text))
-        .count();
+    let blind = blind_spots.iter().filter(|v| left_whole(v, result)).count();
     let false_candidates = result
         .unknowns
         .iter()
         .filter(|u| {
             !planted
                 .iter()
-                .any(|v| u.value.contains(&v.text) || v.text.contains(&u.value))
+                .any(|v| u.spans.iter().any(|s| s.0 < v.at + v.text.len() && v.at < s.1))
         })
         .count();
     let halted = !result.unknowns.is_empty();
@@ -353,10 +335,7 @@ fn measure(document: &Document, mapped: bool, counts: &mut Counts) -> Vec<String
     counts.0[5] += usize::from(mapped && false_candidates > 0);
     counts.0[6] += false_candidates;
     counts.0[7] += usize::from(halted);
-    counts.0[8] += planted
-        .iter()
-        .filter(|v| leaves_a_fragment(document, v, &result))
-        .count();
+    counts.0[8] += planted.iter().filter(|v| leaves_a_fragment(v, result)).count();
     misses
 }
 
@@ -469,15 +448,21 @@ fn a_seed_always_gives_the_same_document() {
     assert_eq!(first.text, second.text);
 }
 
+fn planted(text: &str, value: &str) -> Value {
+    Value {
+        class: Class::Planted,
+        text: value.into(),
+        at: text.find(value).unwrap(),
+    }
+}
+
 #[test]
 fn a_partial_redaction_is_counted_as_a_residual_fragment() {
     // A map entry for the given name alone leaves the family name in the output.
+    let text = "the client is Hana falador today";
     let document = Document {
-        text: "the client is Hana falador today".into(),
-        values: vec![Value {
-            class: Class::Planted,
-            text: "Hana falador".into(),
-        }],
+        text: text.into(),
+        values: vec![planted(text, "Hana falador")],
         entries: vec![entry("Hana", "person", 1)],
     };
     let mut counts = Counts::default();
@@ -488,12 +473,10 @@ fn a_partial_redaction_is_counted_as_a_residual_fragment() {
 #[test]
 fn a_candidate_elsewhere_does_not_excuse_a_fragment() {
     // `Falador` is left from the planted name, and the candidate on line 3 holds it.
+    let text = "the client is Hana Falador today\n\nwrote to Alice Falador\n";
     let document = Document {
-        text: "the client is Hana Falador today\n\nwrote to Alice Falador\n".into(),
-        values: vec![Value {
-            class: Class::Planted,
-            text: "Hana Falador".into(),
-        }],
+        text: text.into(),
+        values: vec![planted(text, "Hana Falador")],
         entries: vec![entry("Hana", "person", 1)],
     };
     let result = redact::redact(&document.text, &document.entries).unwrap();
@@ -504,35 +487,45 @@ fn a_candidate_elsewhere_does_not_excuse_a_fragment() {
             .any(|u| u.line == 3 && u.value.contains("Falador"))
     );
     let mut counts = Counts::default();
-    assert!(measure(&document, true, &mut counts).is_empty());
+    assert!(score(&document, &result, true, &mut counts).is_empty());
     assert_eq!((counts.0[2], counts.0[8]), (0, 1));
 }
 
 #[test]
-fn a_candidate_covers_its_own_occurrence_on_a_line() {
-    // The sweep reports this value once, so only the first occurrence is covered.
+fn each_occurrence_on_a_line_is_scored_at_its_own_position() {
+    // One candidate for the line, holding both places the sweep saw the name.
+    let text = "Alice Falador wrote to Alice Falador today\n";
     let document = Document {
-        text: "Alice Falador wrote to Alice Falador today\n".into(),
-        values: vec![Value {
-            class: Class::Planted,
-            text: "Alice Falador".into(),
-        }],
+        text: text.into(),
+        values: vec![
+            planted(text, "Alice Falador"),
+            Value {
+                at: text.rfind("Alice Falador").unwrap(),
+                ..planted(text, "Alice Falador")
+            },
+        ],
         entries: Vec::new(),
     };
+    let mut result = redact::redact(&document.text, &document.entries).unwrap();
+    let name = result.unknowns.iter().position(|u| u.value == "Alice Falador").unwrap();
+    assert_eq!(result.unknowns[name].spans.len(), 2);
     let mut counts = Counts::default();
-    assert!(measure(&document, true, &mut counts).is_empty());
-    assert_eq!((counts.0[2], counts.0[8]), (0, 1));
+    assert!(score(&document, &result, true, &mut counts).is_empty());
+    assert_eq!((counts.0[2], counts.0[8]), (0, 0));
+    // Had it seen only the first, the second alone would count, once.
+    result.unknowns[name].spans.truncate(1);
+    let mut counts = Counts::default();
+    assert_eq!(score(&document, &result, true, &mut counts), ["Alice Falador"]);
+    assert_eq!((counts.0[2], counts.0[8]), (1, 1));
 }
 
 #[test]
 fn a_planted_value_that_survives_is_counted_as_a_miss() {
     // A lower-case name passes the sweep, so the harness must report it.
+    let text = "the client is hana falador";
     let document = Document {
-        text: "the client is hana falador".into(),
-        values: vec![Value {
-            class: Class::Planted,
-            text: "hana falador".into(),
-        }],
+        text: text.into(),
+        values: vec![planted(text, "hana falador")],
         entries: Vec::new(),
     };
     let mut counts = Counts::default();

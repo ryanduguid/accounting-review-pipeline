@@ -9,7 +9,7 @@ use evatt::{
     entities::Entity,
     patterns,
     pyjson::PyStr,
-    redact::{self, Unknown},
+    redact::{self, Redaction},
 };
 use proptest::{prelude::*, test_runner::Config};
 
@@ -200,57 +200,50 @@ fn digits(text: &str) -> String {
     text.chars().filter(char::is_ascii_digit).collect()
 }
 
-/// `text` as a reader takes it for numbers: the digits of `&#160;` are no part of one.
-fn number_text(text: &str) -> String {
-    let mut kept = String::new();
-    let mut rest = text;
-    while let Some((head, tail)) = rest.split_once("&#") {
-        kept.push_str(head);
-        rest = tail.split_once(';').map_or(tail, |(_, after)| after);
+/// The offset of each digit a reader takes for a number: those of `&#160;` are no
+/// part of one.
+fn number_offsets(text: &str) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let mut offsets = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at..].starts_with(b"&#")
+            && let Some(end) = bytes[at + 2..].iter().position(|b| !b.is_ascii_alphanumeric())
+            && (1..9).contains(&end)
+            && bytes[at + 2 + end] == b';'
+        {
+            at += end + 3;
+            continue;
+        }
+        if bytes[at].is_ascii_digit() {
+            offsets.push(at);
+        }
+        at += 1;
     }
-    kept.push_str(rest);
-    kept
+    offsets
 }
 
-fn number_digits(text: &str) -> String {
-    digits(&number_text(text))
+/// A `&#` that closes no reference holds no number, so this stray pair hides nothing.
+#[test]
+fn a_stray_reference_opening_hides_no_digits() {
+    assert_eq!(number_offsets("&# 12\n;"), [3, 4]);
+    assert_eq!(number_offsets("&#160;1"), [6]);
 }
 
-/// The output as `number_text`, without its placeholders.
-fn surviving_text(text: &str) -> String {
-    let placeholders = patterns::matches("CARRIED_PLACEHOLDER", text).unwrap();
-    let mut kept = String::new();
-    let mut cursor = 0;
-    for placeholder in &placeholders {
-        let token = placeholder.name("token").unwrap();
-        kept.push_str(&text[cursor..token.start()]);
-        cursor = token.end();
-    }
-    kept.push_str(&text[cursor..]);
-    number_text(&kept)
-}
-
-/// How often `group` stands as a whole run of digits in `text`.
-fn group_count(text: &str, group: &str) -> usize {
-    text.split(|c: char| !c.is_ascii_digit())
-        .filter(|run| *run == group)
-        .count()
-}
-
-/// Whether any of the plant is left in the output with no candidate covering it:
-/// the whole spelling, its digits, or one digit group the rest of the document
-/// does not explain.
-fn survives(document: &str, text: &str, unknowns: &[Unknown], plant: &str, number: &str) -> bool {
-    let named = unknowns
+/// Whether a digit of `number`, wherever the source holds it, is exposed.
+fn survives(result: &Redaction, number: &str) -> bool {
+    let offsets = number_offsets(&result.source);
+    let joined: String = offsets
         .iter()
-        .any(|u| u.value.contains(plant) || number_digits(&u.value).contains(number));
-    let kept = surviving_text(text);
-    let elsewhere = number_text(&document.replace(plant, ""));
-    let group_left = number_text(plant)
-        .split(|c: char| !c.is_ascii_digit())
-        .filter(|group| !group.is_empty())
-        .any(|group| group_count(&kept, group) > group_count(&elsewhere, group));
-    !named && (text.contains(plant) || digits(&kept).contains(number) || group_left)
+        .map(|at| char::from(result.source.as_bytes()[*at]))
+        .collect();
+    let found: Vec<_> = joined.match_indices(number).map(|(at, _)| at).collect();
+    assert!(!found.is_empty(), "{number} is not in {:?}", result.source);
+    found.iter().any(|at| {
+        offsets[*at..*at + number.len()]
+            .iter()
+            .any(|digit| result.exposed(*digit, *digit + 1))
+    })
 }
 
 /// The fixed grid: a known TFN and ABN, in every spelling and every context.
@@ -268,7 +261,7 @@ fn every_spelling_in_every_context_is_replaced_or_flagged() {
                 let plant = spelled(number, groups, gap);
                 let document = format!("Notes.\n\n{open}{plant}{close}\n\nMore notes.\n");
                 let result = redact::redact(&document, &[]).unwrap();
-                if survives(&document, &result.text, &result.unknowns, &plant, number) {
+                if survives(&result, number) {
                     survivors.push(document);
                 }
             }
@@ -277,13 +270,10 @@ fn every_spelling_in_every_context_is_replaced_or_flagged() {
     assert!(survivors.is_empty(), "{} survived: {survivors:#?}", survivors.len());
 }
 
-/// Each document holds the number, and a candidate must quote all of it.
+/// Each document holds the number, and each digit of it must be replaced or named.
 fn hidden<'a>(cases: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     let mut hidden = cases.to_vec();
-    hidden.retain(|(document, number)| {
-        let result = redact::redact(document, &[]).unwrap();
-        !result.unknowns.iter().any(|u| number_digits(&u.value).contains(number))
-    });
+    hidden.retain(|(document, number)| survives(&redact::redact(document, &[]).unwrap(), number));
     hidden
 }
 
@@ -345,45 +335,98 @@ fn a_gap_with_no_letter_or_digit_never_hides_a_number() {
 /// let an unchanged document pass the grid.
 #[test]
 fn an_unchanged_reference_spelling_counts_as_a_survivor() {
-    let (plant, number) = ("123&#160;456&#160;782", "123456782");
-    assert!(!digits(plant).contains(number));
-    assert!(survives(plant, plant, &[], plant, number));
-    let document = format!("{plant}\n");
-    let result = redact::redact(&document, &[]).unwrap();
-    assert!(!survives(&document, &result.text, &result.unknowns, plant, number));
+    let (document, number) = ("123&#160;456&#160;782\n", "123456782");
+    assert!(!digits(document).contains(number));
+    let mut result = redact::redact(document, &[]).unwrap();
+    assert!(!survives(&result, number));
+    result.unknowns.clear();
+    assert!(survives(&result, number));
 }
 
-/// Neither the spelling nor its joined digits remain here, yet a group does.
+/// Neither the spelling nor its joined digits remain here, yet 2 groups do.
 #[test]
 fn a_partial_replacement_counts_as_a_survivor() {
-    let (plant, number) = ("123 456 782", "123456782");
-    let document = format!("Notes {plant}\n");
-    assert!(survives(&document, "Notes TFN_01 782\n", &[], plant, number));
-    assert!(!survives(&document, "Notes TFN_01\n", &[], plant, number));
+    let mut result = redact::redact("\n> 142   240   404\n667330 ", &[]).unwrap();
+    result.unknowns.clear();
+    assert!(survives(&result, "142240404"));
+    let replaced = redact::redact("Notes 123 456 782\n", &[]).unwrap();
+    assert!(!survives(&replaced, "123456782"));
 }
 
-/// The partial test found this: `404` and the wrapped `667330` are a valid ACN by
-/// chance, so pass one replaced them and left `142   240` with no halt.
+/// A candidate covers its own place, not the same digits elsewhere.
+#[test]
+fn a_candidate_elsewhere_does_not_cover_a_number() {
+    let mut result = redact::redact("123   456   782\n\n123   456   782\n", &[]).unwrap();
+    assert_eq!(result.unknowns.len(), 2);
+    assert!(!survives(&result, "123456782"));
+    result.unknowns.pop();
+    assert!(survives(&result, "123456782"));
+}
+
+/// A map entry replaced `142 240` here, and that must not explain the same groups
+/// left in the cut number.
+#[test]
+fn a_replaced_copy_does_not_excuse_the_same_groups_left() {
+    let document = "Ref 142 240 here\n> 142   240   404\n667330 ";
+    let mut result = redact::redact(document, &[client("Ref 142 240")]).unwrap();
+    assert!(result.text.starts_with("CLIENT_01 here"));
+    result.unknowns.clear();
+    assert!(survives(&result, "142240404"));
+}
+
+/// The corrected test found the first: `404` and the wrapped `667330` are a valid ACN
+/// by chance, so pass one replaced them and left `142   240` with no halt. In the
+/// others the valid digits start or end inside a group.
 #[test]
 fn a_number_cut_by_a_chance_match_is_named() {
-    let (document, plant, number) = ("\n> 142   240   404\n667330 ", "142   240   404", "142240404");
-    let result = redact::redact(document, &[]).unwrap();
-    assert!(result.text.contains("142   240"));
-    assert!(!survives(document, &result.text, &result.unknowns, plant, number));
-    assert_eq!(result.unknowns[0].line, 2);
-    assert_eq!(&*result.unknowns[0].context, "> 142   240   ACN_01");
+    for (document, kept, value) in [
+        (
+            "\n> 142   240   404\n667330 ",
+            "> 142   240   ACN_01",
+            "142   240   404",
+        ),
+        (
+            "\n> 9142   240   404\n667330 ",
+            "> 9142   240   ACN_01",
+            "9142   240   404",
+        ),
+        (
+            "
+> 142   240   404667330 ",
+            "> 142   240   ACN_01",
+            "142   240   404667330",
+        ),
+    ] {
+        let result = redact::redact(document, &[]).unwrap();
+        assert!(result.text.contains(kept), "{:?}", result.text);
+        assert!(!survives(&result, "142240404"), "{document:?}");
+        let cut = result.unknowns.iter().find(|u| u.value == value).unwrap();
+        assert_eq!((cut.line, &*cut.context), (2, kept));
+    }
+}
+
+fn client(value: &str) -> Entity {
+    Entity {
+        value: PyStr::from(value),
+        placeholder: "CLIENT_01".into(),
+        kind: "client".into(),
+        added: "2026-11-06".into(),
+    }
 }
 
 /// The triage file says to map a false positive, and that must clear this halt.
 #[test]
 fn a_mapped_remainder_clears_a_cut_number() {
-    let entries = [Entity {
-        value: PyStr::from("142   240"),
-        placeholder: "CLIENT_01".into(),
-        kind: "client".into(),
-        added: "2026-11-06".into(),
-    }];
-    let result = redact::redact("\n> 142   240   404\n667330 ", &entries).unwrap();
+    let result = redact::redact("\n> 142   240   404\n667330 ", &[client("142   240")]).unwrap();
+    assert!(result.unknowns.is_empty(), "{:?}", result.unknowns);
+}
+
+/// Survival is a matter of position: this `142` is no part of the cut number.
+#[test]
+fn the_same_group_elsewhere_does_not_keep_a_mapped_halt() {
+    let document = "Notes 142 only\n> 142   240   404\n667330 ";
+    let result = redact::redact(document, &[client("142   240")]).unwrap();
+    assert!(result.text.starts_with("Notes 142 only"));
     assert!(result.unknowns.is_empty(), "{:?}", result.unknowns);
 }
 
@@ -499,10 +542,13 @@ fn a_name_candidate_can_cross_a_blank_line() {
 /// The structured pattern takes this spelling, so no sweep need hold it.
 #[test]
 fn groups_on_their_own_paragraphs_are_replaced() {
-    for (document, group) in [("123\n\n456\n\n782\n", "456"), ("51\n\n824\n\n753\n\n556\n", "824")] {
+    for (document, number) in [
+        ("123\n\n456\n\n782\n", "123456782"),
+        ("51\n\n824\n\n753\n\n556\n", "51824753556"),
+    ] {
         let result = redact::redact(document, &[]).unwrap();
         assert!(
-            !digits(&surviving_text(&result.text)).contains(group),
+            result.unknowns.is_empty() && !survives(&result, number),
             "{}",
             result.text
         );
@@ -528,16 +574,12 @@ proptest! {
         let (open, close) = context;
         let plant = spelled(&number, groups, &gap);
         let document = format!("{before}\n{open}{plant}{close}\n{after}");
-        let (document, plant) = if crlf {
-            (document.replace('\n', "\r\n"), plant.replace('\n', "\r\n"))
-        } else {
-            (document, plant)
-        };
+        let document = if crlf { document.replace('\n', "\r\n") } else { document };
         let result = redact::redact(&document, &[]).unwrap();
         // A halt writes nothing, but a candidate that holds some other text would
         // send the operator away with the number still in the file.
         prop_assert!(
-            !survives(&document, &result.text, &result.unknowns, &plant, &number),
+            !survives(&result, &number),
             "{plant:?} survived in {document:?}"
         );
     }
