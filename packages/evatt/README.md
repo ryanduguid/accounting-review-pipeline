@@ -25,11 +25,11 @@ Putting 2 redacted documents in front of one model is putting 2 meanings of
 `TFN_01` in front of it.
 
 **The key never leaves the local machine.** The entity map is a gitignored file
-on disk. It is not transmitted, and no network client exists in this package.
-`tests/no_network.rs` backs that with a denylist, not a proof: it fails CI if the
-normal dependency tree lists one of its named crates or `src` holds one of its
-socket spellings. An unlisted crate, a foreign function or a program started through
-a subprocess passes it.
+on disk, and evatt has no step that sends it. `tests/no_network.rs` checks part of
+that with a denylist, not a proof: it fails CI if the normal dependency tree lists
+one of its named crates or `src` holds one of its socket spellings. An unlisted
+crate, a foreign function or a program started through a subprocess passes it, and
+no audit of those backs this.
 The recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
@@ -299,9 +299,11 @@ an extra placeholder costs a triage decision whilst a miss leaks.
 - **A valid identifier that looks like money can pass with no halt.** `1234.56   782`
   holds the valid TFN digits `123456782`, and nothing flags it unless `TFN`, `ABN`,
   `ACN`, `Medicare`, `tax file`, `business number` or `company number` sits within
-  40 bytes of it on the same line. A label on the line above does not count. Then it
-  halts; it is never replaced. An unlabelled one stays in the output, so read the
-  output for figures that look wrong.
+  40 bytes of it on the same line. Tags inside a label count, as in
+  `T<span>F</span>N`, within those 40 bytes; a label on the line above or spelled
+  with a character reference, as in `T&#70;N`, does not. A labelled one halts; it is
+  never replaced. An unlabelled one stays in the output, so read the output for
+  figures that look wrong.
 - **Digit groups split wider than a token gap are caught only by their check
   digit.** `123   456   782` halts because its digits pass a TFN check. These are
   known limits, not an exhaustive list, and each passes without a halt in
@@ -453,12 +455,12 @@ The Python library API is removed in 1.0.0; use the 2 commands above.
 consistently. An outer sender must independently authenticate the external human
 decision for the exact payload and actual destination, then send only the checked
 bytes. Reopening the file, re-encoding it, adding message text or attaching another
-file needs separate validation. evatt sends nothing and cannot prevent manual
+file needs separate validation. evatt has no send step and cannot prevent manual
 copying or authenticate the external decision.
 
 ## Documents
 
-- `DATA-FLOW.md`, the zero-network boundary and the 3 passes.
+- `DATA-FLOW.md`, the network boundary and the 3 passes.
 - `DISCLAIMER.md`, what this package does not decide.
 - `CONTRIBUTING.md`, the checks, the fixture rule and the claim rule.
 - `SECURITY.md`, the security boundary and how to report a vulnerability.

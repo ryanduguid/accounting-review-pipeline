@@ -341,6 +341,10 @@ fn money_beside_an_identifier_label_is_joined() {
         ("1234.56   782 (TFN)\n", "123456782"),
         ("| ABN | 5182.47   53556 |\n", "51824753556"),
         ("Medicare card: 2123.45   6701\n", "2123456701"),
+        ("T<span>F</span>N: 1234.56   782\n", "123456782"),
+        ("<b>TFN</b> 1234.56   782\n", "123456782"),
+        ("<td>Holder</td><td>TFN</td><td>1234.56   782</td>\n", "123456782"),
+        ("tax<br>file number 1234.56   782\n", "123456782"),
     ]);
     assert!(found.is_empty(), "{found:?}");
     let document = "TFN: 1234.56   782\n";
@@ -371,7 +375,17 @@ fn a_number_running_into_an_address_is_named() {
     let found = hidden(&[
         ("000\u{2013}500\u{2013}108\nAa Ct\n", "000500108"),
         ("123   456   782 Aa Street\n", "123456782"),
+        ("12345 678\nAa Ct\n", "12345678"),
+        ("9123   456   782\nAa Ct\n", "9123456782"),
     ]);
+    assert!(found.is_empty(), "{found:?}");
+}
+
+/// The 40,000 case run found this: a vertical tab starts a line, so `00002.` read as
+/// a list marker, and its ambiguous candidate dropped the number's own.
+#[test]
+fn an_ambiguous_group_inside_a_valid_number_does_not_hide_it() {
+    let found = hidden(&[("TFN: 2000.\u{b}00002.\u{b}0\n", "2000000020")]);
     assert!(found.is_empty(), "{found:?}");
 }
 
@@ -405,9 +419,11 @@ fn the_documented_limits_still_pass() {
         "123   456\n\n782\n",
         "9123   456\n782\n",
         "<td id=\"7\">123</td><td id=\"7\">456</td><td id=\"7\">782</td>\n",
+        "T&#70;N: 1234.56   782\n",
     ] {
         let result = redact::redact(document, &[]).unwrap();
         assert!(result.unknowns.is_empty(), "{document:?}: {:?}", result.unknowns);
+        assert_eq!(result.text, document);
     }
 }
 

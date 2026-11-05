@@ -6,7 +6,12 @@
 //! from one seed, so the identifiers exist only while the test runs. The counts
 //! measure these fabricated documents only, never real-world accuracy, and the
 //! README's Detection benchmark table must match them.
-use evatt::{entities::Entity, patterns, pyjson::PyStr, redact};
+use evatt::{
+    entities::Entity,
+    patterns,
+    pyjson::PyStr,
+    redact::{self, Unknown},
+};
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -281,19 +286,31 @@ fn standing(text: &str, fragment: &str) -> usize {
     text.match_indices(fragment).filter(|(at, _)| alone(*at)).count()
 }
 
+/// `text` with each candidate blanked where it sits, on its own line, so that a
+/// candidate elsewhere cannot excuse a fragment.
+fn without_candidates(text: &str, unknowns: &[Unknown]) -> String {
+    let mut bytes = text.as_bytes().to_vec();
+    for unknown in unknowns {
+        for (at, _) in text.match_indices(&unknown.value) {
+            if 1 + text[..at].matches('\n').count() == unknown.line {
+                bytes[at..at + unknown.value.len()].fill(b' ');
+            }
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
 /// Whether a word or digit group of 3 or more characters from `value` stays in
-/// the output beyond what the rest of the document explains, with no candidate
-/// naming it. A whole value left behind does this too.
+/// the output beyond what the rest of the document explains, outside every
+/// candidate. A whole value left behind does this too.
 fn leaves_a_fragment(document: &Document, value: &Value, result: &redact::Redaction) -> bool {
-    let elsewhere = document.text.replace(&value.text, "");
+    let output = without_candidates(&result.text, &result.unknowns);
+    let elsewhere = without_candidates(&document.text, &result.unknowns).replace(&value.text, "");
     value
         .text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|fragment| fragment.chars().count() >= 3)
-        .any(|fragment| {
-            standing(&result.text, fragment) > standing(&elsewhere, fragment)
-                && !result.unknowns.iter().any(|u| u.value.contains(fragment))
-        })
+        .any(|fragment| standing(&output, fragment) > standing(&elsewhere, fragment))
 }
 
 fn measure(document: &Document, mapped: bool, counts: &mut Counts) -> Vec<String> {
@@ -455,6 +472,29 @@ fn a_partial_redaction_is_counted_as_a_residual_fragment() {
         }],
         entries: vec![entry("Hana", "person", 1)],
     };
+    let mut counts = Counts::default();
+    assert!(measure(&document, true, &mut counts).is_empty());
+    assert_eq!((counts.0[2], counts.0[8]), (0, 1));
+}
+
+#[test]
+fn a_candidate_elsewhere_does_not_excuse_a_fragment() {
+    // `Falador` is left from the planted name, and the candidate on line 3 holds it.
+    let document = Document {
+        text: "the client is Hana Falador today\n\nwrote to Alice Falador\n".into(),
+        values: vec![Value {
+            class: Class::Planted,
+            text: "Hana Falador".into(),
+        }],
+        entries: vec![entry("Hana", "person", 1)],
+    };
+    let result = redact::redact(&document.text, &document.entries).unwrap();
+    assert!(
+        result
+            .unknowns
+            .iter()
+            .any(|u| u.line == 3 && u.value.contains("Falador"))
+    );
     let mut counts = Counts::default();
     assert!(measure(&document, true, &mut counts).is_empty());
     assert_eq!((counts.0[2], counts.0[8]), (0, 1));

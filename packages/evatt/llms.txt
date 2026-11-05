@@ -20,7 +20,7 @@
 - `src/cli.rs` and `src/commands.rs`: `redact`, `restore`, `verify`, `disclosure-record` and `disclosure-check`, and the question every command asks git about the map before it runs.
 
 ## Architectural boundaries
-1. **No network client.** The package contains no HTTP, API or model client. The entity map never leaves the local machine.
+1. **No network step.** evatt's code has no HTTP, API or model call, and `tests/no_network.rs` checks that with a denylist, not a proof. The entity map never leaves the local machine.
 2. **Pseudonymisation, not anonymisation.** Pseudonymised data remains personal information in the hands of anyone holding the map. Nothing here takes a document outside the Privacy Act.
 3. **Structured identifiers are one-way.** A TFN, ABN, ACN, BSB or Medicare number replaced by `redact` is gone, and no record of its value is kept.
 4. **Detection has no comprehension.** Contextual re-identification through surviving detail is not addressed, lower-case and single names can escape the residual sweep, and no ATO client reference is detected. A human check before sending is the only mitigation.

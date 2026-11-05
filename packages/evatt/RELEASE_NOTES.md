@@ -1,8 +1,8 @@
 # v1.0.0 (unreleased)
 
 - evatt is a standalone Rust binary, built with `cargo build --locked --release`.
-  It uses local files and git only, with no installed Python and no network
-  dependency. The Python release caller has been removed; a Rust release path
+  It uses local files and git only, with no installed Python and no dependency
+  its network denylist names. The Python release caller has been removed; a Rust release path
   must be approved before 1.0.0 can be released.
 - The command names, flags, abbreviations, help, exit codes, redacted documents,
   manifests, triage files and disclosure records retain the Python 0.2.0 CLI

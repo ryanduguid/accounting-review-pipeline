@@ -237,6 +237,8 @@ const IDENTIFIER_LABELS: [&str; 7] = [
 ];
 /// How far along a line a label counts as near, in bytes.
 const LABEL_REACH: usize = 40;
+/// What `without_markup` writes over a tag or a character reference.
+const MARKUP_BLANK: char = '\0';
 
 #[derive(Clone, Copy, PartialEq)]
 enum Gap {
@@ -267,7 +269,7 @@ fn gap(text: &str) -> Result<Gap> {
     }
     let marks: String = text
         .chars()
-        .filter(|c| !('\u{2010}'..='\u{2015}').contains(c) && !['-', '\u{2212}', '\u{ad}'].contains(c))
+        .filter(|c| !('\u{2010}'..='\u{2015}').contains(c) && !['-', '\u{2212}', '\u{ad}', MARKUP_BLANK].contains(c))
         .collect();
     let one_line = marks.matches('\n').count() <= 1;
     Ok(if one_line && patterns::full("_JOIN_SPLIT", &marks)? {
@@ -279,6 +281,7 @@ fn gap(text: &str) -> Result<Gap> {
 
 /// `text` with its tags and character references blanked byte for byte, so
 /// offsets still hold. A tag keeps its digits: a number can sit in an attribute.
+/// The blank is `MARKUP_BLANK`, so a label can be read with its markup gone.
 fn without_markup(text: &str, stats: &mut ScanStats) -> String {
     let mut bytes = text.as_bytes().to_vec();
     let mut cursor = 0;
@@ -314,7 +317,7 @@ fn without_markup(text: &str, stats: &mut ScanStats) -> String {
         };
         for byte in &mut bytes[cursor..cursor + length] {
             if !(keep_digits && byte.is_ascii_digit()) {
-                *byte = b' ';
+                *byte = MARKUP_BLANK as u8;
             }
         }
         cursor += length;
@@ -366,7 +369,12 @@ fn near_label(text: &str, span: (usize, usize)) -> bool {
     let to = text.ceil_char_boundary(span.1 + LABEL_REACH);
     let before = text[from..span.0].rsplit('\n').next().unwrap_or_default();
     let after = text[span.1..to].split('\n').next().unwrap_or_default();
-    names_identifier(before) || names_identifier(after)
+    // Markup can sit between a label's words or inside a word: `T<b>F</b>N`.
+    [before, after].iter().any(|side| {
+        let spaced = side.replace(MARKUP_BLANK, " ");
+        let words: Vec<_> = spaced.split_whitespace().collect();
+        names_identifier(&words.join(" ")) || names_identifier(&side.replace(MARKUP_BLANK, ""))
+    })
 }
 
 /// Each 9, 10 and 11 digit window of one chain of runs that crosses a split gap
@@ -654,7 +662,9 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
     }
     for s in numbers(&numeric.text)? {
         let (start, end) = (numeric.original[s.start], numeric.original[s.end]);
-        if patterns::intersects(&protected, start, end) {
+        // An ambiguous group can sit inside a valid number, and must not hide it.
+        let digits: String = s.value.chars().filter(|c| pytext::is_decimal(*c as u32)).collect();
+        if patterns::intersects(&protected, start, end) && !passes_identifier_check(&digits)? {
             continue;
         }
         let u = lines.unknown("number", &s.value, start);
@@ -665,8 +675,8 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
     Ok(found)
 }
 
-/// A valid number whose last group starts an address: the address mask hides that
-/// group from the sweep, so the halt would name the address and not the number.
+/// A number whose last group starts an address: the address mask hides that group
+/// from the sweep, so the halt would name the address and not the number.
 fn numbers_into_addresses(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
     let addresses: Vec<_> = patterns::matches("ADDRESS", text)?
         .iter()
@@ -680,8 +690,7 @@ fn numbers_into_addresses(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
     for s in numbers(&numeric.text)? {
         let (start, end) = (numeric.original[s.start], numeric.original[s.end]);
         let next = addresses.partition_point(|&address| address <= start);
-        let digits: String = s.value.chars().filter(|c| pytext::is_decimal(*c as u32)).collect();
-        if addresses.get(next).is_some_and(|&address| address < end) && passes_identifier_check(&digits)? {
+        if addresses.get(next).is_some_and(|&address| address < end) {
             found.push(lines.unknown("number", &s.value, start));
         }
     }
