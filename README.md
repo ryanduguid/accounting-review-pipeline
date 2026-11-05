@@ -25,14 +25,17 @@
 
 </div>
 
-Eight independently versioned components that carry an Australian month end from a
-Xero export to a reviewable pack: a read-only trial balance exporter, deterministic
-close controls, a workpaper readiness gate, a ledger review gate, an Excel toolkit, a
-Power BI project, grant acquittal workpapers and evatt, a local pseudonymisation tool.
-They are joined by local files and commands, not by a shared runtime, and each keeps
-its own distribution name, version, licence and command.
+Accounting Review Pipeline is a set of 8 independently versioned components that
+carry an Australian month end from a Xero export to a reviewable pack, for accountants
+and reviewers in public practice.
 
-They produce exception reports and review packs for an accountant to work through.
+The components are a read-only trial balance exporter, deterministic close controls, a
+workpaper readiness gate, a ledger review gate, an Excel toolkit, a Power BI project,
+grant acquittal workpapers and evatt, a local pseudonymisation tool. Local files and
+commands join them, not a shared runtime, and each keeps its own distribution name,
+version, licence and command.
+
+The components produce exception reports and review packs for an accountant to work through.
 Close-control components read local files and refuse rather than guessing: a trial balance
 that does not tie is not exported, and an incomplete pack does not reach manager
 review. The Xero trial-balance exporter is the exception: it pulls through Xero OAuth/API
@@ -66,7 +69,7 @@ Synthetic examples. A human decides whether the close is acceptable.
 
 ## Install
 
-The native commands are not published yet, so build them from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
+Accounting Review Pipeline's native commands are not published yet, so build them from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
 
 ## Reproduce the sample pack
 
@@ -175,8 +178,8 @@ spellings, and records where the consumers differ.
 ## Review-pack contract
 
 The [LodgeiT workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
-import, workpaper and review patterns to these existing components, with a
-checklist for using their local evidence outputs.
+import, workpaper and review patterns to Accounting Review Pipeline's components,
+with a checklist for using their local evidence outputs.
 
 Review packs are deterministic evidence for a human reviewer; they do not approve a close,
 post a journal, make a payment, lodge a return or lock a period. Each pack is a directory whose
@@ -280,6 +283,20 @@ so every push to `main` runs every component's gates; only pull requests filter
 by path. Tag the current `main` commit once its run is green; a successful run
 for an older commit is not evidence for the release. Tags and publication still
 require explicit approval.
+
+## Alternatives
+
+Accounting Review Pipeline's close controls read local trial balance exports and, for `drivers`,
+`classify` and `reconcile`, supplied transactions. None of those 3 commands is a journal-level
+population test. The Xero trial-balance exporter is the exception to local files, because it pulls
+through Xero OAuth/API. As read on 5 November 2026, these projects cover nearby ground:
+
+- [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills): agent skills and scripts
+  for close, tax and audit work in US practice, which refuse to deliver a workpaper that does not tie.
+- [divyanshus2404/journal-entry-testing](https://github.com/divyanshus2404/journal-entry-testing):
+  a PySpark journal entry testing pipeline on Databricks.
+- [XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server): the MCP server from
+  Xero's developer organisation, for agents working directly with Xero.
 
 ## Development
 

@@ -5,6 +5,7 @@ type: software
 authors:
   - family-names: Duguid
     given-names: Ryan
+    website: "https://duguid.com.au/"
 abstract: "Runs deterministic month-end close checks on Xero trial-balance exports and produces exception packs for human sign-off."
 repository-code: "https://github.com/ryanduguid/accounting-review-pipeline"
 url: "https://duguid.com.au/tools/"
@@ -22,5 +23,6 @@ keywords:
   - monthly-close
   - python
   - reconciliation
+  - rust
   - trial-balance
   - xero
