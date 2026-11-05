@@ -106,6 +106,20 @@ Keep bare checksum validation and genuine hard wraps. Cost: a genuine wrapped
 identifier followed by list-shaped punctuation also needs triage. This ruling
 covers these four identifier families; phone-only collisions remain outside it.
 
+49. (6 November 2026) halt when digit groups split wider than a token gap together
+pass a TFN, ACN, Medicare or ABN check. This narrows the cost ruling 46 accepted.
+Reason: a property test planted checksum-valid numbers in Markdown, and
+`123   456   782` left strict redaction with no replacement and no halt. So did
+groups split by ` - `, a run of tabs or no-break spaces, a soft hyphen, a zero-width
+space, `*`, `_`, `<br>` or a line wrap inside a blockquote: 1,070 of the 1,976 fixed
+spellings and contexts survived. Widening the token gap would join columns of
+ordinary amounts, so this sweep runs beside the tokens and only a passing check
+digit makes a candidate. The candidate halts rather than being replaced, because the
+structured patterns that may rewrite a document one-way are unchanged. Digits
+touching it stay in the same candidate, so triage quotes the whole number. Cost if
+wrong: unrelated short numbers split that way halt when their digits happen to pass
+a check. Groups that pass no check, and groups split across a blank line, still pass.
+
 ## Deferred minors, shipped as they are (28)
 
 - RED evidence was a single collection error, so the gitignore assertion was never observed failing on its own condition before implementation.

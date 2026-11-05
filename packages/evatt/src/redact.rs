@@ -225,6 +225,86 @@ pub fn numbers(text: &str) -> Result<Vec<Span>> {
     numbers_counted(text).map(|(spans, _)| spans)
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Gap {
+    /// Crossed by the token scan.
+    Token,
+    /// Too wide for a token, or holding marks a token stops at, yet still inside
+    /// one printed number: PDF text pads digit groups and Markdown wraps them.
+    Split,
+    Break,
+}
+
+fn gap(text: &str) -> Result<Gap> {
+    if text.chars().count() <= 2 && text.chars().all(|c| NUMBER_SEPARATORS.contains(c)) {
+        return Ok(Gap::Token);
+    }
+    let marks: String = text
+        .chars()
+        .filter(|c| !('\u{2010}'..='\u{2015}').contains(c) && !['-', '\u{2212}', '\u{ad}'].contains(c))
+        .collect();
+    let one_line = marks.matches('\n').count() <= 1;
+    Ok(
+        if one_line && (marks.is_empty() || patterns::full("_JOIN_SPLIT", &marks)?) {
+            Gap::Split
+        } else {
+            Gap::Break
+        },
+    )
+}
+
+/// Each run of decimal digits, as byte offsets.
+fn digit_runs(text: &str) -> Vec<(usize, usize)> {
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    for (start, ch) in text.char_indices() {
+        if !pytext::is_decimal(ch as u32) {
+            continue;
+        }
+        match runs.last_mut() {
+            Some(last) if last.1 == start => last.1 += ch.len_utf8(),
+            _ => runs.push((start, start + ch.len_utf8())),
+        }
+    }
+    runs
+}
+
+fn passes_identifier_check(digits: &str) -> Result<bool> {
+    for kind in ["tfn", "acn", "medicare", "abn"] {
+        if patterns::valid(kind, digits)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Digit runs no token joins that together pass a TFN, ACN, Medicare or ABN
+/// check, as byte offsets. The check digit keeps columns of ordinary numbers out.
+/// Every run is a start, because digits before an identifier can themselves
+/// complete a check, and a start stops after 11 digits, so each run is visited a
+/// bounded number of times.
+fn split_identifiers(text: &str) -> Result<Vec<(usize, usize)>> {
+    let runs = digit_runs(text);
+    let gaps = runs
+        .windows(2)
+        .map(|pair| gap(&text[pair[0].1..pair[1].0]))
+        .collect::<Result<Vec<_>>>()?;
+    let mut found = Vec::new();
+    for first in 0..runs.len() {
+        let mut digits = text[runs[first].0..runs[first].1].to_owned();
+        let mut split = false;
+        let mut last = first;
+        while last + 1 < runs.len() && gaps[last] != Gap::Break && digits.chars().count() < 11 {
+            split |= gaps[last] == Gap::Split;
+            last += 1;
+            digits.push_str(&text[runs[last].0..runs[last].1]);
+            if split && passes_identifier_check(&digits)? {
+                found.push((runs[first].0, runs[last].1));
+            }
+        }
+    }
+    Ok(found)
+}
+
 pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
     let mut stats = ScanStats::default();
     let mut chars: Vec<_> = text.char_indices().collect();
@@ -253,23 +333,22 @@ pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
         if digits.chars().count() < 8 {
             continue;
         }
-        if patterns::full("_AMOUNT", value)?
-            && !["tfn", "acn", "medicare", "abn"]
-                .iter()
-                .map(|kind| patterns::valid(kind, &digits))
-                .collect::<Result<Vec<_>>>()?
-                .contains(&true)
-        {
+        if patterns::full("_AMOUNT", value)? && !passes_identifier_check(&digits)? {
             continue;
         }
-        found.push(Span {
+        found.push((start, end));
+    }
+    found.extend(split_identifiers(text)?);
+    let spans = patterns::merge(found)
+        .into_iter()
+        .map(|(start, end)| Span {
             start,
             end,
             kind: "number".into(),
-            value: value.into(),
-        });
-    }
-    Ok((found, stats))
+            value: text[start..end].into(),
+        })
+        .collect();
+    Ok((spans, stats))
 }
 
 fn mapped_numbers(mask: &Mask) -> Result<Vec<(usize, usize)>> {

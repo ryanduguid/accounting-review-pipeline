@@ -25,7 +25,9 @@ Putting 2 redacted documents in front of one model is putting 2 meanings of
 `TFN_01` in front of it.
 
 **The key never leaves the local machine.** The entity map is a gitignored file
-on disk. It is not transmitted, and no network client exists in this package.
+on disk. It is not transmitted, and no network client exists in this package;
+`tests/no_network.rs` fails CI if the normal dependency tree lists a network crate
+or `src` names a standard library socket.
 The recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
@@ -156,9 +158,15 @@ amount. Such an amount halts only if its 9, 10 or 11 digits pass a TFN, ACN,
 Medicare or ABN check. Other tokens of 8 or more digits halt, including dotted
 identifiers, IPv4 addresses and long version strings. Shorter runs, including
 6 and 7 digit account numbers, remain outside this sweep. Ordinary long
-references can halt too; this policy has no established workpaper false
-positive rate. The fabricated `negatives.md` sample now halts on its 8-digit
-statutory reference.
+references can halt too; this policy has no established false positive rate on
+real workpapers, and [Detection benchmark](#detection-benchmark) measures fabricated
+ones only. The fabricated `negatives.md` sample now halts on its 8-digit statutory
+reference.
+
+Digit groups further apart than that are joined only to test them. If they pass a
+TFN, ACN, Medicare or ABN check they halt as one number, whether they are split by
+wider spacing, a spaced dash, a soft hyphen, a zero-width space, emphasis marks,
+`<br>` or a line wrap, within a blockquote or not.
 
 This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
@@ -281,8 +289,10 @@ an extra placeholder costs a triage decision whilst a miss leaks.
   becomes `Medicare: MEDICARE_01` followed by that same `1`. The 10-digit card
   is replaced; the reference alone is below the number sweep's 8-digit floor.
   Ryan accepted this limit on 11 October 2026 (DECISIONS.md ruling 47).
-- **Three or more spaces between digit groups remain unsupported.** Short
-  groups split that way can still pass without a halt. A labelled number with
+- **Digit groups split wider than a token gap are caught only by their check
+  digit.** `123   456   782` halts because its digits pass a TFN check. Groups
+  that pass no check still go through without a halt, and so does a number split
+  across a blank line. A labelled number with
   another digit group up to 2 spaces after it, as in `TFN: 123456783 2026`, can fail
   structured detection and now reaches the number halt when the full token
   meets its rules. `Client TFN is 123 456 789` replaces the TFN but still halts
@@ -303,6 +313,35 @@ an extra placeholder costs a triage decision whilst a miss leaks.
 
 Contextual re-identification is not addressed by any of this. Read the
 document before you send it.
+
+## Detection benchmark
+
+`tests/benchmark.rs` fills the fabricated workpapers in `evaluation/workpapers`
+from one seed, 20 documents each: half with every name, address and date in the
+entity map, half with only the client and other entities mapped. A planted value is
+an identifier, name, address or date that must be replaced or named by a halt, and
+a miss is one left in the output with no candidate naming it. A blind-spot value
+comes from the limits above and is expected to pass unnoticed: a 6 or 7 digit
+account number, an initial or a name in lower case. A false halt is a fully mapped
+document that still halts. A false candidate names no planted value. Halt rate is
+the share of documents that halt. The counts measure these fabricated documents
+only, not accuracy on real workpapers. `cargo test --test benchmark` fails when
+this table, its header or its totals drift from the corpus.
+
+| Workpaper | Documents | Planted values | Misses | Blind-spot values missed | False halts | False candidates | Halt rate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `bank-reconciliation` | 20 | 120 | 0 | 20 of 20 | 10 | 40 | 100.0% |
+| `client-queries` | 20 | 120 | 0 | 0 of 0 | 10 | 60 | 100.0% |
+| `close-review` | 20 | 60 | 0 | 0 of 0 | 10 | 110 | 100.0% |
+| `director-loan` | 20 | 200 | 0 | 40 of 40 | 10 | 20 | 100.0% |
+| `gst-tie-out` | 20 | 160 | 0 | 20 of 20 | 10 | 40 | 100.0% |
+| `payroll-tie-out` | 20 | 260 | 0 | 0 of 0 | 10 | 40 | 100.0% |
+| Total | 120 | 920 | 0 | 80 of 80 | 60 | 310 | 100.0% |
+
+Every document halts, including all 60 fully mapped ones: expect to triage a
+workpaper before it clears. The false candidates here are capitalised phrases such
+as `Business Bank Account` and `Trade Debtors`, month names, and runs of 8 or more
+digits inside SHA-256 digests. Mapping a phrase as an `entity` clears it.
 
 ## The entity map
 
