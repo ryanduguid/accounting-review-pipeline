@@ -225,6 +225,19 @@ pub fn numbers(text: &str) -> Result<Vec<Span>> {
     numbers_counted(text).map(|(spans, _)| spans)
 }
 
+/// Words that say a figure beside them is an identifier, whatever it looks like.
+const IDENTIFIER_LABELS: [&str; 7] = [
+    "tfn",
+    "abn",
+    "acn",
+    "medicare",
+    "tax file",
+    "business number",
+    "company number",
+];
+/// How far along a line a label counts as near, in bytes.
+const LABEL_REACH: usize = 40;
+
 #[derive(Clone, Copy, PartialEq)]
 enum Gap {
     /// Crossed by the token scan.
@@ -234,6 +247,8 @@ enum Gap {
     Split,
     /// A line break in a wrap's shape. It joins whole groups only.
     Wrap,
+    /// Beside money. It joins only near an identifier's label.
+    Money,
     Break,
 }
 
@@ -264,17 +279,25 @@ fn gap(text: &str) -> Result<Gap> {
 
 /// `text` with its tags and character references blanked byte for byte, so
 /// offsets still hold. A tag keeps its digits: a number can sit in an attribute.
-fn without_markup(text: &str) -> String {
+fn without_markup(text: &str, stats: &mut ScanStats) -> String {
     let mut bytes = text.as_bytes().to_vec();
     let mut cursor = 0;
+    // No `<` before this offset can close, so each line is searched once.
+    let mut unclosed_until = 0;
     while cursor < bytes.len() {
         let rest = &text.as_bytes()[cursor..];
         let length = match rest[0] {
-            b'<' if rest.get(1).is_some_and(|b| b.is_ascii_alphabetic() || *b == b'/') => rest
-                .iter()
-                .position(|b| matches!(b, b'>' | b'\n'))
-                .filter(|end| rest[*end] == b'>')
-                .map(|end| (end + 1, true)),
+            b'<' if cursor >= unclosed_until && rest.get(1).is_some_and(|b| b.is_ascii_alphabetic() || *b == b'/') => {
+                let end = rest.iter().position(|b| {
+                    stats.examined();
+                    matches!(b, b'>' | b'\n')
+                });
+                let closed = end.filter(|end| rest[*end] == b'>');
+                if closed.is_none() {
+                    unclosed_until = cursor + end.unwrap_or(rest.len());
+                }
+                closed.map(|end| (end + 1, true))
+            }
             b'&' => rest
                 .iter()
                 .take(12)
@@ -323,6 +346,29 @@ fn passes_identifier_check(digits: &str) -> Result<bool> {
     Ok(false)
 }
 
+/// Whether `text` holds an identifier's label as whole words, in any case.
+fn names_identifier(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    IDENTIFIER_LABELS.iter().any(|label| {
+        text.match_indices(label).any(|(at, _)| {
+            !text[..at].chars().next_back().is_some_and(char::is_alphanumeric)
+                && !text[at + label.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(char::is_alphanumeric)
+        })
+    })
+}
+
+/// Whether a label sits near `span` on its own line.
+fn near_label(text: &str, span: (usize, usize)) -> bool {
+    let from = text.floor_char_boundary(span.0.saturating_sub(LABEL_REACH));
+    let to = text.ceil_char_boundary(span.1 + LABEL_REACH);
+    let before = text[from..span.0].rsplit('\n').next().unwrap_or_default();
+    let after = text[span.1..to].split('\n').next().unwrap_or_default();
+    names_identifier(before) || names_identifier(after)
+}
+
 /// Each 9, 10 and 11 digit window of one chain of runs that crosses a split gap
 /// and passes a check, as the byte span of the runs it touches. A digit touching
 /// the number stays in the span, and a window can start or end inside a run,
@@ -356,8 +402,9 @@ fn chain_identifiers(
             let whole_runs = first.2 == runs[head].0 && last.2 + last.0.len_utf8() == runs[tail].1;
             if crossed.iter().any(|gap| *gap != Gap::Token) && (whole_runs || !crossed.contains(&Gap::Wrap)) {
                 let joined: String = window.iter().map(|digit| digit.0).collect();
-                if passes_identifier_check(&joined)? {
-                    found.push((runs[head].0, runs[tail].1));
+                let span = (runs[head].0, runs[tail].1);
+                if passes_identifier_check(&joined)? && (!crossed.contains(&Gap::Money) || near_label(text, span)) {
+                    found.push(span);
                 }
             }
         }
@@ -386,11 +433,12 @@ fn money_runs(text: &str, runs: &[(usize, usize)]) -> Vec<bool> {
 /// Digit runs no token joins that together pass a TFN, ACN, Medicare or ABN
 /// check, as byte offsets. A check digit passes about 1 time in 10, and every
 /// window is a fresh try, so a chain of ordinary numbers would nearly always
-/// halt. Money ends a chain for that reason; other numbers that share a line or
-/// wrap across lines can halt, as the columnar rows of the README's benchmark
-/// show. Each chain is walked once, so the work grows with the digits in the text.
+/// halt. Money therefore joins only near an identifier's label; other numbers
+/// that share a line or wrap across lines can halt, as the columnar rows of the
+/// README's benchmark show. Each chain is walked once, so the work grows with the
+/// digits in the text.
 fn split_identifiers(text: &str, stats: &mut ScanStats) -> Result<Vec<(usize, usize)>> {
-    let text = without_markup(text);
+    let text = without_markup(text, stats);
     let runs = digit_runs(&text);
     let money = money_runs(&text, &runs);
     let gaps = runs
@@ -399,11 +447,12 @@ fn split_identifiers(text: &str, stats: &mut ScanStats) -> Result<Vec<(usize, us
         .map(|(pair, money)| {
             let between = &text[pair[0].1..pair[1].0];
             let inside = money[0] && money[1] && matches!(between, "." | ",");
-            if (money[0] || money[1]) && !inside {
-                Ok(Gap::Break)
+            let plain = gap(between)?;
+            Ok(if (money[0] || money[1]) && !inside && plain != Gap::Break {
+                Gap::Money
             } else {
-                gap(between)
-            }
+                plain
+            })
         })
         .collect::<Result<Vec<_>>>()?;
     let mut found = Vec::new();
@@ -616,6 +665,29 @@ fn number_unknowns(numeric: &Mask, ambiguous: &Mask, lines: &Lines) -> Result<Ve
     Ok(found)
 }
 
+/// A valid number whose last group starts an address: the address mask hides that
+/// group from the sweep, so the halt would name the address and not the number.
+fn numbers_into_addresses(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
+    let addresses: Vec<_> = patterns::matches("ADDRESS", text)?
+        .iter()
+        .map(|m| m.get(0).unwrap().start())
+        .collect();
+    let mut found = Vec::new();
+    if addresses.is_empty() {
+        return Ok(found);
+    }
+    let numeric = Mask::new(text).blank("DOB")?.blank("CARRIED_PLACEHOLDER")?;
+    for s in numbers(&numeric.text)? {
+        let (start, end) = (numeric.original[s.start], numeric.original[s.end]);
+        let next = addresses.partition_point(|&address| address <= start);
+        let digits: String = s.value.chars().filter(|c| pytext::is_decimal(*c as u32)).collect();
+        if addresses.get(next).is_some_and(|&address| address < end) && passes_identifier_check(&digits)? {
+            found.push(lines.unknown("number", &s.value, start));
+        }
+    }
+    Ok(found)
+}
+
 pub fn residual(text: &str) -> Result<Vec<Unknown>> {
     let lines = Lines::new(text);
     let mut found = Vec::new();
@@ -637,6 +709,7 @@ pub fn residual(text: &str) -> Result<Vec<Unknown>> {
     let numeric = masked.blank("CARRIED_PLACEHOLDER")?;
     let ambiguous = Mask::new(text).blank("CARRIED_PLACEHOLDER")?;
     found.extend(number_unknowns(&numeric, &ambiguous, &lines)?);
+    found.extend(numbers_into_addresses(text, &lines)?);
     found.extend(names.into_values());
     Ok(found)
 }

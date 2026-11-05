@@ -1,9 +1,9 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
-//! The README says no network client exists in this package. This holds the
-//! shipped dependency tree and `src` to that. It reads names, so it cannot see a
-//! socket reached through a foreign function; `git` is the one program evatt runs.
+//! A denylist, not a proof: this fails if the shipped dependency tree lists one of
+//! the crates below or `src` holds one of the socket spellings. An unlisted crate,
+//! a foreign function or a program started through a subprocess passes it.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

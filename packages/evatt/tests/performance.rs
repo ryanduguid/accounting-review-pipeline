@@ -101,6 +101,30 @@ fn split_identifier_chains_keep_bounded_growth() {
     }
 }
 
+#[test]
+fn unterminated_tags_keep_bounded_growth() {
+    for unit in ["<a ", "</", "<a 1 "] {
+        growth(
+            |n| {
+                let text = unit.repeat(n);
+                Box::new(move || {
+                    redact::numbers(&text).unwrap();
+                })
+            },
+            2_000,
+            8_000,
+        );
+    }
+}
+
+/// Every unterminated tag on a line once searched the rest of it.
+#[cfg(feature = "probe")]
+#[test]
+fn unterminated_tags_are_searched_once_a_line() {
+    let examined = |n: usize| redact::numbers_counted(&"<a ".repeat(n)).unwrap().1.characters_examined;
+    assert!(examined(4_000) <= examined(1_000) * 5);
+}
+
 /// One start per token, and a start for each 9, 10 and 11 digit window.
 #[cfg(feature = "probe")]
 #[test]

@@ -112,7 +112,7 @@ Reason: a property test planted checksum-valid numbers in Markdown, and
 `123   456   782` left strict redaction with no replacement and no halt. So did
 groups split by ` - `, a run of tabs or no-break spaces, a soft hyphen, a zero-width
 space, `*`, `_`, `<br>` or a line wrap inside a blockquote: on the code before this
-ruling, 1,070 of a first grid of 1,976 spellings and contexts survived, and 5,028 of
+ruling, 1,070 of a first grid of 1,976 spellings and contexts survived, and 5,180 of
 the final grid of 6,992. Any same-line gap holding no letter, digit or `#` now joins
 groups, and every 9, 10 and 11 digit stretch is tested, because a list of joiners and
 a test of the whole chain each left numbers through. Widening the token gap instead
@@ -121,11 +121,14 @@ digit makes a candidate. The candidate halts rather than being replaced, because
 structured patterns that may rewrite a document one-way are unchanged. Digits
 touching it stay in the same candidate, so triage quotes the whole number. Cost:
 ordinary numbers sharing a line halt when any stretch passes a check, about 1 try in
-10 each. An amount with cents ends a stretch, or every balance table would halt;
-whole-dollar columns still do, and the README's benchmark publishes both rates. A
+10 each. An amount with cents ends a stretch, or every balance table would halt,
+unless an identifier label sits within 40 bytes on its line: a label says the figure
+is an identifier, and the candidate only halts. Unlabelled, `1234.56   782` passes
+with valid TFN digits in it, and that is the sharpest known limit. Whole-dollar
+columns still halt, and the README's benchmark publishes both rates. A
 wrap joins whole groups only, and tokens the sweep already names stay separate, both
-because Python 0.2.0's vectors hold those results. The README's limits list what
-still passes. `123` `456` `782` on their own paragraphs are outside it: the structured
+because Python 0.2.0's vectors hold those results. The README lists the known
+limits, and they are not exhaustive. `123` `456` `782` on their own paragraphs are outside it: the structured
 pattern replaces them, and only forms such as `123   456`, a blank line, `782` pass.
 
 ## Deferred minors, shipped as they are (28)

@@ -5,7 +5,10 @@
 //! never survives: redact replaces it, or the run halts on a candidate that holds
 //! it. Numbers are made up as the test runs and persist nowhere, so no failure
 //! file can hold one.
-use evatt::{patterns, redact};
+use evatt::{
+    patterns,
+    redact::{self, Unknown},
+};
 use proptest::{prelude::*, test_runner::Config};
 
 const TFN_GROUPS: [usize; 3] = [3, 3, 3];
@@ -195,6 +198,18 @@ fn digits(text: &str) -> String {
     text.chars().filter(char::is_ascii_digit).collect()
 }
 
+/// The digits a reader takes for a number: those of `&#160;` are no part of one.
+fn number_digits(text: &str) -> String {
+    let mut kept = String::new();
+    let mut rest = text;
+    while let Some((head, tail)) = rest.split_once("&#") {
+        kept.push_str(head);
+        rest = tail.split_once(';').map_or(tail, |(_, after)| after);
+    }
+    kept.push_str(rest);
+    digits(&kept)
+}
+
 /// The output's digits, without the ones in its placeholders.
 fn surviving_digits(text: &str) -> String {
     let placeholders = patterns::matches("CARRIED_PLACEHOLDER", text).unwrap();
@@ -206,7 +221,15 @@ fn surviving_digits(text: &str) -> String {
         cursor = token.end();
     }
     kept.push_str(&text[cursor..]);
-    digits(&kept)
+    number_digits(&kept)
+}
+
+/// Whether the plant is left in the output with no candidate naming it.
+fn survives(text: &str, unknowns: &[Unknown], plant: &str, number: &str) -> bool {
+    let named = unknowns
+        .iter()
+        .any(|u| u.value.contains(plant) || number_digits(&u.value).contains(number));
+    !named && (text.contains(plant) || surviving_digits(text).contains(number))
 }
 
 /// The fixed grid: a known TFN and ABN, in every spelling and every context.
@@ -224,8 +247,7 @@ fn every_spelling_in_every_context_is_replaced_or_flagged() {
                 let plant = spelled(number, groups, gap);
                 let document = format!("Notes.\n\n{open}{plant}{close}\n\nMore notes.\n");
                 let result = redact::redact(&document, &[]).unwrap();
-                let flagged = result.unknowns.iter().any(|u| digits(&u.value).contains(number));
-                if !flagged && surviving_digits(&result.text).contains(number) {
+                if survives(&result.text, &result.unknowns, &plant, number) {
                     survivors.push(document);
                 }
             }
@@ -239,7 +261,7 @@ fn hidden<'a>(cases: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     let mut hidden = cases.to_vec();
     hidden.retain(|(document, number)| {
         let result = redact::redact(document, &[]).unwrap();
-        !result.unknowns.iter().any(|u| digits(&u.value).contains(number))
+        !result.unknowns.iter().any(|u| number_digits(&u.value).contains(number))
     });
     hidden
 }
@@ -290,15 +312,40 @@ fn a_gap_with_no_letter_or_digit_never_hides_a_number() {
         ("123~~456~~782\n", number),
         ("123`456`782\n", number),
         ("123&nbsp;456&nbsp;782\n", number),
+        ("123&#160;456&#160;782\n", number),
         ("123&456&782;\n", number),
         ("<td>123</td><td>456</td><td>782</td>\n", number),
         ("<span>123</span> <span>456</span> <span>782</span>\n", number),
     ]);
     assert!(found.is_empty(), "{found:?}");
-    // The halt quotes the span, so the reference's own digits sit inside the value.
-    let spelled = "123&#160;456&#160;782";
-    let unknowns = redact::redact(&format!("{spelled}\n"), &[]).unwrap().unknowns;
-    assert!(unknowns.iter().any(|u| u.value == spelled), "{unknowns:?}");
+}
+
+/// Plain digit concatenation reads this spelling as `123160456160782`, which would
+/// let an unchanged document pass the grid.
+#[test]
+fn an_unchanged_reference_spelling_counts_as_a_survivor() {
+    let (plant, number) = ("123&#160;456&#160;782", "123456782");
+    assert!(!digits(plant).contains(number));
+    assert!(survives(plant, &[], plant, number));
+    let document = format!("{plant}\n");
+    let result = redact::redact(&document, &[]).unwrap();
+    assert!(!survives(&result.text, &result.unknowns, plant, number));
+}
+
+/// A label says a figure is an identifier, however like money it looks.
+#[test]
+fn money_beside_an_identifier_label_is_joined() {
+    let found = hidden(&[
+        ("TFN: 1234.56   782\n", "123456782"),
+        ("tax file number 1234.56 | 782\n", "123456782"),
+        ("1234.56   782 (TFN)\n", "123456782"),
+        ("| ABN | 5182.47   53556 |\n", "51824753556"),
+        ("Medicare card: 2123.45   6701\n", "2123456701"),
+    ]);
+    assert!(found.is_empty(), "{found:?}");
+    let document = "TFN: 1234.56   782\n";
+    let before = redact::redact(document, &[]).unwrap();
+    assert_eq!(before.text, document, "a label halts; it never replaces");
 }
 
 /// A chain of money would nearly always pass a check somewhere, so money ends one.
@@ -315,6 +362,17 @@ fn amounts_side_by_side_do_not_join() {
         let result = redact::redact(document, &[]).unwrap();
         assert!(result.unknowns.is_empty(), "{document:?}: {:?}", result.unknowns);
     }
+}
+
+/// The 20,000 case run found this: the address mask took the last group, so the
+/// document halted on `108\nAa Ct` with the number named nowhere.
+#[test]
+fn a_number_running_into_an_address_is_named() {
+    let found = hidden(&[
+        ("000\u{2013}500\u{2013}108\nAa Ct\n", "000500108"),
+        ("123   456   782 Aa Street\n", "123456782"),
+    ]);
+    assert!(found.is_empty(), "{found:?}");
 }
 
 /// A valid number wrapped across lines still halts; a digit beside it does not
@@ -340,6 +398,8 @@ fn the_documented_limits_still_pass() {
     for document in [
         "12   345   678\n",
         "1234.56   782\n",
+        "TFN\n1234.56   782\n",
+        "abnormal 1234.56   782\n",
         "123 and 456 and 782\n",
         "123 # 456 # 782\n",
         "123   456\n\n782\n",
@@ -393,9 +453,8 @@ proptest! {
         let result = redact::redact(&document, &[]).unwrap();
         // A halt writes nothing, but a candidate that holds some other text would
         // send the operator away with the number still in the file.
-        let flagged = result.unknowns.iter().any(|u| digits(&u.value).contains(&number));
         prop_assert!(
-            flagged || !surviving_digits(&result.text).contains(&number),
+            !survives(&result.text, &result.unknowns, &plant, &number),
             "{plant:?} survived in {document:?}"
         );
     }

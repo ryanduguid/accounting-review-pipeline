@@ -9,6 +9,8 @@ receives; it does not change the character of the data.
 ## 2. Zero-network contract
 
 - No HTTP client, socket or telemetry library appears in this package.
+  `tests/no_network.rs` checks a fixed list of crate names and socket spellings,
+  which an unlisted crate or a program started through a subprocess would pass.
 - No cloud model is called. All processing is in memory, locally.
 - The entity map is read from disk and never written by evatt. It is never sent.
 - The one subprocess this package runs is `git`, asked locally whether it

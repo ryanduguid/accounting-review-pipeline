@@ -47,8 +47,8 @@ const IDENTIFIERS: [(&str, usize, &[usize]); 4] = [
 ];
 const MONTHS: [&str; 4] = ["March", "June", "October", "December"];
 const HEADER: [&str; 2] = [
-    "| Workpaper | Documents | Planted values | Misses | Blind-spot values missed | False halts | False candidates | Halt rate |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| Workpaper | Documents | Planted values | Misses | Residual fragments | Blind-spot values missed | False halts | False candidates | Halt rate |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 ];
 
 /// splitmix64, so the corpus needs no dependency and never changes under one.
@@ -240,7 +240,7 @@ fn render(template: &str, seed: u64, mapped: bool) -> Document {
 /// One template's counts: documents, planted, misses, blind-spot values missed,
 /// blind-spot values planted, false halts, false candidates and halts.
 #[derive(Default)]
-struct Counts([usize; 8]);
+struct Counts([usize; 9]);
 
 impl Counts {
     fn add(&mut self, other: &Counts) {
@@ -258,14 +258,42 @@ impl Counts {
             false_halts,
             candidates,
             halts,
+            residual,
         ] = self.0;
         let rate = (halts * 1000 + documents / 2) / documents;
         format!(
-            "| {label} | {documents} | {planted} | {misses} | {blind} of {blind_planted} | {false_halts} | {candidates} | {}.{}% |",
+            "| {label} | {documents} | {planted} | {misses} | {residual} | {blind} of {blind_planted} | {false_halts} | {candidates} | {}.{}% |",
             rate / 10,
             rate % 10
         )
     }
+}
+
+/// How often `fragment` stands alone in `text`.
+fn standing(text: &str, fragment: &str) -> usize {
+    let alone = |at: usize| {
+        !text[..at].chars().next_back().is_some_and(char::is_alphanumeric)
+            && !text[at + fragment.len()..]
+                .chars()
+                .next()
+                .is_some_and(char::is_alphanumeric)
+    };
+    text.match_indices(fragment).filter(|(at, _)| alone(*at)).count()
+}
+
+/// Whether a word or digit group of 3 or more characters from `value` stays in
+/// the output beyond what the rest of the document explains, with no candidate
+/// naming it. A whole value left behind does this too.
+fn leaves_a_fragment(document: &Document, value: &Value, result: &redact::Redaction) -> bool {
+    let elsewhere = document.text.replace(&value.text, "");
+    value
+        .text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|fragment| fragment.chars().count() >= 3)
+        .any(|fragment| {
+            standing(&result.text, fragment) > standing(&elsewhere, fragment)
+                && !result.unknowns.iter().any(|u| u.value.contains(fragment))
+        })
 }
 
 fn measure(document: &Document, mapped: bool, counts: &mut Counts) -> Vec<String> {
@@ -300,6 +328,10 @@ fn measure(document: &Document, mapped: bool, counts: &mut Counts) -> Vec<String
     counts.0[5] += usize::from(mapped && false_candidates > 0);
     counts.0[6] += false_candidates;
     counts.0[7] += usize::from(halted);
+    counts.0[8] += planted
+        .iter()
+        .filter(|v| leaves_a_fragment(document, v, &result))
+        .count();
     misses
 }
 
@@ -410,6 +442,22 @@ fn a_seed_always_gives_the_same_document() {
     let (_, template) = &templates()[0];
     let (first, second) = (render(template, SEED, true), render(template, SEED, true));
     assert_eq!(first.text, second.text);
+}
+
+#[test]
+fn a_partial_redaction_is_counted_as_a_residual_fragment() {
+    // A map entry for the given name alone leaves the family name in the output.
+    let document = Document {
+        text: "the client is Hana falador today".into(),
+        values: vec![Value {
+            class: Class::Planted,
+            text: "Hana falador".into(),
+        }],
+        entries: vec![entry("Hana", "person", 1)],
+    };
+    let mut counts = Counts::default();
+    assert!(measure(&document, true, &mut counts).is_empty());
+    assert_eq!((counts.0[2], counts.0[8]), (0, 1));
 }
 
 #[test]

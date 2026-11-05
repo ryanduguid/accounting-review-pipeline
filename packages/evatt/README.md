@@ -25,9 +25,11 @@ Putting 2 redacted documents in front of one model is putting 2 meanings of
 `TFN_01` in front of it.
 
 **The key never leaves the local machine.** The entity map is a gitignored file
-on disk. It is not transmitted, and no network client exists in this package;
-`tests/no_network.rs` fails CI if the normal dependency tree lists a network crate
-or `src` names a standard library socket.
+on disk. It is not transmitted, and no network client exists in this package.
+`tests/no_network.rs` backs that with a denylist, not a proof: it fails CI if the
+normal dependency tree lists one of its named crates or `src` holds one of its
+socket spellings. An unlisted crate, a foreign function or a program started through
+a subprocess passes it.
 The recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
@@ -170,8 +172,8 @@ character, `&nbsp;` or a tag such as `<td>`. Every 9, 10 and 11 digit stretch is
 tested against the TFN, ACN, Medicare and ABN checks, so a digit touching the number
 does not hide it, and a pass halts on the whole span. A line wrap, within a blockquote
 or not, joins whole groups only. An amount with cents, as in `1,234.56`, ends a
-stretch; other numbers sharing a line do not, so a column of whole dollars nearly
-always halts.
+stretch unless an identifier label sits near it; other numbers sharing a line do
+not, so a column of whole dollars nearly always halts.
 
 This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
@@ -294,16 +296,23 @@ an extra placeholder costs a triage decision whilst a miss leaks.
   becomes `Medicare: MEDICARE_01` followed by that same `1`. The 10-digit card
   is replaced; the reference alone is below the number sweep's 8-digit floor.
   Ryan accepted this limit on 11 October 2026 (DECISIONS.md ruling 47).
+- **A valid identifier that looks like money can pass with no halt.** `1234.56   782`
+  holds the valid TFN digits `123456782`, and nothing flags it unless `TFN`, `ABN`,
+  `ACN`, `Medicare`, `tax file`, `business number` or `company number` sits within
+  40 bytes of it on the same line. A label on the line above does not count. Then it
+  halts; it is never replaced. An unlabelled one stays in the output, so read the
+  output for figures that look wrong.
 - **Digit groups split wider than a token gap are caught only by their check
-  digit.** `123   456   782` halts because its digits pass a TFN check. These pass
-  without a halt, each pinned by `tests/redaction_property.rs`: groups that pass no
-  check, including any 8 digit number such as `12   345   678`; a group written as
-  money, as in `1234.56   782`; a gap holding a letter, a digit or `#`, as in
-  `123 and 456 and 782`; a digit in a tag between groups; a digit touching a number
-  that also wraps across lines, as in `9123   456` above `782`; and a gap holding a
-  blank line, as in `123   456` then a blank line then `782`. Groups written alone
-  on their own paragraphs, `123`, `456`, `782`, and the ABN equivalent are different:
-  the structured pattern replaces them. A labelled number with
+  digit.** `123   456   782` halts because its digits pass a TFN check. These are
+  known limits, not an exhaustive list, and each passes without a halt in
+  `tests/redaction_property.rs`: groups that pass no
+  check, including any 8 digit number such as `12   345   678`; a gap holding a
+  letter, a digit or `#`, as in `123 and 456 and 782`; a digit in a tag between
+  groups; a digit touching a number that also wraps across lines, as in `9123   456`
+  above `782`; and a gap holding a blank line, as in `123   456` then a blank line
+  then `782`. Groups written alone on their own paragraphs, `123`, `456`, `782`, and
+  the ABN equivalent are different: the structured pattern replaces them. A labelled
+  number with
   another digit group up to 2 spaces after it, as in `TFN: 123456783 2026`, can fail
   structured detection and now reaches the number halt when the full token
   meets its rules. `Client TFN is 123 456 789` replaces the TFN but still halts
@@ -333,7 +342,10 @@ document before you send it.
 from one seed, 100 documents each: half with every name, address and date in the
 entity map, half with only the client and other entities mapped. A planted value is
 an identifier, name, address or date that must be replaced or named by a halt, and
-a miss is one left in the output with no candidate naming it. A blind-spot value
+a miss is one left in the output whole with no candidate naming it. A residual
+fragment counts a planted value that leaves a word or digit group of 3 or more
+characters in the output, beyond what the rest of the document explains, with no
+candidate naming it; a miss counts here too. A blind-spot value
 comes from the limits above and is expected to pass unnoticed: a 6 or 7 digit
 account number, an initial or a name in lower case. A false halt is a fully mapped
 document that halts on a false candidate. A false candidate names no planted value.
@@ -341,18 +353,18 @@ Halt rate is the share of documents that halt. The counts measure these fabricat
 documents only, not accuracy on real workpapers. `cargo test --test benchmark` fails
 when this table, its header or its totals drift from the corpus.
 
-| Workpaper | Documents | Planted values | Misses | Blind-spot values missed | False halts | False candidates | Halt rate |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `bank-reconciliation` | 100 | 600 | 0 | 100 of 100 | 50 | 200 | 100.0% |
-| `client-queries` | 100 | 600 | 0 | 0 of 0 | 50 | 300 | 100.0% |
-| `close-review` | 100 | 300 | 0 | 0 of 0 | 50 | 546 | 100.0% |
-| `columnar-balances` | 100 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
-| `columnar-whole-dollars` | 100 | 0 | 0 | 0 of 0 | 50 | 637 | 100.0% |
-| `director-loan` | 100 | 1000 | 0 | 199 of 200 | 50 | 100 | 100.0% |
-| `gst-tie-out` | 100 | 800 | 0 | 100 of 100 | 50 | 200 | 100.0% |
-| `payroll-tie-out` | 100 | 1300 | 0 | 0 of 0 | 50 | 200 | 100.0% |
-| `split-identifiers` | 100 | 400 | 0 | 0 of 0 | 0 | 0 | 100.0% |
-| Total | 900 | 5000 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
+| Workpaper | Documents | Planted values | Misses | Residual fragments | Blind-spot values missed | False halts | False candidates | Halt rate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `bank-reconciliation` | 100 | 600 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `client-queries` | 100 | 600 | 0 | 0 | 0 of 0 | 50 | 300 | 100.0% |
+| `close-review` | 100 | 300 | 0 | 0 | 0 of 0 | 50 | 546 | 100.0% |
+| `columnar-balances` | 100 | 0 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
+| `columnar-whole-dollars` | 100 | 0 | 0 | 0 | 0 of 0 | 50 | 637 | 100.0% |
+| `director-loan` | 100 | 1000 | 0 | 0 | 199 of 200 | 50 | 100 | 100.0% |
+| `gst-tie-out` | 100 | 800 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `payroll-tie-out` | 100 | 1300 | 0 | 0 | 0 of 0 | 50 | 200 | 100.0% |
+| `split-identifiers` | 100 | 400 | 0 | 0 | 0 of 0 | 0 | 0 | 100.0% |
+| Total | 900 | 5000 | 0 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
 
 0 misses does not mean nothing gets through. Planted values are the shapes the sweep
 was built for; the hard cases are the blind-spot values, and 399 of 400 passed. Each row repeats one
