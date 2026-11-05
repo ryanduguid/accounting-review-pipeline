@@ -286,16 +286,17 @@ require explicit approval.
 
 ## Alternatives
 
-Accounting Review Pipeline works at trial balance level from local files and does no
-journal-level testing. As read on 5 November 2026, these open source projects cover
-nearby ground:
+Accounting Review Pipeline's close controls read local trial balance exports and, for `drivers`,
+`classify` and `reconcile`, supplied transactions; they run no journal-level population tests. The
+Xero trial-balance exporter is the exception to local files, because it pulls through Xero OAuth/API.
+As read on 5 November 2026, these projects cover nearby ground:
 
 - [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills): agent skills and scripts
-  for close and audit work in US practice, with a population tie-out before any test.
+  for close, tax and audit work in US practice, which refuse to deliver a workpaper that does not tie.
 - [divyanshus2404/journal-entry-testing](https://github.com/divyanshus2404/journal-entry-testing):
-  a PySpark journal entry testing project.
-- [XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server): Xero's official
-  MCP server, for agents working directly with Xero.
+  a PySpark journal entry testing pipeline on Databricks.
+- [XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server): the MCP server from
+  Xero's developer organisation, for agents working directly with Xero.
 
 ## Development
 
