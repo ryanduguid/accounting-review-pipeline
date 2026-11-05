@@ -1,6 +1,6 @@
 # Joined conformance vectors
 
-Fabricated trial balances for what the [contract's 3 fixtures](../../../contracts/xero-trial-balance-v1/README.md) leave open: quoted CSV, leading-zero account codes, Unicode text and numeric spellings. They use the same 10-column header. They sit here because `contracts/xero-trial-balance-v1/` stays byte-identical: its digests are cited in exporter release evidence.
+Fabricated trial balances for what the [contract's 3 fixtures](../../../contracts/xero-trial-balance-v1/README.md) leave open: quoted CSV, leading-zero account codes, Unicode text and numeric spellings. They use the same 10-column header. They sit here because the contract's first 3 fixtures stay byte-identical: their digests are cited in exporter release evidence.
 
 `expected_results.json` records what each consumer does with each file, and the debit, credit and year-to-date amounts each accepted row must parse to. `src/vectors.rs` in this crate holds Monthly Close Controls and the Workpaper Review Gate to it, and `test_gateway_satisfies_the_joined_vectors` holds the Xero Ledger Review Gate to it. `SHA256SUMS` pins the files, and the joined conformance workflow checks it.
 

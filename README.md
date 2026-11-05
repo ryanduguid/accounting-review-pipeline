@@ -165,7 +165,7 @@ commands documented here. evatt 0.2.0 was released on GitHub only, never on PyPI
 ## Contract
 
 `contracts/xero-trial-balance-v1/` is the data-only authority for the exporter-owned
-`xero-tb-csv.v1` corpus: the exact 10-column schema, 3 fabricated fixtures, the expected
+`xero-tb-csv.v1` corpus: the exact 10-column schema, 7 fabricated fixtures, the expected
 accept and reject results and `SHA256SUMS`. It is test and data input only and adds no shared
 runtime package. The `tests/joined-conformance` crate and the
 `joined-conformance.yml` workflow run the exporter runner and all 3 offline review
@@ -213,6 +213,7 @@ records that commit; any other value fails the build.
 | `review_boundary` | The fixed statement that readiness is not approval, advice or lodgement authority. |
 | `preparer_initials` | The initials on the preparer's self-review; empty when none was loaded. |
 | `controls_not_run` | Each optional slot with no usable input, with its filename and reason. `READY` says nothing about the controls listed here. |
+| `required_controls` | With `--require-control`: each slot this run required and its state, `ran`, `skipped` or `failed`. One that did not run is a `NOT_READY` finding. |
 | `acknowledgement` | Optional evidence of a later human review; it cannot change readiness or approve a file. |
 | `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 
@@ -231,6 +232,7 @@ records that commit; any other value fails the build.
 | `source_sha256` | SHA-256 digests identifying the exact current, prior and optional supporting inputs. |
 | `thresholds` | The absolute, percentage and reconciliation tolerances used to classify exceptions. |
 | `controls_not_run` | The optional controls whose input was not supplied, so they did not run. `PASS` or `REVIEW` says nothing about them. |
+| `required_controls` | With `--require-control`: each control this run required and its state, `ran`, `skipped` or `failed`. One that did not run is a `REVIEW` exception. |
 | `acknowledgement` | Optional evidence of human review; it cannot change a state or approve or close a period. |
 | `producer` | The component, version, commit or `unknown`, and pack contract that wrote the pack; absent from contract 1 packs. |
 

@@ -222,5 +222,6 @@ monthly-close and ledger-review suites gained root-contract tests; the Excel ada
 Power BI suites verify the same files with the standard library only;
 `tests/test_xero_trial_balance_contract.py` and `.github/workflows/joined-conformance.yml`
 run the joined producer-to-consumer conformance with only the exporter's hash-locked runtime
-installed. No duplicate copy of any fixture blob remains in the tree and no shared runtime
+installed. 4 rejection fixtures were added later, written new, leaving those 3 blobs
+unchanged. No duplicate copy of any fixture blob remains in the tree and no shared runtime
 package was added.

@@ -28,7 +28,7 @@ const HEADER: [&str; 10] = [
     "YTDDebit",
     "YTDCredit",
 ];
-const FIXTURE_DIGESTS: [(&str, &str); 3] = [
+const FIXTURE_DIGESTS: [(&str, &str); 7] = [
     (
         "passing.csv",
         "2cbe9997a8e7210936ff3c59b5d3fdb0041c1b375b0f9c88cf9ee30d0f356a09",
@@ -40,6 +40,22 @@ const FIXTURE_DIGESTS: [(&str, &str); 3] = [
     (
         "failing_ytd.csv",
         "ec757f12d13866360fbab189228ebb425893c6f8b299809c6f8567bf5817c64b",
+    ),
+    (
+        "failing_header_order.csv",
+        "9154b9a2d9cdb30c3058e1338c00cf7563c54ed6d6f4ade87a3b0a4636a2f4f4",
+    ),
+    (
+        "failing_duplicate_account.csv",
+        "42a917cc4b364ecfdfd9bb2df56c3951edd60946d77e53b0b09192b550f4f0f2",
+    ),
+    (
+        "failing_number.csv",
+        "a5698c7d513023f0c33526b510e592ac9a1197ce71f9a57b4761f8167e807cb2",
+    ),
+    (
+        "failing_date.csv",
+        "37c825de4e232eaa293e3c0b23e8bafc86f6d1ea4b7caac903ce0d8050b8f7ed",
     ),
 ];
 
@@ -97,8 +113,15 @@ fn assert_fixture(fixture: &Path, digest: &str, scenario: &Json) {
     assert_eq!(actual, digest);
     let source = std::str::from_utf8(&content).unwrap();
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let first = pycsv::Reader::new(source).next().unwrap().unwrap();
-    assert_eq!(first, HEADER);
+    let mut first = pycsv::Reader::new(source).next().unwrap().unwrap();
+    // The one fixture with a wrong order must still hold exactly these columns.
+    if scenario.at("id").is_str("header_order") {
+        assert_ne!(first, HEADER);
+        first.sort();
+        assert_eq!(first, sorted(HEADER.map(str::to_owned).to_vec()));
+    } else {
+        assert_eq!(first, HEADER);
+    }
 
     let result = Command::new(env!("CARGO_BIN_EXE_xero-tb-evaluate"))
         .arg(fixture)

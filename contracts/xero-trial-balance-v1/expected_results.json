@@ -3,7 +3,7 @@
   "corpus_id": "xero-tb-csv.v1",
   "owner_repository": "https://github.com/ryanduguid/accounting-review-pipeline",
   "product_release": "v0.1.6",
-  "fixture_version": "1",
+  "fixture_version": "2",
   "source_reviewed": "2026-08-26",
   "canonical_columns": [
     "ReportDate",
@@ -60,6 +60,68 @@
       "conformance": {
         "accept": false,
         "error_contains": "YTD debit and credit totals"
+      }
+    },
+    {
+      "id": "header_order",
+      "fixture": "failing_header_order.csv",
+      "sha256": "9154b9a2d9cdb30c3058e1338c00cf7563c54ed6d6f4ade87a3b0a4636a2f4f4",
+      "exit_code": 1,
+      "output_contains": ["exact exporter header"],
+      "conformance": {
+        "accept": false,
+        "error_contains": "declared order"
+      },
+      "review_commands": {
+        "accept": true
+      },
+      "tenant": "Catherby Fisheries Pty Ltd",
+      "account_codes": ["090", "800"],
+      "amounts": [["1200.0", "0.0", "15234.5", "0.0"], ["0.0", "1200.0", "0.0", "15234.5"]]
+    },
+    {
+      "id": "duplicate_account_id",
+      "fixture": "failing_duplicate_account.csv",
+      "sha256": "42a917cc4b364ecfdfd9bb2df56c3951edd60946d77e53b0b09192b550f4f0f2",
+      "exit_code": 1,
+      "output_contains": ["repeats a Tenant and AccountID"],
+      "conformance": {
+        "accept": false,
+        "error_contains": "duplicate AccountID"
+      },
+      "review_commands": {
+        "accept": false,
+        "error_contains": "duplicate control key"
+      }
+    },
+    {
+      "id": "bad_number",
+      "fixture": "failing_number.csv",
+      "sha256": "a5698c7d513023f0c33526b510e592ac9a1197ce71f9a57b4761f8167e807cb2",
+      "exit_code": 1,
+      "output_contains": ["is not an amount"],
+      "conformance": {
+        "accept": false,
+        "error_contains": "Debit is not a valid decimal"
+      },
+      "review_commands": {
+        "accept": false,
+        "error_contains": "invalid Debit"
+      }
+    },
+    {
+      "id": "bad_date",
+      "fixture": "failing_date.csv",
+      "sha256": "37c825de4e232eaa293e3c0b23e8bafc86f6d1ea4b7caac903ce0d8050b8f7ed",
+      "exit_code": 1,
+      "output_contains": ["invalid ReportDate"],
+      "conformance": {
+        "accept": false,
+        "error_contains": "ReportDate must be ISO"
+      },
+      "review_commands": {
+        "accept": false,
+        "error_contains": "ReportDate must be an ISO date"
       }
     }
   ],

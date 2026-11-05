@@ -12,6 +12,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const DECLARED_FIXTURES: [&str; 7] = [
+    "passing.csv",
+    "failing_movement.csv",
+    "failing_ytd.csv",
+    "failing_header_order.csv",
+    "failing_duplicate_account.csv",
+    "failing_number.csv",
+    "failing_date.csv",
+];
+
 pub fn component_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -43,7 +53,7 @@ pub fn declared_fixture(path: &Path) -> Result<PathBuf> {
             stderr: "error: fixture path must name a declared fabricated CSV fixture\n".into(),
         });
     }
-    for name in ["passing.csv", "failing_movement.csv", "failing_ytd.csv"] {
+    for name in DECLARED_FIXTURES {
         let owned = crate::paths::resolved(&fixture_root().join(name))?;
         if candidate == owned && owned.is_file() {
             return Ok(owned);
@@ -102,9 +112,27 @@ fn row_totals(rows: &[Vec<String>]) -> Result<Totals> {
             amount::add_totals(&totals, &amounts)
         })
 }
+/// `Tenant` plus `AccountID` is the control identity, and `ReportDate` is a
+/// calendar date.
+fn check_row_identity(rows: &[Vec<String>]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for row in rows {
+        if crate::cli::iso_date(&row[0]).is_err() {
+            return Err(Failure::message("error: fixture has an invalid ReportDate"));
+        }
+        if !seen.insert((&row[1], &row[3])) {
+            return Err(Failure::message(
+                "error: fixture repeats a Tenant and AccountID",
+            ));
+        }
+    }
+    Ok(())
+}
 pub fn evaluate(path: &Path) -> Result<String> {
     let path = declared_fixture(path)?;
-    let totals = row_totals(&read_rows(&path)?)?;
+    let rows = read_rows(&path)?;
+    check_row_identity(&rows)?;
+    let totals = row_totals(&rows)?;
     amount::check_balanced(&totals, None)?;
     Ok(format!(
         "PASS: {} movement and YTD balance\n",
@@ -262,12 +290,13 @@ mod tests {
     }
     #[test]
     fn only_declared_fabricated_fixtures_are_read() {
-        for (name, passing) in [
-            ("passing.csv", true),
-            ("failing_movement.csv", false),
-            ("failing_ytd.csv", false),
-        ] {
-            assert_eq!(evaluate(&fixture_root().join(name)).is_ok(), passing);
+        for name in DECLARED_FIXTURES {
+            let passing = name == "passing.csv";
+            assert_eq!(
+                evaluate(&fixture_root().join(name)).is_ok(),
+                passing,
+                "{name}"
+            );
         }
         assert!(declared_fixture(&component_root().join("samples/sample-output.csv")).is_err());
     }
