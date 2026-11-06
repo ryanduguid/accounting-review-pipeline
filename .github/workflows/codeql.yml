@@ -47,8 +47,26 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: none
 
+      # A finished analysis used to upload in this step. Run 42128639285
+      # wrote the Rust SARIF, then the upload process ended with no error
+      # and failed the job. Keep a successful run's upload in the next
+      # steps, and try it once more. A second failure still fails the job.
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: failure-only
+
+      - name: Upload CodeQL results
+        id: upload-results
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      - name: Retry CodeQL results upload
+        if: steps.upload-results.outcome == 'failure'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
         with:
           category: "/language:${{ matrix.language }}"
 
