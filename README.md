@@ -115,7 +115,7 @@ It holds 8 independently versioned components joined only by local files and com
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 1.0.0 | 1.0.0, GitHub release archive |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application | 1.0.0 | none |
 | Grant Acquittal Workpapers | `apps/grant-acquittal-workpapers/` | Rust command `grant-workpaper`, built with cargo | 0.2.0 | none |
-| evatt | `packages/evatt/` | Rust binary `evatt`; a local pseudonymisation boundary, no network of any kind | 1.0.0 (unreleased) | 0.2.0, GitHub release only |
+| evatt | `packages/evatt/` | Rust binary `evatt`; a local pseudonymisation boundary with no network step | 1.0.0 (unreleased) | 0.2.0, GitHub release only |
 
 Data flows in one direction: the exporter (or a manual Excel export) produces the 10-column
 Xero trial-balance file, the readiness gate decides whether a pack reaches review, monthly

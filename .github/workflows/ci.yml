@@ -148,6 +148,9 @@ jobs:
       - name: test with line coverage
         if: runner.os == 'Linux'
         run: cargo llvm-cov --locked --all-features --fail-under-lines ${{ matrix.coverage_floor }}
+      - name: Check evatt against its network crate and socket denylist
+        if: matrix.package_dir == 'packages/evatt'
+        run: cargo test --locked --test no_network
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane'
         with:

@@ -1,6 +1,6 @@
 # Security boundary
 
-This v0.1 package is a local, offline pseudonymisation boundary. It has no OAuth, API client, HTTP client, MCP server, LLM client, credential store, or accounting-system write path. It sends nothing anywhere; the operator carries the sanitised file to whatever reads it next.
+This v0.1 package is a local pseudonymisation boundary. Its code has no OAuth, API client, HTTP client, MCP server, LLM client, credential store, or accounting-system write path, and no step that sends a file; `tests/no_network.rs` checks that with a denylist, not a proof. The operator carries the sanitised file to whatever reads it next.
 
 The entity map is the key, and it stays on the local disk. Do not place a real entity map, real workpapers, client data, tokens or `.env` files in this repository. Every command refuses to read a map that git tracks or would not ignore, and the shipped rules cover the map, its `.tmp` and any triage file; those rules are a guard against a mistake, not a substitute for keeping real client data out of a public repository.
 

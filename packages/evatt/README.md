@@ -24,8 +24,12 @@ one workpaper and `TFN_01` in the next are 2 different tax file numbers.
 Putting 2 redacted documents in front of one model is putting 2 meanings of
 `TFN_01` in front of it.
 
-**The key never leaves the local machine.** The entity map is a gitignored file
-on disk. It is not transmitted, and no network client exists in this package.
+**Evatt reads the map locally and has no step that sends it anywhere.**
+Dependencies, FFI, subprocesses and transfers by other tools have not been fully
+excluded. The entity map is a gitignored file on disk. `tests/no_network.rs` is a
+denylist, not a proof: it fails CI if the normal dependency tree lists one of its
+named crates or `src` holds one of its socket spellings. An unlisted crate, a foreign
+function or a program started through a subprocess passes it.
 The recipient does not receive the map needed to reverse the entity substitutions.
 
 The **residual risk is contextual re-identification**. A document can identify
@@ -156,9 +160,20 @@ amount. Such an amount halts only if its 9, 10 or 11 digits pass a TFN, ACN,
 Medicare or ABN check. Other tokens of 8 or more digits halt, including dotted
 identifiers, IPv4 addresses and long version strings. Shorter runs, including
 6 and 7 digit account numbers, remain outside this sweep. Ordinary long
-references can halt too; this policy has no established workpaper false
-positive rate. The fabricated `negatives.md` sample now halts on its 8-digit
-statutory reference.
+references can halt too; this policy has no established false positive rate on
+real workpapers, and [Detection benchmark](#detection-benchmark) measures fabricated
+ones only. The fabricated `negatives.md` sample now halts on its 8-digit statutory
+reference.
+
+Digit groups further apart than that are joined only to test them, across any
+same-line gap that holds no letter, digit or `#`: wider spacing, a spaced dash, `|`,
+`;`, `:`, brackets, emphasis marks, a soft hyphen, a zero-width or other format
+character, `&nbsp;` or a tag such as `<td>`. Every 9, 10 and 11 digit stretch is
+tested against the TFN, ACN, Medicare and ABN checks, so a digit touching the number
+does not hide it, and a pass halts on the whole span. A line wrap, within a blockquote
+or not, joins whole groups only. An amount with cents, as in `1,234.56`, ends a
+stretch unless an identifier label sits near it; other numbers sharing a line do
+not, so a column of whole dollars nearly always halts.
 
 This is the point of the tool. A detector that silently passes what it does not
 understand is the failure that leaks.
@@ -281,13 +296,32 @@ an extra placeholder costs a triage decision whilst a miss leaks.
   becomes `Medicare: MEDICARE_01` followed by that same `1`. The 10-digit card
   is replaced; the reference alone is below the number sweep's 8-digit floor.
   Ryan accepted this limit on 11 October 2026 (DECISIONS.md ruling 47).
-- **Three or more spaces between digit groups remain unsupported.** Short
-  groups split that way can still pass without a halt. A labelled number with
+- **A valid identifier that looks like money can pass with no halt.** `1234.56   782`
+  holds the valid TFN digits `123456782`, and nothing flags it unless `TFN`, `ABN`,
+  `ACN`, `Medicare`, `tax file`, `business number` or `company number` sits within
+  40 bytes of it on the same line. Tags inside a label count, as in
+  `T<span>F</span>N`, within those 40 bytes; a label on the line above or spelled
+  with a character reference, as in `T&#70;N`, does not. A labelled one halts; it is
+  never replaced. An unlabelled one stays in the output, so read the output for
+  figures that look wrong.
+- **Digit groups split wider than a token gap are caught only by their check
+  digit.** `123   456   782` halts because its digits pass a TFN check. These are
+  known limits, not an exhaustive list, and each passes without a halt in
+  `tests/redaction_property.rs`: groups that pass no
+  check, including any 8 digit number such as `12   345   678`; a gap holding a
+  letter, a digit or `#`, as in `123 and 456 and 782`; a digit in a tag between
+  groups; a digit touching a number that also wraps across lines, as in `9123   456`
+  above `782`; and a gap holding a blank line, as in `123   456` then a blank line
+  then `782`. Groups written alone on their own paragraphs, `123`, `456`, `782`, and
+  the ABN equivalent are different: the structured pattern replaces them. A labelled
+  number with
   another digit group up to 2 spaces after it, as in `TFN: 123456783 2026`, can fail
   structured detection and now reaches the number halt when the full token
   meets its rules. `Client TFN is 123 456 789` replaces the TFN but still halts
   on the name candidate `Client TFN`; `Tax File Number (TFN)` can likewise
-  report `File Number`. These name false positives need a mapped entity.
+  report `File Number`, and `Net GST`, `Fund ABN` and `Director's TFN` are reported
+  the same way. A name candidate can run across a blank line, so 2 headings can
+  come back as one value. These name false positives need a mapped entity.
 - **A mapped name is matched through the markdown most documents put in it.**
   `_Jane Roe_`, `**Jane Roe**`, `Jane<br>Roe` in a table cell, a name wrapped
   inside a blockquote, `Jane_Roe` and a zero-width joiner between the words are
@@ -303,6 +337,55 @@ an extra placeholder costs a triage decision whilst a miss leaks.
 
 Contextual re-identification is not addressed by any of this. Read the
 document before you send it.
+
+## Detection benchmark
+
+`tests/benchmark.rs` fills the fabricated workpapers in `evaluation/workpapers`
+from one seed, 100 documents each: half with every name, address and date in the
+entity map, half with only the client and other entities mapped. A planted value is
+an identifier, name, address or date that must be replaced or named by a halt, and
+each occurrence is scored at its own position in the document. A candidate covers
+each place the sweep saw its value, though triage lists a value once a line. A miss
+is an occurrence left in the output whole with no candidate covering it. A residual
+fragment counts an occurrence that leaves any of a word or digit group of 3 or more
+characters in the output with no candidate covering it; a miss counts here too. A blind-spot value
+comes from the limits above and is expected to pass unnoticed: a 6 or 7 digit
+account number, an initial or a name in lower case. A false halt is a fully mapped
+document that halts on a false candidate. A false candidate covers no planted value.
+Halt rate is the share of documents that halt. The counts measure these fabricated
+documents only, not accuracy on real workpapers. `cargo test --test benchmark` fails
+when this table, its header or its totals drift from the corpus.
+
+| Workpaper | Documents | Planted values | Misses | Residual fragments | Blind-spot values missed | False halts | False candidates | Halt rate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `bank-reconciliation` | 100 | 600 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `client-queries` | 100 | 600 | 0 | 0 | 0 of 0 | 50 | 300 | 100.0% |
+| `close-review` | 100 | 300 | 0 | 0 | 0 of 0 | 50 | 546 | 100.0% |
+| `columnar-balances` | 100 | 0 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
+| `columnar-whole-dollars` | 100 | 0 | 0 | 0 | 0 of 0 | 50 | 637 | 100.0% |
+| `director-loan` | 100 | 1000 | 0 | 0 | 199 of 200 | 50 | 100 | 100.0% |
+| `gst-tie-out` | 100 | 800 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `payroll-tie-out` | 100 | 1300 | 0 | 0 | 0 of 0 | 50 | 200 | 100.0% |
+| `split-identifiers` | 100 | 400 | 0 | 0 | 0 of 0 | 0 | 0 | 100.0% |
+| Total | 900 | 5000 | 0 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
+
+0 misses does not mean nothing gets through. Planted values are the shapes the sweep
+was built for; the hard cases are the blind-spot values, and 399 of 400 passed. Each row repeats one
+template with fixed prose and only its slots varying, so the sample behaves like 9
+templates, not 900 independent documents, and a halt rate mostly reports that prose.
+
+`split-identifiers` spells each identifier with one of 7 gaps no structured pattern
+takes, and every document halts as it should. `columnar-balances` holds only amounts
+with cents, in aligned columns, one per line and in a table, and none halts.
+`columnar-whole-dollars` is the same layout without cents, and all 100 halt: joining
+every stretch of digits costs that. Inference, not a measurement of real files: expect
+to triage any workpaper holding capitalised phrases or a column of whole numbers.
+
+The other false candidates here are capitalised phrases such as
+`Business Bank Account`, `Trade Debtors`, `Net GST`, `Fund ABN` and `Director's TFN`,
+month names, and runs of 8 or more digits inside SHA-256 digests. Mapping a phrase or
+a whole-number span as an `entity` clears it. A map cannot clear a run inside a
+digest, because an entry does not match inside a longer word.
 
 ## The entity map
 
@@ -373,12 +456,12 @@ The Python library API is removed in 1.0.0; use the 2 commands above.
 consistently. An outer sender must independently authenticate the external human
 decision for the exact payload and actual destination, then send only the checked
 bytes. Reopening the file, re-encoding it, adding message text or attaching another
-file needs separate validation. evatt sends nothing and cannot prevent manual
+file needs separate validation. evatt has no send step and cannot prevent manual
 copying or authenticate the external decision.
 
 ## Documents
 
-- `DATA-FLOW.md`, the zero-network boundary and the 3 passes.
+- `DATA-FLOW.md`, the network boundary and the 3 passes.
 - `DISCLAIMER.md`, what this package does not decide.
 - `CONTRIBUTING.md`, the checks, the fixture rule and the claim rule.
 - `SECURITY.md`, the security boundary and how to report a vulnerability.

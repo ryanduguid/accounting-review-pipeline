@@ -1,8 +1,8 @@
 # v1.0.0 (unreleased)
 
 - evatt is a standalone Rust binary, built with `cargo build --locked --release`.
-  It uses local files and git only, with no installed Python and no network
-  dependency. The Python release caller has been removed; a Rust release path
+  It uses local files and git only, with no installed Python and no dependency
+  its network denylist names. The Python release caller has been removed; a Rust release path
   must be approved before 1.0.0 can be released.
 - The command names, flags, abbreviations, help, exit codes, redacted documents,
   manifests, triage files and disclosure records retain the Python 0.2.0 CLI
@@ -120,6 +120,7 @@ fabricated. Windows execution remains a separate verification gate.
   records for the changed output. Review the number sweep's amount/date
   exclusions and remaining detection limits in the README before upgrading.
 - Replace both identifiers when an email is written straight against a phone number, ABN or other identifier, so `(02) 9876 5432jane@example.com` becomes `PHONE_01EMAIL_01`, where it had become `PHONE_01jane@example.com`. Whichever started second was dropped, and the rest of it stayed in the sanitised output with no halt.
+- Halt on a TFN, ABN, ACN or Medicare number whose digit groups sit further apart than a token gap, as in `123   456   782`, `123 / 456 / 782`, `123;456;782`, `<td>123</td><td>456</td><td>782</td>`, `123*456*782` or a number wrapped inside a blockquote. These left strict redaction unchanged with no halt, found by the property test in `tests/redaction_property.rs`. Existing workpapers holding such a number now halt, and so do most columns of whole numbers, because any 9, 10 or 11 digit stretch that passes a check halts. Amounts with cents do not join unless an identifier label sits near them, so an unlabelled `1234.56   782` still passes with valid TFN digits in it. The README lists the known limits.
 
 # v0.2.0
 

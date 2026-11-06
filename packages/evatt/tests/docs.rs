@@ -28,11 +28,12 @@ fn public_docs_keep_the_assurance_boundary_and_no_retired_claims() {
     let opening = normalise(README.split("```").next().unwrap());
     // Scope and policy stay ahead of the first runnable example.
     assert!(opening.contains("pseudonymisation with local key retention"));
-    assert!(opening.contains("the key never leaves the local machine"));
+    assert!(opening.contains("evatt reads the map locally and has no step that sends it anywhere"));
     let readme = normalise(README);
     for required in [
         "pseudonymisation with local key retention",
-        "the key never leaves the local machine",
+        "evatt reads the map locally and has no step that sends it anywhere",
+        "transfers by other tools have not been fully excluded",
         "residual risk is contextual re-identification",
         "410-100",
         "prints finding kinds and locations, without detected values",

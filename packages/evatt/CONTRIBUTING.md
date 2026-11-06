@@ -13,6 +13,10 @@ Rust 1.99.0 and Cargo are pinned in `rust-toolchain.toml`. Keep functions within
 50 lines, enforced by Clippy. The default build produces only the `evatt`
 binary; `evatt-probe` requires the test-only `probe` feature.
 
+`tests/no_network.rs` is a denylist: it reads `cargo tree -e normal` and `src` for
+the crate names and socket spellings it lists. A dependency it does not name passes,
+so read each new runtime dependency and any program it starts for network use.
+
 The compatibility reference is CPython 3.14 with Unicode 16.0.0. Python is
 needed only to regenerate the checked-in tables and run differential tools:
 

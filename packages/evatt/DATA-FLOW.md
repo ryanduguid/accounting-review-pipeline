@@ -1,4 +1,4 @@
-# Data flow and zero-network boundary
+# Data flow and network boundary
 
 ## 1. Purpose
 
@@ -6,11 +6,15 @@ evatt performs pseudonymisation with local key retention over markdown files.
 This does not take the data outside the Privacy Act. It reduces what a recipient
 receives; it does not change the character of the data.
 
-## 2. Zero-network contract
+## 2. Network boundary
 
-- No HTTP client, socket or telemetry library appears in this package.
-- No cloud model is called. All processing is in memory, locally.
-- The entity map is read from disk and never written by evatt. It is never sent.
+- evatt has no step that calls a network. `tests/no_network.rs` checks a fixed list
+  of crate names and socket spellings, which an unlisted crate, a foreign function
+  or a program started through a subprocess would pass. No audit of those backs this.
+- evatt has no step that calls a cloud model. Its own processing is in memory, locally.
+- evatt reads the entity map from disk, never writes it and has no step that sends
+  it anywhere. Dependencies, FFI, subprocesses and transfers by other tools have not
+  been fully excluded.
 - The one subprocess this package runs is `git`, asked locally whether it
   ignores and does not track the map. It is a question about the working
   directory, not a network call.
