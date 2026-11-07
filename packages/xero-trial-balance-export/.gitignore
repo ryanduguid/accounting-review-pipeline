@@ -53,3 +53,4 @@ build/
 !data/Python-LICENSE.txt
 !tests/fixtures/
 !tests/fixtures/*.json
+!tests/data/float_repr.txt
