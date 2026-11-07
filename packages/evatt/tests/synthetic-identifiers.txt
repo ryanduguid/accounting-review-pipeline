@@ -42,3 +42,6 @@ packages/review-ready-gate/tests/data/float_repr.txt acn 122598565 a float expon
 packages/xero-trial-balance-export/tests/data/float_repr.txt acn 135242732 a float exponent and the next line's hex bits, not an identifier
 packages/xero-trial-balance-export/tests/data/float_repr.txt acn 972065339 hex float bits, not an identifier
 packages/xero-trial-balance-export/tests/data/float_repr.txt acn 122598565 a float exponent and the next line's hex bits, not an identifier
+packages/monthly-close-control-plane/tests/data/float_repr.txt acn 135242732 a float exponent and the next line's hex bits, not an identifier
+packages/monthly-close-control-plane/tests/data/float_repr.txt acn 972065339 hex float bits, not an identifier
+packages/monthly-close-control-plane/tests/data/float_repr.txt acn 122598565 a float exponent and the next line's hex bits, not an identifier
