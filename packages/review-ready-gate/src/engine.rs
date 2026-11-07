@@ -82,6 +82,7 @@ pub fn overall(findings: &[Finding]) -> &'static str {
 const TB_PRECISION: &str = "trial balance totals exceed the supported 28-digit precision, so debits and credits cannot be compared exactly.";
 const BAS_PRECISION: &str =
     "BAS amounts exceed the supported 28-digit precision, so net GST cannot be tied exactly.";
+const BANK_PRECISION: &str = "bank reconciliation and trial balance amounts exceed the supported 28-digit precision, so a GL balance cannot be tied to the trial balance exactly.";
 
 fn exact_sub(left: &Decimal, right: &Decimal, refusal: &str) -> Result<Decimal> {
     let result = left.sub(right);
@@ -308,7 +309,7 @@ pub fn review_requiring(
     apply_open_items(&loaded, &mut findings);
     apply_bas(&loaded, &mut findings, &tolerance)?;
     apply_gst_period(&loaded, &mut findings);
-    apply_bank_rec(&loaded, &mut findings, &tolerance);
+    apply_bank_rec(&loaded, &mut findings, &tolerance)?;
     apply_year_end(&loaded, &mut findings);
     if !document_paths.is_empty() {
         let bundles = document_paths
@@ -522,7 +523,50 @@ fn apply_gst_period(loaded: &Loaded, findings: &mut Vec<Finding>) {
         "Return the pack. The GST control export must be for the period the self-review declares.",
     ));
 }
-fn apply_bank_rec(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Decimal) {
+/// Each reconciled account's GL balance against the trial balance's
+/// `YTDDebit - YTDCredit` for the same `AccountID`: debit balances positive,
+/// credit balances negative, as Monthly Close Controls reads `SubledgerBalance`.
+fn apply_bank_rec(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Decimal) -> Result<()> {
+    apply_bank_statement(loaded, findings, tolerance);
+    let (Some(bank), Some(tb)) = (&loaded.bank_rec, &loaded.trial_balance) else {
+        return Ok(());
+    };
+    for row in bank {
+        let Some(account) = tb.iter().find(|r| r.account_id == row.account_id) else {
+            findings.push(Finding::new(
+                "BANK_REC_BREAK",
+                "NOT_READY",
+                "bank_rec",
+                format!(
+                    "Account {} is not in the trial balance, so its GL balance {} cannot be tied to the ledger.",
+                    row.account_id,
+                    row.gl_balance.to_sci_string()
+                ),
+                "Return the pack. Reconcile an account the trial balance holds, or correct its AccountID.",
+            ));
+            continue;
+        };
+        let ledger = exact_sub(&account.ytd_debit, &account.ytd_credit, BANK_PRECISION)?;
+        let difference = exact_sub(&row.gl_balance, &ledger, BANK_PRECISION)?;
+        if difference.abs() > *tolerance {
+            findings.push(Finding::new(
+                "BANK_REC_BREAK",
+                "NOT_READY",
+                "bank_rec",
+                format!(
+                    "Account {} GL balance {} differs from the trial balance balance {} by {}.",
+                    row.account_id,
+                    row.gl_balance.to_sci_string(),
+                    ledger.to_sci_string(),
+                    difference.to_sci_string()
+                ),
+                "Return the pack. Reconcile the bank account to the ledger this trial balance reports.",
+            ));
+        }
+    }
+    Ok(())
+}
+fn apply_bank_statement(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Decimal) {
     for row in loaded.bank_rec.iter().flatten() {
         // The existing bank control rounds subtraction in the fixed 28-digit context.
         let difference = row.statement_balance.sub(&row.gl_balance).value;
@@ -748,7 +792,7 @@ mod tests {
             gl_balance: Decimal::zero(),
         }]);
         findings.clear();
-        apply_bank_rec(&loaded, &mut findings, &tolerance);
+        apply_bank_rec(&loaded, &mut findings, &tolerance).unwrap();
         assert_eq!(findings.len(), 1);
         assert!(
             findings[0]
@@ -806,13 +850,112 @@ mod tests {
         };
         let mut findings = Vec::new();
         apply_bas(&loaded, &mut findings, &tolerance).unwrap();
-        apply_bank_rec(&loaded, &mut findings, &tolerance);
+        apply_bank_rec(&loaded, &mut findings, &tolerance).unwrap();
         assert!(findings.is_empty(), "{:?}", codes(&findings));
         loaded.gst_control_gl.as_mut().unwrap()[0].credit = amount("100.48");
         loaded.bank_rec.as_mut().unwrap()[0].statement_balance = amount("100.02");
         apply_bas(&loaded, &mut findings, &tolerance).unwrap();
-        apply_bank_rec(&loaded, &mut findings, &tolerance);
+        apply_bank_rec(&loaded, &mut findings, &tolerance).unwrap();
         assert_eq!(codes(&findings), ["TIEOUT_BREAK", "BANK_REC_BREAK"]);
+    }
+    /// month-end-ready with its bank reconciliation replaced. With `overdraft`,
+    /// the trial balance also holds account 101, a $5,000 credit balance, and
+    /// account 100 carries the matching $5,000 so both pairs still balance.
+    fn month_end_bank(tmp: &TempDir, overdraft: bool, bank_rec: &str) -> PathBuf {
+        let dir = tmp.join("pack");
+        test_support::copy_example("month-end-ready", &dir);
+        if overdraft {
+            let path = dir.join("trial_balance.csv");
+            let text = fs::read_to_string(&path).unwrap();
+            let bank = ",100,Operating Bank,1000,15000.00,0.00,120000.00,0.00";
+            assert!(text.contains(bank));
+            let text = text.replace(
+                bank,
+                ",100,Operating Bank,1000,15000.00,0.00,125000.00,0.00",
+            );
+            fs::write(&path, format!("{text}2026-06-30,Varrock Ventures Pty Ltd,Liabilities,101,Business Overdraft,1010,0.00,0.00,0.00,5000.00\n")).unwrap();
+        }
+        fs::write(
+            dir.join("bank_rec.csv"),
+            format!("AccountID,StatementBalance,GLBalance\n{bank_rec}"),
+        )
+        .unwrap();
+        dir
+    }
+    fn bank_breaks(pack: &ReadinessPack) -> Vec<&str> {
+        pack.findings
+            .iter()
+            .filter(|f| f.code == "BANK_REC_BREAK")
+            .map(|f| f.reason.as_str())
+            .collect()
+    }
+    #[test]
+    fn a_bank_rec_that_agrees_with_itself_but_not_the_trial_balance_is_not_ready() {
+        // The statement equals the reconciliation's own GL balance, so the
+        // statement check passes; the trial balance holds 120,000.00.
+        let tmp = TempDir::new();
+        let pack = review(
+            "month_end",
+            &month_end_bank(&tmp, false, "100,119000.00,119000.00\n"),
+        )
+        .unwrap();
+        assert_eq!(pack.status, "NOT_READY");
+        assert_eq!(
+            bank_breaks(&pack),
+            [
+                "Account 100 GL balance 119000.00 differs from the trial balance balance 120000.00 by -1000.00."
+            ]
+        );
+    }
+    #[test]
+    fn a_reconciled_account_the_trial_balance_does_not_hold_is_not_ready() {
+        let tmp = TempDir::new();
+        let pack = review(
+            "month_end",
+            &month_end_bank(&tmp, false, "100,120000.00,120000.00\n999,50.00,50.00\n"),
+        )
+        .unwrap();
+        assert_eq!(pack.status, "NOT_READY");
+        assert_eq!(
+            bank_breaks(&pack),
+            [
+                "Account 999 is not in the trial balance, so its GL balance 50.00 cannot be tied to the ledger."
+            ]
+        );
+    }
+    #[test]
+    fn bank_gl_balances_tie_to_the_trial_balance_debit_positive_in_both_signs() {
+        for (rows, breaks) in [
+            ("100,125000.00,125000.00\n101,-5000.00,-5000.00\n", 0),
+            // A credit balance entered as positive is a sign error, not a tie.
+            ("100,125000.00,125000.00\n101,5000.00,5000.00\n", 1),
+            ("100,-125000.00,-125000.00\n101,-5000.00,-5000.00\n", 1),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("month_end", &month_end_bank(&tmp, true, rows)).unwrap();
+            assert_eq!(bank_breaks(&pack).len(), breaks, "{rows}");
+            assert_eq!(pack.status == "READY", breaks == 0, "{rows}");
+        }
+    }
+    #[test]
+    fn bank_gl_to_trial_balance_differences_equal_to_the_tolerance_tie() {
+        for (gl, ties) in [
+            ("120000.00", true),
+            ("120000.009", true),
+            ("120000.01", true),
+            ("119999.99", true),
+            ("120000.011", false),
+            ("119999.989", false),
+            ("120000.02", false),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review(
+                "month_end",
+                &month_end_bank(&tmp, false, &format!("100,{gl},{gl}\n")),
+            )
+            .unwrap();
+            assert_eq!(bank_breaks(&pack).is_empty(), ties, "{gl}");
+        }
     }
     #[test]
     fn bas_allowance_needs_both_labels_in_whole_dollars() {

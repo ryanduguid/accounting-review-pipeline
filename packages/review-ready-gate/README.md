@@ -164,17 +164,21 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
 | `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; no GST posting dated after `period_end` |
-| `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its own GL balance; prior date earlier; same tenant |
+| `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines |
 
 Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`.
 
-Two limits of these controls. The bank reconciliation compares each account's
-statement balance with the GL balance the reconciliation itself records; it is
-not tied to the pack's trial balance, so a reconciliation prepared against an
-earlier ledger state, or for an account the trial balance does not hold, can
-still pass. And the GST control file is checked for postings after
-`period_end` only: a file from an earlier quarter passes the date check, because
+The bank reconciliation is tied twice for each account. Its `StatementBalance`
+must agree with its `GLBalance`, and that `GLBalance` must agree with the current
+trial balance's `YTDDebit - YTDCredit` for the same `AccountID`, each within
+`--tieout-tolerance`. `StatementBalance` and `GLBalance` therefore use that signed
+convention: debit balances positive, credit balances negative, so an overdrawn
+account is negative. A reconciliation prepared against an earlier ledger state,
+or for an account the trial balance does not hold, is a `BANK_REC_BREAK`.
+
+One limit of these controls: the GST control file is checked for postings after
+`period_end` only. A file from an earlier quarter passes the date check, because
 the self-review carries no period start.
 
 A `READY` status means no configured control tripped, and only the controls that
@@ -388,6 +392,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - JSON nesting is bounded at 1,000 containers. Decimal rendering refuses an output above its 1 GiB resource ceiling.
 - SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
+- A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 
 ## Licence
 

@@ -28,6 +28,12 @@
 - Breaking: the `month_end` profile requires `bank_rec.csv`. A balanced pack
   without its bank reconciliation used to reach `READY`, with the control listed
   only under 'Controls not run'; it is now `NOT_READY` with `MISSING_ARTEFACT`.
+- Breaking: each bank reconciliation `GLBalance` must agree with the current
+  trial balance's `YTDDebit - YTDCredit` for its `AccountID`, within
+  `--tieout-tolerance`. A reconciliation that agreed only with itself used to
+  reach `READY`; it, and an account the trial balance does not hold, is now
+  `NOT_READY` with `BANK_REC_BREAK`. Balances are debit-positive, so an
+  overdrawn account's balances are negative.
 - Native release publishing is not configured. The release workflow fails
   explicitly and cannot publish Python or native artefacts.
 
