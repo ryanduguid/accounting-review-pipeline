@@ -1272,6 +1272,46 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
         .map(str::to_owned)
         .collect())
 }
+/// What a `year_end` result must still share with the baseline, which has no
+/// `fs_mapping` control: the exit code, if any, and the pack with that control
+/// left out of `controls_not_run`. The README's 'Deliberate major-version
+/// differences' records the rest: the summary and the printed list name it too.
+fn without_statement_mapping(result: &str) -> Result<Option<String>> {
+    let result = probe::decode(result)?;
+    let Some(ok) = result.get("ok") else {
+        return Ok(None);
+    };
+    let mut pack = match (ok.get("pack"), ok.get("files")) {
+        (Some(pack), _) => pack.clone(),
+        (None, Some(Json::Array(files))) => {
+            let Some(hex) = files.first().and_then(Json::as_pystr) else {
+                return Ok(None);
+            };
+            let hex = hex.to_utf8().ok_or("pack file hex is not text")?;
+            if !hex.len().is_multiple_of(2) {
+                return Err("odd pack file hex".into());
+            }
+            let mut bytes = Vec::with_capacity(hex.len() / 2);
+            for pair in hex.as_bytes().chunks(2) {
+                bytes.push(u8::from_str_radix(std::str::from_utf8(pair)?, 16)?);
+            }
+            probe::decode(&String::from_utf8(bytes)?)?
+        }
+        _ => return Ok(None),
+    };
+    if let Json::Object(fields) = &mut pack
+        && let Some((_, Json::Array(controls))) = fields
+            .iter_mut()
+            .find(|(key, _)| key.is("controls_not_run"))
+    {
+        controls.retain(|control| !control.at("slot").is_str("fs_mapping"));
+    }
+    let code = ok.get("code").cloned().unwrap_or(Json::Null);
+    Ok(Some(probe::encode(&Json::object([
+        ("code", code),
+        ("pack", pack),
+    ]))))
+}
 #[expect(
     clippy::too_many_lines,
     reason = "runs the differential stages in order"
@@ -1337,8 +1377,16 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     }
     let mut mismatches = 0;
     let mut presentation = 0;
+    let mut recorded = 0;
     for ((name, actual), expected) in actual.iter().zip(expected) {
         if !probe::equivalent(actual, &expected)? {
+            if name.starts_with("pack-year-end-ready-") || name.starts_with("cli-runtime-4-") {
+                let native = without_statement_mapping(actual)?;
+                if native.is_some() && native == without_statement_mapping(&expected)? {
+                    recorded += 1;
+                    continue;
+                }
+            }
             if name.starts_with("cli-presentation-") {
                 let native = probe::decode(actual)?;
                 let python = probe::decode(&expected)?;
@@ -1360,7 +1408,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         }
     }
     println!(
-        "seed {seed}: {} value/file/CLI cases; {presentation} CLI presentation differences; {mismatches} unexplained differences",
+        "seed {seed}: {} value/file/CLI cases; {presentation} CLI presentation differences; {recorded} recorded year_end coverage differences; {mismatches} unexplained differences",
         actual.len()
     );
     if mismatches != 0 {

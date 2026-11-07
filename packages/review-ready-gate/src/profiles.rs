@@ -76,6 +76,7 @@ const YEAR: &[Slot] = &[
         true,
         "tie_out_matrix",
     ),
+    slot("fs_mapping", "fs_mapping.csv", false, "fs_mapping"),
     OPEN,
     SELF,
     PRIOR,

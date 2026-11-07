@@ -55,6 +55,7 @@ pub const TIE_COLUMNS: [&str; 5] = [
     "SourceFile",
     "Status",
 ];
+pub const MAPPING_COLUMNS: [&str; 3] = ["StatementLine", "AccountID", "NormalBalance"];
 pub const PRIOR_COLUMNS: [&str; 3] = ["FindingCode", "Slot", "Status"];
 pub const ASSERTIONS: [&str; 5] = [
     "pack_complete",
@@ -428,9 +429,10 @@ pub fn load_tie_out_matrix(snapshot: &SourceSnapshot) -> Result<Vec<TieOutRow>> 
                 r.number
             ));
         }
-        r.money("StatementAmount")?;
+        let statement_amount = r.money("StatementAmount")?;
         rows.push(TieOutRow {
             statement_line,
+            statement_amount,
             workpaper_ref: r.text("WorkpaperRef", status != "TIED")?,
             source_file: r.text("SourceFile", status != "TIED")?,
             status,
@@ -438,6 +440,49 @@ pub fn load_tie_out_matrix(snapshot: &SourceSnapshot) -> Result<Vec<TieOutRow>> 
     }
     if rows.is_empty() {
         return Err(format!("{path}: no tie-out rows were supplied."));
+    }
+    Ok(rows)
+}
+
+pub fn load_fs_mapping(snapshot: &SourceSnapshot) -> Result<Vec<FsMappingRow>> {
+    let path = pypath::text(&snapshot.path);
+    let mut rows = Vec::new();
+    let mut pairs = BTreeSet::new();
+    let mut sides = BTreeMap::new();
+    for r in csv_rows(snapshot, &MAPPING_COLUMNS, "Statement-mapping file")? {
+        let statement_line = r.text("StatementLine", false)?;
+        let account_id = r.text("AccountID", false)?;
+        let credit = match r.text("NormalBalance", false)?.as_str() {
+            "DEBIT" => false,
+            "CREDIT" => true,
+            _ => {
+                return Err(format!(
+                    "{path}: row {} NormalBalance must be DEBIT or CREDIT.",
+                    r.number
+                ));
+            }
+        };
+        if !pairs.insert((statement_line.clone(), account_id.clone())) {
+            return Err(format!(
+                "{path}: duplicate mapping of AccountID {} to StatementLine {}.",
+                pytext::repr(&account_id),
+                pytext::repr(&statement_line)
+            ));
+        }
+        if *sides.entry(statement_line.clone()).or_insert(credit) != credit {
+            return Err(format!(
+                "{path}: StatementLine {} has both DEBIT and CREDIT rows.",
+                pytext::repr(&statement_line)
+            ));
+        }
+        rows.push(FsMappingRow {
+            statement_line,
+            account_id,
+            credit,
+        });
+    }
+    if rows.is_empty() {
+        return Err(format!("{path}: no statement-mapping rows were supplied."));
     }
     Ok(rows)
 }

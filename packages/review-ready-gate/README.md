@@ -165,9 +165,9 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 | --- | --- | --- |
 | `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; no GST posting dated after `period_end` |
 | `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
-| `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines |
+| `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines; with `fs_mapping.csv`, each `TIED` line computed from the current TB |
 
-Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`.
+Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out).
 
 The bank reconciliation is tied twice for each account. Its `StatementBalance`
 must agree with its `GLBalance`, and that `GLBalance` must agree with the current
@@ -272,6 +272,28 @@ If both the activity statement and the GST control GL are present:
 - when `1A` and `1B` are both whole dollars, as the ATO requires on a lodged statement, any difference under `$1` also ties: the ATO drops the cents from each label, so the statement can sit up to 99 cents either side of the control movement. A statement whose labels carry cents gets no allowance
 
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
+
+### Computed statement tie-out
+
+The tie-out matrix records a `Status` the preparer asserts. With `fs_mapping.csv`
+beside it, the gate also computes each `TIED` line's `StatementAmount` from the
+current trial balance:
+
+```text
+StatementLine,AccountID,NormalBalance
+```
+
+- each row places one trial-balance `AccountID` on one `StatementLine` of the matrix. A line may take several accounts, and an account may sit on more than one line, such as a subtotal
+- a `DEBIT` line is the sum of its accounts' `YTDDebit - YTDCredit`, and a `CREDIT` line the sum of `YTDCredit - YTDDebit`, so trade creditors with a credit balance show positive on a `CREDIT` line and a loss shows negative on a `CREDIT` profit line. Every row for one line must give the same `NormalBalance`
+- a computed amount that differs from `StatementAmount` by more than `--tieout-tolerance` is `TIEOUT_BREAK`. There is no rounding allowance of its own: a statement presented in whole dollars needs a run tolerance that covers its rounding
+- a `TIED` line no row maps is `TIEOUT_UNSUPPORTED`. A row naming an account the trial balance does not hold or a line the matrix does not have, and a trial-balance account with a balance that no row maps, are `TIEOUT_BREAK`
+- `EXCEPTION` and `UNSUPPORTED` lines keep their own findings and are not computed
+
+Without the file the computed tie-out is listed under 'Controls not run', and a
+`READY` year-end pack rests on the statuses the preparer asserted. Name it with
+`--require-control fs_mapping` to make the computed tie-out a condition of
+`READY`. The figures come from the matrix: the gate reads no PDF or signed
+statement.
 
 ## Human acknowledgement
 
@@ -392,6 +414,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - JSON nesting is bounded at 1,000 containers. Decimal rendering refuses an output above its 1 GiB resource ceiling.
 - SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
+- A `year_end` pack lists `fs_mapping` under 'Controls not run' when the file is absent, and computes `TIED` lines from the trial balance when it is present. The baseline has no such slot. The differential compares its `year_end` packs with that one entry left out of `controls_not_run`, and compares the exit code and pack JSON from its `year_end` command runs; the summary and printed list of controls not run differ by that entry.
 - A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 
 ## Licence

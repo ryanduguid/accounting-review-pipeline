@@ -10,7 +10,7 @@ use crate::{
     pytext,
 };
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -24,6 +24,7 @@ struct Loaded {
     gst_control_gl: Option<Vec<GstControlRow>>,
     bank_rec: Option<Vec<BankRecRow>>,
     tie_out_matrix: Option<Vec<TieOutRow>>,
+    fs_mapping: Option<Vec<FsMappingRow>>,
     prior_findings: Option<Vec<PriorFinding>>,
 }
 
@@ -54,6 +55,7 @@ impl Loaded {
             "gst_control_gl" => held(&mut self.gst_control_gl, load_gst_control(source)?),
             "bank_rec" => held(&mut self.bank_rec, load_bank_rec(source)?),
             "tie_out_matrix" => held(&mut self.tie_out_matrix, load_tie_out_matrix(source)?),
+            "fs_mapping" => held(&mut self.fs_mapping, load_fs_mapping(source)?),
             "prior_findings" => held(&mut self.prior_findings, load_prior_findings(source)?),
             _ => return Err(format!("unknown slot kind {}.", pytext::repr(slot.kind))),
         })
@@ -82,6 +84,7 @@ pub fn overall(findings: &[Finding]) -> &'static str {
 const TB_PRECISION: &str = "trial balance totals exceed the supported 28-digit precision, so debits and credits cannot be compared exactly.";
 const BAS_PRECISION: &str =
     "BAS amounts exceed the supported 28-digit precision, so net GST cannot be tied exactly.";
+const STATEMENT_PRECISION: &str = "statement and trial balance amounts exceed the supported 28-digit precision, so a statement line cannot be computed exactly.";
 const BANK_PRECISION: &str = "bank reconciliation and trial balance amounts exceed the supported 28-digit precision, so a GL balance cannot be tied to the trial balance exactly.";
 
 fn exact_sub(left: &Decimal, right: &Decimal, refusal: &str) -> Result<Decimal> {
@@ -311,6 +314,7 @@ pub fn review_requiring(
     apply_gst_period(&loaded, &mut findings);
     apply_bank_rec(&loaded, &mut findings, &tolerance)?;
     apply_year_end(&loaded, &mut findings);
+    apply_statement_mapping(&loaded, &mut findings, &tolerance)?;
     if !document_paths.is_empty() {
         let bundles = document_paths
             .iter()
@@ -501,24 +505,15 @@ fn apply_gst_period(loaded: &Loaded, findings: &mut Vec<Finding>) {
     if late.is_empty() {
         return;
     }
-    let shown = late
-        .iter()
-        .take(3)
-        .map(|d| d.iso())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let more = if late.len() > 3 {
-        format!(" and {} more", late.len() - 3)
-    } else {
-        String::new()
-    };
+    let late: Vec<_> = late.iter().map(|d| d.iso()).collect();
     findings.push(Finding::new(
         "PERIOD_ORDER",
         "NOT_READY",
         "gst_control_gl",
         format!(
-            "GST control postings are dated after the declared period_end {}: {shown}{more}.",
-            s.period_end.iso()
+            "GST control postings are dated after the declared period_end {}: {}.",
+            s.period_end.iso(),
+            first_three(&late)
         ),
         "Return the pack. The GST control export must be for the period the self-review declares.",
     ));
@@ -596,6 +591,162 @@ fn apply_year_end(loaded: &Loaded, findings: &mut Vec<Finding>) {
             "TIED" if row.workpaper_ref.is_empty() || row.source_file.is_empty() => findings.push(Finding::new("TIEOUT_UNSUPPORTED", "NOT_READY", "tie_out_matrix", format!("Statement line {line} is marked TIED without a workpaper reference and source file."), "Return the pack. A tied line must name its evidence.")),
             _ => {}
         }
+    }
+}
+/// Each trial-balance account's `YTDDebit - YTDCredit`, by `AccountID`.
+type Balances<'a> = BTreeMap<&'a str, (Decimal, &'a TrialBalanceRow)>;
+/// Each `TIED` statement line against the trial-balance accounts `fs_mapping`
+/// places on it, and every account with a balance on some line. The computed
+/// amount is the sum of `YTDDebit - YTDCredit`, negated on a credit-normal line.
+fn apply_statement_mapping(
+    loaded: &Loaded,
+    findings: &mut Vec<Finding>,
+    tolerance: &Decimal,
+) -> Result<()> {
+    let (Some(lines), Some(mapping), Some(tb)) = (
+        &loaded.tie_out_matrix,
+        &loaded.fs_mapping,
+        &loaded.trial_balance,
+    ) else {
+        return Ok(());
+    };
+    let balances = tb
+        .iter()
+        .map(|r| {
+            let net = exact_sub(&r.ytd_debit, &r.ytd_credit, STATEMENT_PRECISION)?;
+            Ok((r.account_id.as_str(), (net, r)))
+        })
+        .collect::<Result<Balances>>()?;
+    mapping_coverage(lines, mapping, &balances, findings);
+    computed_lines(lines, mapping, &balances, tolerance, findings)
+}
+fn mapping_finding(code: &str, reason: String) -> Finding {
+    let action = if code == "TIEOUT_UNSUPPORTED" {
+        "Return the pack. Map the trial-balance accounts behind every tied line."
+    } else {
+        "Return the pack. Correct the statement, the mapping or the ledger until each tied line computes from the trial balance."
+    };
+    Finding::new(code, "NOT_READY", "fs_mapping", reason, action)
+}
+/// Mapping rows that name a line or account the pack does not have, and
+/// trial-balance accounts with a balance that no row places on a line.
+fn mapping_coverage(
+    lines: &[TieOutRow],
+    mapping: &[FsMappingRow],
+    balances: &Balances,
+    findings: &mut Vec<Finding>,
+) {
+    for row in mapping {
+        let line = pytext::repr(&row.statement_line);
+        if !lines.iter().any(|l| l.statement_line == row.statement_line) {
+            findings.push(mapping_finding(
+                "TIEOUT_BREAK",
+                format!(
+                    "fs_mapping places account {} on statement line {line}, which the tie-out matrix does not have.",
+                    row.account_id
+                ),
+            ));
+        }
+        if !balances.contains_key(row.account_id.as_str()) {
+            findings.push(mapping_finding(
+                "TIEOUT_BREAK",
+                format!(
+                    "fs_mapping places account {} on statement line {line}, but the trial balance does not hold that account.",
+                    row.account_id
+                ),
+            ));
+        }
+    }
+    let unmapped: Vec<_> = balances
+        .iter()
+        .filter(|(id, (net, _))| !net.is_zero() && !mapping.iter().any(|m| m.account_id == **id))
+        .map(|(id, (_, r))| format!("{id} ({})", r.account_name))
+        .collect();
+    if !unmapped.is_empty() {
+        findings.push(mapping_finding(
+            "TIEOUT_BREAK",
+            format!(
+                "Trial-balance accounts with a balance are on no statement line: {}.",
+                first_three(&unmapped)
+            ),
+        ));
+    }
+}
+/// The sum of the accounts' `YTDDebit - YTDCredit`, negated on a credit-normal
+/// line, or `None` when the trial balance lacks one of them.
+fn line_amount(
+    accounts: &[&FsMappingRow],
+    credit: bool,
+    balances: &Balances,
+) -> Result<Option<Decimal>> {
+    let Some(nets) = accounts
+        .iter()
+        .map(|m| {
+            balances
+                .get(m.account_id.as_str())
+                .map(|(net, _)| Ok(net.clone()))
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
+    let debit_net = exact_sum(nets.into_iter(), STATEMENT_PRECISION)?;
+    Ok(Some(if credit {
+        exact_sub(&Decimal::zero(), &debit_net, STATEMENT_PRECISION)?
+    } else {
+        debit_net
+    }))
+}
+/// Each `TIED` line's `StatementAmount` against the sum of its mapped accounts.
+fn computed_lines(
+    lines: &[TieOutRow],
+    mapping: &[FsMappingRow],
+    balances: &Balances,
+    tolerance: &Decimal,
+    findings: &mut Vec<Finding>,
+) -> Result<()> {
+    for row in lines.iter().filter(|l| l.status == "TIED") {
+        let line = pytext::repr(&row.statement_line);
+        let accounts: Vec<_> = mapping
+            .iter()
+            .filter(|m| m.statement_line == row.statement_line)
+            .collect();
+        let Some(first) = accounts.first() else {
+            findings.push(mapping_finding(
+                "TIEOUT_UNSUPPORTED",
+                format!(
+                    "Statement line {line} is TIED, but fs_mapping places no trial-balance account on it, so its amount was not computed."
+                ),
+            ));
+            continue;
+        };
+        // A mapped account the trial balance lacks is already a finding.
+        let Some(computed) = line_amount(&accounts, first.credit, balances)? else {
+            continue;
+        };
+        let difference = exact_sub(&row.statement_amount, &computed, STATEMENT_PRECISION)?;
+        if difference.abs() > *tolerance {
+            findings.push(mapping_finding(
+                "TIEOUT_BREAK",
+                format!(
+                    "Statement line {line} shows {}, but its mapped trial-balance accounts give {}; difference {} exceeds tolerance {}.",
+                    row.statement_amount.to_sci_string(),
+                    computed.to_sci_string(),
+                    difference.to_sci_string(),
+                    tolerance.to_sci_string()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+/// The first 3 items, then a count of the rest.
+fn first_three(items: &[String]) -> String {
+    let shown = items.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+    if items.len() > 3 {
+        format!("{shown} and {} more", items.len() - 3)
+    } else {
+        shown
     }
 }
 
@@ -957,6 +1108,216 @@ mod tests {
             assert_eq!(bank_breaks(&pack).is_empty(), ties, "{gl}");
         }
     }
+    /// Every account in year-end-ready's trial balance on a statement line.
+    /// Loss for the year is 80,000 + 90,000 - 130,000 = 40,000, debit-normal.
+    const MATRIX: &str = "Cash,120000.00,WP-100,trial_balance.csv,TIED
+Trade debtors,85000.00,WP-110,trial_balance.csv,TIED
+Trade creditors,65000.00,WP-200,trial_balance.csv,TIED
+Loss for the year,40000.00,WP-300,trial_balance.csv,TIED
+Retained earnings,180000.00,WP-900,trial_balance.csv,TIED
+";
+    const MAPPING: &str = "Cash,100,DEBIT
+Trade debtors,110,DEBIT
+Trade creditors,200,CREDIT
+Loss for the year,300,DEBIT
+Loss for the year,400,DEBIT
+Loss for the year,500,DEBIT
+Retained earnings,900,CREDIT
+";
+    fn year_end_mapped(tmp: &TempDir, matrix: &str, mapping: &str) -> PathBuf {
+        let dir = tmp.join("pack");
+        test_support::copy_example("year-end-ready", &dir);
+        fs::write(
+            dir.join("tie_out_matrix.csv"),
+            format!("StatementLine,StatementAmount,WorkpaperRef,SourceFile,Status\n{matrix}"),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("fs_mapping.csv"),
+            format!("StatementLine,AccountID,NormalBalance\n{mapping}"),
+        )
+        .unwrap();
+        dir
+    }
+    fn mapping_codes(pack: &ReadinessPack) -> Vec<&str> {
+        pack.findings
+            .iter()
+            .filter(|f| f.slot == "fs_mapping")
+            .map(|f| f.code.as_str())
+            .collect()
+    }
+    #[test]
+    fn year_end_without_a_statement_mapping_names_it_under_controls_not_run() {
+        let dir = test_support::examples().join("year-end-ready");
+        let pack = review("year_end", &dir).unwrap();
+        assert_eq!(pack.status, "READY");
+        assert_eq!(
+            pack.controls_not_run.unwrap(),
+            [
+                ControlNotRun {
+                    slot: "fs_mapping".into(),
+                    filename: "fs_mapping.csv".into(),
+                    reason: "no file was supplied".into(),
+                },
+                ControlNotRun {
+                    slot: "prior_findings".into(),
+                    filename: "prior_findings.csv".into(),
+                    reason: "no file was supplied".into(),
+                },
+            ]
+        );
+        let required = review_requiring(
+            "year_end",
+            &dir,
+            None,
+            amount("0.01"),
+            &[],
+            &["fs_mapping".into()],
+        )
+        .unwrap();
+        assert_eq!(codes(&required.findings), ["REQUIRED_CONTROL_SKIPPED"]);
+    }
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one case per statement mapping shape"
+    )]
+    fn statement_lines_are_computed_from_the_mapped_trial_balance_accounts() {
+        let profit = MATRIX.replace(
+            "Loss for the year,40000.00",
+            "Profit for the year,-40000.00",
+        );
+        let profit_mapping = MAPPING.replace("Loss for the year,", "Profit for the year,");
+        let profit_mapping = profit_mapping.replace(",DEBIT\nProfit", ",CREDIT\nProfit");
+        let profit_mapping = profit_mapping.replace("500,DEBIT", "500,CREDIT");
+        let retained = "Retained earnings,180000.00,WP-900,trial_balance.csv,TIED\n";
+        for (case, matrix, mapping, expected, asserted) in [
+            (
+                "one-to-one and several to one",
+                MATRIX.to_owned(),
+                MAPPING.to_owned(),
+                vec![],
+                vec![],
+            ),
+            (
+                "a negative credit-normal line",
+                profit,
+                profit_mapping,
+                vec![],
+                vec![],
+            ),
+            (
+                "an unmatched line",
+                format!("{MATRIX}Inventory,0.00,WP-130,trial_balance.csv,TIED\n"),
+                MAPPING.to_owned(),
+                vec!["TIEOUT_UNSUPPORTED"],
+                vec![],
+            ),
+            (
+                "an unmapped account",
+                MATRIX.replace(retained, ""),
+                MAPPING.replace("Retained earnings,900,CREDIT\n", ""),
+                vec!["TIEOUT_BREAK"],
+                vec![],
+            ),
+            (
+                "a mapped account the trial balance lacks",
+                MATRIX.to_owned(),
+                format!("{MAPPING}Cash,105,DEBIT\n"),
+                vec!["TIEOUT_BREAK"],
+                vec![],
+            ),
+            (
+                "a mapped line the matrix lacks",
+                MATRIX.to_owned(),
+                format!("{MAPPING}Inventory,100,DEBIT\n"),
+                vec!["TIEOUT_BREAK"],
+                vec![],
+            ),
+            (
+                "a credit balance on a debit-normal line",
+                MATRIX.to_owned(),
+                MAPPING.replace("200,CREDIT", "200,DEBIT"),
+                vec!["TIEOUT_BREAK"],
+                vec![],
+            ),
+            (
+                "an asserted exception",
+                MATRIX.replace(
+                    "Cash,120000.00,WP-100,trial_balance.csv,TIED",
+                    "Cash,1.00,WP-100,trial_balance.csv,EXCEPTION",
+                ),
+                MAPPING.to_owned(),
+                vec![],
+                vec!["TIEOUT_BREAK"],
+            ),
+            (
+                "an asserted unsupported line",
+                MATRIX.replace(
+                    "Cash,120000.00,WP-100,trial_balance.csv,TIED",
+                    "Cash,1.00,,,UNSUPPORTED",
+                ),
+                MAPPING.to_owned(),
+                vec![],
+                vec!["TIEOUT_UNSUPPORTED"],
+            ),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("year_end", &year_end_mapped(&tmp, &matrix, &mapping)).unwrap();
+            assert_eq!(mapping_codes(&pack), expected, "{case}");
+            let matrix_codes: Vec<_> = pack
+                .findings
+                .iter()
+                .filter(|f| f.slot == "tie_out_matrix")
+                .map(|f| f.code.as_str())
+                .collect();
+            assert_eq!(matrix_codes, asserted, "{case}");
+            assert_eq!(
+                pack.status == "READY",
+                expected.is_empty() && asserted.is_empty(),
+                "{case}"
+            );
+            assert!(
+                !pack
+                    .controls_not_run
+                    .unwrap()
+                    .iter()
+                    .any(|c| c.slot == "fs_mapping"),
+                "{case}"
+            );
+        }
+    }
+    #[test]
+    fn computed_statement_differences_equal_to_the_tolerance_tie() {
+        for (cash, ties) in [
+            ("120000.009", true),
+            ("120000.01", true),
+            ("119999.99", true),
+            ("120000.011", false),
+            ("119999.989", false),
+        ] {
+            let tmp = TempDir::new();
+            let matrix = MATRIX.replace("Cash,120000.00,", &format!("Cash,{cash},"));
+            let pack = review("year_end", &year_end_mapped(&tmp, &matrix, MAPPING)).unwrap();
+            assert_eq!(mapping_codes(&pack).is_empty(), ties, "{cash}");
+        }
+    }
+    #[test]
+    fn a_statement_mapping_refuses_repeats_mixed_sides_and_no_rows() {
+        for (mapping, refusal) in [
+            ("Cash,100,DEBIT\nCash,100,DEBIT\n", "duplicate mapping"),
+            (
+                "Loss for the year,300,DEBIT\nLoss for the year,400,CREDIT\n",
+                "both DEBIT and CREDIT",
+            ),
+            ("Cash,100,debit\n", "NormalBalance must be DEBIT or CREDIT"),
+            ("", "no statement-mapping rows"),
+        ] {
+            let tmp = TempDir::new();
+            let error = review("year_end", &year_end_mapped(&tmp, MATRIX, mapping)).unwrap_err();
+            assert!(error.contains(refusal), "{mapping}: {error}");
+        }
+    }
     #[test]
     fn bas_allowance_needs_both_labels_in_whole_dollars() {
         // 1A whole and 1B in cents: the 50-cent difference is not the allowance.
@@ -1074,6 +1435,7 @@ mod tests {
     fn year_end_lines_need_a_tie_with_its_workpaper_and_source() {
         let row = |status: &str, workpaper_ref: &str, source_file: &str| TieOutRow {
             statement_line: "Cash".into(),
+            statement_amount: amount("120000.00"),
             workpaper_ref: workpaper_ref.into(),
             source_file: source_file.into(),
             status: status.into(),
