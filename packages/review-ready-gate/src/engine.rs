@@ -311,6 +311,7 @@ pub fn review_requiring(
     apply_period_binding(&loaded, &mut findings);
     apply_open_items(&loaded, &mut findings);
     apply_bas(&loaded, &mut findings, &tolerance)?;
+    apply_gst_roll_forward(&loaded, &mut findings, &tolerance)?;
     apply_gst_period(&loaded, &mut findings);
     apply_bank_rec(&loaded, &mut findings, &tolerance)?;
     apply_year_end(&loaded, &mut findings);
@@ -473,11 +474,7 @@ fn apply_bas(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Decimal) 
         return Ok(());
     };
     let statement = exact_sub(a, b, BAS_PRECISION)?;
-    let gl = exact_sum(
-        gst.iter()
-            .map(|r| exact_sub(&r.credit, &r.debit, BAS_PRECISION)),
-        BAS_PRECISION,
-    )?;
+    let gl = gst_movement(gst)?;
     let difference = exact_sub(&statement, &gl, BAS_PRECISION)?;
     let whole = a.is_integral() && b.is_integral();
     let abs = difference.abs();
@@ -487,9 +484,121 @@ fn apply_bas(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Decimal) 
         } else {
             ""
         };
-        findings.push(Finding::new("TIEOUT_BREAK", "NOT_READY", "gst_control_gl", format!("Net GST on the activity statement ({}) does not tie to GST control movement ({}); difference {} exceeds tolerance {}{allowance}.", statement.to_sci_string(), gl.to_sci_string(), difference.to_sci_string(), tolerance.to_sci_string()), "Return the pack. Complete the GST control tie-out before review."));
+        findings.push(Finding::new("TIEOUT_BREAK", "NOT_READY", "gst_control_gl", format!("Net GST on the activity statement ({}) does not tie to GST control movement ({}); difference {} exceeds tolerance {}{allowance}.{}", statement.to_sci_string(), gl.to_sci_string(), difference.to_sci_string(), tolerance.to_sci_string(), difference_hint(&difference, gst)), "Return the pack. Complete the GST control tie-out before review."));
     }
     Ok(())
+}
+/// The GST control file's net movement, credits positive.
+fn gst_movement(gst: &[GstControlRow]) -> Result<Decimal> {
+    exact_sum(
+        gst.iter()
+            .map(|r| exact_sub(&r.credit, &r.debit, BAS_PRECISION)),
+        BAS_PRECISION,
+    )
+}
+/// The GST control accounts' closing balance in the trial balance,
+/// `YTDCredit - YTDDebit`, against the period's movement in the GST control
+/// file. With every earlier period settled through the accounts, they close
+/// at the period's movement; anything else came in from before the period
+/// or is missing from the file.
+fn apply_gst_roll_forward(
+    loaded: &Loaded,
+    findings: &mut Vec<Finding>,
+    tolerance: &Decimal,
+) -> Result<()> {
+    let (Some(gst), Some(tb)) = (&loaded.gst_control_gl, &loaded.trial_balance) else {
+        return Ok(());
+    };
+    let accounts: BTreeSet<_> = gst.iter().map(|r| r.account_id.as_str()).collect();
+    if let Some(finding) = gst_accounts_missing(&accounts, tb) {
+        findings.push(finding);
+        return Ok(());
+    }
+    let closing = exact_sum(
+        tb.iter()
+            .filter(|r| accounts.contains(r.account_id.as_str()))
+            .map(|r| exact_sub(&r.ytd_credit, &r.ytd_debit, BAS_PRECISION)),
+        BAS_PRECISION,
+    )?;
+    let movement = gst_movement(gst)?;
+    let difference = exact_sub(&closing, &movement, BAS_PRECISION)?;
+    if difference.abs() > *tolerance {
+        findings.push(Finding::new(
+            "TIEOUT_BREAK",
+            "NOT_READY",
+            "gst_control_gl",
+            format!(
+                "GST control accounts close at {} in the trial balance, but the GST control file moves them by {}; difference {} exceeds tolerance {}. The file may be missing postings, or the accounts carried a balance, such as an unpaid earlier BAS, in from before the period.{}",
+                closing.to_sci_string(),
+                movement.to_sci_string(),
+                difference.to_sci_string(),
+                tolerance.to_sci_string(),
+                difference_hint(&difference, gst)
+            ),
+            "Return the pack. Complete the GST control file, or settle or explain the earlier balance, before review.",
+        ));
+    }
+    Ok(())
+}
+fn gst_accounts_missing(accounts: &BTreeSet<&str>, tb: &[TrialBalanceRow]) -> Option<Finding> {
+    let missing: Vec<_> = accounts
+        .iter()
+        .filter(|id| !tb.iter().any(|r| r.account_id == **id))
+        .map(|id| (*id).to_owned())
+        .collect();
+    (!missing.is_empty()).then(|| Finding::new(
+        "TIEOUT_BREAK",
+        "NOT_READY",
+        "gst_control_gl",
+        format!(
+            "GST control file accounts are not in the trial balance: {}. The control accounts cannot be rolled forward to the ledger.",
+            first_three(&missing)
+        ),
+        "Return the pack. Export the trial balance and the GST control file from the same ledger.",
+    ))
+}
+/// A pointer to the likeliest cause of a GST difference: one posting of that
+/// size, one posted on the wrong side, or transposed digits.
+fn difference_hint(difference: &Decimal, gst: &[GstControlRow]) -> String {
+    let size = difference.copy_abs();
+    let posting = |r: &GstControlRow| {
+        let net = r.credit.sub(&r.debit).value;
+        let side = if net.is_signed() { "debit" } else { "credit" };
+        let description = if r.description.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", pytext::repr(&r.description))
+        };
+        let label = format!(
+            "the {} posting{description} ({side} {})",
+            r.posted_on.iso(),
+            net.copy_abs().to_sci_string()
+        );
+        (net.copy_abs(), label)
+    };
+    let postings: Vec<_> = gst
+        .iter()
+        .map(posting)
+        .filter(|(amount, _)| !amount.is_zero())
+        .collect();
+    if let Some((_, label)) = postings.iter().find(|(amount, _)| *amount == size) {
+        return format!(" Hint: the difference is the size of {label}; check that posting first.");
+    }
+    if let Some((_, label)) = postings
+        .iter()
+        .find(|(amount, _)| amount.add(amount).value == size)
+    {
+        return format!(
+            " Hint: the difference is twice {label}, so that posting may be on the wrong side."
+        );
+    }
+    let cents = size.mul(&Decimal::parse("100").unwrap());
+    let nine = Decimal::parse("9").unwrap();
+    let ninths = cents.div(&nine);
+    if cents.is_integral() && ninths.is_integral() && ninths.mul(&nine) == cents {
+        return " Hint: the difference is a whole number of cents divisible by 9, which can mean 2 digits were transposed.".into();
+    }
+    String::new()
 }
 fn apply_gst_period(loaded: &Loaded, findings: &mut Vec<Finding>) {
     let Some(s) = &loaded.self_review else {
@@ -1317,6 +1426,154 @@ Retained earnings,900,CREDIT
             let error = review("year_end", &year_end_mapped(&tmp, MATRIX, mapping)).unwrap_err();
             assert!(error.contains(refusal), "{mapping}: {error}");
         }
+    }
+    /// bas-ready with account 820's closing `YTDDebit`/`YTDCredit` in the trial
+    /// balance set to `gst`, or the account left out; the bank's YTD debit
+    /// absorbs the change so both pairs still balance. Optional replacement
+    /// GST control and activity statement rows follow their headers.
+    fn bas_gst(
+        tmp: &TempDir,
+        gst: Option<(&str, &str)>,
+        control: Option<&str>,
+        activity: Option<&str>,
+    ) -> PathBuf {
+        let dir = tmp.join("pack");
+        test_support::copy_example("bas-ready", &dir);
+        let path = dir.join("trial_balance.csv");
+        let text = fs::read_to_string(&path).unwrap();
+        let mut rows: Vec<_> = text.lines().filter(|l| !l.contains(",820,")).collect();
+        assert_eq!(rows.len(), text.lines().count() - 1);
+        let (debit, credit) = gst.unwrap_or(("0.00", "0.00"));
+        let bank = amount("120000.00")
+            .add(&amount(credit))
+            .value
+            .sub(&amount(debit))
+            .value
+            .to_sci_string();
+        let bank = format!(
+            "2026-03-31,Cedar and Pine Consulting Pty Ltd,Assets,100,Operating Bank,1000,15000.00,0.00,{bank},0.00"
+        );
+        let gst_row = format!(
+            "2026-03-31,Cedar and Pine Consulting Pty Ltd,Liabilities,820,GST Payable,8200,0.00,0.00,{debit},{credit}"
+        );
+        rows[1] = &bank;
+        if gst.is_some() {
+            rows.push(&gst_row);
+        }
+        fs::write(&path, rows.join("\n") + "\n").unwrap();
+        if let Some(control) = control {
+            fs::write(
+                dir.join("gst_control_gl.csv"),
+                format!("Date,AccountID,AccountName,Debit,Credit,Description\n{control}"),
+            )
+            .unwrap();
+        }
+        if let Some(activity) = activity {
+            fs::write(
+                dir.join("activity_statement.csv"),
+                format!("Label,Amount\n{activity}"),
+            )
+            .unwrap();
+        }
+        dir
+    }
+    fn gst_breaks(pack: &ReadinessPack) -> Vec<&str> {
+        pack.findings
+            .iter()
+            .filter(|f| f.code == "TIEOUT_BREAK" && f.slot == "gst_control_gl")
+            .map(|f| f.reason.as_str())
+            .collect()
+    }
+    #[test]
+    fn a_gst_control_account_the_trial_balance_lacks_is_not_ready() {
+        let tmp = TempDir::new();
+        let pack = review("bas", &bas_gst(&tmp, None, None, None)).unwrap();
+        assert_eq!(pack.status, "NOT_READY");
+        assert_eq!(
+            gst_breaks(&pack),
+            [
+                "GST control file accounts are not in the trial balance: 820. The control accounts cannot be rolled forward to the ledger."
+            ]
+        );
+    }
+    #[test]
+    fn the_gst_control_rolls_forward_to_the_trial_balance_within_tolerance() {
+        for (closing, ties) in [
+            ("7500.00", true),
+            ("7500.009", true),
+            ("7500.01", true),
+            ("7499.99", true),
+            ("7500.011", false),
+            ("7499.989", false),
+            ("9500.00", false),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("bas", &bas_gst(&tmp, Some(("0.00", closing)), None, None)).unwrap();
+            assert_eq!(gst_breaks(&pack).is_empty(), ties, "{closing}");
+            assert_eq!(pack.status == "READY", ties, "{closing}");
+        }
+    }
+    #[test]
+    fn a_gst_refund_position_rolls_forward_as_a_debit_balance() {
+        // Credits of 1,000 less debits of 1,500: a 500 debit balance, refundable.
+        let control = "2026-01-15,820,GST Payable,0.00,1000.00,GST on sales
+2026-02-20,820,GST Payable,1500.00,0.00,GST on purchases
+";
+        let activity = "1A,1000.00\n1B,1500.00\n";
+        for (gst, ties) in [(("500.00", "0.00"), true), (("0.00", "500.00"), false)] {
+            let tmp = TempDir::new();
+            let pack = review(
+                "bas",
+                &bas_gst(&tmp, Some(gst), Some(control), Some(activity)),
+            )
+            .unwrap();
+            assert_eq!(gst_breaks(&pack).is_empty(), ties, "{gst:?}");
+        }
+    }
+    #[test]
+    fn gst_breaks_carry_a_difference_hint() {
+        for (closing, hint) in [
+            (
+                "10000.00",
+                " Hint: the difference is the size of the 2026-02-20 posting 'GST on purchases' (debit 2500.00); check that posting first.",
+            ),
+            (
+                "12500.00",
+                " Hint: the difference is twice the 2026-02-20 posting 'GST on purchases' (debit 2500.00), so that posting may be on the wrong side.",
+            ),
+            (
+                "7500.90",
+                " Hint: the difference is a whole number of cents divisible by 9, which can mean 2 digits were transposed.",
+            ),
+            ("7501.00", ""),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("bas", &bas_gst(&tmp, Some(("0.00", closing)), None, None)).unwrap();
+            let reasons = gst_breaks(&pack);
+            assert_eq!(reasons.len(), 1, "{closing}");
+            assert!(
+                reasons[0].ends_with(&format!("before the period.{hint}")),
+                "{closing}: {}",
+                reasons[0]
+            );
+        }
+        // The 1A less 1B tie-out carries one too: a purchase posted twice.
+        let control = "2026-01-15,820,GST Payable,0.00,10000.00,GST on sales
+2026-02-20,820,GST Payable,2500.00,0.00,GST on purchases
+2026-02-21,820,GST Payable,2500.00,0.00,GST on purchases
+";
+        let tmp = TempDir::new();
+        let pack = review(
+            "bas",
+            &bas_gst(&tmp, Some(("0.00", "5000.00")), Some(control), None),
+        )
+        .unwrap();
+        assert_eq!(
+            gst_breaks(&pack),
+            [
+                "Net GST on the activity statement (7500.00) does not tie to GST control movement (5000.00); difference 2500.00 exceeds tolerance 0.01 or the 99-cent allowance for whole-dollar 1A and 1B. Hint: the difference is the size of the 2026-02-20 posting 'GST on purchases' (debit 2500.00); check that posting first."
+            ]
+        );
     }
     #[test]
     fn bas_allowance_needs_both_labels_in_whole_dollars() {

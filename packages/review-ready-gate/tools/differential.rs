@@ -476,7 +476,7 @@ fn document_values(c: &mut Corpus) {
         );
     }
 }
-fn packs(c: &mut Corpus, oracle: &Path) {
+fn packs(c: &mut Corpus, root: &Path) {
     for (name, profile) in [
         ("bas-ready", "bas"),
         ("bas-not-ready", "bas"),
@@ -498,7 +498,7 @@ fn packs(c: &mut Corpus, oracle: &Path) {
                 vec![
                     (
                         "pack",
-                        Json::str(&oracle.join("examples").join(name).to_string_lossy()),
+                        Json::str(&root.join("examples").join(name).to_string_lossy()),
                     ),
                     ("profile", Json::str(profile)),
                     ("tolerance", Json::str(tolerance)),
@@ -636,9 +636,9 @@ fn save_pack(scratch: &Path, name: &str, files: &[Vec<u8>; 3]) -> Result<PathBuf
     Ok(path)
 }
 #[expect(clippy::too_many_lines, reason = "builds the saved pack corpus cases")]
-fn saved_packs(c: &mut Corpus, oracle: &Path, scratch: &Path) -> Result<()> {
-    let ready = probe::example_document("bas", &oracle.join("examples/bas-ready"), "0.01")?;
-    let not_ready = probe::example_document("bas", &oracle.join("examples/bas-not-ready"), "0.01")?;
+fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
+    let ready = probe::example_document("bas", &root.join("examples/bas-ready"), "0.01")?;
+    let not_ready = probe::example_document("bas", &root.join("examples/bas-not-ready"), "0.01")?;
     let base = probe::render_pack(&not_ready)?;
     let ready_dir = save_pack(scratch, "ready", &probe::render_pack(&ready)?)?;
     let not_dir = save_pack(scratch, "not-ready", &base)?;
@@ -1337,12 +1337,16 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     csvs(&mut corpus);
     self_reviews(&mut corpus);
     document_values(&mut corpus);
-    packs(&mut corpus, &root);
+    // Packs come from this crate's fabricated examples, not the baseline's: their
+    // bas trial balances hold the GST control account the native roll-forward
+    // needs, a row the baseline only adds to its balanced totals.
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"));
+    packs(&mut corpus, fixtures);
     cli_cases(&mut corpus);
-    runtime_cli(&mut corpus, &root, &scratch.0);
-    saved_packs(&mut corpus, &root, &scratch.0)?;
-    document_packs(&mut corpus, &root, &scratch.0)?;
-    acknowledgements(&mut corpus, &root, &scratch.0)?;
+    runtime_cli(&mut corpus, fixtures, &scratch.0);
+    saved_packs(&mut corpus, fixtures, &scratch.0)?;
+    document_packs(&mut corpus, fixtures, &scratch.0)?;
+    acknowledgements(&mut corpus, fixtures, &scratch.0)?;
     let names: Vec<_> = corpus
         .0
         .iter()

@@ -163,7 +163,7 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
-| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; no GST posting dated after `period_end` |
+| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end` |
 | `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines; with `fs_mapping.csv`, each `TIED` line computed from the current TB |
 
@@ -270,6 +270,18 @@ If both the activity statement and the GST control GL are present:
 - `1A - 1B` is compared with GST-control `sum(Credit) - sum(Debit)`
 - a difference beyond `--tieout-tolerance` (default `$0.01`) is `NOT_READY`
 - when `1A` and `1B` are both whole dollars, as the ATO requires on a lodged statement, any difference under `$1` also ties: the ATO drops the cents from each label, so the statement can sit up to 99 cents either side of the control movement. A statement whose labels carry cents gets no allowance
+
+If the GST control file is present, its accounts also roll forward to the trial
+balance:
+
+- every `AccountID` in the GST control file must be in the trial balance
+- those accounts' closing balance in the trial balance, `YTDCredit - YTDDebit`, is compared with the file's `sum(Credit) - sum(Debit)` for the period; a difference beyond `--tieout-tolerance` is `NOT_READY`, with no 99-cent allowance, since both figures are ledger amounts
+- the opening balance is taken as nil: with every earlier period's GST settled through the control accounts, they close at the period's movement. A balance carried in, such as an earlier BAS still unpaid at `period_end`, or postings missing from the file are a break the preparer clears or explains; there is no waiver
+
+A GST break names the likeliest cause it can see: a posting in the file the size
+of the difference, one posted on the wrong side (half the difference), or a
+difference in whole cents divisible by 9, which transposed digits produce. The
+hint is a starting point, not a diagnosis.
 
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
 
@@ -398,7 +410,7 @@ cargo test --locked --all-features
 cargo build --locked --release
 ```
 
-The test suite covers schema gates, fabricated packs for all 3 engagement profiles, empty and incomplete artefacts, GST and bank-rec breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing and the command-line exit contract.
+The test suite covers schema gates, fabricated packs for all 3 engagement profiles, empty and incomplete artefacts, GST, GST roll-forward, bank-rec and computed statement breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing and the command-line exit contract.
 
 CI runs Cargo format, lint and tests on Linux and Windows, builds the release
 binary and exercises it from an empty directory. The feature-gated differential
@@ -414,6 +426,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - JSON nesting is bounded at 1,000 containers. Decimal rendering refuses an output above its 1 GiB resource ceiling.
 - SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
+- A `bas` pack's GST control accounts must be in the trial balance and roll forward to it, and a GST break carries a difference hint. The baseline tied only 1A less 1B to the control file. The differential's `bas` examples hold the GST control account and tie, so it compares them unchanged.
 - A `year_end` pack lists `fs_mapping` under 'Controls not run' when the file is absent, and computes `TIED` lines from the trial balance when it is present. The baseline has no such slot. The differential compares its `year_end` packs with that one entry left out of `controls_not_run`, and compares the exit code and pack JSON from its `year_end` command runs; the summary and printed list of controls not run differ by that entry.
 - A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 
