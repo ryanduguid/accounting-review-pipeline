@@ -367,7 +367,7 @@ review-ready queue --pack-dir outputs/varrock --pack-dir outputs/falador --pack-
 
 Repeat `--pack-dir` for each pack; the queue reads only those and does not look in neighbouring directories. `--status NOT_READY` shows only packs with that status. `--summary` adds counts across the displayed packs: how many are `READY`, `NOT_READY` and `BLOCKED` and which clients they are, how many packs and findings carry each finding code, and which clients did not run each control. A pack written before control coverage was recorded shows `not recorded` and is named in a note rather than counted.
 
-A pack records no client name, so the queue labels each one by its directory's name. Name each output directory after its client; a misnamed directory shows under the wrong label. The full path and the SHA-256 of each verified file follow the table.
+A pack records no client name, so the queue labels each one by the name of the directory its path resolves to; a symbolic link shows its target's name. Name each output directory after its client; a misnamed directory shows under the wrong label. The full path and the SHA-256 of each verified file follow the table.
 
 Every pack is verified before any filter runs. One pack that fails verification fails the whole command with exit `1` and prints no table, even when `--status` would have hidden it. Exit `0` means every pack verified and the list printed, whatever their statuses; it is not a readiness verdict.
 

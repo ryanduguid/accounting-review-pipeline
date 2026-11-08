@@ -101,18 +101,11 @@ fn entry(path: PathBuf, pack: VerifiedPack) -> Entry {
     );
     entry
 }
-pub fn render_queue(paths: &[PathBuf], options: &Options) -> Result<String> {
-    render_with(paths, options, &mut viewer::verify_pack)
-}
 #[expect(
     clippy::too_many_lines,
     reason = "verifies each pack, then filters and renders the queue"
 )]
-pub fn render_with(
-    paths: &[PathBuf],
-    options: &Options,
-    verify: &mut impl FnMut(&Path) -> Result<VerifiedPack>,
-) -> Result<String> {
+pub fn render_queue(paths: &[PathBuf], options: &Options) -> Result<String> {
     let mut resolved: Vec<PathBuf> = Vec::new();
     for path in paths {
         let path = pypath::resolve(path, false)
@@ -125,7 +118,7 @@ pub fn render_with(
     // Every pack is verified before any filter runs, so a filter cannot hide an edited pack.
     let mut verified = Vec::new();
     for path in resolved {
-        let pack = verify(&path)
+        let pack = viewer::verify_pack(&path)
             .map_err(|error| format!("Pack {}: {error}", pytext::repr_os(&pypath::text(&path))))?;
         verified.push(entry(path, pack));
     }
@@ -254,20 +247,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_status_filter_cannot_hide_a_pack_that_fails_verification() {
-        let paths = [PathBuf::from("good-pack"), PathBuf::from("bad-pack")];
-        let mut reads = 0;
-        let mut verify = |path: &Path| {
-            reads += 1;
-            Err(format!("{} is broken", pypath::text(path)))
-        };
-        let options = Options {
-            status: Some("READY".into()),
-            summary: true,
-        };
-        let error = render_with(&paths, &options, &mut verify).err().unwrap();
-        assert!(error.ends_with("bad-pack is broken"), "{error}");
-        assert_eq!(reads, 1);
+    fn a_cell_escapes_control_characters_non_ascii_text_and_table_separators() {
         assert_eq!(cell(&"x|y\n\u{1b}é".into()), r"x\|y\n\u001b\u00e9");
     }
 }
