@@ -275,8 +275,9 @@ If the GST control file is present, its accounts also roll forward to the trial
 balance:
 
 - every `AccountID` in the GST control file must be in the trial balance
-- those accounts' closing balance in the trial balance, `YTDCredit - YTDDebit`, is compared with the file's `sum(Credit) - sum(Debit)` for the period; a difference beyond `--tieout-tolerance` is `NOT_READY`, with no 99-cent allowance, since both figures are ledger amounts
-- the opening balance is taken as nil: with every earlier period's GST settled through the control accounts, they close at the period's movement. A balance carried in, such as an earlier BAS still unpaid at `period_end`, or postings missing from the file are a break the preparer clears or explains; there is no waiver
+- those accounts' closing balance in the trial balance, `YTDCredit - YTDDebit`, is compared with their opening balance plus the file's `sum(Credit) - sum(Debit)` for the period; a difference beyond `--tieout-tolerance` is `NOT_READY`, with no 99-cent allowance, since all the figures are ledger amounts
+- the opening balance is the activity statement's optional `GST_OPENING` label: the accounts' balance at the period start, signed like the closing balance, so a payable is positive and a refund owed is negative. Declare a balance carried in, such as an earlier BAS still unpaid under a payment plan, or the cents left behind when whole-dollar 1A and 1B were paid. A malformed or repeated `GST_OPENING` is refused like any other activity-statement amount
+- without `GST_OPENING` the opening balance is taken as nil, and a break says so. With every earlier period's GST settled through the control accounts, they close at the period's movement
 
 A GST break names the likeliest cause it can see: a posting in the file the size
 of the difference, one posted on the wrong side (half the difference), or a
