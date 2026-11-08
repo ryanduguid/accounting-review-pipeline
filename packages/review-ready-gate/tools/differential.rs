@@ -589,7 +589,7 @@ fn runtime_cli(c: &mut Corpus, root: &Path, scratch: &Path) {
                 _ => {}
             }
             c.push(
-                format!("cli-runtime-{i}-{variant}"),
+                format!("cli-runtime-{example}-{variant}"),
                 "cli",
                 vec![
                     (
@@ -1272,45 +1272,154 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
         .map(str::to_owned)
         .collect())
 }
-/// What a `year_end` result must still share with the baseline, which has no
-/// `fs_mapping` control: the exit code, if any, and the pack with that control
-/// left out of `controls_not_run`. The README's 'Deliberate major-version
-/// differences' records the rest: the summary and the printed list name it too.
-fn without_statement_mapping(result: &str) -> Result<Option<String>> {
-    let result = probe::decode(result)?;
-    let Some(ok) = result.get("ok") else {
+fn field_mut<'a>(value: &'a mut Json, key: &str) -> Option<&'a mut Json> {
+    let Json::Object(fields) = value else {
+        return None;
+    };
+    fields.iter_mut().find(|(k, _)| k.is(key)).map(|(_, v)| v)
+}
+fn text(value: &Json) -> Option<String> {
+    value.as_pystr().and_then(PyStr::to_utf8)
+}
+fn unhex(hex: &str) -> Result<Vec<u8>> {
+    if !hex.len().is_multiple_of(2) {
+        return Err("odd pack file hex".into());
+    }
+    hex.as_bytes()
+        .chunks(2)
+        .map(|pair| Ok(u8::from_str_radix(std::str::from_utf8(pair)?, 16)?))
+        .collect()
+}
+/// `document` with its one `fs_mapping` entry left out of `controls_not_run`,
+/// that entry, and how many controls are left; `None` when it does not hold
+/// exactly one.
+fn without_mapping_entry(document: &Json) -> Option<(Json, Json, usize)> {
+    let mut document = document.clone();
+    let Some(Json::Array(controls)) = field_mut(&mut document, "controls_not_run") else {
+        return None;
+    };
+    let mapping = |control: &Json| control.at("slot").is_str("fs_mapping");
+    if controls.iter().filter(|c| mapping(c)).count() != 1 {
+        return None;
+    }
+    let entry = controls.iter().find(|c| mapping(c))?.clone();
+    controls.retain(|c| !mapping(c));
+    let left = controls.len();
+    Some((document, entry, left))
+}
+/// `text` with `old` replaced by `new`, or `None` unless `old` occurs once.
+fn replace_once(text: &str, old: &str, new: &str) -> Option<String> {
+    (text.matches(old).count() == 1).then(|| text.replacen(old, new, 1))
+}
+/// The 3 pack files with the `fs_mapping` entry, its summary line and its
+/// share of the summary's count taken out, byte for byte as the native
+/// renderer writes them; `findings.csv` is left as it is.
+fn without_mapping_files(files: &[Json], entry: &Json, left: usize) -> Result<Option<Json>> {
+    let [Some(json), Some(summary), Some(csv)] = [0, 1, 2].map(|i| files.get(i).and_then(text))
+    else {
         return Ok(None);
     };
-    let mut pack = match (ok.get("pack"), ok.get("files")) {
-        (Some(pack), _) => pack.clone(),
-        (None, Some(Json::Array(files))) => {
-            let Some(hex) = files.first().and_then(Json::as_pystr) else {
-                return Ok(None);
-            };
-            let hex = hex.to_utf8().ok_or("pack file hex is not text")?;
-            if !hex.len().is_multiple_of(2) {
-                return Err("odd pack file hex".into());
-            }
-            let mut bytes = Vec::with_capacity(hex.len() / 2);
-            for pair in hex.as_bytes().chunks(2) {
-                bytes.push(u8::from_str_radix(std::str::from_utf8(pair)?, 16)?);
-            }
-            probe::decode(&String::from_utf8(bytes)?)?
-        }
-        _ => return Ok(None),
+    let [json, summary] = [json, summary].map(|hex| unhex(&hex).map(String::from_utf8));
+    let (json, summary) = (json??, summary??);
+    let nl = if json.contains("\r\n") { "\r\n" } else { "\n" };
+    let field = |key| probe::encode(entry.at(key));
+    let block = format!(
+        "    {{{nl}      \"filename\": {},{nl}      \"reason\": {},{nl}      \"slot\": \"fs_mapping\"{nl}    }},{nl}",
+        field("filename"),
+        field("reason")
+    );
+    let [Some(filename), Some(reason)] = ["filename", "reason"].map(|key| text(entry.at(key)))
+    else {
+        return Ok(None);
     };
-    if let Json::Object(fields) = &mut pack
-        && let Some((_, Json::Array(controls))) = fields
-            .iter_mut()
-            .find(|(key, _)| key.is("controls_not_run"))
-    {
-        controls.retain(|control| !control.at("slot").is_str("fs_mapping"));
+    let line = format!("- `fs_mapping` (`{filename}`): {reason}{nl}");
+    let count = |n| format!("- Controls not run: {n}.{nl}");
+    let summary = replace_once(&summary, &line, "")
+        .and_then(|s| replace_once(&s, &count(left + 1), &count(left)));
+    let (Some(json), Some(summary), true) = (replace_once(&json, &block, ""), summary, left > 0)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(Json::Array(
+        [json.into_bytes(), summary.into_bytes()]
+            .iter()
+            .map(|bytes| Json::str(&hex(bytes)))
+            .chain([Json::str(&csv)])
+            .collect(),
+    )))
+}
+/// `stdout` with `fs_mapping` left out of its one 'did not run' line, which
+/// is dropped when no other control is left, or `None` when no such line
+/// names it.
+fn without_mapping_line(stdout: &str) -> Option<String> {
+    const PREFIX: &str = "review-ready: ";
+    const MARK: &str = " control(s) did not run: ";
+    let mut found = 0;
+    let mut out = String::new();
+    for line in stdout.split_inclusive('\n') {
+        let body = line.trim_end_matches(['\r', '\n']);
+        let parsed = body
+            .strip_prefix(PREFIX)
+            .and_then(|rest| rest.split_once(MARK));
+        let Some((count, slots)) = parsed else {
+            out.push_str(line);
+            continue;
+        };
+        let slots: Vec<_> = slots.split(", ").collect();
+        let kept: Vec<_> = slots.iter().filter(|s| **s != "fs_mapping").collect();
+        if count != slots.len().to_string() || kept.len() + 1 != slots.len() {
+            return None;
+        }
+        found += 1;
+        if !kept.is_empty() {
+            let kept = kept.iter().map(|s| **s).collect::<Vec<_>>().join(", ");
+            out.push_str(&format!(
+                "{PREFIX}{}{MARK}{kept}{}",
+                slots.len() - 1,
+                &line[body.len()..]
+            ));
+        }
     }
-    let code = ok.get("code").cloned().unwrap_or(Json::Null);
-    Ok(Some(probe::encode(&Json::object([
-        ("code", code),
-        ("pack", pack),
-    ]))))
+    (found == 1).then_some(out)
+}
+/// The native `year_end` result as the baseline, which has no `fs_mapping`
+/// control, would give it: that one entry taken out of the pack, the pack
+/// files and the 'did not run' line. Every other field and byte is still
+/// compared. `None` when the result does not carry exactly that entry where
+/// the native renderer puts it.
+fn without_statement_mapping(native: &str) -> Result<Option<String>> {
+    let mut result = probe::decode(native)?;
+    let Some(ok) = field_mut(&mut result, "ok") else {
+        return Ok(None);
+    };
+    let Some(Json::Array(files)) = ok.get("files") else {
+        return Ok(None);
+    };
+    let Some(json) = files.first().and_then(text) else {
+        return Ok(None);
+    };
+    let document = probe::decode(&String::from_utf8(unhex(&json)?)?)?;
+    let same_pack = ok
+        .get("pack")
+        .is_none_or(|pack| probe::encode(pack) == probe::encode(&document));
+    let Some((projected, entry, left)) = without_mapping_entry(&document).filter(|_| same_pack)
+    else {
+        return Ok(None);
+    };
+    let Some(files) = without_mapping_files(files, &entry, left)? else {
+        return Ok(None);
+    };
+    *field_mut(ok, "files").expect("checked above") = files;
+    if let Some(pack) = field_mut(ok, "pack") {
+        *pack = projected;
+    }
+    if let Some(stdout) = field_mut(ok, "stdout") {
+        let Some(line) = text(stdout).and_then(|s| without_mapping_line(&s)) else {
+            return Ok(None);
+        };
+        *stdout = Json::str(&line);
+    }
+    Ok(Some(probe::encode(&result)))
 }
 #[expect(
     clippy::too_many_lines,
@@ -1384,12 +1493,13 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     let mut recorded = 0;
     for ((name, actual), expected) in actual.iter().zip(expected) {
         if !probe::equivalent(actual, &expected)? {
-            if name.starts_with("pack-year-end-ready-") || name.starts_with("cli-runtime-4-") {
-                let native = without_statement_mapping(actual)?;
-                if native.is_some() && native == without_statement_mapping(&expected)? {
-                    recorded += 1;
-                    continue;
-                }
+            if (name.starts_with("pack-year-end-ready-")
+                || name.starts_with("cli-runtime-year-end-ready-"))
+                && let Some(native) = without_statement_mapping(actual)?
+                && probe::equivalent(&native, &expected)?
+            {
+                recorded += 1;
+                continue;
             }
             if name.starts_with("cli-presentation-") {
                 let native = probe::decode(actual)?;
