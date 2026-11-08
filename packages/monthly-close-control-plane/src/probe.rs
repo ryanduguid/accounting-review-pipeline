@@ -709,6 +709,7 @@ fn operation(request: &Json) -> Result<Json> {
                 period: optional("period"),
                 status: optional("status"),
                 reviewer: optional("reviewer"),
+                summary: false,
             };
             let result = queue::render_with(&paths, &filters, &mut |path| {
                 let pack = packs

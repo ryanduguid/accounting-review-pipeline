@@ -18,9 +18,13 @@ pub struct Filters {
     pub period: Option<PyStr>,
     pub status: Option<PyStr>,
     pub reviewer: Option<PyStr>,
+    pub summary: bool,
 }
 struct Entry {
     path: PathBuf,
+    client: PyStr,
+    exceptions_by_control: BTreeMap<PyStr, usize>,
+    not_run: Option<Vec<PyStr>>,
     dates: Vec<PyStr>,
     status: PyStr,
     reviewer: Option<PyStr>,
@@ -95,7 +99,21 @@ fn entry(path: PathBuf, pack: VerifiedPack) -> Entry {
             |v| joined(v.as_array().unwrap(), "none"),
         ),
     ];
+    let mut exceptions_by_control = BTreeMap::new();
+    for exception in document.at("exceptions").as_array().unwrap() {
+        let control = exception.at("control").as_pystr().unwrap().clone();
+        *exceptions_by_control.entry(control).or_default() += 1;
+    }
     Entry {
+        client: path_text(path.file_name().map_or(path.as_path(), Path::new)),
+        exceptions_by_control,
+        not_run: document.get("controls_not_run").map(|v| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_pystr().unwrap().clone())
+                .collect()
+        }),
         dates: dates
             .iter()
             .map(|v| v.as_pystr().unwrap().clone())
@@ -136,6 +154,88 @@ fn validate(filters: &Filters) -> Result<()> {
         return Err("Reviewer must not be empty.".into());
     }
     Ok(())
+}
+fn clients<'a>(entries: impl Iterator<Item = &'a Entry>) -> String {
+    let names: Vec<_> = entries.map(|entry| cell(entry.client.clone())).collect();
+    if names.is_empty() {
+        "none".into()
+    } else {
+        names.join(", ")
+    }
+}
+/// A Markdown table, or `empty` when it has no rows.
+fn table(header: &str, rows: Vec<String>, empty: &str) -> Vec<String> {
+    if rows.is_empty() {
+        return vec![String::new(), empty.into()];
+    }
+    let divider = vec!["---"; header.matches('|').count() - 1].join(" | ");
+    let mut lines = vec![String::new(), header.into(), format!("| {divider} |")];
+    lines.extend(rows);
+    lines
+}
+/// Roll the displayed packs up by state, by control raised and by control not run.
+fn summary(entries: &[Entry]) -> Vec<String> {
+    let mut lines = vec![
+        String::new(),
+        format!("Summary of the {} displayed pack(s)", entries.len()),
+        String::new(),
+        "Clients are pack directory names; the pack does not record a client.".into(),
+    ];
+    let states = ["PASS", "REVIEW", "BLOCKED"].map(|state| {
+        let matching: Vec<_> = entries.iter().filter(|e| e.status.is(state)).collect();
+        format!(
+            "| {state} | {} | {} |",
+            matching.len(),
+            clients(matching.into_iter())
+        )
+    });
+    lines.extend(table("| State | Packs | Clients |", states.into(), ""));
+    let mut raised: BTreeMap<&PyStr, (usize, usize)> = BTreeMap::new();
+    for (control, count) in entries.iter().flat_map(|e| &e.exceptions_by_control) {
+        let totals = raised.entry(control).or_default();
+        totals.0 += 1;
+        totals.1 += count;
+    }
+    let raised = raised.into_iter().map(|(control, (packs, count))| {
+        format!("| {} | {packs} | {count} |", cell(control.clone()))
+    });
+    lines.extend(table(
+        "| Control | Packs with exceptions | Exceptions |",
+        raised.collect(),
+        "No displayed pack records an exception.",
+    ));
+    lines.extend(not_run(entries));
+    lines
+}
+/// The controls that did not run, with the clients that omitted each.
+fn not_run(entries: &[Entry]) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut skipped: BTreeMap<&PyStr, Vec<&Entry>> = BTreeMap::new();
+    for entry in entries {
+        for control in entry.not_run.iter().flatten() {
+            skipped.entry(control).or_default().push(entry);
+        }
+    }
+    let skipped = skipped.into_iter().map(|(control, matching)| {
+        let count = matching.len();
+        format!(
+            "| {} | {count} | {} |",
+            cell(control.clone()),
+            clients(matching.into_iter())
+        )
+    });
+    lines.extend(table(
+        "| Control not run | Packs | Clients |",
+        skipped.collect(),
+        "No displayed pack records a control that did not run.",
+    ));
+    let unrecorded = entries.iter().filter(|e| e.not_run.is_none()).count();
+    if unrecorded > 0 {
+        lines.push(format!(
+            "{unrecorded} displayed pack(s) do not record control coverage, so their omitted controls are not counted."
+        ));
+    }
+    lines
 }
 pub fn render_review_queue(paths: &[PathBuf], filters: &Filters) -> Result<String> {
     render_with(paths, filters, &mut viewer::verify_pack)
@@ -210,6 +310,9 @@ pub fn render_with(
         "| --- | --- | --- | --- | --- | --- | --- |".into(),
     ]);
     lines.extend(selected.iter().map(|entry| entry.row.clone()));
+    if filters.summary {
+        lines.extend(summary(&selected));
+    }
     lines.extend([
         String::new(),
         "Verified artefact SHA-256".into(),

@@ -24,6 +24,11 @@
   a new `required_controls` key, which appears
   only when the flag is used; runs without it keep their bytes. `--require` no
   longer abbreviates `--require-calculation`, as it now matches 2 options.
+- `queue --summary` adds a roll-up of the displayed packs: how many are
+  `PASS`, `REVIEW` and `BLOCKED` and which pack directories they are, how many
+  packs and exceptions each control raised, and which controls did not run where.
+  The client label is the pack directory's name. Without the flag the queue keeps
+  its bytes. `--s` no longer abbreviates `--status`; write `--st` or longer.
 - Preserve the original decimal contexts, input validation, source hashes,
   spreadsheet guards, four-file rollback and read-only pack verification.
 - Match Python's shortest floating-point spelling when hashing calculation

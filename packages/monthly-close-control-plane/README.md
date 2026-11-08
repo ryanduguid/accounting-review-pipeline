@@ -171,6 +171,8 @@ exports and generated packs becoming repository content.
 For several packs, use the [local review queue](docs/review-queue.md). It verifies
 every explicitly supplied pack before filtering by report date, recorded state
 and recorded reviewer, and retains omitted-control and missing-metadata disclosures.
+`--summary` counts the displayed packs by state, by control with exceptions and by
+control not run, labelling each client by its pack directory's name.
 
 `close-control view` is the read-only half of the workbench: it loads a
 generated pack, proves the 4 files still agree with each other and prints
