@@ -41,14 +41,16 @@
   are `TIEOUT_BREAK`; a `TIED` line with no mapped account is
   `TIEOUT_UNSUPPORTED`. Without the file, `fs_mapping` is listed under
   'Controls not run' and `--require-control fs_mapping` makes it a condition.
-- Breaking: in the `bas` profile, the GST control accounts must be in the trial
-  balance, and their closing `YTDCredit - YTDDebit` must equal the GST control
-  file's movement plus the opening balance, within `--tieout-tolerance`. The
-  activity statement's optional `GST_OPENING` label declares the opening
-  balance, such as an unpaid earlier BAS or the cents whole-dollar labels leave;
-  without it the opening balance is taken as nil, and a break says so. A break, and the existing 1A less 1B break, names a posting of the
-  difference's size or half of it, or a difference divisible by 9 cents. The
-  `bas-ready` and `bas-blocked` examples' trial balances now hold GST account 820.
+- Breaking: in the `bas` profile, the GST control accounts must be in the
+  trial balance, and their closing `YTDCredit - YTDDebit` must equal the GST
+  control file's movement plus the opening balance, within
+  `--tieout-tolerance`. The activity statement's optional `GST_OPENING` label
+  declares the opening balance, such as an unpaid earlier BAS or the cents
+  whole-dollar labels leave; without it the opening balance is taken as nil,
+  and a break says so. A break, and the existing 1A less 1B break, names a
+  posting whose direction and size, or half its size, explain the difference,
+  or a difference divisible by 9 cents. The `bas-ready` and `bas-blocked`
+  examples' trial balances now hold GST account 820.
 - Native release publishing is not configured. The release workflow fails
   explicitly and cannot publish Python or native artefacts.
 

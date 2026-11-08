@@ -279,10 +279,11 @@ balance:
 - the opening balance is the activity statement's optional `GST_OPENING` label: the accounts' balance at the period start, signed like the closing balance, so a payable is positive and a refund owed is negative. Declare a balance carried in, such as an earlier BAS still unpaid under a payment plan, or the cents left behind when whole-dollar 1A and 1B were paid. A malformed or repeated `GST_OPENING` is refused like any other activity-statement amount
 - without `GST_OPENING` the opening balance is taken as nil, and a break says so. With every earlier period's GST settled through the control accounts, they close at the period's movement
 
-A GST break names the likeliest cause it can see: a posting in the file the size
-of the difference, one posted on the wrong side (half the difference), or a
-difference in whole cents divisible by 9, which transposed digits produce. The
-hint is a starting point, not a diagnosis.
+A GST break names the likeliest cause it can see: a posting in the file that the
+statement or trial balance lacks, or holds on the other side (half the
+difference), or a difference in whole cents divisible by 9, which transposed
+digits produce. A posting is named only when its direction explains the
+difference, not merely its size. The hint is a starting point, not a diagnosis.
 
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
 

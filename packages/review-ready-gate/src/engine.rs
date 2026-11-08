@@ -576,8 +576,11 @@ fn gst_accounts_missing(accounts: &BTreeSet<&str>, tb: &[TrialBalanceRow]) -> Op
         "Return the pack. Export the trial balance and the GST control file from the same ledger.",
     ))
 }
-/// A pointer to the likeliest cause of a GST difference: one posting of that
-/// size, one posted on the wrong side, or transposed digits.
+/// A pointer to the likeliest cause of a GST difference, the other figure less
+/// the file's: a file posting the other figure lacks, so the difference is minus
+/// the posting; one it holds on the other side, minus twice the posting; or
+/// transposed digits. A posting of the right size in the wrong direction
+/// explains nothing, so it is not named.
 fn difference_hint(difference: &Decimal, gst: &[GstControlRow]) -> String {
     let size = difference.copy_abs();
     let posting = |r: &GstControlRow| {
@@ -593,20 +596,18 @@ fn difference_hint(difference: &Decimal, gst: &[GstControlRow]) -> String {
             r.posted_on.iso(),
             net.copy_abs().to_sci_string()
         );
-        (net.copy_abs(), label)
+        (net, label)
     };
     let postings: Vec<_> = gst
         .iter()
         .map(posting)
-        .filter(|(amount, _)| !amount.is_zero())
+        .filter(|(net, _)| !net.is_zero())
         .collect();
-    if let Some((_, label)) = postings.iter().find(|(amount, _)| *amount == size) {
+    let lacks = |net: &Decimal| net.add(difference).value.is_zero();
+    if let Some((_, label)) = postings.iter().find(|(net, _)| lacks(net)) {
         return format!(" Hint: the difference is the size of {label}; check that posting first.");
     }
-    if let Some((_, label)) = postings
-        .iter()
-        .find(|(amount, _)| amount.add(amount).value == size)
-    {
+    if let Some((_, label)) = postings.iter().find(|(net, _)| lacks(&net.add(net).value)) {
         return format!(
             " Hint: the difference is twice {label}, so that posting may be on the wrong side."
         );
@@ -1633,6 +1634,10 @@ Retained earnings,900,CREDIT
                 " Hint: the difference is a whole number of cents divisible by 9, which can mean 2 digits were transposed.",
             ),
             ("7501.00", ""),
+            // The purchases posting's size, and twice it, in the other direction:
+            // the ledger is 2500 or 5000 lower, which that debit cannot explain.
+            ("5000.00", ""),
+            ("2500.00", ""),
         ] {
             let tmp = TempDir::new();
             let pack = review("bas", &bas_gst(&tmp, Some(("0.00", closing)), None, None)).unwrap();
