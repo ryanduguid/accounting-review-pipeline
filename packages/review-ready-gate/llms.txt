@@ -15,7 +15,8 @@
 - `src/engine.rs`: Builds `READY`, `NOT_READY` or `BLOCKED` packs.
 - `src/loader.rs`: Validates input schemas and captures immutable source bytes and hashes.
 - `src/report.rs`: Renders JSON, Markdown and CSV readiness files.
-- `src/cli.rs`: Runs gate, view, compare, intake and view-document commands.
+- `src/cli.rs`: Runs gate, view, queue, compare, intake and view-document commands.
+- `src/queue.rs`: Verifies several packs, then lists and counts them.
 - `src/comparison.rs`: Verifies two runs and reports changed sources, findings and coverage.
 - `src/viewer.rs`: Refuses ambiguous JSON or disagreeing artefacts before display.
 - `src/publication.rs`: Admits one writer and preserves interrupted-publication evidence.
