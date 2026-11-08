@@ -161,13 +161,13 @@ fn csv(request: &Json) -> Result<Json> {
     };
     Ok(Json::Array(rows))
 }
-#[expect(clippy::too_many_lines, reason = "one match arm per probe operation")]
 /// The frozen Python baseline predates the queue command, so CLI output
 /// compared with it drops `queue` from the command choices.
 fn without_queue_command(text: &str) -> String {
     text.replace("{gate,view,queue,compare,", "{gate,view,compare,")
         .replace("'view', 'queue', 'compare'", "'view', 'compare'")
 }
+#[expect(clippy::too_many_lines, reason = "one match arm per probe operation")]
 fn operation(request: &Json) -> Result<Json> {
     match text(request.at("op"))?.as_str() {
         "cli" => {
