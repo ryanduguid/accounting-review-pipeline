@@ -9,7 +9,7 @@ use crate::{
     viewer::{self, VerifiedPack},
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -210,18 +210,19 @@ fn summary(entries: &[Entry]) -> Vec<String> {
 /// The controls that did not run, with the clients that omitted each.
 fn not_run(entries: &[Entry]) -> Vec<String> {
     let mut lines = Vec::new();
-    let mut skipped: BTreeMap<&PyStr, Vec<&Entry>> = BTreeMap::new();
-    for entry in entries {
+    // A set, so a control a pack lists twice counts that pack once.
+    let mut skipped: BTreeMap<&PyStr, BTreeSet<usize>> = BTreeMap::new();
+    for (index, entry) in entries.iter().enumerate() {
         for control in entry.not_run.iter().flatten() {
-            skipped.entry(control).or_default().push(entry);
+            skipped.entry(control).or_default().insert(index);
         }
     }
-    let skipped = skipped.into_iter().map(|(control, matching)| {
-        let count = matching.len();
+    let skipped = skipped.into_iter().map(|(control, indices)| {
         format!(
-            "| {} | {count} | {} |",
+            "| {} | {} | {} |",
             cell(control.clone()),
-            clients(matching.into_iter())
+            indices.len(),
+            clients(indices.iter().map(|&i| &entries[i]))
         )
     });
     lines.extend(table(
@@ -360,5 +361,27 @@ mod tests {
         );
         assert_eq!(reads, 1);
         assert_eq!(cell("x|y\n\u{1b}é".into()), r"x\|y\n\u001b\u00e9");
+    }
+    #[test]
+    fn a_control_a_pack_lists_twice_counts_that_pack_once() {
+        let entry = |client: &str, not_run: &[&str]| Entry {
+            path: PathBuf::from(client),
+            client: client.into(),
+            exceptions_by_control: BTreeMap::new(),
+            not_run: Some(not_run.iter().map(|&c| c.into()).collect()),
+            dates: vec![],
+            status: "PASS".into(),
+            reviewer: None,
+            row: String::new(),
+            digests: BTreeMap::new(),
+        };
+        let lines = not_run(&[
+            entry("varrock", &["subledger", "subledger"]),
+            entry("falador", &["subledger"]),
+        ]);
+        assert!(
+            lines.contains(&"| subledger | 2 | varrock, falador |".to_owned()),
+            "{lines:?}"
+        );
     }
 }

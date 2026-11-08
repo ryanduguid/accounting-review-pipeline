@@ -21,10 +21,13 @@ Add `--summary` to roll the displayed packs up after the table:
 - for each control that raised an exception, how many packs it raised them in and how many it raised in total;
 - for each control that did not run, how many packs omitted it and which clients they are.
 
-Neither pack file records a client when a pack has no exceptions, so the client label is the pack directory's name. Name each pack directory after its client; a misnamed directory shows under the wrong label. The summary counts only the packs the filters display, so `--status REVIEW --summary` rolls up the packs needing review. A pack that predates control coverage is named in a note rather than counted as having run every control.
+Neither pack file records a client when a pack has no exceptions, so the client label is the name of the directory the path resolves to; a symbolic link shows its target's name. Name each pack directory after its client; a misnamed directory shows under the wrong label. The summary counts only the packs the filters display, so `--status REVIEW --summary` rolls up the packs needing review. A pack that predates control coverage is named in a note rather than counted as having run every control.
 
 ```bash
-close-control queue   --pack-dir C:/close-data/2026-08/varrock   --pack-dir C:/close-data/2026-08/falador   --summary
+close-control queue \
+  --pack-dir C:/close-data/2026-08/varrock \
+  --pack-dir C:/close-data/2026-08/falador \
+  --summary
 ```
 
 ## Verification and coverage
