@@ -678,7 +678,7 @@ fn apply_bank_rec(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Deci
                 "NOT_READY",
                 "bank_rec",
                 format!(
-                    "Account {} GL balance {} differs from the trial balance balance {} by {}.",
+                    "Account {} GL balance {} differs from the trial balance's balance {} by {}.",
                     row.account_id,
                     row.gl_balance.to_sci_string(),
                     ledger.to_sci_string(),
@@ -1183,7 +1183,7 @@ mod tests {
         assert_eq!(
             bank_breaks(&pack),
             [
-                "Account 100 GL balance 119000.00 differs from the trial balance balance 120000.00 by -1000.00."
+                "Account 100 GL balance 119000.00 differs from the trial balance's balance 120000.00 by -1000.00."
             ]
         );
     }
