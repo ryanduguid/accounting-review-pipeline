@@ -496,13 +496,16 @@ fn gst_movement(gst: &[GstControlRow]) -> Result<Decimal> {
         BAS_PRECISION,
     )
 }
-/// The activity-statement label that declares the GST control accounts'
-/// balance at the period start, credit positive like the closing balance.
+/// The activity-statement label that declares the balance the GST control
+/// accounts carry in from before the period and still hold at `period_end`:
+/// the period-start balance less any settlement of it posted in the period,
+/// which the GST control file does not hold. Credit positive, like the
+/// closing balance.
 const GST_OPENING: &str = "GST_OPENING";
 /// The GST control accounts' closing balance in the trial balance,
-/// `YTDCredit - YTDDebit`, against their opening balance plus the period's
-/// movement in the GST control file. The opening balance is the activity
-/// statement's `GST_OPENING`, or nil when it declares none.
+/// `YTDCredit - YTDDebit`, against the balance they carry in plus the
+/// period's movement in the GST control file. The balance carried in is the
+/// activity statement's `GST_OPENING`, or nil when it declares none.
 fn apply_gst_roll_forward(
     loaded: &Loaded,
     findings: &mut Vec<Finding>,
@@ -546,16 +549,16 @@ fn apply_gst_roll_forward(
     }
     Ok(())
 }
-/// The roll-forward break, naming the opening balance it used.
+/// The roll-forward break, naming the balance carried in that it used.
 fn roll_forward_break(figures: &[String; 4], opening: Option<&Decimal>) -> String {
     let [closing, movement, difference, tolerance] = figures;
     match opening {
         Some(opening) => format!(
-            "GST control accounts close at {closing} in the trial balance, but open at {}, the activity statement's GST_OPENING, and the GST control file moves them by {movement}; difference {difference} exceeds tolerance {tolerance}. The file may be missing postings, or GST_OPENING may be wrong.",
+            "GST control accounts close at {closing} in the trial balance, but carry in {} from before the period, the activity statement's GST_OPENING, and the GST control file moves them by {movement}; difference {difference} exceeds tolerance {tolerance}. The file may be missing postings, or GST_OPENING may be wrong.",
             opening.to_sci_string()
         ),
         None => format!(
-            "GST control accounts close at {closing} in the trial balance, but the GST control file moves them by {movement} and, with no GST_OPENING on the activity statement, they are taken to open at nil; difference {difference} exceeds tolerance {tolerance}. The file may be missing postings, or the accounts carried a balance in, such as an unpaid earlier BAS or the cents the ATO drops from 1A and 1B, which GST_OPENING declares.",
+            "GST control accounts close at {closing} in the trial balance, but the GST control file moves them by {movement} and, with no GST_OPENING on the activity statement, they are taken to carry in nil; difference {difference} exceeds tolerance {tolerance}. The file may be missing postings, or the accounts carried a balance in, such as an unpaid earlier BAS or the cents the ATO drops from 1A and 1B, which GST_OPENING declares.",
         ),
     }
 }
@@ -1579,7 +1582,7 @@ Retained earnings,900,CREDIT
         assert_eq!(
             gst_breaks(&without),
             [
-                "GST control accounts close at 8000.00 in the trial balance, but the GST control file moves them by 7500.00 and, with no GST_OPENING on the activity statement, they are taken to open at nil; difference 500.00 exceeds tolerance 0.01. The file may be missing postings, or the accounts carried a balance in, such as an unpaid earlier BAS or the cents the ATO drops from 1A and 1B, which GST_OPENING declares."
+                "GST control accounts close at 8000.00 in the trial balance, but the GST control file moves them by 7500.00 and, with no GST_OPENING on the activity statement, they are taken to carry in nil; difference 500.00 exceeds tolerance 0.01. The file may be missing postings, or the accounts carried a balance in, such as an unpaid earlier BAS or the cents the ATO drops from 1A and 1B, which GST_OPENING declares."
             ]
         );
         let tmp = TempDir::new();
@@ -1592,7 +1595,7 @@ Retained earnings,900,CREDIT
         assert_eq!(
             gst_breaks(&review("bas", &wrong).unwrap()),
             [
-                "GST control accounts close at 8000.00 in the trial balance, but open at 400.00, the activity statement's GST_OPENING, and the GST control file moves them by 7500.00; difference 100.00 exceeds tolerance 0.01. The file may be missing postings, or GST_OPENING may be wrong."
+                "GST control accounts close at 8000.00 in the trial balance, but carry in 400.00 from before the period, the activity statement's GST_OPENING, and the GST control file moves them by 7500.00; difference 100.00 exceeds tolerance 0.01. The file may be missing postings, or GST_OPENING may be wrong."
             ]
         );
     }

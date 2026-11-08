@@ -1348,9 +1348,8 @@ fn without_mapping_files(files: &[Json], entry: &Json, left: usize) -> Result<Op
             .collect(),
     )))
 }
-/// `stdout` with `fs_mapping` left out of its one 'did not run' line, which
-/// is dropped when no other control is left, or `None` when no such line
-/// names it.
+/// `stdout` with `fs_mapping` left out of its one 'did not run' line, or
+/// `None` unless exactly one such line names it beside another control.
 fn without_mapping_line(stdout: &str) -> Option<String> {
     const PREFIX: &str = "review-ready: ";
     const MARK: &str = " control(s) did not run: ";
@@ -1367,18 +1366,16 @@ fn without_mapping_line(stdout: &str) -> Option<String> {
         };
         let slots: Vec<_> = slots.split(", ").collect();
         let kept: Vec<_> = slots.iter().filter(|s| **s != "fs_mapping").collect();
-        if count != slots.len().to_string() || kept.len() + 1 != slots.len() {
+        if count != slots.len().to_string() || kept.len() + 1 != slots.len() || kept.is_empty() {
             return None;
         }
         found += 1;
-        if !kept.is_empty() {
-            let kept = kept.iter().map(|s| **s).collect::<Vec<_>>().join(", ");
-            out.push_str(&format!(
-                "{PREFIX}{}{MARK}{kept}{}",
-                slots.len() - 1,
-                &line[body.len()..]
-            ));
-        }
+        let kept = kept.iter().map(|s| **s).collect::<Vec<_>>().join(", ");
+        out.push_str(&format!(
+            "{PREFIX}{}{MARK}{kept}{}",
+            slots.len() - 1,
+            &line[body.len()..]
+        ));
     }
     (found == 1).then_some(out)
 }

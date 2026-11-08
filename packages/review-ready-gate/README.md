@@ -275,9 +275,10 @@ If the GST control file is present, its accounts also roll forward to the trial
 balance:
 
 - every `AccountID` in the GST control file must be in the trial balance
-- those accounts' closing balance in the trial balance, `YTDCredit - YTDDebit`, is compared with their opening balance plus the file's `sum(Credit) - sum(Debit)` for the period; a difference beyond `--tieout-tolerance` is `NOT_READY`, with no 99-cent allowance, since all the figures are ledger amounts
-- the opening balance is the activity statement's optional `GST_OPENING` label: the accounts' balance at the period start, signed like the closing balance, so a payable is positive and a refund owed is negative. Declare a balance carried in, such as an earlier BAS still unpaid under a payment plan, or the cents left behind when whole-dollar 1A and 1B were paid. A malformed or repeated `GST_OPENING` is refused like any other activity-statement amount
-- without `GST_OPENING` the opening balance is taken as nil, and a break says so. With every earlier period's GST settled through the control accounts, they close at the period's movement
+- those accounts' closing balance in the trial balance, `YTDCredit - YTDDebit`, is compared with the balance they carry in plus the file's `sum(Credit) - sum(Debit)` for the period; a difference beyond `--tieout-tolerance` is `NOT_READY`, with no 99-cent allowance, since all the figures are ledger amounts
+- the balance carried in is the activity statement's optional `GST_OPENING` label: what the accounts carry in from before the period and still hold at `period_end`, which is the period-start balance less any settlement of it posted during the period, since the GST control file holds only the period's GST. It is signed like the closing balance, so a payable is positive and a refund owed is negative. Declare, for example, an earlier BAS still unpaid under a payment plan, or the cents left behind when whole-dollar 1A and 1B were paid. An earlier BAS paid during the period is not carried in: declare nothing for it. A malformed or repeated `GST_OPENING` is refused like any other activity-statement amount
+- without `GST_OPENING` the balance carried in is taken as nil, and a break says so. With every earlier period's GST settled through the control accounts, they close at the period's movement
+- the gate does not verify `GST_OPENING`, and a `READY` pack does not show it: the pack records only the activity statement's sha256. The reviewer checks the declared figure against the earlier BAS or the ATO account
 
 A GST break names the likeliest cause it can see: a posting in the file that the
 statement or trial balance lacks, or holds on the other side (half the
