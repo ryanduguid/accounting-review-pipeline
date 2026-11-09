@@ -302,7 +302,9 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
         let (flag, assigned) = raw
             .split_once('=')
             .map_or((raw.as_str(), None), |(key, value)| (key, Some(value)));
-        let flag = if flags.contains(&flag) {
+        let flag = if command == "queue" && flag == "--s" {
+            "--status"
+        } else if flags.contains(&flag) {
             flag
         } else {
             let matches: Vec<_> = if flag.starts_with("--") {

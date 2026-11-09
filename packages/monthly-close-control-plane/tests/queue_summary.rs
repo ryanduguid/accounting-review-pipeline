@@ -69,6 +69,20 @@ fn book(temp: &TempDir) -> Vec<PathBuf> {
     ]
 }
 
+#[test]
+fn queue_keeps_the_short_status_option() {
+    let temp = TempDir::new();
+    let packs = book(&temp);
+    let full = queue(&packs, &["--status", "PASS"]);
+    assert!(full.status.success(), "{full:?}");
+    for args in [&["--s", "PASS"][..], &["--s=PASS"][..]] {
+        let short = queue(&packs, args);
+        assert_eq!(short.status.code(), full.status.code(), "{short:?}");
+        assert_eq!(short.stdout, full.stdout);
+        assert_eq!(short.stderr, full.stderr);
+    }
+}
+
 fn queue(packs: &[PathBuf], extra: &[&str]) -> Output {
     let mut command = Command::new(BIN);
     command.arg("queue");

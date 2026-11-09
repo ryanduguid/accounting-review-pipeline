@@ -28,7 +28,7 @@
   `PASS`, `REVIEW` and `BLOCKED` and which pack directories they are, how many
   packs and exceptions each control raised, and which controls did not run where.
   The client label is the pack directory's name. Without the flag the queue keeps
-  its bytes. `--s` no longer abbreviates `--status`; write `--st` or longer.
+  its bytes. `--s` remains an abbreviation for `--status`.
 - Preserve the original decimal contexts, input validation, source hashes,
   spreadsheet guards, four-file rollback and read-only pack verification.
 - Match Python's shortest floating-point spelling when hashing calculation
