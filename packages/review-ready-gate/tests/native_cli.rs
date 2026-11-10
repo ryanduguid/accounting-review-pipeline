@@ -714,8 +714,8 @@ fn a_required_control_that_did_not_run_is_not_ready() {
         !String::from_utf8_lossy(&result.stdout).contains("required control"),
         "{result:?}"
     );
-    // bank_rec is another profile's slot, so on a BAS pack it cannot run.
-    for name in ["prior_findings", "bank_rec"] {
+    // tie_out_matrix is another profile's slot, so on a BAS pack it cannot run.
+    for name in ["prior_findings", "tie_out_matrix"] {
         let output = tmp.join(name);
         let result = gate_requiring(&output, &[name]);
         assert_eq!(result.status.code(), Some(2), "{name}: {result:?}");
