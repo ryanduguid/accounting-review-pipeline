@@ -4,6 +4,7 @@
 use crate::{
     Result,
     decimal::Decimal,
+    isodate::Date,
     loader::*,
     models::*,
     profiles::{self, Slot},
@@ -623,29 +624,52 @@ fn difference_hint(difference: &Decimal, gst: &[GstControlRow]) -> String {
     }
     String::new()
 }
+/// GST control postings dated outside the period the self-review declares:
+/// before `period_start`, where it declares one, and after `period_end`.
 fn apply_gst_period(loaded: &Loaded, findings: &mut Vec<Finding>) {
     let Some(s) = &loaded.self_review else {
         return;
     };
-    let late: BTreeSet<_> = loaded
+    if let Some(start) = s.period_start {
+        gst_outside(loaded, findings, "before", ("period_start", start), |d| {
+            d < start
+        });
+    }
+    gst_outside(
+        loaded,
+        findings,
+        "after",
+        ("period_end", s.period_end),
+        |d| d > s.period_end,
+    );
+}
+/// One finding for the GST control postings dated `outside` a declared bound.
+fn gst_outside(
+    loaded: &Loaded,
+    findings: &mut Vec<Finding>,
+    side: &str,
+    (bound, date): (&str, Date),
+    outside: impl Fn(Date) -> bool,
+) {
+    let dates: BTreeSet<_> = loaded
         .gst_control_gl
         .iter()
         .flatten()
-        .filter(|r| r.posted_on > s.period_end)
         .map(|r| r.posted_on)
+        .filter(|posted_on| outside(*posted_on))
         .collect();
-    if late.is_empty() {
+    if dates.is_empty() {
         return;
     }
-    let late: Vec<_> = late.iter().map(|d| d.iso()).collect();
+    let dates: Vec<_> = dates.iter().map(Date::iso).collect();
     findings.push(Finding::new(
         "PERIOD_ORDER",
         "NOT_READY",
         "gst_control_gl",
         format!(
-            "GST control postings are dated after the declared period_end {}: {}.",
-            s.period_end.iso(),
-            first_three(&late)
+            "GST control postings are dated {side} the declared {bound} {}: {}.",
+            date.iso(),
+            first_three(&dates)
         ),
         "Return the pack. The GST control export must be for the period the self-review declares.",
     ));
@@ -955,6 +979,76 @@ mod tests {
                 "{posted_on}"
             );
         }
+    }
+    /// The bas-ready pack with its GST control postings redated, one row to
+    /// each of `posted_on` in turn, and `period_start` declared when given.
+    fn bas_pack_dated(tmp: &TempDir, period_start: Option<&str>, posted_on: &[&str]) -> PathBuf {
+        let pack_dir = tmp.join("pack");
+        test_support::copy_example("bas-ready", &pack_dir);
+        if let Some(start) = period_start {
+            let path = pack_dir.join("self_review.json");
+            let declared = fs::read_to_string(&path).unwrap().replacen(
+                '{',
+                &format!("{{\"period_start\": \"{start}\","),
+                1,
+            );
+            fs::write(&path, declared).unwrap();
+        }
+        let source = pack_dir.join("gst_control_gl.csv");
+        let text = fs::read_to_string(&source).unwrap();
+        let mut lines = text.lines();
+        let mut rewritten = format!("{}\n", lines.next().unwrap());
+        for (line, date) in lines.zip(posted_on.iter().cycle()) {
+            let (_, rest) = line.split_once(',').unwrap();
+            rewritten.push_str(&format!("{date},{rest}\n"));
+        }
+        fs::write(&source, rewritten).unwrap();
+        pack_dir
+    }
+    fn gst_period_reasons(pack: &ReadinessPack) -> Vec<&str> {
+        pack.findings
+            .iter()
+            .filter(|f| f.code == "PERIOD_ORDER" && f.slot == "gst_control_gl")
+            .map(|f| f.reason.as_str())
+            .collect()
+    }
+    #[test]
+    fn bas_refuses_gst_postings_before_a_declared_period_start() {
+        const BEFORE: &str = "GST control postings are dated before the declared period_start 2026-01-01: 2025-12-31.";
+        for (period_start, posted_on, expected) in [
+            // An earlier quarter's file, which passed whatever the self-review said.
+            (Some("2026-01-01"), "2025-12-31", vec![BEFORE]),
+            (Some("2026-01-01"), "2026-01-01", vec![]),
+            (Some("2026-01-01"), "2026-03-31", vec![]),
+            // With no period start declared the gate still cannot tell.
+            (None, "2025-12-31", vec![]),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("bas", &bas_pack_dated(&tmp, period_start, &[posted_on])).unwrap();
+            assert_eq!(
+                gst_period_reasons(&pack),
+                expected,
+                "{period_start:?} {posted_on}"
+            );
+            let status = if expected.is_empty() {
+                "READY"
+            } else {
+                "NOT_READY"
+            };
+            assert_eq!(pack.status, status, "{period_start:?} {posted_on}");
+        }
+    }
+    #[test]
+    fn gst_postings_on_both_sides_of_the_period_are_two_findings() {
+        let tmp = TempDir::new();
+        let dir = bas_pack_dated(&tmp, Some("2026-01-01"), &["2025-12-31", "2026-04-01"]);
+        assert_eq!(
+            gst_period_reasons(&review("bas", &dir).unwrap()),
+            [
+                "GST control postings are dated before the declared period_start 2026-01-01: 2025-12-31.",
+                "GST control postings are dated after the declared period_end 2026-03-31: 2026-04-01.",
+            ]
+        );
     }
     #[test]
     fn empty_optional_evidence_is_a_finding_and_names_the_unrun_control() {

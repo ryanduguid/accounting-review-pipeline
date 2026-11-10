@@ -580,13 +580,18 @@ fn checked_initials(value: &Json, name: &str, path: &str) -> Result<String> {
 pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<SelfReview> {
     let path = pypath::text(&snapshot.path);
     let value = json(snapshot, false)?;
-    if !value.has_exact_keys(&[
+    let keys = [
         "preparer_initials",
         "prepared_on",
         "engagement_type",
         "period_end",
         "assertions",
-    ]) {
+        "period_start",
+    ];
+    // Only the bas profile reads period_start, so only it may declare one: a
+    // key another profile ignored would look checked.
+    let declares_start = profile == "bas" && value.has_exact_keys(&keys);
+    if !declares_start && !value.has_exact_keys(&keys[..5]) {
         return Err(format!(
             "{path}: self-review must contain exactly preparer_initials, prepared_on, engagement_type, period_end, and assertions."
         ));
@@ -617,6 +622,24 @@ pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<Self
             period_end.iso()
         ));
     }
+    let period_start = if declares_start {
+        let start = value
+            .at("period_start")
+            .as_pystr()
+            .map(|s| s.os_text())
+            .ok_or_else(|| format!("{path}: period_start must be an ISO date string."))?;
+        let start = parse_iso_date(&start, "period_start", &snapshot.path, None)?;
+        if start > period_end {
+            return Err(format!(
+                "{path}: period_start {} is later than period_end {}.",
+                start.iso(),
+                period_end.iso()
+            ));
+        }
+        Some(start)
+    } else {
+        None
+    };
     let assertions = value.at("assertions");
     if !assertions.has_exact_keys(&ASSERTIONS) {
         return Err(format!(
@@ -636,6 +659,7 @@ pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<Self
         prepared_on,
         engagement_type: profile.into(),
         period_end,
+        period_start,
         assertions,
     })
 }
