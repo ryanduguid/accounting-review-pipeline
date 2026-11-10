@@ -4,12 +4,14 @@
 use crate::{
     Result,
     decimal::Decimal,
+    isodate::Date,
     loader::*,
     models::*,
     profiles::{self, Slot},
     pytext,
 };
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
@@ -623,29 +625,45 @@ fn difference_hint(difference: &Decimal, gst: &[GstControlRow]) -> String {
     }
     String::new()
 }
+/// GST control postings dated outside the period the self-review declares:
+/// before `period_start`, where it declares one, and after `period_end`.
 fn apply_gst_period(loaded: &Loaded, findings: &mut Vec<Finding>) {
     let Some(s) = &loaded.self_review else {
         return;
     };
-    let late: BTreeSet<_> = loaded
+    if let Some(start) = s.period_start {
+        gst_outside(loaded, findings, Ordering::Less, start);
+    }
+    gst_outside(loaded, findings, Ordering::Greater, s.period_end);
+}
+/// One finding for the GST control postings dated on the `side` of a declared
+/// bound that is outside the period: `Less` than `period_start`, or `Greater`
+/// than `period_end`.
+fn gst_outside(loaded: &Loaded, findings: &mut Vec<Finding>, side: Ordering, bound: Date) {
+    let (word, key) = if side == Ordering::Less {
+        ("before", "period_start")
+    } else {
+        ("after", "period_end")
+    };
+    let dates: BTreeSet<_> = loaded
         .gst_control_gl
         .iter()
         .flatten()
-        .filter(|r| r.posted_on > s.period_end)
         .map(|r| r.posted_on)
+        .filter(|posted_on| posted_on.cmp(&bound) == side)
         .collect();
-    if late.is_empty() {
+    if dates.is_empty() {
         return;
     }
-    let late: Vec<_> = late.iter().map(|d| d.iso()).collect();
+    let dates: Vec<_> = dates.iter().map(Date::iso).collect();
     findings.push(Finding::new(
         "PERIOD_ORDER",
         "NOT_READY",
         "gst_control_gl",
         format!(
-            "GST control postings are dated after the declared period_end {}: {}.",
-            s.period_end.iso(),
-            first_three(&late)
+            "GST control postings are dated {word} the declared {key} {}: {}.",
+            bound.iso(),
+            first_three(&dates)
         ),
         "Return the pack. The GST control export must be for the period the self-review declares.",
     ));
@@ -956,6 +974,76 @@ mod tests {
             );
         }
     }
+    /// The bas-ready pack with its GST control postings redated, one row to
+    /// each of `posted_on` in turn, and `period_start` declared when given.
+    fn bas_pack_dated(tmp: &TempDir, period_start: Option<&str>, posted_on: &[&str]) -> PathBuf {
+        let pack_dir = tmp.join("pack");
+        test_support::copy_example("bas-ready", &pack_dir);
+        if let Some(start) = period_start {
+            let path = pack_dir.join("self_review.json");
+            let declared = fs::read_to_string(&path).unwrap().replacen(
+                '{',
+                &format!("{{\"period_start\": \"{start}\","),
+                1,
+            );
+            fs::write(&path, declared).unwrap();
+        }
+        let source = pack_dir.join("gst_control_gl.csv");
+        let text = fs::read_to_string(&source).unwrap();
+        let mut lines = text.lines();
+        let mut rewritten = format!("{}\n", lines.next().unwrap());
+        for (line, date) in lines.zip(posted_on.iter().cycle()) {
+            let (_, rest) = line.split_once(',').unwrap();
+            rewritten.push_str(&format!("{date},{rest}\n"));
+        }
+        fs::write(&source, rewritten).unwrap();
+        pack_dir
+    }
+    fn gst_period_reasons(pack: &ReadinessPack) -> Vec<&str> {
+        pack.findings
+            .iter()
+            .filter(|f| f.code == "PERIOD_ORDER" && f.slot == "gst_control_gl")
+            .map(|f| f.reason.as_str())
+            .collect()
+    }
+    #[test]
+    fn bas_refuses_gst_postings_before_a_declared_period_start() {
+        const BEFORE: &str = "GST control postings are dated before the declared period_start 2026-01-01: 2025-12-31.";
+        for (period_start, posted_on, expected) in [
+            // An earlier quarter's file, which passed whatever the self-review said.
+            (Some("2026-01-01"), "2025-12-31", vec![BEFORE]),
+            (Some("2026-01-01"), "2026-01-01", vec![]),
+            (Some("2026-01-01"), "2026-03-31", vec![]),
+            // With no period start declared the gate still cannot tell.
+            (None, "2025-12-31", vec![]),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("bas", &bas_pack_dated(&tmp, period_start, &[posted_on])).unwrap();
+            assert_eq!(
+                gst_period_reasons(&pack),
+                expected,
+                "{period_start:?} {posted_on}"
+            );
+            let status = if expected.is_empty() {
+                "READY"
+            } else {
+                "NOT_READY"
+            };
+            assert_eq!(pack.status, status, "{period_start:?} {posted_on}");
+        }
+    }
+    #[test]
+    fn gst_postings_on_both_sides_of_the_period_are_two_findings() {
+        let tmp = TempDir::new();
+        let dir = bas_pack_dated(&tmp, Some("2026-01-01"), &["2025-12-31", "2026-04-01"]);
+        assert_eq!(
+            gst_period_reasons(&review("bas", &dir).unwrap()),
+            [
+                "GST control postings are dated before the declared period_start 2026-01-01: 2025-12-31.",
+                "GST control postings are dated after the declared period_end 2026-03-31: 2026-04-01.",
+            ]
+        );
+    }
     #[test]
     fn empty_optional_evidence_is_a_finding_and_names_the_unrun_control() {
         let tmp = TempDir::new();
@@ -1008,6 +1096,69 @@ mod tests {
                 .iter()
                 .any(|c| c.slot == "bank_rec")
         );
+    }
+    /// The bas-ready pack with a reconciliation of its operating bank account,
+    /// which its trial balance holds at 127500.00.
+    fn bas_with_bank_rec(tmp: &TempDir, statement: &str) -> PathBuf {
+        let dir = tmp.join("pack");
+        test_support::copy_example("bas-ready", &dir);
+        fs::write(
+            dir.join("bank_rec.csv"),
+            format!("AccountID,StatementBalance,GLBalance\n100,{statement},127500.00\n"),
+        )
+        .unwrap();
+        dir
+    }
+    fn bank_rec_not_run(pack: &ReadinessPack) -> bool {
+        let controls = pack.controls_not_run.as_ref().unwrap();
+        controls.iter().any(|c| c.slot == "bank_rec")
+    }
+    #[test]
+    fn bas_runs_a_bank_reconciliation_when_the_pack_holds_one() {
+        // Without the file the pack is still READY, and says the control did not run.
+        let pack = review("bas", &test_support::examples().join("bas-ready")).unwrap();
+        assert_eq!(pack.status, "READY");
+        assert!(bank_rec_not_run(&pack));
+        for (statement, status, expected) in [
+            ("127500.00", "READY", vec![]),
+            ("120000.00", "NOT_READY", vec!["BANK_REC_BREAK"]),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("bas", &bas_with_bank_rec(&tmp, statement)).unwrap();
+            assert_eq!(pack.status, status, "{statement}");
+            assert_eq!(codes(&pack.findings), expected, "{statement}");
+            assert!(!bank_rec_not_run(&pack), "{statement}");
+            assert!(
+                pack.source_evidence.iter().any(|e| e.slot == "bank_rec"),
+                "{statement}"
+            );
+        }
+    }
+    #[test]
+    fn a_bas_can_be_held_for_its_bank_reconciliation() {
+        let require = |dir: &Path| {
+            let required = ["bank_rec".to_owned()];
+            review_requiring("bas", dir, None, amount("0.01"), &[], &required).unwrap()
+        };
+        // No file: skipped for want of one, not because bas has no such control.
+        let pack = require(&test_support::examples().join("bas-ready"));
+        assert_eq!(pack.status, "NOT_READY");
+        assert_eq!(codes(&pack.findings), ["REQUIRED_CONTROL_SKIPPED"]);
+        assert!(
+            pack.findings[0].reason.contains("no file was supplied"),
+            "{}",
+            pack.findings[0].reason
+        );
+        for (statement, status, expected) in [
+            ("127500.00", "READY", vec![]),
+            ("120000.00", "NOT_READY", vec!["BANK_REC_BREAK"]),
+        ] {
+            let tmp = TempDir::new();
+            let pack = require(&bas_with_bank_rec(&tmp, statement));
+            assert_eq!(pack.status, status, "{statement}");
+            assert_eq!(codes(&pack.findings), expected, "{statement}");
+            assert_eq!(pack.required_controls[0].state, "ran", "{statement}");
+        }
     }
     #[test]
     fn exact_totals_refuse_lost_digits_without_an_input_digit_limit() {

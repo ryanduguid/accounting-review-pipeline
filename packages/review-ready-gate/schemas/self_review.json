@@ -2,9 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ryanduguid/workpaper-review-gate/blob/main/schemas/self_review.json",
   "title": "Self-review declaration",
-  "description": "Shape of self_review.json. The CLI also requires prepared_on not earlier than period_end, engagement_type matching --profile, JSON booleans only, and no control or formatting characters. Any assertion that is not true is NOT_READY; the assertions are necessary, not sufficient.",
+  "description": "Shape of self_review.json. The CLI also requires prepared_on not earlier than period_end, period_start not later than period_end, engagement_type matching --profile, JSON booleans only, and no control or formatting characters. Only a bas self-review may declare period_start. Any assertion that is not true is NOT_READY; the assertions are necessary, not sufficient.",
   "type": "object",
   "additionalProperties": false,
+  "if": {
+    "properties": { "engagement_type": { "const": "bas" } }
+  },
+  "else": {
+    "properties": { "period_start": false }
+  },
   "required": [
     "preparer_initials",
     "prepared_on",
@@ -27,6 +33,10 @@
       "enum": ["bas", "month_end", "year_end"]
     },
     "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_start": {
       "type": "string",
       "format": "date"
     },

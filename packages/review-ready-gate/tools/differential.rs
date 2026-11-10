@@ -507,6 +507,32 @@ fn packs(c: &mut Corpus, root: &Path) {
         }
     }
 }
+/// A month-end pack that supplies its one optional file. Every `bas` and
+/// `year_end` pack lists a control the baseline lacks, so this is the case
+/// that still compares the native 'every control ran' output with the
+/// baseline's, byte for byte.
+fn complete_pack(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
+    let pack = scratch.join("month-end-complete");
+    fs::create_dir(&pack)?;
+    for entry in fs::read_dir(root.join("examples/month-end-ready"))? {
+        let entry = entry?;
+        fs::copy(entry.path(), pack.join(entry.file_name()))?;
+    }
+    fs::write(
+        pack.join("prior_findings.csv"),
+        "FindingCode,Slot,Status\nBANK_REC_BREAK,bank_rec,CLEARED\n",
+    )?;
+    c.push(
+        "pack-month-end-complete",
+        "review_pack",
+        vec![
+            ("pack", Json::str(&pack.to_string_lossy())),
+            ("profile", Json::str("month_end")),
+            ("tolerance", Json::str("0.01")),
+        ],
+    );
+    Ok(())
+}
 
 fn cli_cases(c: &mut Corpus) {
     for (i, args) in [
@@ -1290,20 +1316,20 @@ fn unhex(hex: &str) -> Result<Vec<u8>> {
         .map(|pair| Ok(u8::from_str_radix(std::str::from_utf8(pair)?, 16)?))
         .collect()
 }
-/// `document` with its one `fs_mapping` entry left out of `controls_not_run`,
-/// that entry, and how many controls are left; `None` when it does not hold
+/// `document` with its one `slot` entry left out of `controls_not_run`, that
+/// entry, and how many controls are left; `None` when it does not hold
 /// exactly one.
-fn without_mapping_entry(document: &Json) -> Option<(Json, Json, usize)> {
+fn without_control_entry(document: &Json, slot: &str) -> Option<(Json, Json, usize)> {
     let mut document = document.clone();
     let Some(Json::Array(controls)) = field_mut(&mut document, "controls_not_run") else {
         return None;
     };
-    let mapping = |control: &Json| control.at("slot").is_str("fs_mapping");
-    if controls.iter().filter(|c| mapping(c)).count() != 1 {
+    let named = |control: &Json| control.at("slot").is_str(slot);
+    if controls.iter().filter(|c| named(c)).count() != 1 {
         return None;
     }
-    let entry = controls.iter().find(|c| mapping(c))?.clone();
-    controls.retain(|c| !mapping(c));
+    let entry = controls.iter().find(|c| named(c))?.clone();
+    controls.retain(|c| !named(c));
     let left = controls.len();
     Some((document, entry, left))
 }
@@ -1311,10 +1337,17 @@ fn without_mapping_entry(document: &Json) -> Option<(Json, Json, usize)> {
 fn replace_once(text: &str, old: &str, new: &str) -> Option<String> {
     (text.matches(old).count() == 1).then(|| text.replacen(old, new, 1))
 }
-/// The 3 pack files with the `fs_mapping` entry, its summary line and its
-/// share of the summary's count taken out, byte for byte as the native
-/// renderer writes them; `findings.csv` is left as it is.
-fn without_mapping_files(files: &[Json], entry: &Json, left: usize) -> Result<Option<Json>> {
+/// The 3 pack files with the `slot` entry, its summary line and its share of
+/// the summary's count taken out, byte for byte as the native renderer
+/// writes them; `findings.csv` is left as it is. When that leaves no control,
+/// the list gives way to what the renderer writes for none: an empty array
+/// and the 'every control ran' line.
+fn without_control_files(
+    files: &[Json],
+    entry: &Json,
+    left: usize,
+    slot: &str,
+) -> Result<Option<Json>> {
     let [Some(json), Some(summary), Some(csv)] = [0, 1, 2].map(|i| files.get(i).and_then(text))
     else {
         return Ok(None);
@@ -1324,7 +1357,7 @@ fn without_mapping_files(files: &[Json], entry: &Json, left: usize) -> Result<Op
     let nl = if json.contains("\r\n") { "\r\n" } else { "\n" };
     let field = |key| probe::encode(entry.at(key));
     let block = format!(
-        "    {{{nl}      \"filename\": {},{nl}      \"reason\": {},{nl}      \"slot\": \"fs_mapping\"{nl}    }},{nl}",
+        "    {{{nl}      \"filename\": {},{nl}      \"reason\": {},{nl}      \"slot\": \"{slot}\"{nl}    }}",
         field("filename"),
         field("reason")
     );
@@ -1332,12 +1365,27 @@ fn without_mapping_files(files: &[Json], entry: &Json, left: usize) -> Result<Op
     else {
         return Ok(None);
     };
-    let line = format!("- `fs_mapping` (`{filename}`): {reason}{nl}");
+    let line = format!("- `{slot}` (`{filename}`): {reason}{nl}");
     let count = |n| format!("- Controls not run: {n}.{nl}");
-    let summary = replace_once(&summary, &line, "")
-        .and_then(|s| replace_once(&s, &count(left + 1), &count(left)));
-    let (Some(json), Some(summary), true) = (replace_once(&json, &block, ""), summary, left > 0)
-    else {
+    let (json, summary) = if left > 0 {
+        (
+            replace_once(&json, &format!("{block},{nl}"), ""),
+            replace_once(&summary, &line, ""),
+        )
+    } else {
+        (
+            replace_once(&json, &format!("[{nl}{block}{nl}  ]"), "[]"),
+            replace_once(
+                &summary,
+                &format!(
+                    "The status above says nothing about these controls. They had no usable input, so they reached no verdict:{nl}{line}"
+                ),
+                &format!("Every control this engagement profile configures ran.{nl}"),
+            ),
+        )
+    };
+    let summary = summary.and_then(|s| replace_once(&s, &count(left + 1), &count(left)));
+    let (Some(json), Some(summary)) = (json, summary) else {
         return Ok(None);
     };
     Ok(Some(Json::Array(
@@ -1348,9 +1396,10 @@ fn without_mapping_files(files: &[Json], entry: &Json, left: usize) -> Result<Op
             .collect(),
     )))
 }
-/// `stdout` with `fs_mapping` left out of its one 'did not run' line, or
-/// `None` unless exactly one such line names it beside another control.
-fn without_mapping_line(stdout: &str) -> Option<String> {
+/// `stdout` with `slot` left out of its one 'did not run' line, and the line
+/// left out when it names no other control; `None` unless exactly one such
+/// line names it.
+fn without_control_line(stdout: &str, slot: &str) -> Option<String> {
     const PREFIX: &str = "review-ready: ";
     const MARK: &str = " control(s) did not run: ";
     let mut found = 0;
@@ -1365,26 +1414,28 @@ fn without_mapping_line(stdout: &str) -> Option<String> {
             continue;
         };
         let slots: Vec<_> = slots.split(", ").collect();
-        let kept: Vec<_> = slots.iter().filter(|s| **s != "fs_mapping").collect();
-        if count != slots.len().to_string() || kept.len() + 1 != slots.len() || kept.is_empty() {
+        let kept: Vec<_> = slots.iter().copied().filter(|s| *s != slot).collect();
+        if count != slots.len().to_string() || kept.len() + 1 != slots.len() {
             return None;
         }
         found += 1;
-        let kept = kept.iter().map(|s| **s).collect::<Vec<_>>().join(", ");
-        out.push_str(&format!(
-            "{PREFIX}{}{MARK}{kept}{}",
-            slots.len() - 1,
-            &line[body.len()..]
-        ));
+        if !kept.is_empty() {
+            out.push_str(&format!(
+                "{PREFIX}{}{MARK}{}{}",
+                kept.len(),
+                kept.join(", "),
+                &line[body.len()..]
+            ));
+        }
     }
     (found == 1).then_some(out)
 }
-/// The native `year_end` result as the baseline, which has no `fs_mapping`
-/// control, would give it: that one entry taken out of the pack, the pack
-/// files and the 'did not run' line. Every other field and byte is still
-/// compared. `None` when the result does not carry exactly that entry where
-/// the native renderer puts it.
-fn without_statement_mapping(native: &str) -> Result<Option<String>> {
+/// The native result as the baseline would give it, whose profile has no
+/// `slot` control: that one entry taken out of the pack, the pack files and
+/// the 'did not run' line. Every other field and byte is still compared.
+/// `None` when the result does not carry exactly that entry where the native
+/// renderer puts it.
+fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
     let mut result = probe::decode(native)?;
     let Some(ok) = field_mut(&mut result, "ok") else {
         return Ok(None);
@@ -1399,11 +1450,12 @@ fn without_statement_mapping(native: &str) -> Result<Option<String>> {
     let same_pack = ok
         .get("pack")
         .is_none_or(|pack| probe::encode(pack) == probe::encode(&document));
-    let Some((projected, entry, left)) = without_mapping_entry(&document).filter(|_| same_pack)
+    let Some((projected, entry, left)) =
+        without_control_entry(&document, slot).filter(|_| same_pack)
     else {
         return Ok(None);
     };
-    let Some(files) = without_mapping_files(files, &entry, left)? else {
+    let Some(files) = without_control_files(files, &entry, left, slot)? else {
         return Ok(None);
     };
     *field_mut(ok, "files").expect("checked above") = files;
@@ -1411,12 +1463,31 @@ fn without_statement_mapping(native: &str) -> Result<Option<String>> {
         *pack = projected;
     }
     if let Some(stdout) = field_mut(ok, "stdout") {
-        let Some(line) = text(stdout).and_then(|s| without_mapping_line(&s)) else {
+        let Some(line) = text(stdout).and_then(|s| without_control_line(&s, slot)) else {
             return Ok(None);
         };
         *stdout = Json::str(&line);
     }
     Ok(Some(probe::encode(&result)))
+}
+/// The optional slot a case's profile has here and lacks in the baseline, so
+/// that the native result lists one more control not run: `fs_mapping` in
+/// `year_end` and `bank_rec` in `bas`. The `note-pack-` and `document-pack-`
+/// cases review the `bas` examples.
+fn slot_the_baseline_lacks(name: &str) -> Option<&'static str> {
+    let starts = |prefixes: &[&str]| prefixes.iter().any(|prefix| name.starts_with(prefix));
+    if starts(&["pack-year-end-ready-", "cli-runtime-year-end-ready-"]) {
+        Some("fs_mapping")
+    } else if starts(&[
+        "pack-bas-",
+        "cli-runtime-bas-",
+        "note-pack-",
+        "document-pack-",
+    ]) {
+        Some("bank_rec")
+    } else {
+        None
+    }
 }
 #[expect(
     clippy::too_many_lines,
@@ -1448,6 +1519,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     // needs, a row the baseline only adds to its balanced totals.
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"));
     packs(&mut corpus, fixtures);
+    complete_pack(&mut corpus, fixtures, &scratch.0)?;
     cli_cases(&mut corpus);
     runtime_cli(&mut corpus, fixtures, &scratch.0);
     saved_packs(&mut corpus, fixtures, &scratch.0)?;
@@ -1490,9 +1562,8 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     let mut recorded = 0;
     for ((name, actual), expected) in actual.iter().zip(expected) {
         if !probe::equivalent(actual, &expected)? {
-            if (name.starts_with("pack-year-end-ready-")
-                || name.starts_with("cli-runtime-year-end-ready-"))
-                && let Some(native) = without_statement_mapping(actual)?
+            if let Some(slot) = slot_the_baseline_lacks(name)
+                && let Some(native) = without_absent_control(actual, slot)?
                 && probe::equivalent(&native, &expected)?
             {
                 recorded += 1;
@@ -1519,7 +1590,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         }
     }
     println!(
-        "seed {seed}: {} value/file/CLI cases; {presentation} CLI presentation differences; {recorded} recorded year_end coverage differences; {mismatches} unexplained differences",
+        "seed {seed}: {} value/file/CLI cases; {presentation} CLI presentation differences; {recorded} recorded bas and year_end coverage differences; {mismatches} unexplained differences",
         actual.len()
     );
     if mismatches != 0 {
