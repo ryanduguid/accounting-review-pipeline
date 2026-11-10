@@ -163,11 +163,11 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
-| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end` |
+| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end`; with `bank_rec.csv`, statement balances tie to the GL and the TB |
 | `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines; with `fs_mapping.csv`, each `TIED` line computed from the current TB |
 
-Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out).
+Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out). Optional in `bas`: supply `bank_rec.csv` to run the bank reconciliation, and use `--require-control bank_rec` when its absence must prevent `READY`.
 
 The bank reconciliation is tied twice for each account. Its `StatementBalance`
 must agree with its `GLBalance`, and that `GLBalance` must agree with the current
@@ -431,6 +431,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
 - A `bas` pack's GST control accounts must be in the trial balance and roll forward to it, and a GST break carries a difference hint. The baseline tied only 1A less 1B to the control file. The differential's `bas` examples hold the GST control account and tie, so it compares them unchanged.
 - A `year_end` pack lists `fs_mapping` under 'Controls not run' when the file is absent, and computes `TIED` lines from the trial balance when it is present. The baseline has no such slot. For the `year-end-ready` example the differential takes exactly that entry out of the native result, its pack JSON, the summary's line and count, and the printed list of controls not run, then compares everything else byte for byte, including the exit code, standard error and `findings.csv`; a result without exactly that entry is an unexplained difference.
+- A BAS pack without `bank_rec.csv` lists `bank_rec` under 'Controls not run'. For those packs the differential accounts for that exact entry and the associated count, leaving the remaining output subject to the same byte comparison.
 - A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 
 ## Licence

@@ -55,6 +55,7 @@ const BAS: &[Slot] = &[
         true,
         "gst_control_gl",
     ),
+    slot("bank_rec", "bank_rec.csv", false, "bank_rec"),
     OPEN,
     SELF,
     PRIOR,

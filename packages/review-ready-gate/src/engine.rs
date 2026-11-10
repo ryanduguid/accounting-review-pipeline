@@ -1009,6 +1009,70 @@ mod tests {
                 .any(|c| c.slot == "bank_rec")
         );
     }
+    /// The bas-ready pack with a reconciliation of its operating bank account,
+    /// which its trial balance holds at 127500.00.
+    fn bas_with_bank_rec(tmp: &TempDir, statement: &str) -> PathBuf {
+        let dir = tmp.join("pack");
+        test_support::copy_example("bas-ready", &dir);
+        fs::write(
+            dir.join("bank_rec.csv"),
+            format!(
+                "AccountID,StatementBalance,GLBalance
+100,{statement},127500.00
+"
+            ),
+        )
+        .unwrap();
+        dir
+    }
+    fn bank_rec_not_run(pack: &ReadinessPack) -> bool {
+        let controls = pack.controls_not_run.as_ref().unwrap();
+        controls.iter().any(|c| c.slot == "bank_rec")
+    }
+    #[test]
+    fn bas_runs_a_bank_reconciliation_when_the_pack_holds_one() {
+        // Without the file the pack is still READY, and says the control did not run.
+        let pack = review("bas", &test_support::examples().join("bas-ready")).unwrap();
+        assert_eq!(pack.status, "READY");
+        assert!(bank_rec_not_run(&pack));
+        for (statement, status, expected) in [
+            ("127500.00", "READY", vec![]),
+            ("120000.00", "NOT_READY", vec!["BANK_REC_BREAK"]),
+        ] {
+            let tmp = TempDir::new();
+            let pack = review("bas", &bas_with_bank_rec(&tmp, statement)).unwrap();
+            assert_eq!(pack.status, status, "{statement}");
+            assert_eq!(codes(&pack.findings), expected, "{statement}");
+            assert!(!bank_rec_not_run(&pack), "{statement}");
+            assert!(pack.source_evidence.iter().any(|e| e.slot == "bank_rec"));
+        }
+    }
+    #[test]
+    fn a_bas_can_be_held_for_its_bank_reconciliation() {
+        let require = |dir: &Path| {
+            let required = ["bank_rec".to_owned()];
+            review_requiring("bas", dir, None, amount("0.01"), &[], &required).unwrap()
+        };
+        // No file: skipped for want of one, not because bas has no such control.
+        let pack = require(&test_support::examples().join("bas-ready"));
+        assert_eq!(pack.status, "NOT_READY");
+        assert_eq!(codes(&pack.findings), ["REQUIRED_CONTROL_SKIPPED"]);
+        assert!(
+            pack.findings[0].reason.contains("no file was supplied"),
+            "{}",
+            pack.findings[0].reason
+        );
+        for (statement, status, expected) in [
+            ("127500.00", "READY", vec![]),
+            ("120000.00", "NOT_READY", vec!["BANK_REC_BREAK"]),
+        ] {
+            let tmp = TempDir::new();
+            let pack = require(&bas_with_bank_rec(&tmp, statement));
+            assert_eq!(pack.status, status, "{statement}");
+            assert_eq!(codes(&pack.findings), expected, "{statement}");
+            assert_eq!(pack.required_controls[0].state, "ran", "{statement}");
+        }
+    }
     #[test]
     fn exact_totals_refuse_lost_digits_without_an_input_digit_limit() {
         let mut row = test_support::ready_pack();
