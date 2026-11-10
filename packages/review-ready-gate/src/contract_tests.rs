@@ -4,7 +4,8 @@
 use crate::{
     decimal::Decimal,
     engine, loader,
-    pyjson::{self, Json},
+    models::SelfReview,
+    pyjson::{self, Json, PyStr},
     report,
     test_support::{self, TempDir},
     viewer,
@@ -202,5 +203,71 @@ fn viewer_refuses_missing_unreadable_ambiguous_and_wrong_width_payloads() {
         );
         fs::write(&csv, data).unwrap();
         assert!(viewer::verify_pack(&output).is_err());
+    }
+}
+/// The `example` self-review with `period_start` added, loaded for `profile`.
+fn declaring_start(example: &str, profile: &str, start: Json) -> crate::Result<SelfReview> {
+    let tmp = TempDir::new();
+    let path = tmp.join("self_review.json");
+    let source = test_support::examples()
+        .join(example)
+        .join("self_review.json");
+    let mut document = pyjson::loads(&fs::read_to_string(source).unwrap()).unwrap();
+    let Json::Object(fields) = &mut document else {
+        panic!("fixture object")
+    };
+    fields.push((PyStr::from("period_start"), start));
+    fs::write(&path, pyjson::canonical(&document)).unwrap();
+    let snapshot = loader::SourceSnapshot::capture(&path, "self_review file").unwrap();
+    loader::load_self_review(&snapshot, profile)
+}
+#[test]
+fn a_bas_self_review_may_declare_a_period_start_up_to_its_period_end() {
+    // The bas-ready example's period ends on 2026-03-31.
+    for start in ["2026-01-01", "2026-03-31"] {
+        let review = declaring_start("bas-ready", "bas", Json::str(start)).unwrap();
+        assert_eq!(
+            review.period_start.map(|date| date.iso()).as_deref(),
+            Some(start)
+        );
+    }
+    let plain = loader::SourceSnapshot::capture(
+        &test_support::examples().join("bas-ready/self_review.json"),
+        "self_review file",
+    )
+    .unwrap();
+    let review = loader::load_self_review(&plain, "bas").unwrap();
+    assert_eq!(review.period_start, None);
+}
+#[test]
+fn a_period_start_that_is_late_malformed_or_outside_bas_is_refused() {
+    for (start, expected) in [
+        (
+            Json::str("2026-04-01"),
+            ": period_start 2026-04-01 is later than period_end 2026-03-31.",
+        ),
+        (Json::str("20260101"), ":period_start must be an ISO date."),
+        (
+            Json::str("2026-02-30"),
+            ":period_start must be an ISO date.",
+        ),
+        (Json::Null, ": period_start must be an ISO date string."),
+        (
+            Json::int(20260101),
+            ": period_start must be an ISO date string.",
+        ),
+    ] {
+        let error = declaring_start("bas-ready", "bas", start).unwrap_err();
+        assert!(error.ends_with(expected), "{error}");
+    }
+    for (example, profile) in [
+        ("month-end-ready", "month_end"),
+        ("year-end-ready", "year_end"),
+    ] {
+        let error = declaring_start(example, profile, Json::str("2026-01-01")).unwrap_err();
+        assert!(
+            error.contains("self-review must contain exactly"),
+            "{profile}: {error}"
+        );
     }
 }

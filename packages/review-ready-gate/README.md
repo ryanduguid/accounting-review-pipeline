@@ -163,7 +163,7 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
-| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end` |
+| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end`, or before `period_start` where the self-review declares one |
 | `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines; with `fs_mapping.csv`, each `TIED` line computed from the current TB |
 
@@ -177,9 +177,13 @@ convention: debit balances positive, credit balances negative, so an overdrawn
 account is negative. A reconciliation prepared against an earlier ledger state,
 or for an account the trial balance does not hold, is a `BANK_REC_BREAK`.
 
-One limit of these controls: the GST control file is checked for postings after
-`period_end` only. A file from an earlier quarter passes the date check, because
-the self-review carries no period start.
+The GST control file is checked against the period the self-review declares. A
+posting dated after `period_end` is a `PERIOD_ORDER` finding, and so is one dated
+before `period_start` when a `bas` self-review declares it. One limit remains:
+`period_start` is optional, so that packs prepared without it still load, and
+without it a file from an earlier quarter passes the date check. The pack does
+not record whether it was declared: check the self-review file that the pack's
+`self_review` sha256 identifies.
 
 A `READY` status means no configured control tripped, and only the controls that
 ran can trip. Every optional slot with no usable input is therefore listed under
@@ -243,6 +247,8 @@ Filenames inside the pack directory are fixed. Header-only CSV schemas live unde
 ```
 
 `engagement_type` must match `--profile`. `prepared_on` must not be earlier than `period_end`. Any assertion that is not `true` is `NOT_READY`. The assertions are necessary, not sufficient: a preparer who ticks `pack_complete` whilst the GST control file is missing still gets `MISSING_ARTEFACT`. The JSON Schema is [schemas/self_review.json](schemas/self_review.json).
+
+A `bas` self-review may also declare the first day of its period, such as `"period_start": "2026-01-01"`. A GST control posting dated before it is then `NOT_READY` with `PERIOD_ORDER`, which is what stops an earlier quarter's file. It must be an ISO date not later than `period_end`. The other profiles read no period start and refuse the key.
 
 ### Open items
 
@@ -430,6 +436,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - SIGTERM recovery is supported on Unix. Windows process termination and SIGINT can stop the process abruptly; retained publication state prevents a mixed pack from being accepted. Preserve the complete directory and investigate before retrying.
 - Publication control state is decoded as UTF-8, including an optional BOM. Its writer emits UTF-8; alternate UTF-16 or UTF-32 control files are refused.
 - A `bas` pack's GST control accounts must be in the trial balance and roll forward to it, and a GST break carries a difference hint. The baseline tied only 1A less 1B to the control file. The differential's `bas` examples hold the GST control account and tie, so it compares them unchanged.
+- A `bas` self-review may declare `period_start`, and a GST control posting dated before it is a finding. The baseline refuses the key. The differential's self-reviews do not declare it, so it compares them unchanged.
 - A `year_end` pack lists `fs_mapping` under 'Controls not run' when the file is absent, and computes `TIED` lines from the trial balance when it is present. The baseline has no such slot. For the `year-end-ready` example the differential takes exactly that entry out of the native result, its pack JSON, the summary's line and count, and the printed list of controls not run, then compares everything else byte for byte, including the exit code, standard error and `findings.csv`; a result without exactly that entry is an unexplained difference.
 - A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 

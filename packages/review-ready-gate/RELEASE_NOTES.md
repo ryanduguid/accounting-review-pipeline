@@ -53,6 +53,12 @@
   size, explain the difference, or a difference divisible by 9 cents. The
   `bas-ready` and `bas-blocked` examples' trial balances now hold GST account
   820.
+- A `bas` self-review may declare `period_start`, an ISO date not later than
+  `period_end`. A GST control posting dated before it is `NOT_READY` with
+  `PERIOD_ORDER`, as one dated after `period_end` already is, so an earlier
+  quarter's GST control file no longer passes the date check. The key is
+  optional and the other profiles refuse it; a self-review without it loads
+  and is checked as before.
 - Native release publishing is not configured. The release workflow fails
   explicitly and cannot publish Python or native artefacts.
 
