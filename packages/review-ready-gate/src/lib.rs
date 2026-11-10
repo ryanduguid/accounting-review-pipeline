@@ -25,6 +25,7 @@ mod pycsv;
 mod pyjson;
 mod pypath;
 mod pytext;
+pub mod queue;
 pub mod report;
 pub mod stdio;
 mod tables;

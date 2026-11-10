@@ -363,6 +363,20 @@ regenerate from the same inputs whilst retaining evidence, choose a new output
 directory. Process death is detected when its state remains unresolved; physical
 power-loss durability is unverified.
 
+## Listing many packs
+
+`review-ready queue` verifies every pack you name, with the same checks as `view`, then lists them in one table: each pack's profile, period end, status, finding count, finding codes and the controls that did not run. It writes nothing.
+
+```bash
+review-ready queue --pack-dir outputs/varrock --pack-dir outputs/falador --pack-dir outputs/cedar-and-pine --summary
+```
+
+Repeat `--pack-dir` for each pack; the queue reads only those and does not look in neighbouring directories. `--status NOT_READY` shows only packs with that status. `--summary` adds counts across the displayed packs: how many are `READY`, `NOT_READY` and `BLOCKED` and which clients they are, how many packs and findings carry each finding code, and which clients did not run each control. A pack written before control coverage was recorded shows `not recorded` and is named in a note rather than counted.
+
+A pack records no client name, so the queue labels each one by the name of the directory its path resolves to; a symbolic link shows its target's name. Name each output directory after its client; a misnamed directory shows under the wrong label. The full path and the SHA-256 of each verified file follow the table.
+
+Every pack is verified before any filter runs. One pack that fails verification fails the whole command with exit `1` and prints no table, even when `--status` would have hidden it. Exit `0` means every pack verified and the list printed, whatever their statuses; it is not a readiness verdict.
+
 ## Comparing 2 runs of a pack
 
 A pack sent back to the preparer is gated again. `review-ready compare` verifies both runs with the same checks as `view`, then prints JSON showing what moved between them: the overall status, each source file's digest, and each group of findings by code and slot. It writes nothing.
@@ -439,6 +453,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - A `bas` self-review may declare `period_start`, and a GST control posting dated before it is a finding. The baseline refuses the key. The differential's self-reviews do not declare it, so it compares them unchanged.
 - A `year_end` pack lists `fs_mapping` under 'Controls not run' when the file is absent, and computes `TIED` lines from the trial balance when it is present. The baseline has no such slot. For the `year-end-ready` example the differential takes exactly that entry out of the native result, its pack JSON, the summary's line and count, and the printed list of controls not run, then compares everything else byte for byte, including the exit code, standard error and `findings.csv`; a result without exactly that entry is an unexplained difference.
 - A `bas` pack lists `bank_rec` under 'Controls not run' when the file is absent, and runs the bank reconciliation when it is present. The baseline has no such slot. For every case that reviews a `bas` example the differential takes exactly that entry out of the native result, as it does for `fs_mapping`: its pack JSON, the summary's line and count, and the printed list of controls not run. Where that leaves no control, it writes what the renderer writes for none. It compares everything else byte for byte, and a result without exactly that entry is an unexplained difference. A `month_end` pack that supplies `prior_findings.csv` keeps the native output for no control not run in the comparison.
+- `queue` is new: the baseline has no command that lists several packs.
 - A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 
 ## Licence

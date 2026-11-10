@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 use crate::{
-    comparison, decimal::Decimal, documents, engine, publication, pypath, pytext, report, viewer,
+    comparison, decimal::Decimal, documents, engine, publication, pypath, pytext, queue, report,
+    viewer,
 };
 use std::{
     collections::BTreeMap,
@@ -17,6 +18,9 @@ fn usage(command: &str) -> String {
             "gate [-h] --profile {bas,month_end,year_end} --pack PACK --output OUTPUT [--review-note REVIEW_NOTE] [--document DOCUMENT] [--require-control NAME] [--tieout-tolerance TIEOUT_TOLERANCE]"
         }
         "view" => "view [-h] --pack-dir PACK_DIR [--document DOCUMENT]",
+        "queue" => {
+            "queue [-h] --pack-dir PACK_DIR [--status {READY,NOT_READY,BLOCKED}] [--summary]"
+        }
         "compare" => {
             "compare [-h] --previous-pack-dir PREVIOUS_PACK_DIR --current-pack-dir CURRENT_PACK_DIR"
         }
@@ -24,7 +28,7 @@ fn usage(command: &str) -> String {
             "intake [-h] --synthetic --source SOURCE --text TEXT --text-origin {manual,pdf-inspector} [--text-version TEXT_VERSION] --entity ENTITY --period-end PERIOD_END --output OUTPUT"
         }
         "view-document" => "view-document [-h] --bundle BUNDLE",
-        _ => "[-h] {gate,view,compare,intake,view-document} ...",
+        _ => "[-h] {gate,view,queue,compare,intake,view-document} ...",
     };
     format!("usage: review-ready {options}\n")
 }
@@ -32,6 +36,9 @@ fn help(command: &str) -> String {
     let description = match command {
         "gate" => "Run completeness, tie-out, and self-review controls.",
         "view" => "Display an existing readiness pack after verifying its three files agree.",
+        "queue" => {
+            "Verify every supplied readiness pack, then list their statuses, finding codes and controls not run. Repeat --pack-dir for each pack; --summary counts them by status, finding code and control not run."
+        }
         "compare" => "Verify two runs of the same pack and print what moved between them as JSON.",
         "intake" => {
             "Prepare a fabricated labelled-invoice text bundle. --synthetic confirms fabricated input. No PDF extraction runs."
@@ -46,7 +53,7 @@ fn help(command: &str) -> String {
         + description
         + "\n\noptions:\n  -h, --help  show this help message and exit\n";
     if command.is_empty() {
-        text.push_str("\ncommands:\n  gate           run completeness, tie-out, and self-review controls\n  view           verify and display a readiness pack\n  compare        verify and compare two readiness runs\n  intake         prepare synthetic document observations\n  view-document  verify and display a document bundle\n");
+        text.push_str("\ncommands:\n  gate           run completeness, tie-out, and self-review controls\n  view           verify and display a readiness pack\n  queue          verify several readiness packs and list them\n  compare        verify and compare two readiness runs\n  intake         prepare synthetic document observations\n  view-document  verify and display a document bundle\n");
     }
     text
 }
@@ -77,6 +84,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
             &["--profile", "--pack", "--output"],
         ),
         "view" => (&["--pack-dir", "--document"], &["--pack-dir"]),
+        "queue" => (&["--pack-dir", "--status", "--summary"], &["--pack-dir"]),
         "compare" => (
             &["--previous-pack-dir", "--current-pack-dir"],
             &["--previous-pack-dir", "--current-pack-dir"],
@@ -109,6 +117,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
 struct Arguments {
     values: BTreeMap<String, String>,
     documents: Vec<PathBuf>,
+    pack_dirs: Vec<PathBuf>,
     required_controls: Vec<String>,
 }
 impl Arguments {
@@ -150,6 +159,7 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
     let mut result = Arguments {
         values: BTreeMap::new(),
         documents: Vec::new(),
+        pack_dirs: Vec::new(),
         required_controls: Vec::new(),
     };
     let mut unknown = Vec::new();
@@ -203,10 +213,10 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
             }
             return Ok(None);
         }
-        if flag == "--synthetic" {
+        if flag == "--synthetic" || flag == "--summary" {
             if let Some(value) = assigned {
                 return Err(format!(
-                    "argument --synthetic: ignored explicit argument {}",
+                    "argument {flag}: ignored explicit argument {}",
                     pytext::repr_os(value)
                 ));
             }
@@ -237,6 +247,12 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
                 pytext::repr_os(&value)
             ));
         }
+        if flag == "--status" && !queue::STATUSES.contains(&value.as_str()) {
+            return Err(format!(
+                "argument --status: invalid choice: {} (choose from 'READY', 'NOT_READY', 'BLOCKED')",
+                pytext::repr_os(&value)
+            ));
+        }
         if flag == "--tieout-tolerance" {
             parse_tolerance(&value).map_err(|e| format!("argument --tieout-tolerance: {e}"))?;
         }
@@ -244,6 +260,11 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
             result
                 .documents
                 .push(PathBuf::from(pypath::encode_os(&pypath::display(&value))));
+        } else if command == "queue" && flag == "--pack-dir" {
+            result
+                .pack_dirs
+                .push(PathBuf::from(pypath::encode_os(&pypath::display(&value))));
+            result.values.insert(flag.into(), value);
         } else if flag == "--require-control" {
             result.required_controls.push(value);
         } else {
@@ -453,11 +474,20 @@ pub fn main(args: Vec<OsString>) -> i32 {
     let Some(command) = args.get(command_index) else {
         return usage_error("", "the following arguments are required: command");
     };
-    if !["gate", "view", "compare", "intake", "view-document"].contains(&command.as_str()) {
+    if ![
+        "gate",
+        "view",
+        "queue",
+        "compare",
+        "intake",
+        "view-document",
+    ]
+    .contains(&command.as_str())
+    {
         return usage_error(
             "",
             &format!(
-                "argument command: invalid choice: {} (choose from 'gate', 'view', 'compare', 'intake', 'view-document')",
+                "argument command: invalid choice: {} (choose from 'gate', 'view', 'queue', 'compare', 'intake', 'view-document')",
                 pytext::repr_os(command)
             ),
         );
@@ -501,6 +531,25 @@ pub fn main(args: Vec<OsString>) -> i32 {
                 1
             }
         },
+        "queue" => {
+            let options = queue::Options {
+                status: args.values.get("--status").cloned(),
+                summary: args.values.contains_key("--summary"),
+            };
+            match queue::render_queue(&args.pack_dirs, &options) {
+                Ok(text) => {
+                    crate::stdio::out_literal(&format!("{text}\n"));
+                    crate::outln!(
+                        "review-ready queue: display is a review aid; it does not approve a file or change any computed status."
+                    );
+                    0
+                }
+                Err(e) => {
+                    crate::errln!("review-ready queue: verification failed: {e}");
+                    1
+                }
+            }
+        }
         "compare" => match comparison::compare_packs(
             &args.path("--previous-pack-dir"),
             &args.path("--current-pack-dir"),

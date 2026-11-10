@@ -12,6 +12,11 @@
   longer. A build older than this option refuses a flagged pack in `view`. Packs
   record each name and state in a new `required_controls` key, which
   appears only when the flag is used; runs without it keep their bytes.
+- Add `queue`: verify several packs named by repeated `--pack-dir` and list
+  each one's status, finding codes and controls not run. `--status` filters the
+  list after every pack verifies, and `--summary` counts the displayed packs by
+  status, finding code and control not run. The client label is the pack
+  directory's name. Exit `0` whatever the statuses; `1` if any pack fails.
 - Add `--version` for native executable identity checks. Power BI records the
   native version and executable hash alongside the Python close-control identity.
 - Use native help, usage and JSON syntax diagnostics. Limit JSON nesting to

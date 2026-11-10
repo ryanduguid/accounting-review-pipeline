@@ -161,6 +161,12 @@ fn csv(request: &Json) -> Result<Json> {
     };
     Ok(Json::Array(rows))
 }
+/// The frozen Python baseline predates the queue command, so CLI output
+/// compared with it drops `queue` from the command choices.
+fn without_queue_command(text: &str) -> String {
+    text.replace("{gate,view,queue,compare,", "{gate,view,compare,")
+        .replace("'view', 'queue', 'compare'", "'view', 'compare'")
+}
 #[expect(clippy::too_many_lines, reason = "one match arm per probe operation")]
 fn operation(request: &Json) -> Result<Json> {
     match text(request.at("op"))?.as_str() {
@@ -175,8 +181,8 @@ fn operation(request: &Json) -> Result<Json> {
             let (code, out, err) = crate::stdio::capture(|| crate::cli::main(args));
             let mut result = vec![
                 ("code", Json::int(code.into())),
-                ("stdout", Json::str(&out)),
-                ("stderr", Json::str(&err)),
+                ("stdout", Json::str(&without_queue_command(&out))),
+                ("stderr", Json::str(&without_queue_command(&err))),
             ];
             if let Some(output) = request.get("output_files") {
                 let output = path(output)?;
@@ -401,4 +407,30 @@ pub fn render_pack(document: &Json) -> Result<[Vec<u8>; 3]> {
         })
         .collect();
     crate::report::rendered(&crate::viewer::canonical_pack(document, evidence)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dropping_the_queue_command_leaves_the_frozen_command_choices() {
+        let (code, _, usage) = crate::stdio::capture(|| crate::cli::main(vec!["--".into()]));
+        assert_eq!(code, 1);
+        assert!(usage.contains("queue"), "{usage}");
+        assert!(
+            without_queue_command(&usage).starts_with(
+                "usage: review-ready [-h] {gate,view,compare,intake,view-document} ...\n"
+            ),
+            "{usage}"
+        );
+        let (code, _, choice) = crate::stdio::capture(|| crate::cli::main(vec!["unknown".into()]));
+        assert_eq!(code, 1);
+        assert!(choice.contains("'queue'"), "{choice}");
+        assert!(
+            without_queue_command(&choice)
+                .contains("(choose from 'gate', 'view', 'compare', 'intake', 'view-document')"),
+            "{choice}"
+        );
+    }
 }
