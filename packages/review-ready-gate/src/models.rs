@@ -63,9 +63,19 @@ pub struct BankRecRow {
 #[derive(Clone, Debug)]
 pub struct TieOutRow {
     pub statement_line: String,
+    pub statement_amount: Decimal,
     pub workpaper_ref: String,
     pub source_file: String,
     pub status: String,
+}
+
+/// One `fs_mapping.csv` row: a trial-balance account that makes up a statement line.
+#[derive(Clone, Debug)]
+pub struct FsMappingRow {
+    pub statement_line: String,
+    pub account_id: String,
+    /// The line shows `YTDCredit - YTDDebit` when true, `YTDDebit - YTDCredit` when false.
+    pub credit: bool,
 }
 
 #[derive(Clone, Debug)]

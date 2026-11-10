@@ -44,7 +44,7 @@ Reviewed 2026-08-26.
 
 ## Product and fixture version
 
-Product release `0.1.5`; fixture version `1`.
+Product release `0.1.5`; fixture version `2`. Version 2 adds GST account 820 to the corrected pack's trial balance, so its GST control rolls forward to the ledger; the 0.1.5 result is unchanged.
 
 ## Limitations and non-claims
 
