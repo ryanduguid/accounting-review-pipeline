@@ -103,13 +103,18 @@ fn check_close(journals: &str, cost: &str, payables: &str, failures: &[&str]) {
     assert_eq!(failed_accounts(&pack), failures);
 }
 
+/// Every exception must come from the subledger control: the trial balances
+/// stay balanced, so any other control raising is a fixture or engine fault.
 fn failed_accounts(pack: &pyjson::Json) -> Vec<String> {
     pack.at("exceptions")
         .as_array()
         .unwrap()
         .iter()
-        .filter(|item| item.at("control").is_str("subledger_reconciliation"))
-        .map(|item| item.at("account_id").as_pystr().unwrap().to_utf8().unwrap())
+        .map(|item| {
+            let text = |key: &str| item.at(key).as_pystr().unwrap().to_utf8().unwrap();
+            assert_eq!(text("control"), "subledger_reconciliation");
+            text("account_id")
+        })
         .collect()
 }
 
