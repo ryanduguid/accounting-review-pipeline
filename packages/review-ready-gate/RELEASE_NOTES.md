@@ -44,9 +44,9 @@
 - `bas` takes an optional `bank_rec.csv` and runs the bank reconciliation on
   it as `month_end` does: a statement balance that disagrees with its
   `GLBalance`, or a `GLBalance` that disagrees with the trial balance, is
-  `NOT_READY` with `BANK_REC_BREAK`. Without the file the status is unchanged,
-  `bank_rec` is listed under 'Controls not run', so a BAS pack's JSON and
-  summary count one more control not run than before, and
+  `NOT_READY` with `BANK_REC_BREAK`. Without the file the status is unchanged
+  and `bank_rec` is listed under 'Controls not run': a BAS pack's JSON, its
+  summary and the printed list show one more control not run than before.
   `--require-control bank_rec` makes it a condition.
 - Breaking: in the `bas` profile, the GST control accounts must be in the
   trial balance, and their closing `YTDCredit - YTDDebit` must equal the GST

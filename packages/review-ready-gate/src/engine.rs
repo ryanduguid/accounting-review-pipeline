@@ -1016,11 +1016,7 @@ mod tests {
         test_support::copy_example("bas-ready", &dir);
         fs::write(
             dir.join("bank_rec.csv"),
-            format!(
-                "AccountID,StatementBalance,GLBalance
-100,{statement},127500.00
-"
-            ),
+            format!("AccountID,StatementBalance,GLBalance\n100,{statement},127500.00\n"),
         )
         .unwrap();
         dir
@@ -1044,7 +1040,10 @@ mod tests {
             assert_eq!(pack.status, status, "{statement}");
             assert_eq!(codes(&pack.findings), expected, "{statement}");
             assert!(!bank_rec_not_run(&pack), "{statement}");
-            assert!(pack.source_evidence.iter().any(|e| e.slot == "bank_rec"));
+            assert!(
+                pack.source_evidence.iter().any(|e| e.slot == "bank_rec"),
+                "{statement}"
+            );
         }
     }
     #[test]

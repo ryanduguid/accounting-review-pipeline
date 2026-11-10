@@ -507,6 +507,32 @@ fn packs(c: &mut Corpus, root: &Path) {
         }
     }
 }
+/// A month-end pack that supplies its one optional file. Every `bas` and
+/// `year_end` pack lists a control the baseline lacks, so this is the case
+/// that still compares the native 'every control ran' output with the
+/// baseline's, byte for byte.
+fn complete_pack(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
+    let pack = scratch.join("month-end-complete");
+    fs::create_dir(&pack)?;
+    for entry in fs::read_dir(root.join("examples/month-end-ready"))? {
+        let entry = entry?;
+        fs::copy(entry.path(), pack.join(entry.file_name()))?;
+    }
+    fs::write(
+        pack.join("prior_findings.csv"),
+        "FindingCode,Slot,Status\nBANK_REC_BREAK,bank_rec,CLEARED\n",
+    )?;
+    c.push(
+        "pack-month-end-complete",
+        "review_pack",
+        vec![
+            ("pack", Json::str(&pack.to_string_lossy())),
+            ("profile", Json::str("month_end")),
+            ("tolerance", Json::str("0.01")),
+        ],
+    );
+    Ok(())
+}
 
 fn cli_cases(c: &mut Corpus) {
     for (i, args) in [
@@ -1446,7 +1472,8 @@ fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
 }
 /// The optional slot a case's profile has here and lacks in the baseline, so
 /// that the native result lists one more control not run: `fs_mapping` in
-/// `year_end` and `bank_rec` in `bas`.
+/// `year_end` and `bank_rec` in `bas`. The `note-pack-` and `document-pack-`
+/// cases review the `bas` examples.
 fn slot_the_baseline_lacks(name: &str) -> Option<&'static str> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|prefix| name.starts_with(prefix));
     if starts(&["pack-year-end-ready-", "cli-runtime-year-end-ready-"]) {
@@ -1492,6 +1519,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     // needs, a row the baseline only adds to its balanced totals.
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"));
     packs(&mut corpus, fixtures);
+    complete_pack(&mut corpus, fixtures, &scratch.0)?;
     cli_cases(&mut corpus);
     runtime_cli(&mut corpus, fixtures, &scratch.0);
     saved_packs(&mut corpus, fixtures, &scratch.0)?;
