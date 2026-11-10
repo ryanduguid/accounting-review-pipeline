@@ -151,6 +151,54 @@
         "accept": false,
         "error_contains": "ReportDate must be ISO"
       }
+    },
+    {
+      "id": "missing_column",
+      "fixture": "failing_missing_column.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "canonical schema mismatch (missing AccountCode)"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "exactly the canonical ten-column header"
+      }
+    },
+    {
+      "id": "extra_cell",
+      "fixture": "failing_extra_cell.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "row 2 has more fields than its header"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "CSV row 2 has more fields than its header"
+      }
+    },
+    {
+      "id": "blank_account_id",
+      "fixture": "failing_blank_account_id.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "row 2 has an empty AccountID"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "CSV row 2 AccountID must be a non-empty string"
+      }
+    },
+    {
+      "id": "mixed_tenants",
+      "fixture": "failing_mixed_tenants.csv",
+      "review_commands": {
+        "accept": false,
+        "error_contains": "must contain exactly one tenant"
+      },
+      "ledger_gate": {
+        "accept": false,
+        "error_contains": "exactly one tenant and report date"
+      }
     }
   ],
   "human_decision": "Accepting a spelling passes the loaders only; a human still decides completeness, classification and accounting treatment."
