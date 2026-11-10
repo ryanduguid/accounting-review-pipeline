@@ -73,9 +73,9 @@ Clients are pack directory names; the pack does not record a client.
 
 | Client | Profile | Period end | Status | Findings | Finding codes | Controls not run |
 | --- | --- | --- | --- | --- | --- | --- |
-| bas-blocked | bas | 2026-03-31 | BLOCKED | 1 | TB_UNBALANCED | prior_findings |
-| bas-not-ready | bas | 2026-03-31 | NOT_READY | 3 | MISSING_ARTEFACT, OPEN_ITEM_BLOCKING, SELF_REVIEW_INCOMPLETE | none |
-| bas-ready | bas | 2026-03-31 | READY | 0 | none | prior_findings |";
+| bas-blocked | bas | 2026-03-31 | BLOCKED | 1 | TB_UNBALANCED | bank_rec, prior_findings |
+| bas-not-ready | bas | 2026-03-31 | NOT_READY | 3 | MISSING_ARTEFACT, OPEN_ITEM_BLOCKING, SELF_REVIEW_INCOMPLETE | bank_rec |
+| bas-ready | bas | 2026-03-31 | READY | 0 | none | bank_rec, prior_findings |";
 
 #[test]
 fn the_queue_lists_each_status_with_its_finding_codes_and_exits_zero() {
@@ -123,6 +123,7 @@ Summary of the 3 displayed pack(s)
 
 | Control not run | Packs | Clients |
 | --- | --- | --- |
+| bank_rec | 3 | bas-blocked, bas-not-ready, bas-ready |
 | prior_findings | 2 | bas-blocked, bas-ready |"
         )
     );
