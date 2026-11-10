@@ -41,6 +41,13 @@
   are `TIEOUT_BREAK`; a `TIED` line with no mapped account is
   `TIEOUT_UNSUPPORTED`. Without the file, `fs_mapping` is listed under
   'Controls not run' and `--require-control fs_mapping` makes it a condition.
+- `bas` takes an optional `bank_rec.csv` and runs the bank reconciliation on
+  it as `month_end` does: a statement balance that disagrees with its
+  `GLBalance`, or a `GLBalance` that disagrees with the trial balance, is
+  `NOT_READY` with `BANK_REC_BREAK`. Without the file the status is unchanged,
+  `bank_rec` is listed under 'Controls not run', so a BAS pack's JSON and
+  summary count one more control not run than before, and
+  `--require-control bank_rec` makes it a condition.
 - Breaking: in the `bas` profile, the GST control accounts must be in the
   trial balance, and their closing `YTDCredit - YTDDebit` must equal the GST
   control file's movement plus the balance they carry in, within

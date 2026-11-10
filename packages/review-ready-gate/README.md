@@ -163,11 +163,11 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
-| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end`; with `bank_rec.csv`, statement balances tie to the GL and the TB |
+| `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end` |
 | `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines; with `fs_mapping.csv`, each `TIED` line computed from the current TB |
 
-Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out). Optional in `bas`: supply `bank_rec.csv` to run the bank reconciliation, and use `--require-control bank_rec` when its absence must prevent `READY`.
+Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out). Optional in `bas`: `bank_rec.csv`, which runs the bank reconciliation described next; use `--require-control bank_rec` when its absence must prevent `READY`.
 
 The bank reconciliation is tied twice for each account. Its `StatementBalance`
 must agree with its `GLBalance`, and that `GLBalance` must agree with the current
