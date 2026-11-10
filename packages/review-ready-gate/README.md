@@ -182,8 +182,8 @@ posting dated after `period_end` is a `PERIOD_ORDER` finding, and so is one date
 before `period_start` when a `bas` self-review declares it. One limit remains:
 `period_start` is optional, so that packs prepared without it still load, and
 without it a file from an earlier quarter passes the date check. The pack does
-not record whether it was declared; the `self_review` sha256 identifies the file
-that says.
+not record whether it was declared: check the self-review file that the pack's
+`self_review` sha256 identifies.
 
 A `READY` status means no configured control tripped, and only the controls that
 ran can trip. Every optional slot with no usable input is therefore listed under

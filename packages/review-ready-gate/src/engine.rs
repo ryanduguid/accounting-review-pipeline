@@ -11,6 +11,7 @@ use crate::{
     pytext,
 };
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
@@ -631,32 +632,25 @@ fn apply_gst_period(loaded: &Loaded, findings: &mut Vec<Finding>) {
         return;
     };
     if let Some(start) = s.period_start {
-        gst_outside(loaded, findings, "before", ("period_start", start), |d| {
-            d < start
-        });
+        gst_outside(loaded, findings, Ordering::Less, start);
     }
-    gst_outside(
-        loaded,
-        findings,
-        "after",
-        ("period_end", s.period_end),
-        |d| d > s.period_end,
-    );
+    gst_outside(loaded, findings, Ordering::Greater, s.period_end);
 }
-/// One finding for the GST control postings dated `outside` a declared bound.
-fn gst_outside(
-    loaded: &Loaded,
-    findings: &mut Vec<Finding>,
-    side: &str,
-    (bound, date): (&str, Date),
-    outside: impl Fn(Date) -> bool,
-) {
+/// One finding for the GST control postings dated on the `side` of a declared
+/// bound that is outside the period: `Less` than `period_start`, or `Greater`
+/// than `period_end`.
+fn gst_outside(loaded: &Loaded, findings: &mut Vec<Finding>, side: Ordering, bound: Date) {
+    let (word, key) = if side == Ordering::Less {
+        ("before", "period_start")
+    } else {
+        ("after", "period_end")
+    };
     let dates: BTreeSet<_> = loaded
         .gst_control_gl
         .iter()
         .flatten()
         .map(|r| r.posted_on)
-        .filter(|posted_on| outside(*posted_on))
+        .filter(|posted_on| posted_on.cmp(&bound) == side)
         .collect();
     if dates.is_empty() {
         return;
@@ -667,8 +661,8 @@ fn gst_outside(
         "NOT_READY",
         "gst_control_gl",
         format!(
-            "GST control postings are dated {side} the declared {bound} {}: {}.",
-            date.iso(),
+            "GST control postings are dated {word} the declared {key} {}: {}.",
+            bound.iso(),
             first_three(&dates)
         ),
         "Return the pack. The GST control export must be for the period the self-review declares.",

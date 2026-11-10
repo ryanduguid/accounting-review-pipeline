@@ -589,7 +589,8 @@ pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<Self
         "period_start",
     ];
     // Only the bas profile reads period_start, so only it may declare one: a
-    // key another profile ignored would look checked.
+    // key another profile ignored would look checked. The refusal keeps the
+    // baseline's wording, which the differential compares byte for byte.
     let declares_start = profile == "bas" && value.has_exact_keys(&keys);
     if !declares_start && !value.has_exact_keys(&keys[..5]) {
         return Err(format!(
