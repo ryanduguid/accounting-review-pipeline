@@ -24,6 +24,11 @@ The pipeline already implements explicit mapping and balance policies. Its revie
 4. Open the pack with its existing verified viewer. Investigate each exception using the source account and supporting evidence. Keep draft client questions for human review; the pipeline sends nothing.
 5. Retain the review decision and the evidence it refers to. `READY`, `PASS`, `REVIEW_READY` and `DECISION_RECORDED` have different owners and meanings. None authorises posting, payment, signing or lodgement.
 
+The [synthetic close replay](../packages/monthly-close-control-plane/tests/journal_replay.rs)
+exercises the hand-off from signed journal movements to a trial balance and
+independent AP, COGS and bank controls. It includes a balanced trial balance
+with failed controls and a changed journal line that breaks both checks.
+
 ## Improvements to consider next
 
 The [dashboard guide](https://help.lodgeit.net.au/support/solutions/articles/60000609258-dashboard-work-status-filter-and-sort-team-form-period-client-group-) suggests useful queue filters: work type, period, owner and due date. The [local close review queue](../packages/monthly-close-control-plane/docs/review-queue.md) now lists explicitly supplied packs after verification, with filters for recorded period, state and reviewer. It labels missing metadata and omitted controls. Owners and due dates are absent from the pack schema and are not inferred from a reviewer acknowledgement.
