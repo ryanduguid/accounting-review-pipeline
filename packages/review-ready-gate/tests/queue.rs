@@ -49,8 +49,11 @@ fn queue(packs: &[PathBuf], extra: &[&str]) -> Output {
     command.args(extra).output().unwrap()
 }
 
+/// Standard output with `\n` line endings: on Windows the CLI writes `\r\n`.
 fn stdout(result: &Output) -> String {
-    String::from_utf8(result.stdout.clone()).unwrap()
+    String::from_utf8(result.stdout.clone())
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 /// Everything before the artefact digests, whose paths and hashes vary by run.
