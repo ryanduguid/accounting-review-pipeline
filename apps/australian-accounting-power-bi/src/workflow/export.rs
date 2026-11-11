@@ -400,6 +400,41 @@ mod tests {
         }
         fs::create_dir(temporary.0.join("close/.reviewready")).unwrap();
         assert!(check_tree(&temporary.0, &expected).unwrap_err().contains("unlisted"));
+        fs::remove_dir(temporary.0.join("close/.reviewready")).unwrap();
+        let listed = temporary.0.join("validation/drivers.stderr.txt");
+        fs::remove_file(&listed).unwrap();
+        let missing = check_tree(&temporary.0, &expected).unwrap_err();
+        assert!(missing.contains("physical inventory differs"), "{missing}");
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(temporary.0.join("receipt.json"), &listed).unwrap();
+            assert!(check_tree(&temporary.0, &expected).unwrap_err().contains("linked path"));
+        }
+    }
+
+    #[test]
+    fn portable_verification_needs_the_fixed_sources_a_member_inventory_and_a_bound_receipt() {
+        let members = unsigned_members();
+        let refusal = |members: &Members| verify_bytes(&archive::encode(members).unwrap()).unwrap_err();
+        let mut receipt = json::parse(&members["run/receipt.json"], "Receipt").unwrap();
+        receipt["case"]["source_sha256"]["extra.csv"] = digest(b"fabricated").into();
+        assert!(inventory(&receipt).unwrap_err().contains("source inventory differs"));
+        let mut changed = members.clone();
+        let mut manifest = json::parse(&changed["export-manifest.json"], "Manifest").unwrap();
+        manifest["members"] = json!([]);
+        changed.insert("export-manifest.json".into(), json::bytes(&manifest));
+        assert!(refusal(&changed).contains("member inventory differs"));
+        let mut changed = members.clone();
+        changed.insert("extra.txt".into(), b"extra".to_vec());
+        assert!(refusal(&changed).contains("member inventory differs"));
+        let mut changed = members.clone();
+        changed.remove("run/receipt.sha256");
+        seal_manifest(&mut changed);
+        assert!(refusal(&changed).contains("receipt is missing"));
+        let mut changed = members;
+        changed.insert("run/receipt.sha256".into(), digest(b"other").into_bytes());
+        seal_manifest(&mut changed);
+        assert!(refusal(&changed).contains("receipt digest differs"));
     }
 
     #[test]

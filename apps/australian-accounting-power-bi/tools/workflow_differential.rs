@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::{
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, ExitCode, Stdio},
 };
 
 type Result<T> = std::result::Result<T, String>;
@@ -82,16 +82,7 @@ impl Oracle {
     }
 
     fn evaluate(&mut self, request: &Value) -> Result<Value> {
-        serde_json::to_writer(&mut self.input, request).map_err(|error| error.to_string())?;
-        self.input
-            .write_all(b"\n")
-            .and_then(|()| self.input.flush())
-            .map_err(|error| error.to_string())?;
-        let mut line = String::new();
-        if self.output.read_line(&mut line).map_err(|error| error.to_string())? == 0 {
-            return Err("Oracle exited before its response.".into());
-        }
-        serde_json::from_str(&line).map_err(|error| format!("Invalid oracle response: {error}"))
+        exchange(&mut self.input, &mut self.output, request)
     }
 }
 
@@ -102,15 +93,25 @@ impl Drop for Oracle {
     }
 }
 
-fn run() -> Result<()> {
-    let settings = settings()?;
-    let workspace = rehearsal::Temporary::new()?;
-    let runs = rehearsal::run(&settings, &workspace.0)?;
-    let cases = cases::generate(&runs[1], settings.seed)?;
-    let mut oracle = Oracle::new(&settings)?;
+/// Sends one request line and reads the one response line that answers it.
+fn exchange(input: &mut impl Write, output: &mut impl BufRead, request: &Value) -> Result<Value> {
+    serde_json::to_writer(&mut *input, request).map_err(|error| error.to_string())?;
+    input
+        .write_all(b"\n")
+        .and_then(|()| input.flush())
+        .map_err(|error| error.to_string())?;
+    let mut line = String::new();
+    if output.read_line(&mut line).map_err(|error| error.to_string())? == 0 {
+        return Err("Oracle exited before its response.".into());
+    }
+    serde_json::from_str(&line).map_err(|error| format!("Invalid oracle response: {error}"))
+}
+
+/// Compares every case with the oracle's answer and reports the differences.
+fn compare(cases: &[Value], seed: u64, mut oracle: impl FnMut(&Value) -> Result<Value>) -> Result<()> {
     let (mut counts, mut failures) = (std::collections::BTreeMap::<String, usize>::new(), 0);
     for (index, request) in cases.iter().enumerate() {
-        let expected = oracle.evaluate(request)?;
+        let expected = oracle(request)?;
         let actual = probe::evaluate(request);
         *counts.entry(request["op"].as_str().unwrap().into()).or_default() += 1;
         if actual != expected {
@@ -121,8 +122,7 @@ fn run() -> Result<()> {
         }
     }
     println!(
-        "Seed {}: {} core cases {counts:?}; {failures} unexplained differences. Two-month six-command CLI, sealed files, CSV/HTML/ZIP bytes and comparison checked.",
-        settings.seed,
+        "Seed {seed}: {} core cases {counts:?}; {failures} unexplained differences. Two-month six-command CLI, sealed files, CSV/HTML/ZIP bytes and comparison checked.",
         cases.len()
     );
     if failures != 0 {
@@ -131,9 +131,60 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn main() {
-    if let Err(error) = run() {
-        eprintln!("{error}");
-        std::process::exit(1);
+fn run() -> Result<()> {
+    let settings = settings()?;
+    let workspace = rehearsal::Temporary::new()?;
+    let runs = rehearsal::run(&settings, &workspace.0)?;
+    let cases = cases::generate(&runs[1], settings.seed)?;
+    let mut oracle = Oracle::new(&settings)?;
+    compare(&cases, settings.seed, |request| oracle.evaluate(request))
+}
+
+// Returning the status lets the process end normally, so a refused run still
+// flushes what it wrote and, when instrumented, its coverage profile.
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn request() -> Value {
+        json!({"op":"json","text":"{}"})
+    }
+
+    #[test]
+    fn an_exchange_writes_one_request_line_and_refuses_a_missing_or_malformed_response() {
+        let mut sent = Vec::new();
+        let response = exchange(&mut sent, &mut &b"{\"ok\":true}\n"[..], &request()).unwrap();
+        assert_eq!(response, json!({"ok":true}));
+        assert_eq!(sent, format!("{}\n", request()).into_bytes());
+        let ended = exchange(&mut Vec::new(), &mut &b""[..], &request()).unwrap_err();
+        assert_eq!(ended, "Oracle exited before its response.");
+        let malformed = exchange(&mut Vec::new(), &mut &b"not json\n"[..], &request()).unwrap_err();
+        assert!(malformed.starts_with("Invalid oracle response: "), "{malformed}");
+    }
+
+    #[test]
+    fn a_comparison_passes_only_when_every_answer_matches() {
+        let cases = vec![request(); 9];
+        compare(&cases, 16, |request| Ok(probe::evaluate(request))).unwrap();
+        let mut asked = 0;
+        let differing = compare(&cases, 16, |_| {
+            asked += 1;
+            Ok(Value::Null)
+        });
+        assert_eq!(differing.unwrap_err(), "Differential comparison failed.");
+        assert_eq!(asked, cases.len());
+        let stopped = compare(&cases, 16, |_| Err("Oracle exited before its response.".into()));
+        assert_eq!(stopped.unwrap_err(), "Oracle exited before its response.");
     }
 }
