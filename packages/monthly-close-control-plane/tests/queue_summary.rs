@@ -92,9 +92,12 @@ fn queue(packs: &[PathBuf], extra: &[&str]) -> Output {
     command.args(extra).output().unwrap()
 }
 
-/// The lines from the summary heading up to the artefact digests.
+/// The lines from the summary heading up to the artefact digests, with `\n`
+/// line endings: on Windows the CLI writes `\r\n`.
 fn summary(result: &Output) -> String {
-    let stdout = String::from_utf8(result.stdout.clone()).unwrap();
+    let stdout = String::from_utf8(result.stdout.clone())
+        .unwrap()
+        .replace("\r\n", "\n");
     let start = stdout
         .find("Summary of the")
         .unwrap_or_else(|| panic!("no summary: {result:?}"));
