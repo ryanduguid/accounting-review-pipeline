@@ -589,6 +589,7 @@ mod tests {
     #[test]
     fn a_refused_command_must_leave_no_output() {
         let workspace = Temporary::new().unwrap();
+        // The scratch directory stands for output that a refused command left behind.
         let left = unpublished(&workspace.0).unwrap_err();
         assert!(left.starts_with("A refused command left "), "{left}");
         unpublished(&workspace.0.join("never-created")).unwrap();

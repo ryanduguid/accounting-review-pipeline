@@ -755,6 +755,7 @@ mod tests {
             root.display()
         );
         assert_eq!((String::from_utf8(stdout).unwrap(), stderr), (reported, Vec::new()));
+        // A writer with no room: the success line cannot be written, so the exit status is 1.
         let mut closed: &mut [u8] = &mut [];
         assert_eq!(command_line(&root, &mut closed, &mut Vec::new()), 1);
 
