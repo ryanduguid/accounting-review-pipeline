@@ -60,11 +60,8 @@ impl Fixture {
             .arg("-o")
             .arg(&delegate)
             .output())?;
-        assert!(
-            output.status.success(),
-            "Native delegate compilation: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let errors = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "Native delegate compilation: {errors}");
         for command in ["close-control", "review-ready"] {
             let name = format!("{command}{}", std::env::consts::EXE_SUFFIX);
             io(fs::copy(native_bin.join(&name), bin.join(format!("actual-{name}"))))?;

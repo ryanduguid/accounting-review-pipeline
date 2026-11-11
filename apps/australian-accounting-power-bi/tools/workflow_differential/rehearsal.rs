@@ -134,6 +134,7 @@ pub fn run(settings: &Settings, root: &Path) -> Result<[PathBuf; 2]> {
     semantic_refusals(&commands, root, &runs[1])?;
     unsealed_refusals(&commands, root, &runs[1])?;
     export_refusal(&commands, root, &runs[1])?;
+    empty_review_refusal(&commands, root, &runs[1])?;
     argument_statuses(&commands, &runs[1])?;
     archive_refusals(&commands, root)?;
     super::adversarial::run(root, &runs, &settings.bin)?;
@@ -497,6 +498,23 @@ fn unsealed_refusals(commands: &Commands<'_>, root: &Path, source: &Path) -> Res
         refused_for(&commands.pair("verify", &run, &[], 1)?, reason)?;
     }
     Ok(())
+}
+
+/// A resealed run whose close pack raises nothing still verifies, but has no review to project.
+fn empty_review_refusal(commands: &Commands<'_>, root: &Path, source: &Path) -> Result<()> {
+    let run = root.join("no-findings");
+    let mut receipt = copy_run(source, &run)?;
+    edit(&run, CLOSE_PACK, |pack| pack["exceptions"] = Value::Array(Vec::new()))?;
+    let pack = digest(&bytes(&run.join(CLOSE_PACK))?);
+    edit(&run, DRIVERS, |drivers| {
+        drivers["source_sha256"]["pack:close-review-pack.json"] = pack.into();
+    })?;
+    reseal(&run, &mut receipt)?;
+    commands.pair("verify", &run, &[], 0)?;
+    let output = root.join("no-findings-fixtures");
+    let args = ["--output".as_ref(), output.as_os_str()];
+    let native = commands.pair("fixtures", &run, &args, 1)?;
+    refused_for(&native, "The fixed review case requires at least one finding.")
 }
 
 /// A run that verifies but seals fewer files than the fixed case cannot be exported.
