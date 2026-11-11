@@ -9,7 +9,7 @@
 //! used; every entity has a fictional place name.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::Path;
 
 use crate::calendar::add_business_days;
@@ -367,23 +367,54 @@ fn freight_and_property(ledger: &mut Ledger, m: &Month) -> Result<(), String> {
 /// Strictly matched intercompany pairs for elimination: ENT001 charges ENT002 and
 /// ENT003 management fees, and ENT003 bills ENT002 for internal freight. Columns:
 /// entity, description, debit account, credit account, amount, counterparty.
-const INTERCOMPANY: &str = "\
-ENT001|Intercompany Management Fees Charged|180|650|10000.0|ENT002
-ENT001|Intercompany Management Fees Charged|180|650|6000.0|ENT003
-ENT002|Intercompany Management Fee Incurred|880|380|10000.0|ENT001
-ENT003|Intercompany Management Fee Incurred|880|380|6000.0|ENT001
-ENT003|Internal Logistics Billed to Draynor|180|600|8500.0|ENT002
-ENT002|Intercompany Freight Costs|750|380|8500.0|ENT003
-";
+const INTERCOMPANY: [(&str, &str, &str, &str, &str, &str); 6] = [
+    (
+        "ENT001",
+        "Intercompany Management Fees Charged",
+        "180",
+        "650",
+        "10000.0",
+        "ENT002",
+    ),
+    (
+        "ENT001",
+        "Intercompany Management Fees Charged",
+        "180",
+        "650",
+        "6000.0",
+        "ENT003",
+    ),
+    (
+        "ENT002",
+        "Intercompany Management Fee Incurred",
+        "880",
+        "380",
+        "10000.0",
+        "ENT001",
+    ),
+    (
+        "ENT003",
+        "Intercompany Management Fee Incurred",
+        "880",
+        "380",
+        "6000.0",
+        "ENT001",
+    ),
+    (
+        "ENT003",
+        "Internal Logistics Billed to Draynor",
+        "180",
+        "600",
+        "8500.0",
+        "ENT002",
+    ),
+    ("ENT002", "Intercompany Freight Costs", "750", "380", "8500.0", "ENT003"),
+];
 
 /// The month's intercompany journals. The second fee keeps its existing identifier
 /// from when the counterparties were split.
 fn intercompany(ledger: &mut Ledger, m: &Month) -> Result<(), String> {
-    for (index, line) in INTERCOMPANY.lines().enumerate() {
-        let fields: Vec<&str> = line.split('|').collect();
-        let [entity, description, debit, credit, amount, counterparty] = fields[..] else {
-            unreachable!("six intercompany columns")
-        };
+    for (index, (entity, description, debit, credit, amount, counterparty)) in INTERCOMPANY.into_iter().enumerate() {
         let key = (index == 1).then(|| format!("ICM3-{}-{:02}", m.year, m.month));
         let (debits, credits) = ([(debit, d(amount))], [(credit, d(amount))]);
         ledger.journal_with([&m.end, entity, description], &debits, &credits, counterparty, key)?;
@@ -664,4 +695,80 @@ pub fn generate(directory: &Path) -> Result<(), Error> {
     write("sample-payroll-super.csv", payroll(&GicRates::published())?)?;
     write("sample-ato-benchmarks.csv", Table::from_text(BENCHMARKS))?;
     Ok(())
+}
+
+/// Python's text-mode stdout ends lines with CRLF on Windows.
+const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+
+/// The `generate-fixtures` command: generates into `directory` and reports the outcome
+/// as `tools/generate_fixtures.py` did, returning the exit code. A report that cannot be
+/// written fails the command.
+pub fn command_line(directory: &Path, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
+    let (code, stream, text): (u8, &mut dyn Write, _) = match generate(directory) {
+        Ok(()) => (
+            0,
+            stdout,
+            format!(
+                "Successfully generated all synthetic fixtures in {}",
+                directory.display()
+            ),
+        ),
+        Err(Error::Calculation(message)) => (1, stderr, format!("ValueError: {message}")),
+        Err(Error::Io(error)) => (1, stderr, format!("OSError: {error}")),
+    };
+    if stream.write_all(format!("{text}{NEWLINE}").as_bytes()).is_err() {
+        1
+    } else {
+        code
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unbalanced_journal_is_refused_before_any_line_is_written() {
+        let mut ledger = Ledger {
+            rows: Vec::new(),
+            journal_id: 1000,
+        };
+        let header = ["2024-07-15", "ENT001", "Varrock Ventures misposted billing"];
+        let refused = ledger.journal(header, &[("110", d("10.00"))], &[("610", d("10.01"))]);
+        assert_eq!(
+            refused.unwrap_err(),
+            "Unbalanced journal 1001: Debits 10.00 != Credits 10.01"
+        );
+        assert!(ledger.rows.is_empty());
+    }
+
+    #[test]
+    fn the_command_reports_success_and_each_failure_once() {
+        let root = std::env::temp_dir().join(format!("pbi-fixture-command-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        assert_eq!(command_line(&root, &mut stdout, &mut stderr), 0);
+        let reported = format!(
+            "Successfully generated all synthetic fixtures in {}{NEWLINE}",
+            root.display()
+        );
+        assert_eq!((String::from_utf8(stdout).unwrap(), stderr), (reported, Vec::new()));
+        let mut closed: &mut [u8] = &mut [];
+        assert_eq!(command_line(&root, &mut closed, &mut Vec::new()), 1);
+
+        // A regular file where the directory belongs: the first step, creating it, fails.
+        let file = root.join("sample-entities.csv");
+        let expected = fs::create_dir_all(&file).unwrap_err();
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let code = command_line(&file, &mut stdout, &mut stderr);
+        let refused = generate(&file);
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(code, 1);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(stderr).unwrap(),
+            format!("OSError: {expected}{NEWLINE}")
+        );
+        assert!(matches!(refused, Err(Error::Io(error)) if error.kind() == io::ErrorKind::AlreadyExists));
+    }
 }

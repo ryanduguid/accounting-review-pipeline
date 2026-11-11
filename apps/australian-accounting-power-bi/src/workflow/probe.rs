@@ -76,3 +76,28 @@ fn ledger_case(request: &Value) -> Result<Value> {
     let (current, prior, transactions) = ledger::trial_balances(&case, &source, month)?;
     Ok(json!([digest(&current), digest(&prior), digest(&transactions)]))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::files::Temporary;
+    use super::*;
+
+    #[test]
+    fn unknown_requests_are_refused_and_export_and_source_requests_reach_their_checks() {
+        assert_eq!(value(&json!({"op":"other"})).unwrap_err(), "Unknown operation.");
+        let schema = json!({"op":"schema","kind":"other","value":null});
+        assert_eq!(value(&schema).unwrap_err(), "Unknown schema.");
+        let temporary = Temporary::new("pbi-probe-export-").unwrap();
+        let path = temporary.0.join("export.zip");
+        std::fs::write(&path, b"not a stored archive").unwrap();
+        let export = json!({"op":"export","path":path.to_str().unwrap()});
+        assert_eq!(
+            value(&export).unwrap_err(),
+            "Export ZIP is outside the canonical profile."
+        );
+        assert_eq!(evaluate(&export), json!({"ok":false}));
+        let sources = json!({"sample-general-ledger.csv":"EntityID,PostingDate\n"});
+        let ledger = json!({"op":"ledger","month":9,"sources":sources});
+        assert_eq!(value(&ledger).unwrap_err(), "Ledger account population is not mapped.");
+    }
+}

@@ -38,7 +38,8 @@ fn parse(args: &[OsString]) -> Result<Arguments> {
                 if args.peek().is_none_or(|value| {
                     value
                         .to_str()
-                        .is_some_and(|value| value != "-" && value.starts_with('-') && !negative_number(value))
+                        .and_then(|value| value.strip_prefix('-'))
+                        .is_some_and(|number| !number.is_empty() && !unsigned_number(number))
                 }) {
                     return Err(format!("argument --{key}: expected one argument"));
                 }
@@ -129,10 +130,8 @@ fn decimal_digit(character: char) -> Option<u32> {
         .map(|zero| cp - zero)
 }
 
-fn negative_number(text: &str) -> bool {
-    let Some(text) = text.strip_prefix('-') else {
-        return false;
-    };
+/// Whether the text after a leading '-' makes argparse read it as a negative number.
+fn unsigned_number(text: &str) -> bool {
     let digits = |text: &str| text.chars().all(|character| decimal_digit(character).is_some());
     if let Some((whole, fraction)) = text.split_once('.') {
         digits(whole) && !fraction.is_empty() && digits(fraction)
@@ -174,8 +173,10 @@ fn execute(args: &Arguments) -> Result<String> {
             run::verify(run)?;
         }
         "html" => html_output(run, bin_dir, previous, output.ok_or("--output is required.")?)?,
-        "fixtures" => fixture_output(run, output.ok_or("--output is required.")?)?,
-        _ => unreachable!("validated command"),
+        command => {
+            assert_eq!(command, "fixtures", "parse admits only the listed commands");
+            fixture_output(run, output.ok_or("--output is required.")?)?;
+        }
     }
     Ok("Review workflow verification completed.".into())
 }
@@ -278,22 +279,44 @@ mod tests {
 
     #[test]
     fn failed_output_is_observable() {
-        struct Closed;
-        impl Write for Closed {
-            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-                Err(std::io::ErrorKind::BrokenPipe.into())
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
+        // A full buffer refuses every write.
+        let mut closed: &mut [u8] = &mut [];
+        assert_eq!(entry(vec!["--help".into()], &mut closed, &mut Vec::new()), 1);
+    }
+
+    #[test]
+    fn version_extra_positionals_and_export_without_output_are_answered_exactly() {
+        let newline = if cfg!(windows) { "\r\n" } else { "\n" };
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        assert_eq!(entry(vec!["--version".into()], &mut out, &mut err), 0);
+        let version = format!("review-workflow {}{newline}", env!("CARGO_PKG_VERSION"));
+        assert_eq!((String::from_utf8(out).unwrap(), err), (version, Vec::new()));
+        let extra = parse(&["verify", "other", "--run", "unused"].map(OsString::from));
+        assert_eq!(extra.err().unwrap(), "unrecognised arguments: other");
+        for arguments in [
+            vec!["export", "--run", "unused"],
+            vec![
+                "export",
+                "--run",
+                "unused",
+                "--output",
+                "unused",
+                "--previous",
+                "unused",
+            ],
+        ] {
+            let parsed = parse(&arguments.into_iter().map(OsString::from).collect::<Vec<_>>()).unwrap();
+            assert_eq!(
+                execute(&parsed).unwrap_err(),
+                "Export requires --output and supports one run without --previous or --review-note."
+            );
         }
-        assert_eq!(entry(vec!["--help".into()], &mut Closed, &mut Vec::new()), 1);
     }
 
     #[test]
     fn option_values_and_end_marker_follow_argument_classification() {
         for value in ["-8", "-۸", "-.5", "-1.2"] {
-            assert!(negative_number(value));
+            assert!(unsigned_number(&value[1..]));
             assert!(parse(&["verify", "--run", value].map(OsString::from)).is_ok());
         }
         for value in ["-other", "-1e2", "--unknown", "-1."] {

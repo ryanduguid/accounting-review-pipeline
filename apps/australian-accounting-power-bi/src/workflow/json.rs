@@ -373,6 +373,32 @@ mod tests {
         assert!(parse(deep.as_bytes(), "test").is_err());
         let shallow = format!("{}0{}", "[".repeat(64), "]".repeat(64));
         assert!(parse(shallow.as_bytes(), "test").is_ok());
+        let objects = |depth| format!("{}0{}", "{\"a\":".repeat(depth), "}".repeat(depth));
+        assert!(parse(objects(64).as_bytes(), "test").is_ok());
+        for (invalid, message) in [
+            (objects(65), "JSON nesting exceeds 64 levels."),
+            ("{\"a\" 1}".into(), "Invalid JSON structure."),
+            ("[\"open".into(), "Unterminated JSON string."),
+        ] {
+            assert_eq!(
+                parse(invalid.as_bytes(), "test").unwrap_err(),
+                format!("test: {message}")
+            );
+        }
+    }
+
+    #[test]
+    fn python_float_layout_covers_zero_ties_and_bare_exponents() {
+        assert_eq!(float_repr(0.0), "0.0");
+        assert_eq!(float_repr(-0.0), "-0.0");
+        assert_eq!(float_repr(1e22), "1e+22");
+        // 2^-24 sits exactly between 5.960464477539062e-08 and ...063e-08. The even
+        // neighbour lies below the power of two, where the spacing halves, so it does not
+        // round-trip and Python keeps the odd digit.
+        assert_eq!(float_repr(2f64.powi(-24)), "5.960464477539063e-08");
+        assert!(equal(&serde_json::json!(1.5), &serde_json::json!(1.5)));
+        assert!(!equal(&serde_json::json!(1.5), &serde_json::json!(2.5)));
+        assert!(!equal(&serde_json::json!(1), &serde_json::json!(1.5)));
     }
 
     #[test]

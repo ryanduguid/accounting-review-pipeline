@@ -113,8 +113,7 @@ fn deadline(command: &mut Command, cache: &Path, limit: Duration) -> Result<Outp
             });
         }
         if start.elapsed() >= limit {
-            child.0.kill().map_err(|error| error.to_string())?;
-            child.0.wait().map_err(|error| error.to_string())?;
+            // Dropping the managed child kills and reaps it.
             return Err("Native producer version probe exceeded its deadline.".into());
         }
         std::thread::sleep(Duration::from_millis(10));
@@ -197,6 +196,11 @@ fn timestamp() -> Result<String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| error.to_string())?;
+    Ok(iso_timestamp(now))
+}
+
+/// Python's `isoformat()` for a UTC instant, which omits a zero microsecond field.
+fn iso_timestamp(now: Duration) -> String {
     let seconds = now.as_secs();
     let date = crate::date::Date::new(1970, 1, 1).add_days((seconds / 86400) as i64);
     let time = format!(
@@ -210,7 +214,7 @@ fn timestamp() -> Result<String> {
     } else {
         format!(".{:06}", now.subsec_micros())
     };
-    Ok(format!("{date}T{time}{fraction}+00:00"))
+    format!("{date}T{time}{fraction}+00:00")
 }
 
 #[cfg(test)]
@@ -319,10 +323,14 @@ mod tests {
     #[test]
     fn deadline_stops_and_reaps_its_owned_child() {
         let cache = Temporary::new("pbi-producer-test-").unwrap();
-        // Re-invokes this test binary. The path is not a trust decision.
-        // nosemgrep: rust.lang.security.current-exe.current-exe
-        let mut child = Command::new(std::env::current_exe().unwrap());
-        child.args(["--ignored", "--exact", "workflow::producer::tests::slow_child"]);
+        // A system command that runs for a minute unless it is killed.
+        let (program, args): (&str, &[&str]) = if cfg!(windows) {
+            ("ping", &["-n", "61", "127.0.0.1"])
+        } else {
+            ("sleep", &["60"])
+        };
+        let mut child = Command::new(program);
+        child.args(args);
         let start = Instant::now();
         assert!(
             deadline(&mut child, &cache.0, Duration::from_millis(50))
@@ -333,8 +341,28 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "child process fixture, invoked only by the deadline test"]
-    fn slow_child() {
-        std::thread::sleep(Duration::from_secs(60));
+    fn unsupported_commands_and_non_native_launchers_are_refused_before_running() {
+        let cache = Temporary::new("pbi-producer-launcher-").unwrap();
+        assert_eq!(
+            executable(&cache.0, "other").unwrap_err(),
+            "Unsupported producer command."
+        );
+        std::fs::write(executable(&cache.0, "review-ready").unwrap(), b"#!/bin/sh\n").unwrap();
+        assert_eq!(
+            manifest(&cache.0, "review-ready").unwrap_err(),
+            "review-ready requires its native Rust executable."
+        );
+    }
+
+    #[test]
+    fn timestamps_follow_python_isoformat() {
+        assert_eq!(
+            iso_timestamp(Duration::new(1_725_148_800, 0)),
+            "2024-09-01T00:00:00+00:00"
+        );
+        assert_eq!(
+            iso_timestamp(Duration::new(1_725_152_461, 1_000)),
+            "2024-09-01T01:01:01.000001+00:00"
+        );
     }
 }

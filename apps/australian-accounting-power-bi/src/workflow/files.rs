@@ -38,13 +38,11 @@ pub fn ordinary(path: &Path) -> Result<PathBuf> {
         return Err("Use a local directory.".into());
     }
     let (mut current, mut missing_depth) = (PathBuf::new(), 0usize);
+    // A local absolute path is not verbatim, so its components hold no `.`.
     for component in absolute.components() {
         if component == Component::ParentDir {
             current.pop();
             missing_depth = missing_depth.saturating_sub(1);
-            continue;
-        }
-        if component == Component::CurDir {
             continue;
         }
         current.push(component.as_os_str());
@@ -82,9 +80,7 @@ fn resolve_existing_prefix(mut path: PathBuf) -> Result<PathBuf> {
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 missing.push(path.file_name().ok_or("Cannot resolve the local path.")?.to_owned());
-                if !path.pop() {
-                    return Err("Cannot resolve the local path.".into());
-                }
+                assert!(path.pop(), "an absolute path with a final name has a parent");
             }
             Err(error) => return Err(error.to_string()),
         }
@@ -249,12 +245,19 @@ impl Temporary {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| error.to_string())?
             .as_nanos();
-        // Unique private directory: Unix mode 0700, and creation fails when the name exists.
         // nosemgrep: rust.lang.security.temp-dir.temp-dir
         let base = ordinary(&std::env::temp_dir())?;
-        for _ in 0..100 {
+        Self::create_in(&base, || {
             let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = base.join(format!("{prefix}{}-{stamp}-{sequence}", std::process::id()));
+            format!("{prefix}{}-{stamp}-{sequence}", std::process::id())
+        })
+    }
+
+    /// The first of up to 100 candidate names under `base` that can be created as a new
+    /// private directory: Unix mode 0700, and creation fails when the name exists.
+    fn create_in(base: &Path, mut name: impl FnMut() -> String) -> Result<Self> {
+        for _ in 0..100 {
+            let path = base.join(name());
             let builder = fs::DirBuilder::new();
             #[cfg(unix)]
             let builder = {
@@ -290,6 +293,12 @@ mod tests {
         write_new(&output, b"first").unwrap();
         assert!(write_new(&output, b"second").is_err());
         assert_eq!(read(&output).unwrap(), b"first");
+        assert_eq!(new_output(&output).unwrap_err(), "Output must be new.");
+        assert_eq!(bounded_read(&output, 5).unwrap(), b"first");
+        assert_eq!(
+            bounded_read(&output, 4).unwrap_err(),
+            "Export archive exceeds the size limit."
+        );
         fs::write(temporary.0.join(".git"), b"fixture marker").unwrap();
         assert!(new_output(&temporary.0.join("missing")).is_err());
         assert!(ordinary(Path::new("Z:/private")).is_err());
@@ -327,38 +336,81 @@ mod tests {
         assert_eq!(read(&output).unwrap(), b"replacement");
     }
 
+    /// A write that leaves evidence: a file holds `marked` only if this ran on it.
+    fn mark(file: &mut File) -> std::io::Result<()> {
+        file.write_all(b"marked")
+    }
+
     #[test]
     fn identity_failure_cleans_only_when_the_owned_descriptor_can_still_identify_it() {
         let temporary = Temporary::new("pbi-identity-failure-").unwrap();
+        let identified = temporary.0.join("identified");
+        write_identified(&identified, mark, identity).unwrap();
+        assert_eq!(read(&identified).unwrap(), b"marked");
         let output = temporary.0.join("output");
         let mut calls = 0;
-        let result = write_identified(
-            &output,
-            |_| panic!("write follows successful identity"),
-            |file| {
-                calls += 1;
-                if calls == 1 {
-                    Err("fixture initial identity failure".into())
-                } else {
-                    identity(file)
-                }
-            },
-        );
+        let result = write_identified(&output, mark, |file| {
+            calls += 1;
+            if calls == 1 {
+                Err("fixture initial identity failure".into())
+            } else {
+                identity(file)
+            }
+        });
         assert_eq!(result.unwrap_err(), "fixture initial identity failure");
         assert!(!output.exists());
-        let result = write_identified(
-            &output,
-            |_| panic!("write follows successful identity"),
-            |_| {
-                if !temporary.0.join("displaced").exists() {
-                    fs::rename(&output, temporary.0.join("displaced")).unwrap();
-                    fs::write(&output, b"another writer").unwrap();
-                }
-                Err("fixture unavailable descriptor identity".into())
-            },
-        );
+        let result = write_identified(&output, mark, |_| {
+            if !temporary.0.join("displaced").exists() {
+                fs::rename(&output, temporary.0.join("displaced")).unwrap();
+                fs::write(&output, b"another writer").unwrap();
+            }
+            Err("fixture unavailable descriptor identity".into())
+        });
         assert!(result.is_err());
         assert_eq!(read(&output).unwrap(), b"another writer");
+        // The descriptor that failed identity was never written.
+        assert_eq!(read(&temporary.0.join("displaced")).unwrap(), b"");
+    }
+
+    #[test]
+    fn temporary_directories_skip_taken_names_and_report_creation_failures() {
+        let temporary = Temporary::new("pbi-temporary-names-").unwrap();
+        fs::create_dir(temporary.0.join("taken")).unwrap();
+        let mut names = ["taken", "fresh"].into_iter();
+        let created = Temporary::create_in(&temporary.0, || names.next().unwrap().into()).unwrap();
+        assert_eq!(created.0, temporary.0.join("fresh"));
+        assert!(created.0.is_dir());
+        let exhausted = Temporary::create_in(&temporary.0, || "taken".into());
+        assert_eq!(
+            exhausted.err().unwrap(),
+            "Could not create a temporary review directory."
+        );
+        // Windows reports a missing parent directory as ERROR_PATH_NOT_FOUND, Unix as ENOENT.
+        let code = if cfg!(windows) { 3 } else { 2 };
+        let orphan = Temporary::create_in(&temporary.0.join("missing"), || "child".into());
+        assert!(orphan.err().unwrap().ends_with(&format!("(os error {code})")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_lookup_failures_other_than_absence_are_reported() {
+        let temporary = Temporary::new("pbi-lookup-failure-").unwrap();
+        let file = temporary.0.join("file");
+        fs::write(&file, b"fixture").unwrap();
+        assert_eq!(
+            ordinary(&file.join("child")).unwrap_err(),
+            "Not a directory (os error 20)"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_device_names_and_device_handles_are_refused() {
+        // GetFullPathNameW maps a bare device name into the device namespace, `\\.\NUL`.
+        assert_eq!(ordinary(Path::new("NUL")).unwrap_err(), "Use a local directory.");
+        // The NUL device answers GetFileInformationByHandle with ERROR_INVALID_FUNCTION.
+        let device = File::open("NUL").unwrap();
+        assert!(single_link(&device).unwrap_err().ends_with("(os error 1)"));
     }
 
     #[test]

@@ -94,20 +94,21 @@ impl Record {
     }
 
     /// `parse_process_char` for one character, or `None` for the end-of-line
-    /// marker _csv.c feeds after each line.
+    /// marker _csv.c feeds after each line. `lines` yields no empty line, so a record
+    /// never starts at the marker, and a line break is the last character of its line
+    /// or the `\r` of a final `\r\n`.
     fn step(&mut self, c: Option<char>) -> Result<(), CsvError> {
-        if self.state == State::StartRecord {
-            match c {
-                None => return Ok(()),
-                Some('\n' | '\r') => {
-                    self.state = State::EatCrnl;
-                    return Ok(());
-                }
-                Some(_) => self.state = State::StartField,
-            }
-        }
         match self.state {
-            State::StartRecord => unreachable!("handled above"),
+            State::StartRecord => match c.expect("lines yields no empty line") {
+                '\n' | '\r' => {
+                    self.state = State::EatCrnl;
+                    Ok(())
+                }
+                _ => {
+                    self.state = State::StartField;
+                    self.unquoted(c)
+                }
+            },
             State::StartField | State::InField => self.unquoted(c),
             State::InQuotedField => match c {
                 None => Ok(()),
@@ -118,14 +119,13 @@ impl Record {
                 Some(ch) => self.add_char(ch),
             },
             State::QuoteInQuotedField => self.after_quote(c),
-            State::EatCrnl => match c {
-                Some('\n' | '\r') => Ok(()),
-                None => {
+            State::EatCrnl => {
+                assert!(matches!(c, None | Some('\n' | '\r')), "a line ends at its line break");
+                if c.is_none() {
                     self.state = State::StartRecord;
-                    Ok(())
                 }
-                Some(_) => Err(CsvError),
-            },
+                Ok(())
+            }
         }
     }
 
@@ -203,5 +203,34 @@ impl Iterator for Reader<'_> {
                 return Some(Ok(record.fields));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn records(text: &str) -> Vec<Result<Vec<String>, CsvError>> {
+        Reader::new(text).collect()
+    }
+
+    fn fields(values: &[&str]) -> Result<Vec<String>, CsvError> {
+        Ok(values.iter().map(|value| (*value).to_owned()).collect())
+    }
+
+    #[test]
+    fn records_follow_cpython_at_line_and_input_ends() {
+        assert_eq!(lines("a\r\nb\rc\nd"), ["a\r\n", "b\r", "c\n", "d"]);
+        assert_eq!(records("a,b\r\nc"), [fields(&["a", "b"]), fields(&["c"])]);
+        // A blank line is an empty record; text after a closing quote joins the field.
+        assert_eq!(records("\r\n\"x\"y,z\n"), [fields(&[]), fields(&["xy", "z"])]);
+        // An unterminated quoted field ends with the input, as strict off allows.
+        assert_eq!(records("\"open\nfield"), [fields(&["open\nfield"])]);
+    }
+
+    #[test]
+    fn fields_beyond_the_cpython_limit_are_refused() {
+        assert_eq!(records(&"x".repeat(FIELD_LIMIT)), [Ok(vec!["x".repeat(FIELD_LIMIT)])]);
+        assert_eq!(records(&format!("{},y", "x".repeat(FIELD_LIMIT + 1))), [Err(CsvError)]);
     }
 }
