@@ -320,8 +320,20 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
-    fn deadline_stops_and_reaps_its_owned_child() {
+    fn dropping_a_managed_child_kills_and_reaps_it() {
+        let child = ManagedChild(Command::new("sleep").arg("60").spawn().unwrap());
+        let process = child.0.id() as libc::pid_t;
+        drop(child);
+        // A child that was killed but not reaped would still answer the null signal.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        assert_eq!(unsafe { libc::kill(process, 0) }, -1);
+        assert_eq!(std::io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+    }
+
+    #[test]
+    fn a_child_that_outlives_its_deadline_is_refused() {
         let cache = Temporary::new("pbi-producer-test-").unwrap();
         // A system command that runs for a minute unless it is killed.
         let (program, args): (&str, &[&str]) = if cfg!(windows) {
@@ -341,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_commands_and_non_native_launchers_are_refused_before_running() {
+    fn unsupported_commands_and_non_native_launchers_are_refused() {
         let cache = Temporary::new("pbi-producer-launcher-").unwrap();
         assert_eq!(
             executable(&cache.0, "other").unwrap_err(),

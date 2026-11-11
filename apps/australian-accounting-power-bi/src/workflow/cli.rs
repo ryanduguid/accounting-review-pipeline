@@ -173,10 +173,8 @@ fn execute(args: &Arguments) -> Result<String> {
             run::verify(run)?;
         }
         "html" => html_output(run, bin_dir, previous, output.ok_or("--output is required.")?)?,
-        command => {
-            assert_eq!(command, "fixtures", "parse admits only the listed commands");
-            fixture_output(run, output.ok_or("--output is required.")?)?;
-        }
+        "fixtures" => fixture_output(run, output.ok_or("--output is required.")?)?,
+        _ => unreachable!("validated command"),
     }
     Ok("Review workflow verification completed.".into())
 }
@@ -279,7 +277,7 @@ mod tests {
 
     #[test]
     fn failed_output_is_observable() {
-        // A full buffer refuses every write.
+        // An empty slice accepts no bytes.
         let mut closed: &mut [u8] = &mut [];
         assert_eq!(entry(vec!["--help".into()], &mut closed, &mut Vec::new()), 1);
     }

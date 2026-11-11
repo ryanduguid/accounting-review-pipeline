@@ -743,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn the_command_reports_success_and_each_failure_once() {
+    fn the_command_reports_success_and_io_failures_once() {
         let root = std::env::temp_dir().join(format!("pbi-fixture-command-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (mut stdout, mut stderr) = (Vec::new(), Vec::new());

@@ -381,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn division_of_a_dividend_longer_than_the_precision_rounds_once() {
+    fn a_dividend_longer_than_the_precision_scales_the_divisor() {
         // 31 digits over 1: the divisor is scaled up instead of the dividend.
         let dividend = d(&format!("1{}", "0".repeat(30)));
         assert_eq!(dividend.div(&d("3")).to_fixed(0), "333333333333333333333333333300");

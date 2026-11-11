@@ -80,7 +80,8 @@ fn resolve_existing_prefix(mut path: PathBuf) -> Result<PathBuf> {
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 missing.push(path.file_name().ok_or("Cannot resolve the local path.")?.to_owned());
-                assert!(path.pop(), "an absolute path with a final name has a parent");
+                let popped = path.pop();
+                assert!(popped, "an absolute path with a final name has a parent");
             }
             Err(error) => return Err(error.to_string()),
         }

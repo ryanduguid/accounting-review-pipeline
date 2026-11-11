@@ -80,10 +80,6 @@ impl Oracle {
         let output = BufReader::new(child.stdout.take().ok_or("Oracle stdout unavailable.")?);
         Ok(Self { child, input, output })
     }
-
-    fn evaluate(&mut self, request: &Value) -> Result<Value> {
-        exchange(&mut self.input, &mut self.output, request)
-    }
 }
 
 impl Drop for Oracle {
@@ -137,7 +133,9 @@ fn run() -> Result<()> {
     let runs = rehearsal::run(&settings, &workspace.0)?;
     let cases = cases::generate(&runs[1], settings.seed)?;
     let mut oracle = Oracle::new(&settings)?;
-    compare(&cases, settings.seed, |request| oracle.evaluate(request))
+    compare(&cases, settings.seed, |request| {
+        exchange(&mut oracle.input, &mut oracle.output, request)
+    })
 }
 
 // Returning the status lets the process end normally, so a refused run still
