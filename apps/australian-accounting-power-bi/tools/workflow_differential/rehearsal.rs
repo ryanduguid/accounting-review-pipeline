@@ -588,10 +588,10 @@ mod tests {
 
     #[test]
     fn a_refused_command_must_leave_no_output() {
-        let present = std::env::temp_dir();
-        let left = unpublished(&present).unwrap_err();
+        let workspace = Temporary::new().unwrap();
+        let left = unpublished(&workspace.0).unwrap_err();
         assert!(left.starts_with("A refused command left "), "{left}");
-        unpublished(&present.join("pbi-rehearsal-never-created")).unwrap();
+        unpublished(&workspace.0.join("never-created")).unwrap();
     }
 
     #[test]

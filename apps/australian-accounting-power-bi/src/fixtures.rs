@@ -744,6 +744,8 @@ mod tests {
 
     #[test]
     fn the_command_reports_success_and_io_failures_once() {
+        // Disposable fixture directory outside the checkout, not a security decision.
+        // nosemgrep: rust.lang.security.temp-dir.temp-dir
         let root = std::env::temp_dir().join(format!("pbi-fixture-command-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
