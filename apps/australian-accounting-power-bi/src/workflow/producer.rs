@@ -113,7 +113,8 @@ fn deadline(command: &mut Command, cache: &Path, limit: Duration) -> Result<Outp
             });
         }
         if start.elapsed() >= limit {
-            // Dropping the managed child kills and reaps it.
+            child.0.kill().map_err(|error| error.to_string())?;
+            child.0.wait().map_err(|error| error.to_string())?;
             return Err("Native producer version probe exceeded its deadline.".into());
         }
         std::thread::sleep(Duration::from_millis(10));
@@ -323,8 +324,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn dropping_a_managed_child_kills_and_reaps_it() {
-        let child = ManagedChild(Command::new("sleep").arg("60").spawn().unwrap());
+        let mut child = ManagedChild(Command::new("sleep").arg("60").spawn().unwrap());
         let process = child.0.id() as libc::pid_t;
+        assert!(child.0.try_wait().unwrap().is_none(), "the child is still running");
         drop(child);
         // A child that was killed but not reaped would still answer the null signal.
         // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage

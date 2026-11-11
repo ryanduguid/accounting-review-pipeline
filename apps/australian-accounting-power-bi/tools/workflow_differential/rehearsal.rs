@@ -93,6 +93,14 @@ fn refused_for(native: &Output, reason: &str) -> Result<()> {
     Ok(())
 }
 
+/// A refused command publishes nothing at its output path.
+fn unpublished(output: &Path) -> Result<()> {
+    if output.symlink_metadata().is_ok() {
+        return Err(format!("A refused command left {}", output.display()));
+    }
+    Ok(())
+}
+
 pub fn run(settings: &Settings, root: &Path) -> Result<[PathBuf; 2]> {
     // This comparison binary's sibling is the workflow under test.
     // nosemgrep: rust.lang.security.current-exe.current-exe
@@ -514,7 +522,8 @@ fn empty_review_refusal(commands: &Commands<'_>, root: &Path, source: &Path) -> 
     let output = root.join("no-findings-fixtures");
     let args = ["--output".as_ref(), output.as_os_str()];
     let native = commands.pair("fixtures", &run, &args, 1)?;
-    refused_for(&native, "The fixed review case requires at least one finding.")
+    refused_for(&native, "The fixed review case requires at least one finding.")?;
+    unpublished(&output)
 }
 
 /// A run that verifies but seals fewer files than the fixed case cannot be exported.
@@ -530,7 +539,8 @@ fn export_refusal(commands: &Commands<'_>, root: &Path, source: &Path) -> Result
     let output = root.join("partial-seal.zip");
     let args = ["--output".as_ref(), output.as_os_str()];
     let native = commands.pair("export", &run, &args, 1)?;
-    refused_for(&native, "Export requires the exact fixed-case inventory")
+    refused_for(&native, "Export requires the exact fixed-case inventory")?;
+    unpublished(&output)
 }
 
 #[cfg(test)]
@@ -574,6 +584,14 @@ mod tests {
         refused_for(&native, "Rust wording").unwrap();
         let unexpected = refused_for(&native, "Receipt digest differs.").unwrap_err();
         assert!(unexpected.ends_with("got: Rust wording"), "{unexpected}");
+    }
+
+    #[test]
+    fn a_refused_command_must_leave_no_output() {
+        let present = std::env::temp_dir();
+        let left = unpublished(&present).unwrap_err();
+        assert!(left.starts_with("A refused command left "), "{left}");
+        unpublished(&present.join("pbi-rehearsal-never-created")).unwrap();
     }
 
     #[test]
