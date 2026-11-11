@@ -546,6 +546,9 @@ mod tests {
             thresholds(&limits).unwrap_err(),
             "Reconciliation tolerance requires a two-decimal money string."
         );
+        // The tolerance is optional.
+        limits.as_object_mut().unwrap().remove("reconciliation_tolerance");
+        thresholds(&limits).unwrap();
         let control = serde_json::json!({"slot":"bank","filename":"bank.csv","reason":"Not supplied"});
         let mut pack = serde_json::json!({"overall_status":"READY","controls_not_run":[control]});
         readiness(&pack).unwrap();
