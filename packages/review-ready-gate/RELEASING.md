@@ -11,7 +11,8 @@ tag only with the owner's explicit approval for that release.
 ## Before tagging
 
 1. In a reviewed pull request, set the same version in `VERSION`, the
-   `[package] version` in `Cargo.toml` and `Cargo.lock`, and make the first line
+   `[package] version` in `Cargo.toml` and `Cargo.lock` and `version` in
+   `CITATION.cff`, and make the first line
    of `RELEASE_NOTES.md` exactly `# vMAJOR.MINOR.PATCH`. The whole file becomes
    the release body.
 2. From this directory, run the component checks:

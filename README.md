@@ -69,7 +69,7 @@ Synthetic examples. A human decides whether the close is acceptable.
 
 ## Install
 
-Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper Review Gate) from its component's [GitHub Release](https://github.com/ryanduguid/accounting-review-pipeline/releases), tagged `monthly-close-control-plane/v<version>` or `review-ready-gate/v<version>`. Each release holds one executable for each of 2 platforms:
+Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper Review Gate) from its component's [GitHub Release](https://github.com/ryanduguid/accounting-review-pipeline/releases), tagged `monthly-close-control-plane/v<version>` or `review-ready-gate/v<version>`. The latest releases are `monthly-close-control-plane/v1.0.0` and `review-ready-gate/v1.0.0`; changes under an unreleased heading in the [Monthly Close Controls](packages/monthly-close-control-plane/RELEASE_NOTES.md) or [Workpaper Review Gate](packages/review-ready-gate/RELEASE_NOTES.md) release notes, such as `close-control queue --summary`, are not in them, so build from source for those. Each release holds one executable for each of 2 platforms:
 
 | Command | Linux x86_64 (static, musl) | Windows x86_64 |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ Check that the 4 result files agree before reviewing the pack:
 cargo run --locked --release --manifest-path packages/monthly-close-control-plane/Cargo.toml --bin close-control -- view --pack-dir ../close-control-demo
 ```
 
-The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all 4 result files together and record each review decision in your workpaper. The [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md) explains installation from source.
+The viewer exits 0 after verification or 1 if the files disagree. Check its list of controls not run before assessing the pack's coverage. It does not re-read the input trial balances. Keep all 4 result files together and record each review decision in your workpaper. The [reviewer quick start](packages/monthly-close-control-plane/docs/reviewer-quick-start.md) explains installing a release or building from source.
 
 The [full command and all 8 exceptions](packages/monthly-close-control-plane/README.md#worked-example) remain available without just. The [GitHub Codespaces](https://codespaces.new/ryanduguid/accounting-review-pipeline) configuration includes Rust and the Python development tools; use the full command there if just is unavailable. Codespaces usage counts against your own GitHub quota. The `devcontainer` workflow builds the container and runs the fabricated close review inside it on every push to `main`.
 
@@ -305,7 +305,7 @@ require explicit approval.
 Accounting Review Pipeline's close controls read local trial balance exports and, for `drivers`,
 `classify` and `reconcile`, supplied transactions. None of those 3 commands is a journal-level
 population test. The Xero trial-balance exporter is the exception to local files, because it pulls
-through Xero OAuth/API. These cover nearby ground (the 3 projects as read on 5 November 2026):
+through Xero OAuth/API. These cover nearby ground (each read on the date shown):
 
 - Xero's built-in [General Ledger Exceptions report](https://central.xero.com/0/article/General-Ledger-Exceptions-report)
   (read 12 November 2026) lists transaction lines that are 2 or more standard deviations above or
@@ -324,12 +324,11 @@ through Xero OAuth/API. These cover nearby ground (the 3 projects as read on 5 N
   URL and reads the user's reconciliations, workpaper support and attachments for companies synced
   from Xero. Access is read-only: it cannot reconcile, edit support, sign off or post to Xero. What
   the assistant reads goes to that AI provider.
-
-- [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills): agent skills and scripts
+- [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills) (read 5 November 2026): agent skills and scripts
   for close, tax and audit work in US practice, which refuse to deliver a workpaper that does not tie.
-- [divyanshus2404/journal-entry-testing](https://github.com/divyanshus2404/journal-entry-testing):
+- [divyanshus2404/journal-entry-testing](https://github.com/divyanshus2404/journal-entry-testing) (read 5 November 2026):
   a PySpark journal entry testing pipeline on Databricks.
-- [XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server): the MCP server from
+- [XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server) (read 5 November 2026): the MCP server from
   Xero's developer organisation, for agents working directly with Xero.
 
 ## Development
