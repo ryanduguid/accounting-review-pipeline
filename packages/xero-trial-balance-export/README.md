@@ -25,8 +25,9 @@ Accounting Review Pipeline. The `xero-trial-balance-export` distribution,
 `xero-trial-balance-export-token-cache` cache format remain compatibility
 identifiers.
 
-For citation metadata, see [`CITATION.cff`](CITATION.cff) and the exact
-[`xero-trial-balance-export/v0.1.11` release](https://github.com/ryanduguid/accounting-review-pipeline/releases/tag/xero-trial-balance-export%2Fv0.1.11).
+For citation metadata, see [`CITATION.cff`](CITATION.cff), which describes this
+unreleased 1.0.0 source; to cite released software, cite the latest
+[`xero-trial-balance-export/v0.1.15` release](https://github.com/ryanduguid/accounting-review-pipeline/releases/tag/xero-trial-balance-export%2Fv0.1.15).
 The API path is read-only and cannot write to the ledger; see
 [Scope and disclaimer](#scope-and-disclaimer) and the fabricated
 [`samples/sample-output.csv`](samples/sample-output.csv) output.
