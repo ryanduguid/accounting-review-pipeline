@@ -38,12 +38,13 @@ These repository-wide rules apply everywhere:
   The same approved binary-only exception applies to Workpaper Review Gate
   1.0.0. Its Python runtime and import API are removed; its native commands
   retain the readiness and file contracts, with documented parser and diagnostic
-  limits. Its release workflow explicitly blocks publication until a native
-  publisher is approved.
+  limits. Its release caller publishes the `review-ready` executable through
+  Release Policy's `release-binary.yml`.
   The same approved binary-only exception applies to Monthly Close Controls
   1.0.0. Its Python runtime and import API are removed. The native close-control
   command preserves its file and status contracts, with documented compatibility
-  limits. Native publication is explicitly blocked.
+  limits. Its release caller publishes the `close-control` executable through
+  `release-binary.yml`.
   The approved binary-only exception also applies to the Power BI review workflow
   in 1.0.0. Its six commands use the native review-workflow binary and an embedded
   fabricated case; the previous Python workflow module is removed.

@@ -71,8 +71,9 @@
   quarter's GST control file no longer passes the date check. The key is
   optional and the other profiles refuse it; a self-review without it loads
   and is checked as before.
-- Native release publishing is not configured. The release workflow fails
-  explicitly and cannot publish Python or native artefacts.
+- The `review-ready` executable ships on this GitHub Release for Linux x86_64
+  (musl) and Windows x86_64, with source archives, SBOMs and signed
+  provenance. Nothing is published to PyPI or crates.io.
 
 # v0.3.0
 

@@ -1,12 +1,13 @@
-# v1.0.0 (unreleased)
+# v1.0.0
 
 - Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
   Apache-2.0 as the future licence). Released versions keep their licence.
 - Breaking: replace the Python runtime and `closecontrol` import API with the
-  native Rust `close-control` command. Install from this directory with
-  `cargo install --locked --path . --bin close-control`. Python callers must
-  invoke the command and read its files. Native publication is blocked until
-  a separate publisher is approved.
+  native Rust `close-control` command. Download the Linux x86_64 (musl) or
+  Windows x86_64 executable from this GitHub Release, or install from this
+  directory with `cargo install --locked --path . --bin close-control`. Python
+  callers must invoke the command and read its files. Nothing is published to
+  PyPI or crates.io.
 - Retain review/workbench, view, queue, reconcile, drivers, compare, classify
   and schedule, their status/exit contracts and platform-specific output bytes.
   `close-control --version` now reports `close-control 1.0.0`.
@@ -58,8 +59,7 @@
   verify it. Packs without the options are unchanged; the differential probe
   drops the 4 new options from the help it compares with the frozen baseline,
   and a test checks them in the raw help.
-- Native release publication, macOS, Aikido scans and hosted CI remain
-  unverified for this candidate.
+- macOS builds and Aikido scans remain unverified for this release.
 
 # v0.2.0
 

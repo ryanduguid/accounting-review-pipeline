@@ -105,9 +105,10 @@ the landed commit with byte-identical twins, `787db4590e725cfd37104c8a9dd9e75f7f
 5 September 2026 and then `fcf25e532e9eb60056ae6e5c819cf3125c4f4b91`, and left the earlier
 commits unreachable from every branch and tag. GitHub refuses a reusable-workflow call at an
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
-produced no release. Every active root release caller now pins `ca5492b`, a later policy commit
-that descends from the squash-landed Python 3.14 migration (the callers pinned `a601f1d`
-and `0f7ca4c` before it). The reusable workflows remain reachable at that immutable commit.
+produced no release. Every active root release caller now pins a policy commit that descends
+from the squash-landed Python 3.14 migration: the source-archive caller pins `ca5492b` and the
+2 native binary callers pin `1058bbf`. The callers pinned `a601f1d` and `0f7ca4c` before
+`ca5492b`. The reusable workflows remain reachable at those immutable commits.
 `tests/test_release_pins.py` holds the README and the release recipes to whatever the
 callers pin today.
 
@@ -139,8 +140,8 @@ disagree.
 
 | Component | Caller | Trigger | Reusable workflow | `source-directory` | `tag-prefix` | Publisher environment |
 |---|---|---|---|---|---|---|
-| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-python.yml` | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | `pypi` (https://pypi.org/p/monthly-close-control-plane) |
-| Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | explicitly blocked after the Rust 1.0.0 port | `packages/review-ready-gate` | `review-ready-gate` | native publisher not configured |
+| Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-binary.yml` with `binary: close-control` since the Rust 1.0.0 port (`release-python.yml` before it) | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | none (GitHub release assets only); `pypi` (https://pypi.org/p/monthly-close-control-plane) for the Python releases |
+| Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-binary.yml` with `binary: review-ready` since the Rust 1.0.0 port | `packages/review-ready-gate` | `review-ready-gate` | none (GitHub release assets only) |
 | Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
 

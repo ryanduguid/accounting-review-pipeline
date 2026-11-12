@@ -69,7 +69,16 @@ Synthetic examples. A human decides whether the close is acceptable.
 
 ## Install
 
-Accounting Review Pipeline's native commands are not published yet, so build them from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
+Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper Review Gate) from its component's [GitHub Release](https://github.com/ryanduguid/accounting-review-pipeline/releases), tagged `monthly-close-control-plane/v<version>` or `review-ready-gate/v<version>`. Each release holds one executable for each of 2 platforms:
+
+| Command | Linux x86_64 (static, musl) | Windows x86_64 |
+| --- | --- | --- |
+| `close-control` | `monthly-close-control-plane-<version>-x86_64-unknown-linux-musl.tar.gz` | `monthly-close-control-plane-<version>-x86_64-pc-windows-msvc.zip` |
+| `review-ready` | `review-ready-gate-<version>-x86_64-unknown-linux-musl.tar.gz` | `review-ready-gate-<version>-x86_64-pc-windows-msvc.zip` |
+
+Download an explicit tag, never `latest`, and verify the archive against the release's signed `SHA256SUMS` and attestations before extracting it, using the recipe in [Monthly Close Controls](packages/monthly-close-control-plane/RELEASING.md#verify-a-release) or [Workpaper Review Gate](packages/review-ready-gate/RELEASING.md#verify-a-release). The archive holds the executable with its `LICENSE`, `NOTICE` and `README.md`; put the executable on your PATH.
+
+For another platform, or for the Xero exporter and the other native commands, which have no release, build from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
 
 ## Reproduce the sample pack
 
@@ -146,17 +155,19 @@ namespaced tags in this repository.
 ## Releases
 
 Each active release caller uses its own namespaced annotated tag, `<component>/vMAJOR.MINOR.PATCH`,
-through a root caller pinned to the independently reviewed Release Policy commit
-`ca5492bd09693be9e1fd47d980e2740ef8daf023`: `accounting-excel-toolkit/v*`.
+through a root caller pinned to a Release Policy commit. `accounting-excel-toolkit/v*` calls the
+source-archive workflow at the independently reviewed commit
+`ca5492bd09693be9e1fd47d980e2740ef8daf023`. `monthly-close-control-plane/v*` and
+`review-ready-gate/v*` call the native binary workflow at
+`1058bbf7a3f22f3c5c421676cf5f89a14389100c`, which publishes the command for Linux x86_64
+(musl) and Windows x86_64 with source archives, SBOMs, `SHA256SUMS` and signed provenance.
 One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name
 is the only difference. `IMPORTS.md` lists the callers and publisher environments.
 To check a downloaded release's checksum and SLSA provenance, follow [Verify a release](https://github.com/ryanduguid/release-policy/blob/main/docs/verify-a-release.md).
 
-The Rust Monthly Close Controls and Workpaper Review Gate 1.0.0 explicitly block publication until a native
-publisher is approved. The Xero exporter also has no native publisher.
-The Rust Xero Ledger Review Gate 1.0.0 and evatt 1.0.0 have no release callers
+The Rust Xero exporter, Xero Ledger Review Gate and evatt 1.0.0 have no release callers
 until their Rust release paths are approved. The PyPI releases in the component table
 (Xero exporter 0.1.15, Workpaper Review Gate 0.3.0, Monthly Close Controls 0.2.0 and the
 ledger review gate 0.2.6) are the earlier Python distributions; they predate the native
@@ -291,7 +302,25 @@ require explicit approval.
 Accounting Review Pipeline's close controls read local trial balance exports and, for `drivers`,
 `classify` and `reconcile`, supplied transactions. None of those 3 commands is a journal-level
 population test. The Xero trial-balance exporter is the exception to local files, because it pulls
-through Xero OAuth/API. As read on 5 November 2026, these projects cover nearby ground:
+through Xero OAuth/API. These cover nearby ground (the 3 projects as read on 5 November 2026):
+
+- Xero's built-in [General Ledger Exceptions report](https://central.xero.com/0/article/General-Ledger-Exceptions-report)
+  (read 12 November 2026) lists transaction lines that are 2 or more standard deviations above or
+  below the average line in their account over the life of the organisation, or that carry a GST
+  treatment other than the account's default, and marks unexpected debits and credits. It excludes
+  conversion balance lines, and it can be exported as PDF or a spreadsheet, or published.
+  `close-control` works on the trial balance instead: it checks debit and credit totals, YTD
+  movements against set thresholds, accounts that appear, disappear or change, and supplied
+  mapping, subledger and GST inputs ([Controls](packages/monthly-close-control-plane/README.md#controls)).
+  It exits 0 for `PASS` and 2 for `REVIEW` or `BLOCKED`, so a script can act on the result,
+  publishes how many seeded cases each control detects and misses
+  ([Detection benchmark](packages/monthly-close-control-plane/README.md#detection-benchmark)), and writes
+  its pack as local files.
+- [RecHound AI Workflows](https://rechound.com/features/ai-connections) (read 12 November 2026):
+  an existing Claude, ChatGPT, Copilot, Gemini CLI or Cursor assistant connects to RecHound's server
+  URL and reads the user's reconciliations, workpaper support and attachments for companies synced
+  from Xero. Access is read-only: it cannot reconcile, edit support, sign off or post to Xero. What
+  the assistant reads goes to that AI provider.
 
 - [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills): agent skills and scripts
   for close, tax and audit work in US practice, which refuse to deliver a workpaper that does not tie.

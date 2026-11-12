@@ -58,8 +58,8 @@ jobs:
 
       - name: Install review-ready-gate
         run: cargo install --path . --locked
-        # Native release publishing is not configured. Build from the reviewed
-        # source revision until a separate native publisher is approved.
+        # Build from the reviewed source revision, or download and verify a
+        # released executable as RELEASING.md describes.
 
       - name: Run the readiness gate
         id: gate

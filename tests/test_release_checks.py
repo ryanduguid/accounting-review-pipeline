@@ -24,8 +24,26 @@ REQUIRED = {
         ".github/workflows/codeql.yml: Analyze Python",
         ".github/workflows/codeql.yml: codeql-gates"
     ],
+    "release-monthly-close-control-plane.yml": [
+        ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
+        ".github/workflows/ci.yml: dependency-audit",
+        ".github/workflows/ci.yml: packages/monthly-close-control-plane / rust (ubuntu-latest)",
+        ".github/workflows/ci.yml: packages/monthly-close-control-plane / rust (windows-latest)",
+        ".github/workflows/joined-conformance.yml: verify",
+        ".github/workflows/reviewer-quick-start.yml: guide",
+        ".github/workflows/codeql.yml: Analyze Rust",
+        ".github/workflows/codeql.yml: codeql-gates"
+    ],
+    "release-review-ready-gate.yml": [
+        ".github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner",
+        ".github/workflows/ci.yml: dependency-audit",
+        ".github/workflows/ci.yml: packages/review-ready-gate / rust (ubuntu-latest)",
+        ".github/workflows/ci.yml: packages/review-ready-gate / rust (windows-latest)",
+        ".github/workflows/joined-conformance.yml: verify",
+        ".github/workflows/codeql.yml: Analyze Rust",
+        ".github/workflows/codeql.yml: codeql-gates"
+    ],
 }
-BLOCKED = {"release-review-ready-gate.yml", "release-monthly-close-control-plane.yml"}
 
 
 class ReleaseChecksTests(unittest.TestCase):
@@ -34,7 +52,7 @@ class ReleaseChecksTests(unittest.TestCase):
         callers = sorted(
             path.name for path in workflows.glob("release*") if path.suffix in {".yml", ".yaml"}
         )
-        self.assertEqual(callers, sorted(set(REQUIRED) | BLOCKED))
+        self.assertEqual(callers, sorted(REQUIRED))
         for filename, expected in REQUIRED.items():
             with self.subTest(workflow=filename):
                 text = (workflows / filename).read_text(encoding="utf-8")
@@ -42,7 +60,7 @@ class ReleaseChecksTests(unittest.TestCase):
                 self.assertRegex(
                     job,
                     r"(?m)^    uses: ryanduguid/release-policy/\.github/workflows/"
-                    r"release-(?:python|archive|skills)\.yml@[0-9a-f]{40}$",
+                    r"release-(?:python|archive|skills|binary)\.yml@[0-9a-f]{40}$",
                 )
                 permissions = job.split("    permissions:\n", 1)[1].split(
                     "    uses:", 1

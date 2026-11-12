@@ -1,8 +1,10 @@
 # Reviewer quick start
 
 This guide runs native Monthly Close Controls 1.0.0 on fabricated trial balances.
-Build it from an Accounting Review Pipeline checkout; native release publication
-is not configured. The reviewer decides whether a close is acceptable.
+Build it from an Accounting Review Pipeline checkout, or use the released
+executable for Linux x86_64 or Windows x86_64 after verifying it as
+[RELEASING.md](../RELEASING.md#verify-a-release) describes. The reviewer decides
+whether a close is acceptable.
 
 ## What you need
 

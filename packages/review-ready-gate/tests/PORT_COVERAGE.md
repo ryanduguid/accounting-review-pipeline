@@ -13,7 +13,7 @@ commit `8061079d0b4206d064c54751aa047af8588fa265`. Inputs are fabricated.
 | Display commands | Real view/compare byte and mtime snapshots, malformed/empty pack refusals, closed-output-pipe tests |
 | Document intake, review and comparison | Fifteen fabricated extraction fixtures; review/binding tests; occurrence, context, original-evidence and coverage corpus |
 | Evaluation and downstream contract | `src/evaluation_tests.rs`; root trial-balance and shared-behaviour conformance; native Power BI producer tests |
-| Package/release metadata | Root metadata checks and explicit blocked native publisher; release-binary smokes |
+| Package/release metadata | Root metadata checks and the native release caller contract (`tests/test_native_release_workflow.py`); release-binary smokes |
 
 The GST period-boundary regression added on main after that commit
 (`test_gst_period_audit.py`, #395) is ported as
