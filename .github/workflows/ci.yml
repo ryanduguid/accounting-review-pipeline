@@ -499,7 +499,7 @@ jobs:
       - name: run the full Python suite with coverage
         run: uv run --locked --group dev coverage run -m pytest
       - name: run frozen Unicode generators with their supported interpreter
-        run: uv run --no-project --python 3.14.1 --with coverage==7.16.2 python -m coverage run -m unittest tests.test_unicode_generators -v
+        run: uv run --no-project --no-build --python 3.14.1 --with coverage==7.16.2 python -m coverage run -m unittest tests.test_unicode_generators -v
       - name: retain every maintained Python source in the report
         shell: bash
         run: |
@@ -578,7 +578,7 @@ jobs:
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
       - name: lint the workspace
-        run: uv run --locked --group dev ruff check .  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+        run: uv run --locked --group dev ruff check .
       - name: type-check the workspace
         shell: python
         run: |
@@ -623,7 +623,7 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as environment:
               environment.write(f"COVERAGE_RCFILE={config}\nCOVERAGE_FILE={output / '.coverage'}\n")
       - name: run the full suite
-        run: uv run --locked --group dev coverage run -m pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+        run: uv run --locked --group dev coverage run -m pytest
       - name: retain every maintained Python source in the report
         shell: bash
         run: |

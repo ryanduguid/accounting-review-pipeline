@@ -68,6 +68,16 @@ class SetupUtilityTests(unittest.TestCase):
         command.assert_not_called()
         self.assertEqual(sentinel.read_text(), "original")
 
+    def test_existing_workspace_is_refused_even_without_setup_tools(self):
+        self.workspace.mkdir()
+        sentinel = self.workspace / "keep.txt"
+        sentinel.write_text("original")
+        with patch.object(setup_utility.shutil, "which", return_value=None), patch.object(setup_utility.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "existing paths are never reused"):
+                setup_utility.setup(self.workspace)
+        command.assert_not_called()
+        self.assertEqual(sentinel.read_text(), "original")
+
     def test_source_nested_workspace_is_refused(self):
         for target in (self.source / "outputs", self.pipeline / "outputs"):
             with self.subTest(target=target), self.assertRaisesRegex(ValueError, "separate"):

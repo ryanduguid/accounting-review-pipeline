@@ -12,7 +12,8 @@ import json
 import random
 import subprocess
 import sys
-from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Context, Decimal, Inexact, InvalidOperation, localcontext
+import _decimal
+from _decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Context, Decimal, Inexact, InvalidOperation, localcontext
 
 PARSE_EXTRAS = [
     " 1.5 ", "\x1c2\x1f", "1_000", "_1", "1__0", "1_.5", "٣٤", "１２", "\U0001d7cf", "1\xa0",
@@ -106,6 +107,7 @@ def requests(rng, count):
 
 
 def main():
+    print(f"decimal oracle: CPython C _decimal, libmpdec {_decimal.__libmpdec_version__}", flush=True)
     parser = argparse.ArgumentParser()
     parser.add_argument("oracle")
     parser.add_argument("--cases", type=int, default=200_000)

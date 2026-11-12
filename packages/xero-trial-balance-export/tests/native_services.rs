@@ -287,6 +287,18 @@ fn native_export_fetches_and_publishes_a_balanced_accrual_report_over_real_tls()
     native_export(false, false);
 }
 
+fn dangling_link_target(scratch: &Path, name: &Path, spelling: &str) -> PathBuf {
+    match spelling {
+        // Windows TEMP can use an 8.3 spelling that the working directory expands.
+        "absolute" => xero_trial_balance_export::paths::resolved(scratch)
+            .unwrap()
+            .join(name),
+        "canonical-parent" | "long-canonical" => fs::canonicalize(scratch).unwrap().join(name),
+        "relative" => PathBuf::from("future-exports"),
+        _ => unreachable!(),
+    }
+}
+
 #[test]
 fn dangling_output_links_publish_only_beneath_the_working_directory() {
     for spelling in ["absolute", "canonical-parent", "relative", "long-canonical"] {
@@ -299,14 +311,7 @@ fn dangling_output_links_publish_only_beneath_the_working_directory() {
         };
         let target = scratch.0.join(&name);
         let alias = scratch.0.join("linked");
-        let link_target = match spelling {
-            "absolute" => target.clone(),
-            "canonical-parent" | "long-canonical" => {
-                fs::canonicalize(&scratch.0).unwrap().join(&name)
-            }
-            "relative" => PathBuf::from("future-exports"),
-            _ => unreachable!(),
-        };
+        let link_target = dangling_link_target(&scratch.0, &name, spelling);
         if !directory_link::create(&link_target, &alias) {
             return;
         }
@@ -328,7 +333,11 @@ fn dangling_output_links_publish_only_beneath_the_working_directory() {
             &proxy,
             false,
         ));
-        assert!(output.status.success(), "{output:?}");
+        assert!(
+            output.status.success(),
+            "spelling={spelling} root={:?} link_target={link_target:?}: {output:?}",
+            scratch.0
+        );
         proxy.finish();
         assert!(output.stderr.is_empty());
         assert_published(&target.join("tb.csv"), false);

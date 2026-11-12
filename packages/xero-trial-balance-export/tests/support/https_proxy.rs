@@ -3,6 +3,7 @@
 
 //! An owned CONNECT endpoint: decrypt fabricated requests without forwarding them.
 
+use base64::Engine;
 use rustls::{ServerConfig, ServerConnection, StreamOwned, pki_types::PrivatePkcs8KeyDer};
 use std::{
     collections::BTreeMap,
@@ -86,11 +87,14 @@ impl Drop for Proxy {
 }
 
 fn configuration() -> Arc<ServerConfig> {
-    let certificate = include_bytes!("../fixtures/native-https/server.der")
-        .to_vec()
+    let certificate = base64::engine::general_purpose::STANDARD
+        .decode(include_str!("../fixtures/native-https/server.der.b64").trim())
+        .unwrap()
         .into();
     let key = PrivatePkcs8KeyDer::from(
-        include_bytes!("../fixtures/native-https/server-key.der").to_vec(),
+        base64::engine::general_purpose::STANDARD
+            .decode(include_str!("../fixtures/native-https/server-key.der.b64").trim())
+            .unwrap(),
     );
     Arc::new(
         ServerConfig::builder()
