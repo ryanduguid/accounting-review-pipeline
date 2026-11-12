@@ -44,8 +44,9 @@ function Find-SettingsCopy([int]$ProcessId, [datetime]$StartedAt, [string]$Local
                     ForEach-Object { [ordered]@{ settings_trace = $_.FullName; user_zip = Join-Path $root 'User.zip' } }
             }
         })
-        if ($traces.Count -eq 1) { return $traces[0] }
-        if ($traces.Count -gt 1) { break }
+        $copies = @($traces | ForEach-Object { $_.user_zip } | Sort-Object -Unique)
+        if ($copies.Count -eq 1) { return $traces[0] }
+        if ($copies.Count -gt 1) { break }
     }
     [ordered]@{ settings_trace = $null; user_zip = $null }
 }
@@ -56,6 +57,7 @@ function Get-ExecutableReceipt([int]$ProcessId, [datetime]$StartedAt) {
     if ($null -eq $process -or [Math]::Abs(($process.CreationDate.ToUniversalTime() - $StartedAt.ToUniversalTime()).TotalMilliseconds) -gt 1) {
         throw "Process $ProcessId is not the recorded instance."
     }
+    if (-not $process.ExecutablePath) { throw "Cannot read the executable of process $ProcessId; run at the same elevation as Desktop." }
     $version = (Get-Item -LiteralPath $process.ExecutablePath).VersionInfo
     [ordered]@{
         pid = $ProcessId

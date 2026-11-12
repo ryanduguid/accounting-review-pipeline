@@ -52,12 +52,15 @@ $ErrorActionPreference = 'Continue'
 exit $LASTEXITCODE
 "#;
 
-/// Finds the settings copy for process 4242, started on 1 January 2000, in each case folder.
+/// Finds the settings copy for process 4242, started at midnight UTC on 1 January 2000, in each
+/// case folder. The start passes through JSON as an instance record's does: PowerShell 7 reads it
+/// as a local time and Windows PowerShell as a string.
 const COPY_DRIVER: &str = r#"param([string]$Tools, [string]$Cases, [string]$Out)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $Tools 'native_receipts.ps1')
+$started = ('{"started_at": "2000-01-01T11:00:00.0000000+11:00"}' | ConvertFrom-Json).started_at
 $found = [ordered]@{}
-foreach ($case in Get-ChildItem -LiteralPath $Cases -Directory) { $found[$case.Name] = Find-SettingsCopy 4242 '2000-01-01T00:00:00Z' $case.FullName }
+foreach ($case in Get-ChildItem -LiteralPath $Cases -Directory) { $found[$case.Name] = Find-SettingsCopy 4242 $started $case.FullName }
 $found | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $Out -Encoding utf8
 "#;
 
@@ -250,15 +253,18 @@ fn found_in(local: &Path, settings: &str) -> Value {
     })
 }
 
-#[test]
-fn the_settings_copy_is_the_one_holding_desktops_own_trace() {
-    let work = scratch("copies");
-    let cases = work.join("cases");
+/// Builds one folder per case under `cases` and returns the copy each should report.
+fn copy_cases(cases: &Path) -> Value {
     let none = json!({ "settings_trace": null, "user_zip": null });
     let mut want = serde_json::Map::new();
     let real = cases.join("real");
     trace(&real, DESKTOP, "PBIDesktop.4242.a.log", None);
     want.insert("real".into(), found_in(&real, DESKTOP));
+    // One process can leave more than one trace in the copy it uses.
+    let two = cases.join("two-traces");
+    trace(&two, DESKTOP, "PBIDesktop.4242.a.log", None);
+    trace(&two, DESKTOP, "PBIDesktop.4242.b.log", None);
+    want.insert("two-traces".into(), found_in(&two, DESKTOP));
     // Inside a package, the unpackaged path also shows the package's trace.
     let inside = cases.join("inside-package");
     trace(&inside, &packaged("Agent_1"), "PBIDesktop.4242.a.log", None);
@@ -278,21 +284,31 @@ fn the_settings_copy_is_the_one_holding_desktops_own_trace() {
     trace(&missing, DESKTOP, "PBIDesktop.42420.a.log", None);
     fs::create_dir_all(missing.join(packaged("Agent_1"))).unwrap();
     want.insert("missing".into(), none);
+    Value::Object(want)
+}
+
+#[test]
+fn the_settings_copy_is_the_one_holding_desktops_own_trace() {
+    let work = scratch("copies");
+    let cases = work.join("cases");
+    let want = copy_cases(&cases);
     fs::write(work.join("driver.ps1"), COPY_DRIVER).unwrap();
-    let out = work.join("found.json");
-    let status = Command::new("powershell")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(work.join("driver.ps1"))
-        .arg("-Tools")
-        .arg(app().join("tools"))
-        .arg("-Cases")
-        .arg(&cases)
-        .arg("-Out")
-        .arg(&out)
-        .status()
-        .expect("Windows PowerShell");
-    assert!(status.success());
-    let found: Value = serde_json::from_str(&read_text(&out)).unwrap();
+    for host in ["powershell", "pwsh"] {
+        let out = work.join(format!("found-{host}.json"));
+        let status = Command::new(host)
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(work.join("driver.ps1"))
+            .arg("-Tools")
+            .arg(app().join("tools"))
+            .arg("-Cases")
+            .arg(&cases)
+            .arg("-Out")
+            .arg(&out)
+            .status()
+            .unwrap_or_else(|error| panic!("{host}: {error}"));
+        assert!(status.success(), "{host}");
+        let found: Value = serde_json::from_str(&read_text(&out)).unwrap();
+        assert_eq!(found, want, "{host}");
+    }
     fs::remove_dir_all(&work).unwrap();
-    assert_eq!(found, Value::Object(want));
 }
