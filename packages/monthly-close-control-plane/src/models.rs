@@ -83,6 +83,7 @@ controls! {
     GstReasonableness => "gst_reasonableness",
     CalculationEvidence => "calculation_evidence",
     EquityReconciliation => "equity_reconciliation",
+    ReconciliationCoverage => "reconciliation_coverage",
     Required => "required_control",
 }
 

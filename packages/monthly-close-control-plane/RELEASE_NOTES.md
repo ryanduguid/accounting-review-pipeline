@@ -8,6 +8,13 @@
 - A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
   valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
   build, the release build included, name its commit instead of `unknown`.
+- `--require-control reconciliation_coverage` runs a new control,
+  `reconciliation_coverage`, which raises `REVIEW` for each balance-sheet
+  account (`Section` `Assets`, `Liabilities` or `Equity`) with a closing
+  balance that no `--subledger` row or computed equity reconciliation ties out,
+  and for each account with a balance and no tie whose `Section` is none of
+  those nor `Revenue` or `Expenses`. The pack adds no member: the accounts are
+  its exceptions. Without the requirement nothing changes.
 
 # v1.0.0
 
