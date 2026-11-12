@@ -69,6 +69,15 @@ Synthetic examples. A human decides whether the close is acceptable.
 
 ## Install
 
+In Claude Code, add this repository as a plugin marketplace and install the `close-review` skill:
+
+```text
+/plugin marketplace add ryanduguid/accounting-review-pipeline
+/plugin install close-review@accounting-review-pipeline
+```
+
+The skill runs the installed `close-control` on files you name, checks the pack with `close-control view` and answers only from `close-review-pack.json` and `exceptions.csv`. It runs no server, uses no network, never approves or posts anything and stops on an exit code it does not recognise. The plugin holds the skill only and does not install `close-control`: download that executable from the release asset for your platform, today `monthly-close-control-plane/v1.0.0`, verify it as below and put it on your PATH. Without it, the skill stops and points you here. For another agent, copy [`packages/monthly-close-control-plane/skills/close-review`](packages/monthly-close-control-plane/skills/close-review/SKILL.md) into its skills directory instead.
+
 Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper Review Gate) from its component's [GitHub Release](https://github.com/ryanduguid/accounting-review-pipeline/releases), tagged `monthly-close-control-plane/v<version>` or `review-ready-gate/v<version>`. The latest releases are `monthly-close-control-plane/v1.0.0` and `review-ready-gate/v1.0.0`; changes under an unreleased heading in the [Monthly Close Controls](packages/monthly-close-control-plane/RELEASE_NOTES.md) or [Workpaper Review Gate](packages/review-ready-gate/RELEASE_NOTES.md) release notes, such as `close-control queue --summary`, are not in them, so build from source for those. Each release holds one executable for each of 2 platforms:
 
 | Command | Linux x86_64 (static, musl) | Windows x86_64 |
@@ -79,8 +88,6 @@ Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper R
 Download an explicit tag, never `latest`, and verify the archive against the release's signed `SHA256SUMS` and attestations before extracting it, using the recipe in [Monthly Close Controls](packages/monthly-close-control-plane/RELEASING.md#verify-a-release) or [Workpaper Review Gate](packages/review-ready-gate/RELEASING.md#verify-a-release). The archive holds the executable with its `LICENSE`, `NOTICE` and `README.md`; put the executable on your PATH.
 
 For another platform, or for the Xero exporter and the other native commands, which have no release, build from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
-
-To have an AI agent run the close checks for you, copy [`packages/monthly-close-control-plane/skills/close-review`](packages/monthly-close-control-plane/skills/close-review/SKILL.md) into your agent's skills directory (for Claude Code, `~/.claude/skills/`). The skill runs the installed `close-control` on files you name, checks the pack with `close-control view` and answers only from `close-review-pack.json` and `exceptions.csv`. It runs no server, uses no network, never approves or posts anything and stops on an exit code it does not recognise.
 
 ## Reproduce the sample pack
 
