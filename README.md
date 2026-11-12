@@ -80,6 +80,8 @@ Download an explicit tag, never `latest`, and verify the archive against the rel
 
 For another platform, or for the Xero exporter and the other native commands, which have no release, build from a checkout with Rust. From `packages/monthly-close-control-plane`, run `cargo install --locked --path . --bin close-control`. Each component's README gives its own command.
 
+To have an AI agent run the close checks for you, copy [`packages/monthly-close-control-plane/skills/close-review`](packages/monthly-close-control-plane/skills/close-review/SKILL.md) into your agent's skills directory (for Claude Code, `~/.claude/skills/`). The skill runs the installed `close-control` on files you name, checks the pack with `close-control view` and answers only from `close-review-pack.json` and `exceptions.csv`. It runs no server, uses no network, never approves or posts anything and stops on an exit code it does not recognise.
+
 ## Reproduce the sample pack
 
 From the repository root, with Rust and [just](https://github.com/casey/just) installed, run:
