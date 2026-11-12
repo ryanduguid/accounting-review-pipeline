@@ -19,13 +19,13 @@ $summary = [ordered]@{
     processes = $null; steps = [Collections.Generic.List[object]]::new()
 }
 # Appends a step record. The caller sets its end time and, for a child process, its raw exit code.
-function Start-Step([string]$Name) {
+function Add-Step([string]$Name) {
     $step = [ordered]@{ name = $Name; started_at = Get-Date -Format o; ended_at = $null; exit_code = $null }
     $summary.steps.Add($step)
     $step
 }
 function Test-Binding {
-    $step = Start-Step 'verify_native_model'
+    $step = Add-Step 'verify_native_model'
     try { & (Join-Path $PSScriptRoot 'verify_native_model.ps1') @binding } finally { $step.ended_at = Get-Date -Format o }
 }
 try {
@@ -43,7 +43,7 @@ try {
     foreach ($name in @('test_financial_filters', 'test_benchmark_measures', 'test_review_controls', 'test_review_projection', 'test_review_presentation')) {
         $arguments = @('-NoProfile', '-File', (Join-Path $SourceRoot "tools/$name.ps1"), '-Server', $instance.server, '-PowerBIBin', $PowerBIBin)
         if ($name -eq 'test_review_presentation') { $arguments += @('-Samples', (Join-Path $instance.project 'samples')) }
-        $step = Start-Step $name
+        $step = Add-Step $name
         # Under 'Stop', Windows PowerShell would end the run at a suite's first stderr line, losing its exit code.
         $output = & { $ErrorActionPreference = 'Continue'; & powershell @arguments 2>&1 }
         $result = $LASTEXITCODE
@@ -53,7 +53,7 @@ try {
         if ($result -ne 0) { throw "$name failed with exit $result; see its retained log." }
         Write-Output ($output | Select-Object -Last 1)
     }
-    $step = Start-Step 'measure_report_queries'
+    $step = Add-Step 'measure_report_queries'
     $timings = & { $ErrorActionPreference = 'Continue'; & powershell -NoProfile -File (Join-Path $SourceRoot 'tools/measure_report_queries.ps1') -Server $instance.server -PowerBIBin $PowerBIBin 2>&1 }
     $result = $LASTEXITCODE
     $step.ended_at = Get-Date -Format o
