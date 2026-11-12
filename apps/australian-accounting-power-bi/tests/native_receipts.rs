@@ -68,8 +68,18 @@ foreach ($case in Get-ChildItem -LiteralPath $Cases -Directory) { $found[$case.N
 $found | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $Out -Encoding utf8
 "#;
 
+/// The temp folder in its long form. A runner's TEMP can be an 8.3 short path
+/// (`C:\Users\RUNNER~1\...`), and PowerShell reports the paths it finds in their long form.
+fn temp_root() -> PathBuf {
+    let long = fs::canonicalize(std::env::temp_dir()).unwrap();
+    match long.to_str().and_then(|path| path.strip_prefix(r"\\?\")) {
+        Some(path) if !path.starts_with(r"UNC\") => PathBuf::from(path),
+        _ => long,
+    }
+}
+
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("powerbi-receipts-{name}-{}", std::process::id()));
+    let dir = temp_root().join(format!("powerbi-receipts-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     dir
