@@ -80,10 +80,16 @@ if ($Launch) {
     } while (-not $server -and (Get-Date) -lt $deadline)
     if (-not $server) { throw 'Owned engine did not become available; no other instance was adopted.' }
     $desktopRecord = Get-CimInstance Win32_Process -Filter "ProcessId = $($desktop.Id)"
-    [ordered]@{
+    $record = [ordered]@{
         project = $project; server = $server
         desktop_pid = $desktop.Id; started_at = $desktopRecord.CreationDate.ToString('o')
         engine_pid = $ownedEngine[0].ProcessId; engine_started_at = $ownedEngine[0].CreationDate.ToString('o')
-    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Destination 'instance.json') -Encoding utf8
+    }
+    # Record the instance before its receipt, so a receipt failure still leaves the launched Desktop identified.
+    $instanceFile = Join-Path $Destination 'instance.json'
+    $record | ConvertTo-Json | Set-Content -LiteralPath $instanceFile -Encoding utf8
+    . (Join-Path $PSScriptRoot 'native_receipts.ps1')
+    $record.processes = Get-InstanceReceipt $record
+    $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $instanceFile -Encoding utf8
 }
 Write-Output 'Native project prepared. Set the fabricated CSV privacy classifications and refresh in Desktop before running verification.'
