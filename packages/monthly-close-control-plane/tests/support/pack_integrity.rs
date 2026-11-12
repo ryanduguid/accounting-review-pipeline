@@ -427,6 +427,22 @@ fn evidence_json_container_and_scalar_types_are_checked_by_physical_view() {
 }
 
 #[test]
+fn undocumented_calculation_evidence_is_refused_before_display() {
+    let mut files = evidence_pack();
+    let mut doc = document(&files);
+    put(
+        &mut doc,
+        &["calculation_evidence", "approved"],
+        Json::Bool(true),
+    );
+    save(&mut files, &doc);
+    refused(
+        &files,
+        "close-review-pack.json: calculation_evidence has unknown member(s): approved",
+    );
+}
+
+#[test]
 fn dropping_a_query_csv_row_preserves_the_header_but_fails_verification() {
     let mut files = query_pack(None);
     let csv = String::from_utf8(files[QUERIES].clone()).unwrap();

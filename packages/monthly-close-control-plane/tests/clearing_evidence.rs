@@ -138,6 +138,96 @@ fn an_opening_item_after_its_recorded_period_end_is_refused_without_changing_inp
 }
 
 #[test]
+fn malformed_opening_json_is_refused_without_changing_inputs() {
+    let temp = TempDir::new();
+    let mut config = config(&temp, "");
+    let path = temp.join("opening.json");
+    config.opening_items = Some(path.clone());
+    for (content, diagnostic) in [
+        (
+            "{} x",
+            "Opening items are not readable JSON: Extra data: line 1 column 4 (char 3)",
+        ),
+        (
+            "{\"schema\":0,\"schema\":1}",
+            "Opening items are not readable JSON: JSON member 'schema' appears more than once.",
+        ),
+    ] {
+        fs::write(&path, content).unwrap();
+        let before = inventory(&temp.0);
+        assert_eq!(reconciliation::reconcile(&config).unwrap_err(), diagnostic);
+        assert_eq!(inventory(&temp.0), before);
+    }
+}
+
+#[test]
+fn opening_items_require_every_transaction_field_as_text() {
+    let temp = TempDir::new();
+    let mut config = config(&temp, "Synthetic,CLEAR,AUD,T1,2026-09-30,Old,Receipt,1,0\n");
+    config.closing_balance = "1".into();
+    let september = reconciliation::reconcile(&config).unwrap();
+    let carry = reconciliation_report::rendered(&september)
+        .unwrap()
+        .into_iter()
+        .find(|(name, _)| name == "carry-forward.json")
+        .unwrap()
+        .1;
+    let mut carry = pyjson::loads(std::str::from_utf8(&carry).unwrap()).unwrap();
+    let mut item = carry.at("items").as_array().unwrap()[0].clone();
+    let Json::Object(fields) = &mut item else {
+        panic!("carried transaction")
+    };
+    fields.retain(|(key, _)| !key.is("Credit"));
+    carry.set("items", Json::Array(vec![item]));
+    let path = temp.join("opening.json");
+    fs::write(&path, pyjson::pretty(&carry)).unwrap();
+    config.opening_items = Some(path.clone());
+    config.period_start = "2026-10-01".into();
+    config.period_end = "2026-10-31".into();
+    config.opening_balance = "1".into();
+    fs::write(
+        &config.transactions,
+        reconciliation::COLUMNS.join(",") + "\n",
+    )
+    .unwrap();
+    let before = inventory(&temp.0);
+    assert_eq!(
+        reconciliation::reconcile(&config).unwrap_err(),
+        format!(
+            "{}: row 1 must contain every transaction field as text.",
+            monthly_close_control_plane::pypath::text(&path)
+        )
+    );
+    assert_eq!(inventory(&temp.0), before);
+}
+
+#[test]
+fn short_transaction_and_decision_rows_are_refused_without_changing_inputs() {
+    let temp = TempDir::new();
+    let short = config(&temp, "Synthetic,CLEAR,AUD,T1,2026-09-01,R,Debit,1\n");
+    let before = inventory(&temp.0);
+    assert_eq!(
+        reconciliation::reconcile(&short).unwrap_err(),
+        format!(
+            "{}: row 2 must contain every transaction field as text.",
+            monthly_close_control_plane::pypath::text(&short.transactions)
+        )
+    );
+    assert_eq!(inventory(&temp.0), before);
+    let mut complete = config(
+        &temp,
+        "Synthetic,CLEAR,AUD,T1,2026-09-01,R,Debit,1,0\nSynthetic,CLEAR,AUD,T2,2026-09-02,R,Credit,0,1\n",
+    );
+    record_decisions(&temp, &mut complete, "G,T1,accept\n");
+    let before = inventory(&temp.0);
+    assert_eq!(
+        reconciliation::reconcile(&complete).unwrap_err(),
+        "Every decisions row must contain all four fields."
+    );
+    assert_eq!(inventory(&temp.0), before);
+}
+
+#[test]
 fn suggestions_do_not_reuse_retained_group_labels_or_clear_any_items() {
     let temp = TempDir::new();
     let mut config = config(

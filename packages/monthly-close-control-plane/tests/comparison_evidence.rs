@@ -4,12 +4,14 @@
 use monthly_close_control_plane::{
     comparison::{self, CompareConfig},
     decimal::Decimal,
-    engine::{self, ReviewConfig},
+    engine::{self, CloseReviewPack, ReviewConfig},
     pyjson::{self, Json},
     report, sha256, viewer,
 };
 use std::{collections::BTreeMap, fs, path::Path, time::SystemTime};
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
 #[path = "support/temp.rs"]
 mod temp;
 use temp::TempDir;
@@ -24,12 +26,16 @@ fn trial_balance(date: &str, balance: &str) -> String {
 
 fn write_pack(config: &ReviewConfig, directory: &Path) {
     let pack = engine::review_close(config).unwrap();
-    let files = report::rendered(&pack).unwrap();
+    write_rendered_pack(&pack, directory);
+    viewer::verify_pack(directory).unwrap();
+}
+
+fn write_rendered_pack(pack: &CloseReviewPack, directory: &Path) {
+    let files = report::rendered(pack).unwrap();
     fs::create_dir(directory).unwrap();
     for (name, bytes) in report::PACK_FILE_NAMES.into_iter().zip(files) {
         fs::write(directory.join(name), bytes).unwrap();
     }
-    viewer::verify_pack(directory).unwrap();
 }
 
 fn inventory(directory: &Path) -> BTreeMap<String, (Vec<u8>, SystemTime)> {
@@ -474,6 +480,197 @@ fn equity_movement() -> Json {
         ("description", Json::str("Fabricated capital contribution")),
         ("evidence_reference", Json::str("fabricated-capital-1")),
     ])
+}
+
+fn refused_equity_edit(edit: impl FnOnce(&mut Json), diagnostic: &str) {
+    let inputs = equity_fixture();
+    let config = equity_config(&inputs, "2027-01-31", "2027-02-28");
+    save_schedule(
+        &config,
+        &equity_schedule(&config, "2027-01-31", "2027-02-28"),
+    );
+    let before_inputs = inventory(&inputs.0);
+    let output = TempDir::new();
+    let directory = output.join("pack");
+    write_pack(&config, &directory);
+    let document_path = directory.join("close-review-pack.json");
+    let mut document = pyjson::loads(&fs::read_to_string(&document_path).unwrap()).unwrap();
+    let mut equity = document.at("equity_reconciliation").clone();
+    edit(&mut equity);
+    document.set("equity_reconciliation", equity);
+    fs::write(document_path, pyjson::pretty(&document)).unwrap();
+    let before_pack = inventory(&directory);
+    for error in [
+        viewer::verify_pack(&directory).unwrap_err(),
+        viewer::render_review_sheet(&directory).unwrap_err(),
+    ] {
+        assert_eq!(error, diagnostic);
+    }
+    let shown = child_profile::command(env!("CARGO_BIN_EXE_close-control"))
+        .args(["view", "--pack-dir"])
+        .arg(&directory)
+        .output()
+        .unwrap();
+    assert_eq!(shown.status.code(), Some(1), "{shown:?}");
+    assert!(shown.stdout.is_empty(), "{shown:?}");
+    let newline = if cfg!(windows) { "\r\n" } else { "\n" };
+    assert_eq!(
+        String::from_utf8(shown.stderr).unwrap(),
+        format!("close-control view: verification failed: {diagnostic}{newline}")
+    );
+    assert_eq!(inventory(&directory), before_pack);
+    assert_eq!(inventory(&inputs.0), before_inputs);
+}
+
+#[test]
+fn saved_equity_accounts_require_complete_unique_evidence() {
+    refused_equity_edit(
+        |equity| {
+            let mut account = equity.at("accounts").as_array().unwrap()[0].clone();
+            let Json::Object(fields) = &mut account else {
+                panic!("account")
+            };
+            fields.retain(|(key, _)| !key.is("opening"));
+            equity.set("accounts", Json::Array(vec![account]));
+        },
+        "Malformed equity account evidence.",
+    );
+    refused_equity_edit(
+        |equity| {
+            let account = equity.at("accounts").as_array().unwrap()[0].clone();
+            equity.set("accounts", Json::Array(vec![account.clone(), account]));
+        },
+        "Duplicate equity account evidence.",
+    );
+}
+
+#[test]
+fn saved_equity_movements_require_complete_text_fields() {
+    let mut missing = equity_movement();
+    let Json::Object(fields) = &mut missing else {
+        panic!("movement")
+    };
+    fields.retain(|(key, _)| !key.is("date"));
+    let mut numeric = equity_movement();
+    numeric.set("date", Json::int(20270215));
+    for (movement, diagnostic) in [
+        (missing, "Malformed equity movement evidence."),
+        (numeric, "Equity movement fields must be strings."),
+    ] {
+        refused_equity_edit(
+            |equity| equity.set("movements", Json::Array(vec![movement])),
+            diagnostic,
+        );
+    }
+}
+
+#[test]
+fn blocked_saved_equity_cannot_retain_calculated_balances() {
+    refused_equity_edit(
+        |equity| equity.set("status", Json::str("BLOCKED")),
+        "Blocked equity evidence must omit calculated balances.",
+    );
+}
+
+#[test]
+fn saved_equity_movements_cannot_repeat_an_identifier() {
+    refused_equity_edit(
+        |equity| {
+            let movement = equity_movement();
+            equity.set("movements", Json::Array(vec![movement.clone(), movement]));
+        },
+        "Duplicate equity movement evidence.",
+    );
+}
+
+#[test]
+fn saved_equity_movement_requires_exactly_one_positive_side() {
+    refused_equity_edit(
+        |equity| {
+            let mut movement = equity_movement();
+            movement.set("debit", Json::str("1"));
+            movement.set("credit", Json::str("1"));
+            equity.set("movements", Json::Array(vec![movement]));
+        },
+        "Equity movement must have exactly one positive side.",
+    );
+}
+
+#[test]
+fn saved_equity_movements_must_name_a_calculated_account() {
+    refused_equity_edit(
+        |equity| {
+            let mut movement = equity_movement();
+            movement.set("account_id", Json::str("missing"));
+            equity.set("movements", Json::Array(vec![movement]));
+        },
+        "Equity movement references an unknown account.",
+    );
+}
+
+#[test]
+fn saved_equity_totals_must_equal_the_account_evidence() {
+    refused_equity_edit(
+        |equity| {
+            let mut total = equity.at("total").clone();
+            total.set("opening", Json::str("1"));
+            equity.set("total", total);
+        },
+        "Equity totals disagree with the account evidence.",
+    );
+}
+
+#[test]
+fn saved_equity_status_must_agree_with_the_calculated_difference() {
+    refused_equity_edit(
+        |equity| equity.set("status", Json::str("REVIEW")),
+        "Equity status disagrees with its arithmetic.",
+    );
+}
+
+#[test]
+fn comparison_binds_internally_consistent_packs_to_the_supplied_trial_balance() {
+    let inputs = equity_fixture();
+    let before_inputs = inventory(&inputs.0);
+    for (case, diagnostic) in [
+        (
+            "date",
+            "Comparison trial-balance date does not match the pack.",
+        ),
+        ("tenant", "Pack finding names another tenant."),
+    ] {
+        let output = TempDir::new();
+        let previous = output.join("previous");
+        let current = output.join("current");
+        let mut pack = engine::review_close(&ReviewConfig::new(
+            inputs.join("2027-02-28.csv"),
+            inputs.join("2027-01-31.csv"),
+        ))
+        .unwrap();
+        if case == "date" {
+            pack.current_report_dates = vec!["2027-02-27".into()];
+        } else {
+            pack.exceptions[0].tenant = "Other fabricated tenant".into();
+        }
+        write_rendered_pack(&pack, &previous);
+        viewer::verify_pack(&previous).unwrap();
+        write_pack(
+            &ReviewConfig::new(inputs.join("2027-03-31.csv"), inputs.join("2027-02-28.csv")),
+            &current,
+        );
+        let before_packs = [inventory(&previous), inventory(&current)];
+        let error = comparison::compare_packs(&CompareConfig {
+            previous_pack: previous.clone(),
+            current_pack: current.clone(),
+            previous_tb: inputs.join("2027-02-28.csv"),
+            current_tb: inputs.join("2027-03-31.csv"),
+            responses: None,
+        })
+        .unwrap_err();
+        assert_eq!(error, diagnostic);
+        assert_eq!([inventory(&previous), inventory(&current)], before_packs);
+        assert_eq!(inventory(&inputs.0), before_inputs);
+    }
 }
 
 #[test]
