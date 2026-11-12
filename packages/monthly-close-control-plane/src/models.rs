@@ -98,6 +98,19 @@ pub enum GstClass {
     BasExcluded,
     Mixed,
     Gst,
+    /// An account that records only GST collected, compared with sales on its own.
+    GstCollected,
+    /// An account that records only GST paid, compared with purchases on its own.
+    GstPaid,
+}
+
+/// A GST settlements declaration: each settlement's net debit to the GST
+/// accounts and, when the declaration has a `Side` column, the side it was
+/// posted to (`GstCollected` or `GstPaid`).
+#[derive(Clone, Debug)]
+pub struct GstSettlements {
+    pub sided: bool,
+    pub rows: Vec<(Option<GstClass>, Decimal)>,
 }
 
 impl GstClass {
@@ -111,6 +124,8 @@ impl GstClass {
             "bas_excluded" => Self::BasExcluded,
             "mixed" => Self::Mixed,
             "gst" => Self::Gst,
+            "gst_collected" => Self::GstCollected,
+            "gst_paid" => Self::GstPaid,
             _ => return None,
         })
     }

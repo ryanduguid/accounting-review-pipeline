@@ -35,6 +35,7 @@ pub const BALANCE_POLICY_COLUMNS: [&str; 3] = ["AccountID", "ExpectedBalance", "
 pub const SUBLEDGER_COLUMNS: [&str; 3] = ["Tenant", "AccountID", "SubledgerBalance"];
 pub const GST_MAPPING_COLUMNS: [&str; 2] = ["AccountID", "GSTClass"];
 pub const GST_SETTLEMENT_COLUMNS: [&str; 2] = ["Reference", "Amount"];
+pub const GST_SIDED_SETTLEMENT_COLUMNS: [&str; 3] = ["Reference", "Amount", "Side"];
 #[derive(Clone, Debug)]
 pub struct SourceSnapshot {
     pub path: PathBuf,
@@ -446,7 +447,7 @@ pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, Gs
         let name = row.text("GSTClass", false)?;
         let class = GstClass::parse(&name).ok_or_else(|| {
             format!(
-                "{path}: row {} GSTClass {} is not one of taxable_sales, creditable_purchases, non_creditable, gst_free, input_taxed, bas_excluded, mixed, gst.",
+                "{path}: row {} GSTClass {} is not one of taxable_sales, creditable_purchases, non_creditable, gst_free, input_taxed, bas_excluded, mixed, gst, gst_collected, gst_paid.",
                 row.number,
                 pytext::repr(&name)
             )
@@ -458,7 +459,19 @@ pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, Gs
             ));
         }
     }
-    if !mapping.values().any(|class| *class == GstClass::Gst) {
+    let has = |wanted: GstClass| mapping.values().any(|class| *class == wanted);
+    let sided = has(GstClass::GstCollected) || has(GstClass::GstPaid);
+    if sided && has(GstClass::Gst) {
+        return Err(format!(
+            "{path}: GST mapping classes accounts both gst and gst_collected or gst_paid; class every GST account gst, or split them all into gst_collected and gst_paid."
+        ));
+    }
+    if sided && !(has(GstClass::GstCollected) && has(GstClass::GstPaid)) {
+        return Err(format!(
+            "{path}: GST mapping splits GST by side but classes no account gst_collected or no account gst_paid, so one side has no recorded GST to compare."
+        ));
+    }
+    if !sided && !has(GstClass::Gst) {
         return Err(format!(
             "{path}: GST mapping classes no account gst, so there is no recorded GST to compare."
         ));
@@ -467,11 +480,20 @@ pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, Gs
 }
 
 /// The declared BAS payments, refunds and clearing journals in the GST
-/// accounts, each as its net debit to them. A header alone declares none.
-pub fn load_gst_settlements(snapshot: &SourceSnapshot) -> Result<Vec<Decimal>> {
+/// accounts, each as its net debit to them and, with a `Side` column, the side
+/// (`collected` or `paid`) it was posted to. A header alone declares none.
+pub fn load_gst_settlements(snapshot: &SourceSnapshot) -> Result<GstSettlements> {
+    let label = "GST settlements file";
+    let (sided, rows) = match csv_rows(snapshot, &GST_SIDED_SETTLEMENT_COLUMNS, label) {
+        Ok(rows) => (true, rows),
+        Err(_) => (false, csv_rows(snapshot, &GST_SETTLEMENT_COLUMNS, label)?),
+    };
     let mut references = BTreeSet::new();
-    let mut amounts = Vec::new();
-    for row in csv_rows(snapshot, &GST_SETTLEMENT_COLUMNS, "GST settlements file")? {
+    let mut settlements = GstSettlements {
+        sided,
+        rows: Vec::new(),
+    };
+    for row in rows {
         let row = row?;
         let reference = row.text("Reference", false)?;
         if !references.insert(reference.clone()) {
@@ -481,9 +503,26 @@ pub fn load_gst_settlements(snapshot: &SourceSnapshot) -> Result<Vec<Decimal>> {
                 pytext::repr(&reference)
             ));
         }
-        amounts.push(row.money("Amount")?);
+        let side = if sided {
+            let name = row.text("Side", false)?;
+            Some(match name.as_str() {
+                "collected" => GstClass::GstCollected,
+                "paid" => GstClass::GstPaid,
+                _ => {
+                    return Err(format!(
+                        "{}: row {} Side {} is not one of collected, paid.",
+                        pypath::text(&snapshot.path),
+                        row.number,
+                        pytext::repr(&name)
+                    ));
+                }
+            })
+        } else {
+            None
+        };
+        settlements.rows.push((side, row.money("Amount")?));
     }
-    Ok(amounts)
+    Ok(settlements)
 }
 
 pub fn load_subledger(
