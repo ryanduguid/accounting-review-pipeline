@@ -83,6 +83,7 @@ controls! {
     GstReasonableness => "gst_reasonableness",
     CalculationEvidence => "calculation_evidence",
     EquityReconciliation => "equity_reconciliation",
+    ContactRegister => "contact_register",
     Required => "required_control",
 }
 
@@ -114,6 +115,14 @@ impl GstClass {
             _ => return None,
         })
     }
+}
+
+/// One row of a contacts export; `abn` is blank when none is recorded.
+#[derive(Clone, Debug)]
+pub struct Contact {
+    pub id: String,
+    pub name: String,
+    pub abn: String,
 }
 
 #[derive(Clone, Debug)]

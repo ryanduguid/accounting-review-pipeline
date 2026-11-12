@@ -225,6 +225,12 @@ const GST_OPTIONS: &str = concat!(
     "                        of the expected GST on sales and purchases, e.g. 0.01\n",
     "                        for 1%\n",
 );
+/// The review command's contacts option, in its usage and its help.
+const CONTACTS_USAGE: &str = "                            [--contacts CONTACTS]\n";
+const CONTACTS_OPTION: &str = concat!(
+    "  --contacts CONTACTS   optional ContactID,Name,ABN CSV; runs the contact\n",
+    "                        register checks\n",
+);
 /// The review command's required-control option, in its usage and its help.
 const REQUIRED_CONTROL_USAGE: &str = concat!(
     "[--require-calculation LABEL]\n",
@@ -241,11 +247,13 @@ const SUMMARY_OPTION: &str = concat!(
     "  --summary             count the displayed packs by state, by control with\n",
     "                        exceptions and by control not run\n",
 );
-/// The frozen Python baseline predates the GST reasonableness, required
-/// control and queue summary options, so CLI output compared with it drops
-/// their usage and help lines.
+/// The frozen Python baseline predates the GST reasonableness, contacts,
+/// required control and queue summary options, so CLI output compared with it
+/// drops their usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(GST_USAGE, "")
+    text.replace(CONTACTS_USAGE, "")
+        .replace(CONTACTS_OPTION, "")
+        .replace(GST_USAGE, "")
         .replace(GST_OPTIONS, "")
         .replace(
             REQUIRED_CONTROL_USAGE,
@@ -1006,9 +1014,10 @@ mod tests {
     fn dropping_the_native_options_leaves_the_frozen_review_help_and_usage() {
         let (code, help, _) = stdio::capture(|| cli::main(vec!["review".into(), "--help".into()]));
         assert_eq!(code, 0);
-        assert!(help.contains("--gst-mapping"));
+        assert!(help.contains("--gst-mapping") && help.contains("--contacts"));
         let frozen = without_native_options(&help);
         assert!(!frozen.to_lowercase().contains("gst"), "{frozen}");
+        assert!(!frozen.contains("--contacts"), "{frozen}");
         assert!(!frozen.contains("--require-control"), "{frozen}");
         assert!(frozen.contains(
             "[--require-calculation LABEL] --output OUTPUT
@@ -1017,9 +1026,10 @@ mod tests {
         assert!(frozen.ends_with("maximum permitted GL/subledger difference\n"));
         let (code, _, usage) = stdio::capture(|| cli::main(vec!["review".into()]));
         assert_eq!(code, 1);
-        assert!(usage.contains("--gst-mapping"));
+        assert!(usage.contains("--gst-mapping") && usage.contains("--contacts"));
         let frozen = without_native_options(&usage);
         assert!(!frozen.to_lowercase().contains("gst"));
+        assert!(!frozen.contains("--contacts"));
         assert!(!frozen.contains("--require-control"));
     }
     /// The queue's help and usage as the frozen Python baseline printed them.

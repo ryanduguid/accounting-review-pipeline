@@ -96,6 +96,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
                 "--gst-settlements",
                 "--gst-absolute-tolerance",
                 "--gst-percentage-tolerance",
+                "--contacts",
             ],
             &["--current", "--prior", "--output"],
         ),
@@ -449,6 +450,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
             "--gst-settlements",
             "--review-note",
             "--equity-schedule",
+            "--contacts",
         ]
         .into_iter()
         .filter_map(|flag| args.optional_path(flag).map(|path| (flag, path)))
@@ -491,6 +493,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.gst_settlements_path = args.optional_path("--gst-settlements");
         config.acknowledgement_path = args.optional_path("--review-note");
         config.equity_schedule_path = args.optional_path("--equity-schedule");
+        config.contacts_path = args.optional_path("--contacts");
         config.equity_currency = args.optional_literal("--equity-currency")?;
         config.equity_currency_evidence = args.optional_literal("--equity-currency-evidence")?;
         config.calculation_evidence_paths = args.paths("--calculation-evidence");

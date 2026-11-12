@@ -10,7 +10,7 @@ use crate::{
     isodate::Date,
     loader::{self, SourceSnapshot},
     models::{
-        ClientQuery, Control, ExceptionItem, GstClass, ReviewerAcknowledgement, Status,
+        ClientQuery, Contact, Control, ExceptionItem, GstClass, ReviewerAcknowledgement, Status,
         TrialBalanceRow,
     },
     pyjson::Json,
@@ -97,6 +97,7 @@ pub struct ReviewConfig {
     pub gst_settlements_path: Option<PathBuf>,
     pub acknowledgement_path: Option<PathBuf>,
     pub equity_schedule_path: Option<PathBuf>,
+    pub contacts_path: Option<PathBuf>,
     pub equity_currency: Option<String>,
     pub equity_currency_evidence: Option<String>,
     pub calculation_evidence_paths: Vec<PathBuf>,
@@ -121,6 +122,7 @@ impl ReviewConfig {
             gst_settlements_path: None,
             acknowledgement_path: None,
             equity_schedule_path: None,
+            contacts_path: None,
             equity_currency: None,
             equity_currency_evidence: None,
             calculation_evidence_paths: Vec::new(),
@@ -468,6 +470,99 @@ pub fn subledger_exceptions(
             item.threshold = Some(tolerance.clone());
             result.push(item);
         }
+    }
+    result
+}
+
+/// Whether 11 ASCII digits pass the ABN check: subtract 1 from the first
+/// digit, weight the digits 10, 1, 3, 5, ..., 19, and the sum divides by 89.
+/// Copied from evatt's `patterns::valid`, since a component may not import a
+/// sibling.
+fn abn_check_digits_hold(digits: &str) -> bool {
+    const WEIGHTS: [u32; 11] = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+    let values: Vec<u32> = digits.chars().filter_map(|c| c.to_digit(10)).collect();
+    digits.len() == 11
+        && values.len() == 11
+        && values.iter().zip(WEIGHTS).map(|(v, w)| v * w).sum::<u32>() % 89 == 10
+}
+
+/// The contacts named in a finding, as `ID (name)`.
+fn contact_list(contacts: &[&Contact]) -> String {
+    contacts
+        .iter()
+        .map(|c| format!("{} ({})", pytext::repr(&c.id), pytext::repr(&c.name)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn contact_item(reason: &str, action: &str) -> ExceptionItem {
+    ExceptionItem::new(
+        Control::ContactRegister,
+        Status::Review,
+        None,
+        reason,
+        action,
+    )
+}
+
+/// The finding for a recorded ABN that `digits`, its spaces removed, show is
+/// not a valid ABN.
+fn invalid_abn(contact: &Contact, digits: &str) -> ExceptionItem {
+    let fault = if digits.len() == 11 && digits.bytes().all(|b| b.is_ascii_digit()) {
+        "fails the ABN check digits"
+    } else {
+        "is not 11 digits"
+    };
+    contact_item(
+        &format!(
+            "Contact {} has ABN {}, which {fault}, so it is not a valid ABN.",
+            contact_list(&[contact]),
+            pytext::repr(&contact.abn)
+        ),
+        "Confirm the ABN on the Australian Business Register's ABN Lookup and correct the contact. This exception changes nothing in the ledger.",
+    )
+}
+
+/// `REVIEW` for each contact whose recorded ABN is not 11 digits or fails the
+/// check digits, each valid ABN held by more than one contact, and each name
+/// held by more than one contact once case and spacing are ignored. A blank
+/// ABN is not checked.
+pub fn contact_register_exceptions(contacts: &[Contact]) -> Vec<ExceptionItem> {
+    let mut result = Vec::new();
+    let mut by_abn: BTreeMap<String, Vec<&Contact>> = BTreeMap::new();
+    let mut by_name: BTreeMap<String, Vec<&Contact>> = BTreeMap::new();
+    for contact in contacts {
+        let name = pytext::casefold(&contact.name);
+        by_name
+            .entry(name.split_whitespace().collect::<Vec<_>>().join(" "))
+            .or_default()
+            .push(contact);
+        let digits = contact.abn.replace(' ', "");
+        if abn_check_digits_hold(&digits) {
+            by_abn.entry(digits).or_default().push(contact);
+        } else if !digits.is_empty() {
+            result.push(invalid_abn(contact, &digits));
+        }
+    }
+    for (abn, holders) in by_abn.into_iter().filter(|(_, h)| h.len() > 1) {
+        result.push(contact_item(
+            &format!(
+                "ABN {abn} is recorded on {} contacts: {}.",
+                holders.len(),
+                contact_list(&holders)
+            ),
+            "Confirm whether they are one business entered more than once, which should be merged, or separate contacts that share an ABN, such as branches. This exception changes nothing in the ledger.",
+        ));
+    }
+    for holders in by_name.into_values().filter(|h| h.len() > 1) {
+        result.push(contact_item(
+            &format!(
+                "{} contacts have the same name once case and spacing are ignored: {}.",
+                holders.len(),
+                contact_list(&holders)
+            ),
+            "Confirm whether they are one contact entered more than once, which should be merged. This exception changes nothing in the ledger.",
+        ));
     }
     result
 }
@@ -838,6 +933,11 @@ pub fn review_with(
         .as_ref()
         .map(loader::load_gst_mapping)
         .transpose()?;
+    let contacts_source = optional(&config.contacts_path, "Contacts file")?;
+    let contacts = contacts_source
+        .as_ref()
+        .map(loader::load_contacts)
+        .transpose()?;
     let acknowledgement_source = optional(&config.acknowledgement_path, "Review-note file")?;
     let acknowledgement = loader::load_reviewer_acknowledgement(acknowledgement_source.as_ref())?;
     // An absent or unusable declaration stops only the GST control, which says why.
@@ -917,6 +1017,13 @@ pub fn review_with(
             exceptions.extend(found);
             gst_ran = ran;
         }
+        if let Some(contacts) = &contacts {
+            let mut found = contact_register_exceptions(contacts);
+            for item in &mut found {
+                item.tenant.clone_from(current_tenant);
+            }
+            exceptions.extend(found);
+        }
         for name in &config.required_calculations {
             if !calculation_evidence::valid_label(name) {
                 return Err(format!(
@@ -988,6 +1095,10 @@ pub fn review_with(
         Control::CalculationEvidence if !unreadable.is_empty() => RunState::Failed,
         Control::CalculationEvidence => supplied(!evidence.is_empty()),
         Control::EquityReconciliation => supplied(equity_source.is_some()),
+        Control::ContactRegister if contacts.as_ref().is_some_and(Vec::is_empty) => {
+            RunState::Failed
+        }
+        Control::ContactRegister => supplied(contacts.is_some()),
     };
     let required_controls: Vec<_> = required_controls
         .into_iter()
@@ -1016,6 +1127,7 @@ pub fn review_with(
         ),
         ("review_note", acknowledgement_source),
         ("equity_schedule", equity_source),
+        ("contacts", contacts_source),
     ] {
         if let Some(source) = source {
             source_hashes.insert(role.into(), source.sha256);
@@ -1033,6 +1145,11 @@ pub fn review_with(
         ("subledger", !subledger.is_empty()),
         // Tracked only once a GST mapping is supplied, so packs without one are unchanged.
         ("gst_reasonableness", gst_ran),
+        // Named only when a supplied contacts file held no contacts.
+        (
+            "contact_register",
+            contacts.as_ref().is_none_or(|c| !c.is_empty()),
+        ),
         (
             "calculation_evidence",
             !evidence.is_empty()

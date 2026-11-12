@@ -505,6 +505,7 @@ into an exception.
 | `gst_reasonableness` | With `--gst-mapping` and `--gst-settlements`: `REVIEW` when the period's net GST movement, with the declared BAS payments, refunds and clearing journals added back, differs from 1/10 of taxable sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance` (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST expected on sales and purchases, a review heuristic rather than a rounding bound. `REVIEW`, with the control named under `controls_not_run`, when an account that moved has no GST class or is classed `mixed`, so the mapping cannot tell its taxable amounts from the rest, or when the settlements declaration is missing, unreadable or malformed: the control did not run. | A sale or purchase in the wrong class, such as GST charged on a GST-free sale in a taxable sales account; equal shortfalls on sales and purchases, since only the net is compared; a difference within the tolerance; and whether GST on imports, GST adjustments or the taxable part of a mixed supply is right, since the trial balance does not separate them from other GST; and whether the settlements declaration is true, since the control relies on it and cannot verify it from trial-balance movements. | Check the declared settlements against the BAS and the ATO account, then trace the rest to tax codes and postings ([GST reasonableness](#gst-reasonableness)). No client query. |
 | `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
 | `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
+| `contact_register` | With `--contacts`: `REVIEW` for each contact whose `ABN` is not 11 digits once spaces are removed or fails the ABN check digits, for each valid ABN on more than one contact, and for each name on more than one contact once case and spacing are ignored. | Whether an ABN that passes the check digits is registered, current or the contact's own: nothing is looked up. A contact with a blank `ABN`, and duplicates whose names differ by more than case and spacing, such as `Pty Ltd` against `Pty. Limited`. | Confirm each ABN on the Australian Business Register's ABN Lookup, and merge contacts entered more than once in the ledger. No client query. |
 | `required_control` | With `--require-control`: `REVIEW` for each named control that was skipped or failed. | Whether a control that ran was fed complete data: a subledger file with one row counts as run. | Supply the input the control needs, or remove the requirement deliberately. No client query. |
 
 ## Detection benchmark
@@ -616,6 +617,18 @@ Tenant,AccountID,SubledgerBalance
 
 `SubledgerBalance` must use the same signed convention as `YTDDebit - YTDCredit`: debit balances positive; credit balances negative. Each supplied subledger row is compared only with the matching current TB account. A missing GL account, or a difference beyond `--reconciliation-tolerance`, requires review.
 
+An optional contacts export, a 3-column CSV, runs `contact_register`:
+
+```text
+ContactID,Name,ABN
+```
+
+`ContactID` and `Name` must not be blank, and a `ContactID` may appear once.
+`ABN` may be blank, and then it is not checked; spaces in it are ignored. The
+check reads only this file: it does not look an ABN up. A contacts file with no
+rows is named under `controls_not_run`; without `--contacts` the control is not
+named there, so a pack without the option is unchanged.
+
 Each of these controls runs only when its input is supplied, and so does the
 calculation-evidence control. The pack therefore names the ones that did not run:
 the summary's scope block carries a `Controls not run` line, and
@@ -654,6 +667,7 @@ The rule for each control:
 | `gst_reasonableness` | `--gst-mapping` was supplied and the control finished | No mapping was supplied | The control could not finish, as without `--gst-settlements` |
 | `calculation_evidence` | Evidence was supplied and every file was read | No evidence file was supplied, even with `--require-calculation` | A supplied file could not be read |
 | `equity_reconciliation` | `--equity-schedule` was supplied | It was not | Never |
+| `contact_register` | `--contacts` held at least one row | It was not supplied | The file held no rows |
 
 A `skipped` or `failed` control raises a `required_control` exception naming it, so
 the pack cannot reach `PASS`, and the command exits 2, never 0. No new status exists,

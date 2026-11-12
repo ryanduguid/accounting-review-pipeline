@@ -8,6 +8,12 @@
 - A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
   valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
   build, the release build included, name its commit instead of `unknown`.
+- `review` and `workbench` take `--contacts`, a `ContactID,Name,ABN` CSV, and
+  run a new control, `contact_register`: `REVIEW` for an ABN that is not 11
+  digits or fails the ABN check digits, for one valid ABN on several contacts,
+  and for one name on several contacts once case and spacing are ignored. A
+  blank ABN is not checked, and nothing is looked up. Without the option the
+  output is unchanged.
 
 # v1.0.0
 
