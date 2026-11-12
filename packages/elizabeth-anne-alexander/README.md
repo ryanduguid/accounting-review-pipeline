@@ -2,7 +2,7 @@
 
 | Command | Build from source | Released Python distribution |
 | --- | --- | --- |
-| `elizabeth-anne-alexander` | `cargo build --release` | `elizabeth-anne-alexander` 0.2.6 on PyPI |
+| `elizabeth-anne-alexander` | `cargo build --locked --release` | `elizabeth-anne-alexander` 0.2.6 on PyPI |
 
 From 1.0.0 the gate is a standalone Rust binary. Its command, subcommands, flags, exit codes and output files match 0.2.6; the `elizabeth_anne_alexander` Python import no longer exists. 1.0.0 is unreleased and has no release workflow yet, so `pip install elizabeth-anne-alexander` still installs the Python 0.2.6. [RELEASE_NOTES.md](RELEASE_NOTES.md) lists the differences from 0.2.6.
 
@@ -87,7 +87,7 @@ flowchart TD
 ```bash
 # From packages/elizabeth-anne-alexander, build the binary (rust-toolchain.toml
 # names the Rust version) and put it on PATH
-cargo build --release
+cargo build --locked --release
 export PATH="$PWD/target/release:$PATH"
 
 # Run deterministic evaluation

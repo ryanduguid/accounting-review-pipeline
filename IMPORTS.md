@@ -64,6 +64,9 @@ The fetched heads above are the selected import snapshots.
 
 ## Component identities and boundaries
 
+This table records each component as imported. The README's component table gives the
+current identities, versions and releases.
+
 | Component | Public identity | Lock and verification | Licence and publisher boundary |
 |---|---|---|---|
 | Monthly Close Controls | distribution `monthly-close-control-plane` 0.1.2; import `closecontrol`; commands `close-control`, `openaccountants-au`; version in `pyproject.toml` | `uv.lock`; pytest, build, Ruff, mypy, clean-wheel smoke | Apache-2.0; PyPI environment `pypi`; local, offline review package |
@@ -142,16 +145,16 @@ disagree.
 |---|---|---|---|---|---|---|
 | Monthly Close Controls | `release-monthly-close-control-plane.yml` | `monthly-close-control-plane/v*` tags | `release-binary.yml` with `binary: close-control` since the Rust 1.0.0 port (`release-python.yml` before it) | `packages/monthly-close-control-plane` | `monthly-close-control-plane` | none (GitHub release assets only); `pypi` (https://pypi.org/p/monthly-close-control-plane) for the Python releases |
 | Workpaper Review Gate | `release-review-ready-gate.yml` | `review-ready-gate/v*` tags | `release-binary.yml` with `binary: review-ready` since the Rust 1.0.0 port | `packages/review-ready-gate` | `review-ready-gate` | none (GitHub release assets only) |
-| Xero Trial Balance Export | `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags | `release-python.yml` | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) |
+| Xero Trial Balance Export | none since the Rust 1.0.0 port removed `release-xero-trial-balance-export.yml` | `xero-trial-balance-export/v*` tags, before the port | `release-python.yml`, before the port | `packages/xero-trial-balance-export` | `xero-trial-balance-export` | `pypi-xero-trial-balance-export` (https://pypi.org/p/xero-trial-balance-export) for the Python releases |
 | Accounting Excel Toolkit | `release-accounting-excel-toolkit.yml` | `accounting-excel-toolkit/v*` tags | `release-archive.yml` with `artifact-stem: accounting-excel-toolkit` | `adapters/accounting-excel-toolkit` | `accounting-excel-toolkit` | none (GitHub release assets only) |
 
-The 3 Python callers upload the attested distribution (`upload-dist-artifact: true`) and
-publish it from a caller-side `pypi` job that downloads `dist-<stem>-<version>`, requires
-exactly one wheel and one source distribution, and uses
-`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`.
-Before any monorepo release the owner must register each PyPI trusted publisher against the
-new caller file name and environment (the repository currently has only the `pypi`
-environment). The Release Policy pin resolves to its protected `main`. No caller references
+No Python release caller remains. Until their Rust ports, the Python callers uploaded the
+attested distribution (`upload-dist-artifact: true`) and published it from a caller-side
+`pypi` job that downloaded `dist-<stem>-<version>`, required exactly one wheel and one
+source distribution, and used
+`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33` through a PyPI
+trusted publisher registered against the caller file name and environment.
+The Release Policy pin resolves to its protected `main`. No caller references
 a secret. No component directory carries a `release.yml` of its own.
 
 The evatt Python caller was removed for the 1.0.0 Rust port on 13 October 2026.
