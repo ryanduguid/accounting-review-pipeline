@@ -59,7 +59,7 @@ AS ISO/IEC 42001:2023 is the Australian identical adoption of ISO/IEC 42001:2023
 
 | Field | Entry |
 | --- | --- |
-| Name and version | [Workpaper Review Gate](../packages/review-ready-gate/README.md) (`review-ready-gate`) 1.0.0, a Rust readiness gate for workpaper packs before manager review |
+| Name and version | [Workpaper Review Gate](../packages/review-ready-gate/README.md) (`review-ready-gate`) 1.0.1, a Rust readiness gate for workpaper packs before manager review |
 | Source and updates | Ryan Duguid, the sole maintainer, under the [Ryan Duguid Public Attribution Licence 1.0](../LICENSE) (the FSL-1.1-ALv2 text with a public attribution condition), with no warranty or support agreement. Each release has [release notes](../packages/review-ready-gate/RELEASE_NOTES.md); an installed version changes only when the firm upgrades it. |
 | Intended use cases | Stops an incomplete, untied or unbalanced pack reaching manager review, however it was prepared |
 | Known limitations and prohibited use | Not tax, financial, audit or legal advice, and not a sign-off. `READY` means no configured control tripped, not that every control ran; the pack lists the optional controls that had no input. Tie-out tolerance is an input to each gate run. The GST control file is checked only for postings after `period_end`, not for a period start. The command refuses to write a pack inside a version-control checkout it can detect, but a work tree chosen by `--work-tree` or `core.worktree` in another repository cannot be detected, so the check is a backstop, not proof that a directory is untracked. |

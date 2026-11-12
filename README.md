@@ -208,7 +208,8 @@ and `view` refuses a pack whose 2 copies disagree. It holds no time, host or pat
 build and inputs still write byte-identical packs. A pack without the block is contract 1, written
 before it existed; `view` still reads one, but a `view` from before the block refuses packs that
 carry it. Building with `ACCOUNTING_REVIEW_SOURCE_COMMIT` set to a full lowercase commit SHA
-records that commit; any other value fails the build.
+records that commit; any other value fails the build. Without it, a full lowercase
+`GITHUB_SHA`, as in a GitHub Actions build, is recorded instead, else `unknown`.
 
 ### Readiness-gate output
 

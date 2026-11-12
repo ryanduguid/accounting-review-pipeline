@@ -5,6 +5,9 @@
   packs and exceptions each control raised, and which controls did not run where.
   The client label is the pack directory's name. Without the flag the queue keeps
   its bytes. `--s` remains an abbreviation for `--status`.
+- A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
+  valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
+  build, the release build included, name its commit instead of `unknown`.
 
 # v1.0.0
 
