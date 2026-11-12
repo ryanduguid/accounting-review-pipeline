@@ -7,6 +7,16 @@ use super::{Result, archive, digest, export, json, ledger, schema};
 use serde_json::{Value, json};
 use std::path::Path;
 
+/// Returns the same validated fabricated inputs embedded by the native workflow.
+pub fn bundled_fixture_files() -> Result<std::collections::BTreeMap<String, Vec<u8>>> {
+    let (_, mut sources) = ledger::bundled_sources()?;
+    sources.insert(
+        "shared-review-case.json".into(),
+        include_bytes!("../../samples/shared-review-case.json").to_vec(),
+    );
+    Ok(sources)
+}
+
 pub fn evaluate(request: &Value) -> Value {
     match value(request) {
         Ok(value) => json!({"ok":true,"value":value}),

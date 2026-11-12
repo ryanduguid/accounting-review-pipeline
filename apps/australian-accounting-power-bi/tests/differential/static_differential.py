@@ -32,6 +32,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from legacy_fixture_migration import GENERATOR_SHA256, TEST_SHA256, require_hash
+
 APP = Path(__file__).resolve().parents[2]
 REPO = APP.parents[1]
 APP_PATH = APP.relative_to(REPO)
@@ -53,6 +55,7 @@ RUST_ONLY = {
     "review_island_has_only_its_own_single_direction_relationship_and_text_amounts",
     "drillthrough_binds_complete_review_context_and_preserves_back_navigation",
 }
+CURRENT_ONLY = {"industry_titles_match_the_selected_abs_revision"}
 SWAPS = [
     ("KEEPFILTERS(", "FILTER("), ("TREATAS(", "TREAT("), ("OneDirection", "BothDirections"),
     ("crossFilteringBehavior", "crossFilter"), ("formatString:", "formatstring:"), ("\t/// ", "\t// "),
@@ -300,7 +303,15 @@ def run_rust(binaries: dict[str, str], app: Path) -> dict[str, bool]:
         completed = subprocess.run([binary, "--test-threads=4"], capture_output=True, text=True, env=environment, timeout=120)
         for match in re.finditer(r"^test (\S+) \.\.\. (ok|FAILED)$", completed.stdout, re.MULTILINE):
             results[match.group(1)] = match.group(2) == "ok"
-    return {name: ok for name, ok in results.items() if name not in RUST_ONLY}
+    return results
+
+
+def split_rust(results: dict[str, bool]) -> tuple[dict[str, bool], dict[str, bool]]:
+    missing = CURRENT_ONLY - results.keys()
+    if missing:
+        raise SystemExit("missing current-only Rust assertions: " + ", ".join(sorted(missing)))
+    return ({name: ok for name, ok in results.items() if name not in RUST_ONLY | CURRENT_ONLY},
+            {name: results[name] for name in CURRENT_ONLY})
 
 
 def run_python(tests: Path) -> dict[str, bool]:
@@ -313,13 +324,20 @@ def run_python(tests: Path) -> dict[str, bool]:
 
 
 def prepare(scratch: Path, python_tests: Path, generator: Path) -> Path:
+    require_hash(generator.read_bytes(), GENERATOR_SHA256, "frozen Python generator")
+    for module in MODULES:
+        require_hash((python_tests / f"{module}.py").read_bytes(), TEST_SHA256[module], f"frozen {module}")
     root = scratch / "repo"
     ignore = shutil.ignore_patterns("target", "node_modules", "__pycache__", ".venv")
     shutil.copytree(APP, root / APP_PATH, ignore=ignore)
     shutil.copytree(REPO / CONTRACT, root / CONTRACT)
     for module in MODULES:
         shutil.copy2(python_tests / f"{module}.py", root / APP_PATH / "tests" / f"{module}.py")
-    shutil.copy2(generator, root / APP_PATH / "tools" / "generate_fixtures.py")
+    tools = root / APP_PATH / "tools"
+    shutil.copy2(generator, tools / "_frozen_generate_fixtures.py")
+    here = Path(__file__).resolve().parent
+    shutil.copy2(here / "legacy_generator_adapter.py", tools / "generate_fixtures.py")
+    shutil.copy2(here / "legacy_fixture_migration.py", tools / "legacy_fixture_migration.py")
     return root
 
 
@@ -331,12 +349,15 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
     binaries = build_rust()
-    differences = failing = 0
+    differences = failing = current_failing = 0
     with tempfile.TemporaryDirectory(prefix="pbi-static-") as scratch:
         pristine = prepare(Path(scratch), args.python_tests.resolve(), args.python_generator.resolve())
         baseline_python = run_python(pristine / APP_PATH / "tests")
-        baseline_rust = run_rust(binaries, pristine / APP_PATH)
-        if set(baseline_python) != set(baseline_rust) or not all(baseline_python.values()) or not all(baseline_rust.values()):
+        raw_baseline_rust = run_rust(binaries, pristine / APP_PATH)
+        baseline_rust, baseline_current = split_rust(raw_baseline_rust)
+        print("Rust pristine results:", json.dumps(raw_baseline_rust, sort_keys=True))
+        if (set(baseline_python) != set(baseline_rust) or not all(baseline_python.values())
+                or not all(raw_baseline_rust.values())):
             print("baseline mismatch", sorted(set(baseline_python) ^ set(baseline_rust)),
                   [n for n, ok in baseline_python.items() if not ok], [n for n, ok in baseline_rust.items() if not ok])
             return 1
@@ -346,7 +367,11 @@ def main() -> int:
             shutil.copytree(pristine, root)
             labels = [mutate(root, rng) for _ in range(rng.choice((1, 1, 2)))]
             python = run_python(root / APP_PATH / "tests")
-            rust = run_rust(binaries, root / APP_PATH)
+            rust, current = split_rust(run_rust(binaries, root / APP_PATH))
+            if not all(current.values()):
+                current_failing += 1
+                print(f"case {case}: current-only assertions failed: "
+                      + ", ".join(name for name, ok in current.items() if not ok))
             differing = sorted(name for name in baseline_python if python.get(name) != rust.get(name))
             failing += not all(python.values())
             if differing:
@@ -356,7 +381,8 @@ def main() -> int:
                     print(f"  {name}: python={python.get(name)} rust={rust.get(name)}")
             shutil.rmtree(root)
     print(f"{args.cases} cases, {failing} failing at least one test, {differences} with differences, "
-          f"{len(baseline_python)} tests compared")
+          f"{len(baseline_python)} tests compared; {len(baseline_current)} current-only assertions passed pristine, "
+          f"{current_failing} mutation cases failed a current-only assertion")
     return 1 if differences else 0
 
 

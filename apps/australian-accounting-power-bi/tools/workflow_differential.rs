@@ -127,9 +127,28 @@ fn compare(cases: &[Value], seed: u64, mut oracle: impl FnMut(&Value) -> Result<
     Ok(())
 }
 
+/// Keeps the oracle program frozen while comparing both implementations on current inputs.
+fn stage_oracle(settings: &mut Settings, root: &Path) -> Result<()> {
+    let staged = root.join("oracle");
+    std::fs::create_dir(&staged).map_err(|error| error.to_string())?;
+    std::fs::create_dir(staged.join("tools")).map_err(|error| error.to_string())?;
+    std::fs::create_dir(staged.join("samples")).map_err(|error| error.to_string())?;
+    std::fs::copy(
+        settings.oracle.join("tools/review_workflow.py"),
+        staged.join("tools/review_workflow.py"),
+    )
+    .map_err(|error| error.to_string())?;
+    for (name, data) in probe::bundled_fixture_files()? {
+        std::fs::write(staged.join("samples").join(name), data).map_err(|error| error.to_string())?;
+    }
+    settings.oracle = staged;
+    Ok(())
+}
+
 fn run() -> Result<()> {
-    let settings = settings()?;
+    let mut settings = settings()?;
     let workspace = rehearsal::Temporary::new()?;
+    stage_oracle(&mut settings, &workspace.0)?;
     let runs = rehearsal::run(&settings, &workspace.0)?;
     let cases = cases::generate(&runs[1], settings.seed)?;
     let mut oracle = Oracle::new(&settings)?;
@@ -154,6 +173,42 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_frozen_program_uses_current_validated_fixtures_without_changing_its_checkout() {
+        let original = rehearsal::Temporary::new().unwrap();
+        let workspace = rehearsal::Temporary::new().unwrap();
+        std::fs::create_dir(original.0.join("tools")).unwrap();
+        std::fs::create_dir(original.0.join("samples")).unwrap();
+        let program = b"# frozen program bytes\n";
+        std::fs::write(original.0.join("tools/review_workflow.py"), program).unwrap();
+        let old_case = original.0.join("samples/shared-review-case.json");
+        std::fs::write(&old_case, b"old case").unwrap();
+        let mut settings = Settings {
+            python: "unused".into(),
+            oracle: original.0.clone(),
+            bin: "unused".into(),
+            seed: 16,
+        };
+        stage_oracle(&mut settings, &workspace.0).unwrap();
+        assert_eq!(
+            std::fs::read(settings.oracle.join("tools/review_workflow.py")).unwrap(),
+            program
+        );
+        let files = probe::bundled_fixture_files().unwrap();
+        assert_eq!(files.len(), 7);
+        for (name, expected) in files {
+            assert_eq!(
+                std::fs::read(settings.oracle.join("samples").join(name)).unwrap(),
+                expected
+            );
+        }
+        assert_eq!(std::fs::read(&old_case).unwrap(), b"old case");
+        assert_eq!(
+            std::fs::read(original.0.join("tools/review_workflow.py")).unwrap(),
+            program
+        );
+    }
 
     fn request() -> Value {
         json!({"op":"json","text":"{}"})

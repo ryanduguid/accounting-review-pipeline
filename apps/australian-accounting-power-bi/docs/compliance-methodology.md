@@ -26,16 +26,17 @@ The 2027 AFL date was not confirmed in the source snapshot and falls outside the
 - **Statutory SG Rate**: **12.0%** (effective since 1 July 2025).
 - **Qualifying Earnings (Code Q)**: Replaces Ordinary Time Earnings (OTE) as the statutory SG base from 1 July 2026.
 - **Single Touch Payroll (STP Phase 2)**:
-  - `Code Q`: Qualifying earnings paid in the pay run.
-  - `Code L`: Superannuation liability accrued in the pay run.
+  - `Code Q`: Year-to-date qualifying earnings.
+  - `Code L`: Year-to-date superannuation liability.
+  - The sample CSV holds per-payday amounts corresponding to increases in those YTD totals, rather than cumulative STP reports. Neither code records contributions paid.
 
 ### Superannuation Guarantee Charge (SGC) & GIC
-Where a contribution is not received in time, the SG charge for the qualifying earnings day is the sum of 4 components. The pre-2026 quarterly model (shortfall on total salary and wages, nominal interest from the first day of the quarter, and a \$20 per employee per quarter administration fee) no longer applies.
+Where a contribution is not received in time, the SG charge for the qualifying earnings day is the sum of 4 components. For quarters ending before 1 July 2026, the former quarterly rules included shortfalls on salary and wages, nominal interest from the quarter's first day and a \$20 administration component per affected employee per quarter. Those rules remain relevant to earlier quarters; see [former SGAA ss 17, 19, 31 and 32](https://www.legislation.gov.au/C2026C00146).
 
 1. **Individual final SG shortfalls**: the SG that remains unpaid for each employee when the Commissioner assesses, measured on **qualifying earnings**, not total salary and wages.
 2. **Individual notional earnings** (SGAA s 19A): interest on each individual base shortfall, compounding daily at the GIC rate from **the day after the due day**. Accrual stops on the earlier of the day a late eligible contribution clears the shortfall and the day before assessment.
-3. **Administrative uplift** (SGAA s 19B): **60%** of total individual final shortfalls plus total individual notional earnings for the day. Reduced by 20 percentage points where no Commissioner-initiated SGC assessment was in force in the 24 months ending on that day, and reduced further where a voluntary disclosure statement is lodged before assessment.
-4. **Choice loading** (SGAA s 20A): **25%** of the affected contributions where the choice of fund rules were not met. Nil throughout these fixtures, because every fabricated employee has a nominated fund.
+3. **Administrative uplift** (SGAA s 19B): **60%** of the sum of total individual final shortfalls and total individual notional earnings for the day. Under [SGAR regs 13B–13D](https://www.legislation.gov.au/F2018L01289/2026-07-01/2026-07-01/text/original/epub/OEBPS/document_1/document_1.html), a 20 percentage point reduction requires no qualifying Commissioner-initiated assessment made in the lookback period and still in force on the QE day, and no SGC estimate made during that period, disregarding estimates revoked or reduced to nil by the QE day. The usual lookback is 24 months ending on the QE day; for QE days from 1 July 2026 to 30 June 2028 it starts on 1 July 2026. Qualifying voluntary disclosure before assessment can reduce the percentage further according to its timing, with a nil floor. These fixtures apply no reductions.
+4. **Choice loading** ([SGAA ss 20A and 20C](https://www.legislation.gov.au/C2026C00272)): the lower of **25%** of the affected eligible contributions and the remaining statutory choice-loading limit where the choice rules were not met. Nil throughout these fixtures, because every fabricated employee has a nominated fund.
 
 - **Daily GIC Divisor**: Per Section 8AAD of the *Taxation Administration Act 1953*, the GIC rate for a day is the base interest rate plus 7 percentage points, divided by **the number of days in the calendar year** (366 in a leap year, 365 otherwise).
 - **Modelled GIC rate**: Each accrual day uses its own calendar quarter's rate and year divisor. The [ATO rate table](https://www.ato.gov.au/tax-rates-and-codes/general-interest-charge-rates), checked on 25 September 2026, publishes **11.43% for July to September 2026** and **11.51% for October to December 2026**. Later quarters carry the latest published rate forward as an explicit projection. The model's `EstimateBasis` field identifies those records. Update the published-rate map, tests and this source date together when a later rate is released.

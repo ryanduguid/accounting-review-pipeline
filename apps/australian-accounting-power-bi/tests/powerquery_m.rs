@@ -32,6 +32,44 @@ fn named_expressions() -> BTreeMap<String, String> {
     expressions
 }
 
+/// Official labels for the selected ANZSIC 2006 (Revision 2.0), read 12 November 2026.
+#[test]
+fn industry_titles_match_the_selected_abs_revision() {
+    let expressions = named_expressions();
+    let rows = Regex::new(r#"\{"(\d{4})",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}"#).unwrap();
+    let actual: BTreeMap<_, _> = rows
+        .captures_iter(&expressions["IndustryLookup"])
+        .map(|row| {
+            (
+                row[1].to_owned(),
+                [row[2].to_owned(), row[3].to_owned(), row[4].to_owned()],
+            )
+        })
+        .collect();
+    // ABS detailed classification: .../g/41/412/4122 and .../m/69/696/6962.
+    let expected = [
+        (
+            "4122",
+            [
+                "G - Retail Trade",
+                "41 - Food Retailing",
+                "Fruit and Vegetable Retailing",
+            ],
+        ),
+        (
+            "6962",
+            [
+                "M - Professional, Scientific and Technical Services",
+                "69 - Professional, Scientific and Technical Services (Except Computer System Design and Related Services)",
+                "Management Advice and Related Consulting Services",
+            ],
+        ),
+    ];
+    for (code, titles) in expected {
+        assert_eq!(actual.get(code), Some(&titles.map(str::to_owned)), "ANZSIC {code}");
+    }
+}
+
 /// The indentation of an M let binding (`Name =` or `#"Quoted name" =`, never `==`).
 fn binding_indent(line: &str) -> Option<&str> {
     let binding = Regex::new(r#"^([\t ]*)(?:[A-Za-z_]\w*|#"[^"]+")\s*="#).unwrap();
