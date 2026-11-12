@@ -1,3 +1,9 @@
+# v1.0.1 (unreleased)
+
+- A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
+  valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
+  build, the release build included, name its commit instead of `unknown`.
+
 # v1.0.0
 
 - Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
