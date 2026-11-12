@@ -5,9 +5,11 @@
 # tax file number, ABN, bank detail or Medicare number. They are the rules
 # australian-accounting-skills runs, anchored on the label rather than the
 # digits: an unanchored pattern would match amounts and dates on every other
-# line. They match the labels TFN, ABN, BSB, account number and Medicare
-# number written as words; spelled-out names such as 'tax file number' and
-# snake_case keys such as client_tfn are not matched.
+# line.
+#
+# A label may be abbreviated or spelled out ('TFN' or 'tax file number') and
+# may be joined with underscores, as in a client_tfn or account_number key.
+# Keys in camelCase, such as clientTfn or tfnNumber, are not matched.
 
 title = "accounting-review-pipeline"
 
@@ -18,26 +20,26 @@ useDefault = true
 id = "au-tax-file-number"
 description = "Tax file number beside its label"
 # 8 or 9 digits, commonly grouped 3-3-3.
-regex = '''(?i)\btfns?\b[^0-9\n]{0,20}(\d{3}[ -]?\d{3}[ -]?\d{2,3})\b'''
+regex = '''(?i)(?:\b|_)(?:tfns?|tax[ _-]?file[ _-]?(?:number|no\.?))(?:\b|_)[^0-9\n]{0,20}(\d{3}[ -]?\d{3}[ -]?\d{2,3})\b'''
 tags = ["client-data", "australia"]
 
 [[rules]]
 id = "au-business-number"
 description = "ABN beside its label"
 # 11 digits, commonly grouped 2-3-3-3.
-regex = '''(?i)\bab\.?n\.?\b[^0-9\n]{0,20}(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
+regex = '''(?i)(?:\b|_)(?:ab\.?n\.?|australian[ _-]?business[ _-]?number)(?:\b|_)[^0-9\n]{0,20}(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
 tags = ["client-data", "australia"]
 
 [[rules]]
 id = "au-bank-account"
 description = "BSB or account number beside its label"
-regex = '''(?i)\b(?:bsb|account\s*(?:number|no\.?))\b[^0-9\n]{0,20}(\d{3}[ -]?\d{3}\b|\d{6,10}\b)'''
+regex = '''(?i)(?:\b|_)(?:bsb|account[\s_-]*(?:number|no\.?))(?:\b|_)[^0-9\n]{0,20}(\d{3}[ -]?\d{3}\b|\d{6,10}\b)'''
 tags = ["client-data", "australia"]
 
 [[rules]]
 id = "au-medicare-number"
 description = "Medicare number beside its label"
-regex = '''(?i)\bmedicare\s*(?:number|no\.?|card)\b[^0-9\n]{0,20}(\d{4}[ -]?\d{5}[ -]?\d{1,2})\b'''
+regex = '''(?i)(?:\b|_)medicare[\s_-]*(?:number|no\.?|card)(?:\b|_)[^0-9\n]{0,20}(\d{4}[ -]?\d{5}[ -]?\d{1,2})\b'''
 tags = ["client-data", "australia"]
 
 [[allowlists]]
