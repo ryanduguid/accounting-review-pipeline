@@ -57,6 +57,12 @@ audits the embedded dependency list against RustSec, then publishes 9 assets:
 | `SHA256SUMS` | digests of the 7 assets above |
 | `monthly-close-control-plane-<version>.intoto.jsonl` | signed provenance bundle |
 
+From 1.1.0, each release executable records the tagged commit in the
+`producer` block of the packs it writes. The release build does not set
+`ACCOUNTING_REVIEW_SOURCE_COMMIT`, so the command falls back to the
+`GITHUB_SHA` GitHub Actions gives that build. The 1.0.0 executables, and a local
+build without either variable, record `unknown`.
+
 If any gate fails, inspect it before touching the tag or draft. An existing
 release is never replaced; cut a new version instead.
 

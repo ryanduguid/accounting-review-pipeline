@@ -67,10 +67,14 @@ pub const COMPONENT: &str = "monthly-close-control-plane";
 /// The pack layout a `producer` block declares. Packs without the block are contract 1.
 pub const PACK_CONTRACT: &str = "2";
 /// The commit recorded in `producer`: the full SHA given in
-/// `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time, otherwise `unknown`.
+/// `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time, else the `GITHUB_SHA` of
+/// a GitHub Actions build, such as the release build of a tag, else `unknown`.
 pub const SOURCE_COMMIT: &str = match option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT") {
     Some(commit) => commit,
-    None => "unknown",
+    None => match option_env!("GITHUB_SHA") {
+        Some(commit) if is_commit(commit) => commit,
+        _ => "unknown",
+    },
 };
 const _: () = assert!(
     option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT").is_none() || is_commit(SOURCE_COMMIT),
@@ -660,4 +664,30 @@ pub fn rendered(pack: &CloseReviewPack) -> Result<[Vec<u8>; 4]> {
         csv(as_csv(pack)?),
         csv(as_query_csv(pack)?),
     ])
+}
+
+#[cfg(test)]
+mod source_commit_tests {
+    use super::*;
+
+    #[test]
+    fn the_producer_names_the_explicit_commit_then_the_ci_commit_then_unknown() {
+        let expected = match (
+            option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT"),
+            option_env!("GITHUB_SHA"),
+        ) {
+            (Some(commit), _) => commit,
+            (None, Some(commit)) if is_commit(commit) => commit,
+            _ => "unknown",
+        };
+        assert_eq!(
+            producer()
+                .at("commit")
+                .as_pystr()
+                .unwrap()
+                .to_utf8()
+                .unwrap(),
+            expected
+        );
+    }
 }
