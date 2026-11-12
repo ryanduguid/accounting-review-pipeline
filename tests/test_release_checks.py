@@ -90,7 +90,9 @@ class ReleaseChecksTests(unittest.TestCase):
         workflows = ROOT / ".github" / "workflows"
         for filename in (
             "ci.yml",
+            "codeql.yml",
             "joined-conformance.yml",
+            "reviewer-quick-start.yml",
             "standard-library-components.yml",
         ):
             with self.subTest(workflow=filename):

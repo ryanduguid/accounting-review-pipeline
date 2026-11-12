@@ -34,10 +34,13 @@ the prior date earlier.
 
 Optional, only when the user supplies the file or asks for the setting:
 `--mapping`, `--mapping-policy` (needs `--mapping`), `--balance-policy`,
-`--subledger`, `--gst-mapping` with `--gst-settlements`, `--require-control`,
-`--absolute-threshold`, `--percentage-threshold` and
-`--reconciliation-tolerance`. Do not invent thresholds; when the user gives
-none, the tool's defaults apply and the pack records them.
+`--subledger`, `--gst-mapping` with `--gst-settlements`,
+`--gst-absolute-tolerance`, `--gst-percentage-tolerance`, `--equity-schedule`,
+`--equity-currency`, `--equity-currency-evidence`, `--calculation-evidence`,
+`--require-calculation`, `--require-control`, `--absolute-threshold`,
+`--percentage-threshold` and `--reconciliation-tolerance`. Do not invent
+thresholds or tolerances; when the user gives none, the tool's defaults apply
+and the pack records them.
 
 Output: a new, empty directory the user chooses or confirms, outside every Git,
 Mercurial, Subversion or Bazaar checkout. The command refuses a directory
@@ -63,7 +66,8 @@ files with the same names in an existing directory.
     | anything else | Not part of the command's contract | Report the code and the error output and stop. Read no files. |
 
 4. Run `close-control view --pack-dir <new directory>`. Exit 0 means the 4
-   pack files agree. On exit 1, report that verification failed and stop; on
+   pack files (`close-summary.md`, `exceptions.csv`, `client-queries.csv` and
+   `close-review-pack.json`) agree. On exit 1, report that verification failed and stop; on
    any other exit, report it and stop. Read nothing from a pack that did not
    verify.
 5. Read `close-review-pack.json` and `exceptions.csv`. Stop and report a
