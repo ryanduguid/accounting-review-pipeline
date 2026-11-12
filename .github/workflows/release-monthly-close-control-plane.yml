@@ -1,19 +1,42 @@
-name: monthly-close-control-plane release blocked
+name: Release monthly-close-control-plane
 
+# One namespaced tag releases exactly one component: the close-control executable for
+# Linux x86_64 (musl) and Windows x86_64, with the source archives, SBOMs and
+# signed provenance. The reusable workflow refuses the release unless the
+# directory leaf, the tag prefix and the artifact stem agree (monthly-close-control-plane).
 on:
   push:
-    tags: ['monthly-close-control-plane/v*']
-  workflow_dispatch:
+    tags:
+      - "monthly-close-control-plane/v*"
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  release-blocked:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Refuse publication until the native release policy is configured
-        run: |
-          echo "::error::monthly-close-control-plane is a Rust binary. Native release publishing is not configured. Do not tag or publish."
-          exit 1
+  release:
+    # A job that calls a reusable workflow accepts no timeout-minutes; every
+    # job in release-binary.yml sets its own.
+    permissions:
+      actions: read # Read this repository's own runs to require the mandatory checks.
+      attestations: write # Record provenance and SBOM attestations for release assets.
+      contents: write # Create the draft release, upload assets and publish it.
+      id-token: write # Obtain the OIDC identity required to sign attestations.
+    uses: ryanduguid/release-policy/.github/workflows/release-binary.yml@1058bbf7a3f22f3c5c421676cf5f89a14389100c
+    with:
+      artifact-stem: monthly-close-control-plane
+      binary: close-control
+      source-directory: packages/monthly-close-control-plane
+      tag-prefix: monthly-close-control-plane
+      required-checks: |
+        .github/workflows/no-ai-attribution.yml: Attribution policy / Attribution policy runner
+        .github/workflows/ci.yml: dependency-audit
+        .github/workflows/ci.yml: packages/monthly-close-control-plane / rust (ubuntu-latest)
+        .github/workflows/ci.yml: packages/monthly-close-control-plane / rust (windows-latest)
+        .github/workflows/joined-conformance.yml: verify
+        .github/workflows/reviewer-quick-start.yml: guide
+        .github/workflows/codeql.yml: Analyze Rust
+        .github/workflows/codeql.yml: codeql-gates

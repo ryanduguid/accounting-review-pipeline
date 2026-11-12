@@ -61,6 +61,58 @@ fn snapshot(root: &Path) -> BTreeMap<PathBuf, (Vec<u8>, SystemTime)> {
 }
 
 #[test]
+fn a_section_reclassification_is_published_as_a_metadata_finding() {
+    let inputs = temp::TempDir::new();
+    sources(&inputs, "Bank");
+    let current = inputs.join("current.csv");
+    let content = fs::read_to_string(&current).unwrap();
+    fs::write(current, content.replace(",Assets,A,", ",Liabilities,A,")).unwrap();
+    let before_inputs = snapshot(&inputs.0);
+    let output = temp::TempDir::new();
+    let directory = output.join("pack");
+    let reviewed = review_command(&inputs, &directory).output().unwrap();
+    assert_eq!(reviewed.status.code(), Some(2), "{reviewed:?}");
+    let document = viewer::verify_pack(&directory).unwrap().document;
+    assert!(document.at("overall_status").is_str("REVIEW"));
+    let findings = document.at("exceptions").as_array().unwrap();
+    assert_eq!(findings.len(), 1);
+    for (key, expected) in [
+        ("control", "account_metadata"),
+        ("status", "REVIEW"),
+        ("account_id", "A"),
+        (
+            "reason",
+            "Stable AccountID has changed section since the prior period.",
+        ),
+        ("current_value", "100.00"),
+        ("prior_value", "100.00"),
+        ("difference", "0.00"),
+    ] {
+        assert!(
+            findings[0].at(key).is_str(expected),
+            "{key}: {:?}",
+            findings[0]
+        );
+    }
+    let before_pack = snapshot(&directory);
+    assert!(
+        !viewer::render_review_sheet(&directory)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    let shown = child_profile::command(env!("CARGO_BIN_EXE_close-control"))
+        .args(["view", "--pack-dir"])
+        .arg(&directory)
+        .output()
+        .unwrap();
+    assert_eq!(shown.status.code(), Some(0), "{shown:?}");
+    assert!(!shown.stdout.is_empty());
+    assert_eq!(snapshot(&directory), before_pack);
+    assert_eq!(snapshot(&inputs.0), before_inputs);
+}
+
+#[test]
 fn the_csv_field_limit_counts_unicode_characters_and_preserves_an_existing_pack() {
     let temp = temp::TempDir::new();
     sources(&temp, &"é".repeat(131_072));

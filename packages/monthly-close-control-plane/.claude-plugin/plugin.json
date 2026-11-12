@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "close-review",
+  "version": "1.1.0",
+  "description": "Runs your installed close-control on trial-balance CSV files you name and answers only from the verified review pack. Needs the close-control executable.",
+  "author": {
+    "name": "Ryan Duguid"
+  },
+  "homepage": "https://duguid.com.au/tools/monthly-close-controls/",
+  "repository": "https://github.com/ryanduguid/accounting-review-pipeline",
+  "license": "LicenseRef-Duguid-Public-Attribution-1.0",
+  "keywords": [
+    "accounting",
+    "month-end close",
+    "trial balance",
+    "xero",
+    "australia",
+    "agent skills"
+  ]
+}

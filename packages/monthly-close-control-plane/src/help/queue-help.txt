@@ -1,6 +1,6 @@
 usage: close-control queue [-h] --pack-dir PACK_DIR [--period PERIOD]
                            [--status {PASS,REVIEW,BLOCKED}]
-                           [--reviewer REVIEWER]
+                           [--reviewer REVIEWER] [--summary]
 
 options:
   -h, --help            show this help message and exit
@@ -9,3 +9,5 @@ options:
   --status {PASS,REVIEW,BLOCKED}
                         recorded pack state
   --reviewer REVIEWER   exact initials from a recorded human acknowledgement
+  --summary             count the displayed packs by state, by control with
+                        exceptions and by control not run

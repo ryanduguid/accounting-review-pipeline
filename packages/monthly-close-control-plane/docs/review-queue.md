@@ -13,6 +13,23 @@ Repeat `--pack-dir` for each directory you intend to read. The command reads onl
 
 Add `--period 2026-07-31` to match an exact current report date, or `--reviewer RD` to match the exact initials in a human acknowledgement. Filters combine, and reviewer matching is case sensitive. An acknowledgement records a past review action; it is not a preparer assignment or approval. The pack schema records neither owners nor due dates, so the queue cannot filter by them.
 
+## Summary across the book
+
+Add `--summary` to roll the displayed packs up after the table:
+
+- how many packs are `PASS`, `REVIEW` and `BLOCKED`, and which clients they are;
+- for each control that raised an exception, how many packs it raised them in and how many it raised in total;
+- for each control that did not run, how many packs omitted it and which clients they are.
+
+Neither pack file records a client when a pack has no exceptions, so the client label is the name of the directory the path resolves to; a symbolic link shows its target's name. Name each pack directory after its client; a misnamed directory shows under the wrong label. The summary counts only the packs the filters display, so `--status REVIEW --summary` rolls up the packs needing review. A note gives the number of displayed packs that predate control coverage; their omitted controls are not counted.
+
+```bash
+close-control queue \
+  --pack-dir C:/close-data/2026-08/varrock \
+  --pack-dir C:/close-data/2026-08/falador \
+  --summary
+```
+
 ## Verification and coverage
 
 Every supplied pack passes the same `viewer.verify_pack` checks as `close-control view` before any queue is displayed. An invalid or missing pack fails the command even when a filter would exclude it. No partial queue is printed.

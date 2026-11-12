@@ -25,11 +25,19 @@ pub const COMPONENT: &str = "review-ready-gate";
 /// The pack layout a `producer` block declares. Packs without the block are contract 1.
 pub const PACK_CONTRACT: &str = "2";
 /// The commit recorded in `producer`: the full SHA given in
-/// `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time, otherwise `unknown`.
-pub const SOURCE_COMMIT: &str = match option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT") {
-    Some(commit) => commit,
-    None => "unknown",
-};
+/// `ACCOUNTING_REVIEW_SOURCE_COMMIT` at build time, else `GITHUB_SHA` when it
+/// is a full lowercase commit, as in the release build of a tag, else `unknown`.
+pub const SOURCE_COMMIT: &str = source_commit(
+    option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT"),
+    option_env!("GITHUB_SHA"),
+);
+const fn source_commit(explicit: Option<&'static str>, ci: Option<&'static str>) -> &'static str {
+    match (explicit, ci) {
+        (Some(commit), _) => commit,
+        (None, Some(commit)) if is_commit(commit) => commit,
+        _ => "unknown",
+    }
+}
 const _: () = assert!(
     option_env!("ACCOUNTING_REVIEW_SOURCE_COMMIT").is_none() || is_commit(SOURCE_COMMIT),
     "ACCOUNTING_REVIEW_SOURCE_COMMIT must be a 40-character lowercase hexadecimal commit"
@@ -443,4 +451,43 @@ pub fn write_review_pack(pack: &ReadinessPack, output: &Path) -> Result<[PathBuf
     fs::create_dir_all(&output).map_err(|e| e.to_string())?;
     crate::publication::publish(&output, &rendered(pack)?).map_err(|e| e.to_string())?;
     Ok(PACK_NAMES.map(|name| output.join(name)))
+}
+
+#[cfg(test)]
+mod source_commit_tests {
+    use super::*;
+
+    #[test]
+    fn the_explicit_commit_wins_then_a_full_ci_commit_then_unknown() {
+        let explicit = "1111111111111111111111111111111111111111";
+        let ci = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(source_commit(Some(explicit), Some(ci)), explicit);
+        assert_eq!(source_commit(None, Some(ci)), ci);
+        for malformed in [
+            "0123456789ABCDEF0123456789ABCDEF01234567",
+            "0123456789abcdef0123456789abcdef0123456",
+            "0123456789abcdef0123456789abcdef012345678",
+            "0123456789abcdef0123456789abcdef0123456g",
+        ] {
+            assert_eq!(
+                source_commit(None, Some(malformed)),
+                "unknown",
+                "{malformed}"
+            );
+        }
+        assert_eq!(source_commit(None, None), "unknown");
+    }
+
+    #[test]
+    fn the_producer_names_the_built_commit() {
+        assert_eq!(
+            producer()
+                .at("commit")
+                .as_pystr()
+                .unwrap()
+                .to_utf8()
+                .unwrap(),
+            SOURCE_COMMIT
+        );
+    }
 }

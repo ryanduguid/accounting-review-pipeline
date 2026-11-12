@@ -27,9 +27,10 @@ in the Accounting Review Pipeline. The `monthly-close-control-plane`
 distribution and `close-control` command remain compatibility identifiers.
 
 Version 1.0.0 provides a standalone Rust `close-control` binary. Install from this
-directory with `cargo install --locked --path .`. It replaces the Python runtime
-and import API. Native release publishing is not configured; see
-[RELEASING.md](RELEASING.md) before preparing a release.
+directory with `cargo install --locked --path .`, or download the Linux x86_64
+or Windows x86_64 executable from its `monthly-close-control-plane/v<version>`
+GitHub Release and verify it as [RELEASING.md](RELEASING.md#verify-a-release)
+describes. It replaces the Python runtime and import API.
 
 A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
 
@@ -70,7 +71,7 @@ The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots and inter-entity balances from supplied canonical records.
 Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
 variance drivers and the balance policy. The quick start builds the native command
-from source; native publication is not configured.
+from source; released executables are an alternative on Linux x86_64 and Windows x86_64.
 The [classification evidence check](docs/classification-evidence.md) compares
 selected postings with supplied purpose and account assertions, preserving
 original discrepancies after a recode. It first ships in 0.2.0.
@@ -170,6 +171,8 @@ exports and generated packs becoming repository content.
 For several packs, use the [local review queue](docs/review-queue.md). It verifies
 every explicitly supplied pack before filtering by report date, recorded state
 and recorded reviewer, and retains omitted-control and missing-metadata disclosures.
+`--summary` counts the displayed packs by state, by control with exceptions and by
+control not run, labelling each client by the name of the directory its path resolves to.
 
 `close-control view` is the read-only half of the workbench: it loads a
 generated pack, proves the 4 files still agree with each other and prints

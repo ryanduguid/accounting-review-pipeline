@@ -1,0 +1,30 @@
+{
+  "name": "accounting-review-pipeline",
+  "description": "Ryan Duguid's Claude Code plugin for local, deterministic month-end close review.",
+  "owner": {
+    "name": "Ryan Duguid"
+  },
+  "plugins": [
+    {
+      "name": "close-review",
+      "description": "Runs your installed close-control on trial-balance CSV files you name and answers only from the verified review pack. Needs the close-control executable.",
+      "author": {
+        "name": "Ryan Duguid",
+        "url": "https://github.com/ryanduguid"
+      },
+      "category": "productivity",
+      "tags": [
+        "accounting",
+        "agent-skills",
+        "australia",
+        "claude-code",
+        "month-end-close",
+        "xero"
+      ],
+      "source": "./packages/monthly-close-control-plane",
+      "strict": true,
+      "homepage": "https://duguid.com.au/tools/monthly-close-controls/",
+      "license": "LicenseRef-Duguid-Public-Attribution-1.0"
+    }
+  ]
+}

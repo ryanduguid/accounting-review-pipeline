@@ -1,13 +1,16 @@
 # Reviewer quick start
 
-This guide runs native Monthly Close Controls 1.0.0 on fabricated trial balances.
-Build it from an Accounting Review Pipeline checkout; native release publication
-is not configured. The reviewer decides whether a close is acceptable.
+This guide runs native Monthly Close Controls 1.0.0 or later on fabricated trial balances.
+Build it from an Accounting Review Pipeline checkout, or use the released
+executable for Linux x86_64 or Windows x86_64 after verifying it as
+[RELEASING.md](../RELEASING.md#verify-a-release) describes. The reviewer decides
+whether a close is acceptable.
 
 ## What you need
 
-- Rust and an Accounting Review Pipeline checkout containing the native port.
-  From `packages/monthly-close-control-plane`, run
+- A released `close-control` executable on PATH, verified as RELEASING.md
+  describes, or Rust and an Accounting Review Pipeline checkout containing the
+  native port. From `packages/monthly-close-control-plane`, run
   `cargo install --locked --path . --bin close-control` and ensure Cargo's
   binary directory is on PATH. Production needs no Python interpreter.
 - An empty folder that is not inside a Git, Mercurial, Subversion or Bazaar

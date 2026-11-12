@@ -1,3 +1,9 @@
+# v1.0.1 (unreleased)
+
+- A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
+  valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
+  build, the release build included, name its commit instead of `unknown`.
+
 # v1.0.0
 
 - Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
@@ -71,8 +77,9 @@
   quarter's GST control file no longer passes the date check. The key is
   optional and the other profiles refuse it; a self-review without it loads
   and is checked as before.
-- Native release publishing is not configured. The release workflow fails
-  explicitly and cannot publish Python or native artefacts.
+- The `review-ready` executable ships on this GitHub Release for Linux x86_64
+  (musl) and Windows x86_64, with source archives, SBOMs and signed
+  provenance. Nothing is published to PyPI or crates.io.
 
 # v0.3.0
 

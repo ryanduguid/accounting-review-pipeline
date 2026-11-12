@@ -96,6 +96,12 @@ impl Fixture {
         io(fs::write(self.bin.join("sealed-files"), names.join("\n")))?;
         io(fs::write(self.bin.join("source-run"), run.to_string_lossy().as_bytes()))?;
         io(fs::write(self.bin.join("mode"), mode))?;
+        for command in ["close-control", "review-ready"] {
+            let version = receipt["producer_manifests"][command]["native"]["version"]
+                .as_str()
+                .ok_or("Receipt producer version missing")?;
+            io(fs::write(self.bin.join(format!("version-{command}")), version))?;
+        }
         reseal(&run, &mut receipt, &digest(&io(fs::read(&self.delegate))?))?;
         workflow::verify(&run)?;
         Ok(run)

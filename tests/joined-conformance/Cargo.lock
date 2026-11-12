@@ -94,7 +94,7 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "monthly-close-control-plane"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "getrandom",
  "libc",
@@ -141,7 +141,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "review-ready-gate"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "getrandom",
  "libc",

@@ -53,5 +53,5 @@ keep credentials, client data and exploit details out of the issue tracker.
 
 ## Releasing
 
-Native publishing is blocked. Follow [RELEASING.md](RELEASING.md); do not tag or
-upload a native release until a separately authorised publisher is configured.
+Follow [RELEASING.md](RELEASING.md). Releases are published only by the root
+caller from an approved annotated tag; never build or upload release assets by hand.
