@@ -32,11 +32,7 @@ fn replace(directory: &Path, executable: &Path) -> Result<()> {
         .open(&replacement)?
         .write_all(b"fixture replacement")?;
     let displaced = directory.join("displaced");
-    if let Err(error) = fs::rename(executable, &displaced) {
-        fs::write(directory.join("replacement-unsupported"), format!("{:?}", error.kind()))?;
-        fs::remove_file(replacement)?;
-        return Ok(());
-    }
+    fs::rename(executable, &displaced)?;
     if let Err(error) = fs::rename(&replacement, executable) {
         fs::rename(displaced, executable)?;
         return Err(error.into());
@@ -59,6 +55,20 @@ fn check_snapshot(directory: &Path, original: &Path, pack: &Path) -> Result<()> 
     Ok(())
 }
 
+/// Copies a prepared tree over a run, so the run changes whilst the workflow reads it.
+fn overlay(tree: &Path, target: &Path) -> Result<()> {
+    for entry in fs::read_dir(tree)? {
+        let entry = entry?;
+        let destination = target.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            overlay(&entry.path(), &destination)?;
+        } else {
+            fs::copy(entry.path(), destination)?;
+        }
+    }
+    Ok(())
+}
+
 fn run() -> Result<i32> {
     // The fixture locates its own executable so the rehearsal can replace that file.
     // nosemgrep: rust.lang.security.current-exe.current-exe
@@ -71,19 +81,31 @@ fn run() -> Result<i32> {
     // Fixture arguments record the producer invocation; they grant nothing.
     // nosemgrep: rust.lang.security.args-os.args-os
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
-    record(
-        directory,
-        &format!(
-            "{command} {}",
-            args.first().unwrap_or(&OsString::new()).to_string_lossy()
-        ),
-    )?;
+    let first = args.first().map(|argument| argument.to_string_lossy()).unwrap_or_default();
+    record(directory, &format!("{command} {first}"))?;
     let mode = fs::read_to_string(directory.join("mode")).unwrap_or_default();
-    if args == [OsString::from("--version")] {
+    if first == "--version" && args.len() == 1 {
         println!("{command} {}", if mode == "wrong-version" { "2.0.0" } else { "1.0.0" });
         return Ok(0);
     }
-    invoke(directory, &command, &executable, &args, &mode)
+    if command == "close-control" && mode == "garbage-compare" && first == "compare" {
+        println!("fabricated text in place of a comparison");
+        return Ok(0);
+    }
+    if command == "review-ready" && mode == "replace-sibling" && first == "gate" {
+        let sibling = executable.with_file_name(format!("close-control{}", std::env::consts::EXE_SUFFIX));
+        OpenOptions::new()
+            .append(true)
+            .open(sibling)?
+            .write_all(b"fixture replacement")?;
+    }
+    let code = invoke(directory, &command, &executable, &args, &mode)?;
+    if command == "close-control" && mode.strip_prefix("overlay-") == Some(&*first) {
+        let plan = fs::read_to_string(directory.join("overlay"))?;
+        let (tree, target) = plan.split_once('\n').ok_or("Fixture overlay plan missing")?;
+        overlay(Path::new(tree), Path::new(target))?;
+    }
+    Ok(code)
 }
 
 fn invoke(directory: &Path, command: &str, executable: &Path, args: &[OsString], mode: &str) -> Result<i32> {

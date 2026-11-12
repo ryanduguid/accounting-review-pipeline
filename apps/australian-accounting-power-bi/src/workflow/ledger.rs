@@ -475,6 +475,74 @@ mod tests {
         assert!(trial_balances(&changed, &source, 9).is_err());
     }
 
+    /// The pinned sources read from disk, with the shared case changed first.
+    fn sources_with_case(change: impl FnOnce(&mut Value)) -> Result<(Value, Snapshot)> {
+        let samples = Path::new(env!("CARGO_MANIFEST_DIR")).join("samples");
+        let mut case = json::parse(&files::read(&samples.join("shared-review-case.json"))?, "Shared case")?;
+        change(&mut case);
+        let case = json::bytes(&case);
+        sources_with(|name| match name {
+            "shared-review-case.json" => Ok(case.clone()),
+            _ => files::read(&samples.join(name)),
+        })
+    }
+
+    #[test]
+    fn case_sources_must_be_the_six_pinned_whitelisted_files() {
+        assert_eq!(sources_with_case(|_| ()).unwrap(), bundled_sources().unwrap());
+        let pinned = Value::from("0".repeat(64));
+        let outside = sources_with_case(|case| case["source_sha256"]["sample-Other.csv"] = pinned.clone());
+        assert_eq!(outside.unwrap_err(), "Case source is outside the fixture whitelist.");
+        let changed = sources_with_case(|case| case["source_sha256"]["sample-budgets.csv"] = pinned.clone());
+        assert_eq!(
+            changed.unwrap_err(),
+            "Pinned fabricated source changed: sample-budgets.csv"
+        );
+        let fewer = sources_with_case(|case| {
+            case["source_sha256"]
+                .as_object_mut()
+                .unwrap()
+                .remove("sample-budgets.csv");
+        });
+        assert_eq!(fewer.unwrap_err(), "Expected the original six fabricated sources.");
+    }
+
+    #[test]
+    fn malformed_ledger_inputs_and_an_incomplete_chart_are_refused() {
+        let (case, source) = bundled_sources().unwrap();
+        let long = "x".repeat(131_073);
+        let chart = std::str::from_utf8(&source["sample-chart-of-accounts.csv"]).unwrap();
+        let without_revenue: String = chart
+            .lines()
+            .filter(|line| !line.starts_with("610,"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        assert_ne!(without_revenue, chart);
+        for (name, data, message) in [
+            ("sample-chart-of-accounts.csv", long.clone(), "Invalid CSV header."),
+            (
+                "sample-general-ledger.csv",
+                format!("EntityID\n{long}\n"),
+                "Invalid CSV data.",
+            ),
+            (
+                "sample-general-ledger.csv",
+                "EntityID\nENT001\n".into(),
+                "Missing ledger identity or date.",
+            ),
+            // The revenue account has postings, so the chart's balances no longer net to nil.
+            (
+                "sample-chart-of-accounts.csv",
+                without_revenue,
+                "Trial balance does not satisfy the exporter contract.",
+            ),
+        ] {
+            let mut changed = source.clone();
+            changed.insert(name.into(), data.into_bytes());
+            assert_eq!(trial_balances(&case, &changed, 9).unwrap_err(), message, "{name}");
+        }
+    }
+
     #[test]
     fn workflow_csv_uses_python_lf_quoting() {
         let data = csv(

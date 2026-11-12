@@ -528,6 +528,156 @@ mod tests {
     }
 
     #[test]
+    fn maps_thresholds_readiness_and_commands_refuse_with_their_messages() {
+        let map = serde_json::json!({"current": "fixture"});
+        assert_eq!(
+            string_map(&map, "Fixture hashes", true, &[]).unwrap_err(),
+            "Fixture hashes requires a string map of lowercase SHA-256 values."
+        );
+        let map = serde_json::json!({"current": 1});
+        assert_eq!(
+            string_map(&map, "Fixture names", false, &[]).unwrap_err(),
+            "Fixture names requires a string map."
+        );
+        let mut limits = serde_json::json!({"absolute_variance":"500.00","percentage_variance":"10.00%","reconciliation_tolerance":"1.00"});
+        thresholds(&limits).unwrap();
+        limits["reconciliation_tolerance"] = "1".into();
+        assert_eq!(
+            thresholds(&limits).unwrap_err(),
+            "Reconciliation tolerance requires a two-decimal money string."
+        );
+        // The tolerance is optional.
+        limits.as_object_mut().unwrap().remove("reconciliation_tolerance");
+        thresholds(&limits).unwrap();
+        let control = serde_json::json!({"slot":"bank","filename":"bank.csv","reason":"Not supplied"});
+        let mut pack = serde_json::json!({"overall_status":"READY","controls_not_run":[control]});
+        readiness(&pack).unwrap();
+        for (name, value) in [("reason", ""), ("extra", "field")] {
+            pack["controls_not_run"][0] = control.clone();
+            pack["controls_not_run"][0][name] = value.into();
+            assert_eq!(
+                readiness(&pack).unwrap_err(),
+                "Readiness controls not run requires exactly its non-empty producer fields."
+            );
+        }
+        assert_eq!(
+            producer(&Value::Null, "other").unwrap_err(),
+            "Unsupported producer command."
+        );
+    }
+
+    /// A complete version 1 (Python) producer manifest, as receipts sealed before the
+    /// Rust port record it.
+    fn legacy() -> Value {
+        serde_json::json!({
+            "manifest_version": 1,
+            "command": "review-ready",
+            "launcher_name": "review-ready.exe",
+            "launcher_sha256": "0".repeat(64),
+            "interpreter": {"implementation":"cpython","version":"3.12.4","cache_tag":"cpython-312","executable_sha256":"1".repeat(64)},
+            "distribution": {"name":"review-ready-gate","version":"1.0.0","requires_python":">=3.11","entry_point":"reviewready.cli:main"},
+            "package": {"name":"reviewready","files":{"reviewready/cli.py":"2".repeat(64),"reviewready/__init__.py":"3".repeat(64)}}
+        })
+    }
+
+    /// Each change replaces the value at a JSON pointer in the legacy manifest.
+    fn assert_legacy_refusals<const N: usize>(changes: [(&str, Value, &str); N]) {
+        for (pointer, value, message) in changes {
+            let mut changed = legacy();
+            *changed.pointer_mut(pointer).unwrap() = value;
+            assert_eq!(producer(&changed, "review-ready").unwrap_err(), message, "{pointer}");
+        }
+    }
+
+    #[test]
+    fn legacy_producer_manifests_bind_their_command_launcher_and_interpreter() {
+        producer(&legacy(), "review-ready").unwrap();
+        let mut extra = legacy()["interpreter"].clone();
+        extra["extra"] = "field".into();
+        assert_legacy_refusals([
+            (
+                "/manifest_version",
+                serde_json::json!(3),
+                "Unsupported producer manifest.",
+            ),
+            ("/command", "close-control".into(), "Unsupported producer manifest."),
+            (
+                "/launcher_name",
+                serde_json::json!(5),
+                "Producer launcher requires an object with string fields: launcher_name, launcher_sha256.",
+            ),
+            (
+                "/launcher_name",
+                "close-control".into(),
+                "Producer executable identity differs.",
+            ),
+            (
+                "/interpreter/cache_tag",
+                Value::Null,
+                "Producer interpreter requires an object with string fields: implementation, version, cache_tag, executable_sha256.",
+            ),
+            ("/interpreter", extra, "Unsupported interpreter identity fields."),
+            (
+                "/interpreter/executable_sha256",
+                "F".repeat(64).into(),
+                "Unsupported interpreter identity fields.",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn legacy_producer_manifests_bind_their_distribution_and_package_files() {
+        assert_legacy_refusals([
+            (
+                "/distribution",
+                Value::Null,
+                "Producer distribution requires an object with string fields: name, version, requires_python, entry_point.",
+            ),
+            (
+                "/distribution/entry_point",
+                "reviewready.other:main".into(),
+                "Producer distribution contract differs.",
+            ),
+            (
+                "/package/name",
+                Value::Null,
+                "Producer package requires an object with string fields: name.",
+            ),
+            (
+                "/package/name",
+                "closecontrol".into(),
+                "Producer package contract differs.",
+            ),
+            (
+                "/package/files",
+                serde_json::json!({"reviewready/cli.py":"not a hash"}),
+                "Producer package files requires a string map of lowercase SHA-256 values.",
+            ),
+            (
+                "/package/files",
+                serde_json::json!({}),
+                "Producer package file paths differ.",
+            ),
+        ]);
+        for path in [
+            "../cli.py",
+            "reviewready//cli.py",
+            "reviewready/./cli.py",
+            "reviewready/__pycache__/cli.pyc",
+            "reviewready/cli py",
+        ] {
+            let mut changed = legacy();
+            changed["package"]["files"] = serde_json::json!({});
+            changed["package"]["files"][path] = "2".repeat(64).into();
+            assert_eq!(
+                producer(&changed, "review-ready").unwrap_err(),
+                "Producer package file paths differ.",
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
     fn comparison_distinguishes_changed_records_and_reordered_recurring_groups() {
         let first = serde_json::json!({"account_name":"Sales","current_value":"10.00","status":"REVIEW"});
         let second = serde_json::json!({"account_name":"Sales","current_value":"20.00","status":"REVIEW"});

@@ -333,10 +333,8 @@ pub fn build(run: &Path, bin_dir: &Path, month: u32, note: Option<&Path>) -> Res
         files::write_new(&run.join("inputs").join(name), data)?;
     }
     let period = first_date(&current)?;
-    files::write_new(
-        &run.join("inputs/open_items.csv"),
-        b"ItemID,Severity,Owner,DueDate,Status,Description,Resolution\n",
-    )?;
+    let open_items = b"ItemID,Severity,Owner,DueDate,Status,Description,Resolution\n";
+    files::write_new(&run.join("inputs/open_items.csv"), open_items)?;
     let self_review = serde_json::json!({"preparer_initials":"DEMO","prepared_on":period,"engagement_type":"month_end","period_end":period,"assertions":{"pack_complete":true,"tie_outs_done":true,"open_items_listed":true,"variances_explained":true,"self_reviewed":true}});
     files::write_new(&run.join("inputs/self_review.json"), &json::bytes(&self_review))?;
     let invocations = build_commands(&run, bin_dir, &case, &manifests, note)?;

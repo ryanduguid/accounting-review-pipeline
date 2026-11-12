@@ -37,12 +37,11 @@ fn digits(magnitude: &BigInt) -> u64 {
 }
 
 /// `magnitude / 10^drop`, rounded half to even. `sticky` marks a nonzero remainder
-/// below the dropped digits, as an inexact quotient leaves.
+/// below the dropped digits, as an inexact quotient leaves. Every caller drops at least
+/// one digit: `rescale` only when the exponent is below the target, and `rounded` only
+/// beyond the precision, which an inexact quotient always exceeds.
 fn round_half_even(magnitude: &BigInt, drop: u64, sticky: bool) -> BigInt {
-    if drop == 0 {
-        assert!(!sticky, "an inexact value needs digits to round");
-        return magnitude.clone();
-    }
+    assert!(drop > 0, "rounding drops at least one digit");
     let (quotient, remainder) = magnitude.div_rem(&pow10(drop));
     let half = pow10(drop - 1) * 5;
     let up = match remainder.cmp(&half) {
@@ -361,5 +360,31 @@ mod tests {
         for invalid in ["NaN", "Infinity", "1.2.3", "1e999999", ""] {
             assert!(Review::try_parse(invalid).is_none());
         }
+    }
+
+    #[test]
+    fn exponents_and_explicit_signs_parse_exactly() {
+        for (text, places, expected) in [
+            ("1e2", 0, "100"),
+            ("1E-2", 2, "0.01"),
+            ("2.5e-3", 4, "0.0025"),
+            ("1e+000", 0, "1"),
+            ("+1.5", 1, "1.5"),
+            ("-1.5E1", 0, "-15"),
+        ] {
+            assert_eq!(Decimal::try_parse(text).unwrap().to_fixed(places), expected, "{text}");
+        }
+        assert!(Decimal::try_parse("1e10000").is_some());
+        for invalid in ["1e10001", "1e", "1e+", "1ex", "1e1.5"] {
+            assert!(Decimal::try_parse(invalid).is_none(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn a_dividend_longer_than_the_precision_scales_the_divisor() {
+        // 31 digits over 1: the divisor is scaled up instead of the dividend.
+        let dividend = d(&format!("1{}", "0".repeat(30)));
+        assert_eq!(dividend.div(&d("3")).to_fixed(0), "333333333333333333333333333300");
+        assert_eq!(dividend.div(&d("-4")).to_fixed(0), "-250000000000000000000000000000");
     }
 }

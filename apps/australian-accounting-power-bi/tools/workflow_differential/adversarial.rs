@@ -18,18 +18,26 @@ fn io<T>(result: std::io::Result<T>) -> Result<T> {
     result.map_err(|error| error.to_string())
 }
 
-fn require(condition: bool, message: &str) -> Result<()> {
-    if condition { Ok(()) } else { Err(message.into()) }
+/// The workflow must refuse, and for the reason the case targets.
+fn refused<T: std::fmt::Debug>(result: Result<T>, reason: &str) {
+    let error = result.expect_err("The workflow accepted a case it must refuse");
+    assert!(error.contains(reason), "Expected the refusal {reason:?}, got: {error}");
 }
 
 fn digest(data: &[u8]) -> String {
     Sha256::digest(data).iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn canonical_hash(value: &Value) -> Result<Value> {
+fn canonical_hash(value: &Value) -> Value {
     let response = probe::evaluate(&json!({"op":"json","text":value.to_string()}));
-    require(response["ok"] == true, "Fixture manifest canonicalisation failed")?;
-    Ok(response["value"].clone())
+    assert_eq!(response["ok"], true, "Fixture manifest canonicalisation failed");
+    response["value"].clone()
+}
+
+fn place(tree: &Path, name: &str, data: &[u8]) -> Result<()> {
+    let path = tree.join(name);
+    io(fs::create_dir_all(path.parent().unwrap()))?;
+    io(fs::write(path, data))
 }
 
 struct Fixture {
@@ -52,18 +60,11 @@ impl Fixture {
             .arg("-o")
             .arg(&delegate)
             .output())?;
-        require(
-            output.status.success(),
-            &format!(
-                "Native delegate compilation: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ),
-        )?;
+        let errors = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "Native delegate compilation: {errors}");
         for command in ["close-control", "review-ready"] {
-            io(fs::copy(
-                native_bin.join(format!("{command}{}", std::env::consts::EXE_SUFFIX)),
-                bin.join(format!("actual-{command}{}", std::env::consts::EXE_SUFFIX)),
-            ))?;
+            let name = format!("{command}{}", std::env::consts::EXE_SUFFIX);
+            io(fs::copy(native_bin.join(&name), bin.join(format!("actual-{name}"))))?;
         }
         Ok(Self { root, bin, delegate })
     }
@@ -76,13 +77,7 @@ impl Fixture {
         for command in ["close-control", "review-ready"] {
             io(fs::copy(&self.delegate, self.executable(command)))?;
         }
-        for name in [
-            "calls",
-            "displaced",
-            "replacement-done",
-            "replacement-unsupported",
-            "snapshot-checked",
-        ] {
+        for name in ["calls", "displaced", "overlay", "replacement-done", "snapshot-checked"] {
             let path = self.bin.join(name);
             if path.exists() {
                 io(fs::remove_file(path))?;
@@ -106,6 +101,14 @@ impl Fixture {
         Ok(run)
     }
 
+    /// Names the tree an `overlay-` mode copies over `target` and returns where to build it.
+    fn overlay(&self, name: &str, target: &Path) -> Result<PathBuf> {
+        let tree = self.root.join(name);
+        let plan = format!("{}\n{}", tree.to_string_lossy(), target.to_string_lossy());
+        io(fs::write(self.bin.join("overlay"), plan))?;
+        Ok(tree)
+    }
+
     fn calls(&self) -> Result<String> {
         io(fs::read_to_string(self.bin.join("calls")))
     }
@@ -117,16 +120,16 @@ impl Fixture {
             .filter_map(|line| line.strip_prefix("pack "))
             .map(PathBuf::from)
             .collect();
-        require(!packs.is_empty(), "Producer view was never invoked")?;
+        assert!(!packs.is_empty(), "Producer view was never invoked");
         let captured = packs[0].parent().ok_or("Captured parent missing")?.to_owned();
-        require(
+        assert!(
             captured != source && packs.iter().all(|path| path.parent() == Some(captured.as_path())),
-            "Display did not use one captured snapshot",
-        )?;
-        require(
+            "Display did not use one captured snapshot"
+        );
+        assert!(
             !captured.exists(),
-            "Export snapshot directory survived completion/refusal",
-        )?;
+            "Export snapshot directory survived completion/refusal"
+        );
         Ok(captured)
     }
 }
@@ -135,7 +138,7 @@ fn reseal(run: &Path, receipt: &mut Value, hash: &str) -> Result<()> {
     for command in ["close-control", "review-ready"] {
         let manifest = &mut receipt["producer_manifests"][command];
         manifest["launcher_sha256"] = hash.into();
-        let manifest_hash = canonical_hash(manifest)?;
+        let manifest_hash = canonical_hash(manifest);
         for invocation in receipt["invocations"]
             .as_array_mut()
             .unwrap()
@@ -172,84 +175,102 @@ fn pinned_refusals(fixture: &Fixture, source: &Path) -> Result<()> {
     let mut changed = io(fs::read(&executable))?;
     changed.extend_from_slice(b"fabricated changed identity");
     io(fs::write(executable, changed))?;
-    let error = workflow::render_html(&run, &fixture.bin, None).unwrap_err();
-    require(
-        error.contains("hash differs"),
-        &format!("Expected pinned hash refusal: {error}"),
-    )?;
-    require(!fixture.bin.join("calls").exists(), "Hash mismatch executed a producer")?;
+    refused(workflow::render_html(&run, &fixture.bin, None), "hash differs");
+    assert!(!fixture.bin.join("calls").exists(), "Hash mismatch executed a producer");
     let run = fixture.prepare(source, "wrong-version", "wrong-version")?;
-    let error = workflow::render_html(&run, &fixture.bin, None).unwrap_err();
-    require(
-        error.contains("identity differs"),
-        &format!("Expected pinned version refusal: {error}"),
-    )?;
-    require(
-        !fixture.calls()?.lines().any(|line| line.ends_with(" view")),
-        "Identity mismatch executed producer view",
-    )?;
+    refused(workflow::render_html(&run, &fixture.bin, None), "identity differs");
+    let viewed = fixture.calls()?.lines().any(|line| line.ends_with(" view"));
+    assert!(!viewed, "Identity mismatch executed producer view");
     let run = fixture.prepare(source, "producer-refusal", "refuse")?;
-    let error = workflow::render_html(&run, &fixture.bin, None).unwrap_err();
-    require(
-        error.contains("verification refused"),
-        &format!("Expected producer view refusal: {error}"),
-    )?;
-    require(
-        fixture.calls()?.contains("close-control view"),
-        "Refusal did not execute the actual invocation",
-    )
+    refused(workflow::render_html(&run, &fixture.bin, None), "verification refused");
+    let viewed = fixture.calls()?.contains("close-control view");
+    assert!(viewed, "Refusal did not execute the actual invocation");
+    Ok(())
 }
 
+/// A producer that replaces its own executable whilst running is refused, on display and on build.
 fn identity_replacement(fixture: &Fixture, source: &Path) -> Result<()> {
     let run = fixture.prepare(source, "identity-replacement", "replace")?;
     let result = workflow::render_html(&run, &fixture.bin, None);
-    if fixture.bin.join("replacement-unsupported").exists() {
-        let reason = io(fs::read_to_string(fixture.bin.join("replacement-unsupported")))?;
-        require(
-            cfg!(windows) && reason == "PermissionDenied",
-            &format!("Unexpected identity replacement failure: {reason}"),
-        )?;
-        result?;
-        eprintln!(
-            "Adversarial identity replacement: Windows denied renaming its running executable; case unavailable."
-        );
-        return Ok(());
-    }
-    require(
-        fixture.bin.join("replacement-done").exists(),
-        "Identity replacement did not occur",
-    )?;
-    let error = result.expect_err("Changed producer identity must refuse display");
-    require(
-        error.contains("changed during invocation"),
-        &format!("Expected postinvocation identity refusal: {error}"),
-    )
+    let replaced = fixture.bin.join("replacement-done");
+    assert!(replaced.exists(), "Identity replacement did not occur");
+    refused(result, "changed during invocation");
+    fixture.prepare(source, "build-replacement-seed", "replace-invoke")?;
+    let result = workflow::build(&fixture.root.join("build-replacement"), &fixture.bin, 9, None);
+    assert!(replaced.exists(), "Build identity replacement did not occur");
+    refused(result, "changed during invocation");
+    Ok(())
 }
 
-fn build_identity_replacement(fixture: &Fixture, source: &Path) -> Result<()> {
-    fixture.prepare(source, "build-replacement-seed", "replace-invoke")?;
-    let run = fixture.root.join("build-replacement");
-    let result = workflow::build(&run, &fixture.bin, 9, None);
-    if fixture.bin.join("replacement-unsupported").exists() {
-        require(
-            cfg!(windows) && io(fs::read_to_string(fixture.bin.join("replacement-unsupported")))? == "PermissionDenied",
-            "Unexpected build replacement failure",
-        )?;
-        result?;
-        eprintln!(
-            "Adversarial build identity replacement: Windows denied renaming its running executable; case unavailable."
-        );
-    } else {
-        require(
-            fixture.bin.join("replacement-done").exists(),
-            "Build identity replacement did not occur",
-        )?;
-        let error = result.expect_err("Changed producer identity must refuse build");
-        require(
-            error.contains("changed during invocation"),
-            &format!("Expected build identity refusal: {error}"),
-        )?;
-    }
+/// A build stops when a producer changes, refuses, or its outputs change under it.
+fn build_refusals(fixture: &Fixture, source: &Path) -> Result<()> {
+    let build = |name: &str| workflow::build(&fixture.root.join(name), &fixture.bin, 9, None);
+    fixture.prepare(source, "sibling-seed", "replace-sibling")?;
+    refused(build("sibling-build"), "installed identity differs from the receipt");
+    fixture.prepare(source, "refused-seed", "refuse")?;
+    refused(
+        build("refused-build"),
+        "review-ready readiness-view refused the case (exit 1)",
+    );
+    fixture.prepare(source, "close-view-seed", "overlay-view")?;
+    let tree = fixture.overlay("close-view-tree", &fixture.root.join("close-view-build"))?;
+    place(&tree, "close/close-summary.md", b"fabricated late change")?;
+    refused(build("close-view-build"), "Close outputs changed during verification");
+    fixture.prepare(source, "provenance-seed", "overlay-drivers")?;
+    let tree = fixture.overlay("provenance-tree", &fixture.root.join("provenance-build"))?;
+    let pack = io(fs::read(source.join("close/close-review-pack.json")))?;
+    let mut pack: Value = serde_json::from_slice(&pack).map_err(|error| error.to_string())?;
+    pack["source_sha256"]["current_trial_balance"] = "0".repeat(64).into();
+    place(&tree, "close/close-review-pack.json", pack.to_string().as_bytes())?;
+    refused(
+        build("provenance-build"),
+        "Close provenance or context differs from the case",
+    );
+    Ok(())
+}
+
+/// A comparison needs the same producer, a comparison it can read and a previous run that stays put.
+fn comparison_refusals(fixture: &Fixture, [previous, current]: &[PathBuf; 2]) -> Result<()> {
+    let display = |run: &Path, old: &Path| workflow::render_html(run, &fixture.bin, Some(old));
+    let run = fixture.prepare(current, "comparison-identity", "")?;
+    refused(
+        display(&run, previous),
+        "Comparison producer installed identities differ",
+    );
+    let old = fixture.prepare(previous, "comparison-garbage-previous", "")?;
+    let run = fixture.prepare(current, "comparison-garbage", "garbage-compare")?;
+    refused(display(&run, &old), "Comparison: ");
+    let old = fixture.prepare(previous, "comparison-swap-previous", "")?;
+    let run = fixture.prepare(current, "comparison-swap", "overlay-compare")?;
+    let tree = fixture.overlay("comparison-swap-tree", &old)?;
+    copy_run(&run, &tree, &workflow::verify(&run)?.receipt)?;
+    refused(display(&run, &old), "Previous run changed during display");
+    Ok(())
+}
+
+/// A run that changes whilst a producer reads it is neither displayed nor exported.
+fn changed_whilst_read(fixture: &Fixture, [previous, current]: &[PathBuf; 2]) -> Result<()> {
+    let run = fixture.prepare(current, "display-swap", "overlay-view")?;
+    let tree = fixture.overlay("display-swap-tree", &run)?;
+    copy_run(previous, &tree, &workflow::verify(previous)?.receipt)?;
+    refused(
+        workflow::render_html(&run, &fixture.bin, None),
+        "Current run changed during display",
+    );
+    let run = fixture.prepare(current, "export-reencoded", "overlay-view")?;
+    let tree = fixture.overlay("export-reencoded-tree", &run)?;
+    let receipt = workflow::verify(&run)?.receipt.to_string().into_bytes();
+    place(&tree, "receipt.json", &receipt)?;
+    place(&tree, "receipt.sha256", digest(&receipt).as_bytes())?;
+    let output = fixture.root.join("reencoded.zip");
+    refused(
+        workflow::export(&run, &fixture.bin, &output),
+        "Run changed during export",
+    );
+    assert!(
+        !output.exists(),
+        "Export published a run that changed whilst it was read"
+    );
     Ok(())
 }
 
@@ -259,26 +280,20 @@ fn snapshot_export(fixture: &Fixture, source: &Path) -> Result<()> {
     let output = fixture.root.join("snapshot.zip");
     workflow::export(&run, &fixture.bin, &output)?;
     fixture.captured(&run)?;
-    require(
-        fixture.bin.join("snapshot-checked").exists(),
-        "Captured bytes were not checked during rendering",
-    )?;
-    require(
-        workflow::verify(&run)? == before,
-        "Transient source mutation was not restored",
-    )?;
+    let checked = fixture.bin.join("snapshot-checked").exists();
+    assert!(checked, "Captured bytes were not checked during rendering");
+    let after = workflow::verify(&run)?;
+    assert!(after == before, "Transient source mutation was not restored");
     let result = workflow::verify_export(&output)?;
-    require(
-        result["period"] == before.receipt["period"],
-        "Captured export period changed",
-    )?;
+    assert_eq!(
+        result["period"], before.receipt["period"],
+        "Captured export period changed"
+    );
     let run = fixture.prepare(source, "export-refusal", "refuse")?;
     let output = fixture.root.join("refused.zip");
-    require(
-        workflow::export(&run, &fixture.bin, &output).is_err(),
-        "Refused producer created an export",
-    )?;
-    require(!output.exists(), "Refused export left an output")?;
+    let refusal = workflow::export(&run, &fixture.bin, &output);
+    assert!(refusal.is_err(), "Refused producer created an export");
+    assert!(!output.exists(), "Refused export left an output");
     fixture.captured(&run)?;
     Ok(())
 }
@@ -287,34 +302,29 @@ fn unlisted_during_render(fixture: &Fixture, source: &Path) -> Result<()> {
     let run = fixture.prepare(source, "unlisted-during-render", "extra")?;
     let before = workflow::verify(&run)?;
     let output = fixture.root.join("unlisted.zip");
-    let error = workflow::export(&run, &fixture.bin, &output).unwrap_err();
-    require(
-        error.contains("unlisted"),
-        &format!("Expected final physical inventory refusal: {error}"),
-    )?;
-    require(
-        run.join("unlisted.txt").is_file(),
-        "Rendering never added the adversarial file",
-    )?;
-    require(
+    refused(workflow::export(&run, &fixture.bin, &output), "unlisted");
+    let added = run.join("unlisted.txt").is_file();
+    assert!(added, "Rendering never added the adversarial file");
+    assert!(
         !output.exists(),
-        "Export published after an unlisted source file appeared",
-    )?;
-    require(
-        workflow::verify(&run)? == before,
-        "Extra-file case altered sealed source bytes",
-    )?;
+        "Export published after an unlisted source file appeared"
+    );
+    let after = workflow::verify(&run)?;
+    assert!(after == before, "Extra-file case altered sealed source bytes");
     fixture.captured(&run)?;
     Ok(())
 }
 
-pub fn run(root: &Path, source_run: &Path, native_bin: &Path) -> Result<()> {
+pub fn run(root: &Path, runs: &[PathBuf; 2], native_bin: &Path) -> Result<()> {
     let fixture = Fixture::new(root, native_bin)?;
-    pinned_refusals(&fixture, source_run)?;
-    identity_replacement(&fixture, source_run)?;
-    build_identity_replacement(&fixture, source_run)?;
-    snapshot_export(&fixture, source_run)?;
-    unlisted_during_render(&fixture, source_run)?;
+    let current = &runs[1];
+    pinned_refusals(&fixture, current)?;
+    identity_replacement(&fixture, current)?;
+    build_refusals(&fixture, current)?;
+    comparison_refusals(&fixture, runs)?;
+    changed_whilst_read(&fixture, runs)?;
+    snapshot_export(&fixture, current)?;
+    unlisted_during_render(&fixture, current)?;
     println!(
         "Native adversarial producer pinning, export snapshot isolation, cleanup and late inventory checks passed."
     );

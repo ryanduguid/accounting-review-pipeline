@@ -169,4 +169,28 @@ mod tests {
         let members = (0..65).map(|i| (format!("file{i}"), Vec::new())).collect();
         assert!(encode(&members).is_err());
     }
+
+    #[test]
+    fn limits_hold_for_headers_names_and_hand_built_archives() {
+        // Four full members reach the data limit exactly; their headers exceed it.
+        let full: Members = (0..4)
+            .map(|i| (format!("part{i}"), vec![0; MAX_EXPORT_MEMBER]))
+            .collect();
+        assert_eq!(full.values().map(Vec::len).sum::<usize>(), MAX_EXPORT_BYTES);
+        assert_eq!(encode(&full).unwrap_err(), "Export archive exceeds the size limit.");
+        assert_eq!(
+            encode(&Members::from([("café".into(), vec![])])).unwrap_err(),
+            "Export member is outside the stored regular-file profile."
+        );
+        assert_eq!(
+            decode(&vec![0; MAX_EXPORT_BYTES + 1]).unwrap_err(),
+            "Export archive exceeds the size limit."
+        );
+        // encode refuses a 65th member, so build the local headers directly.
+        let (mut payload, mut central) = (Vec::new(), Vec::new());
+        for i in 0..=MAX_EXPORT_FILES {
+            append(&mut payload, &mut central, &format!("file{i}"), &[]).unwrap();
+        }
+        assert_eq!(decode(&payload).unwrap_err(), "Export exceeds inventory limits.");
+    }
 }

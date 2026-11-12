@@ -44,14 +44,10 @@ pub fn projection(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
     let snapshot = &verified.snapshot;
     let close = run::snapshot_file(snapshot, "close/close-review-pack.json")?;
     let doc = json::parse(close, "Close pack")?;
-    let drivers = json::parse(
-        run::snapshot_file(snapshot, "drivers/variance-drivers.json")?,
-        "Driver pack",
-    )?;
-    let readiness = json::parse(
-        run::snapshot_file(snapshot, "readiness/readiness-pack.json")?,
-        "Readiness pack",
-    )?;
+    let drivers = run::snapshot_file(snapshot, "drivers/variance-drivers.json")?;
+    let drivers = json::parse(drivers, "Driver pack")?;
+    let readiness = run::snapshot_file(snapshot, "readiness/readiness-pack.json")?;
+    let readiness = json::parse(readiness, "Readiness pack")?;
     let case = &receipt["case"];
     let context = vec![
         digest(close),

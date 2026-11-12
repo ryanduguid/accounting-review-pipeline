@@ -444,4 +444,17 @@ mod tests {
         assert!(summary.contains("Acknowledgement changed</dt><dd>Yes"));
         assert!(summary.contains("-123456789012345678901234567890.01"));
     }
+
+    #[test]
+    fn a_record_no_longer_raised_shows_its_previous_side_and_an_empty_current_side() {
+        let row = json!({"account_name":"Sales","current_value":"10.00","status":"REVIEW"});
+        let finding =
+            json!({"change":"NOT_RAISED","control":"variance","account_id":"200","previous":[row],"current":[]});
+        let output = comparison_finding(&finding, "2024-09-30", "2024-08-31");
+        assert!(output.contains("<h4>Sales</h4>"));
+        assert_eq!(output.matches("No finding raised in this run.").count(), 1);
+        let previous = json!({"account_name":"Rent","control":"variance","account_id":"400"});
+        let query = json!({"change":"NOT_RAISED","query_id":"Q-1","previous":previous,"current":null});
+        assert!(comparison_query(&query).contains("<h4>Rent</h4>"));
+    }
 }
