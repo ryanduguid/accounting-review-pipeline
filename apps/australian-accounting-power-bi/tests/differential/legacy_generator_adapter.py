@@ -13,6 +13,7 @@ _spec.loader.exec_module(_migration)
 _legacy = _migration.load_generator(Path(__file__).with_name("_frozen_generate_fixtures.py"))
 # Retain the frozen functions and mutable rate/calendar objects used by its suites.
 globals().update({name: value for name, value in vars(_legacy).items() if not name.startswith("_")})
+SAMPLES_DIR = _legacy.SAMPLES_DIR
 
 
 def generate_fixtures():
