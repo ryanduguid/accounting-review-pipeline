@@ -1,0 +1,6 @@
+usage: close-control demo [-h] --output OUTPUT
+
+options:
+  -h, --help       show this help message and exit
+  --output OUTPUT  new or empty directory outside any checkout; receives the
+                   fabricated inputs and their review pack

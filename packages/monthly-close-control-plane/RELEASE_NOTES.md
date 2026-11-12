@@ -8,6 +8,13 @@
 - A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
   valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
   build, the release build included, name its commit instead of `unknown`.
+- `close-control demo --output DIR` writes the fabricated example inputs, which
+  are built into the executable, to `DIR/inputs` and reviews them into
+  `DIR/pack`, so a downloaded executable shows a sample pack without a
+  checkout. The pack is the one the `just demo` source command writes, byte for
+  byte, and the command exits `2` like it. `DIR` must be new or empty and
+  outside any version-control checkout; otherwise it exits `1` and writes
+  nothing.
 
 # v1.0.0
 
