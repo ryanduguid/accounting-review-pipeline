@@ -1,0 +1,41 @@
+# Accepted findings in earlier commits, one fingerprint each (commit:file:rule:line).
+# Each is in a file no longer in the tree, so only the weekly full-history scan
+# reads it; a new match anywhere else still fails. Checked 12 November 2026:
+# - au-business-number: 3 checksum-valid ABNs in the Power BI fixture
+#   generator, since removed.
+# - generic-api-key: SHA-256 digests of the Xero auth module and labelled
+#   SYNTHETIC tokens in Xero export tests, since rewritten.
+
+016e85122439137add38187297f9f2b9ef53524a:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:25
+07accd723285bdd63e2a43d5b2dd6a8929208b06:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:25
+4b82c47cd5aaa9c8d64a0fc40f9d073858082213:packages/xero-trial-balance-export/tests/test_xero_client_paths.py:generic-api-key:198
+5403bb077b2347c956493418e9ed51c9b4aaf43a:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:155
+5403bb077b2347c956493418e9ed51c9b4aaf43a:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:167
+5403bb077b2347c956493418e9ed51c9b4aaf43a:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:179
+5403bb077b2347c956493418e9ed51c9b4aaf43a:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:19
+5403bb077b2347c956493418e9ed51c9b4aaf43a:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:20
+639425f62628a1e67ca7fcd8817e769d3c5f4b38:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:28
+639425f62628a1e67ca7fcd8817e769d3c5f4b38:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:29
+6b001670f25beb995924dc165b1ee894f9a6efd8:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:24
+6b001670f25beb995924dc165b1ee894f9a6efd8:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:25
+7c5fd39843046ec15666e90073607e3169fdde61:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:23
+96758bbc219649e0bdc3c2f50c31e0c8bb3d47b5:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:155
+96758bbc219649e0bdc3c2f50c31e0c8bb3d47b5:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:167
+96758bbc219649e0bdc3c2f50c31e0c8bb3d47b5:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:179
+96758bbc219649e0bdc3c2f50c31e0c8bb3d47b5:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:19
+96758bbc219649e0bdc3c2f50c31e0c8bb3d47b5:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:20
+9adb6523435c489bd9652aa303af4ad706fe661d:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:24
+9adb6523435c489bd9652aa303af4ad706fe661d:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:25
+c24ac53a6db3b0f18a9ba43690bfa671018e09d2:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:24
+c24ac53a6db3b0f18a9ba43690bfa671018e09d2:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:25
+c25d48db492c245976f6ae64184fdc632e2c09e1:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:24
+cf8db2b8e60e8ff9ae2a5ae13f79b335496fcfca:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:24
+cf8db2b8e60e8ff9ae2a5ae13f79b335496fcfca:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:25
+e05bef17dbc553bc4a3c509a97a40004250373b9:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:28
+e05bef17dbc553bc4a3c509a97a40004250373b9:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:29
+f3633a01384d32bd7d2f6d5029e52fb5292bb485:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:155
+f3633a01384d32bd7d2f6d5029e52fb5292bb485:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:167
+f3633a01384d32bd7d2f6d5029e52fb5292bb485:apps/australian-accounting-power-bi/tools/generate_fixtures.py:au-business-number:179
+f3633a01384d32bd7d2f6d5029e52fb5292bb485:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:19
+f3633a01384d32bd7d2f6d5029e52fb5292bb485:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:20
+fa1e9c16e3fcea9fe7ae2924694c975bd13f9bb0:packages/xero-trial-balance-export/tests/test_xero_auth_provenance.py:generic-api-key:23
