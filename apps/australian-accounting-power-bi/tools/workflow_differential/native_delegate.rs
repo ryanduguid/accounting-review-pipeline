@@ -85,7 +85,12 @@ fn run() -> Result<i32> {
     record(directory, &format!("{command} {first}"))?;
     let mode = fs::read_to_string(directory.join("mode")).unwrap_or_default();
     if first == "--version" && args.len() == 1 {
-        println!("{command} {}", if mode == "wrong-version" { "2.0.0" } else { "1.0.0" });
+        // The rehearsal records the real producer's version, so the fixture follows each release.
+        let version = match mode.as_str() {
+            "wrong-version" => "2.0.0".to_owned(),
+            _ => fs::read_to_string(directory.join(format!("version-{command}")))?,
+        };
+        println!("{command} {version}");
         return Ok(0);
     }
     if command == "close-control" && mode == "garbage-compare" && first == "compare" {

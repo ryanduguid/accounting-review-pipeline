@@ -1,3 +1,11 @@
+# v1.1.0 (unreleased)
+
+- `queue --summary` adds a roll-up of the displayed packs: how many are
+  `PASS`, `REVIEW` and `BLOCKED` and which pack directories they are, how many
+  packs and exceptions each control raised, and which controls did not run where.
+  The client label is the pack directory's name. Without the flag the queue keeps
+  its bytes. `--s` remains an abbreviation for `--status`.
+
 # v1.0.0
 
 - Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with

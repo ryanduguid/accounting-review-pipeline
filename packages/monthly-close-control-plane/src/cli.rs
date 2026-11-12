@@ -101,7 +101,13 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
         ),
         "view" => (&["--pack-dir"], &["--pack-dir"]),
         "queue" => (
-            &["--pack-dir", "--period", "--status", "--reviewer"],
+            &[
+                "--pack-dir",
+                "--period",
+                "--status",
+                "--reviewer",
+                "--summary",
+            ],
             &["--pack-dir"],
         ),
         "reconcile" => (
@@ -296,7 +302,9 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
         let (flag, assigned) = raw
             .split_once('=')
             .map_or((raw.as_str(), None), |(key, value)| (key, Some(value)));
-        let flag = if flags.contains(&flag) {
+        let flag = if command == "queue" && flag == "--s" {
+            "--status"
+        } else if flags.contains(&flag) {
             flag
         } else {
             let matches: Vec<_> = if flag.starts_with("--") {
@@ -322,7 +330,7 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
                 continue;
             }
         };
-        if ["--help", "--decisions-escaped"].contains(&flag) {
+        if ["--help", "--decisions-escaped", "--summary"].contains(&flag) {
             if let Some(value) = assigned {
                 return Err(format!(
                     "argument {}: ignored explicit argument {}",
@@ -584,6 +592,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                     period: option("--period"),
                     status: option("--status"),
                     reviewer: option("--reviewer"),
+                    summary: args.0.contains_key("--summary"),
                 };
                 stdio::out_literal(
                     &(queue::render_review_queue(&args.paths("--pack-dir"), &filters)? + "\n"),

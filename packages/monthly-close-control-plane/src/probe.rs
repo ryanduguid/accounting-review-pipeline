@@ -235,8 +235,15 @@ const REQUIRED_CONTROL_OPTION: &str = concat!(
     "                        a control this close needs; if it did not run the\n",
     "                        pack is REVIEW, never PASS. Repeat for more than one\n",
 );
-/// The frozen Python baseline predates the GST reasonableness and required
-/// control options, so CLI output compared with it drops their usage and help lines.
+/// The queue command's summary option, in its usage and its help.
+const SUMMARY_USAGE: &str = "[--reviewer REVIEWER] [--summary]\n";
+const SUMMARY_OPTION: &str = concat!(
+    "  --summary             count the displayed packs by state, by control with\n",
+    "                        exceptions and by control not run\n",
+);
+/// The frozen Python baseline predates the GST reasonableness, required
+/// control and queue summary options, so CLI output compared with it drops
+/// their usage and help lines.
 fn without_native_options(text: &str) -> String {
     text.replace(GST_USAGE, "")
         .replace(GST_OPTIONS, "")
@@ -245,6 +252,8 @@ fn without_native_options(text: &str) -> String {
             "[--require-calculation LABEL] --output OUTPUT\n",
         )
         .replace(REQUIRED_CONTROL_OPTION, "")
+        .replace(SUMMARY_USAGE, "[--reviewer REVIEWER]\n")
+        .replace(SUMMARY_OPTION, "")
 }
 fn decimal_json(value: Option<&Decimal>) -> Json {
     value.map_or(Json::Null, |value| Json::str(&value.to_sci_string()))
@@ -709,6 +718,7 @@ fn operation(request: &Json) -> Result<Json> {
                 period: optional("period"),
                 status: optional("status"),
                 reviewer: optional("reviewer"),
+                summary: false,
             };
             let result = queue::render_with(&paths, &filters, &mut |path| {
                 let pack = packs
@@ -1011,5 +1021,39 @@ mod tests {
         let frozen = without_native_options(&usage);
         assert!(!frozen.to_lowercase().contains("gst"));
         assert!(!frozen.contains("--require-control"));
+    }
+    /// The queue's help and usage as the frozen Python baseline printed them.
+    const FROZEN_QUEUE_USAGE: &str = concat!(
+        "usage: close-control queue [-h] --pack-dir PACK_DIR [--period PERIOD]\n",
+        "                           [--status {PASS,REVIEW,BLOCKED}]\n",
+        "                           [--reviewer REVIEWER]\n",
+    );
+    #[test]
+    fn dropping_the_native_options_leaves_the_frozen_queue_help_and_usage() {
+        let (code, help, _) = stdio::capture(|| cli::main(vec!["queue".into(), "--help".into()]));
+        assert_eq!(code, 0);
+        assert!(help.contains("--summary"));
+        assert_eq!(
+            without_native_options(&help),
+            [
+                FROZEN_QUEUE_USAGE,
+                "\n",
+                "options:\n",
+                "  -h, --help            show this help message and exit\n",
+                "  --pack-dir PACK_DIR   pack directory; repeat to include more packs\n",
+                "  --period PERIOD       exact current report date, YYYY-MM-DD\n",
+                "  --status {PASS,REVIEW,BLOCKED}\n",
+                "                        recorded pack state\n",
+                "  --reviewer REVIEWER   exact initials from a recorded human acknowledgement\n",
+            ]
+            .concat()
+        );
+        let (code, _, usage) = stdio::capture(|| cli::main(vec!["queue".into()]));
+        assert_eq!(code, 1);
+        assert!(usage.contains("[--summary]"));
+        assert!(
+            without_native_options(&usage).starts_with(FROZEN_QUEUE_USAGE),
+            "{usage}"
+        );
     }
 }
