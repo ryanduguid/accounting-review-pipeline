@@ -1,12 +1,12 @@
 # Copyright 2026 Ryan Duguid
 # SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
-"""The Release Policy pin the callers run is the one the documentation claims.
+"""The Release Policy pins the callers run are the ones the documentation claims.
 
-README.md describes the current callers' pin in the present tense, and each
-RELEASING.md verification recipe derives the signer digest from the caller at
-the tagged commit. Both drift silently when a caller is repointed, so this
-test reads the callers and holds the documents to them.
+README.md and IMPORTS.md describe the current callers' pins in the present
+tense, and each RELEASING.md verification recipe derives the signer digest
+from the caller at the tagged commit. They drift silently when a caller is
+repointed, so this test reads the callers and holds the documents to them.
 """
 
 from __future__ import annotations
@@ -18,18 +18,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 PIN = re.compile(r"uses: ryanduguid/release-policy/\.github/workflows/[a-z-]+\.yml@([0-9a-f]{40})$", re.M)
-CLAIM = re.compile(
-    r"through a root caller pinned to the independently reviewed Release Policy commit\n"
-    r"`([0-9a-f]{40})`"
-)
-CURRENT_CALLERS = re.compile(r"Every active root release caller now pins `([0-9a-f]{7})`")
+# The sentence ends at the first code span followed by a full stop.
+CURRENT_CALLERS = re.compile(r"Every active root release caller now pins a policy commit.*?`\.", re.S)
 
 
 def caller_pins() -> dict[str, str]:
     pins: dict[str, str] = {}
     for workflow in sorted(WORKFLOWS.glob("release-*.yml")):
-        if workflow.name in {"release-review-ready-gate.yml", "release-monthly-close-control-plane.yml"}:
-            continue  # The Rust publisher is explicitly blocked and has no policy caller.
         match = PIN.search(workflow.read_text(encoding="utf-8"))
         if match is None:
             raise AssertionError(f"{workflow.name} does not pin release-policy by full commit")
@@ -40,23 +35,27 @@ def caller_pins() -> dict[str, str]:
 class ReleasePinTests(unittest.TestCase):
     def test_every_release_caller_pins_a_full_commit(self) -> None:
         pins = caller_pins()
-        self.assertEqual(len(pins), 1, sorted(pins))
+        self.assertEqual(len(pins), 3, sorted(pins))
 
-    def test_readme_names_the_pin_the_callers_run(self) -> None:
-        """One claim, one pin: if the callers diverge, the README has to say so."""
-        pins = set(caller_pins().values())
-        self.assertEqual(len(pins), 1, "callers run different pins; rewrite the README claim")
-        claim = CLAIM.search((ROOT / "README.md").read_text(encoding="utf-8"))
-        self.assertIsNotNone(claim, "README.md no longer states the callers' pin")
-        assert claim is not None
-        self.assertEqual({claim.group(1)}, pins)
+    def test_readme_names_the_pins_the_callers_run(self) -> None:
+        """The Releases section names every caller's tag and pin, and no other pin."""
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        section = readme.split("\n## Releases\n", 1)[1].split("\n## ", 1)[0]
+        self.assertEqual(
+            set(re.findall(r"`([0-9a-f]{40})`", section)), set(caller_pins().values())
+        )
+        for workflow in caller_pins():
+            component = workflow.removeprefix("release-").removesuffix(".yml")
+            self.assertIn(f"`{component}/v*`", section)
 
-    def test_imports_names_the_pin_the_callers_run(self) -> None:
+    def test_imports_names_the_pins_the_callers_run(self) -> None:
         pins = set(caller_pins().values())
         claim = CURRENT_CALLERS.search((ROOT / "IMPORTS.md").read_text(encoding="utf-8"))
-        self.assertIsNotNone(claim, "IMPORTS.md no longer states the callers' current pin")
+        self.assertIsNotNone(claim, "IMPORTS.md no longer states the callers' current pins")
         assert claim is not None
-        self.assertEqual({pin[:7] for pin in pins}, {claim.group(1)})
+        self.assertEqual(
+            {pin[:7] for pin in pins}, set(re.findall(r"`([0-9a-f]{7})`", claim.group(0)))
+        )
 
     def test_releasing_recipes_derive_the_signer_digest_from_the_caller(self) -> None:
         """A literal digest in a recipe is the pin of some earlier day, not of the release."""
@@ -65,9 +64,6 @@ class ReleasePinTests(unittest.TestCase):
         pins = set(caller_pins().values())
         for recipe in recipes:
             text = recipe.read_text(encoding="utf-8")
-            if recipe.parent.name in {"review-ready-gate", "monthly-close-control-plane"}:
-                self.assertIn("Native release publishing is not configured", text)
-                continue
             with self.subTest(recipe=str(recipe.relative_to(ROOT))):
                 for pin in pins:
                     self.assertNotIn(f"--signer-digest {pin}", text, "literal current pin")

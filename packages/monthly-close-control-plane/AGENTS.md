@@ -57,5 +57,6 @@ base revision. Its Python process is a migration oracle, never a production
 runtime. The root `.github/ci/monthly-close-control-plane/smoke.sh` exercises the
 release binary from an empty directory using fabricated examples.
 
-Native release publishing is not configured. The root release caller fails with
-read permission only; a publisher requires separate approval.
+The root release caller publishes the `close-control` executable for Linux x86_64
+(musl) and Windows x86_64 through Release Policy's `release-binary.yml`;
+[RELEASING.md](RELEASING.md) gives the preflight, tag and verification steps.

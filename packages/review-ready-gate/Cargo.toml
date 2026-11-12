@@ -40,6 +40,14 @@ name = "review-ready-publication-probe"
 path = "src/publication_probe_main.rs"
 required-features = ["probe"]
 
+# The CLI tests decode packs with the probe's JSON reader. The release build
+# runs `cargo test` without features, so it skips them; CI runs them with
+# --all-features.
+[[test]]
+name = "native_cli"
+path = "tests/native_cli.rs"
+required-features = ["probe"]
+
 [features]
 probe = []
 tools = []

@@ -6,7 +6,8 @@
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane
 - **Crate name**: `monthly-close-control-plane`, version 1.0.0 (unreleased).
 - **CLI command**: native Rust `close-control`; no Python runtime or import API.
-  Native publication is blocked pending an approved publisher. Build with Cargo.
+  Released as Linux x86_64 and Windows x86_64 executables on
+  `monthly-close-control-plane/v<version>` GitHub Releases, or built with Cargo.
 - **Domain**: Local, deterministic review-pack generation for current and prior validated trial-balance exports.
 - **Control basis**: Double-entry balance checks, material year-to-date variance review, account-change review, mapping checks, and optional subledger reconciliation.
 

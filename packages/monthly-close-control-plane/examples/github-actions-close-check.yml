@@ -1,8 +1,9 @@
 # Example: scheduled close check with GitHub Actions.
 #
 # This example builds close-control in an Accounting Review Pipeline checkout.
-# Adapt the source and fixture paths for another repository. Native release
-# publication is not configured; use a reviewed source revision.
+# Adapt the source and fixture paths for another repository. Build from a
+# reviewed source revision, or download and verify a released executable as
+# RELEASING.md describes.
 #
 # Exit codes, from src/cli.rs:
 #   0  every control passed (PASS)

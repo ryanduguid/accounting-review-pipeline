@@ -12,7 +12,9 @@ review-ready gate --profile bas --pack examples/bas-ready --output ../../../revi
 
 The demo exits `0` for `READY`. A human still decides whether the pack may proceed.
 Python imports and the Python runtime were removed in this major version.
-Native release publishing is not configured; see [RELEASING.md](RELEASING.md).
+Released executables for Linux x86_64 and Windows x86_64 ship on
+`review-ready-gate/v<version>` GitHub Releases; verify one as
+[RELEASING.md](RELEASING.md#verify-a-release) describes before running it.
 
 ```
 +----------------------------------------------------------------------+
