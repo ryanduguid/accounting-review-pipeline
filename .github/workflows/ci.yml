@@ -506,15 +506,20 @@ jobs:
                             + "".join("    " + str(root / name) + "\n" for name in sources), encoding="utf-8")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as environment:
               environment.write(f"COVERAGE_RCFILE={config}\nCOVERAGE_FILE={output / '.coverage'}\n")
+      # The first sync builds PyYAML from its hash-locked sdist: PyPI has no
+      # CPython 3.15 wheel for it. Later steps reuse the synced environment
+      # with --no-build.
       - name: run the full Python suite with coverage
         run: uv run --locked --group dev coverage run -m pytest
+      # .github/requirements-unicode-coverage.in names the pin; regenerate the
+      # hashed file with uv pip compile (command in its header) when it changes.
       - name: run frozen Unicode generators with their supported interpreter
-        run: uv run --no-project --no-build --python 3.14.1 --with coverage==7.16.2 python -m coverage run -m unittest tests.test_unicode_generators -v
+        run: uv run --no-project --no-build --python 3.14.1 --with-requirements .github/requirements-unicode-coverage.txt python -m coverage run -m unittest tests.test_unicode_generators -v
       - name: retain every maintained Python source in the report
         shell: bash
         run: |
-          uv run --locked --group dev coverage combine --keep "$RUNNER_TEMP/python-coverage"
-          uv run --locked --group dev python - <<'PY'
+          uv run --locked --no-build --group dev coverage combine --keep "$RUNNER_TEMP/python-coverage"
+          uv run --locked --no-build --group dev python - <<'PY'
           import json
           import os
           from pathlib import Path
@@ -587,6 +592,9 @@ jobs:
                   for name in ("pyproject.toml", "uv.lock"):
                       shutil.copyfile(component / name, Path(standalone) / name)
                   subprocess.run(["uv", "lock", "--check"], cwd=standalone, check=True)
+      # The first sync builds PyYAML from its hash-locked sdist: PyPI has no
+      # CPython 3.15 wheel for it. Later steps reuse the synced environment
+      # with --no-build.
       - name: lint the workspace
         run: uv run --locked --group dev ruff check .
       - name: type-check the workspace
@@ -633,12 +641,12 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as environment:
               environment.write(f"COVERAGE_RCFILE={config}\nCOVERAGE_FILE={output / '.coverage'}\n")
       - name: run the full suite
-        run: uv run --locked --group dev coverage run -m pytest
+        run: uv run --locked --no-build --group dev coverage run -m pytest
       - name: retain every maintained Python source in the report
         shell: bash
         run: |
-          uv run --locked --group dev coverage combine --keep "$RUNNER_TEMP/python-coverage"
-          uv run --locked --group dev python - <<'PY'
+          uv run --locked --no-build --group dev coverage combine --keep "$RUNNER_TEMP/python-coverage"
+          uv run --locked --no-build --group dev python - <<'PY'
           import json
           import os
           from pathlib import Path
