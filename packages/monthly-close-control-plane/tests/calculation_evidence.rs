@@ -1,6 +1,9 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use monthly_close_control_plane::{
     calculation_evidence::{self, CalculationEvidence},
     engine::{self, CloseReviewPack, ReviewConfig},
@@ -108,7 +111,7 @@ fn payloads(pack: &CloseReviewPack) -> BTreeMap<String, Vec<u8>> {
         .collect()
 }
 fn review_command(output: &Path) -> Command {
-    let mut command = Command::new(BIN);
+    let mut command = child_profile::command(BIN);
     command
         .arg("review")
         .arg("--current")
@@ -165,7 +168,7 @@ fn valid_evidence_survives_physical_publication_and_read_only_display() {
         assert_eq!(fs::read(path).unwrap(), *bytes);
     }
     assert!(viewer::verify_pack(&output).is_ok());
-    let shown = Command::new(BIN)
+    let shown = child_profile::command(BIN)
         .args(["view", "--pack-dir"])
         .arg(&output)
         .output()
@@ -185,6 +188,27 @@ fn valid_evidence_survives_physical_publication_and_read_only_display() {
     for (path, bytes) in paths.iter().zip(&expected) {
         assert_eq!(fs::read(path).unwrap(), *bytes);
     }
+}
+
+#[test]
+fn supplied_evidence_can_be_displayed_without_a_required_calculation() {
+    let temp = TempDir::new();
+    let evidence = temp.join("evidence.json");
+    fs::write(&evidence, GOOD).unwrap();
+    let mut config = config(&evidence);
+    config.required_calculations.clear();
+    let pack = engine::review_close(&config).unwrap();
+    assert!(findings(&pack).is_empty());
+    assert!(pack.relied_on.contains(LABEL));
+    let output = temp.join("pack");
+    publication::write_review_pack(&pack, &output).unwrap();
+    let (sheet, _) = viewer::render_review_sheet(&output).unwrap();
+    assert!(sheet.contains("- Required: none"), "{sheet}");
+    assert!(sheet.contains("- coal-lsl-levy: COMPUTED"), "{sheet}");
+    assert!(
+        sheet.contains("eligible_wages 7125.00; levy 192.38"),
+        "{sheet}"
+    );
 }
 
 #[test]

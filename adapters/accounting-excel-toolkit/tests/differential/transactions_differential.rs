@@ -10,6 +10,8 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+#[path = "../../../../tests/support/child_profile.rs"]
+mod child_profile;
 mod transactions_cases;
 mod transactions_cli;
 

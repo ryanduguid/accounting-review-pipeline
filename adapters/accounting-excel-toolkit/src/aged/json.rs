@@ -1024,4 +1024,93 @@ mod tests {
             false
         ));
     }
+
+    #[test]
+    fn typed_access_and_exact_keys_distinguish_wrong_shapes() {
+        let mut value = Json::object([("a", Json::Null), ("b", Json::Bool(true))]);
+        assert!(value.has_exact_keys(&["b", "a"]));
+        assert!(!value.has_exact_keys(&["a"]));
+        assert!(!value.has_exact_keys(&["a", "missing"]));
+        assert_eq!(value.at("b").as_bool(), Some(true));
+        value.set("a", Json::int(7));
+        value.set("c", Json::str("changed"));
+        assert_eq!(value.at("a").as_plain_int(), Some(&BigInt::from(7)));
+        assert!(value.at("c").is_str("changed"));
+        assert!(value.get("missing").is_none());
+        for scalar in [Json::Null, Json::int(0)] {
+            assert!(scalar.get("a").is_none());
+            assert!(scalar.as_array().is_none());
+            assert!(scalar.as_bool().is_none());
+            assert!(scalar.keys().is_none());
+            assert!(!scalar.has_exact_keys(&[]));
+        }
+        assert!(py_eq(&Json::Null, &Json::Null, false));
+        assert!(!py_eq(&Json::Null, &Json::int(0), false));
+        assert!(!py_eq(&Json::str("0"), &Json::int(0), false));
+        for (text, bound, expected) in [
+            ("-9223372036854775809", i64::MIN, Ordering::Less),
+            ("9223372036854775808", i64::MAX, Ordering::Greater),
+            ("7", 7, Ordering::Equal),
+        ] {
+            assert_eq!(
+                int_cmp(loads(text).unwrap().as_plain_int().unwrap(), bound),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn unicode_exports_escape_controls_and_refuse_surrogate_runs() {
+        let text = PyStr(vec![0x61, 0xd800, 0xdc80, 0x62, 0xdfff]);
+        assert_eq!(PyStr::from_os_text(&text.os_text()), text);
+        assert!(text.to_utf8().is_none());
+        assert_eq!(
+            encode_utf8(&text).unwrap_err(),
+            "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed"
+        );
+        let value = loads(r#"{"z":"\b\t\n\f\r\"\\\u0001é😀","a":0}"#).unwrap();
+        assert_eq!(
+            canonical(&value),
+            r#"{"a":0,"z":"\b\t\n\f\r\"\\\u0001\u00e9\ud83d\ude00"}"#
+        );
+        assert_eq!(
+            pretty_utf8(&value).unwrap(),
+            "{\n  \"z\": \"\\b\\t\\n\\f\\r\\\"\\\\\\u0001é😀\",\n  \"a\": 0\n}"
+        );
+        assert_eq!(
+            pretty_utf8(&loads(r#""\ud800\ud801""#).unwrap()).unwrap_err(),
+            "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed"
+        );
+    }
+
+    #[test]
+    fn malformed_tokens_and_delimiters_are_refused() {
+        for text in [
+            "-",
+            "1ex",
+            "1e+x",
+            r#""\q""#,
+            r#""\u123"#,
+            "[1 2]",
+            r#"{"a" 1}"#,
+            r#"{"a":1 "b":2}"#,
+        ] {
+            assert_eq!(loads(text).unwrap_err(), LoadError::Invalid, "{text}");
+        }
+        assert!(py_eq(
+            &loads(r#""\/\b\f\t""#).unwrap(),
+            &Json::str("/\u{8}\u{c}\t"),
+            false
+        ));
+        assert_eq!(repr(&Json::Float(f64::INFINITY)), "inf");
+        assert_eq!(repr(&Json::Float(f64::NEG_INFINITY)), "-inf");
+        assert_eq!(repr(&Json::str("text")), "'text'");
+        assert_eq!(float_repr(0.0), "0.0");
+    }
+
+    #[test]
+    #[should_panic(expected = "set requires an object")]
+    fn setting_a_member_requires_an_object() {
+        Json::Null.set("a", Json::int(1));
+    }
 }

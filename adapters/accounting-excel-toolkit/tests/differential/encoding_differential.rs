@@ -7,6 +7,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
+#[path = "../../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 struct Oracle(Child);
 impl Drop for Oracle {
     fn drop(&mut self) {
@@ -140,7 +143,7 @@ fn compare_cli(python: &Path, script: &Path, binary: &Path, seed: u64) -> Result
             .current_dir(&temp.0)
             .output()
             .map_err(|e| e.to_string())?;
-        let actual = Command::new(binary)
+        let actual = child_profile::command(binary)
             .args(arguments)
             .current_dir(&temp.0)
             .output()

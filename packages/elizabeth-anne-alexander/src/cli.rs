@@ -888,4 +888,17 @@ mod tests {
             Some("evaluate")
         );
     }
+
+    #[test]
+    fn stream_errors_preserve_messages_and_translate_windows_disk_full() {
+        assert_eq!(
+            stream_error(&std::io::Error::other("fabricated stream failure")),
+            "OSError: fabricated stream failure"
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            stream_error(&std::io::Error::from_raw_os_error(112)),
+            "OSError: [Errno 28] No space left on device"
+        );
+    }
 }

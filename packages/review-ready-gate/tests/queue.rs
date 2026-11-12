@@ -6,11 +6,10 @@
 #[path = "support/temp.rs"]
 mod temp;
 
-use std::{
-    fs,
-    path::PathBuf,
-    process::{Command, Output},
-};
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
+use std::{fs, path::PathBuf, process::Output};
 use temp::TempDir;
 
 const BIN: &str = env!("CARGO_BIN_EXE_review-ready");
@@ -22,7 +21,7 @@ fn book(temp: &TempDir) -> Vec<PathBuf> {
         .into_iter()
         .map(|example| {
             let output = temp.join(example);
-            let result = Command::new(BIN)
+            let result = child_profile::command(BIN)
                 .args(["gate", "--profile", "bas", "--pack"])
                 .arg(
                     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -41,7 +40,7 @@ fn book(temp: &TempDir) -> Vec<PathBuf> {
 }
 
 fn queue(packs: &[PathBuf], extra: &[&str]) -> Output {
-    let mut command = Command::new(BIN);
+    let mut command = child_profile::command(BIN);
     command.arg("queue");
     for pack in packs {
         command.arg("--pack-dir").arg(pack);

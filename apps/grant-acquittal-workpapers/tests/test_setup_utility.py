@@ -68,6 +68,16 @@ class SetupUtilityTests(unittest.TestCase):
         command.assert_not_called()
         self.assertEqual(sentinel.read_text(), "original")
 
+    def test_existing_workspace_is_refused_even_without_setup_tools(self):
+        self.workspace.mkdir()
+        sentinel = self.workspace / "keep.txt"
+        sentinel.write_text("original")
+        with patch.object(setup_utility.shutil, "which", return_value=None), patch.object(setup_utility.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "existing paths are never reused"):
+                setup_utility.setup(self.workspace)
+        command.assert_not_called()
+        self.assertEqual(sentinel.read_text(), "original")
+
     def test_source_nested_workspace_is_refused(self):
         for target in (self.source / "outputs", self.pipeline / "outputs"):
             with self.subTest(target=target), self.assertRaisesRegex(ValueError, "separate"):
@@ -154,3 +164,23 @@ class SetupUtilityTests(unittest.TestCase):
     def test_git_runs_plain_git_even_with_rtk_on_path(self):
         with patch.object(setup_utility.shutil, "which", return_value="rtk"):
             self.assertEqual(setup_utility.git_command("status"), ["git", "status"])
+
+    def test_new_nested_workspace_is_created_after_isolation_checks(self):
+        self.workspace = self.root / "new parent" / "new workspace"
+        with patch.object(setup_utility.subprocess, "run", side_effect=self.command):
+            self.assertEqual(setup_utility.setup(self.workspace), self.workspace / "results")
+        self.assertTrue((self.workspace / "results/manifest.json").is_file())
+
+    def test_manifest_must_confirm_fixture_validation(self):
+        command = self.command
+        for index, manifest in enumerate(([], {"fixture_validation": "failed"})):
+            self.workspace = self.root / f"invalid result {index}"
+            def invalid_result(arguments, **kwargs):
+                result = command(arguments, **kwargs)
+                if "--output" in arguments:
+                    output = Path(arguments[arguments.index("--output") + 1])
+                    (output / "manifest.json").write_text(json.dumps(manifest))
+                return result
+            with patch.object(setup_utility.subprocess, "run", side_effect=invalid_result):
+                with self.assertRaisesRegex(ValueError, "fixture result checks"):
+                    setup_utility.setup(self.workspace)

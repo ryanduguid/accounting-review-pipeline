@@ -759,6 +759,105 @@ mod tests {
     }
 
     #[test]
+    fn json_encodings_preserve_astral_and_unpaired_surrogate_code_points() {
+        let expected = vec![0x5b, 0x22, 0xe9, 0x1f600, 0xd800, 0x22, 0x5d];
+        let utf16: [u16; 8] = [0x5b, 0x22, 0xe9, 0xd83d, 0xde00, 0xd800, 0x22, 0x5d];
+        for big_endian in [false, true] {
+            for with_bom in [false, true] {
+                let mut encoded16 = Vec::new();
+                let mut encoded32 = Vec::new();
+                if with_bom {
+                    encoded16.extend(if big_endian { [0xfe, 0xff] } else { [0xff, 0xfe] });
+                    encoded32.extend(if big_endian {
+                        [0, 0, 0xfe, 0xff]
+                    } else {
+                        [0xff, 0xfe, 0, 0]
+                    });
+                }
+                for unit in utf16 {
+                    encoded16.extend(if big_endian {
+                        unit.to_be_bytes()
+                    } else {
+                        unit.to_le_bytes()
+                    });
+                }
+                for &cp in &expected {
+                    encoded32.extend(if big_endian {
+                        u32::to_be_bytes(cp)
+                    } else {
+                        u32::to_le_bytes(cp)
+                    });
+                }
+                for bytes in [encoded16, encoded32] {
+                    assert_eq!(decode_json_bytes(&bytes).unwrap(), expected);
+                    let value = loads_bytes(&bytes).unwrap();
+                    assert_eq!(dumps_indent2(&value), "[\n  \"\\u00e9\\ud83d\\ude00\\ud800\"\n]");
+                    assert!(matches!(value, Json::Array(ref items)
+                        if matches!(&items[..], [Json::Str(s)] if s.to_utf8().is_none())));
+                }
+            }
+        }
+        assert_eq!(decode_json_bytes(b"\x00{").unwrap(), vec![0x7b]);
+        assert_eq!(decode_json_bytes(b"{\x00").unwrap(), vec![0x7b]);
+    }
+
+    #[test]
+    fn malformed_encoded_documents_report_the_original_byte_span() {
+        for (bytes, expected) in [
+            (
+                &b"\xff\xfe\x00"[..],
+                "'utf-16' codec can't decode byte 0x00 in position 2: truncated data",
+            ),
+            (
+                &b"\xff\xfe\x00\x00{\x00"[..],
+                "'utf-32' codec can't decode bytes in position 4-5: truncated data",
+            ),
+            (
+                &b"\xff\xfe\x00\x00\x00\x00\x11\x00"[..],
+                "'utf-32' codec can't decode bytes in position 4-7: code point not in range(0x110000)",
+            ),
+            (
+                &b"\xe2\x82"[..],
+                "'utf-8' codec can't decode bytes in position 0-1: unexpected end of data",
+            ),
+            (
+                &b"\xe2\x82A"[..],
+                "'utf-8' codec can't decode bytes in position 0-1: invalid continuation byte",
+            ),
+        ] {
+            assert_eq!(err(bytes), expected);
+        }
+    }
+
+    #[test]
+    fn escaped_strings_and_number_boundaries_match_python() {
+        let value = loads_bytes(br#""\"\\\/\b\f\r\t""#).unwrap();
+        assert!(matches!(&value, Json::Str(s) if s.0 == vec![0x22, 0x5c, 0x2f, 8, 12, 13, 9]));
+        assert_eq!(dumps_indent2(&value), r#""\"\\/\b\f\r\t""#);
+        assert!(matches!(loads_bytes(br#""\ud83d\ude00""#), Ok(Json::Str(s)) if s.0 == vec![0x1f600]));
+        assert!(matches!(loads_bytes(br#""\ud800\u0041""#), Ok(Json::Str(s)) if s.0 == vec![0xd800, 0x41]));
+        assert_eq!(err(br#"{"a":1,"\u0061":2}"#), "Duplicate JSON field: a");
+        assert_eq!(
+            err(b"\"x\\"),
+            "Unterminated string starting at: line 1 column 1 (char 0)"
+        );
+        assert_eq!(err(br#""\u123"#), "Invalid \\uXXXX escape: line 1 column 3 (char 2)");
+        assert_eq!(err(b"1e+x"), "Extra data: line 1 column 2 (char 1)");
+        assert_eq!(err(b"-"), "Expecting value: line 1 column 1 (char 0)");
+        assert_eq!(repr(&loads_bytes(b"false").unwrap()), "False");
+        assert_eq!(repr(&loads_bytes(b"NaN").unwrap()), "nan");
+        assert_eq!(repr(&loads_bytes(b"Infinity").unwrap()), "inf");
+        assert_eq!(repr(&loads_bytes(b"1.2345").unwrap()), "1.2345");
+        assert_eq!(repr(&loads_bytes(b"1e+2").unwrap()), "100.0");
+        let limit = "7".repeat(4300);
+        assert!(matches!(loads_bytes(limit.as_bytes()), Ok(Json::Int(digits)) if digits == limit));
+        assert_eq!(
+            err("7".repeat(4301).as_bytes()),
+            "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit"
+        );
+    }
+
+    #[test]
     fn dumps_and_repr_match_cpython() {
         let value = loads_bytes(b"{\"b\": [1, 2.5, \"\\u00e9\"], \"a\": {}}").unwrap();
         assert_eq!(

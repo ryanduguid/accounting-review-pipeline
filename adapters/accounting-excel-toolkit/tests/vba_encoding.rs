@@ -1,11 +1,13 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use accounting_excel_toolkit::{check_bytes, collect_targets, default_vba_dir, run};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const CLEAN: &[u8] = b"Attribute VB_Name = \"modClean\"\r\nOption Explicit\r\n";
@@ -208,7 +210,10 @@ fn installed_binary_is_independent_of_cwd_and_build_checkout() {
         std::env::consts::EXE_SUFFIX
     ));
     fs::copy(env!("CARGO_BIN_EXE_check-vba-encoding"), &binary).unwrap();
-    let output = Command::new(binary).current_dir(&wrong.0).output().unwrap();
+    let output = child_profile::command(binary)
+        .current_dir(&wrong.0)
+        .output()
+        .unwrap();
     assert!(
         output.status.success(),
         "{}",
@@ -222,7 +227,7 @@ fn installed_binary_is_independent_of_cwd_and_build_checkout() {
 fn cli_errors_have_no_traceback_and_do_not_mix_diagnostics_into_stdout() {
     let temp = Temp::new();
     let file = temp.write("clsProbe.cls", b"\xef\xbb\xbf\n");
-    let output = Command::new(env!("CARGO_BIN_EXE_check-vba-encoding"))
+    let output = child_profile::command(env!("CARGO_BIN_EXE_check-vba-encoding"))
         .arg(file)
         .output()
         .unwrap();
@@ -241,7 +246,7 @@ fn cli_errors_have_no_traceback_and_do_not_mix_diagnostics_into_stdout() {
 fn dash_arguments_are_literal_paths_as_in_the_original_guard() {
     let temp = Temp::new();
     temp.write("--help", CLEAN);
-    let output = Command::new(env!("CARGO_BIN_EXE_check-vba-encoding"))
+    let output = child_profile::command(env!("CARGO_BIN_EXE_check-vba-encoding"))
         .arg("--help")
         .current_dir(&temp.0)
         .output()

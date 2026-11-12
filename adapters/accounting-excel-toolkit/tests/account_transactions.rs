@@ -1,6 +1,9 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use accounting_excel_toolkit::transactions::{
     amount, convert, inspect_export, output_csv, parse_date,
 };
@@ -8,7 +11,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const SOURCE: &[u8] = include_bytes!("../samples/xero-account-transactions.csv");
@@ -78,7 +81,7 @@ fn converted(source: &[u8], map: &Value) -> Result<Vec<Value>, String> {
 }
 
 fn cli(source: &Path, map: Option<&Path>, extra: &[&str]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_xero-account-transactions"));
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"));
     command
         .arg(source)
         .args(["--tenant", TENANT, "--account-name", "Clearing"]);
@@ -123,6 +126,32 @@ fn inspection_retains_identity_totals_and_original_detail() {
              "Reference": "SET-1", "Description": "Settlement", "Debit": "0", "Credit": "100.00"}
         ])
     );
+}
+
+#[test]
+fn non_unicode_tenant_is_refused_without_changing_the_source() {
+    #[cfg(unix)]
+    let tenant = {
+        use std::os::unix::ffi::OsStringExt;
+        std::ffi::OsString::from_vec(b"Fabricated\xff".to_vec())
+    };
+    #[cfg(windows)]
+    let tenant = {
+        use std::os::windows::ffi::OsStringExt;
+        std::ffi::OsString::from_wide(&[0xd800])
+    };
+    let temp = Temp::new();
+    let source = temp.write("source.csv", SOURCE);
+    let output = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"))
+        .arg(&source)
+        .arg("--tenant")
+        .arg(tenant)
+        .args(["--account-name", "Clearing"])
+        .output()
+        .unwrap();
+    refused(&output, 2, "text arguments require valid Unicode");
+    assert_eq!(fs::read(source).unwrap(), SOURCE);
+    assert_eq!(fs::read_dir(&temp.0).unwrap().count(), 1);
 }
 
 #[test]
@@ -583,7 +612,7 @@ fn cli_runtime_failures_have_empty_stdout_and_leave_both_inputs_unchanged() {
 #[test]
 fn cli_distinguishes_help_usage_and_file_errors() {
     for argument in ["--help", "-hh", "-hhh", "-hfoo", "-h_-"] {
-        let help = Command::new(env!("CARGO_BIN_EXE_xero-account-transactions"))
+        let help = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"))
             .arg(argument)
             .output()
             .unwrap();
@@ -591,14 +620,14 @@ fn cli_distinguishes_help_usage_and_file_errors() {
         assert!(help.stderr.is_empty());
         assert!(String::from_utf8_lossy(&help.stdout).starts_with("usage:"));
     }
-    for argument in ["-h-h", "-hh-h", "-h=foo", "-h="] {
-        let usage = Command::new(env!("CARGO_BIN_EXE_xero-account-transactions"))
+    for argument in ["-h-h", "-hh-h", "-h=foo", "-h=", "-x"] {
+        let usage = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"))
             .arg(argument)
             .output()
             .unwrap();
         refused(&usage, 2, "usage:");
     }
-    let usage = Command::new(env!("CARGO_BIN_EXE_xero-account-transactions"))
+    let usage = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"))
         .output()
         .unwrap();
     refused(&usage, 2, "usage:");
@@ -611,6 +640,25 @@ fn cli_distinguishes_help_usage_and_file_errors() {
     let path = temp.write("invalid.csv", b"\xff");
     refused(&cli(&path, None, &[]), 1, "Account Transactions:");
     assert_eq!(fs::read(path).unwrap(), b"\xff");
+}
+
+#[test]
+fn cli_inspects_a_negative_decimal_filename_without_treating_it_as_an_option() {
+    let temp = Temp::new();
+    let source = temp.write("-1.5", SOURCE);
+    let output = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"))
+        .current_dir(&temp.0)
+        .args(["-1.5", "--tenant", TENANT, "--account-name", "Clearing"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+        inspect(SOURCE)
+    );
+    assert_eq!(fs::read(source).unwrap(), SOURCE);
+    assert_eq!(fs::read_dir(&temp.0).unwrap().count(), 1);
 }
 
 #[test]
@@ -634,7 +682,7 @@ fn python_date_digit_widths_and_lone_cr_output_quoting_are_retained() {
             .unwrap()
             .contains(",\"bare\rreturn\",110.00,0\n")
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_xero-account-transactions"))
+    let output = child_profile::command(env!("CARGO_BIN_EXE_xero-account-transactions"))
         .args(["--unknown", "--help"])
         .output()
         .unwrap();

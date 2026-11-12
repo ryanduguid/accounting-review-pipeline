@@ -23,11 +23,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 # The canonical checker lives in ryanduguid/release-policy, whose
 # tests/test_repository_baseline.sh pins the same digest (SHA-256 after CRLF to LF).
-POLICY_DIGEST = "8d48fa32c92d15bb476e28f2ad34400660f62ee337c527c1d9fd9b7f6230f62a"
+POLICY_DIGEST = "f10beb3a9a7c61412dd444ced5664662f9444764591d01a670319c51bc5d9323"
 
 OLD_GATE = "pipeline-gates"
-NEEDS = "    needs: [dependency-audit, rust, windows-workspace]\n"
-REMOVALS = "dependency-audit, rust, windows-workspace, pipeline-gates"
+NEEDS = "    needs: [dependency-audit, rust, python-coverage, windows-workspace, upload-coverage]\n"
+REMOVALS = "dependency-audit, rust, python-coverage, windows-workspace, upload-coverage, pipeline-gates"
 # The repository no longer has a reusable workflow, so the callable lineage
 # tests use this fixture in place of the retired ci-package.yml.
 CALLABLE = """name: package
@@ -96,6 +96,51 @@ class GateReaderTests(unittest.TestCase):
             return sources[args[1].split(":", 1)[1]]
         with patch.object(checker, "git", side_effect=git), patch.object(checker, "base_workflow_paths", return_value=list(sources)):
             return checker.base_jobs(".github/workflows/new.yml", "replacement", workflow(head))
+
+    def test_quoted_names_comments_and_malformed_keys_keep_reader_boundaries(self):
+        self.assertEqual(self.names('  plain:\n    name: protected # note\n  quoted:\n    name: "a # literal" # note\n'),
+                         {"plain": {"protected"}, "quoted": {"a # literal"}})
+        for text in ('"unterminated', '""', r'"a\nb"', '"name" trailing'):
+            with self.subTest(text=text):
+                self.assertIsNone(checker.literal_name(text))
+        self.assertIsNone(checker.job_key("job:value"))
+
+    def test_static_matrix_comments_and_unsupported_layouts(self):
+        prefix = "  build:\n    name: ${{ matrix.label }}\n"
+        matrix = "    strategy:\n      matrix:\n        include:\n\n          # fabricated rows\n          - label: first\n"
+        self.assertEqual(self.names(prefix + matrix)["build"], {"first"})
+        # parse_jobs strips comments; the standalone matrix reader accepts raw blocks too.
+        self.assertEqual(checker.matrix_values(matrix.splitlines(), "label"), {"first"})
+        for layout in ("", "    strategy: {matrix: {include: []}}\n",
+                       matrix.replace("          - label", "         - label")):
+            with self.subTest(layout=layout):
+                self.assertTrue(checker.possible_context(self.names(prefix + layout)["build"], "protected"))
+
+    def test_unreadable_jobs_fail_and_next_top_level_key_ends_jobs(self):
+        for text, message in (("name: fixture\n", "Cannot find the jobs block"),
+                              (workflow("  123:\n    runs-on: linux\n"), "Cannot read the job key")):
+            with self.subTest(text=text), self.assertRaisesRegex(SystemExit, message):
+                checker.job_ids(text)
+        self.assertEqual(self.names("  first:\n    runs-on: linux\npermissions: {}\n  ignored:\n"),
+                         {"first": {"first"}})
+        self.assertIsNone(self.names("  first:\n     name: protected\n")["first"])
+
+    def test_event_reader_refuses_duplicate_unreadable_or_premature_nested_events(self):
+        for body in ("  push:\n  push:\n", "  123:\n", "    branches: [main]\n  push:\n"):
+            with self.subTest(body=body):
+                self.assertIsNone(checker.workflow_modes("on:\n" + body))
+        head = workflow("  replacement:\n    name: protected\n").replace(
+            "on: pull_request", "on: [pull_request, workflow_call]")
+        with patch.object(checker, "git", return_value=""), self.assertRaisesRegex(SystemExit, "invocation namespace"):
+            checker.base_jobs(".github/workflows/new.yml", "replacement", head)
+
+    def test_workflow_argument_cannot_escape_the_listed_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / ".github/workflows/ci.yml").write_text(workflow("  gate:\n    runs-on: linux\n"))
+            with contextlib.chdir(root), self.assertRaisesRegex(SystemExit, "not a file"):
+                checker.workflow_file(".github/workflows/../outside.yml")
 
     def test_path_listing_preserves_linebreaks_and_rejects_invalid_utf8(self):
         paths = [".github/workflows/ci\r.yml", ".github/workflows/ci\n.yml"]
@@ -293,12 +338,13 @@ class GateReaderTests(unittest.TestCase):
             root = Path(directory)
             (root / ".github/workflows").mkdir(parents=True)
             (root / ".github/workflows/ci.yml").write_text(workflow("  gate:\n    runs-on: linux\n"), encoding="utf-8")
-            env = {key: os.environ[key] for key in ("PATH", "SystemRoot", "TEMP", "TMP") if key in os.environ}
+            env = {key: os.environ[key] for key in ("PATH", "SystemRoot", "TEMP", "TMP", "COVERAGE_PROCESS_CONFIG", "COVERAGE_PROCESS_START") if key in os.environ}
             env.update(GIT_CEILING_DIRECTORIES=str(root.parent), GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
             for args, extra, expected in (
                 ([], {"RESULTS": "{}"}, "ValueError: expected WORKFLOW GATE [--exempt JOB ...] [--no-results]"),
                 (["gate"], {}, "KeyError: 'RESULTS'"),
                 (["gate"], {"RESULTS": "not JSON"}, "JSONDecodeError: Expecting value: line 1 column 1 (char 0)"),
+                (["missing"], {"RESULTS": "{}"}, "Cannot find missing in .github/workflows/ci.yml; the gate check needs updating"),
                 (["gate"], {"RESULTS": "[]"}, "AttributeError: 'list' object has no attribute 'items'"),
                 (["gate"], {"RESULTS": "{}", "GITHUB_EVENT_NAME": "pull_request"}, "CalledProcessError: Command "),  # 3.15 drops the quotes around the list
             ):
@@ -355,7 +401,7 @@ class PipelineGatePredecessorTests(unittest.TestCase):
             home.mkdir()
             env = {
                 key: os.environ[key]
-                for key in ("PATH", "SystemRoot", "TEMP", "TMP")
+                for key in ("PATH", "SystemRoot", "TEMP", "TMP", "COVERAGE_PROCESS_CONFIG", "COVERAGE_PROCESS_START")
                 if key in os.environ
             }
             env.update(

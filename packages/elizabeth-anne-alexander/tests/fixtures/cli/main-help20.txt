@@ -1,0 +1,28 @@
+usage: elizabeth-anne-alexander
+       [-h]
+       {evaluate,validate-review} ...
+
+Run a fixed-
+policy, synthetic
+Xero review
+boundary.
+
+positional arguments:
+  {evaluate,validate-review}
+    evaluate
+    evaluate the
+    one
+    allowlisted
+    variance
+    review
+    validate-review
+    validate a
+    human acknowle
+    dgement/escala
+    tion record
+
+options:
+  -h, --help
+    show this help
+    message and
+    exit

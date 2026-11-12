@@ -32,7 +32,7 @@ fn check<A: AsRef<OsStr> + Debug>(
         .args(arguments)
         .output()
         .map_err(|e| e.to_string())?;
-    let actual = Command::new(binary)
+    let actual = super::child_profile::command(binary)
         .args(arguments)
         .output()
         .map_err(|e| e.to_string())?;

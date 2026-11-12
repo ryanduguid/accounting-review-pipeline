@@ -1,13 +1,16 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use accounting_excel_toolkit::aged::{
     Json, amount, date, evidence, inspect_export, json, records, replay,
 };
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const SOURCE: &[u8] = include_bytes!("../samples/sample-aged-receivables-review.csv");
@@ -211,7 +214,7 @@ fn refused(output: &Output, code: i32, message: &str) {
 fn verifier(temp: &Temp, source: &[u8], manifest: &Json, control: Option<&Json>) -> Output {
     let source = temp.write("source.csv", source);
     let manifest = temp.write("manifest.json", json::dumps(manifest, false).as_bytes());
-    let mut command = Command::new(VERIFIER);
+    let mut command = child_profile::command(VERIFIER);
     command.arg(source).arg("--manifest").arg(manifest);
     if let Some(control) = control {
         command
@@ -252,13 +255,115 @@ fn review_files(output_dir: &Path, result: &Json) {
 }
 
 fn output_cli(tool: &str, source: &Path, output: &Path) -> Output {
-    let mut command = Command::new(tool);
+    let mut command = child_profile::command(tool);
     if tool == EVIDENCE {
         command.arg("draft").arg(source);
     } else {
         command.args(["--case", "clean"]);
     }
     command.arg("--output").arg(output).output().unwrap()
+}
+
+#[test]
+fn zero_balanced_export_still_requires_population_evidence() {
+    let temp = Temp::new();
+    let mut rows = records(SOURCE).unwrap();
+    rows.truncate(6);
+    rows.push(
+        ["Total", "0", "0", "0", "0", "0", "0", "0"]
+            .map(String::from)
+            .to_vec(),
+    );
+    let source = csv(&rows);
+    let mut manifest = manifest(&source);
+    manifest.set("footer_record", Json::int(7));
+    manifest.set("on_screen_rows", Json::int(0));
+    manifest.set("on_screen_total", Json::str("0"));
+    let mut control = control();
+    control.set("amount", Json::str("0"));
+    let output = verifier(&temp, &source, &manifest, Some(&control));
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stderr.is_empty());
+    let result = json::loads(std::str::from_utf8(&output.stdout).unwrap()).unwrap();
+    status(&result, "REVIEW");
+    assert!(array(&result, "rows").is_empty());
+    all_agree(&result);
+    assert_eq!(
+        array(&result, "exceptions")
+            .iter()
+            .map(text)
+            .collect::<Vec<_>>(),
+        ["No contact rows supplied; completeness is unconfirmed."]
+    );
+    verifier_inputs_unchanged(&temp, &source, &manifest, &control);
+}
+
+#[test]
+fn incomplete_control_evidence_is_distinct_from_invalid_json_shapes() {
+    let temp = Temp::new();
+    let manifest = manifest(SOURCE);
+    for amount in [None, Some(""), Some(" \t ")] {
+        let mut control = control();
+        if let Some(amount) = amount {
+            control.set("amount", Json::str(amount));
+        } else {
+            remove(&mut control, "amount");
+        }
+        let output = verifier(&temp, SOURCE, &manifest, Some(&control));
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stderr.is_empty());
+        let result = json::loads(std::str::from_utf8(&output.stdout).unwrap()).unwrap();
+        status(&result, "REVIEW");
+        no_control_tie(&result);
+        all_agree(&result);
+        assert_eq!(
+            array(&result, "exceptions")
+                .iter()
+                .map(text)
+                .collect::<Vec<_>>(),
+            ["Receivables control amount is missing."]
+        );
+        verifier_inputs_unchanged(&temp, SOURCE, &manifest, &control);
+    }
+    let empty_array = Json::Array(Vec::new());
+    for (manifest, control) in [(&manifest, &empty_array), (&empty_array, &control())] {
+        let output = verifier(&temp, SOURCE, manifest, Some(control));
+        refused(&output, 1, "Manifest and control must be JSON objects.");
+        verifier_inputs_unchanged(&temp, SOURCE, manifest, control);
+    }
+}
+
+#[test]
+fn usage_refusals_precede_input_access_and_output_creation() {
+    let temp = Temp::new();
+    for (tool, args, message) in [
+        (VERIFIER, vec!["--=x"], "ambiguous option: --"),
+        (VERIFIER, vec!["-x"], "invalid positional arguments"),
+        (
+            VERIFIER,
+            vec!["not-created.csv", "--manifest", "--control"],
+            "--manifest requires a value",
+        ),
+        (
+            EVIDENCE,
+            vec![
+                "post",
+                "not-created.csv",
+                "--output",
+                "never-created/output",
+            ],
+            "mode must be draft or review",
+        ),
+    ] {
+        let output = child_profile::command(tool)
+            .current_dir(&temp.root)
+            .args(args)
+            .output()
+            .unwrap();
+        refused(&output, 2, message);
+        assert!(String::from_utf8_lossy(&output.stderr).contains("usage:"));
+        assert_eq!(fs::read_dir(&temp.root).unwrap().count(), 0);
+    }
 }
 
 #[test]
@@ -728,19 +833,71 @@ fn cli_preserves_pass_and_review_exits() {
 #[test]
 fn cli_preserves_invalid_input_exit_and_exact_error_bytes() {
     let temp = Temp::new();
-    let source = changed("00123,100,,0,0,0,0,100", "00123,100");
-    let manifest = manifest(&source);
-    let control = control();
-    let output = verifier(&temp, &source, &manifest, Some(&control));
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
-    assert!(output.stdout.is_empty());
+    for (row, error) in [
+        ("00123,100", "field count does not match the header"),
+        (",100,,0,0,0,0,100", "missing contact label"),
+    ] {
+        let source = changed("00123,100,,0,0,0,0,100", row);
+        let manifest = manifest(&source);
+        let control = control();
+        let output = verifier(&temp, &source, &manifest, Some(&control));
+        assert_eq!(output.status.code(), Some(1), "{output:?}");
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            output.stderr,
+            terminal(&format!(
+                "{{\"summary_status\": \"INVALID_INPUT\", \"error\": \"Source record 7: {error}.\"}}\n"
+            ))
+        );
+        verifier_inputs_unchanged(&temp, &source, &manifest, &control);
+    }
+}
+
+#[test]
+fn cli_preserves_the_json_integer_limit_diagnostic_and_input_bytes() {
+    let temp = Temp::new();
+    let source = temp.write("source.csv", SOURCE);
+    let bytes = format!("{{\"operator_metadata\":{}}}", "1".repeat(4301)).into_bytes();
+    let manifest = temp.write("manifest.json", &bytes);
+    let output = child_profile::command(VERIFIER)
+        .arg(&source)
+        .arg("--manifest")
+        .arg(&manifest)
+        .output()
+        .unwrap();
+    refused(&output, 1, "INVALID_INPUT");
     assert_eq!(
         output.stderr,
         terminal(
-            "{\"summary_status\": \"INVALID_INPUT\", \"error\": \"Source record 7: field count does not match the header.\"}\n"
+            "{\"summary_status\": \"INVALID_INPUT\", \"error\": \"Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits\"}\n"
         )
     );
-    verifier_inputs_unchanged(&temp, &source, &manifest, &control);
+    assert_eq!(fs::read(source).unwrap(), SOURCE);
+    assert_eq!(fs::read(manifest).unwrap(), bytes);
+    assert_eq!(fs::read_dir(&temp.root).unwrap().count(), 2);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn public_commands_report_an_actual_stdout_write_failure() {
+    for tool in [
+        VERIFIER,
+        EVIDENCE,
+        REPLAY,
+        env!("CARGO_BIN_EXE_xero-account-transactions"),
+    ] {
+        let full = fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .unwrap();
+        let output = child_profile::command(tool)
+            .arg("--help")
+            .stdout(full)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1), "{tool}: {output:?}");
+        assert!(output.stdout.is_empty());
+    }
 }
 
 #[test]
@@ -894,7 +1051,7 @@ fn duplicate_json_fields_are_invalid_at_every_object_depth() {
             "valid.json",
             json::dumps(&manifest(SOURCE), false).as_bytes(),
         );
-        let mut command = Command::new(VERIFIER);
+        let mut command = child_profile::command(VERIFIER);
         command.arg(&source).arg("--manifest");
         if key == "manifest" {
             command.arg(&evidence);
@@ -1067,8 +1224,26 @@ fn failure_catalogue_runs_actual_cli_and_expected_exits() {
         }
     }
     assert!(replay::pack("unknown", Path::new(VERIFIER)).is_err());
+    assert_eq!(replay::case("all").unwrap_err(), "Unknown replay case.");
     let clean = replay::pack("clean", Path::new(VERIFIER)).unwrap();
     assert_eq!(array(&clean, "cases").len(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn replay_refuses_an_incompatible_verifier_output_contract() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = Temp::new();
+    let executable = b"#!/bin/sh\nprintf '%s\\n' '{\"summary_status\":\"PASS\"}'\n";
+    let verifier = temp.write("incompatible-verifier", executable);
+    fs::set_permissions(&verifier, fs::Permissions::from_mode(0o700)).unwrap();
+    let error = replay::pack("clean", &verifier).unwrap_err();
+    assert_eq!(
+        error,
+        "Replay clean failed its output contract: 0: {\"summary_status\":\"PASS\"}\n"
+    );
+    assert_eq!(fs::read(verifier).unwrap(), executable);
 }
 
 #[test]
@@ -1260,6 +1435,34 @@ fn strict_csv_preserves_logical_records_crlf_quotes_bom_and_field_limits() {
 }
 
 #[test]
+fn verifier_preserves_pinned_timestamp_suffix_and_leap_midnight_semantics() {
+    let temp = Temp::new();
+    for (timestamp, code, expected) in [
+        ("2026-10-01T12:34:56xZ", 0, "PASS"),
+        ("2026-10-01T12:34:56.123456xxZ", 0, "PASS"),
+        ("2026-10-01T12345612Z", 0, "PASS"),
+        ("2024-03-01T24Z", 0, "PASS"),
+        ("2026-10-01T12:34:56xxZ", 2, "REVIEW"),
+        ("2026-10-01T12:34:56:0Z", 2, "REVIEW"),
+        ("2026-10-01T12:34:56.1xZ", 2, "REVIEW"),
+        ("2026-10-01T12:34:56+10:00x", 2, "REVIEW"),
+    ] {
+        let mut manifest = manifest(SOURCE);
+        manifest.set("generated_at", Json::str(timestamp));
+        let control = control();
+        let output = verifier(&temp, SOURCE, &manifest, Some(&control));
+        assert_eq!(output.status.code(), Some(code), "{timestamp}: {output:?}");
+        assert!(output.stderr.is_empty());
+        let result = json::loads(std::str::from_utf8(&output.stdout).unwrap()).unwrap();
+        status(&result, expected);
+        assert_eq!(has_exception(&result, "timestamp"), code == 2);
+        assert!(result.at("manifest").at("generated_at").is_str(timestamp));
+        all_agree(&result);
+        verifier_inputs_unchanged(&temp, SOURCE, &manifest, &control);
+    }
+}
+
+#[test]
 fn timestamps_require_timezone_valid_calendar_and_boundary_time() {
     for timestamp in [
         "2026-10-01T09:00:00+10:00",
@@ -1270,6 +1473,8 @@ fn timestamps_require_timezone_valid_calendar_and_boundary_time() {
         "9999-12-31T23:59:59.999999Z",
         "2000-02-29T00:00+23:59",
         "2026-10-01T24:00:00.000000Z",
+        "2025-W01-1T12Z",
+        "2024-03-01T00Z",
     ] {
         assert!(date::generated(timestamp), "{timestamp}");
         status(
@@ -1289,12 +1494,24 @@ fn timestamps_require_timezone_valid_calendar_and_boundary_time() {
         "2026-10-01T23:60Z",
         "2026-10-01T23:59:60Z",
         "2026-10-01T12Zextra",
+        "2026W401--T12Z",
+        "2026W401xxT12Z",
+        "2026-10-01T12+ab:00",
+        "2026-Wx1T12Z",
+        "2026-W40x1T12Z",
+        "2026-W40-xT12Z",
+        "2025-W53-1T12Z",
+        "9999-W52-6T12Z",
     ] {
         assert!(!date::generated(timestamp), "{timestamp}");
         let result = review_with(SOURCE, &[("generated_at", Json::str(timestamp))]);
         status(&result, "REVIEW");
         assert!(has_exception(&result, "timestamp"));
     }
+}
+
+#[test]
+fn cutoff_dates_require_canonical_valid_calendar_dates() {
     for cutoff in ["0001-01-01", "9999-12-31", "2000-02-29", "2026-09-30"] {
         assert!(date::cutoff(cutoff));
     }
@@ -1456,7 +1673,7 @@ fn evidence_review_writes_exact_files_and_preserves_sources_for_pass_and_review(
         [("pass", true, 0, "PASS"), ("review", false, 2, "REVIEW")]
     {
         let output_dir = temp.root.join(name);
-        let mut command = Command::new(EVIDENCE);
+        let mut command = child_profile::command(EVIDENCE);
         command
             .arg("review")
             .arg(&source_path)
@@ -1523,7 +1740,7 @@ fn evidence_draft_refusals_do_not_create_parents_or_overwrite_source() {
     let source = temp.write("source.csv", SOURCE);
     let manifest = temp.write("manifest.json", MANIFEST.as_bytes());
     let output_path = temp.root.join("missing-parent/draft");
-    let output = Command::new(EVIDENCE)
+    let output = child_profile::command(EVIDENCE)
         .arg("draft")
         .arg(&source)
         .arg("--manifest")
@@ -1543,7 +1760,7 @@ fn evidence_draft_refusals_do_not_create_parents_or_overwrite_source() {
         );
         assert_eq!(fs::read(&source).unwrap(), SOURCE);
     }
-    let output = Command::new(EVIDENCE)
+    let output = child_profile::command(EVIDENCE)
         .arg("review")
         .arg(&source)
         .arg("--output")
@@ -1592,19 +1809,64 @@ fn evidence_requests_keep_preparer_roles_and_specific_remedies() {
 }
 
 #[test]
+fn malformed_review_manifest_preserves_inputs_and_never_creates_output_parents() {
+    let temp = Temp::new();
+    let source = temp.write("source.csv", SOURCE);
+    let manifest = temp.write("manifest.json", b"{");
+    let output_path = temp.root.join("missing-parent/evidence");
+    let output = child_profile::command(EVIDENCE)
+        .arg("review")
+        .arg(&source)
+        .arg("--manifest")
+        .arg(&manifest)
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+    refused(&output, 1, "INVALID_INPUT");
+    let error = json::loads(std::str::from_utf8(&output.stderr).unwrap()).unwrap();
+    assert!(error.at("summary_status").is_str("INVALID_INPUT"));
+    assert!(error.at("error").is_str("Malformed JSON evidence."));
+    assert!(!output_path.parent().unwrap().exists());
+    assert_eq!(fs::read(source).unwrap(), SOURCE);
+    assert_eq!(fs::read(manifest).unwrap(), b"{");
+}
+
+#[test]
+fn output_parent_obstructions_preserve_the_existing_file_and_source() {
+    let temp = Temp::new();
+    let source = temp.write("source.csv", SOURCE);
+    let parent = temp.write("blocked-parent", b"fabricated obstruction");
+    let modified = fs::metadata(&parent).unwrap().modified().unwrap();
+    for tool in [EVIDENCE, REPLAY] {
+        let output_path = parent.join("new-output");
+        let output = output_cli(tool, &source, &output_path);
+        refused(&output, 1, "INVALID_INPUT");
+        let error = json::loads(std::str::from_utf8(&output.stderr).unwrap()).unwrap();
+        assert!(error.at("summary_status").is_str("INVALID_INPUT"));
+        assert!(!text(error.at("error")).is_empty());
+        assert!(!output_path.exists());
+        assert_eq!(fs::read(&parent).unwrap(), b"fabricated obstruction");
+        assert_eq!(fs::metadata(&parent).unwrap().modified().unwrap(), modified);
+        assert_eq!(fs::read(&source).unwrap(), SOURCE);
+        assert_eq!(fs::read_dir(&temp.root).unwrap().count(), 2);
+    }
+}
+
+#[test]
 fn command_help_usage_missing_files_and_replay_selection_use_the_right_streams() {
     for tool in [VERIFIER, EVIDENCE, REPLAY] {
-        let help = Command::new(tool).arg("--help").output().unwrap();
+        let help = child_profile::command(tool).arg("--help").output().unwrap();
         assert_eq!(help.status.code(), Some(0));
         assert!(help.stderr.is_empty());
         assert!(help.stdout.starts_with(b"usage:"));
-        let usage = Command::new(tool).output().unwrap();
+        let usage = child_profile::command(tool).output().unwrap();
         refused(&usage, 2, "usage:");
     }
     let temp = Temp::new();
     let missing = temp.root.join("missing.csv");
     let manifest = temp.write("manifest.json", MANIFEST.as_bytes());
-    let result = Command::new(VERIFIER)
+    let result = child_profile::command(VERIFIER)
         .arg(missing)
         .arg("--manifest")
         .arg(manifest)
@@ -1612,14 +1874,14 @@ fn command_help_usage_missing_files_and_replay_selection_use_the_right_streams()
         .unwrap();
     refused(&result, 1, "INVALID_INPUT");
     let output_path = temp.root.join("not-created/replay.json");
-    let unknown = Command::new(REPLAY)
+    let unknown = child_profile::command(REPLAY)
         .args(["--case", "unknown", "--output"])
         .arg(&output_path)
         .output()
         .unwrap();
     refused(&unknown, 2, "unknown replay case");
     assert!(!output_path.parent().unwrap().exists());
-    let output = Command::new(REPLAY)
+    let output = child_profile::command(REPLAY)
         .args(["--case", "clean", "--output"])
         .arg(&output_path)
         .output()
@@ -1645,6 +1907,20 @@ fn directory_link(target: &Path, path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(any(unix, windows))]
+fn create_directory_link(target: &Path, path: &Path) -> bool {
+    if let Err(error) = directory_link(target, path) {
+        if cfg!(windows) && error.kind() == std::io::ErrorKind::PermissionDenied {
+            eprintln!(
+                "directory-link containment check skipped: Windows symlink privilege is unavailable"
+            );
+            return false;
+        }
+        panic!("cannot create test directory link: {error}");
+    }
+    true
+}
+
+#[cfg(any(unix, windows))]
 #[test]
 fn output_containment_resolves_directory_links_before_creation() {
     let checkout = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1655,14 +1931,8 @@ fn output_containment_resolves_directory_links_before_creation() {
     let external = Temp::new();
     let source = external.write("source.csv", SOURCE);
     let checkout_alias = external.root.join("checkout-alias");
-    if let Err(error) = directory_link(checkout, &checkout_alias) {
-        if cfg!(windows) && error.kind() == std::io::ErrorKind::PermissionDenied {
-            eprintln!(
-                "directory-link containment check skipped: Windows symlink privilege is unavailable"
-            );
-            return;
-        }
-        panic!("cannot create test directory link: {error}");
+    if !create_directory_link(checkout, &checkout_alias) {
+        return;
     }
     let name = format!(
         "fabricated-aged-alias-{}-{}",
@@ -1699,6 +1969,48 @@ fn output_containment_resolves_directory_links_before_creation() {
         .unwrap();
 }
 
+#[cfg(any(unix, windows))]
+#[test]
+fn output_containment_resolves_dangling_absolute_and_relative_links() {
+    let checkout = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let external = Temp::new();
+    let within = Temp::inside(checkout);
+    let source = external.write("source.csv", SOURCE);
+    for (link, target, resolved) in [
+        (
+            external.root.join("absolute-link"),
+            within.root.join("absent-absolute"),
+            within.root.join("absent-absolute"),
+        ),
+        (
+            within.root.join("relative-link"),
+            PathBuf::from("absent-relative"),
+            within.root.join("absent-relative"),
+        ),
+    ] {
+        assert!(!resolved.exists());
+        if !create_directory_link(&target, &link) {
+            return;
+        }
+        for (tool, suffix, code) in [(EVIDENCE, "evidence", 1), (REPLAY, "replay", 2)] {
+            refused(
+                &output_cli(tool, &source, &link.join(suffix)),
+                code,
+                "outside the checkout",
+            );
+            assert!(!resolved.exists());
+            assert_eq!(fs::read(&source).unwrap(), SOURCE);
+        }
+        fs::remove_dir(&link)
+            .or_else(|_| fs::remove_file(&link))
+            .unwrap();
+    }
+}
+
 #[test]
 fn aged_test_source_remains_ascii() {
     assert!(
@@ -1706,4 +2018,38 @@ fn aged_test_source_remains_ascii() {
             .unwrap()
             .is_ascii()
     );
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn dangling_links_to_new_external_outputs_remain_allowed() {
+    let checkout = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let external = Temp::new();
+    let within = Temp::inside(checkout);
+    let source = external.write("source.csv", SOURCE);
+    for (tool, name, code) in [(EVIDENCE, "evidence", 2), (REPLAY, "replay.json", 0)] {
+        let target = external.root.join(format!("absent-{name}"));
+        let link = within.root.join(format!("link-{name}"));
+        assert!(!target.exists());
+        if !create_directory_link(&target, &link) {
+            return;
+        }
+        let output = output_cli(tool, &source, &link.join(name));
+        assert_eq!(output.status.code(), Some(code), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+        let expected = target.join(name);
+        assert!(if tool == EVIDENCE {
+            expected.join("manifest-draft.json").is_file()
+        } else {
+            expected.is_file()
+        });
+        assert_eq!(fs::read(&source).unwrap(), SOURCE);
+        fs::remove_dir(&link)
+            .or_else(|_| fs::remove_file(&link))
+            .unwrap();
+    }
 }

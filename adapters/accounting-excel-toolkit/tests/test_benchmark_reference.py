@@ -3,17 +3,42 @@
 
 """The retained benchmark measures the frozen Python implementation only."""
 import json
+import runpy
 import subprocess
 import sys
 import tempfile
+import tracemalloc
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "benchmark_aged_review.py"
 
 
 class PythonReferenceBenchmarkTests(unittest.TestCase):
+    def test_a_failed_fabricated_review_cannot_be_reported_as_a_measurement(self):
+        with patch.object(sys, "path", sys.path.copy()):
+            module = runpy.run_path(str(SCRIPT))
+        worker = module["measure"]
+        inspect = module["inspect_export"]
+
+        def failed_review(*arguments):
+            result = inspect(*arguments)
+            result["summary_status"] = "FAIL"
+            return result
+
+        content, manifest, control = module["workload"](1)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "source.csv").write_bytes(content)
+            for name, value in (("manifest", manifest), ("control", control)):
+                (root / f"{name}.json").write_text(json.dumps(value), encoding="utf-8")
+            with patch.dict(worker.__globals__, {"inspect_export": failed_review}):
+                with self.assertRaisesRegex(RuntimeError, "failed its review contract"):
+                    worker(root)
+        self.assertFalse(tracemalloc.is_tracing())
+
     def run_benchmark(self, output):
         return subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "--output", str(output)],

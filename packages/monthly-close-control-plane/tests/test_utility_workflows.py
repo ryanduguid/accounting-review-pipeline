@@ -4,6 +4,8 @@
 """The portable runner refuses destructive destinations before running commands."""
 import json
 import runpy
+import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -379,3 +381,199 @@ def test_wip_runner_follows_the_package_manifest(tmp_path, monkeypatch, native):
              "examples/job_to_cash.py", "--output", str(output / "job-extra-cost"), "--extra-cost-to-complete", "100000"],
         ]
         assert all("wip-tally" not in part for command in commands for part in command)
+
+
+@pytest.fixture
+def workflow_producers(results, monkeypatch):
+    """Fabricated command results, with real result validation and file finalisation."""
+    run = MODULE["run_workflows"]
+    scope = run.__globals__
+    close = results / "pipeline/packages/close"
+    fpa, accounting, grants = (results / name for name in ("fpa-source", "accounting-source", "grant-source"))
+    accounting, wip = _wip_checkout(accounting, native=True)
+    for project, manifest in ((close, "Cargo.toml"), (fpa, "pyproject.toml"), (grants, "pyproject.toml")):
+        project.mkdir(parents=True)
+        (project / manifest).write_text("[project]" if manifest == "pyproject.toml" else "[package]")
+    output = results / "actual-results"
+    environment = results / "fresh-environments"
+    commands = []
+    monkeypatch.setitem(scope, "COMPONENT", close)
+    monkeypatch.setitem(scope, "project_evidence", lambda project: {"revision": "a" * 40, "source": str(project)})
+    monkeypatch.setattr(scope["shutil"], "which", lambda name: name)
+
+    def completed(command, **kwargs):
+        commands.append((command, kwargs))
+        text, exit_code = "", 0
+        if command[-1] == "--version":
+            text = "close-control 1.0.0\n" if "close-control" in command else "wip-tally 1.0.0\n" if "wip-tally" in command else "uv fixture\n"
+        elif "-c" in command:
+            text = '{"python":"fixture","packages":[]}'
+        elif "compare" in command:
+            period = Path(command[command.index("--current-pack") + 1]).parent.name
+            text = (results / "quarter" / period / "comparison.json").read_text()
+        elif "review" in command:
+            exit_code = 2
+            target = Path(command[command.index("--output") + 1])
+            if not target.exists():
+                shutil.copytree(results / "lumbridge-close", target)
+        elif "--output" in command:
+            target = Path(command[command.index("--output") + 1])
+            if "close_handoff.py" in " ".join(command):
+                target.mkdir()
+                (target / "handoff.json").write_text(json.dumps({"source_sha256": dict.fromkeys(
+                    ("xero_bs.csv", "invoices.csv", "payments.csv"), "fabricated-source")}))
+            else:
+                label = target.name
+                shutil.copytree(results / label, target)
+                if label == "grants":
+                    exit_code = 2
+                if label == "lumbridge-refresh":
+                    path = target / "review.json"
+                    document = json.loads(path.read_text())
+                    document["source_sha256"] = dict.fromkeys(("xero_bs.csv", "invoices.csv", "payments.csv"), "fabricated-source")
+                    path.write_text(json.dumps(document))
+        elif "project_cash.py" in " ".join(command):
+            target = Path(command[command.index("--pack") + 1])
+            text = (target / "project-cash.json").read_text()
+        elif "grant_cash.py" in " ".join(command):
+            text = (results / "grant-cash.json").read_text()
+        return subprocess.CompletedProcess(command, exit_code, text, "")
+
+    monkeypatch.setitem(scope, "captured", completed)
+    return {"run": run, "scope": scope, "completed": completed, "commands": commands,
+            "arguments": {"output": output, "fpa": fpa, "accounting": accounting, "grants": grants,
+                          "environment_root": environment}, "wip": wip}
+
+
+def test_all_fabricated_routes_validate_commands_provenance_and_output_hashes(workflow_producers):
+    fixture = workflow_producers
+    manifest = fixture["run"](**fixture["arguments"])
+    output = fixture["arguments"]["output"]
+    assert manifest["fixture_validation"] == "passed"
+    assert manifest["workflow"] == "all"
+    assert json.loads((output / "manifest.json").read_text()) == manifest
+    assert manifest["outputs_sha256"]["summary.md"]
+    assert "Fixture checks passed" in (output / "summary.md").read_text()
+    comparisons = [command for command, _ in fixture["commands"] if "compare" in command]
+    assert {(Path(command[command.index("--previous-pack") + 1]).parent.name,
+             Path(command[command.index("--current-pack") + 1]).parent.name) for command in comparisons} == {
+                 ("2026-10-31", "2026-11-30"), ("2026-11-30", "2026-12-31")}
+    environments = {options["env"]["UV_PROJECT_ENVIRONMENT"] for _, options in fixture["commands"] if options.get("env")}
+    assert environments == {str(fixture["arguments"]["environment_root"] / owner) for owner in ("close", "fpa", "wip", "grants")}
+    assert not (output / "failed-results.json").exists()
+
+
+@pytest.mark.parametrize("failure", ["close-version", "wip-version", "uv-version", "source-handoff", "provenance"])
+def test_failed_runtime_or_source_identity_never_finalises(workflow_producers, monkeypatch, failure):
+    fixture = workflow_producers
+    original = fixture["completed"]
+    def completed(command, **kwargs):
+        result = original(command, **kwargs)
+        if command[-1] == "--version":
+            if failure == "close-version" and "close-control" in command:
+                result.stdout = "unexpected-close-version\n"
+            elif failure == "wip-version" and "wip-tally" in command:
+                result.stdout = "unexpected-wip-version\n"
+            elif failure == "uv-version" and command[0] == "uv":
+                result.returncode = 1
+        if failure == "source-handoff" and "recurring.py" in " ".join(command):
+            path = fixture["arguments"]["output"] / "lumbridge-refresh/review.json"
+            document = json.loads(path.read_text())
+            document["source_sha256"]["invoices.csv"] = "changed-source"
+            path.write_text(json.dumps(document))
+        return result
+    monkeypatch.setitem(fixture["scope"], "captured", completed)
+    if failure == "provenance":
+        calls = 0
+        def evidence(project):
+            nonlocal calls
+            calls += 1
+            return {"revision": "a" * 40 if calls <= 4 else "b" * 40, "source": str(project)}
+        monkeypatch.setitem(fixture["scope"], "project_evidence", evidence)
+    with pytest.raises(ValueError) as error:
+        fixture["run"](**fixture["arguments"])
+    expected = {"close-version": "Native close runtime version differs", "wip-version": "Native WIP runtime version differs",
+                "uv-version": "Unable to record uv version", "source-handoff": "Close and forecast sources differ",
+                "provenance": "Source changed during the run"}[failure]
+    assert expected in str(error.value.__cause__ or error.value)
+    output = fixture["arguments"]["output"]
+    assert not (output / "manifest.json").exists()
+    assert "Run failed" in (output / "summary.md").read_text()
+    assert (output / ("source-changes.json" if failure == "provenance" else "failed-results.json")).is_file()
+
+
+def test_standalone_provenance_refuses_missing_lock_and_tracks_deleted_indexed_source(tmp_path):
+    MODULE["git_output"](tmp_path, "init")
+    project = tmp_path / "standalone"
+    project.mkdir()
+    (project / "pyproject.toml").write_text("[project]\nname='fixture'\n")
+    lock = project / "uv.lock"
+    lock.write_text("fabricated resolution")
+    deleted = project / "deleted.py"
+    deleted.write_text("fabricated = True\n")
+    MODULE["git_output"](tmp_path, "add", "--", "standalone/deleted.py")
+    deleted.unlink()
+    evidence = MODULE["project_evidence"](project)
+    assert evidence["lockfile"] == "standalone/uv.lock" and evidence["lock_scope"] == "project"
+    assert "standalone/deleted.py" not in evidence["source_sha256"]
+    lock.unlink()
+    with pytest.raises(ValueError, match="Missing authoritative lockfile"):
+        MODULE["project_evidence"](project)
+
+
+def test_git_failure_reports_its_diagnostics(tmp_path, monkeypatch):
+    monkeypatch.setitem(MODULE["git_output"].__globals__, "captured", lambda *args, **kwargs:
+                        subprocess.CompletedProcess(args, 128, "", "fabricated Git failure"))
+    with pytest.raises(ValueError, match="fabricated Git failure"):
+        MODULE["git_output"](tmp_path, "status")
+
+
+@pytest.mark.parametrize("failure", ["missing-grant-manifest", "missing-uv", "existing-output"])
+def test_prepare_protects_external_destinations_and_requires_grant_manifest(tmp_path, monkeypatch, failure):
+    fpa, grants = tmp_path / "fpa", tmp_path / "grants"
+    for project in (fpa, grants):
+        project.mkdir()
+        (project / "pyproject.toml").write_text("[project]")
+    output = tmp_path / "external-output"
+    expected = {"missing-grant-manifest": "Missing project manifest", "missing-uv": "Install uv", "existing-output": "new output"}[failure]
+    if failure == "missing-grant-manifest":
+        (grants / "pyproject.toml").unlink()
+    elif failure == "missing-uv":
+        monkeypatch.setattr(MODULE["shutil"], "which", lambda name: None if name == "uv" else name)
+    else:
+        output.mkdir()
+        (output / "sentinel").write_text("keep")
+    with pytest.raises(ValueError, match=expected):
+        PREPARE(output, fpa, None, grants, None, "grant-cash")
+    if output.exists():
+        assert (output / "sentinel").read_text() == "keep"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group disappearance race")
+def test_timeout_survives_a_process_disappearing_before_group_cleanup(tmp_path, monkeypatch):
+    def disappeared(*args):
+        raise ProcessLookupError("fabricated process disappeared")
+    monkeypatch.setattr(MODULE["os"], "killpg", disappeared)
+    with pytest.raises(subprocess.TimeoutExpired) as error:
+        MODULE["captured"]([sys.executable, "-c", "import time; print('ready',flush=True); time.sleep(.05)"],
+                           cwd=tmp_path, timeout=.001)
+    assert "ready" in error.value.output
+
+
+def test_cli_reports_verified_commands_after_real_result_validation(workflow_producers, capsys):
+    fixture = workflow_producers
+    arguments = [value for name, value in fixture["arguments"].items() for value in ("--" + name.replace("_", "-"), str(value))]
+    assert MODULE["main"](arguments) == 0
+    manifest = json.loads((fixture["arguments"]["output"] / "manifest.json").read_text())
+    assert manifest["fixture_validation"] == "passed"
+    assert capsys.readouterr().out == f"UTILITY WORKFLOWS VERIFIED: {len(manifest['calls'])} successful commands\n"
+
+
+def test_real_cli_invalid_timeout_refuses_before_creating_output(tmp_path):
+    output = tmp_path / "results"
+    result = subprocess.run([sys.executable, str(ROOT / "examples/utility_workflows.py"),
+                             "--fpa", str(tmp_path), "--output", str(output), "--timeout", "0"],
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1
+    assert result.stderr == "Utility workflows: Command timeout must be positive and at most 3600 seconds\n"
+    assert not output.exists()

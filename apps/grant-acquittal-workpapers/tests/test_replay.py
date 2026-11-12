@@ -6,6 +6,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -132,6 +133,15 @@ class ReplayTests(unittest.TestCase):
         # The pipeline commit comes from the local pipeline checkout, which may hold unpushed work.
         self.assertEqual(seen[-1], ("accounting-review-pipeline", str(setup_utility.SOURCE.resolve().parents[1]), "1" * 40))
         self.assertEqual(len(seen), 3)
+        # A successful runner still cannot substitute another source revision.
+        requested = manifest()
+        requested["projects"]["fpa"]["revision"] = "9" * 40
+        self.manifest.write_text(json.dumps(requested))
+        workspace = self.root / "mismatched workspace"
+        with patch.object(setup_utility.sys, "version_info", (3, 14)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
+            with self.assertRaisesRegex(ValueError, "does not match the replay revisions"):
+                setup_utility.setup(workspace, self.manifest)
+
 
     def test_replay_runner_comes_from_the_recorded_commit(self):
         self.manifest.write_text(json.dumps(manifest()))
@@ -235,3 +245,36 @@ class ReplayTests(unittest.TestCase):
         self.assertIn("Accounting examples verified", stdout.getvalue())
         self.assertIn("Could not append the requested result summary", stderr.getvalue())
         self.assertFalse(target.exists())
+
+    def test_summary_cannot_write_into_sources_or_workspace(self):
+        workspace = self.root / "new workspace"
+        for target in (setup_utility.SOURCE.resolve().parents[1] / "summary.md", workspace / "summary.md"):
+            with patch.object(setup_utility, "setup") as setup, contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as result:
+                    setup_utility.main(["--workspace", str(workspace), "--summary", str(target)])
+            self.assertEqual(result.exception.code, 2)
+            setup.assert_not_called()
+
+    def test_failed_setup_cannot_append_a_success_claim_from_partial_results(self):
+        workspace = self.root / "partial workspace"
+        target = self.root / "summary.md"
+        def failed(*args):
+            output = workspace / "results"
+            output.mkdir(parents=True)
+            (output / "summary.md").write_text("Fixture checks passed.")
+            raise ValueError("fixture producer failed after writing its summary")
+        with patch.object(setup_utility, "setup", side_effect=failed), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(setup_utility.main(["--workspace", str(workspace), "--summary", str(target)]), 1)
+        self.assertIn("Setup failed", target.read_text())
+        self.assertNotIn("Fixture checks passed", target.read_text())
+
+    def test_real_cli_preserves_an_existing_workspace(self):
+        workspace = self.root / "existing workspace"
+        workspace.mkdir()
+        (workspace / "sentinel.txt").write_text("keep")
+        result = subprocess.run([sys.executable, str(Path(setup_utility.__file__)), "--workspace", str(workspace)],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("existing paths are never reused", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual((workspace / "sentinel.txt").read_text(), "keep")

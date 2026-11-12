@@ -7,11 +7,14 @@
 #[path = "support/temp.rs"]
 mod temp;
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use monthly_close_control_plane::{pyjson, viewer};
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::Output,
 };
 use temp::TempDir;
 
@@ -50,7 +53,7 @@ fn trial_balance(temp: &TempDir, name: &str, date: &str) -> PathBuf {
 /// A close on which every control that runs passes.
 fn review(temp: &TempDir, output: &str, extra: &[&str]) -> (Output, PathBuf) {
     let output = temp.join(output);
-    let result = Command::new(BIN)
+    let result = child_profile::command(BIN)
         .arg("review")
         .arg("--current")
         .arg(trial_balance(temp, "current.csv", "2026-08-31"))
@@ -239,6 +242,105 @@ fn a_required_calculation_with_no_evidence_file_is_skipped() {
     );
     assert_eq!(result.status.code(), Some(2), "{result:?}");
     assert_eq!(state_of(&pack(&output), "calculation_evidence"), "skipped");
+    let shown = child_profile::command(BIN)
+        .args(["view", "--pack-dir"])
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert_eq!(shown.status.code(), Some(0), "{shown:?}");
+    assert!(shown.stderr.is_empty(), "{shown:?}");
+    let sheet = stdout(&shown);
+    assert!(sheet.contains("calculation_evidence (skipped)"), "{sheet}");
+    assert!(sheet.contains("- Required: coal-lsl-levy"), "{sheet}");
+    assert!(sheet.contains("- Supplied: none. The exceptions say which calculation is missing."));
+}
+
+#[test]
+fn mixed_tenants_or_dates_are_refused_before_a_pack_is_published() {
+    for (replacement, diagnostic) in [
+        (
+            "2026-08-31,Another fabricated tenant,Equity",
+            "exactly one tenant",
+        ),
+        (
+            "2026-07-31,Fabricated Varrock,Equity",
+            "exactly one ReportDate",
+        ),
+    ] {
+        let temp = TempDir::new();
+        let current = trial_balance(&temp, "current.csv", "2026-08-31");
+        let prior = trial_balance(&temp, "prior.csv", "2026-07-31");
+        let original = fs::read_to_string(&current).unwrap();
+        let changed = original.replacen("2026-08-31,Fabricated Varrock,Equity", replacement, 1);
+        assert_ne!(changed, original);
+        fs::write(&current, &changed).unwrap();
+        let prior_bytes = fs::read(&prior).unwrap();
+        let output = temp.join("refused");
+        let result = child_profile::command(BIN)
+            .args(["review", "--current"])
+            .arg(&current)
+            .arg("--prior")
+            .arg(&prior)
+            .arg("--output")
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1), "{result:?}");
+        assert!(result.stdout.is_empty(), "{result:?}");
+        assert!(
+            String::from_utf8_lossy(&result.stderr).contains(diagnostic),
+            "{result:?}"
+        );
+        assert!(!output.exists());
+        assert_eq!(fs::read_to_string(current).unwrap(), changed);
+        assert_eq!(fs::read(prior).unwrap(), prior_bytes);
+    }
+}
+
+#[test]
+fn formula_like_account_names_remain_literal_across_the_pack_and_view() {
+    for name in ["=BANK", "+BANK", "-BANK", "@BANK"] {
+        let temp = TempDir::new();
+        let current = trial_balance(&temp, "current.csv", "2026-08-31");
+        let prior = trial_balance(&temp, "prior.csv", "2026-07-31");
+        let original = fs::read_to_string(&current).unwrap();
+        let changed = original.replacen(",A1,Bank,090,", &format!(",A1,{name},090,"), 1);
+        assert_ne!(changed, original);
+        fs::write(&current, changed).unwrap();
+        let output = temp.join("pack");
+        let result = child_profile::command(BIN)
+            .args(["review", "--current"])
+            .arg(current)
+            .arg("--prior")
+            .arg(prior)
+            .arg("--output")
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert!(result.stderr.is_empty(), "{result:?}");
+        assert!(
+            pack(&output)
+                .at("exceptions")
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| {
+                    row.at("control").is_str("account_metadata")
+                        && row.at("account_name").is_str(name)
+                })
+        );
+        let csv = fs::read_to_string(output.join("exceptions.csv")).unwrap();
+        assert!(csv.contains(&format!("'{name}")), "{csv}");
+        let shown = child_profile::command(BIN)
+            .args(["view", "--pack-dir"])
+            .arg(output)
+            .output()
+            .unwrap();
+        assert_eq!(shown.status.code(), Some(0), "{shown:?}");
+        assert!(shown.stderr.is_empty(), "{shown:?}");
+        assert!(stdout(&shown).contains(name), "{shown:?}");
+    }
 }
 
 /// A class for every account the example balances move.
@@ -284,7 +386,7 @@ fn every_optional_control_ran_and_its_own_exceptions_hold_the_pack() {
     let schedule = temp.join("equity.json");
     equity_schedule(&schedule, &prior, &current);
     let output = temp.join("all");
-    let mut command = Command::new(BIN);
+    let mut command = child_profile::command(BIN);
     command
         .args(["review", "--current", &current, "--prior", &prior])
         .args(["--mapping", &example("account_mapping.csv")])
@@ -363,7 +465,7 @@ fn a_review_note_does_not_clear_an_unmet_requirement() {
 fn the_workbench_holds_the_requirement_too() {
     let temp = TempDir::new();
     let output = temp.join("workbench");
-    let result = Command::new(BIN)
+    let result = child_profile::command(BIN)
         .arg("workbench")
         .arg("--current")
         .arg(trial_balance(&temp, "current.csv", "2026-08-31"))
@@ -422,7 +524,7 @@ fn a_changed_requirement_is_a_scope_change_between_packs() {
     let (_, previous) = review(&temp, "previous", &[]);
     let (_, current) = review(&temp, "current", &["--require-control=account_mapping"]);
     let trial_balance = temp.join("current.csv");
-    let result = Command::new(BIN)
+    let result = child_profile::command(BIN)
         .arg("compare")
         .arg("--previous-pack")
         .arg(&previous)

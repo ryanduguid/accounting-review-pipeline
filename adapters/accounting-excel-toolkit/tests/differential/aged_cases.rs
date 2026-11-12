@@ -125,6 +125,7 @@ fn dates(oracle: &mut Oracle, rng: &mut Rng) -> Result<(), String> {
         ] {
             oracle.compare(json!({"kind":"generated","text":format!("{day}T{time}")}))?;
         }
+        timestamp_suffixes(oracle, day)?;
     }
     for _ in 0..8000 {
         let y = rng.next() % 10010;
@@ -135,6 +136,36 @@ fn dates(oracle: &mut Oracle, rng: &mut Rng) -> Result<(), String> {
         let sec = rng.next() % 64;
         let zone = rng.next() % 26;
         oracle.compare(json!({"kind":"generated","text":format!("{y:04}-{m:02}-{d:02}T{hour:02}:{min:02}:{sec:02}+{zone:02}:00")}))?;
+    }
+    Ok(())
+}
+fn timestamp_suffixes(oracle: &mut Oracle, day: &str) -> Result<(), String> {
+    for time in [
+        "12xZ",
+        "12:34xZ",
+        "12:34:56xZ",
+        "12:34:56xxZ",
+        "12:34:56:Z",
+        "12:34:56:0Z",
+        "123456xZ",
+        "1234561Z",
+        "12345612Z",
+        "1234561234567Z",
+        "12:34:561Z",
+        "12:34:5612Z",
+        "12:34:56.1xZ",
+        "12:34:56.123456xZ",
+        "12:34:56.123456xxZ",
+        "12:34:56.1234567xZ",
+        "12:34:56x+10:00",
+        "12:34:56+10:00x",
+        "12:34:56+10000012",
+        "12:34:56\u{e9}Z",
+        "12:34:56\u{1f4a0}Z",
+        "12:34:56.Z",
+        "12:34:56.aZ",
+    ] {
+        oracle.compare(json!({"kind":"generated","text":format!("{day}T{time}")}))?;
     }
     Ok(())
 }

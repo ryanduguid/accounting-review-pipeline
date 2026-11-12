@@ -216,7 +216,9 @@ fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> 
     loop {
         let base = match std::fs::canonicalize(&current) {
             Ok(found) => Some(strip_verbatim(found)),
-            Err(_) => read_link_deep(&current).filter(|followed| *followed != current),
+            Err(_) => read_link_deep(&current)
+                .filter(|followed| *followed != current)
+                .map(strip_verbatim),
         };
         if let Some(mut result) = base {
             for name in tail.iter().rev() {

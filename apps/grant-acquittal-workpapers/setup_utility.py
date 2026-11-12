@@ -73,11 +73,11 @@ def checkout_revision(destination: Path, source: str, revision: str, environment
 def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
     if sys.version_info < (3, 14):
         raise ValueError("Setup needs Python 3.14 or later")
+    if workspace.is_symlink() or workspace.exists():
+        raise ValueError("Choose a new workspace; existing paths are never reused")
     for tool in ("git", "uv", "cargo"):
         if not shutil.which(tool):
             raise ValueError(f"Install {tool} and put it on PATH before running setup")
-    if workspace.is_symlink() or workspace.exists():
-        raise ValueError("Choose a new workspace; existing paths are never reused")
     revisions = replay_revisions(replay_manifest) if replay_manifest is not None else None
     workspace = workspace.resolve()
     source = SOURCE.resolve()

@@ -1782,6 +1782,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "reqwest",
+ "rustls",
  "sha2",
  "socket2",
  "tokio",

@@ -101,3 +101,44 @@ pub fn repr_code_points(cps: &[u32]) -> String {
     out.push(quote);
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn carriers_keep_literal_private_use_text_and_surrogates_distinct() {
+        let original = [0x10_F7FF, 0x10_F800, 0xD800, 0xDFFF, 0x1_F600];
+        let mut encoded = String::new();
+        for cp in original {
+            push_code_point(&mut encoded, cp);
+        }
+        assert_eq!(code_points(&encoded).collect::<Vec<_>>(), original);
+        for text in ["\u{10f7ff}", "\u{10f7ff}x"] {
+            assert_eq!(
+                code_points(text).collect::<Vec<_>>(),
+                text.chars().map(|ch| ch as u32).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn whitespace_digits_and_representations_match_python_strings() {
+        assert_eq!(strip("\u{a0}\t x \u{85}"), "x");
+        assert!(!is_space(0xD800));
+        for (cp, expected) in [(0x37, Some(7)), (0x663, Some(3)), (0x41, None), (0, None)] {
+            assert_eq!(decimal_value(cp), expected);
+        }
+        for (points, expected) in [
+            (vec![0x61, 0x27, 0x62], "\"a'b\""),
+            (vec![0x61, 0x27, 0x62, 0x22, 0x63], "'a\\'b\"c'"),
+            (vec![0x5C, 0x09, 0x0A, 0x0D], "'\\\\\\t\\n\\r'"),
+            (
+                vec![0, 0x7F, 0x2028, 0xD800, 0x10_FFFF],
+                "'\\x00\\x7f\\u2028\\ud800\\U0010ffff'",
+            ),
+        ] {
+            assert_eq!(repr_code_points(&points), expected);
+        }
+    }
+}

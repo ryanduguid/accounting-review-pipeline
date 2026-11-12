@@ -150,12 +150,6 @@ impl Decimal {
         self.exp
     }
 
-    pub fn is_integral(&self) -> bool {
-        self.is_zero()
-            || self.exp >= 0
-            || self.digits.chars().rev().take_while(|&c| c == '0').count() as i128 >= -self.exp
-    }
-
     /// Fixed-point formatting rounds independently of the arithmetic context.
     pub fn format_places(&self, places: i128) -> Option<String> {
         if !(0..=1 << 30).contains(&places) {
@@ -171,10 +165,6 @@ impl Decimal {
             return None;
         }
         rescale(self, -places, Rounding::HalfEven).to_fixed_string()
-    }
-
-    pub fn is_signed(&self) -> bool {
-        self.negative
     }
 
     pub fn copy_abs(&self) -> Decimal {

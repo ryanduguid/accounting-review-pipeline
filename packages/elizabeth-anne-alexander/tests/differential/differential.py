@@ -520,6 +520,9 @@ def child_env(**extra):
     base = {name: os.environ[name] for name in keep if name in os.environ}
     if os.name != "nt":
         base["PATH"] = "/usr/bin:/bin"
+    profile = os.environ.get("ARP_CHILD_LLVM_PROFILE_FILE", os.environ.get("LLVM_PROFILE_FILE"))
+    if profile is not None:
+        base["LLVM_PROFILE_FILE"] = profile
     return {**base, "LANG": "C.UTF-8", **extra}
 
 

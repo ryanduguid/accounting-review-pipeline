@@ -1,0 +1,7 @@
+usage: elizabeth-anne-alexander validate-review
+       [-h]
+       --evidence EVIDENCE
+       --receipt RECEIPT
+       --decision DECISION
+       [--out OUT]
+elizabeth-anne-alexander validate-review: error: the following arguments are required: --evidence, --receipt, --decision

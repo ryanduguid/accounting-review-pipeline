@@ -9,10 +9,117 @@ use super::*;
 use crate::persist;
 use crate::util::Location;
 
+#[path = "../../../../tests/support/directory_link.rs"]
+mod directory_link;
+
 fn evaluate_to(env: &Env, out: &str) -> Run {
     let mut args = EVALUATE.to_vec();
     args.extend(["--out", out]);
     run(env, &args)
+}
+
+#[cfg(unix)]
+#[test]
+fn occupied_validation_staging_preserves_inputs_and_recovers() {
+    use std::os::unix::fs::MetadataExt;
+
+    for hard_link in [false, true] {
+        let dir = TempDir::new();
+        let env = env(dir.path());
+        let run_dir = run_evaluation(&env);
+        let out = dir.path().join("build/validation.json");
+        assert_eq!(validate_to(&env, &run_dir, &out).code, 0);
+        let summary = std::fs::read(&out).unwrap();
+        let inputs = snapshot(&run_dir);
+        let unrelated = dir.path().join("unrelated.txt");
+        write(&unrelated, "fabricated unrelated target\n");
+        let staging = out.with_file_name(".validation.json.partial");
+        if hard_link {
+            std::fs::hard_link(&unrelated, &staging).unwrap();
+        } else {
+            write(&staging, "occupied staging\n");
+        }
+        let staged_bytes = std::fs::read(&staging).unwrap();
+        let identity = std::fs::metadata(&staging).unwrap();
+        let result = validate_to(&env, &run_dir, &out);
+        assert_eq!(result.code, 2, "{}", result.err);
+        assert!(result.out.is_empty());
+        assert!(
+            result.err.contains("validation output cannot be written"),
+            "{}",
+            result.err
+        );
+        assert!(result.err.contains("[Errno 17]"), "{}", result.err);
+        assert_eq!(std::fs::read(&out).unwrap(), summary);
+        assert_eq!(snapshot(&run_dir), inputs);
+        assert_eq!(std::fs::read(&staging).unwrap(), staged_bytes);
+        let after = std::fs::metadata(&staging).unwrap();
+        assert_eq!((after.dev(), after.ino()), (identity.dev(), identity.ino()));
+        assert_eq!(
+            std::fs::read_to_string(&unrelated).unwrap(),
+            "fabricated unrelated target\n"
+        );
+        std::fs::remove_file(&staging).unwrap();
+        let retry = validate_to(&env, &run_dir, &out);
+        assert_eq!(retry.code, 0, "{}", retry.err);
+        assert!(retry.out.contains("DECISION_RECORDED"));
+        assert!(!staging.exists());
+        assert_eq!(snapshot(&run_dir), inputs);
+        assert_eq!(
+            std::fs::read_to_string(&unrelated).unwrap(),
+            "fabricated unrelated target\n"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn public_commands_resolve_repeated_links_and_refuse_unusable_paths() {
+    use std::os::unix::fs::symlink;
+
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let run_dir = run_evaluation(&env);
+    let inputs = snapshot(&run_dir);
+    let build = dir.path().join("build");
+    symlink("demo", build.join("link")).unwrap();
+    let out = build.join("validation.json");
+    let result = validate_to(&env, &build.join("link/../link"), &out);
+    assert_eq!(result.code, 0, "{}", result.err);
+    assert!(result.out.contains("DECISION_RECORDED"));
+    let summary = std::fs::read(&out).unwrap();
+
+    symlink("loop", build.join("loop")).unwrap();
+    write(&build.join("occupied"), "not a directory\n");
+    for unusable in [build.join("loop"), build.join("occupied")] {
+        let result = validate_to(&env, &unusable, &out);
+        assert_eq!(result.code, 2, "{}", result.err);
+        assert!(result.out.is_empty());
+        assert!(
+            result.err.contains("reviewer evidence is not a usable path"),
+            "{}",
+            result.err
+        );
+        assert_eq!(std::fs::read(&out).unwrap(), summary);
+    }
+    let blocked_out = build.join("loop/validation.json");
+    let result = validate_to(&env, &run_dir, &blocked_out);
+    assert_eq!(result.code, 2, "{}", result.err);
+    assert!(result.out.is_empty());
+    let context = build.join("occupied/child.json");
+    let mut args = EVALUATE.to_vec();
+    args[2] = context.to_str().unwrap();
+    args.extend(["--out", "build/refused-context"]);
+    let result = run(&env, &args);
+    assert!(!build.join("refused-context").exists());
+    assert_eq!(result.code, 2, "{}", result.err);
+    assert!(result.err.contains("context is not a usable path"), "{}", result.err);
+    assert_eq!(snapshot(&run_dir), inputs);
+    assert_eq!(
+        std::fs::read_to_string(build.join("occupied")).unwrap(),
+        "not a directory\n"
+    );
+    assert_eq!(std::fs::read(&out).unwrap(), summary);
 }
 
 #[test]
@@ -47,6 +154,64 @@ fn test_cli_blocks_output_outside_cwd_build() {
     let env = env(dir.path());
     let elsewhere = dir.path().join("elsewhere");
     assert_eq!(evaluate_to(&env, elsewhere.to_str().unwrap()).code, 2);
+}
+
+#[test]
+fn dangling_output_links_publish_only_beneath_build() {
+    for spelling in ["absolute", "canonical-parent", "relative", "long-canonical"] {
+        let dir = TempDir::new();
+        let env = env(dir.path());
+        let build = dir.path().join("build");
+        std::fs::create_dir(&build).unwrap();
+        let name = if spelling == "long-canonical" {
+            // Two valid filename components exceed MAX_PATH even in a short temp root.
+            PathBuf::from("fabricated-output-".repeat(9)).join("fabricated-output-".repeat(9))
+        } else {
+            PathBuf::from("new")
+        };
+        let target = build.join(&name);
+        let alias = dir.path().join("linked");
+        let link_target = match spelling {
+            "absolute" => target.clone(),
+            "canonical-parent" | "long-canonical" => std::fs::canonicalize(&build).unwrap().join(&name),
+            "relative" => PathBuf::from("build/new"),
+            _ => unreachable!(),
+        };
+        if !directory_link::create(&link_target, &alias) {
+            return;
+        }
+        assert!(!target.exists());
+        let result = evaluate_to(&env, "linked/run");
+        assert_eq!(result.code, 0, "{}", result.err);
+        assert!(result.err.is_empty());
+        assert!(result.out.contains("REVIEW_READY"));
+        let mut published: Vec<_> = std::fs::read_dir(target.join("run"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_str().unwrap().to_owned())
+            .collect();
+        published.sort();
+        assert_eq!(
+            published,
+            ["model-result.json", "receipt.json", "reviewer-evidence.json"]
+        );
+        assert!(std::fs::symlink_metadata(alias).unwrap().file_type().is_symlink());
+    }
+}
+
+#[test]
+fn dangling_output_links_outside_build_are_refused() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let outside = TempDir::new();
+    let target = outside.path().join("new");
+    if !directory_link::create(&target, &dir.path().join("linked")) {
+        return;
+    }
+    let result = evaluate_to(&env, "linked/run");
+    assert_eq!(result.code, 2, "{}", result.err);
+    assert!(result.out.is_empty());
+    assert!(result.err.contains("output directory must stay within"));
+    assert!(!target.exists());
 }
 
 #[test]
@@ -286,4 +451,54 @@ fn usage_errors_and_help_match_argparse() {
     let help = run(&env, &["validate-review", "-h"]);
     assert_eq!(help.code, 0);
     assert!(help.out.contains("  --decision DECISION  decision JSON under the bundled samples/ data or the\n                       working directory's build/\n"));
+}
+
+#[test]
+fn explicit_help_and_ambiguous_options_match_argparse() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let help = run(&env, &["evaluate", "-hx"]);
+    assert_eq!(help.code, 0);
+    assert_eq!(help.out, run(&env, &["evaluate", "--help"]).out);
+    assert!(help.err.is_empty());
+    for (args, message) in [
+        (
+            vec!["evaluate", "--help=x"],
+            "argument -h/--help: ignored explicit argument 'x'",
+        ),
+        (
+            vec!["evaluate", "--=x"],
+            "ambiguous option: --=x could match --help, --context, --request, --policy, --out",
+        ),
+    ] {
+        let result = run(&env, &args);
+        assert_eq!(result.code, 2);
+        assert!(result.out.is_empty());
+        assert!(result.err.ends_with(&format!("{message}\n")), "{}", result.err);
+    }
+    let mut args = EVALUATE.to_vec();
+    args.extend(["--out", "build/demo", "extra"]);
+    let extra = run(&env, &args);
+    assert_eq!(extra.code, 2);
+    assert!(extra.err.ends_with("unrecognized arguments: extra\n"), "{}", extra.err);
+}
+
+#[test]
+fn invalid_validation_paths_preserve_the_existing_output_and_remove_staging() {
+    let dir = TempDir::new();
+    let output = dir.path().join("validation.json");
+    write(&output, "fabricated existing bytes\n");
+    let before = snapshot(dir.path());
+    let invalid = dir.path().join("invalid\0name.json");
+    let protected = [Location::Disk(invalid.clone())];
+    let summary = parse(r#"{"status":"DECISION_RECORDED"}"#);
+    for result in [
+        persist::write_validation(&summary, &output, &protected),
+        persist::write_validation_by_path(&summary, &output, &protected),
+        persist::write_validation(&summary, &invalid, &[]),
+        persist::write_validation_by_path(&summary, &invalid, &[]),
+    ] {
+        assert_refused(result, "validation output");
+    }
+    assert_eq!(snapshot(dir.path()), before);
 }

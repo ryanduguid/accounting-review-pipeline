@@ -11,6 +11,8 @@ use std::{
 };
 mod aged_cases;
 mod aged_cli;
+#[path = "../../../../tests/support/child_profile.rs"]
+mod child_profile;
 
 fn native(request: &Value) -> Json {
     let parsed = json::loads(&request.to_string()).unwrap();

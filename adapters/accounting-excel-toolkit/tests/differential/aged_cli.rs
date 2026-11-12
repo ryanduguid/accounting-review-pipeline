@@ -36,7 +36,7 @@ impl Comparison<'_> {
             .current_dir(&self.scratch.root)
             .output()
             .map_err(|e| e.to_string())?;
-        let actual = Command::new(
+        let actual = super::child_profile::command(
             self.bins
                 .join(format!("{tool}{}", std::env::consts::EXE_SUFFIX)),
         )
