@@ -28,6 +28,9 @@ const SUITES: [&str; 6] = [
 const BINDING_STUB: &str = "param($InstanceFile, $SourceManifest, $EvidencePath, $SourceRoot, $PowerBIBin)
 Write-Output 'Stub binding verified.'
 ";
+const FAILING_BINDING_STUB: &str = "param($InstanceFile, $SourceManifest, $EvidencePath, $SourceRoot, $PowerBIBin)
+throw 'Stub binding failed.'
+";
 const PASSING_STUB: &str = "param($Server, $PowerBIBin, $Samples)
 Write-Output 'Stub suite passed.'
 ";
@@ -37,17 +40,18 @@ exit 3
 ";
 
 /// Records the driver's own process as Desktop and engine, its start shifted by `ShiftMs`, then
-/// runs the runner under the same host.
-const RUN_DRIVER: &str = r#"param([string]$Work, [int]$ShiftMs)
+/// runs the runner under the same host, passing `SourceRoot` when given.
+const RUN_DRIVER: &str = r#"param([string]$Work, [int]$ShiftMs, [string]$SourceRoot)
 $ErrorActionPreference = 'Stop'
 $self = Get-CimInstance Win32_Process -Filter "ProcessId = $PID"
 $started = $self.CreationDate.AddMilliseconds($ShiftMs).ToString('o')
 $instance = Join-Path $Work 'instance.json'
 [ordered]@{ project = $Work; server = 'localhost:1'; desktop_pid = $PID; started_at = $started; engine_pid = $PID; engine_started_at = $started } |
     ConvertTo-Json | Set-Content -LiteralPath $instance -Encoding utf8
+$root = @(if ($SourceRoot) { '-SourceRoot', $SourceRoot })
 $ErrorActionPreference = 'Continue'
 & $self.ExecutablePath -NoProfile -File (Join-Path $Work 'tools\test_native_project.ps1') -InstanceFile $instance `
-    -SourceManifest (Join-Path $Work 'source-manifest.json') -EvidenceDirectory (Join-Path $Work 'evidence') 2>&1 |
+    -SourceManifest (Join-Path $Work 'source-manifest.json') -EvidenceDirectory (Join-Path $Work 'evidence') @root 2>&1 |
     Set-Content -LiteralPath (Join-Path $Work 'runner.log') -Encoding utf8
 exit $LASTEXITCODE
 "#;
@@ -85,15 +89,30 @@ struct Run {
     failing_log: String,
 }
 
-/// Runs the real runner under `host` with stub checks; `failing` writes to stderr and exits 3.
-fn run(host: &str, failing: Option<&str>, shift_ms: i32) -> Run {
-    let work = scratch(&format!("{host}-{}-{shift_ms}", failing.unwrap_or("passing")));
+/// How a run differs from a passing one.
+#[derive(Default)]
+struct Case {
+    /// The check that fails: a suite writes to stderr and exits 3; the binding check throws.
+    failing: Option<&'static str>,
+    /// Shifts the recorded start, so the process ID no longer names the recorded process.
+    shift_ms: i32,
+    /// A `-SourceRoot` inside the scratch folder.
+    source_root: Option<&'static str>,
+}
+
+/// Copies the real runner and receipt script into `work\tools` beside stub checks.
+fn stub_tools(work: &Path, failing: Option<&str>) {
     let tools = work.join("tools");
     fs::create_dir_all(&tools).unwrap();
     for script in ["test_native_project.ps1", "native_receipts.ps1"] {
         fs::copy(app().join("tools").join(script), tools.join(script)).unwrap();
     }
-    fs::write(tools.join("verify_native_model.ps1"), BINDING_STUB).unwrap();
+    let binding = if failing == Some("verify_native_model") {
+        FAILING_BINDING_STUB
+    } else {
+        BINDING_STUB
+    };
+    fs::write(tools.join("verify_native_model.ps1"), binding).unwrap();
     for suite in SUITES {
         let stub = if failing == Some(suite) {
             FAILING_STUB
@@ -102,20 +121,39 @@ fn run(host: &str, failing: Option<&str>, shift_ms: i32) -> Run {
         };
         fs::write(tools.join(format!("{suite}.ps1")), stub).unwrap();
     }
+}
+
+/// Runs the real runner under `host` with stub checks.
+fn run(host: &str, case: Case) -> Run {
+    let Case {
+        failing,
+        shift_ms,
+        source_root,
+    } = case;
+    let work = scratch(&format!(
+        "{host}-{}-{shift_ms}-{}",
+        failing.unwrap_or("passing"),
+        source_root.unwrap_or("default")
+    ));
+    stub_tools(&work, failing);
     fs::write(work.join("driver.ps1"), RUN_DRIVER).unwrap();
-    let child = Command::new(host)
+    let mut command = Command::new(host);
+    command
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(work.join("driver.ps1"))
         .arg("-Work")
         .arg(&work)
-        .args(["-ShiftMs", &shift_ms.to_string()])
-        .spawn()
-        .unwrap_or_else(|error| panic!("{host}: {error}"));
+        .args(["-ShiftMs", &shift_ms.to_string()]);
+    if let Some(root) = source_root {
+        command.arg("-SourceRoot").arg(work.join(root));
+    }
+    let child = command.spawn().unwrap_or_else(|error| panic!("{host}: {error}"));
     let driver = child.id();
     let code = child.wait_with_output().unwrap().status.code();
     let log = read_text(&work.join("runner.log"));
     let summary = serde_json::from_str(&read_text(&work.join("evidence/run-summary.json"))).unwrap();
     let failing_log = failing
+        .filter(|name| SUITES.contains(name))
         .map(|name| read_text(&work.join(format!("evidence/{name}.log"))))
         .unwrap_or_default();
     fs::remove_dir_all(&work).unwrap();
@@ -168,7 +206,7 @@ fn assert_timed(step: &Value) {
 #[test]
 fn a_passing_run_records_every_step_and_both_processes() {
     for host in ["powershell", "pwsh"] {
-        let run = run(host, None, 0);
+        let run = run(host, Case::default());
         assert_eq!(run.code, Some(0), "{host}: {}", run.log);
         let summary = &run.summary;
         assert_eq!(summary["result"], "passed", "{host}: {summary}");
@@ -196,7 +234,13 @@ fn a_passing_run_records_every_step_and_both_processes() {
 /// Windows PowerShell stops at a child's first stderr line under 'Stop' unless the runner guards it.
 #[test]
 fn a_failing_suite_keeps_its_raw_exit_code_and_output() {
-    let run = run("powershell", Some("test_financial_filters"), 0);
+    let run = run(
+        "powershell",
+        Case {
+            failing: Some("test_financial_filters"),
+            ..Case::default()
+        },
+    );
     assert_ne!(run.code, Some(0), "{}", run.log);
     let summary = &run.summary;
     assert_eq!(summary["result"], "failed", "{summary}");
@@ -214,7 +258,13 @@ fn a_failing_suite_keeps_its_raw_exit_code_and_output() {
 
 #[test]
 fn a_process_id_that_no_longer_names_the_recorded_process_gets_no_receipt() {
-    let run = run("powershell", None, 1000);
+    let run = run(
+        "powershell",
+        Case {
+            shift_ms: 1000,
+            ..Case::default()
+        },
+    );
     assert_ne!(run.code, Some(0), "{}", run.log);
     let summary = &run.summary;
     assert_eq!(summary["result"], "failed");
@@ -227,6 +277,52 @@ fn a_process_id_that_no_longer_names_the_recorded_process_gets_no_receipt() {
     );
     assert!(summary["processes"].is_null(), "{summary}");
     assert_eq!(summary["steps"], json!([]));
+}
+
+#[test]
+fn a_failing_binding_check_is_timed_and_ends_the_run() {
+    for host in ["powershell", "pwsh"] {
+        let run = run(
+            host,
+            Case {
+                failing: Some("verify_native_model"),
+                ..Case::default()
+            },
+        );
+        assert_ne!(run.code, Some(0), "{host}: {}", run.log);
+        let summary = &run.summary;
+        assert_eq!(summary["result"], "failed", "{host}: {summary}");
+        assert_eq!(summary["error"], "Stub binding failed.", "{host}");
+        let steps = summary["steps"].as_array().unwrap();
+        assert_eq!(steps.len(), 1, "{host}: {summary}");
+        assert_eq!(steps[0]["name"], "verify_native_model");
+        assert_timed(&steps[0]);
+        assert!(steps[0]["exit_code"].is_null(), "{host}: {summary}");
+        assert_receipts(host, &run);
+    }
+}
+
+#[test]
+fn a_run_that_cannot_find_its_source_still_writes_its_summary() {
+    for host in ["powershell", "pwsh"] {
+        let run = run(
+            host,
+            Case {
+                source_root: Some("missing"),
+                ..Case::default()
+            },
+        );
+        assert_ne!(run.code, Some(0), "{host}: {}", run.log);
+        let summary = &run.summary;
+        assert_eq!(summary["result"], "failed", "{host}: {summary}");
+        assert!(
+            summary["error"].as_str().unwrap().contains(r"\missing"),
+            "{host}: {summary}"
+        );
+        assert_timed(summary);
+        assert!(summary["processes"].is_null(), "{host}: {summary}");
+        assert_eq!(summary["steps"], json!([]), "{host}");
+    }
 }
 
 const DESKTOP: &str = r"Microsoft\Power BI Desktop";

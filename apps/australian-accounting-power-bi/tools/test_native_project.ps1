@@ -12,15 +12,8 @@ param(
 # Compose the existing checks. Refresh and input-rejection checks remain explicit.
 # run-summary.json records each step and the recorded processes, whether the run passes or fails.
 $ErrorActionPreference = 'Stop'
-if (-not $SourceRoot) { $SourceRoot = Join-Path $PSScriptRoot '..' }
-$SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 $EvidenceDirectory = (Resolve-Path -LiteralPath $EvidenceDirectory).Path
-$binding = @{
-    InstanceFile = $InstanceFile; SourceManifest = $SourceManifest
-    EvidencePath = (Join-Path $EvidenceDirectory 'model-binding.json')
-    SourceRoot = $SourceRoot; PowerBIBin = $PowerBIBin
-}
 $summary = [ordered]@{
     started_at = Get-Date -Format o; ended_at = $null; result = 'failed'; error = $null
     processes = $null; steps = [Collections.Generic.List[object]]::new()
@@ -36,6 +29,13 @@ function Test-Binding {
     try { & (Join-Path $PSScriptRoot 'verify_native_model.ps1') @binding } finally { $step.ended_at = Get-Date -Format o }
 }
 try {
+    if (-not $SourceRoot) { $SourceRoot = Join-Path $PSScriptRoot '..' }
+    $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
+    $binding = @{
+        InstanceFile = $InstanceFile; SourceManifest = $SourceManifest
+        EvidencePath = (Join-Path $EvidenceDirectory 'model-binding.json')
+        SourceRoot = $SourceRoot; PowerBIBin = $PowerBIBin
+    }
     . (Join-Path $PSScriptRoot 'native_receipts.ps1')
     $instance = Get-Content -LiteralPath $InstanceFile -Raw | ConvertFrom-Json
     $summary.processes = Get-InstanceReceipt $instance
