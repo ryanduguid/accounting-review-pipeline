@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 //! Real binary and real local git; all documents and maps are fabricated.
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
+#[cfg(windows)]
+#[path = "../../../tests/support/windows_console.rs"]
+mod windows_console;
+
 use std::{
     path::PathBuf,
     process::{Command, Output},
@@ -62,8 +69,7 @@ impl Repo {
     fn get(&self, name: &str) -> Vec<u8> {
         std::fs::read(self.path(name)).unwrap()
     }
-    fn configured(&self, program: &str) -> Command {
-        let mut c = Command::new(program);
+    fn configured(&self, mut c: Command) -> Command {
         c.current_dir(&self.root)
             .env("GIT_CONFIG_GLOBAL", self.path("absent-global"))
             .env("GIT_CONFIG_SYSTEM", self.path("absent-system"))
@@ -75,10 +81,17 @@ impl Repo {
         c
     }
     fn git(&self, args: &[&str]) {
-        assert!(self.configured("git").args(args).output().unwrap().status.success());
+        assert!(
+            self.configured(Command::new("git"))
+                .args(args)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
     }
     fn command(&self, args: &[&str]) -> Command {
-        let mut c = self.configured(env!("CARGO_BIN_EXE_evatt"));
+        let mut c = self.configured(child_profile::command(env!("CARGO_BIN_EXE_evatt")));
         c.args(args);
         c
     }
@@ -117,6 +130,137 @@ fn code(output: &Output) -> i32 {
 }
 fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).unwrap()
+}
+
+/// Compare raw stream output with CPython's native text-mode line endings.
+fn native_output(text: &str) -> String {
+    if cfg!(windows) {
+        text.replace('\n', "\r\n")
+    } else {
+        text.to_owned()
+    }
+}
+
+#[test]
+fn command_help_wraps_without_requiring_or_changing_workpapers() {
+    let repo = Repo::new();
+    let original = repo.get("in.md");
+    for command in [
+        None,
+        Some("redact"),
+        Some("restore"),
+        Some("verify"),
+        Some("disclosure-record"),
+        Some("disclosure-check"),
+    ] {
+        let mut args = command.into_iter().collect::<Vec<_>>();
+        if command.is_some() {
+            args.extend(["--in", "absent-input.md", "--map", "absent-map.json"]);
+        }
+        args.push("--help");
+        let mut rendered = Vec::new();
+        for width in ["20", "80"] {
+            let output = repo
+                .command(&args)
+                .env("COLUMNS", width)
+                .env("LINES", "24")
+                .output()
+                .unwrap();
+            assert_eq!(code(&output), 0, "{args:?}: {}", stderr(&output));
+            assert!(output.stderr.is_empty());
+            let help = String::from_utf8(output.stdout).unwrap();
+            assert!(help.starts_with("usage: evatt"), "{help}");
+            assert!(help.contains("--help"));
+            if let Some(command) = command {
+                assert!(help.contains(command));
+                assert!(help.contains("--in") && help.contains("--map"));
+            } else {
+                for command in ["redact", "restore", "verify", "disclosure-record", "disclosure-check"] {
+                    assert!(help.contains(command));
+                }
+            }
+            rendered.push(help);
+        }
+        assert_ne!(rendered[0], rendered[1], "{args:?} did not respect COLUMNS");
+    }
+    assert_eq!(repo.get("in.md"), original);
+    assert_eq!(repo.get("entities.json"), MAP.as_bytes());
+    assert!(!repo.path("out.md").exists());
+    assert!(!repo.path("out.md.manifest.json").exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn real_console_uses_native_width_and_colours_on_both_streams() {
+    windows_console::check(
+        "real_console_uses_native_width_and_colours_on_both_streams",
+        env!("CARGO_BIN_EXE_evatt"),
+        include_str!("fixtures/cli/main-help80.txt"),
+        include_str!("fixtures/cli/main-required80.txt"),
+        1,
+    );
+}
+
+#[test]
+fn help_colour_respects_python_and_terminal_environment_precedence() {
+    let repo = Repo::new();
+    let cases: &[(&[(&str, &str)], bool)] = &[
+        (&[("PYTHON_COLORS", "1"), ("NO_COLOR", "1"), ("TERM", "dumb")], true),
+        (&[("PYTHON_COLORS", "0"), ("FORCE_COLOR", "1")], false),
+        (&[("NO_COLOR", "1"), ("FORCE_COLOR", "1")], false),
+        (&[("NO_COLOR", ""), ("FORCE_COLOR", "1"), ("TERM", "dumb")], true),
+        (&[("FORCE_COLOR", ""), ("TERM", "dumb")], false),
+        (&[("TERM", "xterm")], false),
+    ];
+    for (variables, expected_colour) in cases {
+        let mut command = repo.command(&["--help"]);
+        for name in ["PYTHON_COLORS", "NO_COLOR", "FORCE_COLOR", "TERM"] {
+            command.env_remove(name);
+        }
+        for (name, value) in *variables {
+            command.env(name, value);
+        }
+        let output = command.output().unwrap();
+        assert_eq!(code(&output), 0);
+        assert!(output.stderr.is_empty());
+        assert_eq!(
+            output.stdout.windows(2).any(|pair| pair == b"\x1b["),
+            *expected_colour,
+            "{variables:?}"
+        );
+    }
+}
+
+#[test]
+fn abbreviated_and_explicit_arguments_preserve_redaction_and_usage_errors() {
+    let repo = Repo::new();
+    for arguments in [
+        ["redact", "--i", "in.md", "--m", "entities.json", "--o", "out.md"].as_slice(),
+        ["redact", "--in=in.md", "--map=entities.json", "--out=out.md"].as_slice(),
+    ] {
+        let output = repo.run(arguments);
+        assert_eq!(code(&output), 0, "{}", stderr(&output));
+        assert_eq!(repo.get("out.md"), b"PERSON_01\nTFN: TFN_01\n");
+        assert!(repo.path("out.md.manifest.json").is_file());
+    }
+    for arguments in [
+        ["--vers=x"].as_slice(),
+        ["--hel=x"].as_slice(),
+        ["-h=x"].as_slice(),
+        ["--", "redact"].as_slice(),
+        ["redact", "--help=x"].as_slice(),
+    ] {
+        let output = repo.run(arguments);
+        assert_eq!(code(&output), 1, "{arguments:?}");
+        assert!(output.stdout.is_empty());
+        assert!(stderr(&output).contains("error:"), "{arguments:?}: {}", stderr(&output));
+    }
+    let attached_help = repo.run(&["-hfoo"]);
+    assert_eq!(code(&attached_help), 0);
+    assert!(attached_help.stderr.is_empty());
+    assert_eq!(attached_help.stdout, repo.run(&["--help"]).stdout);
+    assert_eq!(repo.get("in.md"), b"Jane Roe\nTFN: 123456782\n");
+    assert_eq!(repo.get("entities.json"), MAP.as_bytes());
 }
 
 #[test]
@@ -211,6 +355,196 @@ fn collisions_include_hardlinks_and_derived_paths_before_any_mutation() {
         std::fs::hard_link(repo.path("out.md"), repo.path(name)).unwrap();
         assert_eq!(code(&repo.run(&repo.normal("redact"))), 1);
         assert_eq!(repo.get("out.md"), b"fabricated previous output");
+    }
+}
+
+#[test]
+fn invalid_utf8_input_and_maps_preserve_every_existing_artifact() {
+    let cases: &[(&str, &[u8], &str)] = &[
+        ("in.md", b"\xff", "byte 0xff in position 0: invalid start byte"),
+        (
+            "in.md",
+            b"\xe2\x28\xa1",
+            "byte 0xe2 in position 0: invalid continuation byte",
+        ),
+        ("in.md", b"\xe2", "byte 0xe2 in position 0: unexpected end of data"),
+        ("in.md", b"\xe2\x82", "bytes in position 0-1: unexpected end of data"),
+        (
+            "entities.json",
+            b"\xe2\x82",
+            "bytes in position 0-1: unexpected end of data",
+        ),
+    ];
+    for &(path, bytes, diagnostic) in cases {
+        let repo = Repo::new();
+        for name in ["out.md", "out.md.manifest.json", "out.md.triage.md"] {
+            repo.put(name, name.as_bytes());
+        }
+        repo.put(path, bytes);
+        let before = [
+            "in.md",
+            "entities.json",
+            "out.md",
+            "out.md.manifest.json",
+            "out.md.triage.md",
+        ]
+        .map(|name| (name, repo.get(name)));
+        let output = repo.run(&repo.normal("redact"));
+        assert_eq!(code(&output), 1, "{path}: {diagnostic}");
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            stderr(&output),
+            native_output(&format!("error: 'utf-8' codec can't decode {diagnostic}\n"))
+        );
+        for (name, expected) in before {
+            assert_eq!(repo.get(name), expected, "{name}");
+        }
+    }
+}
+
+#[test]
+fn malformed_entity_dates_and_kinds_preserve_input_and_existing_output() {
+    for (old, value, diagnostic) in [
+        (
+            "\"2026-10-13\"",
+            "null",
+            "entity added date must be YYYY-MM-DD, got None",
+        ),
+        (
+            "\"2026-10-13\"",
+            "\"2026-1x-13\"",
+            "entity added date must be YYYY-MM-DD, got '2026-1x-13'",
+        ),
+        (
+            "\"2026-10-13\"",
+            "{\"sample\":[null,false,1]}",
+            "entity added date must be YYYY-MM-DD, got {'sample': [None, False, 1]}",
+        ),
+        (
+            "\"person\"",
+            "{\"sample\":[null,false,1]}",
+            "unknown entity kind {'sample': [None, False, 1]}",
+        ),
+    ] {
+        let repo = Repo::new();
+        let map = MAP.replace(old, value);
+        repo.put("entities.json", map.as_bytes());
+        repo.put("out.md", b"fabricated previous output\r\n");
+        let input = repo.get("in.md");
+        let output = repo.run(&repo.normal("restore"));
+        assert_eq!(code(&output), 1);
+        assert!(output.stdout.is_empty());
+        assert_eq!(stderr(&output), native_output(&format!("error: {diagnostic}\n")));
+        assert_eq!(repo.get("in.md"), input);
+        assert_eq!(repo.get("entities.json"), map.as_bytes());
+        assert_eq!(repo.get("out.md"), b"fabricated previous output\r\n");
+    }
+}
+
+#[test]
+fn restore_creates_missing_output_parents_and_preserves_original_line_endings() {
+    let repo = Repo::new();
+    repo.put("in.md", b"PERSON_01\r\n");
+    let relative = PathBuf::from("new").join("deep").join("restored.md");
+    let output = repo.run(&[
+        "restore",
+        "--in",
+        "in.md",
+        "--map",
+        "entities.json",
+        "--out",
+        relative.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        native_output(&format!("wrote {}\n", relative.display()))
+    );
+    assert_eq!(std::fs::read(repo.root.join(&relative)).unwrap(), b"Jane Roe\r\n");
+    assert_eq!(repo.get("in.md"), b"PERSON_01\r\n");
+    assert_eq!(repo.get("entities.json"), MAP.as_bytes());
+    assert!(!repo.root.join(relative.with_extension("md.manifest.json")).exists());
+    assert!(!repo.root.join(relative.with_extension("md.triage.md")).exists());
+}
+
+#[test]
+fn disclosure_findings_refuse_before_touching_an_existing_record() {
+    let repo = Repo::new();
+    repo.put("out.disclosure.json", b"fabricated previous record\n");
+    let input = repo.get("in.md");
+    let output = repo.disclosure("disclosure-record");
+    assert_eq!(code(&output), 2);
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        stderr(&output),
+        native_output("refused: the disclosure payload has verifier findings\n")
+    );
+    assert_eq!(repo.get("out.disclosure.json"), b"fabricated previous record\n");
+    assert_eq!(repo.get("in.md"), input);
+    assert_eq!(repo.get("entities.json"), MAP.as_bytes());
+}
+
+#[test]
+fn disclosure_records_cannot_replace_the_payload_map_or_redaction_artifacts() {
+    for path in ["in.md", "entities.json", "in.md.manifest.json", "in.md.triage.md"] {
+        let repo = Repo::new();
+        let mut ignored = repo.get(".gitignore");
+        ignored.extend_from_slice(b"in.md\nin.md.manifest.json\n");
+        repo.put(".gitignore", &ignored);
+        repo.git(&["check-ignore", "-q", path]);
+        repo.put("in.md", b"PERSON_01\n");
+        for name in ["in.md.manifest.json", "in.md.triage.md"] {
+            repo.put(name, name.as_bytes());
+        }
+        let before =
+            ["in.md", "entities.json", "in.md.manifest.json", "in.md.triage.md"].map(|name| (name, repo.get(name)));
+        let output = repo.run(&[
+            "disclosure-record",
+            "--in",
+            "in.md",
+            "--map",
+            "entities.json",
+            "--destination",
+            "model:sample",
+            "--decision-ref",
+            "sample:42",
+            "--out",
+            path,
+        ]);
+        assert_eq!(code(&output), 1, "{path}");
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            stderr(&output),
+            native_output("error: invalid disclosure input or record path; use local ignored, untracked records\n")
+        );
+        for (name, expected) in before {
+            assert_eq!(repo.get(name), expected, "{name}");
+        }
+    }
+}
+
+#[test]
+fn verify_reports_the_original_line_of_numbers_crossing_list_markers() {
+    for (input, expected) in [
+        (
+            "tfn: 1234567\n82. next",
+            "number: line 1\n1 finding(s); this file is not ready to send\n",
+        ),
+        (
+            "tfn: 1234567\n82. next\ntfn: 1234567\n82. next",
+            "number: line 1\nnumber: line 3\n2 finding(s); this file is not ready to send\n",
+        ),
+    ] {
+        let repo = Repo::new();
+        repo.put("in.md", input.as_bytes());
+        let output = repo.run(&repo.normal("verify"));
+        assert_eq!(code(&output), 2);
+        assert!(output.stderr.is_empty());
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), native_output(expected));
+        assert_eq!(repo.get("in.md"), input.as_bytes());
+        assert_eq!(repo.get("entities.json"), MAP.as_bytes());
+        assert!(!repo.path("out.md").exists());
     }
 }
 
@@ -472,7 +806,7 @@ fn default_windows_stdout_escapes_a_lone_low_surrogate_like_cpython() {
     repo.put("in.md", b"Hello world.\n");
     // "out" + U+DCE9 + ".md": CPython 3.14.8 writes b"wrote out\xe9.md\r\n", exit 0.
     let out = std::ffi::OsString::from_wide(&[111, 117, 116, 0xDCE9, 46, 109, 100]);
-    let mut command = repo.configured(env!("CARGO_BIN_EXE_evatt"));
+    let mut command = repo.configured(child_profile::command(env!("CARGO_BIN_EXE_evatt")));
     command
         .args(["redact", "--in", "in.md", "--map", "entities.json", "--out"])
         .arg(&out)

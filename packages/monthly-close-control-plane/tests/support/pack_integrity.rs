@@ -109,7 +109,7 @@ fn physically_refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
             .unwrap_err()
             .contains(diagnostic)
     );
-    let shown = Command::new(BIN)
+    let shown = child_profile::command(BIN)
         .args(["view", "--pack-dir"])
         .arg(&temp.0)
         .output()
@@ -439,6 +439,98 @@ fn dropping_a_query_csv_row_preserves_the_header_but_fails_verification() {
 }
 
 #[test]
+fn query_summary_structure_cannot_hide_or_add_a_preparer_question() {
+    let baseline = query_pack(None);
+    let text = summary(&baseline);
+    let section = text.split("## Client queries\n").nth(1).unwrap();
+    let rows: Vec<_> = section
+        .lines()
+        .filter(|line| line.starts_with('|'))
+        .collect();
+    assert_eq!(rows.len(), 4, "header, delimiter and 2 query rows");
+    for (before, after, diagnostic) in [
+        (
+            "- Client queries drafted: 2.".into(),
+            "- Client queries drafted: 3.".into(),
+            "client-query counts disagree",
+        ),
+        (
+            "- Client queries drafted: 2.".into(),
+            "- Client queries drafted: 2.\n- Client queries drafted: 2.".into(),
+            "exactly one client-query count",
+        ),
+        (
+            format!("{}\n", rows[2]),
+            String::new(),
+            "renders 1 table rows",
+        ),
+        (
+            rows[0].into(),
+            rows[0].replace("Question", "Answer"),
+            "table header",
+        ),
+        (rows[1].into(), "| --- | --- |".into(), "table delimiter"),
+        (
+            report::CLIENT_QUERY_PREAMBLE[2].into(),
+            "Every answer closes this period.".into(),
+            "preamble is missing or altered",
+        ),
+    ] {
+        let mut files = baseline.clone();
+        change_summary(&mut files, &before, &after);
+        refused(&files, diagnostic);
+    }
+}
+
+#[test]
+fn summary_status_and_source_digest_lines_must_have_one_consistent_witness() {
+    let baseline = query_pack(None);
+    let doc = document(&baseline);
+    let status = doc.at("overall_status").as_pystr().unwrap().os_text();
+    let status_line = format!("**Overall status: {status}**");
+    let other = if status == "PASS" { "REVIEW" } else { "PASS" };
+    for (after, diagnostic) in [
+        (String::new(), "exactly one overall-status line"),
+        (
+            format!("{status_line}\n{status_line}"),
+            "exactly one overall-status line",
+        ),
+        (
+            format!("**Overall status: {other}**"),
+            "overall status disagrees",
+        ),
+    ] {
+        let mut files = baseline.clone();
+        change_summary(&mut files, &status_line, &after);
+        refused(&files, diagnostic);
+    }
+    let Json::Object(sources) = doc.at("source_sha256") else {
+        panic!("sources")
+    };
+    let (label, _) = &sources[0];
+    let mut files = baseline.clone();
+    let text = summary(&files);
+    files.insert(
+        SUMMARY.into(),
+        format!("{text}\n- `{}`: `{}`\n", label.os_text(), "0".repeat(64)).into_bytes(),
+    );
+    refused(&files, "appears with two different digests");
+    let mut files = baseline.clone();
+    let mut text = summary(&files);
+    for (label, digest) in sources {
+        let line = format!(
+            "- `{}`: `{}`",
+            label.os_text(),
+            digest.as_pystr().unwrap().os_text()
+        );
+        assert!(text.contains(&line));
+        text = text.replace(&line, "");
+    }
+    files.insert(SUMMARY.into(), text.into_bytes());
+    refused(&files, "no source-evidence digest lines");
+}
+
+#[test]
 fn a_question_reworded_in_only_csv_or_summary_is_refused() {
     for (name, diagnostic) in [
         (QUERIES, "question disagrees on client query 1"),
@@ -521,6 +613,85 @@ fn exchanging_distinct_questions_cannot_keep_a_pack_verifiable() {
 }
 
 #[test]
+fn source_digest_containers_and_values_fail_before_display() {
+    let baseline = evidence_pack();
+    for value in [Json::Null, Json::Object(Vec::new())] {
+        let mut files = baseline.clone();
+        let mut doc = document(&files);
+        doc.set("source_sha256", value);
+        save(&mut files, &doc);
+        refused(&files, "source_sha256 must be a non-empty object");
+    }
+    for value in [Json::int(42), Json::str(&"A".repeat(64))] {
+        let mut files = baseline.clone();
+        let mut doc = document(&files);
+        let Json::Object(sources) = part_mut(&mut doc, &["source_sha256"]) else {
+            panic!("source digests")
+        };
+        sources[0].1 = value;
+        save(&mut files, &doc);
+        refused(&files, "is not a lowercase SHA-256 digest");
+    }
+}
+
+#[test]
+fn query_containers_rows_and_empty_identifiers_fail_before_display() {
+    let baseline = query_pack(None);
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    doc.set("client_queries", Json::Object(Vec::new()));
+    save(&mut files, &doc);
+    refused(&files, "client_queries must be a list");
+
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    *first_mut(&mut doc, &["client_queries"]) = Json::Null;
+    save(&mut files, &doc);
+    refused(&files, "client_queries[0] must be an object");
+
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    first_mut(&mut doc, &["client_queries"]).set("query_id", Json::str(""));
+    save(&mut files, &doc);
+    refused(&files, "query_id must be a non-empty string");
+}
+
+#[test]
+fn acknowledgement_schema_cannot_be_replaced_by_a_preparer_claim() {
+    let baseline = query_pack(Some("Recorded human review only."));
+    for (value, diagnostic) in [
+        (
+            Json::str("Approved"),
+            "acknowledgement must be null or an object",
+        ),
+        (
+            Json::Object(Vec::new()),
+            "acknowledgement does not hold the fields the writer emits",
+        ),
+    ] {
+        let mut files = baseline.clone();
+        let mut doc = document(&files);
+        doc.set("acknowledgement", value);
+        save(&mut files, &doc);
+        refused(&files, diagnostic);
+    }
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    part_mut(&mut doc, &["acknowledgement"]).set("reviewed_on", Json::int(20260731));
+    save(&mut files, &doc);
+    refused(&files, "acknowledgement.reviewed_on must be a string");
+
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    part_mut(&mut doc, &["acknowledgement"]).set("effect", Json::str("Approved"));
+    save(&mut files, &doc);
+    refused(
+        &files,
+        "acknowledgement.effect is not the text the writer emits",
+    );
+}
+
+#[test]
 fn a_query_identifier_in_a_reviewer_comment_is_not_an_extra_query() {
     let files = query_pack(Some(
         "Discussed with the controller, see ticket Q-deadbeef.",
@@ -530,7 +701,7 @@ fn a_query_identifier_in_a_reviewer_comment_is_not_an_extra_query() {
         fs::write(temp.join(name), bytes).unwrap();
     }
     let before = inventory(&temp.0);
-    let shown = Command::new(BIN)
+    let shown = child_profile::command(BIN)
         .args(["view", "--pack-dir"])
         .arg(&temp.0)
         .output()

@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -118,6 +119,13 @@ class NativeAuditTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_cli_with_no_known_base_requires_the_checks(self) -> None:
+        environment = {**os.environ, "CI_BASE": "", "CI_PATHS": "packages/evatt/**"}
+        result = subprocess.run([sys.executable, str(ROOT / ".github/ci/select_paths.py")],
+                                env=environment, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "run=true\n")
+
     def test_unknown_base_runs_checks(self) -> None:
         for base in ("", "0" * 40, "missing-commit"):
             with (

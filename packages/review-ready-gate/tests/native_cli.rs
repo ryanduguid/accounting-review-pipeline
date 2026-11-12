@@ -1,20 +1,30 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
+use review_ready_gate::probe::Json;
 use std::{fs, path::PathBuf, process::Command};
 #[path = "support/temp.rs"]
 mod temp;
 use temp::TempDir;
 
 fn gate_command(example: &str, output: &std::path::Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_review-ready"));
+    fixture_command(
+        "bas",
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join(example),
+        output,
+    )
+}
+
+fn fixture_command(profile: &str, pack: &std::path::Path, output: &std::path::Path) -> Command {
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_review-ready"));
     command
-        .args(["gate", "--profile", "bas", "--pack"])
-        .arg(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("examples")
-                .join(example),
-        )
+        .args(["gate", "--profile", profile, "--pack"])
+        .arg(pack)
         .arg("--output")
         .arg(output)
         .env_remove("GIT_WORK_TREE");
@@ -140,7 +150,7 @@ fn display_commands_preserve_payload_and_publication_bytes_and_mtimes() {
         vec!["view", "--pack-dir"],
         vec!["compare", "--previous-pack-dir"],
     ] {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_review-ready"));
+        let mut command = child_profile::command(env!("CARGO_BIN_EXE_review-ready"));
         command.args(&args).arg(&output);
         if args[0] == "compare" {
             command.arg("--current-pack-dir").arg(&output);
@@ -150,7 +160,7 @@ fn display_commands_preserve_payload_and_publication_bytes_and_mtimes() {
     }
     fs::write(output.join("readiness-summary.md"), b"edited").unwrap();
     let before = snapshot(&output);
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["view", "--pack-dir"])
         .arg(&output)
         .output()
@@ -164,7 +174,7 @@ fn display_commands_preserve_payload_and_publication_bytes_and_mtimes() {
     assert_eq!(snapshot(&output), before);
     let empty = tmp.join("empty");
     fs::create_dir(&empty).unwrap();
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["view", "--pack-dir"])
         .arg(&empty)
         .output()
@@ -178,7 +188,7 @@ fn refused_view(path: &std::path::Path) {
         process::Stdio,
         time::{Duration, Instant},
     };
-    let mut child = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let mut child = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["view", "--pack-dir"])
         .arg(path)
         .stdout(Stdio::null())
@@ -269,7 +279,7 @@ fn closed_stdout_returns_failure_after_preserving_a_published_pack() {
     let output = tmp.join("pack");
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["gate", "--profile", "bas", "--pack"])
         .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/bas-ready"))
         .arg("--output")
@@ -286,7 +296,7 @@ fn closed_stdout_returns_failure_after_preserving_a_published_pack() {
     .map(|name| fs::read(output.join(name)).unwrap());
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
-    let shown = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let shown = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["view", "--pack-dir"])
         .arg(&output)
         .stdout(writer)
@@ -304,7 +314,7 @@ fn closed_stdout_returns_failure_after_preserving_a_published_pack() {
 #[cfg(unix)]
 #[test]
 fn failed_stdout_device_returns_failure() {
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .arg("--help")
         .stdout(fs::File::options().write(true).open("/dev/full").unwrap())
         .output()
@@ -329,7 +339,7 @@ fn native_intake_preserves_private_use_unicode_arguments_and_paths() {
     let output = tmp.join("bundle-\u{10f800}");
     let entity = "Demo\u{10f7ff}\u{10f800}";
     let version = "manual\u{10f7ff}\u{10f800}";
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["intake", "--synthetic", "--source"])
         .arg(&source)
         .arg("--text")
@@ -360,7 +370,7 @@ fn native_intake_preserves_private_use_unicode_arguments_and_paths() {
     assert!(manifest.at("entity_ref").is_str(entity));
     assert!(manifest.at("text_version").is_str(version));
     let before = snapshot(&output);
-    let shown = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let shown = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["view-document", "--bundle"])
         .arg(&output)
         .output()
@@ -394,7 +404,7 @@ fn deeply_nested_json_is_a_named_input_error_in_the_real_process() {
         )
         .unwrap();
         let output = tmp.join("output");
-        let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+        let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
             .args(["gate", "--profile", "bas", "--pack"])
             .arg(&pack)
             .arg("--output")
@@ -418,7 +428,7 @@ fn payloads(path: &std::path::Path) -> [Option<Vec<u8>>; 3] {
 }
 #[cfg(feature = "probe")]
 fn seed(path: &std::path::Path) {
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
         .arg(path)
         .args(["never", "old"])
         .output()
@@ -443,7 +453,7 @@ fn paused(path: &std::path::Path, point: &str) -> Child {
     use std::io::{BufRead, BufReader};
     use std::process::Stdio;
     let mut child = Child(
-        Command::new(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+        child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
             .arg(path)
             .arg(point)
             .arg("new")
@@ -501,20 +511,22 @@ fn abrupt_death_keeps_precommit_evidence_and_preserves_a_settled_commit() {
                 payloads(&output),
                 std::array::from_fn(|i| Some(format!("new-{i}").into_bytes()))
             );
-            let retry = Command::new(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
-                .arg(&output)
-                .args(["never", "next"])
-                .output()
-                .unwrap();
+            let retry =
+                child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+                    .arg(&output)
+                    .args(["never", "next"])
+                    .output()
+                    .unwrap();
             assert!(retry.status.success());
         } else {
             let before = payloads(&output);
             assert!(review_ready_gate::publication::snapshot_revision(&output).is_err());
-            let retry = Command::new(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
-                .arg(&output)
-                .args(["never", "next"])
-                .output()
-                .unwrap();
+            let retry =
+                child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+                    .arg(&output)
+                    .args(["never", "next"])
+                    .output()
+                    .unwrap();
             assert_eq!(retry.status.code(), Some(1));
             assert!(String::from_utf8_lossy(&retry.stderr).contains("unresolved pack publication"));
             assert_eq!(payloads(&output), before);
@@ -537,7 +549,7 @@ fn second_process_cannot_acquire_writer_admission() {
     seed(&output);
     let _child = paused(&output, "prepared");
     let before = payloads(&output);
-    let other = Command::new(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+    let other = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
         .arg(&output)
         .args(["never", "other"])
         .output()
@@ -545,6 +557,55 @@ fn second_process_cannot_acquire_writer_admission() {
     assert_eq!(other.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&other.stderr).contains("another pack writer holds admission"));
     assert_eq!(payloads(&output), before);
+}
+#[cfg(feature = "probe")]
+#[test]
+fn a_missing_signal_expires_the_checkpoint_and_rolls_back_the_publication() {
+    use std::io::Write;
+    use std::time::{Duration, Instant};
+
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    seed(&output);
+    let old = payloads(&output);
+    let mut child = paused(&output, "prepared");
+    child
+        .0
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"cancel\n")
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "signal checkpoint did not expire"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert_eq!(status.code(), Some(1));
+    let stderr = std::io::read_to_string(child.0.stderr.take().unwrap()).unwrap();
+    assert_eq!(stderr.trim(), "signal checkpoint timed out");
+    assert_eq!(payloads(&output), old);
+    assert!(
+        review_ready_gate::publication::snapshot_revision(&output)
+            .unwrap()
+            .is_some()
+    );
+    let retry = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+        .arg(&output)
+        .args(["never", "next"])
+        .output()
+        .unwrap();
+    assert!(retry.status.success(), "{retry:?}");
+    assert_eq!(
+        payloads(&output),
+        std::array::from_fn(|i| Some(format!("next-{i}").into_bytes()))
+    );
 }
 #[cfg(all(unix, feature = "probe"))]
 #[test]
@@ -635,7 +696,7 @@ fn the_gate_records_its_producer_and_view_refuses_an_edited_one() {
             .contains(&line)
     );
     let view = |path: &std::path::Path| {
-        Command::new(env!("CARGO_BIN_EXE_review-ready"))
+        child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
             .args(["view", "--pack-dir"])
             .arg(path)
             .output()
@@ -694,6 +755,456 @@ fn pack_json(output: &std::path::Path) -> String {
     fs::read_to_string(output.join("readiness-pack.json")).unwrap()
 }
 
+fn json_array(value: &Json) -> &[Json] {
+    match value {
+        Json::Array(items) => items,
+        other => panic!("Expected a JSON array, got {other:?}"),
+    }
+}
+
+fn assert_only_finding(
+    output: &std::path::Path,
+    status: &str,
+    slot: &str,
+    code: &str,
+    reason: &str,
+) {
+    let before = snapshot(output);
+    let verified = review_ready_gate::viewer::verify_pack(output).unwrap();
+    assert!(verified.document.at("overall_status").is_str(status));
+    let document = pack_json(output);
+    assert_eq!(document.matches("\"code\":").count(), 1);
+    for (name, value) in [
+        ("slot", slot),
+        ("code", code),
+        ("status", status),
+        ("reason", reason),
+    ] {
+        assert!(
+            document.contains(&format!("\"{name}\": \"{value}\"")),
+            "{document}"
+        );
+    }
+    assert_eq!(snapshot(output), before);
+}
+
+#[test]
+fn gst_rollforward_counts_each_control_account_once_across_repeated_postings() {
+    for (receivable, bank, code) in [("2500.00", "127500.00", 0), ("2499.98", "127500.02", 2)] {
+        let tmp = TempDir::new();
+        let input = pack_copy(&tmp, "bas-ready");
+        let path = input.join("trial_balance.csv");
+        let original = fs::read_to_string(&path).unwrap();
+        let mut changed = original
+            .replace("0.00,7500.00", "0.00,10000.00")
+            .replace("127500.00,0.00", &format!("{bank},0.00"));
+        assert_ne!(changed, original);
+        changed.push_str(&format!("2026-03-31,Cedar and Pine Consulting Pty Ltd,Assets,821,GST Receivable,8210,0.00,0.00,{receivable},0.00\n"));
+        fs::write(&path, changed).unwrap();
+        fs::write(input.join("gst_control_gl.csv"), "Date,AccountID,AccountName,Debit,Credit,Description\n2026-01-15,820,GST Payable,0.00,6000.00,First sales posting\n2026-01-16,820,GST Payable,0.00,4000.00,Second sales posting\n2026-02-20,821,GST Receivable,2500.00,0.00,GST on purchases\n").unwrap();
+        let before = snapshot(&input);
+        let output = tmp.join("output");
+        let result = fixture_command("bas", &input, &output).output().unwrap();
+        assert_eq!(result.status.code(), Some(code), "{result:?}");
+        if code == 0 {
+            let verified = review_ready_gate::viewer::verify_pack(&output).unwrap();
+            assert!(verified.document.at("overall_status").is_str("READY"));
+            assert!(pack_json(&output).contains("\"findings\": []"));
+        } else {
+            assert_only_finding(
+                &output,
+                "NOT_READY",
+                "gst_control_gl",
+                "TIEOUT_BREAK",
+                "GST control accounts close at 7500.02 in the trial balance, but the GST control file moves them by 7500.00 and, with no GST_OPENING on the activity statement, they are taken to carry in nil; difference 0.02 exceeds tolerance 0.01. The file may be missing postings, or the accounts carried a balance in, such as an unpaid earlier BAS or the cents the ATO drops from 1A and 1B, which GST_OPENING declares.",
+            );
+        }
+        assert_eq!(snapshot(&input), before);
+    }
+}
+
+#[test]
+fn statement_mapping_reuses_accounts_on_detail_lines_and_a_subtotal() {
+    for (subtotal, code) in [("205000.00", 0), ("205000.02", 2)] {
+        let tmp = TempDir::new();
+        let input = pack_copy(&tmp, "year-end-ready");
+        fs::write(input.join("tie_out_matrix.csv"), format!("StatementLine,StatementAmount,WorkpaperRef,SourceFile,Status\nCash,120000.00,WP-100,trial_balance.csv,TIED\nTrade debtors,85000.00,WP-110,trial_balance.csv,TIED\nTrade creditors,65000.00,WP-200,trial_balance.csv,TIED\nLoss for the year,40000.00,WP-300,trial_balance.csv,TIED\nRetained earnings,180000.00,WP-900,trial_balance.csv,TIED\nCurrent assets,{subtotal},WP-120,trial_balance.csv,TIED\n")).unwrap();
+        fs::write(input.join("fs_mapping.csv"), "StatementLine,AccountID,NormalBalance\nCash,100,DEBIT\nTrade debtors,110,DEBIT\nTrade creditors,200,CREDIT\nLoss for the year,300,DEBIT\nLoss for the year,400,DEBIT\nLoss for the year,500,DEBIT\nRetained earnings,900,CREDIT\nCurrent assets,100,DEBIT\nCurrent assets,110,DEBIT\n").unwrap();
+        let before = snapshot(&input);
+        let output = tmp.join("output");
+        let result = fixture_command("year_end", &input, &output)
+            .args(["--require-control", "fs_mapping"])
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(code), "{result:?}");
+        if code == 0 {
+            let verified = review_ready_gate::viewer::verify_pack(&output).unwrap();
+            assert!(verified.document.at("overall_status").is_str("READY"));
+            let document = pack_json(&output);
+            assert!(document.contains("\"findings\": []"));
+            assert!(document.contains("\"name\": \"fs_mapping\""));
+            assert_eq!(document.matches("\"state\": \"ran\"").count(), 1);
+        } else {
+            assert_only_finding(
+                &output,
+                "NOT_READY",
+                "fs_mapping",
+                "TIEOUT_BREAK",
+                "Statement line 'Current assets' shows 205000.02, but its mapped trial-balance accounts give 205000.00; difference 0.02 exceeds tolerance 0.01.",
+            );
+        }
+        assert_eq!(snapshot(&input), before);
+    }
+}
+
+#[test]
+fn comparative_entity_and_period_refusals_publish_verified_blocked_reports() {
+    for (before, after, reason) in [
+        (
+            "Varrock Ventures Pty Ltd",
+            "Lumbridge Ventures Pty Ltd",
+            "Current tenant 'Varrock Ventures Pty Ltd' does not match prior tenant 'Lumbridge Ventures Pty Ltd'.",
+        ),
+        (
+            "2026-05-31",
+            "2026-06-30",
+            "Prior ReportDate 2026-06-30 is not earlier than current ReportDate 2026-06-30.",
+        ),
+        (
+            "2026-05-31",
+            "2026-07-31",
+            "Prior ReportDate 2026-07-31 is not earlier than current ReportDate 2026-06-30.",
+        ),
+    ] {
+        let tmp = TempDir::new();
+        let input = pack_copy(&tmp, "month-end-ready");
+        let path = input.join("prior_trial_balance.csv");
+        let original = fs::read_to_string(&path).unwrap();
+        assert_eq!(original.matches(before).count(), 7);
+        fs::write(path, original.replace(before, after)).unwrap();
+        let before = snapshot(&input);
+        let output = tmp.join("output");
+        let result = fixture_command("month_end", &input, &output)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert_only_finding(
+            &output,
+            "BLOCKED",
+            "prior_trial_balance",
+            "PERIOD_ORDER",
+            reason,
+        );
+        assert_eq!(snapshot(&input), before);
+    }
+}
+
+fn view_read_only(output: &std::path::Path) -> std::process::Output {
+    let before = snapshot(output);
+    let view = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
+        .args(["view", "--pack-dir"])
+        .arg(output)
+        .output()
+        .unwrap();
+    assert_eq!(snapshot(output), before);
+    view
+}
+
+fn acknowledged_pack(tmp: &TempDir) -> PathBuf {
+    let note = tmp.join("review-note.json");
+    fs::write(
+        &note,
+        br#"{"reviewer_initials":"RD","reviewed_on":"2026-04-12","comment":"Fabricated review with | and \\ in text."}"#,
+    )
+    .unwrap();
+    let output = tmp.join("acknowledged");
+    let gated = gate_command("bas-not-ready", &output)
+        .arg("--review-note")
+        .arg(note)
+        .output()
+        .unwrap();
+    assert_eq!(gated.status.code(), Some(2), "{gated:?}");
+    assert!(view_read_only(&output).status.success());
+    output
+}
+
+#[test]
+fn viewing_an_acknowledged_pack_preserves_its_not_ready_status() {
+    let tmp = TempDir::new();
+    let output = acknowledged_pack(&tmp);
+    let view = view_read_only(&output);
+    assert!(view.status.success(), "{view:?}");
+    assert!(view.stderr.is_empty());
+    let text = String::from_utf8(view.stdout).unwrap();
+    for expected in [
+        "**Overall status: NOT_READY**",
+        "- Reviewer initials: RD",
+        "- Reviewed on: 2026-04-12",
+        r"Fabricated review with \| and \\ in text.",
+        "does not change readiness or approve a file",
+    ] {
+        assert!(text.contains(expected), "{text}");
+    }
+    assert!(pack_json(&output).contains("\"overall_status\": \"NOT_READY\""));
+}
+
+#[test]
+fn viewing_refuses_edited_acknowledgement_types_effect_and_dates() {
+    let tmp = TempDir::new();
+    let output = acknowledged_pack(&tmp);
+    let original = pack_json(&output);
+    for (before, after, diagnostic) in [
+        (
+            "\"reviewer_initials\": \"RD\"",
+            "\"reviewer_initials\": 1",
+            "acknowledgement.reviewer_initials must be a string",
+        ),
+        (
+            "\"reviewed_on\": \"2026-04-12\"",
+            "\"reviewed_on\": null",
+            "acknowledgement.reviewed_on must be a string",
+        ),
+        (
+            "Acknowledgement is evidence of human review only;",
+            "Acknowledgement approves this file;",
+            "acknowledgement.effect disagrees",
+        ),
+        ("2026-04-12", "20260412", "extended-format ISO date"),
+        ("2026-04-12", "2026-02-30", "is not a date"),
+    ] {
+        let changed = original.replacen(before, after, 1);
+        assert_ne!(changed, original, "{before}");
+        fs::write(output.join("readiness-pack.json"), changed).unwrap();
+        let view = view_read_only(&output);
+        assert_eq!(view.status.code(), Some(1), "{view:?}");
+        assert!(view.stdout.is_empty());
+        assert_view_says(&view, diagnostic);
+    }
+}
+
+#[test]
+fn viewing_refuses_duplicate_missing_or_disagreeing_source_witnesses() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    assert!(
+        gate_command("bas-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let path = output.join("readiness-summary.md");
+    let original = fs::read_to_string(&path).unwrap();
+    let evidence = original
+        .lines()
+        .find(|line| line.starts_with("- `") && line.contains("`): `"))
+        .unwrap();
+    let without_evidence = original
+        .lines()
+        .filter(|line| !(line.starts_with("- `") && line.contains("`): `")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let (prefix, _) = evidence.rsplit_once("`): `").unwrap();
+    let wrong_digest = format!("{prefix}`): `{}`", "0".repeat(64));
+    for (changed, diagnostic) in [
+        (
+            format!("{original}{evidence}\n"),
+            "more than one evidence line",
+        ),
+        (without_evidence, "no source-evidence digest lines found"),
+        (
+            original.replacen(evidence, &wrong_digest, 1),
+            "list different source digests",
+        ),
+        (
+            original.replacen(evidence, &evidence.replace("` (`", "` (`changed-"), 1),
+            "list different source digests",
+        ),
+    ] {
+        fs::write(&path, &original).unwrap();
+        assert!(view_read_only(&output).status.success());
+        assert_ne!(changed, original);
+        fs::write(&path, changed).unwrap();
+        let view = view_read_only(&output);
+        assert_eq!(view.status.code(), Some(1), "{view:?}");
+        assert!(view.stdout.is_empty());
+        assert_view_says(&view, diagnostic);
+    }
+}
+
+#[test]
+fn viewing_refuses_disagreeing_finding_rows_and_delimiters() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    assert_eq!(
+        gate_command("bas-not-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .code(),
+        Some(2)
+    );
+    let path = output.join("readiness-summary.md");
+    let original = fs::read_to_string(&path).unwrap();
+    let newline = if original.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let row = original
+        .lines()
+        .find(|line| line.starts_with("| NOT_READY |") || line.starts_with("| BLOCKED |"))
+        .unwrap();
+    let (_, after_status) = row[1..].split_once('|').unwrap();
+    for (changed, diagnostic) in [
+        (
+            original.replacen(&format!("| --- | --- | --- | --- | --- |{newline}"), "", 1),
+            "no delimiter row",
+        ),
+        (
+            original.replacen(&format!("{row}{newline}"), "", 1),
+            "finding counts disagree",
+        ),
+        (
+            original.replacen(row, &format!("|{after_status}"), 1),
+            "cells, expected 5",
+        ),
+    ] {
+        fs::write(&path, &original).unwrap();
+        assert!(view_read_only(&output).status.success());
+        assert_ne!(changed, original);
+        fs::write(&path, changed).unwrap();
+        let view = view_read_only(&output);
+        assert_eq!(view.status.code(), Some(1), "{view:?}");
+        assert!(view.stdout.is_empty());
+        assert_view_says(&view, diagnostic);
+    }
+}
+
+#[test]
+fn viewing_refuses_a_findings_table_when_the_pack_has_no_findings() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    let generated = gate_command("bas-ready", &output).output().unwrap();
+    assert!(generated.status.success(), "{generated:?}");
+    assert!(view_read_only(&output).status.success());
+    let path = output.join("readiness-summary.md");
+    let original = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        format!("{original}\n| Status | Code | Slot | Repeat | Reason |\n"),
+    )
+    .unwrap();
+    let shown = view_read_only(&output);
+    assert_eq!(shown.status.code(), Some(1), "{shown:?}");
+    assert!(shown.stdout.is_empty());
+    assert_view_says(
+        &shown,
+        "tabulates findings but readiness-pack.json lists none",
+    );
+    fs::write(&path, original).unwrap();
+    assert!(view_read_only(&output).status.success());
+}
+
+#[test]
+fn viewing_refuses_ambiguous_finding_tables_and_contradictory_counts() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    let generated = gate_command("bas-not-ready", &output).output().unwrap();
+    assert_eq!(generated.status.code(), Some(2), "{generated:?}");
+    assert!(view_read_only(&output).status.success());
+    let path = output.join("readiness-summary.md");
+    let original = fs::read_to_string(&path).unwrap();
+    let header = "| Status | Code | Slot | Repeat | Reason |";
+    assert_eq!(original.matches(header).count(), 1);
+    let counts = original
+        .lines()
+        .find(|line| line.starts_with("- Findings:"))
+        .unwrap();
+    for (changed, diagnostic) in [
+        (
+            original.replacen(header, "", 1),
+            "expected exactly one findings-table header, found 0",
+        ),
+        (
+            format!("{original}\n{header}\n"),
+            "expected exactly one findings-table header, found 2",
+        ),
+        (
+            original.replacen(
+                counts,
+                "- Findings: 0 total; 0 blocked; 0 not ready; 0 repeats.",
+                1,
+            ),
+            "finding counts disagree: readiness-pack.json says",
+        ),
+    ] {
+        assert_ne!(changed, original);
+        fs::write(&path, changed).unwrap();
+        let shown = view_read_only(&output);
+        assert_eq!(shown.status.code(), Some(1), "{shown:?}");
+        assert!(shown.stdout.is_empty());
+        assert_view_says(&shown, diagnostic);
+        fs::write(&path, &original).unwrap();
+        assert!(view_read_only(&output).status.success());
+    }
+}
+
+#[test]
+fn viewing_requires_exactly_one_findings_scope_line() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    assert_eq!(
+        gate_command("bas-not-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .code(),
+        Some(2)
+    );
+    let path = output.join("readiness-summary.md");
+    let original = fs::read_to_string(&path).unwrap();
+    let count = original
+        .lines()
+        .find(|line| line.starts_with("- Findings:"))
+        .unwrap();
+    for changed in [
+        original.replacen(count, "", 1),
+        format!("{original}{count}\n"),
+    ] {
+        fs::write(&path, &original).unwrap();
+        assert!(view_read_only(&output).status.success());
+        assert_ne!(changed, original);
+        fs::write(&path, changed).unwrap();
+        let view = view_read_only(&output);
+        assert_eq!(view.status.code(), Some(1), "{view:?}");
+        assert!(view.stdout.is_empty());
+        assert_view_says(&view, "expected exactly one 'Findings' scope line");
+    }
+}
+
+#[test]
+fn viewing_refuses_disagreeing_csv_finding_counts() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    assert_eq!(
+        gate_command("bas-not-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .code(),
+        Some(2)
+    );
+    assert!(view_read_only(&output).status.success());
+    let csv = output.join("findings.csv");
+    let original_csv = fs::read_to_string(&csv).unwrap();
+    fs::write(&csv, format!("{}\n", original_csv.lines().next().unwrap())).unwrap();
+    let view = view_read_only(&output);
+    assert_eq!(view.status.code(), Some(1), "{view:?}");
+    assert!(view.stdout.is_empty());
+    assert_view_says(&view, "finding counts disagree");
+}
+
 fn gate_requiring(output: &std::path::Path, names: &[&str]) -> std::process::Output {
     let mut command = gate_command("bas-ready", output);
     for name in names {
@@ -728,7 +1239,7 @@ fn a_required_control_that_did_not_run_is_not_ready() {
                 .contains(&format!("required control {name}: skipped")),
             "{result:?}"
         );
-        let view = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+        let view = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
             .arg("view")
             .arg("--pack-dir")
             .arg(&output)
@@ -774,8 +1285,377 @@ fn pack_copy(tmp: &TempDir, example: &str) -> PathBuf {
     copy
 }
 
+fn compare_read_only(
+    previous: &std::path::Path,
+    current: &std::path::Path,
+) -> std::process::Output {
+    let before = (snapshot(previous), snapshot(current));
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
+        .args(["compare", "--previous-pack-dir"])
+        .arg(previous)
+        .arg("--current-pack-dir")
+        .arg(current)
+        .output()
+        .unwrap();
+    assert_eq!((snapshot(previous), snapshot(current)), before);
+    result
+}
+
+#[test]
+fn comparison_refuses_different_engagement_types_without_changing_packs() {
+    let tmp = TempDir::new();
+    let previous = tmp.join("previous");
+    let current = tmp.join("current");
+    for (profile, example, output) in [
+        ("year_end", "year-end-ready", &previous),
+        ("month_end", "month-end-ready", &current),
+    ] {
+        let input = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join(example);
+        let result = fixture_command(profile, &input, output).output().unwrap();
+        assert_eq!(result.status.code(), Some(0), "{result:?}");
+    }
+    assert_compare_refused(
+        &previous,
+        &current,
+        "engagement type",
+        "year_end",
+        "month_end",
+    );
+}
+
+#[test]
+fn comparison_refuses_different_periods_without_changing_packs() {
+    let tmp = TempDir::new();
+    let input = pack_copy(&tmp, "bas-ready");
+    let previous = tmp.join("previous-bas");
+    let current = tmp.join("current-bas");
+    let result = fixture_command("bas", &input, &previous).output().unwrap();
+    assert!(result.status.success(), "{result:?}");
+    for name in ["trial_balance.csv", "self_review.json"] {
+        let path = input.join(name);
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            path,
+            text.replace("2026-03-31", "2026-04-30")
+                .replace("2026-04-10", "2026-05-10"),
+        )
+        .unwrap();
+    }
+    let before = snapshot(&input);
+    let result = fixture_command("bas", &input, &current).output().unwrap();
+    assert!(result.status.success(), "{result:?}");
+    assert_compare_refused(
+        &previous,
+        &current,
+        "period end",
+        "2026-03-31",
+        "2026-04-30",
+    );
+    assert_eq!(snapshot(&input), before);
+}
+
+#[test]
+fn comparison_marks_changed_gst_discrepancies_without_changing_either_not_ready_status() {
+    let outputs = TempDir::new();
+    let previous = outputs.join("previous");
+    let current = outputs.join("current");
+    for (balance, bank, output) in [
+        ("7500.02", "127500.02", &previous),
+        ("7500.03", "127500.03", &current),
+    ] {
+        let tmp = TempDir::new();
+        let input = pack_copy(&tmp, "bas-ready");
+        let path = input.join("trial_balance.csv");
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            path,
+            text.replace("7500.00", balance).replace("127500.00", bank),
+        )
+        .unwrap();
+        let before = snapshot(&input);
+        let result = fixture_command("bas", &input, output).output().unwrap();
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert_eq!(snapshot(&input), before);
+        assert!(review_ready_gate::viewer::verify_pack(output).is_ok());
+    }
+    let result = compare_read_only(&previous, &current);
+    assert!(result.status.success(), "{result:?}");
+    let document =
+        review_ready_gate::probe::decode(&String::from_utf8(result.stdout).unwrap()).unwrap();
+    assert!(json_array(document.at("scope_changes")).is_empty());
+    for side in ["previous", "current"] {
+        assert!(document.at(side).at("overall_status").is_str("NOT_READY"));
+    }
+    let findings = json_array(document.at("findings"));
+    assert_eq!(findings.len(), 1);
+    assert!(findings[0].at("code").is_str("TIEOUT_BREAK"));
+    assert!(findings[0].at("slot").is_str("gst_control_gl"));
+    assert!(findings[0].at("change").is_str("CHANGED"));
+    for (side, closing, difference) in [
+        ("previous", "7500.02", "0.02"),
+        ("current", "7500.03", "0.03"),
+    ] {
+        let rows = json_array(findings[0].at(side));
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].at("status").is_str("NOT_READY"));
+        let reason = format!(
+            "GST control accounts close at {closing} in the trial balance, but the GST control file moves them by 7500.00 and, with no GST_OPENING on the activity statement, they are taken to carry in nil; difference {difference} exceeds tolerance 0.01. The file may be missing postings, or the accounts carried a balance in, such as an unpaid earlier BAS or the cents the ATO drops from 1A and 1B, which GST_OPENING declares."
+        );
+        assert!(rows[0].at("reason").is_str(&reason), "{:?}", rows[0]);
+    }
+}
+
+fn assert_compare_refused(
+    previous: &std::path::Path,
+    current: &std::path::Path,
+    member: &str,
+    old: &str,
+    new: &str,
+) {
+    let result = compare_read_only(previous, current);
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    assert!(result.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(result.stderr).unwrap().trim(),
+        format!(
+            "review-ready compare: verification failed: compare needs two runs of the same {member}; the previous pack has '{old}' and the current pack has '{new}'"
+        )
+    );
+}
+
+fn intake_command(
+    source: &std::path::Path,
+    text: &std::path::Path,
+    output: &std::path::Path,
+) -> Command {
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_review-ready"));
+    command
+        .args(["intake", "--synthetic", "--source"])
+        .arg(source)
+        .arg("--text")
+        .arg(text)
+        .args([
+            "--text-origin",
+            "manual",
+            "--text-version",
+            "fabricated-v1",
+            "--entity",
+            "Cedar and Pine Consulting Pty Ltd",
+            "--period-end",
+            "2026-03-31",
+            "--output",
+        ])
+        .arg(output)
+        .env_remove("GIT_WORK_TREE");
+    command
+}
+
+#[test]
+fn document_intake_enforces_the_exact_extracted_text_byte_limit() {
+    let tmp = TempDir::new();
+    let source = tmp.join("original.txt");
+    let text = tmp.join("text.txt");
+    let mut invoice = fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/document-intake/invoice.txt"),
+    )
+    .unwrap();
+    fs::write(&source, &invoice).unwrap();
+    for size in [0, 1_048_577] {
+        let mut bytes = "é".repeat(size / 2).into_bytes();
+        bytes.resize(size, b' ');
+        fs::write(&text, bytes).unwrap();
+        let before = snapshot(&tmp.0);
+        let output = tmp.join(format!("refused-{size}"));
+        let result = intake_command(&source, &text, &output).output().unwrap();
+        assert_eq!(result.status.code(), Some(1), "{result:?}");
+        assert!(result.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(result.stderr).unwrap().trim(),
+            "review-ready intake: text.txt must contain between 1 and 1048576 bytes."
+        );
+        assert!(!output.exists());
+        assert_eq!(snapshot(&tmp.0), before);
+    }
+    invoice.extend_from_slice("é".repeat((1_048_576 - invoice.len()) / 2).as_bytes());
+    invoice.resize(1_048_576, b' ');
+    fs::write(&source, &invoice).unwrap();
+    fs::write(&text, &invoice).unwrap();
+    let before = snapshot(&tmp.0);
+    let output = tmp.join("accepted");
+    let result = intake_command(&source, &text, &output).output().unwrap();
+    assert!(result.status.success(), "{result:?}");
+    assert_eq!(fs::read(output.join("original.txt")).unwrap(), invoice);
+    assert_eq!(fs::read(output.join("extracted.txt")).unwrap(), invoice);
+    for (name, bytes_and_mtime) in before {
+        assert_eq!(snapshot(&tmp.0).get(&name), Some(&bytes_and_mtime));
+    }
+}
+
+#[test]
+fn document_view_refuses_duplicate_malformed_and_nonobject_json_without_writing() {
+    for (json, diagnostic) in [
+        (
+            r#"{"source":{},"source":{}}"#,
+            "Duplicate document JSON member: 'source'.",
+        ),
+        ("{", "document-intake.json is not valid document JSON."),
+        ("[]", "document-intake.json must hold a JSON object."),
+    ] {
+        let tmp = TempDir::new();
+        fs::write(tmp.join("document-intake.json"), json).unwrap();
+        let before = snapshot(&tmp.0);
+        let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
+            .args(["view-document", "--bundle"])
+            .arg(&tmp.0)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1), "{result:?}");
+        assert!(result.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(result.stderr).unwrap().trim(),
+            format!("review-ready view-document: verification failed: {diagnostic}")
+        );
+        assert_eq!(snapshot(&tmp.0), before);
+    }
+}
+
+#[test]
+fn an_occupied_payload_directory_refuses_publication_and_allows_a_clean_retry() {
+    let tmp = TempDir::new();
+    let input = pack_copy(&tmp, "bas-ready");
+    let output = tmp.join("output");
+    fs::create_dir(&output).unwrap();
+    for name in ["readiness-pack.json", "readiness-summary.md"] {
+        fs::write(output.join(name), format!("fabricated sentinel: {name}")).unwrap();
+    }
+    let obstruction = output.join("findings.csv");
+    fs::create_dir(&obstruction).unwrap();
+    fs::write(obstruction.join("sentinel.txt"), b"preserve me").unwrap();
+    let before = (snapshot(&input), snapshot(&output));
+    let directory_mtimes = (
+        fs::metadata(&output).unwrap().modified().unwrap(),
+        fs::metadata(&obstruction).unwrap().modified().unwrap(),
+    );
+    let result = fixture_command("bas", &input, &output).output().unwrap();
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    assert!(result.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(result.stderr).unwrap().trim(),
+        "review-ready: output error: publication refuses a non-regular or linked file: findings.csv"
+    );
+    assert_eq!((snapshot(&input), snapshot(&output)), before);
+    assert_eq!(
+        (
+            fs::metadata(&output).unwrap().modified().unwrap(),
+            fs::metadata(&obstruction).unwrap().modified().unwrap()
+        ),
+        directory_mtimes
+    );
+    assert!(!output.join(".reviewready").exists());
+    let retained = tmp.join("retained-findings");
+    assert!(obstruction.starts_with(&tmp.0) && retained.starts_with(&tmp.0));
+    fs::rename(obstruction, &retained).unwrap();
+    let result = fixture_command("bas", &input, &output).output().unwrap();
+    assert_eq!(result.status.code(), Some(0), "{result:?}");
+    let verified = review_ready_gate::viewer::verify_pack(&output).unwrap();
+    assert!(verified.document.at("overall_status").is_str("READY"));
+    assert_eq!(snapshot(&input), before.0);
+    assert_eq!(
+        fs::read(retained.join("sentinel.txt")).unwrap(),
+        b"preserve me"
+    );
+}
+
+#[test]
+fn either_missing_bas_label_publishes_a_verified_not_ready_report() {
+    for row in ["1A,10000.00", "1B,2500.00"] {
+        let tmp = TempDir::new();
+        let input = pack_copy(&tmp, "bas-ready");
+        fs::write(
+            input.join("activity_statement.csv"),
+            format!("Label,Amount\n{row}\n"),
+        )
+        .unwrap();
+        let before = snapshot(&input);
+        let output = tmp.join("output");
+        let result = fixture_command("bas", &input, &output).output().unwrap();
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert_only_finding(
+            &output,
+            "NOT_READY",
+            "activity_statement",
+            "TIEOUT_BREAK",
+            "Activity statement is missing label 1A or 1B, so net GST cannot be tied.",
+        );
+        let verified = review_ready_gate::viewer::verify_pack(&output).unwrap();
+        assert!(
+            json_array(verified.document.at("findings"))[0]
+                .at("reviewer_action")
+                .is_str("Return the pack. BAS readiness requires 1A and 1B.")
+        );
+        assert!(view_read_only(&output).status.success());
+        assert_eq!(snapshot(&input), before);
+    }
+}
+
+#[test]
+fn an_empty_bas_directory_produces_a_usable_not_ready_report_without_source_claims() {
+    let tmp = TempDir::new();
+    let input = tmp.join("empty-input");
+    fs::create_dir(&input).unwrap();
+    let output = tmp.join("output");
+    let result = fixture_command("bas", &input, &output).output().unwrap();
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    let verified = review_ready_gate::viewer::verify_pack(&output).unwrap();
+    let document = &verified.document;
+    assert!(document.at("overall_status").is_str("NOT_READY"));
+    for name in ["period_end", "preparer_initials"] {
+        assert!(document.at(name).is_str(""));
+    }
+    assert!(matches!(document.at("source_sha256"), Json::Object(items) if items.is_empty()));
+    let findings = json_array(document.at("findings"));
+    assert_eq!(findings.len(), 5);
+    let mut slots = findings
+        .iter()
+        .map(|finding| {
+            assert!(finding.at("code").is_str("MISSING_ARTEFACT"));
+            assert!(finding.at("status").is_str("NOT_READY"));
+            finding.at("slot").as_pystr().unwrap().to_utf8().unwrap()
+        })
+        .collect::<Vec<_>>();
+    slots.sort();
+    assert_eq!(
+        slots,
+        [
+            "activity_statement",
+            "gst_control_gl",
+            "open_items",
+            "self_review",
+            "trial_balance"
+        ]
+    );
+    let skipped = json_array(document.at("controls_not_run"));
+    assert_eq!(skipped.len(), 2);
+    for slot in ["bank_rec", "prior_findings"] {
+        assert!(skipped.iter().any(|row| row.at("slot").is_str(slot)));
+    }
+    let shown = view_read_only(&output);
+    assert!(shown.status.success(), "{shown:?}");
+    let summary = String::from_utf8(shown.stdout).unwrap();
+    for expected in [
+        "- Period end: n/a",
+        "- Preparer initials: n/a",
+        "No source files were present in the pack directory.",
+    ] {
+        assert!(summary.contains(expected), "{summary}");
+    }
+    assert!(fs::read_dir(input).unwrap().next().is_none());
+}
+
 fn gate_on(pack: &std::path::Path, profile: &str, output: &std::path::Path, name: &str) -> String {
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .args(["gate", "--profile", profile, "--pack"])
         .arg(pack)
         .args(["--require-control", name, "--output"])
@@ -842,7 +1722,7 @@ fn viewed_after(edit: impl Fn(&str) -> String) -> std::process::Output {
     let changed = edit(&text);
     assert_ne!(changed, text);
     fs::write(output.join("readiness-pack.json"), changed).unwrap();
-    let view = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let view = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .arg("view")
         .arg("--pack-dir")
         .arg(&output)
@@ -855,6 +1735,106 @@ fn viewed_after(edit: impl Fn(&str) -> String) -> std::process::Output {
 fn assert_view_says(view: &std::process::Output, expected: &str) {
     let error = String::from_utf8_lossy(&view.stderr);
     assert!(error.contains(expected), "{error}");
+}
+
+fn edited_member(document: &Json, name: &str, replacement: Json) -> Json {
+    let Json::Object(mut members) = document.clone() else {
+        panic!("Expected a JSON object");
+    };
+    let (_, value) = members.iter_mut().find(|(key, _)| key.is(name)).unwrap();
+    *value = replacement;
+    Json::Object(members)
+}
+
+fn assert_edited_pack_refused(output: &std::path::Path, document: &Json, diagnostic: &str) {
+    fs::write(
+        output.join("readiness-pack.json"),
+        review_ready_gate::probe::encode(document),
+    )
+    .unwrap();
+    let shown = view_read_only(output);
+    assert_eq!(shown.status.code(), Some(1), "{shown:?}");
+    assert!(shown.stdout.is_empty());
+    assert_view_says(&shown, diagnostic);
+}
+
+#[test]
+fn viewing_refuses_missing_or_empty_skipped_control_fields_without_writing() {
+    let tmp = TempDir::new();
+    let input = tmp.join("empty-input");
+    fs::create_dir(&input).unwrap();
+    let output = tmp.join("output");
+    let result = fixture_command("bas", &input, &output).output().unwrap();
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    let original = pack_json(&output);
+    let document = review_ready_gate::viewer::verify_pack(&output)
+        .unwrap()
+        .document;
+    let skipped = &json_array(document.at("controls_not_run"))[0];
+    let Json::Object(members) = skipped else {
+        panic!("Expected a skipped control object");
+    };
+    let missing_filename = Json::Object(
+        members
+            .iter()
+            .filter(|(key, _)| !key.is("filename"))
+            .cloned()
+            .collect(),
+    );
+    let mut invalid = vec![(missing_filename, "does not hold the fields".to_owned())];
+    for key in ["filename", "reason", "slot"] {
+        for value in [Json::Null, Json::str("")] {
+            invalid.push((
+                edited_member(skipped, key, value),
+                format!("controls_not_run[0].{key} must be a non-empty string"),
+            ));
+        }
+    }
+    for (row, diagnostic) in invalid {
+        let changed = edited_member(&document, "controls_not_run", Json::Array(vec![row]));
+        assert_edited_pack_refused(&output, &changed, &diagnostic);
+    }
+    fs::write(output.join("readiness-pack.json"), original).unwrap();
+    assert!(view_read_only(&output).status.success());
+    assert!(fs::read_dir(input).unwrap().next().is_none());
+}
+
+#[test]
+fn viewing_refuses_malformed_required_control_lists_without_writing() {
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    let result = gate_requiring(&output, &["open_items", "prior_findings"]);
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    let original = pack_json(&output);
+    let document = review_ready_gate::viewer::verify_pack(&output)
+        .unwrap()
+        .document;
+    for required in [
+        Json::Null,
+        Json::Array(vec![]),
+        Json::Array(vec![Json::object([("name", Json::str("open_items"))])]),
+        Json::Array(vec![Json::object([
+            ("name", Json::int(1)),
+            ("state", Json::str("ran")),
+        ])]),
+        Json::Array(vec![Json::object([
+            ("name", Json::str("open_items")),
+            ("state", Json::int(1)),
+        ])]),
+        Json::Array(vec![Json::object([
+            ("name", Json::str("open_items")),
+            ("state", Json::str("approved")),
+        ])]),
+    ] {
+        let changed = edited_member(&document, "required_controls", required);
+        assert_edited_pack_refused(
+            &output,
+            &changed,
+            "required_controls must be a non-empty list of names and states",
+        );
+    }
+    fs::write(output.join("readiness-pack.json"), original).unwrap();
+    assert!(view_read_only(&output).status.success());
 }
 
 const RAN: &str = "\"state\": \"ran\"";
@@ -894,7 +1874,7 @@ fn a_ready_status_over_a_required_finding_fails_view() {
         fs::write(&path, text.replace(&from, &to)).unwrap();
     }
     assert!(pack_json(&output).contains("REQUIRED_CONTROL_SKIPPED"));
-    let view = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let view = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .arg("view")
         .arg("--pack-dir")
         .arg(&output)
@@ -960,7 +1940,7 @@ fn a_changed_requirement_is_a_scope_change_between_runs() {
     let (previous, current) = (tmp.join("previous"), tmp.join("current"));
     gate_requiring(&previous, &[]);
     gate_requiring(&current, &["open_items"]);
-    let result = Command::new(env!("CARGO_BIN_EXE_review-ready"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
         .arg("compare")
         .arg("--previous-pack-dir")
         .arg(&previous)
@@ -973,4 +1953,89 @@ fn a_changed_requirement_is_a_scope_change_between_runs() {
         report.contains("\"member\": \"required_controls\""),
         "{result:?}"
     );
+}
+
+#[test]
+fn published_pack_inputs_are_refused_before_any_payload_can_be_overwritten() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    assert!(
+        gate_command("bas-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let before = snapshot(&output);
+    for flag in ["--review-note", "--document"] {
+        for name in review_ready_gate::report::PACK_NAMES {
+            assert!(before.contains_key(&PathBuf::from(name)));
+            for input in [output.join(name), output.join(".").join(name)] {
+                let result = gate_command("bas-ready", &output)
+                    .arg(flag)
+                    .arg(&input)
+                    .output()
+                    .unwrap();
+                assert_eq!(result.status.code(), Some(1), "{flag} {input:?}");
+                assert!(result.stdout.is_empty());
+                let error = String::from_utf8(result.stderr).unwrap();
+                assert!(error.starts_with("review-ready: output error:"), "{error}");
+                assert!(error.contains(flag), "{error}");
+                assert!(
+                    error.contains("shares a generated pack file name"),
+                    "{error}"
+                );
+                assert_eq!(snapshot(&output), before, "{flag} {input:?}");
+            }
+        }
+    }
+}
+
+#[cfg(feature = "probe")]
+#[test]
+fn probe_profile_refusal_preserves_inputs_and_keeps_the_session_usable() {
+    use review_ready_gate::probe::{self, Json};
+    use std::{io::Write, process::Stdio};
+
+    let tmp = TempDir::new();
+    let absent = tmp.join("absent-pack");
+    assert!(!absent.exists());
+    let request = Json::object([
+        ("op", Json::str("review_pack")),
+        ("profile", Json::str("quarter_end")),
+        ("pack", Json::str("absent-pack")),
+        ("tolerance", Json::str("0.01")),
+    ]);
+    let requests = format!(
+        "{}\n{{\"op\":\"money\",\"value\":\"1\"}}\n",
+        probe::encode(&request)
+    );
+    let mut child = child_profile::command(env!("CARGO_BIN_EXE_review-ready-probe"))
+        .current_dir(&tmp.0)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(requests.as_bytes())
+        .unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let response = String::from_utf8(result.stdout)
+        .unwrap()
+        .replace("\r\n", "\n");
+    assert_eq!(
+        response,
+        concat!(
+            "{\"error\":\"unknown engagement profile 'quarter_end'; expected one of: bas, month_end, year_end.\"}\n",
+            "{\"ok\":\"1\"}\n",
+        )
+    );
+    assert!(!absent.exists());
+    assert!(fs::read_dir(&tmp.0).unwrap().next().is_none());
 }

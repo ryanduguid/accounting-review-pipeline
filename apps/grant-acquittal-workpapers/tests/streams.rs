@@ -6,7 +6,10 @@
 //! at exit is exit status 120, a failed print outside the script's handler is
 //! an uncaught OSError (exit 1), and argparse ignores its own write errors.
 
-use std::process::{Command, Stdio};
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 const EXAMPLE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/examples/two-grants");
@@ -33,7 +36,7 @@ fn run(args: &[&str], broken_stdout: bool, unbuffered: bool) -> (i32, String) {
         RUN.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_dir_all(&out);
-    let mut command = Command::new(env!("CARGO_BIN_EXE_grant-workpaper"));
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_grant-workpaper"));
     command.args(args.iter().map(|a| a.replace("OUT", &out.to_string_lossy())));
     command.env_remove("PYTHONUNBUFFERED");
     if unbuffered {
@@ -81,5 +84,47 @@ fn an_unwritable_diagnostic_loses_the_original_code() {
     assert_eq!(
         run(&["--input", "missing", "--output", "OUT"], false, true),
         (1, String::new())
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn file_error_mappings_match_cpython_windows_c_runtime_errors() {
+    // Independent oracle: ctypes.WinError(code).errno, then OSError(errno,
+    // os.strerror(errno), "out.csv") under CPython 3.15 on Windows.
+    for (code, errno, message) in [
+        (5, 13, "Permission denied"),
+        (32, 13, "Permission denied"),
+        (33, 13, "Permission denied"),
+        (19, 13, "Permission denied"),
+        (80, 17, "File exists"),
+        (183, 17, "File exists"),
+        (267, 20, "Not a directory"),
+        (112, 28, "No space left on device"),
+    ] {
+        let error = std::io::Error::from_raw_os_error(code);
+        assert_eq!(
+            grant_acquittal_workpapers::oserror::file_error(&error, "out.csv"),
+            format!("[Errno {errno}] {message}: 'out.csv'")
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn stream_errors_preserve_non_pipe_os_errors() {
+    let error = std::io::Error::from_raw_os_error(5);
+    assert_eq!(
+        grant_acquittal_workpapers::oserror::stream_error(&error),
+        "OSError: [Errno 5] Input/output error"
+    );
+}
+
+#[test]
+fn stream_errors_preserve_an_application_supplied_sink_diagnostic() {
+    let error = std::io::Error::other("output sink failed");
+    assert_eq!(
+        grant_acquittal_workpapers::oserror::stream_error(&error),
+        "OSError: output sink failed"
     );
 }

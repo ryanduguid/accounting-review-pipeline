@@ -279,7 +279,7 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
 
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fpa", type=Path, required=True)
     parser.add_argument("--accounting", type=Path)
@@ -288,9 +288,14 @@ if __name__ == "__main__":
     parser.add_argument("--environment-root", type=Path, help="optional new directory for isolated installations")
     parser.add_argument("--timeout", type=float, default=300, help="seconds per command, including setup (default: 300)")
     parser.add_argument("--workflow", choices=("all", "close-forecast", "quarter", "job-cash", "grant-cash"), default="all")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         result = run_workflows(**vars(args))
     except (ValueError, KeyError, TypeError, OSError) as exc:
         parser.exit(1, f"Utility workflows: {exc}\n")
     print(f"UTILITY WORKFLOWS VERIFIED: {len(result['calls'])} successful commands")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

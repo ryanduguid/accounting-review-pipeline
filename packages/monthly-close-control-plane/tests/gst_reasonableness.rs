@@ -6,8 +6,11 @@
 #[path = "support/temp.rs"]
 mod temp;
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use monthly_close_control_plane::pyjson::{self, Json};
-use std::{fs, process::Command};
+use std::fs;
 use temp::TempDir;
 
 const BIN: &str = env!("CARGO_BIN_EXE_close-control");
@@ -150,7 +153,7 @@ fn review_settled(
         path.into_os_string()
     };
     let dir = temp.join("pack");
-    let mut command = Command::new(BIN);
+    let mut command = child_profile::command(BIN);
     command
         .arg("review")
         .arg("--current")
@@ -217,7 +220,7 @@ fn matching_gst_raises_nothing_and_the_pack_records_the_tolerance() {
     let thresholds = pack.at("thresholds");
     assert!(thresholds.at("gst_absolute_tolerance").is_str("1.00"));
     assert!(thresholds.at("gst_percentage_tolerance").is_str("1.00%"));
-    let view = Command::new(BIN)
+    let view = child_profile::command(BIN)
         .args(["view", "--pack-dir"])
         .arg(&run.dir)
         .output()
@@ -237,7 +240,7 @@ fn matching_gst_raises_nothing_and_the_pack_records_the_tolerance() {
         .map(str::to_owned)
         .collect();
     fs::write(&json, edited.join("\n") + "\n").unwrap();
-    let view = Command::new(BIN)
+    let view = child_profile::command(BIN)
         .args(["view", "--pack-dir"])
         .arg(&run.dir)
         .output()
@@ -443,7 +446,7 @@ fn rounding_on_many_small_sales_can_exceed_the_heuristic_and_is_raised_for_revie
         text(found[0].at("reason")),
         "Net GST recorded this period is 3.00 (3.00 of movement in the GST accounts plus 0.00 of declared settlements), against 1.80 expected: GST collected 1.80 (1/10 of taxable sales 18.00) less GST paid 0.00 (1/10 of creditable purchases 0.00). The difference of 1.20 is beyond the 1.0180 review heuristic, which is not a rounding bound: rounding across many small invoices can exceed it. Amounts are net GST payable; a negative amount is a net refund. The settlements are as declared; the trial balance cannot verify them."
     );
-    let view = Command::new(BIN)
+    let view = child_profile::command(BIN)
         .args(["view", "--pack-dir"])
         .arg(&run.dir)
         .output()
@@ -666,7 +669,7 @@ const GST_HELP: &str = concat!(
 fn review_and_workbench_help_and_usage_show_the_gst_options() {
     let lf = |bytes: Vec<u8>| String::from_utf8(bytes).unwrap().replace("\r\n", "\n");
     for command in ["review", "workbench"] {
-        let help = Command::new(BIN)
+        let help = child_profile::command(BIN)
             .args([command, "--help"])
             .output()
             .unwrap();
@@ -674,7 +677,7 @@ fn review_and_workbench_help_and_usage_show_the_gst_options() {
         let help = lf(help.stdout);
         assert!(help.contains(GST_USAGE), "{command}: {help}");
         assert!(help.ends_with(GST_HELP), "{command}: {help}");
-        let usage = Command::new(BIN).arg(command).output().unwrap();
+        let usage = child_profile::command(BIN).arg(command).output().unwrap();
         assert_eq!(usage.status.code(), Some(1), "{command}");
         let usage = lf(usage.stderr);
         assert!(usage.contains(GST_USAGE), "{command}: {usage}");

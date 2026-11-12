@@ -422,7 +422,17 @@ fn test_policy_model_projection_must_match_the_code_contract() {
 
 #[test]
 fn test_policy_max_results_outside_one_to_one_hundred_is_refused() {
-    for value in ["0", "101", "-1", "\"25\"", "2.5", "true", "false"] {
+    for value in [
+        "0",
+        "101",
+        "-1",
+        "\"25\"",
+        "2.5",
+        "true",
+        "false",
+        "1000000000000000000000000000000",
+        "-1000000000000000000000000000000",
+    ] {
         let dir = TempDir::new();
         let mut sandbox = env(dir.path());
         edit(&mut sandbox, POLICY, |p| {

@@ -1,4 +1,7 @@
 //! Seeded, offline comparison with the pinned CPython release.
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Read, Write},
@@ -135,8 +138,18 @@ impl Process {
 impl Drop for Process {
     fn drop(&mut self) {
         self.input.take();
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+                _ => {
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    break;
+                }
+            }
+        }
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
         }
@@ -362,7 +375,7 @@ fn compare_cli(
                     .args(*flags);
                 let executable =
                     probe.with_file_name(format!("{binary}{}", env::consts::EXE_SUFFIX));
-                let mut rust = Command::new(executable);
+                let mut rust = child_profile::command(executable);
                 rust.args(*flags);
                 for command in [&mut source, &mut rust] {
                     command
@@ -430,7 +443,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             env::temp_dir().join("xero-differential-synthetic/token.json"),
         );
     let mut python = Process::start(&mut python_cmd)?;
-    let mut native = Process::start(&mut Command::new(&probe_path))?;
+    let mut native = Process::start(&mut child_profile::command(&probe_path))?;
     let fixture = pyjson::loads(include_str!("../tests/fixtures/python-value-cases.json"))
         .map_err(|_| "invalid fixture")?;
     let Json::Array(cases) = fixture.at("cases") else {
@@ -612,4 +625,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("unexplained behaviour differences".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EOF_FIXTURE: &str = "XERO_DIFFERENTIAL_EOF_FIXTURE";
+
+    #[test]
+    fn teardown_allows_the_child_to_finish_after_input_eof() {
+        if let Some(directory) = env::var_os(EOF_FIXTURE) {
+            let directory = Path::new(&directory);
+            fs::write(directory.join("ready"), b"ready").unwrap();
+            let mut input = String::new();
+            io::stdin().read_to_string(&mut input).unwrap();
+            let delay = if env::var_os("XERO_DIFFERENTIAL_STALL_FIXTURE").is_some() {
+                Duration::from_secs(30)
+            } else {
+                Duration::from_millis(50)
+            };
+            thread::sleep(delay);
+            fs::write(directory.join("finished"), b"normal shutdown").unwrap();
+            return;
+        }
+
+        let (finished, _) = run_fixture(false);
+        assert_eq!(finished.unwrap(), b"normal shutdown");
+    }
+
+    #[test]
+    fn teardown_still_terminates_a_child_that_ignores_eof() {
+        let (finished, elapsed) = run_fixture(true);
+        assert_eq!(finished.unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert!(elapsed >= Duration::from_secs(5));
+        assert!(elapsed < Duration::from_secs(10));
+    }
+
+    fn run_fixture(stall: bool) -> (io::Result<Vec<u8>>, Duration) {
+        let mut nonce = [0_u8; 16];
+        getrandom::fill(&mut nonce).unwrap();
+        let nonce: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
+        let directory = env::temp_dir().join(format!("xero-differential-eof-{nonce}"));
+        fs::create_dir(&directory).unwrap();
+        let mut command = Command::new(env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "tests::teardown_allows_the_child_to_finish_after_input_eof",
+                "--nocapture",
+            ])
+            .env(EOF_FIXTURE, &directory);
+        if stall {
+            command.env("XERO_DIFFERENTIAL_STALL_FIXTURE", "1");
+        }
+        let process = Process::start(&mut command).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !directory.join("ready").is_file() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        let ready = directory.join("ready").is_file();
+        let started = Instant::now();
+        drop(process);
+        let elapsed = started.elapsed();
+        let finished = fs::read(directory.join("finished"));
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(ready, "the child did not start");
+        (finished, elapsed)
+    }
 }

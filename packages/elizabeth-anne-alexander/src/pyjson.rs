@@ -655,6 +655,7 @@ mod tests {
     #[test]
     fn float_repr_matches_python() {
         for (value, text) in [
+            (0.0, "0.0"),
             (1.0, "1.0"),
             (f64::from_bits(0x3e60_0000_0000_0000), "2.9802322387695312e-08"),
             (f64::from_bits(0xbe60_0000_0000_0000), "-2.9802322387695312e-08"),
@@ -713,6 +714,51 @@ mod tests {
             pretty(&value),
             "{\n  \"a\": {},\n  \"b\": [\n    1,\n    2.5,\n    \"\\u00e9\\ud800\\ud83d\\ude00\\u007f\"\n  ],\n  \"c\": []\n}"
         );
+    }
+
+    #[test]
+    fn string_escapes_preserve_every_control_code_point() {
+        let escaped = loads(r#""\"\\\/\b\f\n\r\t""#).unwrap();
+        assert_eq!(escaped.as_pystr().unwrap().0, vec![34, 92, 47, 8, 12, 10, 13, 9]);
+        let normal = r#""\"\\/\b\f\n\r\t""#;
+        assert_eq!(canonical(&escaped), normal);
+        assert_eq!(pretty(&escaped), normal);
+
+        let controls = Json::Str(PyStr((0..=31).collect()));
+        let expected = r#""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f""#;
+        assert_eq!(canonical(&controls), expected);
+        assert_eq!(pretty(&controls), expected);
+        assert_eq!(loads(expected).unwrap().as_pystr(), controls.as_pystr());
+    }
+
+    #[test]
+    fn malformed_tokens_and_unfinished_structures_are_refused() {
+        for source in [
+            "?",
+            "1e+x",
+            r#""\u12""#,
+            r#""\q""#,
+            "[1",
+            r#"{"key"1}"#,
+            r#"{"a":1 "b":2}"#,
+        ] {
+            assert_eq!(loads(source).unwrap_err(), LoadError::Invalid, "{source}");
+        }
+        assert!(matches!(loads("1.2345"), Ok(Json::Float(value)) if value == 1.2345));
+    }
+
+    #[test]
+    fn excessive_nesting_returns_a_controlled_error() {
+        std::thread::Builder::new()
+            .stack_size(256 << 20)
+            .spawn(|| {
+                let source = format!("{}{}", "[".repeat(10_001), "]".repeat(10_001));
+                assert!(matches!(loads(&source), Err(LoadError::Crash(message))
+                    if message.starts_with("maximum recursion depth")));
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[test]

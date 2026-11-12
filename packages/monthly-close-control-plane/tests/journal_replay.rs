@@ -7,8 +7,11 @@
 #[path = "support/temp.rs"]
 mod temp;
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 use monthly_close_control_plane::{decimal::Decimal, pycsv, pyjson, viewer};
-use std::{collections::BTreeMap, fs, process::Command};
+use std::{collections::BTreeMap, fs};
 use temp::TempDir;
 
 const JOURNALS: &str = "Journal ID,Account ID,Debit,Credit\n\
@@ -79,7 +82,7 @@ fn check_close(journals: &str, cost: &str, payables: &str, failures: &[&str]) {
     )
     .unwrap();
     fs::write(&subledger_path, subledger).unwrap();
-    let run = Command::new(env!("CARGO_BIN_EXE_close-control"))
+    let run = child_profile::command(env!("CARGO_BIN_EXE_close-control"))
         .arg("review")
         .arg("--current")
         .arg(current)

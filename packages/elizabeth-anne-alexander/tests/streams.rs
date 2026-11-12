@@ -7,7 +7,14 @@
 //! uncaught OSError (exit 1), a diagnostic that cannot be written loses the
 //! original code, and argparse ignores its own write errors.
 
-use std::process::{Command, Stdio};
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
+#[cfg(windows)]
+#[path = "../../../tests/support/windows_console.rs"]
+mod windows_console;
+
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// The OSError line Python printed for a write to a pipe with no reader.
@@ -16,6 +23,18 @@ const CLOSED_PIPE: &str = if cfg!(windows) {
 } else {
     "BrokenPipeError: [Errno 32] Broken pipe"
 };
+
+#[cfg(windows)]
+#[test]
+fn real_console_uses_native_width_and_colours_on_both_streams() {
+    windows_console::check(
+        "real_console_uses_native_width_and_colours_on_both_streams",
+        env!("CARGO_BIN_EXE_elizabeth-anne-alexander"),
+        include_str!("fixtures/cli/main-help80.txt"),
+        include_str!("fixtures/cli/main-required80.txt"),
+        2,
+    );
+}
 
 const EVALUATE: &[&str] = &[
     "evaluate",
@@ -44,7 +63,7 @@ fn run(args: &[&str], broken_stdout: bool, unbuffered: bool) -> (i32, String) {
         RUN.fetch_add(1, Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&cwd).unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_elizabeth-anne-alexander"));
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_elizabeth-anne-alexander"));
     command.args(args).current_dir(&cwd).env_remove("PYTHONUNBUFFERED");
     if unbuffered {
         command.env("PYTHONUNBUFFERED", "1");
@@ -94,4 +113,86 @@ fn an_unwritable_diagnostic_loses_the_original_code() {
     assert_eq!(run(&["--bogus"], false, true), (2, String::new()));
     assert_eq!(run(&blocked, false, false), (120, String::new()));
     assert_eq!(run(&blocked, false, true), (1, String::new()));
+}
+
+fn capture(args: &[&str], variables: &[(&str, &str)], lines: bool) -> std::process::Output {
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_elizabeth-anne-alexander"));
+    for name in [
+        "PYTHON_COLORS",
+        "NO_COLOR",
+        "FORCE_COLOR",
+        "TERM",
+        "COLUMNS",
+        "LINES",
+        "PYTHONUNBUFFERED",
+    ] {
+        command.env_remove(name);
+    }
+    command.args(args).env("COLUMNS", "20").envs(variables.iter().copied());
+    if lines {
+        command.env("LINES", "24");
+    }
+    command.output().unwrap()
+}
+
+fn plain(bytes: &[u8]) -> String {
+    let text = String::from_utf8(bytes.to_vec()).unwrap();
+    let mut parts = text.split('\x1b');
+    let mut result = parts.next().unwrap().to_string();
+    for part in parts {
+        let (sequence, rest) = part.split_once('m').expect("complete ANSI colour sequence");
+        assert!(sequence.starts_with('['));
+        assert!(sequence[1..].bytes().all(|byte| byte.is_ascii_digit() || byte == b';'));
+        result.push_str(rest);
+    }
+    result.replace("\r\n", "\n")
+}
+
+#[test]
+fn narrow_help_and_diagnostics_respect_colour_precedence() {
+    // Complete outputs from the released Python package under CPython 3.15.
+    let commands = [
+        (&["--help"][..], 0, include_str!("fixtures/cli/main-help20.txt")),
+        (
+            &["validate-review", "--help"][..],
+            0,
+            include_str!("fixtures/cli/review-help20.txt"),
+        ),
+        (
+            &["validate-review"][..],
+            2,
+            include_str!("fixtures/cli/review-required20.txt"),
+        ),
+    ];
+    let cases = [
+        (&[("PYTHON_COLORS", "0"), ("FORCE_COLOR", "1")][..], false),
+        (&[("PYTHON_COLORS", "1"), ("NO_COLOR", "1"), ("TERM", "dumb")][..], true),
+        (&[("NO_COLOR", "1"), ("FORCE_COLOR", "1")][..], false),
+        (&[("FORCE_COLOR", "1"), ("TERM", "dumb")][..], true),
+        (&[("TERM", "dumb")][..], false),
+    ];
+    for (args, code, expected) in commands {
+        for (variables, coloured) in cases {
+            let output = capture(args, variables, true);
+            assert_eq!(output.status.code(), Some(code), "{args:?}, {variables:?}");
+            let (stream, other) = if code == 0 {
+                (&output.stdout, &output.stderr)
+            } else {
+                (&output.stderr, &output.stdout)
+            };
+            assert!(other.is_empty(), "{}", plain(other));
+            assert_eq!(stream.contains(&0x1b), coloured, "{args:?}, {variables:?}");
+            assert_eq!(plain(stream), expected, "{args:?}, {variables:?}");
+        }
+        let output = capture(args, &[("PYTHON_COLORS", "0")], false);
+        assert_eq!(output.status.code(), Some(code));
+        let (stream, other) = if code == 0 {
+            (&output.stdout, &output.stderr)
+        } else {
+            (&output.stderr, &output.stdout)
+        };
+        assert!(other.is_empty(), "{}", plain(other));
+        assert!(!stream.contains(&0x1b));
+        assert_eq!(plain(stream), expected, "positive COLUMNS with missing LINES");
+    }
 }

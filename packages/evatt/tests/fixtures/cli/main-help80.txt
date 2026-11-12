@@ -1,0 +1,16 @@
+usage: evatt [-h] [--version]
+             {redact,restore,verify,disclosure-record,disclosure-check} ...
+
+Pseudonymise Australian client data in markdown, locally, before sending it.
+
+positional arguments:
+  {redact,restore,verify,disclosure-record,disclosure-check}
+    redact              raw markdown to sanitised markdown
+    restore             reverse the entity map over an answer
+    verify              re-scan a sanitised file
+    disclosure-record   record local evidence for an intended disclosure
+    disclosure-check    check local evidence; does not authenticate permission
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit

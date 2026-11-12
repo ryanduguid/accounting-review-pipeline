@@ -1,0 +1,13 @@
+usage: grant-workpaper [-h]
+                       --input INPUT
+                       --output OUTPUT
+
+Local grant allocation and funding
+workpapers from explicitly reviewed
+inputs.
+
+options:
+  -h, --help      show this help
+                  message and exit
+  --input INPUT
+  --output OUTPUT

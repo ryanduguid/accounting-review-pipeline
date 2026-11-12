@@ -232,18 +232,11 @@ fn negative_number(text: &str) -> bool {
     let Some(text) = text.strip_prefix('-') else {
         return false;
     };
-    let mut parts = text.split('.');
-    let before = parts.next().unwrap();
-    let after = parts.next();
-    let digits = |s: &str| {
-        s.chars()
-            .all(|ch| pytext::decimal_value(ch as u32).is_some())
-    };
-    parts.next().is_none()
-        && digits(before)
-        && after.map_or(!before.is_empty(), |after| {
-            !after.is_empty() && digits(after)
-        })
+    // CPython 3.15 argparse matches the prefix `-\.?\d`, leaving validation to the option.
+    let text = text.strip_prefix('.').unwrap_or(text);
+    text.chars()
+        .next()
+        .is_some_and(|ch| pytext::decimal_value(ch as u32).is_some())
 }
 fn integer(value: &str) -> Option<BigInt> {
     let raw = pytext::strip(value);

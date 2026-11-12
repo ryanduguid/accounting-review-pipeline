@@ -3911,6 +3911,7 @@ fn run_batch(corpus: &Corpus, python: &Path, root: &Path, executable: &Path) -> 
         .arg(root)
         .env("PYTHONIOENCODING", "utf-8");
     let expected = exchange(oracle, &encoded)?;
+    // The probe returns normally, so inherit the parent's exit-time profiling.
     let actual = exchange(Command::new(executable), &encoded)?;
     if actual.len() != expected.len() || actual.len() != names.len() {
         return Err("oracle/native response count differs".into());

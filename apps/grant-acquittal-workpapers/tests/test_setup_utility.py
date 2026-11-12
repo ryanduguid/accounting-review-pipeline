@@ -154,3 +154,23 @@ class SetupUtilityTests(unittest.TestCase):
     def test_git_runs_plain_git_even_with_rtk_on_path(self):
         with patch.object(setup_utility.shutil, "which", return_value="rtk"):
             self.assertEqual(setup_utility.git_command("status"), ["git", "status"])
+
+    def test_new_nested_workspace_is_created_after_isolation_checks(self):
+        self.workspace = self.root / "new parent" / "new workspace"
+        with patch.object(setup_utility.subprocess, "run", side_effect=self.command):
+            self.assertEqual(setup_utility.setup(self.workspace), self.workspace / "results")
+        self.assertTrue((self.workspace / "results/manifest.json").is_file())
+
+    def test_manifest_must_confirm_fixture_validation(self):
+        command = self.command
+        for index, manifest in enumerate(([], {"fixture_validation": "failed"})):
+            self.workspace = self.root / f"invalid result {index}"
+            def invalid_result(arguments, **kwargs):
+                result = command(arguments, **kwargs)
+                if "--output" in arguments:
+                    output = Path(arguments[arguments.index("--output") + 1])
+                    (output / "manifest.json").write_text(json.dumps(manifest))
+                return result
+            with patch.object(setup_utility.subprocess, "run", side_effect=invalid_result):
+                with self.assertRaisesRegex(ValueError, "fixture result checks"):
+                    setup_utility.setup(self.workspace)

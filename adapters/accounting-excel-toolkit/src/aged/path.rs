@@ -42,7 +42,9 @@ fn resolve_absolute(path: &Path, strict: bool) -> Result<PathBuf, ResolveError> 
     loop {
         let base = match std::fs::canonicalize(&current) {
             Ok(found) => Some(strip_verbatim(found)),
-            Err(_) => read_link_deep(&current).filter(|followed| *followed != current),
+            Err(_) => read_link_deep(&current)
+                .filter(|followed| *followed != current)
+                .map(strip_verbatim),
         };
         if let Some(mut result) = base {
             for name in tail.iter().rev() {
@@ -253,4 +255,111 @@ pub fn is_within(resolved: &Path, root: &Path) -> bool {
         |p: &Path| -> Vec<Vec<u32>> { p.components().map(|c| fold(c.as_os_str())).collect() };
     let (inner, outer) = (parts(resolved), parts(root));
     inner.len() >= outer.len() && inner[..outer.len()] == outer[..]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(unix)]
+    use std::fs;
+
+    #[cfg(unix)]
+    struct Fixture {
+        root: PathBuf,
+        parent: PathBuf,
+    }
+
+    #[cfg(unix)]
+    impl Fixture {
+        fn new() -> Self {
+            let parent = fs::canonicalize(std::env::temp_dir()).unwrap();
+            let root = parent.join(format!("fabricated-aged-path-{}", std::process::id()));
+            fs::create_dir(&root).unwrap();
+            Self { root, parent }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            if self.root.parent() == Some(self.parent.as_path())
+                && fs::symlink_metadata(&self.root)
+                    .is_ok_and(|meta| meta.is_dir() && !meta.file_type().is_symlink())
+            {
+                fs::remove_dir_all(&self.root).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn strict_resolution_distinguishes_missing_files_and_invalid_names() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let file = root.join("Cargo.toml");
+        assert!(resolve(&file, true).unwrap().is_file());
+        let missing = root.join(format!("fabricated-missing-path-{}", std::process::id()));
+        assert!(!missing.exists());
+        assert!(matches!(
+            resolve(&missing, true),
+            Err(ResolveError::NotFound)
+        ));
+        for strict in [false, true] {
+            assert!(matches!(
+                resolve(Path::new("fabricated\0name"), strict),
+                Err(ResolveError::Unusable)
+            ));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_paths_follow_repeated_aliases_and_classify_cycles_and_non_directories() {
+        use std::os::unix::fs::symlink;
+        let fixture = Fixture::new();
+        let root = &fixture.root;
+        fs::create_dir(root.join("real")).unwrap();
+        fs::write(root.join("real/file"), b"fabricated").unwrap();
+        symlink("real", root.join("alias")).unwrap();
+        symlink("loop", root.join("loop")).unwrap();
+        symlink("missing", root.join("dangling")).unwrap();
+        for strict in [false, true] {
+            assert_eq!(
+                resolve(&root.join("alias/../alias/file"), strict).unwrap(),
+                root.join("real/file")
+            );
+        }
+        assert_eq!(
+            resolve(&root.join("loop"), false).unwrap(),
+            root.join("loop")
+        );
+        assert!(matches!(
+            resolve(&root.join("loop"), true),
+            Err(ResolveError::Unusable)
+        ));
+        assert!(matches!(
+            resolve(&root.join("real/file/child"), true),
+            Err(ResolveError::Unusable)
+        ));
+        assert_eq!(
+            resolve(&root.join("dangling"), false).unwrap(),
+            root.join("missing")
+        );
+        assert!(matches!(
+            resolve(&root.join("dangling"), true),
+            Err(ResolveError::NotFound)
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_paths_and_surrogate_components_preserve_their_identity() {
+        use std::os::windows::ffi::OsStringExt;
+        assert_eq!(
+            strip_verbatim(PathBuf::from(r"\\?\UNC\server\share\file")),
+            PathBuf::from(r"\\server\share\file")
+        );
+        let root = PathBuf::from(r"C:\fabricated").join(OsString::from_wide(&[0xD800]));
+        let different = PathBuf::from(r"C:\fabricated").join(OsString::from_wide(&[0xD801]));
+        assert!(is_within(&root.join("file"), &root));
+        assert!(!is_within(&different.join("file"), &root));
+    }
 }

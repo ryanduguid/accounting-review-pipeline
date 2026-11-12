@@ -5,10 +5,8 @@
 //! Strings are code point sequences so a lone surrogate from a `\uD800`
 //! escape survives parsing and re-serialisation, as it does in Python.
 
-use std::cmp::Ordering;
-
 use num_bigint::BigInt;
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 
 /// A Python `str`: Unicode code points, possibly including lone surrogates.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -658,13 +656,6 @@ pub fn repr(value: &Json) -> String {
         ),
     }
 }
-pub fn str_value(value: &Json) -> String {
-    match value {
-        Json::Str(s) => s.os_text(),
-        _ => repr(value),
-    }
-}
-
 fn write_str(out: &mut String, s: &PyStr) {
     out.push('"');
     for &cp in &s.0 {
@@ -942,20 +933,6 @@ fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {
     let mut out = Vec::new();
     go(&mut out, value, 0, sort, ascii);
     PyStr(out)
-}
-
-/// Ordering for `max_results` style bounds on a parsed integer.
-pub fn int_cmp(value: &BigInt, bound: i64) -> Ordering {
-    value.to_i64().map_or_else(
-        || {
-            if value.sign() == num_bigint::Sign::Minus {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        },
-        |v| v.cmp(&bound),
-    )
 }
 
 #[cfg(test)]

@@ -273,16 +273,16 @@ fn write_staged(
 
     let c = |p: &Path| CString::new(p.as_os_str().as_bytes()).map_err(|_| fail("embedded null byte".into()));
     let parent_c = c(parent)?;
-    // SAFETY: parent_c is a valid NUL-terminated path.
+    let name = output.file_name().expect("output names a file");
+    let name_c = c(Path::new(name))?;
+    let temporary = format!(".{}.partial", pypath::text(Path::new(name)));
+    let temporary_c = c(Path::new(&pypath::encode_os(&temporary)))?;
+    // SAFETY: parent_c is a valid NUL-terminated path. Validate names before opening it.
     // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let dir_fd = unsafe { libc::open(parent_c.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC) };
     if dir_fd < 0 {
         return Err(fail(os_error(&io::Error::last_os_error(), Some(parent), None)));
     }
-    let name = output.file_name().expect("output names a file");
-    let temporary = format!(".{}.partial", pypath::text(Path::new(name)));
-    let temporary_c = CString::new(pypath::encode_os(&temporary).as_bytes()).expect("no NUL in a file name");
-    let name_c = CString::new(name.as_bytes()).expect("no NUL in a file name");
     let mut created = false;
     let result = (|| -> Result<()> {
         // O_EXCL prevents a pre-existing pathname (including a symlink) from being used as the staging file.

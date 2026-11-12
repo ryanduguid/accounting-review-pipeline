@@ -63,6 +63,9 @@ pub fn python_date_fromisoformat(text: &str) -> Option<Date> {
         return Date::new(year, text[4..6].parse().ok()?, text[6..].parse().ok()?);
     }
     let separated = bytes[4] == b'-';
+    if !matches!((separated, bytes.len()), (true, 8 | 10) | (false, 7 | 8)) {
+        return None;
+    }
     let start = if separated { 5 } else { 4 };
     if bytes[start] != b'W' {
         return None;

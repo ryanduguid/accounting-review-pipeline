@@ -120,4 +120,65 @@ mod tests {
             "{\"a\":2,\"z\":\"é\"}".as_bytes()
         );
     }
+
+    #[test]
+    fn cache_text_escapes_controls_and_optional_ascii_in_keys_and_values() {
+        let text = "\"\\\u{8}\t\n\u{c}\r\0\u{1f}é😀";
+        let value = Json::object([(text, Json::str(text))]);
+        for (ascii, escaped) in [
+            (false, r#"\"\\\b\t\n\f\r\u0000\u001fé😀"#),
+            (true, r#"\"\\\b\t\n\f\r\u0000\u001f\u00e9\ud83d\ude00"#),
+        ] {
+            assert_eq!(
+                dumps(&value, false, false, ascii).unwrap(),
+                format!("{{\"{escaped}\":\"{escaped}\"}}").as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn sorted_nested_cache_json_keeps_empty_collections_and_indentation() {
+        let value = Json::object([
+            (
+                "z",
+                Json::Array(vec![
+                    Json::object([("β", Json::str("😀")), ("a", Json::Null)]),
+                    Json::Array(vec![]),
+                ]),
+            ),
+            ("a", Json::object([])),
+        ]);
+        assert_eq!(
+            dumps(&value, false, true, true).unwrap(),
+            br#"{"a":{},"z":[{"a":null,"\u03b2":"\ud83d\ude00"},[]]}"#
+        );
+        assert_eq!(
+            dumps(&value, true, true, true).unwrap(),
+            concat!(
+                "{\n  \"a\": {},\n  \"z\": [\n    {\n",
+                "      \"a\": null,\n      \"\\u03b2\": \"\\ud83d\\ude00\"\n",
+                "    },\n    []\n  ]\n}\n"
+            )
+            .as_bytes()
+        );
+    }
+
+    #[test]
+    fn lone_surrogates_need_ascii_escaping_before_a_cache_can_be_saved() {
+        let surrogate = PyStr(vec![0xd800]);
+        let cases = [
+            (Json::Str(surrogate.clone()), br#""\ud800""#.as_slice()),
+            (
+                Json::Object(vec![(surrogate, Json::str("x"))]),
+                br#"{"\ud800":"x"}"#.as_slice(),
+            ),
+        ];
+        for (value, escaped) in cases {
+            assert_eq!(dumps(&value, false, false, true).unwrap(), escaped);
+            assert_eq!(
+                dumps(&value, false, false, false).unwrap_err(),
+                Failure::message("error: token cache text is not valid UTF-8; no token was saved.")
+            );
+        }
+    }
 }

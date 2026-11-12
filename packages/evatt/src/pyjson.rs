@@ -755,6 +755,7 @@ mod tests {
             (1.5e-5, "1.5e-05"),
             (123456789012345678.0, "1.2345678901234568e+17"),
             (-0.0, "-0.0"),
+            (0.0, "0.0"),
             (0.1, "0.1"),
             (1e22, "1e+22"),
             (5e-324, "5e-324"),
@@ -788,6 +789,53 @@ mod tests {
         assert!(matches!(loads("1.5E+2"), Ok(Json::Float(_))));
         assert_eq!(loads("01").unwrap_err(), LoadError::Invalid);
         assert_eq!(loads("1.").unwrap_err(), LoadError::Invalid);
+    }
+
+    #[test]
+    fn plain_map_diagnostics_preserve_cpython_positions() {
+        for (text, expected) in [
+            (
+                "\u{feff}{}",
+                "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)",
+            ),
+            ("{}\n null", "Extra data: line 2 column 2 (char 4)"),
+            ("1e+x", "Extra data: line 1 column 2 (char 1)"),
+            ("[1 2]", "Expecting ',' delimiter: line 1 column 4 (char 3)"),
+            ("{\"a\" 1}", "Expecting ':' delimiter: line 1 column 6 (char 5)"),
+            (
+                "{1}",
+                "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+            ),
+            ("\"a\\x\"", "Invalid \\escape: line 1 column 3 (char 2)"),
+            ("\"\\u123\"", "Invalid \\uXXXX escape: line 1 column 3 (char 2)"),
+            (
+                "\"unterminated",
+                "Unterminated string starting at: line 1 column 1 (char 0)",
+            ),
+            ("\"a\u{1}\"", "Invalid control character at: line 1 column 3 (char 2)"),
+        ] {
+            assert_eq!(loads_plain(text).unwrap_err(), LoadError::Decode(expected.into()));
+            assert_eq!(loads(text).unwrap_err(), LoadError::Invalid);
+        }
+    }
+
+    #[test]
+    fn plain_maps_replace_duplicate_values_without_reordering_keys() {
+        for text in [r#"{"a":1,"b":2,"a":3}"#, r#"{"a":1,"b":2,"\u0061":3}"#] {
+            let value = loads_plain(text).unwrap();
+            assert_eq!(pretty_ordered(&value), "{\n  \"a\": 3,\n  \"b\": 2\n}");
+            assert_eq!(
+                loads_record(text).unwrap_err(),
+                LoadError::DuplicateKey(PyStr::from("a"))
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_json_preserves_escaped_control_characters() {
+        let value = loads(r#""\"\\\/\b\t\n\f\r""#).unwrap();
+        assert_eq!(value.as_pystr().unwrap().0, vec![0x22, 0x5c, 0x2f, 8, 9, 10, 12, 13]);
+        assert_eq!(canonical(&value), r#""\"\\/\b\t\n\f\r""#);
     }
 
     #[test]

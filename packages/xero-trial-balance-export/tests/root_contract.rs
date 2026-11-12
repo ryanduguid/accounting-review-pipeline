@@ -6,9 +6,14 @@
 //! fixture. The offline review consumers meet the same fixtures in the joined
 //! conformance crate, tests/joined.
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+#[path = "support/scratch.rs"]
+mod scratch;
+
+use scratch::Scratch;
 use sha2::{Digest, Sha256};
-use std::path::Path;
-use std::process::Command;
+use std::{ffi::OsString, path::Path};
 use xero_trial_balance_export::pycsv;
 use xero_trial_balance_export::pyjson::{self, Json};
 
@@ -100,7 +105,7 @@ fn assert_fixture(fixture: &Path, digest: &str, scenario: &Json) {
     let first = pycsv::Reader::new(source).next().unwrap().unwrap();
     assert_eq!(first, HEADER);
 
-    let result = Command::new(env!("CARGO_BIN_EXE_xero-tb-evaluate"))
+    let result = child_profile::command(env!("CARGO_BIN_EXE_xero-tb-evaluate"))
         .arg(fixture)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -143,5 +148,90 @@ fn exporter_owned_bytes_and_outcomes_are_the_root_contract() {
             .find(|item| item.at("fixture").is_str(name))
             .unwrap();
         assert_fixture(&contract.join("fixtures").join(name), digest, scenario);
+    }
+}
+
+#[test]
+fn evaluator_refuses_wrong_arity_and_undeclared_fixture_paths() {
+    let directory = Scratch::new();
+    let fixtures = Path::new(CONTRACT).join("fixtures");
+    let passing = fixtures.join("passing.csv");
+    let failing = fixtures.join("failing_movement.csv");
+    let undeclared = fixtures.join("not-declared.csv");
+    assert!(!undeclared.exists());
+    let external = directory.0.join("passing.csv");
+    let bytes = std::fs::read(&passing).unwrap();
+    std::fs::write(&external, &bytes).unwrap();
+    let usage = "usage: xero-tb-evaluate FIXTURE.csv\n";
+    let policy = "error: fixture path must name a declared fabricated CSV fixture\n";
+    let cases = [
+        (vec![], usage),
+        (
+            vec![passing.clone().into_os_string(), failing.into_os_string()],
+            usage,
+        ),
+        (vec![undeclared.into_os_string()], policy),
+        (vec![external.clone().into_os_string()], policy),
+    ];
+    let windows_device = cfg!(windows).then_some((
+        vec![OsString::from(r"\\.\NUL")],
+        "error: fixture path must not use a Windows device namespace\n",
+    ));
+    for (arguments, diagnostic) in cases.into_iter().chain(windows_device) {
+        assert_evaluator_refusal(&arguments, &directory.0, diagnostic);
+        assert_eq!(std::fs::read(&external).unwrap(), bytes);
+        assert_eq!(std::fs::read(&passing).unwrap(), bytes);
+        assert_eq!(std::fs::read_dir(&directory.0).unwrap().count(), 1);
+    }
+}
+
+fn assert_evaluator_refusal(arguments: &[OsString], directory: &Path, diagnostic: &str) {
+    let output = child_profile::command(env!("CARGO_BIN_EXE_xero-tb-evaluate"))
+        .args(arguments)
+        .current_dir(directory)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+    assert!(output.stdout.is_empty(), "{arguments:?}");
+    assert_eq!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .replace("\r\n", "\n"),
+        diagnostic,
+        "{arguments:?}",
+    );
+}
+
+#[test]
+fn quick_proof_check_and_argument_diagnostics_preserve_committed_assets() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let assets = ["assets/quick-proof.svg", "assets/quick-proof.md"];
+    let prior = assets.map(|name| std::fs::read(root.join(name)).unwrap());
+    for (argument, code, stdout, stderr) in [
+        ("--check", 0, "quick proof is current\n", ""),
+        ("--help", 0, "usage: xero-tb-proof [--check]\n", ""),
+        ("-h", 0, "usage: xero-tb-proof [--check]\n", ""),
+        ("--invalid", 2, "", "usage: xero-tb-proof [--check]\n"),
+    ] {
+        let output = child_profile::command(env!("CARGO_BIN_EXE_xero-tb-proof"))
+            .arg(argument)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(code));
+        assert_eq!(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            stdout
+        );
+        assert_eq!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            stderr
+        );
+        for (name, bytes) in assets.iter().zip(&prior) {
+            assert_eq!(&std::fs::read(root.join(name)).unwrap(), bytes);
+        }
     }
 }

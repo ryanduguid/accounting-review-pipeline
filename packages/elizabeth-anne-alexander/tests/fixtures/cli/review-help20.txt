@@ -1,0 +1,27 @@
+usage: elizabeth-anne-alexander validate-review
+       [-h]
+       --evidence EVIDENCE
+       --receipt RECEIPT
+       --decision DECISION
+       [--out OUT]
+
+options:
+  -h, --help
+    show this help
+    message and
+    exit
+  --evidence EVIDENCE
+  --receipt RECEIPT
+  --decision DECISION
+    decision JSON
+    under the
+    bundled
+    samples/ data
+    or the working
+    directory's
+    build/
+  --out OUT
+    optional JSON
+    validation
+    output below
+    build/

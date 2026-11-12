@@ -81,7 +81,7 @@ jobs:
           "$RUNNER_TEMP/actionlint" -shellcheck "$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
 
   rust:
-    # These five packages are native Rust crates from 1.0.0.
+    # Collect every authorised native component through the same instrumentation.
     # Each rust-toolchain.toml pins the toolchain. Windows also exercises staged
     # validation writes and evatt's record links, native paths and text streams.
     name: ${{ matrix.package_dir }} / rust (${{ matrix.os }})
@@ -93,7 +93,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate, packages/monthly-close-control-plane]
+        package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate, packages/monthly-close-control-plane, adapters/accounting-excel-toolkit, apps/grant-acquittal-workpapers, apps/australian-accounting-power-bi]
         # Each floor is the crate's measured line coverage on Linux, rounded down
         # (3 November 2026). Raise it with the tests, never lower it to pass.
         include:
@@ -107,6 +107,12 @@ jobs:
             coverage_floor: 71
           - package_dir: packages/monthly-close-control-plane
             coverage_floor: 56
+          - package_dir: adapters/accounting-excel-toolkit
+            coverage_floor: 88
+          - package_dir: apps/grant-acquittal-workpapers
+            coverage_floor: 85
+          - package_dir: apps/australian-accounting-power-bi
+            coverage_floor: 62
     defaults:
       run:
         shell: bash
@@ -131,33 +137,98 @@ jobs:
         run: cargo fmt --check
       - name: lint
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - name: test
-        if: runner.os == 'Windows'
-        run: cargo test --locked --all-features
       - name: add the coverage instrumentation tools
-        if: runner.os == 'Linux'
         run: |
           rustup toolchain install
           rustup component add llvm-tools
       - name: install the pinned coverage tool
-        if: runner.os == 'Linux'
         uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-llvm-cov@0.9.1
           fallback: none
+      - name: Build the independent Power BI producers before instrumentation
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        run: |
+          cargo build --locked --release --manifest-path ../../packages/review-ready-gate/Cargo.toml --bin review-ready --target-dir "$RUNNER_TEMP/pbi-producer-targets"
+          cargo build --locked --release --manifest-path ../../packages/monthly-close-control-plane/Cargo.toml --bin close-control --target-dir "$RUNNER_TEMP/pbi-producer-targets"
+          suffix=
+          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
+          mkdir "$RUNNER_TEMP/pbi-producers"
+          cp "$RUNNER_TEMP/pbi-producer-targets/release/review-ready$suffix" "$RUNNER_TEMP/pbi-producers/"
+          cp "$RUNNER_TEMP/pbi-producer-targets/release/close-control$suffix" "$RUNNER_TEMP/pbi-producers/"
+      - name: prepare coverage for tests and external commands
+        env:
+          PACKAGE_DIR: ${{ matrix.package_dir }}
+        run: |
+          # Every Power BI binary returns normally and flushes its exit profile.
+          if [ "$RUNNER_OS" = Windows ] && [ "$PACKAGE_DIR" != apps/australian-accounting-power-bi ]; then
+            # ExitProcess bypasses LLVM's exit handler. Continuous counters also
+            # preserve executed probe requests if a harness must terminate one.
+            if [ "${CARGO_ENCODED_RUSTFLAGS+x}" ]; then
+              flags="$CARGO_ENCODED_RUSTFLAGS"
+              [ -z "$flags" ] || flags+=$'\x1f'
+              export CARGO_ENCODED_RUSTFLAGS="${flags}-Cllvm-args=-runtime-counter-relocation"
+            else
+              export RUSTFLAGS="${RUSTFLAGS:-} -Cllvm-args=-runtime-counter-relocation"
+            fi
+          fi
+          cargo llvm-cov show-env --sh > "$RUNNER_TEMP/coverage-env.sh"
+          source "$RUNNER_TEMP/coverage-env.sh"
+          if [ "$RUNNER_OS" = Windows ] && [ "$PACKAGE_DIR" != apps/australian-accounting-power-bi ]; then
+            if [ "${CARGO_ENCODED_RUSTFLAGS+x}" ]; then
+              printf 'export CARGO_ENCODED_RUSTFLAGS=%q\n' "$CARGO_ENCODED_RUSTFLAGS" >> "$RUNNER_TEMP/coverage-env.sh"
+            else
+              printf 'export RUSTFLAGS=%q\n' "$RUSTFLAGS" >> "$RUNNER_TEMP/coverage-env.sh"
+            fi
+            LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE//\%20m/%m}"
+            export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE%.profraw}%c.profraw"
+            printf 'export LLVM_PROFILE_FILE=%q\n' "$LLVM_PROFILE_FILE" >> "$RUNNER_TEMP/coverage-env.sh"
+          fi
+          printf 'export ARP_CHILD_LLVM_PROFILE_FILE=%q\n' "$LLVM_PROFILE_FILE" >> "$RUNNER_TEMP/coverage-env.sh"
+          cargo llvm-cov clean --workspace
       - name: test with line coverage
-        if: runner.os == 'Linux'
-        run: cargo llvm-cov --locked --all-features --fail-under-lines ${{ matrix.coverage_floor }}
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          # Passing harnesses return normally; mapped counters overwhelm hot loops.
+          export ARP_CHILD_LLVM_PROFILE_FILE="$LLVM_PROFILE_FILE"
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo test --locked --all-features
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo test --locked --all-features --release
       - name: Check evatt against its network crate and socket denylist
         if: matrix.package_dir == 'packages/evatt'
-        run: cargo test --locked --test no_network
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          cargo test --locked --test no_network
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane'
+        if: matrix.package_dir == 'packages/elizabeth-anne-alexander' || matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane' || matrix.package_dir == 'adapters/accounting-excel-toolkit' || matrix.package_dir == 'apps/australian-accounting-power-bi'
         with:
           python-version: '3.15'
+      - name: Compare the ledger gate with the released Python baseline
+        if: matrix.package_dir == 'packages/elizabeth-anne-alexander'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          temp_root="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
+          baseline="$temp_root/ledger-gate-python-baseline"
+          mkdir -p "$baseline/elizabeth_anne_alexander"
+          # The driver imports this package from the archived source's parent.
+          git -C "$GITHUB_WORKSPACE" archive c6e932d2439623ec26f851379620f9fe057020ba:packages/elizabeth-anne-alexander/elizabeth_anne_alexander | tar -xf - -C "$baseline/elizabeth_anne_alexander"
+          cargo build --locked --features differential --bins --examples
+          suffix=
+          if [ "$RUNNER_OS" = Windows ]; then
+            suffix=.exe
+            # The embedded bundle uses the executable's drive; materialise the
+            # oracle's per-case bundles on that drive too.
+            TEMP="$(cygpath -w "$temp_root")"
+            export TEMP
+            export TMP="$TEMP"
+          fi
+          python tests/differential/differential.py --python-pkg "$baseline" --binary "$PWD/target/debug/elizabeth-anne-alexander$suffix" --cases 1000 --seed 20261011
+          # This streaming oracle returns normally; flush once without mapped counters.
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" python tests/differential/decimal_differential.py "$PWD/target/debug/examples/decimal_oracle$suffix"
       - name: Compare the exporter with the pinned Python baseline
         if: matrix.package_dir == 'packages/xero-trial-balance-export'
         run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
           temp_root="$RUNNER_TEMP"
           if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
           baseline="$temp_root/xero-python-baseline"
@@ -175,31 +246,112 @@ jobs:
       - name: Compare the readiness gate with the frozen Python baseline
         if: matrix.package_dir == 'packages/review-ready-gate'
         run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
           temp_root="$RUNNER_TEMP"
           if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
           baseline="$temp_root/review-ready-python-baseline"
           mkdir -p "$baseline"
           git -C "$GITHUB_WORKSPACE" archive 8061079d0b4206d064c54751aa047af8588fa265:packages/review-ready-gate | tar -xf - -C "$baseline"
           cargo build --locked --features probe --bins
-          cargo run --locked --features probe --bin review-ready-differential -- "$(command -v python)" "$baseline" 1
+          # The comparison and its probe return normally and flush coverage on exit.
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --bin review-ready-differential -- "$(command -v python)" "$baseline" 1
       - name: Compare Monthly Close Controls with the frozen Python baseline
         if: matrix.package_dir == 'packages/monthly-close-control-plane'
         run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
           temp_root="$RUNNER_TEMP"
           if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
           baseline="$temp_root/monthly-close-python-baseline"
           mkdir -p "$baseline"
           git -C "$GITHUB_WORKSPACE" archive 2523f118bd9f1a5bda6e3540e06647a03371fe04:packages/monthly-close-control-plane | tar -xf - -C "$baseline"
           cargo build --locked --features probe --bins
-          cargo run --locked --features probe --bin close-control-differential -- "$(command -v python)" "$baseline" 1
+          # This normally returning comparison uses exit-time flushing: continuous
+          # writes exceed the oracle deadline on its full Windows corpus.
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --bin close-control-differential -- "$(command -v python)" "$baseline" 1
+      - name: Check out the frozen Python Excel tools
+        if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: e06647062efaf4410f7d4a414a0559ca51147267
+          path: .encoding-oracle
+          sparse-checkout: adapters/accounting-excel-toolkit
+          persist-credentials: false
+      - name: Compare native Excel tools with their frozen Python implementations
+        if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          baseline="$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit"
+          cargo build --locked --bins --examples
+          oracle_python="$(python -c 'import sys; print(sys.executable)')"
+          suffix=
+          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
+          # Comparison parents return normally; their child CLIs keep the original
+          # continuous pattern so abrupt exits still retain executed lines.
+          export ARP_CHILD_LLVM_PROFILE_FILE="$LLVM_PROFILE_FILE"
+          export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}"
+          for seed in 16 17; do
+            "target/debug/examples/encoding-differential$suffix" "$oracle_python" "$baseline/tools/check_vba_encoding.py" "target/debug/check-vba-encoding$suffix" "$seed"
+            "target/debug/examples/transactions-differential$suffix" "$oracle_python" "$baseline/tools/xero_account_transactions.py" "target/debug/xero-account-transactions$suffix" "$seed"
+            "target/debug/examples/aged-differential$suffix" "$oracle_python" "$baseline/tools" target/debug "$seed"
+          done
       - name: build
         env:
           ACCOUNTING_REVIEW_SOURCE_COMMIT: ${{ github.sha }}
-        run: cargo build --locked --release
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          cargo build --locked --release
+      - name: Check out the frozen pre-port Power BI workflow
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: d48b9fe681f3a3ae278a90c43cfdce9b863589d4
+          path: .workflow-oracle
+          persist-credentials: false
+      - name: Compare Power BI with its frozen Python workflow
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          cargo build --locked --all-features --bins
+          oracle_python="$(python -c 'import sys; print(sys.executable)')"
+          oracle="$GITHUB_WORKSPACE/.workflow-oracle/apps/australian-accounting-power-bi"
+          producers="$RUNNER_TEMP/pbi-producers"
+          suffix=
+          if [ "$RUNNER_OS" = Windows ]; then
+            suffix=.exe
+            oracle="$(cygpath -w "$oracle")"
+            producers="$(cygpath -w "$producers")"
+          fi
+          for seed in 16 17; do
+            "target/debug/workflow-differential$suffix" --python "$oracle_python" --oracle "$oracle" --bin-dir "$producers" --seed "$seed"
+          done
+      - name: Regenerate the Power BI fixtures and require the committed bytes
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          cargo run --locked --release --bin generate-fixtures
+          git diff --exit-code -- samples
+      - name: Check the tracked VBA source
+        if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          git ls-files -z -- ':(icase,glob)vba/**/*.bas' ':(icase,glob)vba/**/*.cls' ':(icase,glob)vba/**/*.frm' > "$RUNNER_TEMP/vba-sources"
+          mapfile -d '' -t sources < "$RUNNER_TEMP/vba-sources"
+          test "${#sources[@]}" -gt 0
+          cargo run --locked --release --bin check-vba-encoding -- "${sources[@]}"
+      - name: Run the bundled grant example from the release build
+        if: matrix.package_dir == 'apps/grant-acquittal-workpapers'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          status=0
+          target/release/grant-workpaper --input examples/two-grants --output "$RUNNER_TEMP/grant-example" || status=$?
+          test "$status" -eq 2
+          test -f "$RUNNER_TEMP/grant-example/workpaper.json"
       - name: smoke the release binary from an empty directory
+        if: startsWith(matrix.package_dir, 'packages/')
         env:
           ACCOUNTING_REVIEW_SOURCE_COMMIT: ${{ github.sha }}
         run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
           binary="$PWD/target/release"
           component="${PWD##*/}"
           smoke="$PWD/../../.github/ci/$component/smoke.sh"
@@ -207,6 +359,182 @@ jobs:
           work="$(mktemp -d)"
           cd "$work"
           PATH="$binary:$PATH" bash "$smoke"
+
+      - name: report both instrumented build profiles
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          cargo llvm-cov report --lcov --output-path coverage-debug.lcov
+          cargo llvm-cov report --json --output-path coverage-debug.json
+          cargo llvm-cov report --release --lcov --output-path coverage-release.lcov
+          cargo llvm-cov report --release --json --output-path coverage-release.json
+          if [ "$RUNNER_OS" = Linux ]; then
+            cargo llvm-cov report --summary-only --fail-under-lines ${{ matrix.coverage_floor }}
+          fi
+      - name: normalise report paths within the repository
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          for profile in ("debug", "release"):
+              source = Path(f"coverage-{profile}.lcov")
+              lines = source.read_text(encoding="utf-8").splitlines()
+              if not any(line.startswith("SF:") for line in lines):
+                  raise SystemExit(f"No source files in {source}")
+              for index, line in enumerate(lines):
+                  if line.startswith("SF:"):
+                      path = Path(line[3:])
+                      if not path.is_absolute():
+                          raise SystemExit(f"Non-absolute coverage path: {path}")
+                      lines[index] = "SF:" + path.resolve().relative_to(root).as_posix()
+              name = f"coverage-{Path.cwd().name}-{os.environ['RUNNER_OS']}-{profile}"
+              Path(name + ".lcov").write_text("\n".join(lines) + "\n", encoding="utf-8")
+              Path(f"coverage-{profile}.json").replace(name + ".json")
+              source.unlink()
+      - name: retain both coverage profiles
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-packages-${{ strategy.job-index }}
+          path: |
+            ${{ matrix.package_dir }}/coverage-*.lcov
+            ${{ matrix.package_dir }}/coverage-*.json
+          if-no-files-found: error
+          retention-days: 1
+
+  upload-coverage:
+    needs: [rust, python-coverage, windows-workspace]
+    if: github.repository == 'ryanduguid/accounting-review-pipeline' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-*
+          path: coverage
+          merge-multiple: true
+      - name: require every current component and platform report
+        id: reports
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          components = ("elizabeth-anne-alexander", "evatt", "xero-trial-balance-export", "review-ready-gate", "monthly-close-control-plane", "accounting-excel-toolkit", "grant-acquittal-workpapers", "australian-accounting-power-bi")
+          expected = {f"coverage-{component}-{platform}-{profile}.lcov"
+                      for component in components for platform in ("Linux", "Windows")
+                      for profile in ("debug", "release")}
+          expected.update(f"coverage-python-{platform}.xml" for platform in ("Linux", "Windows"))
+          actual = {path.name for path in Path("coverage").iterdir() if path.suffix in (".lcov", ".xml")}
+          if actual != expected:
+              raise SystemExit(f"Coverage report inventory differs: missing={sorted(expected - actual)}, extra={sorted(actual - expected)}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("files=" + ",".join("coverage/" + name for name in sorted(expected)) + "\n")
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: ${{ steps.reports.outputs.files }}
+          disable_search: true
+          fail_ci_if_error: true
+
+  python-coverage:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15"
+          allow-prereleases: true
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.5"
+          enable-cache: true
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+          prune-cache: true
+      - name: prepare Python coverage
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+
+          root = Path.cwd()
+          output = Path(os.environ["RUNNER_TEMP"]) / "python-coverage"
+          output.mkdir(parents=True)
+          sources = (".github/ci/check_ca_bundle.py",
+                     ".github/ci/check_gates.py",
+                     ".github/ci/select_paths.py",
+                     "apps/grant-acquittal-workpapers/setup_utility.py",
+                     "packages/monthly-close-control-plane/examples/utility_results.py",
+                     "packages/monthly-close-control-plane/examples/utility_workflows.py",
+                     "adapters/accounting-excel-toolkit/tools/benchmark_aged_review.py",
+                     "apps/grant-acquittal-workpapers/tools/gen_unicode_tables.py",
+                     "packages/elizabeth-anne-alexander/tools/gen_unicode_tables.py",
+                     "packages/evatt/tools/gen_unicode_tables.py",
+                     "packages/evatt/tools/gen_patterns.py",
+                     "packages/evatt/tools/gen_unicode_cases.py",
+                     "packages/evatt/tools/record_python_tests.py",)
+          tracked = subprocess.check_output(["git", "ls-files", "--", "*.py"], text=True).splitlines()
+          maintained = {name for name in tracked if "tests" not in Path(name).parts}
+          if set(sources) != maintained:
+              raise SystemExit("Maintained Python source inventory changed; update coverage inputs")
+          if not all((root / name).is_file() for name in sources):
+              raise SystemExit("A maintained Python source is missing")
+          config = output / "coverage.ini"
+          config.write_text("[run]\nparallel = true\nrelative_files = true\npatch = subprocess\ninclude =\n"
+                            + "".join("    " + str(root / name) + "\n" for name in sources), encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as environment:
+              environment.write(f"COVERAGE_RCFILE={config}\nCOVERAGE_FILE={output / '.coverage'}\n")
+      - name: run the full Python suite with coverage
+        run: uv run --locked --group dev coverage run -m pytest
+      - name: run frozen Unicode generators with their supported interpreter
+        run: uv run --no-project --python 3.14.1 --with coverage==7.16.2 python -m coverage run -m unittest tests.test_unicode_generators -v
+      - name: retain every maintained Python source in the report
+        shell: bash
+        run: |
+          uv run --locked --group dev coverage combine --keep "$RUNNER_TEMP/python-coverage"
+          uv run --locked --group dev python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import coverage
+
+          root = Path.cwd()
+          collector = coverage.Coverage(config_file=os.environ["COVERAGE_RCFILE"])
+          collector.load()
+          owned = {str(Path(name).relative_to(root))
+                   for name in collector.get_option("run:include")}
+          collector.get_data().touch_files(sorted(owned))
+          collector.save()
+          name = "coverage-python-" + os.environ["RUNNER_OS"]
+          collector.json_report(outfile=name + ".json")
+          collector.xml_report(outfile=name + ".xml")
+          report = json.loads(Path(name + ".json").read_text(encoding="utf-8"))
+          if set(report["files"]) != owned:
+              raise SystemExit("Python coverage inventory differs from the maintained sources")
+          if report["totals"]["excluded_lines"]:
+              raise SystemExit("Python coverage must retain every executable statement")
+          print(json.dumps(report["totals"], sort_keys=True))
+          PY
+      - name: retain Python coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-python-${{ runner.os }}
+          path: coverage-python-*
+          if-no-files-found: error
+          retention-days: 1
 
   windows-workspace:
     permissions:
@@ -260,14 +588,83 @@ jobs:
           python = Path(".venv/Scripts/python.exe").resolve()
           for component in ("adapters/accounting-excel-toolkit", "apps/grant-acquittal-workpapers"):
               subprocess.run([str(python), "-m", "mypy"], cwd=component, check=True)
+      - name: prepare Python coverage
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+
+          root = Path.cwd()
+          output = Path(os.environ["RUNNER_TEMP"]) / "python-coverage"
+          output.mkdir(parents=True)
+          sources = (".github/ci/check_ca_bundle.py",
+                     ".github/ci/check_gates.py",
+                     ".github/ci/select_paths.py",
+                     "apps/grant-acquittal-workpapers/setup_utility.py",
+                     "packages/monthly-close-control-plane/examples/utility_results.py",
+                     "packages/monthly-close-control-plane/examples/utility_workflows.py",
+                     "adapters/accounting-excel-toolkit/tools/benchmark_aged_review.py",
+                     "apps/grant-acquittal-workpapers/tools/gen_unicode_tables.py",
+                     "packages/elizabeth-anne-alexander/tools/gen_unicode_tables.py",
+                     "packages/evatt/tools/gen_unicode_tables.py",
+                     "packages/evatt/tools/gen_patterns.py",
+                     "packages/evatt/tools/gen_unicode_cases.py",
+                     "packages/evatt/tools/record_python_tests.py",)
+          tracked = subprocess.check_output(["git", "ls-files", "--", "*.py"], text=True).splitlines()
+          maintained = {name for name in tracked if "tests" not in Path(name).parts}
+          if set(sources) != maintained:
+              raise SystemExit("Maintained Python source inventory changed; update coverage inputs")
+          if not all((root / name).is_file() for name in sources):
+              raise SystemExit("A maintained Python source is missing")
+          config = output / "coverage.ini"
+          config.write_text("[run]\nparallel = true\nrelative_files = true\npatch = subprocess\ninclude =\n"
+                            + "".join("    " + str(root / name) + "\n" for name in sources), encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as environment:
+              environment.write(f"COVERAGE_RCFILE={config}\nCOVERAGE_FILE={output / '.coverage'}\n")
       - name: run the full suite
-        run: uv run --locked --group dev pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+        run: uv run --locked --group dev coverage run -m pytest  # NOSONAR: uv builds only this workspace's packages; dependencies install from wheels
+      - name: retain every maintained Python source in the report
+        shell: bash
+        run: |
+          uv run --locked --group dev coverage combine --keep "$RUNNER_TEMP/python-coverage"
+          uv run --locked --group dev python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import coverage
+
+          root = Path.cwd()
+          collector = coverage.Coverage(config_file=os.environ["COVERAGE_RCFILE"])
+          collector.load()
+          owned = {str(Path(name).relative_to(root))
+                   for name in collector.get_option("run:include")}
+          collector.get_data().touch_files(sorted(owned))
+          collector.save()
+          name = "coverage-python-" + os.environ["RUNNER_OS"]
+          collector.json_report(outfile=name + ".json")
+          collector.xml_report(outfile=name + ".xml")
+          report = json.loads(Path(name + ".json").read_text(encoding="utf-8"))
+          if set(report["files"]) != owned:
+              raise SystemExit("Python coverage inventory differs from the maintained sources")
+          if report["totals"]["excluded_lines"]:
+              raise SystemExit("Python coverage must retain every executable statement")
+          print(json.dumps(report["totals"], sort_keys=True))
+          PY
+      - name: retain Python coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-python-${{ runner.os }}
+          path: coverage-python-*
+          if-no-files-found: error
+          retention-days: 1
       - name: run the joined conformance crate
         working-directory: tests/joined-conformance
         run: cargo test --locked
 
   pipeline-gates:
-    needs: [dependency-audit, rust, windows-workspace]
+    needs: [dependency-audit, rust, python-coverage, windows-workspace, upload-coverage]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -281,11 +678,14 @@ jobs:
         shell: python
         env:
           RESULTS: ${{ toJSON(needs) }}
+          COVERAGE_REQUIRED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           import json, os
           results = json.loads(os.environ["RESULTS"])
           expected = "success"
-          failed = [name for name, value in results.items() if value["result"] != expected]
+          failed = [name for name, value in results.items() if value["result"] != expected
+                    and not (name == "upload-coverage" and value["result"] == "skipped"
+                             and os.environ["COVERAGE_REQUIRED"] == "false")]
           if failed:
               raise SystemExit("Checks did not complete as expected: " + ", ".join(failed))
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

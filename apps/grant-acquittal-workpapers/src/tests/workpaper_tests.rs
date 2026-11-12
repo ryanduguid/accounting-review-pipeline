@@ -18,6 +18,221 @@ fn assert_refused<T: std::fmt::Debug>(outcome: workpaper::Result<T>, needle: &st
     assert!(message.contains(needle), "{message:?} lacks {needle:?}");
 }
 
+fn assert_refused_before_publication(fixture: &Fixture, expected: &str) {
+    let evidence: Vec<_> = std::fs::read_dir(fixture.source())
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    assert_eq!(refused(fixture.review()), expected);
+    assert_eq!(
+        fixture.main("refused-input"),
+        (1, format!("grant-workpaper: {expected}\n"))
+    );
+    assert!(!fixture.root().join("refused-input").exists());
+    assert!(fixture.temporary_directories().is_empty());
+    for (path, bytes) in evidence {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn agreement_header_refusals_preserve_source_and_publish_nothing() {
+    for (field, value, message) in [
+        (
+            "currency",
+            Json::str("USD"),
+            "Version 1 requires one named entity, AUD and explicitly GST-inclusive amounts",
+        ),
+        (
+            "amount_basis",
+            Json::str("GST-exclusive"),
+            "Version 1 requires one named entity, AUD and explicitly GST-inclusive amounts",
+        ),
+        ("ledger_start", Json::str("9999-12-31"), "Ledger period is reversed"),
+        (
+            "agreements",
+            Json::Array(Vec::new()),
+            "Supply ledger evidence and at least one reviewed agreement",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        let mut header = fixture.agreements();
+        set(&mut header, field, value);
+        fixture.save_agreements(&header);
+        assert_refused_before_publication(&fixture, message);
+    }
+    let fixture = Fixture::new();
+    fixture.edit_csv("ledger.csv", Vec::clear);
+    assert_refused_before_publication(&fixture, "Supply ledger evidence and at least one reviewed agreement");
+}
+
+#[test]
+fn incomplete_duplicate_and_reversed_agreements_fail_before_publication() {
+    for duplicate in [false, true] {
+        let fixture = Fixture::new();
+        let mut header = fixture.agreements();
+        let Json::Array(agreements) = field_mut(&mut header, "agreements") else {
+            panic!("agreements")
+        };
+        if duplicate {
+            agreements.push(agreements[0].clone());
+        } else {
+            let Json::Object(fields) = &mut agreements[0] else {
+                panic!("agreement")
+            };
+            fields.retain(|(key, _)| !key.is("agreement_evidence"));
+        }
+        fixture.save_agreements(&header);
+        assert_refused_before_publication(&fixture, "Agreement IDs must be unique with complete fields");
+    }
+    for (field, value, message) in [
+        (
+            "start",
+            Json::str("9999-12-31"),
+            "Agreement dates and reviewed summary evidence are required",
+        ),
+        (
+            "budget",
+            Json::Object(Vec::new()),
+            "Supply the reviewed budget-line mapping",
+        ),
+        (
+            "budget",
+            Json::Array(Vec::new()),
+            "Supply the reviewed budget-line mapping",
+        ),
+        (
+            "opening_cash",
+            Json::Null,
+            "Expected a non-negative decimal string with at most 2 places: None",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fixture.edit_agreement("G-A", &[(field, value)]);
+        assert_refused_before_publication(&fixture, message);
+    }
+}
+
+#[test]
+fn ledger_and_allocation_refusals_precede_publication() {
+    for (file, field, value, message) in [
+        (
+            "ledger.csv",
+            "date",
+            "0001-01-01",
+            "Ledger rows must fall inside the declared ledger period",
+        ),
+        (
+            "ledger.csv",
+            "amount",
+            "0",
+            "Source expenses must be positive; cash paid cannot exceed the expense",
+        ),
+        (
+            "ledger.csv",
+            "cash_paid",
+            "999999",
+            "Source expenses must be positive; cash paid cannot exceed the expense",
+        ),
+        (
+            "allocations.csv",
+            "ledger_id",
+            "unknown-source",
+            "Allocation references an unknown ledger row or grant",
+        ),
+        (
+            "allocations.csv",
+            "grant_id",
+            "unknown-grant",
+            "Allocation references an unknown ledger row or grant",
+        ),
+        (
+            "allocations.csv",
+            "amount",
+            "0",
+            "Allocation expense must be positive and cover its cash allocation",
+        ),
+        (
+            "allocations.csv",
+            "cash_allocated",
+            "999999",
+            "Allocation expense must be positive and cover its cash allocation",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fixture.edit_csv(file, |rows| put(&mut rows[0], field, value));
+        assert_refused_before_publication(&fixture, message);
+    }
+}
+
+#[test]
+fn date_money_and_quoted_csv_contracts_are_exact() {
+    let whole = workpaper::money("1").unwrap();
+    let cents = workpaper::money("1.00").unwrap();
+    assert_eq!(whole, cents);
+    assert_eq!((whole.to_string(), cents.to_string()), ("1".into(), "1.00".into()));
+    for (input, message) in [
+        ("20260630", "Use YYYY-MM-DD dates"),
+        ("202x-06-30", "Invalid isoformat string: '202x-06-30'"),
+        ("2026-W01X1", "Invalid isoformat string: '2026-W01X1'"),
+        ("2026-02-29", "day 29 must be in range 1..28 for month 2 in year 2026"),
+    ] {
+        assert_eq!(refused(workpaper::iso(input)), message);
+    }
+    for (input, kind) in [
+        ("null", "None"),
+        ("true", "bool"),
+        ("1", "int"),
+        ("1.5", "float"),
+        ("[]", "list"),
+        ("{}", "dict"),
+    ] {
+        let value = pyjson::loads_bytes(input.as_bytes()).unwrap();
+        assert_eq!(
+            refused(workpaper::iso_json(&value)),
+            format!("fromisoformat() argument must be str, not {kind}")
+        );
+    }
+    let parsed = workpaper::rows(b"id,evidence\nx,\"a\"\"b\"\n", "id evidence", "id").unwrap();
+    assert_eq!(
+        parsed,
+        vec![vec![("id".into(), "x".into()), ("evidence".into(), "a\"b".into())]]
+    );
+}
+
+#[test]
+fn csv_headers_width_and_field_size_are_checked_without_truncation() {
+    for (input, expected) in [
+        ("id,wrong\nx,evidence\n", "Expected exact CSV headings: id evidence"),
+        ("id,evidence\nx\n", "Every CSV row must have the exact field count"),
+        (
+            "id,evidence\nx,proof,extra\n",
+            "Every CSV row must have the exact field count",
+        ),
+    ] {
+        assert_eq!(
+            refused(workpaper::rows(input.as_bytes(), "id evidence", "id")),
+            expected
+        );
+    }
+    let evidence = "a".repeat(131_072);
+    let accepted = format!("id,evidence\nx,{evidence}\n");
+    let parsed = workpaper::rows(accepted.as_bytes(), "id evidence", "id").unwrap();
+    assert_eq!(get(&parsed[0], "evidence"), evidence);
+    let refused_input = format!("id,evidence\nx,{evidence}a\n");
+    assert_eq!(
+        refused(workpaper::rows(refused_input.as_bytes(), "id evidence", "id")),
+        "field larger than field limit (131072)"
+    );
+    let fixture = Fixture::new();
+    std::fs::write(fixture.source().join("agreements.json"), b"[1 2]").unwrap();
+    assert_refused_before_publication(&fixture, "Expecting ',' delimiter: line 1 column 4 (char 3)");
+}
+
 #[test]
 fn test_independent_totals_and_cash_are_distinct() {
     let fixture = Fixture::new();
@@ -47,6 +262,132 @@ fn test_independent_totals_and_cash_are_distinct() {
             "UNAPPROVED_ALLOCATION"
         ]
     );
+}
+
+#[test]
+fn inline_and_abbreviated_cli_paths_publish_the_same_reviewed_pack() {
+    for arguments in [["--input=inputs", "--output=out"], ["--in=inputs", "--out=out"]] {
+        let fixture = Fixture::new();
+        let baseline = fixture.review().unwrap();
+        fixture.write(&baseline, "expected-pack").unwrap();
+        let args = arguments.map(String::from).to_vec();
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let code = crate::cli::main("grant-workpaper", &args, fixture.root(), &mut stdout, &mut stderr);
+        assert_eq!(code, 2);
+        assert_eq!(
+            String::from_utf8(stdout).unwrap(),
+            format!("grant-workpaper: REVIEW; {} review items\n", findings(&baseline).len())
+        );
+        assert!(stderr.is_empty());
+        let mut expected_files: Vec<_> = std::fs::read_dir(fixture.root().join("expected-pack"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        let mut actual_files: Vec<_> = std::fs::read_dir(fixture.root().join("out"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        expected_files.sort();
+        actual_files.sort();
+        assert_eq!(actual_files, expected_files);
+        for file in expected_files {
+            assert_eq!(
+                std::fs::read(fixture.root().join("out").join(&file)).unwrap(),
+                std::fs::read(fixture.root().join("expected-pack").join(file)).unwrap()
+            );
+        }
+        assert!(fixture.temporary_directories().is_empty());
+    }
+}
+
+#[test]
+fn split_receipts_preserve_funding_and_report_only_the_missing_evidence() {
+    let fixture = Fixture::new();
+    let mut expected_findings = findings(&fixture.review().unwrap());
+    let agreements = fixture.agreements();
+    let start = text(agreements.at("ledger_start"));
+    let end = text(agreements.at("ledger_end"));
+    fixture.edit_csv("receipts.csv", |rows| {
+        let mut final_receipt = rows[0].clone();
+        put(&mut rows[0], "amount", "4999.99");
+        put(&mut rows[0], "date", &start);
+        put(&mut final_receipt, "receipt_id", "R1-final-cent");
+        put(&mut final_receipt, "amount", "0.01");
+        put(&mut final_receipt, "date", &end);
+        put(&mut final_receipt, "evidence", "");
+        rows.push(final_receipt);
+    });
+    let result = fixture.review().unwrap();
+    let movement = rows(&result, "funding_movements")
+        .iter()
+        .find(|row| row.at("grant_id").is_str("G-A"))
+        .unwrap();
+    assert!(movement.at("funding_received").is_str("5000.00"));
+    assert!(movement.at("closing_cash_allocation").is_str("14220.00"));
+    assert!(movement.at("unspent_funding_workpaper").is_str("9100.00"));
+    expected_findings.push(("MISSING_RECEIPT_EVIDENCE".into(), "R1-final-cent".into()));
+    expected_findings.sort();
+    let mut actual_findings = findings(&result);
+    actual_findings.sort();
+    assert_eq!(actual_findings, expected_findings);
+    assert!(result.at("status").is_str("REVIEW"));
+}
+
+#[test]
+fn invalid_receipt_grants_dates_and_zero_amounts_fail_before_publication() {
+    for (field, value, diagnostic) in [
+        (
+            "grant_id",
+            "undeclared-grant",
+            "Funding receipt must reference a declared grant and ledger period",
+        ),
+        (
+            "date",
+            "2026-06-30",
+            "Funding receipt must reference a declared grant and ledger period",
+        ),
+        (
+            "date",
+            "2027-07-01",
+            "Funding receipt must reference a declared grant and ledger period",
+        ),
+        ("amount", "0", "Funding receipts must be positive"),
+    ] {
+        let fixture = Fixture::new();
+        fixture.edit_csv("receipts.csv", |rows| put(&mut rows[0], field, value));
+        let (status, stderr) = fixture.main("refused-receipt");
+        assert_eq!(status, 1, "{field}={value}: {stderr}");
+        assert!(stderr.contains(diagnostic), "{stderr}");
+        assert!(!fixture.root().join("refused-receipt").exists());
+    }
+}
+
+#[test]
+fn encoded_agreements_preserve_financial_results_and_refuse_malformed_bytes() {
+    let fixture = Fixture::new();
+    let baseline = fixture.review().unwrap();
+    let path = fixture.source().join("agreements.json");
+    let original = std::fs::read_to_string(&path).unwrap();
+    let mut encoded = vec![0xff, 0xfe];
+    encoded.extend(original.encode_utf16().flat_map(u16::to_le_bytes));
+    std::fs::write(&path, encoded).unwrap();
+    let result = fixture.review().unwrap();
+    assert!(result.at("ledger_total").is_str("6500"));
+    assert!(result.at("allocated_total").is_str("6300"));
+    assert_eq!(findings(&result), findings(&baseline));
+    for (bytes, message) in [
+        (
+            &b"\xff\xfe\x00"[..],
+            "'utf-16' codec can't decode byte 0x00 in position 2: truncated data",
+        ),
+        (&b"[]"[..], "Unexpected agreement schema"),
+    ] {
+        std::fs::write(&path, bytes).unwrap();
+        let (status, stderr) = fixture.main("refused");
+        assert_eq!(status, 1);
+        assert!(stderr.contains(message), "{stderr}");
+        assert!(!fixture.root().join("refused").exists());
+    }
 }
 
 #[test]
@@ -141,6 +482,62 @@ fn test_clean_evidence_can_reconcile_without_approving_acquittal() {
     let result = fixture.review().unwrap();
     assert!(result.at("status").is_str("RECONCILED"));
     assert!(text(result.at("scope")).contains("No grant eligibility"));
+    let args = ["--input", SOURCE, "--output", "nested/new/output"]
+        .map(String::from)
+        .to_vec();
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    assert_eq!(
+        crate::cli::main("grant-workpaper", &args, fixture.root(), &mut stdout, &mut stderr),
+        0
+    );
+    assert_eq!(stdout, b"grant-workpaper: RECONCILED; 0 review items\n");
+    assert!(stderr.is_empty());
+    let output = fixture.root().join("nested/new/output");
+    assert_reconciled_example_pack(&output);
+}
+
+fn assert_reconciled_example_pack(output: &Path) {
+    let mut files = std::fs::read_dir(output)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    files.sort();
+    assert_eq!(
+        files,
+        [
+            "allocation_evidence.csv",
+            "budget_lines.csv",
+            "contributions.csv",
+            "findings.csv",
+            "funding_movements.csv",
+            "ledger_tieout.csv",
+            "workpaper.json",
+            "workpaper.md",
+        ]
+    );
+    let written = pyjson::loads_bytes(&std::fs::read(output.join("workpaper.json")).unwrap()).unwrap();
+    assert!(written.at("ledger_total").is_str("6500"));
+    assert!(written.at("allocated_total").is_str("6500"));
+    assert!(written.at("unallocated_total").is_str("0"));
+    assert_eq!(
+        std::fs::read_to_string(output.join("findings.csv"))
+            .unwrap()
+            .lines()
+            .collect::<Vec<_>>(),
+        ["code,reference"]
+    );
+    assert!(
+        std::fs::read_to_string(output.join("workpaper.md"))
+            .unwrap()
+            .contains("No differences found in the supplied evidence.")
+    );
+    assert_eq!(
+        std::fs::read_dir(output.parent().unwrap())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>(),
+        [std::ffi::OsString::from("output")]
+    );
 }
 
 #[test]
@@ -290,6 +687,71 @@ fn test_csv_evidence_and_ids_refuse_invisible_controls() {
             std::fs::write(fixture.source().join(name), &original).unwrap();
         }
     }
+}
+
+#[test]
+fn quoted_nonfinal_csv_fields_preserve_the_derived_financial_pack() {
+    let fixture = Fixture::new();
+    let mut expected = fixture.review().unwrap();
+    let path = fixture.source().join("ledger.csv");
+    let original = std::fs::read_to_string(&path).unwrap();
+    let changed = original.replacen("Shared programme invoice", "\"Shared, programme invoice\"", 1);
+    assert_ne!(changed, original);
+    std::fs::write(path, changed).unwrap();
+    let result = fixture.review().unwrap();
+    assert_ne!(
+        pyjson::dumps_indent2(expected.at("source_sha256")),
+        pyjson::dumps_indent2(result.at("source_sha256"))
+    );
+    set(&mut expected, "source_sha256", result.at("source_sha256").clone());
+    assert_eq!(pyjson::dumps_indent2(&result), pyjson::dumps_indent2(&expected));
+    fixture.write(&result, "quoted-csv").unwrap();
+    let saved = std::fs::read(fixture.root().join("quoted-csv/workpaper.json")).unwrap();
+    assert_eq!(
+        pyjson::dumps_indent2(&pyjson::loads_bytes(&saved).unwrap()),
+        pyjson::dumps_indent2(&result)
+    );
+}
+
+#[test]
+fn raw_utf8_entity_is_preserved_and_its_quotes_are_literal_in_markdown() {
+    let fixture = Fixture::new();
+    let mut expected = fixture.review().unwrap();
+    let entity = "\u{800} 한 \u{10000} \"Fabricated\"";
+    let path = fixture.source().join("agreements.json");
+    let original = std::fs::read_to_string(&path).unwrap();
+    let changed = original.replacen("Fabricated Community Association", &entity.replace('"', "\\\""), 1);
+    assert_ne!(changed, original);
+    std::fs::write(path, changed).unwrap();
+    let result = fixture.review().unwrap();
+    assert!(result.at("entity").is_str(entity));
+    set(&mut expected, "entity", Json::str(entity));
+    set(&mut expected, "source_sha256", result.at("source_sha256").clone());
+    assert_eq!(pyjson::dumps_indent2(&result), pyjson::dumps_indent2(&expected));
+    fixture.write(&result, "raw-utf8").unwrap();
+    let saved = std::fs::read(fixture.root().join("raw-utf8/workpaper.json")).unwrap();
+    assert!(pyjson::loads_bytes(&saved).unwrap().at("entity").is_str(entity));
+    let markdown = std::fs::read_to_string(fixture.root().join("raw-utf8/workpaper.md")).unwrap();
+    assert!(
+        markdown.contains("Entity: \u{800} 한 \u{10000} &quot;Fabricated&quot;. Currency: AUD. Basis: GST-inclusive.")
+    );
+}
+
+#[test]
+fn a_regular_file_parent_prevents_publication_without_changing_the_blocker() {
+    let fixture = Fixture::new();
+    let blocker = fixture.root().join("blocker");
+    std::fs::write(&blocker, b"Fabricated output-parent sentinel").unwrap();
+    let arguments = ["--input", SOURCE, "--output", "blocker/out"].map(String::from);
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    let code = crate::cli::main("grant-workpaper", &arguments, fixture.root(), &mut stdout, &mut stderr);
+    assert_eq!(code, 1);
+    assert!(stdout.is_empty());
+    let diagnostic = String::from_utf8(stderr).unwrap();
+    assert!(diagnostic.contains("blocker"), "{diagnostic}");
+    assert_eq!(std::fs::read(blocker).unwrap(), b"Fabricated output-parent sentinel");
+    assert!(!fixture.root().join("blocker/out").exists());
+    assert!(fixture.temporary_directories().is_empty());
 }
 
 #[test]
