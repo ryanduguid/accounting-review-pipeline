@@ -60,6 +60,20 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
+From the next release, a downloaded `close-control` executable runs the demo
+without a checkout:
+
+```bash
+close-control demo --output ~/close-control-demo
+```
+
+It writes the fabricated files from `examples/` to `inputs/` and reviews them
+into `pack/`, with the settings of the source command below, so `pack/` holds
+the same 4 files byte for byte. It exits `2`, as that command does. The output
+must be a new or empty directory outside any version-control checkout;
+anything else is refused with exit `1` and nothing written. Version 1.0.0 does
+not have this command: use the source command below.
+
 The [reviewer quick start](docs/reviewer-quick-start.md) uses fabricated files and
 shows how to retain and verify a saved pack.
 
@@ -291,7 +305,9 @@ the option lists `balance_policy` under `controls_not_run`.
 The native command accepts optional `--gst-mapping` on `review` and
 `workbench`: a local UTF-8 CSV with exactly `AccountID,GSTClass` columns that
 classes each account for GST. Blank fields, a class not listed below, a
-repeated `AccountID` and a mapping with no `gst` account fail with exit code 1.
+repeated `AccountID`, a mapping with no `gst` account, and a mapping that mixes
+`gst` with `gst_collected` or `gst_paid` or has only one of those 2 fail with
+exit code 1.
 The mapping needs a settlements declaration beside it, described below.
 
 | `GSTClass` | Use it for | Counted as |
@@ -304,6 +320,8 @@ The mapping needs a settlements declaration beside it, described below.
 | `bas_excluded` | Movements outside GST: bank, receivables, payables, wages, superannuation, depreciation, loans and equity | Left out |
 | `mixed` | An account that holds taxable and other amounts together | Stops the control when it moves |
 | `gst` | Each account that records GST, whether one account holds GST collected and paid or each has its own | Credits less debits: the net GST recorded |
+| `gst_collected` | Instead of `gst`: each account that records only GST collected | Credits less debits, compared with 1/10 of taxable sales and counted in the net GST |
+| `gst_paid` | Instead of `gst`: each account that records only GST paid | Debits less credits, compared with 1/10 of creditable purchases and taken from the net GST |
 
 For the current period's `Debit` and `Credit` movement, the control expects net
 GST payable of 1/10 of taxable sales less 1/10 of creditable purchases, and
@@ -317,6 +335,17 @@ exception under `gst_reasonableness` with the recorded figure as
 the tolerance applied as `threshold`; its reason gives the sales, purchases and
 GST behind both figures. The exception changes no figure, posts nothing and
 blocks nothing, and the firm traces it, so it drafts no client question.
+
+The net figure cannot see equal shortfalls on both sides: GST collected 100.00
+short and GST paid 100.00 short still net to the expected amount. Where the
+ledger keeps GST collected and GST paid in separate accounts, class them
+`gst_collected` and `gst_paid` instead of `gst`. The control then also compares
+GST collected with 1/10 of taxable sales and GST paid with 1/10 of creditable
+purchases, each with a tolerance of the absolute amount plus the percentage of
+that side's expected GST, and raises a separate `REVIEW` exception for each side
+beyond it, with the same fields as the net one. Where one account holds both
+sides, the trial balance holds only its net movement, and the net comparison is
+all the control can make.
 
 Every account that moved in the period must be classed. When one is not, or
 one classed `mixed` moved, the mapping cannot tell taxable amounts from
@@ -343,6 +372,16 @@ read or is malformed (a blank or repeated `Reference`, an `Amount` that is not
 a number, or other columns), the control does not run: its `REVIEW` exception
 gives the reason, and the pack names `gst_reasonableness` under
 `controls_not_run`. A declaration without a mapping fails with exit code 1.
+
+With a mapping that classes `gst_collected` and `gst_paid`, the declaration has
+exactly `Reference,Amount,Side` columns, and `Side` is `collected` or `paid`:
+the side whose accounts the settlement was posted to. A clearing journal that
+debits GST collected 1000.00 and credits GST paid 400.00 is 2 rows, 1000.00
+`collected` and -400.00 `paid`, each with its own `Reference`. A declaration
+that lists settlements without `Side` for a split mapping, or with `Side` for a
+`gst` mapping, or a `Side` other than those 2 stops the control in the same
+way. A header alone, in either shape, declares no settlements for either
+mapping.
 
 The control relies on the declaration and cannot verify it from trial-balance
 movements, which do not tell a settlement from other GST postings. A
@@ -484,7 +523,8 @@ The reviewer reads this as: the Operating Bank YTD balance moved from $105,000.0
 ## Controls
 
 Every exception names the control that raised it. The first 5 controls run on
-every review; the others run only when their input is supplied. A control that
+every review; `reconciliation_coverage` runs only when `--require-control` names
+it, and the others only when their input is supplied. A control that
 ran and raised nothing has passed. One whose input was not supplied did not
 run, and the pack names the optional controls it tracks under
 `controls_not_run`. The pack takes the most severe status any control raised.
@@ -501,10 +541,12 @@ into an exception.
 | `account_mapping` | With `--mapping`: `REVIEW` for each current-period account with no row in the mapping file. A blank `ReviewGroup` is refused when the file loads. | Whether a mapped group suits the account (`mapping_compatibility` tests that), or an account in the prior period only. | Assign and review a reporting group before using a grouped pack. No client query. Named under `controls_not_run` when `--mapping` is absent. |
 | `mapping_compatibility` | With `--mapping-policy`, which requires `--mapping`: `REVIEW` when a mapped current-period account's `Section` is not permitted for its `ReviewGroup`, or the group has no policy entry. | An unmapped account (`account_mapping` covers it), or a wrong group the policy permits for that section: it infers nothing from names or balances. | Compare the chart of accounts, mapping and policy, and retain evidence before changing either file; the exception reclassifies nothing. No client query. |
 | `balance_policy` | With `--balance-policy`: `REVIEW` when a listed account's YTD balance sits on the other side from a declared `debit` or `credit`, an account declared `nil` carries a balance, or an account expecting movement has none this period. | An account the policy does not list; it infers nothing from `Section` or account names. | Trace the balance or the missing entries to the ledger; change the policy only if the account's expected behaviour changed. No client query. |
-| `subledger_reconciliation` | With `--subledger`: `REVIEW` when a current YTD net balance differs from its `SubledgerBalance` by more than `--reconciliation-tolerance` (default 0.01), or a subledger row has no matching trial-balance account. | An account with no subledger row: only supplied rows are compared. | Reconcile the difference to timing, mapping or source records and retain support. Drafts a client query for a difference, not for an unmatched row. |
-| `gst_reasonableness` | With `--gst-mapping` and `--gst-settlements`: `REVIEW` when the period's net GST movement, with the declared BAS payments, refunds and clearing journals added back, differs from 1/10 of taxable sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance` (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST expected on sales and purchases, a review heuristic rather than a rounding bound. `REVIEW`, with the control named under `controls_not_run`, when an account that moved has no GST class or is classed `mixed`, so the mapping cannot tell its taxable amounts from the rest, or when the settlements declaration is missing, unreadable or malformed: the control did not run. | A sale or purchase in the wrong class, such as GST charged on a GST-free sale in a taxable sales account; equal shortfalls on sales and purchases, since only the net is compared; a difference within the tolerance; and whether GST on imports, GST adjustments or the taxable part of a mixed supply is right, since the trial balance does not separate them from other GST; and whether the settlements declaration is true, since the control relies on it and cannot verify it from trial-balance movements. | Check the declared settlements against the BAS and the ATO account, then trace the rest to tax codes and postings ([GST reasonableness](#gst-reasonableness)). No client query. |
+| `subledger_reconciliation` | With `--subledger`: `REVIEW` when a current YTD net balance differs from its `SubledgerBalance` by more than `--reconciliation-tolerance` (default 0.01), or a subledger row has no matching trial-balance account. | An account with no subledger row: only supplied rows are compared (`reconciliation_coverage` lists those). | Reconcile the difference to timing, mapping or source records and retain support. Drafts a client query for a difference, not for an unmatched row. |
+| `gst_reasonableness` | With `--gst-mapping` and `--gst-settlements`: `REVIEW` when the period's net GST movement, with the declared BAS payments, refunds and clearing journals added back, differs from 1/10 of taxable sales less 1/10 of creditable purchases by more than `--gst-absolute-tolerance` (default 1.00) plus `--gst-percentage-tolerance` (default 0.01) of the GST expected on sales and purchases, a review heuristic rather than a rounding bound. With the GST accounts classed `gst_collected` and `gst_paid`, also `REVIEW` for each side whose GST differs from 1/10 of its taxable sales or creditable purchases by more than the absolute tolerance plus the percentage of that side's expected GST. `REVIEW`, with the control named under `controls_not_run`, when an account that moved has no GST class or is classed `mixed`, so the mapping cannot tell its taxable amounts from the rest, or when the settlements declaration is missing, unreadable or malformed: the control did not run. | A sale or purchase in the wrong class, such as GST charged on a GST-free sale in a taxable sales account; equal shortfalls on sales and purchases when one `gst` account holds both sides, since only the net is compared; a difference within the tolerance; and whether GST on imports, GST adjustments or the taxable part of a mixed supply is right, since the trial balance does not separate them from other GST; and whether the settlements declaration is true, since the control relies on it and cannot verify it from trial-balance movements. | Check the declared settlements against the BAS and the ATO account, then trace the rest to tax codes and postings ([GST reasonableness](#gst-reasonableness)). No client query. |
 | `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
 | `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
+| `reconciliation_coverage` | With `--require-control reconciliation_coverage`: `REVIEW` for each current account with a closing balance (`YTDDebit - YTDCredit` not nil) that has no `--subledger` row and is not an equity account that `equity_reconciliation` computed, when its `Section` is `Assets`, `Liabilities` or `Equity`, or is none of those nor `Revenue` or `Expenses`, since whether such an account needs a reconciliation cannot be told. | Whether a supplied subledger balance or equity schedule is itself complete or right: any row counts as a tie, and its own control compares the figures. An account with a nil closing balance, which a reconciliation would tie to nil. | Reconcile each listed account and supply it as a subledger balance or an equity schedule, or retain why it needs none. No client query. |
+| `contact_register` | With `--contacts`: `REVIEW` for each contact whose `ABN` is not 11 digits once whitespace is removed or fails the ABN check digits, for each valid ABN on more than one contact, and for each name on more than one contact once case and spacing are ignored. | Whether an ABN that passes the check digits is registered, current or the contact's own: nothing is looked up. A contact with a blank `ABN`, and duplicates whose names differ by more than case and spacing, such as `Pty Ltd` against `Pty. Limited`. | Confirm each ABN on the Australian Business Register's ABN Lookup, and merge contacts entered more than once in the ledger. No client query. |
 | `required_control` | With `--require-control`: `REVIEW` for each named control that was skipped or failed. | Whether a control that ran was fed complete data: a subledger file with one row counts as run. | Supply the input the control needs, or remove the requirement deliberately. No client query. |
 
 ## Detection benchmark
@@ -616,6 +658,18 @@ Tenant,AccountID,SubledgerBalance
 
 `SubledgerBalance` must use the same signed convention as `YTDDebit - YTDCredit`: debit balances positive; credit balances negative. Each supplied subledger row is compared only with the matching current TB account. A missing GL account, or a difference beyond `--reconciliation-tolerance`, requires review.
 
+An optional contacts export, a 3-column CSV, runs `contact_register`:
+
+```text
+ContactID,Name,ABN
+```
+
+`ContactID` and `Name` must not be blank, and a `ContactID` may appear once.
+`ABN` may be blank, and then it is not checked; whitespace in it is ignored. The
+check reads only this file: it does not look an ABN up. A contacts file with no
+rows is named under `controls_not_run`; without `--contacts` the control is not
+named there, so a pack without the option is unchanged.
+
 Each of these controls runs only when its input is supplied, and so does the
 calculation-evidence control. The pack therefore names the ones that did not run:
 the summary's scope block carries a `Controls not run` line, and
@@ -654,6 +708,8 @@ The rule for each control:
 | `gst_reasonableness` | `--gst-mapping` was supplied and the control finished | No mapping was supplied | The control could not finish, as without `--gst-settlements` |
 | `calculation_evidence` | Evidence was supplied and every file was read | No evidence file was supplied, even with `--require-calculation` | A supplied file could not be read |
 | `equity_reconciliation` | `--equity-schedule` was supplied | It was not | Never |
+| `reconciliation_coverage` | Always: naming it runs it | Never | Never |
+| `contact_register` | `--contacts` held at least one row | It was not supplied | The file held no rows |
 
 A `skipped` or `failed` control raises a `required_control` exception naming it, so
 the pack cannot reach `PASS`, and the command exits 2, never 0. No new status exists,

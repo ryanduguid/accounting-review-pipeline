@@ -17,3 +17,4 @@ usage: close-control review [-h] --current CURRENT --prior PRIOR
                             [--gst-settlements GST_SETTLEMENTS]
                             [--gst-absolute-tolerance GST_ABSOLUTE_TOLERANCE]
                             [--gst-percentage-tolerance GST_PERCENTAGE_TOLERANCE]
+                            [--contacts CONTACTS]

@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 9] = [
+const COMMANDS: [&str; 10] = [
     "review",
     "workbench",
     "view",
@@ -27,6 +27,7 @@ const COMMANDS: [&str; 9] = [
     "compare",
     "classify",
     "schedule",
+    "demo",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -47,6 +48,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "compare" => saved!("compare"),
         "classify" => saved!("classify"),
         "schedule" => saved!("schedule"),
+        "demo" => saved!("demo"),
         _ => saved!("root"),
     }
 }
@@ -96,6 +98,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
                 "--gst-settlements",
                 "--gst-absolute-tolerance",
                 "--gst-percentage-tolerance",
+                "--contacts",
             ],
             &["--current", "--prior", "--output"],
         ),
@@ -177,6 +180,7 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
             ],
         ),
         "schedule" => (&["--kind", "--input"], &["--kind", "--input"]),
+        "demo" => (&["--output"], &["--output"]),
         _ => unreachable!("command checked"),
     }
 }
@@ -449,6 +453,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
             "--gst-settlements",
             "--review-note",
             "--equity-schedule",
+            "--contacts",
         ]
         .into_iter()
         .filter_map(|flag| args.optional_path(flag).map(|path| (flag, path)))
@@ -491,6 +496,7 @@ fn review(command: &str, args: &Arguments) -> i32 {
         config.gst_settlements_path = args.optional_path("--gst-settlements");
         config.acknowledgement_path = args.optional_path("--review-note");
         config.equity_schedule_path = args.optional_path("--equity-schedule");
+        config.contacts_path = args.optional_path("--contacts");
         config.equity_currency = args.optional_literal("--equity-currency")?;
         config.equity_currency_evidence = args.optional_literal("--equity-currency-evidence")?;
         config.calculation_evidence_paths = args.paths("--calculation-evidence");
@@ -567,10 +573,100 @@ fn review(command: &str, args: &Arguments) -> i32 {
     }
     if pack.status == Status::Pass { 0 } else { 2 }
 }
+/// The fabricated inputs `demo` writes, embedded from `examples/`, under the
+/// names and with the settings `just demo` uses.
+const DEMO_INPUTS: [(&str, &str, &[u8]); 5] = [
+    (
+        "--current",
+        "current_trial_balance.csv",
+        include_bytes!("../examples/current_trial_balance.csv"),
+    ),
+    (
+        "--prior",
+        "prior_trial_balance.csv",
+        include_bytes!("../examples/prior_trial_balance.csv"),
+    ),
+    (
+        "--mapping",
+        "account_mapping.csv",
+        include_bytes!("../examples/account_mapping.csv"),
+    ),
+    (
+        "--subledger",
+        "subledger_balances.csv",
+        include_bytes!("../examples/subledger_balances.csv"),
+    ),
+    (
+        "--review-note",
+        "review_note.json",
+        include_bytes!("../examples/review_note.json"),
+    ),
+];
+const DEMO_SETTINGS: [(&str, &str); 3] = [
+    ("--absolute-threshold", "10000"),
+    ("--percentage-threshold", "0.10"),
+    ("--reconciliation-tolerance", "0.01"),
+];
+
+/// Write the fabricated inputs into a new `OUTPUT/inputs`, each as a new file,
+/// with their flags. Anything already at those paths, such as a symbolic link
+/// put there after the emptiness check, is refused, so no existing file is
+/// written through.
+fn write_demo_inputs(output: &Path) -> Result<Vec<(&'static str, PathBuf)>> {
+    let inputs = output.join("inputs");
+    std::fs::create_dir_all(output)
+        .and_then(|()| std::fs::create_dir(&inputs))
+        .map_err(|error| format!("cannot create {}: {error}", pypath::text(&inputs)))?;
+    let mut written = Vec::new();
+    for (flag, name, bytes) in DEMO_INPUTS {
+        let path = inputs.join(name);
+        std::fs::File::create_new(&path)
+            .and_then(|mut file| std::io::Write::write_all(&mut file, bytes))
+            .map_err(|error| format!("cannot write {}: {error}", pypath::text(&path)))?;
+        written.push((flag, path));
+    }
+    Ok(written)
+}
+
+/// Write the fabricated inputs to `OUTPUT/inputs` and review them into
+/// `OUTPUT/pack`, as `review` would. `OUTPUT` must be new or empty, and
+/// outside any checkout.
+fn demo(args: &Arguments) -> i32 {
+    let prepare = || -> Result<Arguments> {
+        let output = publication::require_output_outside_repository(&args.path("--output"))?;
+        let not_empty = std::fs::read_dir(&output).map(|mut entries| entries.next().is_some());
+        if not_empty.unwrap_or(output.exists()) {
+            return Err(format!(
+                "{} is not an empty directory; use a new or empty one, so the demo cannot overwrite anything.",
+                pypath::text(&output)
+            ));
+        }
+        let raw = |path: &Path| vec![pypath::decode_os(path.as_os_str())];
+        let mut options = BTreeMap::new();
+        for (flag, path) in write_demo_inputs(&output)? {
+            options.insert(flag.to_owned(), raw(&path));
+        }
+        for (flag, value) in DEMO_SETTINGS {
+            options.insert(flag.to_owned(), vec![value.to_owned()]);
+        }
+        options.insert("--output".to_owned(), raw(&output.join("pack")));
+        Ok(Arguments(options))
+    };
+    match prepare() {
+        Ok(review_args) => review("review", &review_args),
+        Err(error) => {
+            crate::errln!("close-control demo: {error}");
+            1
+        }
+    }
+}
 #[expect(clippy::too_many_lines, reason = "dispatches every other command")]
 fn run(command: &str, args: &Arguments) -> i32 {
     if ["review", "workbench"].contains(&command) {
         return review(command, args);
+    }
+    if command == "demo" {
+        return demo(args);
     }
     let result = || -> Result<i32> {
         match command {
@@ -836,6 +932,23 @@ pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A link put at `OUTPUT/inputs` after the emptiness check is refused, and
+    /// the file it leads to keeps its contents.
+    #[cfg(unix)]
+    #[test]
+    fn demo_inputs_refuse_a_link_in_place_of_their_directory() {
+        let temp = crate::test_support::TempDir::new();
+        let elsewhere = temp.join("elsewhere");
+        std::fs::create_dir(&elsewhere).unwrap();
+        let sentinel = elsewhere.join("current_trial_balance.csv");
+        std::fs::write(&sentinel, "keep").unwrap();
+        let output = temp.join("demo");
+        std::fs::create_dir(&output).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, output.join("inputs")).unwrap();
+        let error = write_demo_inputs(&output).unwrap_err();
+        assert!(error.starts_with("cannot create "), "{error}");
+        assert_eq!(std::fs::read_to_string(&sentinel).unwrap(), "keep");
+    }
     #[test]
     fn a_panicking_command_returns_failure() {
         assert_eq!(command_thread(|| panic!("synthetic command failure")), 1);

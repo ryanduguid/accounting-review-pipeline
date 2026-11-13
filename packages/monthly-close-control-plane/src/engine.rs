@@ -10,8 +10,8 @@ use crate::{
     isodate::Date,
     loader::{self, SourceSnapshot},
     models::{
-        ClientQuery, Control, ExceptionItem, GstClass, ReviewerAcknowledgement, Status,
-        TrialBalanceRow,
+        ClientQuery, Contact, Control, ExceptionItem, GstClass, GstSettlements,
+        ReviewerAcknowledgement, Status, TrialBalanceRow,
     },
     pyjson::Json,
     pytext, queries, report,
@@ -97,6 +97,7 @@ pub struct ReviewConfig {
     pub gst_settlements_path: Option<PathBuf>,
     pub acknowledgement_path: Option<PathBuf>,
     pub equity_schedule_path: Option<PathBuf>,
+    pub contacts_path: Option<PathBuf>,
     pub equity_currency: Option<String>,
     pub equity_currency_evidence: Option<String>,
     pub calculation_evidence_paths: Vec<PathBuf>,
@@ -121,6 +122,7 @@ impl ReviewConfig {
             gst_settlements_path: None,
             acknowledgement_path: None,
             equity_schedule_path: None,
+            contacts_path: None,
             equity_currency: None,
             equity_currency_evidence: None,
             calculation_evidence_paths: Vec::new(),
@@ -472,42 +474,328 @@ pub fn subledger_exceptions(
     result
 }
 
+/// `REVIEW` for each current account with a closing balance that no supplied
+/// subledger balance or computed equity reconciliation ties out, when its
+/// `Section` is Assets, Liabilities or Equity, or is none of those nor Revenue
+/// or Expenses, so whether it needs a reconciliation cannot be told.
+pub fn reconciliation_coverage_exceptions(
+    rows: &[TrialBalanceRow],
+    subledger: &BTreeMap<(String, String), Decimal>,
+    equity: Option<&Json>,
+) -> Vec<ExceptionItem> {
+    let reconciled: BTreeSet<String> = equity
+        .and_then(|result| result.at("accounts").as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|account| account.at("account_id").as_pystr())
+        .map(|id| id.to_utf8().unwrap_or_else(|| id.os_text()))
+        .collect();
+    let mut result = Vec::new();
+    for row in ordered_rows(rows) {
+        let balance = row.ytd_net();
+        if balance.is_zero()
+            || subledger.contains_key(&row.key())
+            || reconciled.contains(&row.account_id)
+        {
+            continue;
+        }
+        let reason = match pytext::casefold(&row.section).as_str() {
+            "revenue" | "expenses" => continue,
+            "assets" | "liabilities" | "equity" => {
+                "Balance-sheet account with a closing balance and no supplied subledger balance or equity reconciliation: this pack ties it to nothing."
+            }
+            _ => {
+                "Account with a closing balance and no supplied subledger balance or equity reconciliation, in a Section that is not Assets, Liabilities, Equity, Revenue or Expenses, so whether it needs a reconciliation cannot be told."
+            }
+        };
+        let mut item = ExceptionItem::new(
+            Control::ReconciliationCoverage,
+            Status::Review,
+            Some(row),
+            reason,
+            "Supply its reconciliation as a subledger balance, or select the equity account in an equity schedule, and run the review again; or retain why it needs none. This exception adjusts nothing.",
+        );
+        item.current_value = Some(balance);
+        result.push(item);
+    }
+    result
+}
+
+/// Whether 11 ASCII digits pass the ABN check: subtract 1 from the first
+/// digit, weight the digits 10, 1, 3, 5, ..., 19, and the sum divides by 89.
+/// Copied from evatt's `patterns::valid`, since a component may not import a
+/// sibling.
+fn abn_check_digits_hold(digits: &str) -> bool {
+    const WEIGHTS: [u32; 11] = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+    let values: Vec<u32> = digits.chars().filter_map(|c| c.to_digit(10)).collect();
+    digits.len() == 11
+        && values.len() == 11
+        && values.iter().zip(WEIGHTS).map(|(v, w)| v * w).sum::<u32>() % 89 == 10
+}
+
+/// The contacts named in a finding, as `ID (name)`.
+fn contact_list(contacts: &[&Contact]) -> String {
+    contacts
+        .iter()
+        .map(|c| format!("{} ({})", pytext::repr(&c.id), pytext::repr(&c.name)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn contact_item(reason: &str, action: &str) -> ExceptionItem {
+    ExceptionItem::new(
+        Control::ContactRegister,
+        Status::Review,
+        None,
+        reason,
+        action,
+    )
+}
+
+/// The finding for a recorded ABN that `digits`, its whitespace removed, show is
+/// not a valid ABN.
+fn invalid_abn(contact: &Contact, digits: &str) -> ExceptionItem {
+    let fault = if digits.len() == 11 && digits.bytes().all(|b| b.is_ascii_digit()) {
+        "fails the ABN check digits"
+    } else {
+        "is not 11 digits"
+    };
+    contact_item(
+        &format!(
+            "Contact {} has ABN {}, which {fault}, so it is not a valid ABN.",
+            contact_list(&[contact]),
+            pytext::repr(&contact.abn)
+        ),
+        "Confirm the ABN on the Australian Business Register's ABN Lookup and correct the contact. This exception changes nothing in the ledger.",
+    )
+}
+
+/// `REVIEW` for each contact whose recorded ABN is not 11 digits or fails the
+/// check digits, each valid ABN held by more than one contact, and each name
+/// held by more than one contact once case and spacing are ignored. A blank
+/// ABN is not checked.
+pub fn contact_register_exceptions(contacts: &[Contact]) -> Vec<ExceptionItem> {
+    let mut result = Vec::new();
+    let mut by_abn: BTreeMap<String, Vec<&Contact>> = BTreeMap::new();
+    let mut by_name: BTreeMap<String, Vec<&Contact>> = BTreeMap::new();
+    for contact in contacts {
+        let name = pytext::casefold(&contact.name);
+        by_name
+            .entry(name.split_whitespace().collect())
+            .or_default()
+            .push(contact);
+        let digits: String = contact.abn.split_whitespace().collect();
+        if abn_check_digits_hold(&digits) {
+            by_abn.entry(digits).or_default().push(contact);
+        } else if !digits.is_empty() {
+            result.push(invalid_abn(contact, &digits));
+        }
+    }
+    for (abn, holders) in by_abn.into_iter().filter(|(_, h)| h.len() > 1) {
+        result.push(contact_item(
+            &format!(
+                "ABN {abn} is recorded on {} contacts: {}.",
+                holders.len(),
+                contact_list(&holders)
+            ),
+            "Confirm whether they are one business entered more than once, which should be merged, or separate contacts that share an ABN, such as branches. This exception changes nothing in the ledger.",
+        ));
+    }
+    for holders in by_name.into_values().filter(|h| h.len() > 1) {
+        result.push(contact_item(
+            &format!(
+                "{} contacts have the same name once case and spacing are ignored: {}.",
+                holders.len(),
+                contact_list(&holders)
+            ),
+            "Confirm whether they are one contact entered more than once, which should be merged. This exception changes nothing in the ledger.",
+        ));
+    }
+    result
+}
+
 /// Compares the period's net GST movement, with the declared settlements added
 /// back, with 1/10 of the GST-exclusive taxable sales less 1/10 of the
 /// creditable purchases, and says whether the control ran. Sales and GST
 /// amounts are credits less debits; purchases and settlements are debits less
-/// credits. `settlements` is the declaration, or why there is none to use.
+/// credits. A mapping that splits GST into `gst_collected` and `gst_paid`
+/// accounts also compares each side with its own expectation, so equal
+/// shortfalls on both sides, which offset in the net figure, are still raised.
+/// `settlements` is the declaration, or why there is none to use.
 pub fn gst_reasonableness_exceptions(
     rows: &[TrialBalanceRow],
     mapping: &BTreeMap<String, GstClass>,
-    settlements: std::result::Result<&[Decimal], &str>,
+    settlements: std::result::Result<&GstSettlements, &str>,
     absolute: &Decimal,
     percentage: &Decimal,
 ) -> Result<(Vec<ExceptionItem>, bool)> {
     let (mut unclassed, mut mixed) = (Vec::new(), Vec::new());
-    let (mut sales, mut purchases, mut recorded) = (Vec::new(), Vec::new(), Vec::new());
+    let mut sides = GstSides::default();
+    let mut recorded = Vec::new();
     for row in ordered_rows(rows) {
         let moved = !(row.debit.is_zero() && row.credit.is_zero());
+        let credit_less_debit = row.credit.sub(&row.debit).value;
         match mapping.get(&row.account_id) {
             None if moved => unclassed.push(row),
             Some(GstClass::Mixed) if moved => mixed.push(row),
-            Some(GstClass::TaxableSales) => sales.push(row.credit.sub(&row.debit).value),
-            Some(GstClass::CreditablePurchases) => purchases.push(row.current_net()),
-            Some(GstClass::Gst) => recorded.push(row.credit.sub(&row.debit).value),
+            Some(GstClass::TaxableSales) => sides.sales.push(credit_less_debit),
+            Some(GstClass::CreditablePurchases) => sides.purchases.push(row.current_net()),
+            Some(GstClass::Gst) => recorded.push(credit_less_debit),
+            Some(GstClass::GstCollected) => {
+                recorded.push(credit_less_debit.clone());
+                sides.collected.push(credit_less_debit);
+            }
+            Some(GstClass::GstPaid) => {
+                recorded.push(credit_less_debit);
+                sides.paid.push(row.current_net());
+            }
             _ => {}
         }
     }
+    let sided = mapping
+        .values()
+        .any(|class| *class == GstClass::GstCollected);
+    let settlements = settlements.and_then(|declared| gst_declaration_fits(sided, declared));
     let ran = settlements.is_ok() && unclassed.is_empty() && mixed.is_empty();
     let mut result = match settlements {
-        Ok(settled) if ran => {
-            gst_difference(&sales, &purchases, &recorded, settled, absolute, percentage)?
+        Ok(declared) if ran => {
+            let settled: Vec<_> = declared.rows.iter().map(|(_, a)| a.clone()).collect();
+            let (sales, purchases) = (&sides.sales, &sides.purchases);
+            let net = gst_difference(sales, purchases, &recorded, &settled, absolute, percentage)?;
+            let mut found = Vec::from_iter(net);
+            if sided {
+                found.extend(gst_side_differences(
+                    &sides, declared, absolute, percentage,
+                )?);
+            }
+            found
         }
-        _ => Some(gst_not_run(&unclassed, &mixed, settlements.err())),
+        _ => vec![gst_not_run(&unclassed, &mixed, settlements.err())],
     };
-    if let Some(item) = &mut result {
+    for item in &mut result {
         item.tenant.clone_from(&rows[0].tenant);
     }
-    Ok((result.into_iter().collect(), ran))
+    Ok((result, ran))
+}
+
+/// A declaration with a `Side` column goes with a mapping that splits GST by
+/// side, and one without it with a mapping that does not. A header alone
+/// declares no settlement, so either shape fits either mapping.
+fn gst_declaration_fits(
+    sided: bool,
+    declared: &GstSettlements,
+) -> std::result::Result<&GstSettlements, &'static str> {
+    if declared.rows.is_empty() {
+        return Ok(declared);
+    }
+    match (sided, declared.sided) {
+        (true, false) => Err(
+            "The GST settlements declaration cannot be used: the GST mapping splits GST into gst_collected and gst_paid accounts, so each settlement needs a Side saying which side it was posted to.",
+        ),
+        (false, true) => Err(
+            "The GST settlements declaration cannot be used: it has a Side column, but the GST mapping classes its GST accounts gst rather than splitting them into gst_collected and gst_paid.",
+        ),
+        _ => Ok(declared),
+    }
+}
+
+/// The movements a GST mapping classes: sales and GST collected as credits less
+/// debits, purchases and GST paid as debits less credits.
+#[derive(Default)]
+struct GstSides {
+    sales: Vec<Decimal>,
+    purchases: Vec<Decimal>,
+    collected: Vec<Decimal>,
+    paid: Vec<Decimal>,
+}
+
+/// GST collected against 1/10 of taxable sales, and GST paid against 1/10 of
+/// creditable purchases, each with the settlements declared against its side
+/// added back: a settlement's net debit adds to collected and takes from paid.
+/// The tolerance is the absolute amount plus the percentage of that side's
+/// expected GST.
+fn gst_side_differences(
+    sides: &GstSides,
+    declared: &GstSettlements,
+    absolute: &Decimal,
+    percentage: &Decimal,
+) -> Result<Vec<ExceptionItem>> {
+    let on = |side: GstClass, sign: fn(&Decimal) -> Decimal| -> Vec<Decimal> {
+        let rows = declared.rows.iter().filter(|(s, _)| *s == Some(side));
+        rows.map(|(_, amount)| sign(amount)).collect()
+    };
+    let mut found = Vec::new();
+    for (label, base_label, base, movement, settled) in [
+        (
+            "collected",
+            "taxable sales",
+            &sides.sales,
+            &sides.collected,
+            on(GstClass::GstCollected, Decimal::clone),
+        ),
+        (
+            "paid",
+            "creditable purchases",
+            &sides.purchases,
+            &sides.paid,
+            on(GstClass::GstPaid, |amount| {
+                Decimal::zero().sub(amount).value
+            }),
+        ),
+    ] {
+        let base = exact_total(base, "Current", base_label)?;
+        let movement = exact_total(movement, "Current", &format!("GST {label} movement"))?;
+        let settled = exact_total(&settled, "Declared", &format!("GST {label} settlements"))?;
+        let recorded = exact_total([&movement, &settled], "Current", "GST recorded")?;
+        let expected = base.div(&Decimal::parse("10").unwrap());
+        let difference = recorded.sub(&expected).value;
+        let tolerance = absolute.add(&percentage.mul(&expected.abs())).value;
+        if difference.abs() > tolerance {
+            let figures = [
+                &recorded,
+                &movement,
+                &settled,
+                &expected,
+                &base,
+                &difference,
+            ];
+            found.push(gst_side_item(label, base_label, figures, tolerance)?);
+        }
+    }
+    Ok(found)
+}
+
+/// The exception for one side of a split GST mapping beyond its tolerance;
+/// `figures` are recorded, movement, settled, expected, base and difference.
+fn gst_side_item(
+    label: &str,
+    base_label: &str,
+    figures: [&Decimal; 6],
+    tolerance: Decimal,
+) -> Result<ExceptionItem> {
+    let [recorded, movement, settled, expected, base, difference] = figures;
+    let money = report::money;
+    let mut item = ExceptionItem::new(
+        Control::GstReasonableness,
+        Status::Review,
+        None,
+        &format!(
+            "GST {label} recorded this period is {} ({} of movement in the gst_{label} accounts and {} for the settlements declared against them), against {} expected: 1/10 of {base_label} {}. The difference of {} is beyond the {} review heuristic, which is not a rounding bound. Each side is compared on its own because equal shortfalls in GST collected and GST paid offset in the net figure. The settlements are as declared; the trial balance cannot verify them.",
+            money(recorded)?,
+            money(movement)?,
+            money(settled)?,
+            money(expected)?,
+            money(base)?,
+            money(difference)?,
+            money(&tolerance)?,
+        ),
+        "Trace the difference through that side's GST account postings and the tax codes on its sales or purchases: a sale or purchase coded with the wrong GST treatment, a manual GST journal, a settlement declared against the wrong side, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
+    );
+    item.current_value = Some(recorded.clone());
+    item.prior_value = Some(expected.clone());
+    item.difference = Some(difference.clone());
+    item.threshold = Some(tolerance);
+    Ok(item)
 }
 
 /// The exception for a net GST movement, with the declared settlements added
@@ -838,6 +1126,11 @@ pub fn review_with(
         .as_ref()
         .map(loader::load_gst_mapping)
         .transpose()?;
+    let contacts_source = optional(&config.contacts_path, "Contacts file")?;
+    let contacts = contacts_source
+        .as_ref()
+        .map(loader::load_contacts)
+        .transpose()?;
     let acknowledgement_source = optional(&config.acknowledgement_path, "Review-note file")?;
     let acknowledgement = loader::load_reviewer_acknowledgement(acknowledgement_source.as_ref())?;
     // An absent or unusable declaration stops only the GST control, which says why.
@@ -910,12 +1203,19 @@ pub fn review_with(
             let (found, ran) = gst_reasonableness_exceptions(
                 &current_rows,
                 mapping,
-                gst_settlements.as_deref().map_err(String::as_str),
+                gst_settlements.as_ref().map_err(String::as_str),
                 &config.gst_absolute_tolerance,
                 &config.gst_percentage_tolerance,
             )?;
             exceptions.extend(found);
             gst_ran = ran;
+        }
+        if let Some(contacts) = &contacts {
+            let mut found = contact_register_exceptions(contacts);
+            for item in &mut found {
+                item.tenant.clone_from(current_tenant);
+            }
+            exceptions.extend(found);
         }
         for name in &config.required_calculations {
             if !calculation_evidence::valid_label(name) {
@@ -956,6 +1256,13 @@ pub fn review_with(
     } else {
         None
     };
+    // Runs only when required: it lists accounts no input ties out, which
+    // would otherwise change every pack that leaves one out.
+    if required_controls.contains(&Control::ReconciliationCoverage) {
+        exceptions.extend(decimal::with_precision(28, || {
+            reconciliation_coverage_exceptions(&current_rows, &subledger, equity_result.as_ref())
+        }));
+    }
     let supplied = |present| {
         if present {
             RunState::Ran
@@ -970,6 +1277,7 @@ pub fn review_with(
         | Control::PeriodComparison
         | Control::PeriodVariance
         | Control::AccountMetadata
+        | Control::ReconciliationCoverage
         | Control::Required => RunState::Ran,
         Control::AccountMapping if config.mapping_path.is_some() && mapping.is_empty() => {
             RunState::Failed
@@ -988,6 +1296,10 @@ pub fn review_with(
         Control::CalculationEvidence if !unreadable.is_empty() => RunState::Failed,
         Control::CalculationEvidence => supplied(!evidence.is_empty()),
         Control::EquityReconciliation => supplied(equity_source.is_some()),
+        Control::ContactRegister if contacts.as_ref().is_some_and(Vec::is_empty) => {
+            RunState::Failed
+        }
+        Control::ContactRegister => supplied(contacts.is_some()),
     };
     let required_controls: Vec<_> = required_controls
         .into_iter()
@@ -1016,6 +1328,7 @@ pub fn review_with(
         ),
         ("review_note", acknowledgement_source),
         ("equity_schedule", equity_source),
+        ("contacts", contacts_source),
     ] {
         if let Some(source) = source {
             source_hashes.insert(role.into(), source.sha256);
@@ -1033,6 +1346,11 @@ pub fn review_with(
         ("subledger", !subledger.is_empty()),
         // Tracked only once a GST mapping is supplied, so packs without one are unchanged.
         ("gst_reasonableness", gst_ran),
+        // Named only when a supplied contacts file held no contacts.
+        (
+            "contact_register",
+            contacts.as_ref().is_none_or(|c| !c.is_empty()),
+        ),
         (
             "calculation_evidence",
             !evidence.is_empty()

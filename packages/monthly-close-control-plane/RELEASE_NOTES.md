@@ -8,6 +8,31 @@
 - A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
   valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
   build, the release build included, name its commit instead of `unknown`.
+- `gst_reasonableness` accepts GST accounts classed `gst_collected` and
+  `gst_paid`, and then also compares each side with 1/10 of its taxable sales or
+  creditable purchases, so equal shortfalls on both sides, which offset in the
+  net figure, are raised for review. Its settlements declaration then takes a
+  `Side` column. Mappings that class GST accounts `gst` behave as before.
+- `--require-control reconciliation_coverage` runs a new control,
+  `reconciliation_coverage`, which raises `REVIEW` for each balance-sheet
+  account (`Section` `Assets`, `Liabilities` or `Equity`) with a closing
+  balance that no `--subledger` row or computed equity reconciliation ties out,
+  and for each account with a balance and no tie whose `Section` is none of
+  those nor `Revenue` or `Expenses`. The pack adds no member: the accounts are
+  its exceptions. Without the requirement nothing changes.
+- `review` and `workbench` take `--contacts`, a `ContactID,Name,ABN` CSV, and
+  run a new control, `contact_register`: `REVIEW` for an ABN that is not 11
+  digits or fails the ABN check digits, for one valid ABN on several contacts,
+  and for one name on several contacts once case and spacing are ignored. A
+  blank ABN is not checked, and nothing is looked up. Without the option the
+  output is unchanged.
+- `close-control demo --output DIR` writes the fabricated example inputs, which
+  are built into the executable, to `DIR/inputs` and reviews them into
+  `DIR/pack`, so a downloaded executable shows a sample pack without a
+  checkout. The pack is the one the `just demo` source command writes, byte for
+  byte, and the command exits `2` like it. `DIR` must be new or empty and
+  outside any version-control checkout; otherwise it exits `1` and writes
+  nothing.
 
 # v1.0.0
 

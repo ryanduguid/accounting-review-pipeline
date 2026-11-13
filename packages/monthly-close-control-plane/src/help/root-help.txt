@@ -1,11 +1,11 @@
 usage: close-control [-h]
-                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule} ...
+                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo} ...
 
 Create a review-first monthly close control pack from validated trial-balance
 exports.
 
 positional arguments:
-  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule}
+  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo}
     review (workbench)  run integrity, variance, mapping, and optional
                         reconciliation controls (as `workbench`, with the
                         local close-review banner)
@@ -21,6 +21,8 @@ positional arguments:
     classify            compare postings with supplied bill-purpose evidence
     schedule            review a canonical expense, migration or inter-entity
                         schedule
+    demo                write the fabricated example inputs and review them,
+                        with no checkout needed
 
 options:
   -h, --help            show this help message and exit
