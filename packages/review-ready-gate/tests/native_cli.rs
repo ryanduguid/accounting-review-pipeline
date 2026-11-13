@@ -1759,6 +1759,100 @@ fn assert_edited_pack_refused(output: &std::path::Path, document: &Json, diagnos
 }
 
 #[test]
+fn unsupported_saved_publication_state_preserves_payloads_and_recovery_evidence() {
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    assert!(
+        gate_command("bas-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let state_path = output.join(".reviewready/state.json");
+    let original = fs::read(&state_path).unwrap();
+    let state = review_ready_gate::probe::decode(std::str::from_utf8(&original).unwrap()).unwrap();
+    assert!(matches!(state.at("transaction"), Json::Null));
+    let cases = [
+        ("status", Json::str("unknown")),
+        ("transaction", Json::str("not-a-transaction")),
+        ("status", Json::str("in_progress")),
+        ("previous", Json::Null),
+        ("previous", Json::Array(vec![])),
+        (
+            "previous",
+            Json::Array(vec![Json::str("bad"), Json::Null, Json::Null]),
+        ),
+    ];
+    for (member, value) in cases {
+        let changed = edited_member(&state, member, value);
+        fs::write(&state_path, review_ready_gate::probe::encode(&changed)).unwrap();
+        let before = snapshot(&output);
+        for result in [
+            view_read_only(&output),
+            gate_command("bas-ready", &output).output().unwrap(),
+        ] {
+            assert_eq!(result.status.code(), Some(1), "{result:?}");
+            assert!(result.stdout.is_empty());
+            assert_view_says(&result, "publication state is unsupported");
+            assert_eq!(snapshot(&output), before);
+        }
+        fs::write(&state_path, &original).unwrap();
+    }
+    assert!(view_read_only(&output).status.success());
+}
+
+#[test]
+fn viewing_refuses_invalid_status_source_names_and_nonobject_findings() {
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    assert!(
+        gate_command("bas-ready", &output)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let original = pack_json(&output);
+    let document = review_ready_gate::probe::decode(&original).unwrap();
+    for (status, representation) in [
+        (Json::str("unknown"), "'unknown'"),
+        (Json::Bool(true), "True"),
+        (Json::Bool(false), "False"),
+        (Json::Null, "None"),
+    ] {
+        let changed = edited_member(&document, "overall_status", status);
+        assert_edited_pack_refused(&output, &changed, &format!("got {representation}"));
+    }
+    assert_edited_pack_refused(
+        &output,
+        &Json::Array(vec![]),
+        "top level must be a JSON object",
+    );
+    let surrogate =
+        review_ready_gate::probe::decode(r#"{"\ud800": {"filename":"input.csv","sha256":"bad"}}"#)
+            .unwrap();
+    let changed = edited_member(&document, "source_sha256", surrogate);
+    assert_edited_pack_refused(&output, &changed, "source_sha256 key is not valid Unicode");
+    let Json::Object(sources) = document.at("source_sha256") else {
+        panic!("source witnesses")
+    };
+    let (label, info) = sources.first().unwrap();
+    for filename in [Json::str(""), Json::Null] {
+        let source = Json::Object(vec![(
+            label.clone(),
+            edited_member(info, "filename", filename),
+        )]);
+        let changed = edited_member(&document, "source_sha256", source);
+        assert_edited_pack_refused(&output, &changed, ".filename must be a non-empty string");
+    }
+    let changed = edited_member(&document, "findings", Json::Array(vec![Json::Null]));
+    assert_edited_pack_refused(&output, &changed, "findings[0] must be an object");
+    fs::write(output.join("readiness-pack.json"), original).unwrap();
+    assert!(view_read_only(&output).status.success());
+}
+
+#[test]
 fn viewing_refuses_missing_or_empty_skipped_control_fields_without_writing() {
     let tmp = TempDir::new();
     let input = tmp.join("empty-input");
@@ -1992,10 +2086,28 @@ fn published_pack_inputs_are_refused_before_any_payload_can_be_overwritten() {
 }
 
 #[cfg(feature = "probe")]
+fn probe_requests(tmp: &TempDir, requests: &str) -> std::process::Output {
+    use std::{io::Write, process::Stdio};
+    let mut child = child_profile::command(env!("CARGO_BIN_EXE_review-ready-probe"))
+        .current_dir(&tmp.0)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(requests.as_bytes())
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[cfg(feature = "probe")]
 #[test]
 fn probe_profile_refusal_preserves_inputs_and_keeps_the_session_usable() {
     use review_ready_gate::probe::{self, Json};
-    use std::{io::Write, process::Stdio};
 
     let tmp = TempDir::new();
     let absent = tmp.join("absent-pack");
@@ -2010,20 +2122,7 @@ fn probe_profile_refusal_preserves_inputs_and_keeps_the_session_usable() {
         "{}\n{{\"op\":\"money\",\"value\":\"1\"}}\n",
         probe::encode(&request)
     );
-    let mut child = child_profile::command(env!("CARGO_BIN_EXE_review-ready-probe"))
-        .current_dir(&tmp.0)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(requests.as_bytes())
-        .unwrap();
-    let result = child.wait_with_output().unwrap();
+    let result = probe_requests(&tmp, &requests);
     assert!(result.status.success());
     assert!(result.stderr.is_empty());
     let response = String::from_utf8(result.stdout)
@@ -2037,5 +2136,93 @@ fn probe_profile_refusal_preserves_inputs_and_keeps_the_session_usable() {
         )
     );
     assert!(!absent.exists());
+    assert!(fs::read_dir(&tmp.0).unwrap().next().is_none());
+}
+
+#[cfg(feature = "probe")]
+#[test]
+fn probe_trial_balance_preserves_rows_and_exact_differences() {
+    use review_ready_gate::probe;
+    let tmp = TempDir::new();
+    let csv = concat!(
+        "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n",
+        "2026-03-31,Fabricated Tenant,Assets,a,Cash,100,10,0,100,0\n",
+        "2026-03-31,Fabricated Tenant,Liabilities,b,Payable,200,0,7,0,90\n",
+    );
+    fs::write(tmp.join("tb.csv"), csv).unwrap();
+    let csv_hex: String = csv.bytes().map(|byte| format!("{byte:02x}")).collect();
+    let requests = format!(
+        concat!(
+            "{{\"op\":\"tb_integrity\",\"path\":\"tb.csv\"}}\n",
+            "{{\"op\":\"csv\",\"path\":\"tb.csv\",\"hex\":\"{}\",\"kind\":\"unknown\"}}\n",
+        ),
+        csv_hex
+    );
+    let result = probe_requests(&tmp, &requests);
+    assert!(result.status.success(), "{result:?}");
+    assert!(result.stderr.is_empty());
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let responses: Vec<_> = stdout
+        .lines()
+        .map(|line| probe::decode(line).unwrap())
+        .collect();
+    assert_eq!(responses.len(), 2);
+    let expected = probe::decode(r#"{"movement":"3.00","ytd":"10.00","rows":[
+        {"report_date":"2026-03-31","tenant":"Fabricated Tenant","section":"Assets","account_id":"a","account_name":"Cash","account_code":"100","debit":"10","credit":"0","ytd_debit":"100","ytd_credit":"0"},
+        {"report_date":"2026-03-31","tenant":"Fabricated Tenant","section":"Liabilities","account_id":"b","account_name":"Payable","account_code":"200","debit":"0","credit":"7","ytd_debit":"0","ytd_credit":"90"}
+    ]}"#).unwrap();
+    assert_eq!(
+        probe::encode(responses[0].at("ok")),
+        probe::encode(&expected)
+    );
+    assert!(
+        responses[1]
+            .at("error")
+            .is_str("unsupported probe CSV kind")
+    );
+    assert_eq!(fs::read(tmp.join("tb.csv")).unwrap(), csv.as_bytes());
+}
+
+#[cfg(feature = "probe")]
+#[test]
+fn probe_request_errors_precede_a_fatal_protocol_error() {
+    use review_ready_gate::probe;
+    let tmp = TempDir::new();
+    let requests = concat!(
+        "{\"op\":\"parse_pack_json\",\"hex\":\"0\"}\n",
+        "{\"op\":\"cli\",\"args\":null}\n",
+        "{\"op\":\"money\",\"value\":null}\n",
+        "{\"op\":\"format_money\",\"value\":\"1\"}\n",
+        "{\"op\":\"format_money\",\"value\":\"invalid\"}\n",
+        "{\"op\":\"unknown\"}\n",
+        "[\n",
+    );
+    let result = probe_requests(&tmp, requests);
+    assert_eq!(result.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&result.stderr).starts_with("invalid probe request:"));
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let responses: Vec<_> = stdout
+        .lines()
+        .map(|line| probe::decode(line).unwrap())
+        .collect();
+    assert_eq!(responses.len(), 6);
+    for (index, diagnostic) in [
+        (0, "invalid probe hex"),
+        (1, "probe CLI arguments must be a list"),
+        (2, "Amount"),
+        (4, "invalid probe decimal"),
+        (5, "unsupported probe operation"),
+    ] {
+        assert!(
+            responses[index]
+                .at("error")
+                .as_pystr()
+                .unwrap()
+                .to_utf8()
+                .unwrap()
+                .contains(diagnostic)
+        );
+    }
+    assert!(responses[3].at("ok").is_str("1.00"));
     assert!(fs::read_dir(&tmp.0).unwrap().next().is_none());
 }
