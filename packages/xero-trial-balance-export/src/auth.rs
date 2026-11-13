@@ -447,6 +447,194 @@ fn open_browser(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configuration_checks_the_parsed_host_and_final_path_segment() {
+        for (uri, diagnostic) in [
+            ("http://user@/callback", "must include a host"),
+            (
+                r"http://example.invalid\@localhost/callback",
+                "must use localhost",
+            ),
+        ] {
+            assert!(
+                callback_config(uri)
+                    .unwrap_err()
+                    .stderr
+                    .contains(diagnostic)
+            );
+        }
+        assert_eq!(
+            callback_config(
+                " \tHTTP://LOCALHOST:8400/before;keep/callback;discard?ignored=1#fragment"
+            )
+            .unwrap(),
+            CallbackConfig {
+                host: "localhost".into(),
+                port: 8400,
+                path: "/before;keep/callback".into(),
+            }
+        );
+    }
+
+    fn exchange_request(request: Vec<u8>) -> (Option<Callback>, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_write_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let peer = std::thread::spawn(move || {
+            client.write_all(&request).unwrap();
+            client.shutdown(std::net::Shutdown::Write).unwrap();
+            let mut response = String::new();
+            client.read_to_string(&mut response).unwrap();
+            response
+        });
+        let (mut server, _) = listener.accept().unwrap();
+        let callback = receive(
+            &mut server,
+            &CallbackConfig {
+                host: "localhost".into(),
+                port: 0,
+                path: "/callback".into(),
+            },
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        );
+        // Drain only after the production parser decides, so refusal cannot race
+        // the peer's write or discard its response through a TCP reset.
+        server.read_to_end(&mut Vec::new()).unwrap();
+        drop(server);
+        (callback, peer.join().unwrap())
+    }
+
+    #[test]
+    fn callback_request_line_and_header_limits_accept_the_boundary_only() {
+        let prefix = "GET /callback?code=fabricated&padding=";
+        let suffix = " HTTP/1.1\r\n";
+        for length in [65536, 65537] {
+            let padding = "x".repeat(length - prefix.len() - suffix.len());
+            let request = format!("{prefix}{padding}{suffix}\r\n");
+            let (callback, response) = exchange_request(request.into_bytes());
+            if length == 65536 {
+                assert_eq!(callback.unwrap().code.as_deref(), Some("fabricated"));
+                assert!(response.starts_with("HTTP/1.0 200 OK\r\n"));
+            } else {
+                assert!(callback.is_none());
+                assert!(response.is_empty());
+            }
+        }
+        for count in [99, 100] {
+            let headers = "X-Fabricated: header\r\n".repeat(count);
+            let request = format!("GET /callback?code=fabricated HTTP/1.1\r\n{headers}\r\n");
+            let (callback, response) = exchange_request(request.into_bytes());
+            if count == 99 {
+                assert_eq!(callback.unwrap().code.as_deref(), Some("fabricated"));
+                assert!(response.starts_with("HTTP/1.0 200 OK\r\n"));
+            } else {
+                assert!(callback.is_none());
+                assert!(response.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn callback_normalises_target_parts_and_reports_provider_denial() {
+        let (callback, response) = exchange_request(
+            b"GET //callback;ignored?unused=value&error=access_denied&state=fabricated#ignored HTTP/1.1\r\n\r\n"
+                .to_vec(),
+        );
+        let callback = callback.unwrap();
+        assert_eq!(callback.code, None);
+        assert_eq!(callback.error.as_deref(), Some("access_denied"));
+        assert_eq!(callback.state.as_deref(), Some("fabricated"));
+        assert!(response.starts_with("HTTP/1.0 200 OK\r\n"));
+        assert!(response.contains("Authorisation was not completed."));
+        assert!(!response.contains("<h3>Authorised."));
+        assert!(
+            verify_callback(&callback, "fabricated")
+                .unwrap_err()
+                .stderr
+                .contains("'access_denied'")
+        );
+    }
+
+    #[test]
+    fn malformed_callback_request_lines_are_refused() {
+        for request in [
+            b"GET\r\n\r\n".as_slice(),
+            b"GET /callback HTTP/1.1 extra\r\n\r\n",
+            b"GET /callback HTTP/1\r\n\r\n",
+            b"GET /callback HTTP/.1\r\n\r\n",
+            b"GET /callback HTTP/1.\r\n\r\n",
+            b"GET /callback HTTP/1.x\r\n\r\n",
+            b"GET /callback HTTP/00000000001.0\r\n\r\n",
+            b"GET /callback HTTP/2.0\r\n\r\n",
+        ] {
+            let (callback, response) = exchange_request(request.to_vec());
+            assert!(callback.is_none(), "{request:?}");
+            assert!(response.is_empty(), "{request:?}");
+        }
+    }
+
+    #[test]
+    fn expired_connection_budget_refuses_even_a_ready_callback() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .write_all(b"GET /callback?code=fabricated HTTP/1.1\r\n\r\n")
+            .unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        assert_eq!(server.peek(&mut [0]).unwrap(), 1);
+        assert!(
+            receive(
+                &mut server,
+                &CallbackConfig {
+                    host: "localhost".into(),
+                    port: 0,
+                    path: "/callback".into(),
+                },
+                Duration::from_secs(2),
+                Duration::ZERO,
+            )
+            .is_none()
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_shutdown_listener_reports_failure_without_a_callback() {
+        let config = CallbackConfig {
+            host: "localhost".into(),
+            port: 0,
+            path: "/callback".into(),
+        };
+        let listener = bind(&config).unwrap();
+        socket2::SockRef::from(&listener)
+            .shutdown(std::net::Shutdown::Both)
+            .unwrap();
+        let failure = wait_with_budgets(
+            &listener,
+            &config,
+            Duration::from_secs(1),
+            Duration::from_millis(50),
+            Duration::from_millis(100),
+        )
+        .unwrap_err();
+        assert!(
+            failure
+                .stderr
+                .starts_with("error: OAuth callback listener failed (")
+        );
+        assert!(failure.stderr.ends_with("); nothing was saved.\n"));
+    }
+
     #[test]
     fn configuration_and_state_refuse_wrong_boundaries() {
         assert_eq!(
