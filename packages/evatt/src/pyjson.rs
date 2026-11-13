@@ -814,6 +814,7 @@ mod tests {
             ),
             ("\"a\\x\"", "Invalid \\escape: line 1 column 3 (char 2)"),
             ("\"\\u123\"", "Invalid \\uXXXX escape: line 1 column 3 (char 2)"),
+            (r#""\u123"#, "Invalid \\uXXXX escape: line 1 column 3 (char 2)"),
             (
                 "\"unterminated",
                 "Unterminated string starting at: line 1 column 1 (char 0)",
