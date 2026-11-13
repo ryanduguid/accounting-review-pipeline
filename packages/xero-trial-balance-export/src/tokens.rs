@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn missing_cache_reports_authentication_without_creating_a_token_pair() {
         let scratch = Scratch::new();
-        let path = fs::canonicalize(&scratch.0).unwrap().join("token.json");
+        let path = paths::resolved(&scratch.0).unwrap().join("token.json");
         let session = TokenSession::new(&path).unwrap();
         assert_eq!(session.path(), path);
         let failure = session.load().unwrap_err();
