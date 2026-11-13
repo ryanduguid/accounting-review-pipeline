@@ -1,4 +1,5 @@
 name: Standard-library components
+# removed-jobs: rust
 
 # The Excel adapter, the Power BI application and the grant workpapers
 # application have no Python dependencies and are not uv workspace members.
@@ -6,12 +7,9 @@ name: Standard-library components
 # pyproject.toml for its setup and replay utility and is never released. Each
 # gets the same lint tools at the same pins (configured in its own ruff and mypy
 # settings) and its standard-library suite runs on the same Python matrix. The
-# grant workpaper itself is a Rust binary from 0.2.0; the rust job checks it on
-# Linux and Windows, whose exclusive-rename publication differs. The grant
-# application's Python suite also runs on Windows. The Power BI application's
-# fixture generator, review workflow and structural checks are Rust. Its frozen
-# Python oracle runs only in the native differential job. The report also runs
-# Microsoft's PBIR validator once.
+# grant application's Python suite also runs on Windows. The 3 components' Rust
+# crates, frozen Python comparisons and coverage floors run in ci.yml's rust
+# job on Linux and Windows. The report also runs Microsoft's PBIR validator once.
 
 on:
   push:
@@ -193,148 +191,8 @@ jobs:
       - name: Run the component's standard-library suite
         run: python -B -m unittest discover -s tests -v
 
-  rust:
-    # rust-toolchain.toml in each component directory pins the toolchain,
-    # which rustup installs on first use.
-    name: ${{ matrix.component }} / rust (${{ matrix.os }})
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    permissions:
-      contents: read
-    timeout-minutes: 30
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        component:
-          - adapters/accounting-excel-toolkit
-          - apps/australian-accounting-power-bi
-          - apps/grant-acquittal-workpapers
-        os: [ubuntu-latest, windows-latest]
-        # Each floor is the component's measured line coverage on Linux, rounded
-        # down (3 November 2026). Raise it with the tests, never lower it to pass.
-        include:
-          - component: adapters/accounting-excel-toolkit
-            coverage_floor: 88
-          - component: apps/australian-accounting-power-bi
-            coverage_floor: 62
-          - component: apps/grant-acquittal-workpapers
-            coverage_floor: 85
-    defaults:
-      run:
-        shell: bash
-        working-directory: ${{ matrix.component }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Windows legs are the slowest. Only main saves, so pull requests cannot
-      # replace the shared entries. shortcut: the key hashes the runner image's
-      # toolchains, so an image Rust update misses until the next main push saves.
-      # Add a scheduled main run to refresh the cache if those misses slow pull requests.
-      - name: Restore the dependency build cache
-        if: runner.os == 'Windows'
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: ${{ matrix.component }}
-          key: ${{ matrix.component }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Format
-        run: cargo fmt --check
-      - name: Lint
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - name: Test
-        if: runner.os == 'Windows'
-        run: cargo test --locked --all-features
-      - name: Add the coverage instrumentation tools
-        if: runner.os == 'Linux'
-        run: |
-          rustup toolchain install
-          rustup component add llvm-tools
-      - name: Install the pinned coverage tool
-        if: runner.os == 'Linux'
-        uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
-        with:
-          tool: cargo-llvm-cov@0.9.1
-          fallback: none
-      - name: Test with line coverage
-        if: runner.os == 'Linux'
-        run: cargo llvm-cov --locked --all-features --fail-under-lines ${{ matrix.coverage_floor }}
-      - name: Check the tracked VBA source
-        if: matrix.component == 'adapters/accounting-excel-toolkit'
-        run: cargo run --locked --release --bin check-vba-encoding
-      - name: Check out the frozen Python Excel tools
-        if: matrix.component == 'adapters/accounting-excel-toolkit'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: e06647062efaf4410f7d4a414a0559ca51147267
-          path: .encoding-oracle
-          persist-credentials: false
-      - name: Set up CPython for the frozen Excel tools
-        if: matrix.component == 'adapters/accounting-excel-toolkit'
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.15"
-      - name: Compare native Excel tools with their frozen Python implementations
-        if: matrix.component == 'adapters/accounting-excel-toolkit'
-        run: |
-          cargo build --locked --bins --examples
-          oracle_python="$(python -c 'import sys; print(sys.executable)')"
-          suffix=
-          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
-          target/debug/examples/encoding-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/check_vba_encoding.py" "target/debug/check-vba-encoding$suffix" 16
-          target/debug/examples/encoding-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/check_vba_encoding.py" "target/debug/check-vba-encoding$suffix" 17
-          target/debug/examples/transactions-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/xero_account_transactions.py" "target/debug/xero-account-transactions$suffix" 16
-          target/debug/examples/transactions-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools/xero_account_transactions.py" "target/debug/xero-account-transactions$suffix" 17
-          target/debug/examples/aged-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools" target/debug 16
-          target/debug/examples/aged-differential "$oracle_python" "$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit/tools" target/debug 17
-      - name: Check out the frozen pre-port Power BI workflow
-        if: matrix.component == 'apps/australian-accounting-power-bi'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: d48b9fe681f3a3ae278a90c43cfdce9b863589d4
-          path: .workflow-oracle
-          persist-credentials: false
-      - name: Set up CPython for the frozen workflow oracle
-        if: matrix.component == 'apps/australian-accounting-power-bi'
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.15"
-      - name: Build the workflow and independent native producers
-        if: matrix.component == 'apps/australian-accounting-power-bi'
-        run: |
-          cargo build --locked --all-features --bins
-          cargo build --locked --release --manifest-path ../../packages/review-ready-gate/Cargo.toml --bin review-ready
-          cargo build --locked --release --manifest-path ../../packages/monthly-close-control-plane/Cargo.toml --bin close-control
-          suffix=
-          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
-          mkdir "$RUNNER_TEMP/pbi-producers"
-          cp "../../packages/review-ready-gate/target/release/review-ready$suffix" "$RUNNER_TEMP/pbi-producers/"
-          cp "../../packages/monthly-close-control-plane/target/release/close-control$suffix" "$RUNNER_TEMP/pbi-producers/"
-      - name: Compare the workflow with its frozen Python implementation
-        if: matrix.component == 'apps/australian-accounting-power-bi'
-        run: |
-          oracle_python="$(python -c 'import sys; print(sys.executable)')"
-          target/debug/workflow-differential --python "$oracle_python" --oracle "$GITHUB_WORKSPACE/.workflow-oracle/apps/australian-accounting-power-bi" --bin-dir "$RUNNER_TEMP/pbi-producers" --seed 16
-          target/debug/workflow-differential --python "$oracle_python" --oracle "$GITHUB_WORKSPACE/.workflow-oracle/apps/australian-accounting-power-bi" --bin-dir "$RUNNER_TEMP/pbi-producers" --seed 17
-      - name: Regenerate the fixtures and require the committed bytes
-        if: matrix.component == 'apps/australian-accounting-power-bi'
-        run: |
-          cargo run --locked --release --bin generate-fixtures
-          git diff --exit-code -- samples
-      - name: Run the bundled example from the release build
-        if: matrix.component == 'apps/grant-acquittal-workpapers'
-        run: |
-          cargo build --locked --release
-          status=0
-          target/release/grant-workpaper --input examples/two-grants --output "$RUNNER_TEMP/grant-example" || status=$?
-          # The fabricated example retains review items, which exit 2.
-          test "$status" -eq 2
-          test -f "$RUNNER_TEMP/grant-example/workpaper.json"
-
   standard-library-gates:
-    needs: [changes, lint, verify, verify-windows, rust, pbir]
+    needs: [changes, lint, verify, verify-windows, pbir]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

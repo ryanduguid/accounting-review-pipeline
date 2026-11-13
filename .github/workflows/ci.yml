@@ -196,6 +196,13 @@ jobs:
           export ARP_CHILD_LLVM_PROFILE_FILE="$LLVM_PROFILE_FILE"
           LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo test --locked --all-features
           LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo test --locked --all-features --release
+      # The final report also counts the comparisons and example runs, so hold the
+      # adapter's and applications' tests to their floor on their own here.
+      - name: hold the tests alone to the coverage floor
+        if: runner.os == 'Linux' && !startsWith(matrix.package_dir, 'packages/')
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          cargo llvm-cov report --summary-only --fail-under-lines ${{ matrix.coverage_floor }}
       - name: Check evatt against its network crate and socket denylist
         if: matrix.package_dir == 'packages/evatt'
         run: |
