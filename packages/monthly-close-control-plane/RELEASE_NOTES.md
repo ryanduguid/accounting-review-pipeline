@@ -26,6 +26,13 @@
   and for one name on several contacts once case and spacing are ignored. A
   blank ABN is not checked, and nothing is looked up. Without the option the
   output is unchanged.
+- `close-control demo --output DIR` writes the fabricated example inputs, which
+  are built into the executable, to `DIR/inputs` and reviews them into
+  `DIR/pack`, so a downloaded executable shows a sample pack without a
+  checkout. The pack is the one the `just demo` source command writes, byte for
+  byte, and the command exits `2` like it. `DIR` must be new or empty and
+  outside any version-control checkout; otherwise it exits `1` and writes
+  nothing.
 
 # v1.0.0
 

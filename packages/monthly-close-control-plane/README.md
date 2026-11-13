@@ -60,6 +60,20 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
+From the next release, a downloaded `close-control` executable runs the demo
+without a checkout:
+
+```bash
+close-control demo --output ~/close-control-demo
+```
+
+It writes the fabricated files from `examples/` to `inputs/` and reviews them
+into `pack/`, with the settings of the source command below, so `pack/` holds
+the same 4 files byte for byte. It exits `2`, as that command does. The output
+must be a new or empty directory outside any version-control checkout;
+anything else is refused with exit `1` and nothing written. Version 1.0.0 does
+not have this command: use the source command below.
+
 The [reviewer quick start](docs/reviewer-quick-start.md) uses fabricated files and
 shows how to retain and verify a saved pack.
 

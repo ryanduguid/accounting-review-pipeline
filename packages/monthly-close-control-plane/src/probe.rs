@@ -247,11 +247,19 @@ const SUMMARY_OPTION: &str = concat!(
     "  --summary             count the displayed packs by state, by control with\n",
     "                        exceptions and by control not run\n",
 );
+/// The root help line for the native-only `demo` command.
+const DEMO_COMMAND: &str = concat!(
+    "    demo                write the fabricated example inputs and review them,\n",
+    "                        with no checkout needed\n",
+);
 /// The frozen Python baseline predates the GST reasonableness, contacts,
-/// required control and queue summary options, so CLI output compared with it
-/// drops their usage and help lines.
+/// required control and queue summary options and the `demo` command, so CLI
+/// output compared with it drops their usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(CONTACTS_USAGE, "")
+    text.replace(",schedule,demo}", ",schedule}")
+        .replace(", 'schedule', 'demo')", ", 'schedule')")
+        .replace(DEMO_COMMAND, "")
+        .replace(CONTACTS_USAGE, "")
         .replace(CONTACTS_OPTION, "")
         .replace(GST_USAGE, "")
         .replace(GST_OPTIONS, "")
@@ -1031,6 +1039,24 @@ mod tests {
         assert!(!frozen.to_lowercase().contains("gst"));
         assert!(!frozen.contains("--contacts"));
         assert!(!frozen.contains("--require-control"));
+    }
+    #[test]
+    fn dropping_the_native_demo_command_leaves_the_frozen_root_help_and_errors() {
+        const FROZEN_CHOICES: &str =
+            "{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule}";
+        let (code, help, _) = stdio::capture(|| cli::main(vec!["--help".into()]));
+        assert_eq!(code, 0);
+        assert!(help.contains("    demo "));
+        let frozen = without_native_options(&help);
+        assert!(!frozen.contains("demo"), "{frozen}");
+        assert_eq!(frozen.matches(FROZEN_CHOICES).count(), 2, "{frozen}");
+        assert!(frozen.contains("                        schedule\n\noptions:\n"));
+        let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
+        assert_eq!(code, 1);
+        assert!(error.contains("'schedule', 'demo')"), "{error}");
+        let frozen = without_native_options(&error);
+        assert!(!frozen.contains("demo"), "{frozen}");
+        assert!(frozen.contains("'classify', 'schedule')"), "{frozen}");
     }
     /// The queue's help and usage as the frozen Python baseline printed them.
     const FROZEN_QUEUE_USAGE: &str = concat!(
