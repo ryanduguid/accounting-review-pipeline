@@ -64,8 +64,8 @@ fn amounts(value: &Json) -> Result<amount::Totals> {
     ])
 }
 
-fn require_tenant(value: &Json) -> Result<()> {
-    for key in ["tenantId", "tenantName"] {
+fn require_fields(value: &Json, fields: &[&str]) -> Result<()> {
+    for &key in fields {
         if value.get(key).is_none() {
             return Err(Failure::message(format!("'{key}'")));
         }
@@ -124,11 +124,14 @@ pub fn execute(input: &Json) -> Result<Json> {
             )?
             .clone())
         }
-        "default_output_filename" => Ok(Json::str(&export::default_filename(
-            arg(0),
-            &string(1),
-            &string(2),
-        ))),
+        "default_output_filename" => {
+            require_fields(arg(0), &["tenantName", "tenantId"])?;
+            Ok(Json::str(&export::default_filename(
+                arg(0),
+                &string(1),
+                &string(2),
+            )))
+        }
         "row_amounts" => Ok(strings(
             report::row_amounts(&record(arg(0)))?
                 .iter()
@@ -213,7 +216,7 @@ pub fn execute(input: &Json) -> Result<Json> {
             if path.file_name().is_none() {
                 return Err(Failure::message("expected a manifest CSV filename"));
             }
-            require_tenant(arg(2))?;
+            require_fields(arg(2), &["tenantId", "tenantName"])?;
             Ok(publication::manifest(
                 path,
                 &string(1),
@@ -226,7 +229,7 @@ pub fn execute(input: &Json) -> Result<Json> {
         "csv_artifact" => {
             let (rows, totals) = report::build_rows(&records(arg(0)), arg(1), &string(2))?;
             amount::check_balanced(&totals, Some(rows.len()))?;
-            require_tenant(arg(1))?;
+            require_fields(arg(1), &["tenantId", "tenantName"])?;
             let bytes = report::csv_bytes(&rows)?;
             let digest: String = sha2::Sha256::digest(&bytes)
                 .iter()
