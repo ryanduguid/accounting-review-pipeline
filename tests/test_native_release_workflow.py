@@ -77,6 +77,12 @@ class NativeReleaseWorkflowTests(unittest.TestCase):
                 # The release gate requires exactly `# v<version>` at tag time;
                 # an `(unreleased)` suffix is allowed between releases.
                 self.assertTrue(notes.startswith(f"# v{version}"), notes.splitlines()[0])
+                # CITATION.cff names the latest release, so between releases it
+                # trails VERSION; once the notes are ready to tag it must match.
+                citation = crate / "CITATION.cff"
+                if citation.is_file() and notes.splitlines()[0] == f"# v{version}":
+                    cff = yaml.safe_load(citation.read_text(encoding="utf-8"))
+                    self.assertEqual(cff["version"], version, "CITATION.cff")
                 for document in ("LICENSE", "NOTICE", "README.md"):
                     self.assertTrue((crate / document).is_file(), document)
                 tracked = subprocess.run(

@@ -160,8 +160,8 @@ jobs:
         env:
           PACKAGE_DIR: ${{ matrix.package_dir }}
         run: |
-          # Every Power BI binary returns normally and flushes its exit profile.
-          if [ "$RUNNER_OS" = Windows ] && [ "$PACKAGE_DIR" != apps/australian-accounting-power-bi ]; then
+          # Evatt and Power BI binaries return normally and flush exit profiles.
+          if [ "$RUNNER_OS" = Windows ] && [ "$PACKAGE_DIR" != apps/australian-accounting-power-bi ] && [ "$PACKAGE_DIR" != packages/evatt ]; then
             # ExitProcess bypasses LLVM's exit handler. Continuous counters also
             # preserve executed probe requests if a harness must terminate one.
             if [ "${CARGO_ENCODED_RUSTFLAGS+x}" ]; then
@@ -174,7 +174,7 @@ jobs:
           fi
           cargo llvm-cov show-env --sh > "$RUNNER_TEMP/coverage-env.sh"
           source "$RUNNER_TEMP/coverage-env.sh"
-          if [ "$RUNNER_OS" = Windows ] && [ "$PACKAGE_DIR" != apps/australian-accounting-power-bi ]; then
+          if [ "$RUNNER_OS" = Windows ] && [ "$PACKAGE_DIR" != apps/australian-accounting-power-bi ] && [ "$PACKAGE_DIR" != packages/evatt ]; then
             if [ "${CARGO_ENCODED_RUSTFLAGS+x}" ]; then
               printf 'export CARGO_ENCODED_RUSTFLAGS=%q\n' "$CARGO_ENCODED_RUSTFLAGS" >> "$RUNNER_TEMP/coverage-env.sh"
             else
@@ -370,6 +370,14 @@ jobs:
           cd "$work"
           PATH="$binary:$PATH" bash "$smoke"
 
+      - name: Restore Evatt test binaries for coverage reporting
+        if: matrix.package_dir == 'packages/evatt'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          # Default-feature build and smoke remain checked above. Reporting
+          # needs the native tests' dependency features and CLI symbols.
+          cargo test --locked --all-features --no-run
+          cargo test --locked --all-features --no-run --release
       - name: report both instrumented build profiles
         run: |
           source "$RUNNER_TEMP/coverage-env.sh"
@@ -398,6 +406,22 @@ jobs:
                       if not path.is_absolute():
                           raise SystemExit(f"Non-absolute coverage path: {path}")
                       lines[index] = "SF:" + path.resolve().relative_to(root).as_posix()
+              if Path.cwd().name == "evatt":
+                  main = Path("src/main.rs").read_text(encoding="utf-8").splitlines()
+                  configure = next(i for i, line in enumerate(main)
+                                   if "if let Err(message) = stdio::configure()" in line)
+                  refusal = next(i + 1 for i, line in enumerate(main)
+                                 if i > configure and line.strip() == "return 1;")
+                  child = False
+                  counts = {}
+                  for line in lines:
+                      if line.startswith("SF:"):
+                          child = line[3:] == "packages/evatt/src/main.rs"
+                      elif child and line.startswith("DA:"):
+                          number, count = map(int, line[3:].split(",")[:2])
+                          counts[number] = counts.get(number, 0) + count
+                  if not counts.get(refusal):
+                      raise SystemExit(f"Evatt child stream-refusal counters are missing from {profile}")
               name = f"coverage-{Path.cwd().name}-{os.environ['RUNNER_OS']}-{profile}"
               Path(name + ".lcov").write_text("\n".join(lines) + "\n", encoding="utf-8")
               Path(f"coverage-{profile}.json").replace(name + ".json")
