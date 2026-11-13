@@ -13,15 +13,34 @@ pub struct Temporary(pub PathBuf);
 
 impl Temporary {
     pub fn new() -> Result<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| error.to_string())?
             .as_nanos();
         // Disposable comparison directory outside the checkout, not a security decision.
         // nosemgrep: rust.lang.security.temp-dir.temp-dir
-        let path = std::env::temp_dir().join(format!("power-bi-differential-{}-{stamp}", std::process::id()));
-        fs::create_dir(&path).map_err(|error| error.to_string())?;
-        Ok(Self(path))
+        let base = std::env::temp_dir();
+        Self::create(|| {
+            let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
+            base.join(format!(
+                "power-bi-differential-{}-{stamp}-{sequence}",
+                std::process::id()
+            ))
+        })
+    }
+
+    fn create(mut candidate: impl FnMut() -> PathBuf) -> Result<Self> {
+        for _ in 0..100 {
+            let path = candidate();
+            match fs::create_dir(&path) {
+                Ok(()) => return Ok(Self(path)),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        Err("Could not create a temporary comparison directory.".into())
     }
 }
 
@@ -584,6 +603,56 @@ mod tests {
         refused_for(&native, "Rust wording").unwrap();
         let unexpected = refused_for(&native, "Receipt digest differs.").unwrap_err();
         assert!(unexpected.ends_with("got: Rust wording"), "{unexpected}");
+    }
+
+    #[test]
+    fn temporary_allocation_preserves_an_occupied_candidate() {
+        let workspace = Temporary::new().unwrap();
+        let occupied = workspace.0.join("occupied");
+        let fresh = workspace.0.join("fresh");
+        fs::create_dir(&occupied).unwrap();
+        fs::write(occupied.join("sentinel"), b"keep existing owner").unwrap();
+        let mut candidates = [occupied.clone(), fresh.clone()].into_iter();
+        let allocated = Temporary::create(|| candidates.next().unwrap()).unwrap();
+        assert_eq!(allocated.0, fresh);
+        assert!(fs::read_dir(&fresh).unwrap().next().is_none());
+        assert_eq!(fs::read(occupied.join("sentinel")).unwrap(), b"keep existing owner");
+        drop(allocated);
+        assert!(!fresh.exists());
+        assert!(occupied.is_dir());
+    }
+
+    #[test]
+    fn temporary_allocation_stops_after_repeated_collisions() {
+        let workspace = Temporary::new().unwrap();
+        let occupied = workspace.0.join("occupied-file");
+        fs::write(&occupied, b"keep existing owner").unwrap();
+        let mut attempts = 0;
+        let result = Temporary::create(|| {
+            attempts += 1;
+            occupied.clone()
+        });
+        assert_eq!(
+            result.err().unwrap(),
+            "Could not create a temporary comparison directory."
+        );
+        assert_eq!(attempts, 100);
+        assert_eq!(fs::read(&occupied).unwrap(), b"keep existing owner");
+    }
+
+    #[test]
+    fn temporary_allocation_returns_other_filesystem_errors_immediately() {
+        let workspace = Temporary::new().unwrap();
+        let missing = workspace.0.join("missing-parent").join("candidate");
+        let expected = fs::create_dir(&missing).unwrap_err().to_string();
+        let mut attempts = 0;
+        let result = Temporary::create(|| {
+            attempts += 1;
+            missing.clone()
+        });
+        assert_eq!(result.err().unwrap(), expected);
+        assert_eq!(attempts, 1);
+        assert!(!missing.exists());
     }
 
     #[test]
