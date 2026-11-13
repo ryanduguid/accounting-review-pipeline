@@ -683,3 +683,180 @@ fn review_and_workbench_help_and_usage_show_the_gst_options() {
         assert!(usage.contains(GST_USAGE), "{command}: {usage}");
     }
 }
+
+/// The matching month with GST split into a collected and a paid account:
+/// 1000.00 collected on 10000.00 of taxable sales and 400.00 paid on 4000.00
+/// of creditable purchases.
+fn split() -> Vec<Line> {
+    let mut lines = matching();
+    lines.retain(|l| l.id != "210");
+    lines.push(Line {
+        credit: 100_000,
+        ..line("211", "Liabilities", "GST Collected", "gst_collected")
+    });
+    lines.push(Line {
+        debit: 40_000,
+        ..line("212", "Assets", "GST Paid", "gst_paid")
+    });
+    lines
+}
+
+/// The split mapping's GST accounts classed `gst` instead, as one net figure.
+fn combined(lines: &[Line]) -> String {
+    mapping(lines)
+        .replace(",gst_collected\n", ",gst\n")
+        .replace(",gst_paid\n", ",gst\n")
+}
+
+#[test]
+fn equal_shortfalls_in_gst_collected_and_paid_are_raised_on_each_side() {
+    // 900.00 collected against 1000.00 and 300.00 paid against 400.00: both
+    // sides 100.00 short, so the net 600.00 agrees with the 600.00 expected.
+    let mut lines = split();
+    set(&mut lines, "211", 0, 90_000);
+    set(&mut lines, "212", 30_000, 0);
+    // Classed `gst`, the 2 accounts give one net figure and the shortfalls offset.
+    let run = review(&lines, Some(combined(&lines)), &[]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(gst_findings(run.pack.as_ref().unwrap()).is_empty());
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    assert!(pack.at("overall_status").is_str("REVIEW"));
+    assert!(!not_run(&pack));
+    let found = gst_findings(&pack);
+    assert_eq!(
+        found.len(),
+        2,
+        "the net figure agrees, so only the sides are raised"
+    );
+    for (finding, recorded, expected, threshold) in [
+        (found[0], "900.00", "1000.00", "11.0000"),
+        (found[1], "300.00", "400.00", "5.0000"),
+    ] {
+        assert!(finding.at("status").is_str("REVIEW"));
+        assert!(finding.at("tenant").is_str(TENANT));
+        assert!(finding.at("current_value").is_str(recorded));
+        assert!(finding.at("prior_value").is_str(expected));
+        assert!(finding.at("difference").is_str("-100.00"));
+        assert!(finding.at("threshold").is_str(threshold));
+    }
+    assert_eq!(
+        text(found[0].at("reason")),
+        "GST collected recorded this period is 900.00 (900.00 of movement in the gst_collected accounts and 0.00 for the settlements declared against them), against 1000.00 expected: 1/10 of taxable sales 10000.00. The difference of -100.00 is beyond the 11.0000 review heuristic, which is not a rounding bound. Each side is compared on its own because equal shortfalls in GST collected and GST paid offset in the net figure. The settlements are as declared; the trial balance cannot verify them."
+    );
+    assert!(text(found[1].at("reason")).starts_with(
+        "GST paid recorded this period is 300.00 (300.00 of movement in the gst_paid accounts and 0.00 for the settlements declared against them), against 400.00 expected: 1/10 of creditable purchases 4000.00."
+    ));
+    let queries = pack.at("client_queries").as_array().unwrap();
+    assert!(queries.is_empty(), "the firm traces GST; no client query");
+}
+
+#[test]
+fn a_split_mapping_that_agrees_raises_nothing_and_a_one_sided_error_raises_both_figures() {
+    let lines = split();
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(gst_findings(run.pack.as_ref().unwrap()).is_empty());
+    // 100.00 of GST collected left unrecorded: the net figure and the collected
+    // side are both raised; the paid side agrees.
+    let mut lines = split();
+    set(&mut lines, "211", 0, 90_000);
+    let run = review(&lines, Some(mapping(&lines)), &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    let found = gst_findings(&pack);
+    assert_eq!(found.len(), 2);
+    // Exceptions sort by reason, so the collected side comes before the net figure.
+    assert!(
+        text(found[0].at("reason")).starts_with("GST collected recorded this period is 900.00")
+    );
+    assert!(text(found[1].at("reason")).starts_with("Net GST recorded this period is 500.00"));
+}
+
+#[test]
+fn a_split_clearing_journal_is_set_aside_side_by_side() {
+    // The month's 1000.00 collected and 400.00 paid journalled into the ATO
+    // integrated client account at 600.00.
+    let mut lines = split();
+    set(&mut lines, "211", 100_000, 100_000);
+    set(&mut lines, "212", 40_000, 40_000);
+    lines.push(Line {
+        credit: 60_000,
+        ..line(
+            "220",
+            "Liabilities",
+            "ATO Integrated Client Account",
+            "bas_excluded",
+        )
+    });
+    let sided = "Reference,Amount,Side\nGST collected cleared (journal 41),1000.00,collected\nGST paid cleared (journal 41),-400.00,paid\n";
+    let run = review_settled(&lines, Some(mapping(&lines)), Some(sided.into()), &[]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let pack = run.pack.unwrap();
+    assert!(gst_findings(&pack).is_empty());
+    assert!(pack.at("source_sha256").get("gst_settlements").is_some());
+    // Declared against the wrong sides, the net figure still agrees and each side is raised.
+    let swapped = sided
+        .replace(",collected\n", ",x\n")
+        .replace(",paid\n", ",collected\n")
+        .replace(",x\n", ",paid\n");
+    let run = review_settled(&lines, Some(mapping(&lines)), Some(swapped), &[]);
+    assert_eq!(run.code, 2, "{}", run.stderr);
+    assert_eq!(gst_findings(run.pack.as_ref().unwrap()).len(), 2);
+}
+
+#[test]
+fn a_declaration_must_match_whether_the_mapping_splits_gst() {
+    let split_lines = split();
+    let net_lines = matching();
+    for (lines, csv, message) in [
+        (
+            &split_lines,
+            "Reference,Amount\nBAS July 2026,600.00\n",
+            "the GST mapping splits GST into gst_collected and gst_paid accounts, so each settlement needs a Side",
+        ),
+        (
+            &net_lines,
+            "Reference,Amount,Side\nBAS July 2026,600.00,collected\n",
+            "it has a Side column, but the GST mapping classes its GST accounts gst",
+        ),
+        (
+            &split_lines,
+            "Reference,Amount,Side\nBAS July 2026,600.00,net\n",
+            "row 2 Side 'net' is not one of collected, paid.",
+        ),
+    ] {
+        let run = review_settled(lines, Some(mapping(lines)), Some(csv.into()), &[]);
+        assert_eq!(run.code, 2, "{csv}: {}", run.stderr);
+        let pack = run.pack.unwrap();
+        assert!(not_run(&pack), "{csv}");
+        let reason = text(gst_findings(&pack)[0].at("reason"));
+        assert!(
+            reason.starts_with("The GST settlements declaration cannot be used: "),
+            "{reason}"
+        );
+        assert!(reason.contains(message), "{csv}: {reason}");
+        assert!(reason.ends_with("this is not a pass."), "{reason}");
+    }
+}
+
+#[test]
+fn a_mapping_that_splits_gst_must_split_it_wholly() {
+    let lines = split();
+    for (csv, message) in [
+        (
+            "AccountID,GSTClass\n210,gst\n211,gst_collected\n212,gst_paid\n",
+            "classes accounts both gst and gst_collected or gst_paid",
+        ),
+        (
+            "AccountID,GSTClass\n211,gst_collected\n",
+            "classes no account gst_collected or no account gst_paid",
+        ),
+    ] {
+        let run = review(&lines, Some(csv.into()), &[]);
+        assert_eq!(run.code, 1, "{csv}");
+        assert!(run.stderr.contains(message), "{csv}: {}", run.stderr);
+        assert!(run.pack.is_none(), "{csv}");
+    }
+}

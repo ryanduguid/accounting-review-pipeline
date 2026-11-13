@@ -8,6 +8,11 @@
 - A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
   valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
   build, the release build included, name its commit instead of `unknown`.
+- `gst_reasonableness` accepts GST accounts classed `gst_collected` and
+  `gst_paid`, and then also compares each side with 1/10 of its taxable sales or
+  creditable purchases, so equal shortfalls on both sides, which offset in the
+  net figure, are raised for review. Its settlements declaration then takes a
+  `Side` column. Mappings that class GST accounts `gst` behave as before.
 
 # v1.0.0
 

@@ -10,8 +10,8 @@ use crate::{
     isodate::Date,
     loader::{self, SourceSnapshot},
     models::{
-        ClientQuery, Control, ExceptionItem, GstClass, ReviewerAcknowledgement, Status,
-        TrialBalanceRow,
+        ClientQuery, Control, ExceptionItem, GstClass, GstSettlements, ReviewerAcknowledgement,
+        Status, TrialBalanceRow,
     },
     pyjson::Json,
     pytext, queries, report,
@@ -476,38 +476,184 @@ pub fn subledger_exceptions(
 /// back, with 1/10 of the GST-exclusive taxable sales less 1/10 of the
 /// creditable purchases, and says whether the control ran. Sales and GST
 /// amounts are credits less debits; purchases and settlements are debits less
-/// credits. `settlements` is the declaration, or why there is none to use.
+/// credits. A mapping that splits GST into `gst_collected` and `gst_paid`
+/// accounts also compares each side with its own expectation, so equal
+/// shortfalls on both sides, which offset in the net figure, are still raised.
+/// `settlements` is the declaration, or why there is none to use.
 pub fn gst_reasonableness_exceptions(
     rows: &[TrialBalanceRow],
     mapping: &BTreeMap<String, GstClass>,
-    settlements: std::result::Result<&[Decimal], &str>,
+    settlements: std::result::Result<&GstSettlements, &str>,
     absolute: &Decimal,
     percentage: &Decimal,
 ) -> Result<(Vec<ExceptionItem>, bool)> {
     let (mut unclassed, mut mixed) = (Vec::new(), Vec::new());
-    let (mut sales, mut purchases, mut recorded) = (Vec::new(), Vec::new(), Vec::new());
+    let mut sides = GstSides::default();
+    let mut recorded = Vec::new();
     for row in ordered_rows(rows) {
         let moved = !(row.debit.is_zero() && row.credit.is_zero());
+        let credit_less_debit = row.credit.sub(&row.debit).value;
         match mapping.get(&row.account_id) {
             None if moved => unclassed.push(row),
             Some(GstClass::Mixed) if moved => mixed.push(row),
-            Some(GstClass::TaxableSales) => sales.push(row.credit.sub(&row.debit).value),
-            Some(GstClass::CreditablePurchases) => purchases.push(row.current_net()),
-            Some(GstClass::Gst) => recorded.push(row.credit.sub(&row.debit).value),
+            Some(GstClass::TaxableSales) => sides.sales.push(credit_less_debit),
+            Some(GstClass::CreditablePurchases) => sides.purchases.push(row.current_net()),
+            Some(GstClass::Gst) => recorded.push(credit_less_debit),
+            Some(GstClass::GstCollected) => {
+                recorded.push(credit_less_debit.clone());
+                sides.collected.push(credit_less_debit);
+            }
+            Some(GstClass::GstPaid) => {
+                recorded.push(credit_less_debit);
+                sides.paid.push(row.current_net());
+            }
             _ => {}
         }
     }
+    let sided = mapping
+        .values()
+        .any(|class| *class == GstClass::GstCollected);
+    let settlements = settlements.and_then(|declared| gst_declaration_fits(sided, declared));
     let ran = settlements.is_ok() && unclassed.is_empty() && mixed.is_empty();
     let mut result = match settlements {
-        Ok(settled) if ran => {
-            gst_difference(&sales, &purchases, &recorded, settled, absolute, percentage)?
+        Ok(declared) if ran => {
+            let settled: Vec<_> = declared.rows.iter().map(|(_, a)| a.clone()).collect();
+            let (sales, purchases) = (&sides.sales, &sides.purchases);
+            let net = gst_difference(sales, purchases, &recorded, &settled, absolute, percentage)?;
+            let mut found = Vec::from_iter(net);
+            if sided {
+                found.extend(gst_side_differences(
+                    &sides, declared, absolute, percentage,
+                )?);
+            }
+            found
         }
-        _ => Some(gst_not_run(&unclassed, &mixed, settlements.err())),
+        _ => vec![gst_not_run(&unclassed, &mixed, settlements.err())],
     };
-    if let Some(item) = &mut result {
+    for item in &mut result {
         item.tenant.clone_from(&rows[0].tenant);
     }
-    Ok((result.into_iter().collect(), ran))
+    Ok((result, ran))
+}
+
+/// A declaration with a `Side` column goes with a mapping that splits GST by
+/// side, and one without it with a mapping that does not. A header alone
+/// declares no settlement, so either shape fits either mapping.
+fn gst_declaration_fits(
+    sided: bool,
+    declared: &GstSettlements,
+) -> std::result::Result<&GstSettlements, &'static str> {
+    if declared.rows.is_empty() {
+        return Ok(declared);
+    }
+    match (sided, declared.sided) {
+        (true, false) => Err(
+            "The GST settlements declaration cannot be used: the GST mapping splits GST into gst_collected and gst_paid accounts, so each settlement needs a Side saying which side it was posted to.",
+        ),
+        (false, true) => Err(
+            "The GST settlements declaration cannot be used: it has a Side column, but the GST mapping classes its GST accounts gst rather than splitting them into gst_collected and gst_paid.",
+        ),
+        _ => Ok(declared),
+    }
+}
+
+/// The movements a GST mapping classes: sales and GST collected as credits less
+/// debits, purchases and GST paid as debits less credits.
+#[derive(Default)]
+struct GstSides {
+    sales: Vec<Decimal>,
+    purchases: Vec<Decimal>,
+    collected: Vec<Decimal>,
+    paid: Vec<Decimal>,
+}
+
+/// GST collected against 1/10 of taxable sales, and GST paid against 1/10 of
+/// creditable purchases, each with the settlements declared against its side
+/// added back: a settlement's net debit adds to collected and takes from paid.
+/// The tolerance is the absolute amount plus the percentage of that side's
+/// expected GST.
+fn gst_side_differences(
+    sides: &GstSides,
+    declared: &GstSettlements,
+    absolute: &Decimal,
+    percentage: &Decimal,
+) -> Result<Vec<ExceptionItem>> {
+    let on = |side: GstClass, sign: fn(&Decimal) -> Decimal| -> Vec<Decimal> {
+        let rows = declared.rows.iter().filter(|(s, _)| *s == Some(side));
+        rows.map(|(_, amount)| sign(amount)).collect()
+    };
+    let mut found = Vec::new();
+    for (label, base_label, base, movement, settled) in [
+        (
+            "collected",
+            "taxable sales",
+            &sides.sales,
+            &sides.collected,
+            on(GstClass::GstCollected, Decimal::clone),
+        ),
+        (
+            "paid",
+            "creditable purchases",
+            &sides.purchases,
+            &sides.paid,
+            on(GstClass::GstPaid, |amount| {
+                Decimal::zero().sub(amount).value
+            }),
+        ),
+    ] {
+        let base = exact_total(base, "Current", base_label)?;
+        let movement = exact_total(movement, "Current", &format!("GST {label} movement"))?;
+        let settled = exact_total(&settled, "Declared", &format!("GST {label} settlements"))?;
+        let recorded = exact_total([&movement, &settled], "Current", "GST recorded")?;
+        let expected = base.div(&Decimal::parse("10").unwrap());
+        let difference = recorded.sub(&expected).value;
+        let tolerance = absolute.add(&percentage.mul(&expected.abs())).value;
+        if difference.abs() > tolerance {
+            let figures = [
+                &recorded,
+                &movement,
+                &settled,
+                &expected,
+                &base,
+                &difference,
+            ];
+            found.push(gst_side_item(label, base_label, figures, tolerance)?);
+        }
+    }
+    Ok(found)
+}
+
+/// The exception for one side of a split GST mapping beyond its tolerance;
+/// `figures` are recorded, movement, settled, expected, base and difference.
+fn gst_side_item(
+    label: &str,
+    base_label: &str,
+    figures: [&Decimal; 6],
+    tolerance: Decimal,
+) -> Result<ExceptionItem> {
+    let [recorded, movement, settled, expected, base, difference] = figures;
+    let money = report::money;
+    let mut item = ExceptionItem::new(
+        Control::GstReasonableness,
+        Status::Review,
+        None,
+        &format!(
+            "GST {label} recorded this period is {} ({} of movement in the gst_{label} accounts and {} for the settlements declared against them), against {} expected: 1/10 of {base_label} {}. The difference of {} is beyond the {} review heuristic, which is not a rounding bound. Each side is compared on its own because equal shortfalls in GST collected and GST paid offset in the net figure. The settlements are as declared; the trial balance cannot verify them.",
+            money(recorded)?,
+            money(movement)?,
+            money(settled)?,
+            money(expected)?,
+            money(base)?,
+            money(difference)?,
+            money(&tolerance)?,
+        ),
+        "Trace the difference through that side's GST account postings and the tax codes on its sales or purchases: a sale or purchase coded with the wrong GST treatment, a manual GST journal, a settlement declared against the wrong side, or an account in the wrong GST class. Retain the evidence; this exception adjusts nothing.",
+    );
+    item.current_value = Some(recorded.clone());
+    item.prior_value = Some(expected.clone());
+    item.difference = Some(difference.clone());
+    item.threshold = Some(tolerance);
+    Ok(item)
 }
 
 /// The exception for a net GST movement, with the declared settlements added
@@ -910,7 +1056,7 @@ pub fn review_with(
             let (found, ran) = gst_reasonableness_exceptions(
                 &current_rows,
                 mapping,
-                gst_settlements.as_deref().map_err(String::as_str),
+                gst_settlements.as_ref().map_err(String::as_str),
                 &config.gst_absolute_tolerance,
                 &config.gst_percentage_tolerance,
             )?;
