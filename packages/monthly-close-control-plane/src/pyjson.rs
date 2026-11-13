@@ -449,9 +449,9 @@ impl<'a> Parser<'a> {
     /// `\uXXXX` with the `u` at `idx`, joining a following low surrogate escape.
     fn unicode_escape(&self, idx: usize) -> Result<(u32, usize), LoadError> {
         let len = self.text.len();
-        // CPython requires a character after the 4 hex digits.
+        // A complete escape may end at EOF; string() then reports the missing quote.
         let end = idx + 5;
-        if end >= len {
+        if end > len {
             return Err(self.invalid("Invalid \\uXXXX escape", idx));
         }
         let mut unit = self
@@ -1020,6 +1020,90 @@ mod tests {
         assert!(matches!(loads("1.5E+2"), Ok(Json::Float(_))));
         assert_eq!(loads("01").unwrap_err(), LoadError::Invalid);
         assert_eq!(loads("1.").unwrap_err(), LoadError::Invalid);
+    }
+
+    #[test]
+    fn malformed_documents_refuse_without_partial_values() {
+        for text in [
+            "1e+x",
+            "[1 2]",
+            r#"{"a" 1}"#,
+            r#"{"a":1 "b":2}"#,
+            r#""\x""#,
+            r#""\u1234"#,
+        ] {
+            assert_eq!(loads(text).unwrap_err(), LoadError::Invalid, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn unicode_escape_errors_distinguish_incomplete_digits_from_unclosed_strings() {
+        for (text, diagnostic) in [
+            (
+                r#""\u123"#,
+                "Invalid \\uXXXX escape: line 1 column 3 (char 2)",
+            ),
+            (
+                r#""\u1234"#,
+                "Unterminated string starting at: line 1 column 1 (char 0)",
+            ),
+        ] {
+            assert_eq!(
+                loads_detailed(text).unwrap_err(),
+                (LoadError::Invalid, Some(diagnostic.into()))
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_arrays_round_trip_with_python_float_spelling() {
+        let value = loads("[-12.50,0.0,Infinity,-Infinity,null]").unwrap();
+        let expected = "[-12.5,0.0,Infinity,-Infinity,null]";
+        assert_eq!(canonical(&value), expected);
+        assert!(py_eq(&value, &loads(expected).unwrap(), false));
+    }
+
+    #[test]
+    fn canonical_json_preserves_escaped_control_characters() {
+        let value = loads(r#""\"\\\/\b\t\n\f\r""#).unwrap();
+        assert_eq!(
+            value.as_pystr().unwrap().0,
+            vec![0x22, 0x5c, 0x2f, 8, 9, 10, 12, 13]
+        );
+        assert_eq!(canonical(&value), r#""\"\\/\b\t\n\f\r""#);
+    }
+
+    #[test]
+    fn dumps_sorts_only_when_requested_and_preserves_array_order() {
+        let value = loads(r#"{"z":[2,1],"a":0}"#).unwrap();
+        assert_eq!(dumps(&value, false), r#"{"z": [2, 1], "a": 0}"#);
+        assert_eq!(dumps(&value, true), r#"{"a": 0, "z": [2, 1]}"#);
+    }
+
+    #[test]
+    fn utf8_json_preserves_unicode_and_escapes_control_characters() {
+        let value = loads(r#""é\"\\\/\b\t\n\f\r\u0001""#).unwrap();
+        let expected = r#""é\"\\/\b\t\n\f\r\u0001""#;
+        assert_eq!(canonical_utf8(&value).unwrap(), expected);
+        assert_eq!(pretty_utf8(&value).unwrap(), expected);
+        assert_eq!(canonical(&value), r#""\u00e9\"\\/\b\t\n\f\r\u0001""#);
+    }
+
+    #[test]
+    fn utf8_exports_refuse_consecutive_lone_surrogates_at_their_positions() {
+        let value = loads(r#""a\ud800\ud800z""#).unwrap();
+        assert_eq!(
+            encode_utf8(value.as_pystr().unwrap()).unwrap_err(),
+            "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed"
+        );
+        assert_eq!(
+            pretty_utf8(&value).unwrap_err(),
+            "'utf-8' codec can't encode characters in position 2-3: surrogates not allowed"
+        );
+        assert_eq!(
+            canonical_utf8(&value).unwrap_err(),
+            "JSON string cannot be encoded as UTF-8"
+        );
     }
 
     #[test]

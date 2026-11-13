@@ -411,9 +411,9 @@ impl<'a> Parser<'a> {
     /// `\uXXXX` with the `u` at `idx`, joining a following low surrogate escape.
     fn unicode_escape(&self, idx: usize) -> Result<(u32, usize), LoadError> {
         let len = self.text.len();
-        // CPython requires a character after the 4 hex digits.
+        // A complete escape may end at EOF; string() then reports the missing quote.
         let end = idx + 5;
-        if end >= len {
+        if end > len {
             return Err(self.fail("Invalid \\uXXXX escape", idx));
         }
         let mut unit = self
@@ -799,7 +799,13 @@ mod tests {
                 "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)",
             ),
             ("{}\n null", "Extra data: line 2 column 2 (char 4)"),
+            ("x", "Expecting value: line 1 column 1 (char 0)"),
             ("1e+x", "Extra data: line 1 column 2 (char 1)"),
+            (r#"{"a":1 "b":2}"#, "Expecting ',' delimiter: line 1 column 8 (char 7)"),
+            (
+                r#""\u1234"#,
+                "Unterminated string starting at: line 1 column 1 (char 0)",
+            ),
             ("[1 2]", "Expecting ',' delimiter: line 1 column 4 (char 3)"),
             ("{\"a\" 1}", "Expecting ':' delimiter: line 1 column 6 (char 5)"),
             (
@@ -808,6 +814,7 @@ mod tests {
             ),
             ("\"a\\x\"", "Invalid \\escape: line 1 column 3 (char 2)"),
             ("\"\\u123\"", "Invalid \\uXXXX escape: line 1 column 3 (char 2)"),
+            (r#""\u123"#, "Invalid \\uXXXX escape: line 1 column 3 (char 2)"),
             (
                 "\"unterminated",
                 "Unterminated string starting at: line 1 column 1 (char 0)",
@@ -836,6 +843,14 @@ mod tests {
         let value = loads(r#""\"\\\/\b\t\n\f\r""#).unwrap();
         assert_eq!(value.as_pystr().unwrap().0, vec![0x22, 0x5c, 0x2f, 8, 9, 10, 12, 13]);
         assert_eq!(canonical(&value), r#""\"\\/\b\t\n\f\r""#);
+    }
+
+    #[test]
+    fn numeric_arrays_round_trip_with_python_float_spelling() {
+        let value = loads("[-12.50,0.0,Infinity,-Infinity,null]").unwrap();
+        let expected = "[-12.5,0.0,Infinity,-Infinity,null]";
+        assert_eq!(canonical(&value), expected);
+        assert!(py_eq(&value, &loads(expected).unwrap(), false));
     }
 
     #[test]
