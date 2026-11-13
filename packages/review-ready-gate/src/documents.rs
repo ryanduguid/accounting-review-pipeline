@@ -687,6 +687,70 @@ mod tests {
     }
 
     #[test]
+    fn copying_the_review_template_does_not_confirm_transcription() {
+        let tmp = TempDir::new();
+        let path = bundle(&tmp, &source_text(), "Demo", "txt");
+        fs::copy(
+            path.join("document-review.example.json"),
+            path.join(REVIEW_NAME),
+        )
+        .unwrap();
+        let loaded = load_document(&path).unwrap();
+        let issue = "Record the reviewer, date and confirmation against the original document.";
+        assert_eq!(loaded.issues, [issue]);
+        let rendered = render_document(&loaded);
+        assert!(rendered.contains(issue));
+        assert!(!rendered.contains("Transcription review recorded."));
+        let (findings, _) = document_controls(&[loaded], Some("Demo"), Some("2026-03-31"));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].code, "DOCUMENT_REVIEW_REQUIRED");
+        assert_eq!(findings[0].status, "NOT_READY");
+    }
+    #[test]
+    fn reviewed_gst_must_share_the_total_sign_and_not_exceed_it() {
+        for (total, gst, invalid) in [
+            ("110.00", "-10.00", true),
+            ("110.00", "120.00", true),
+            ("-110.00", "-10.00", false),
+        ] {
+            let tmp = TempDir::new();
+            let text = source_text()
+                .replace("Total: 110.00", &format!("Total: {total}"))
+                .replace("GST: 10.00", &format!("GST: {gst}"));
+            let path = bundle(&tmp, &text, "Demo", "txt");
+            reviewed(&path);
+            let loaded = load_document(&path).unwrap();
+            if invalid {
+                assert_eq!(
+                    loaded.issues,
+                    ["Observed GST has a different sign from the total or exceeds it."]
+                );
+            } else {
+                assert!(loaded.issues.is_empty(), "{:?}", loaded.issues);
+            }
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn extracted_text_symlink_cannot_escape_the_document_bundle() {
+        use std::os::unix::fs::symlink;
+        let tmp = TempDir::new();
+        let path = bundle(&tmp, &source_text(), "Demo", "txt");
+        let outside = tmp.join("outside.txt");
+        let prior = b"fabricated text outside this bundle";
+        fs::write(&outside, prior).unwrap();
+        let member = path.join(TEXT_NAME);
+        fs::remove_file(&member).unwrap();
+        symlink(&outside, &member).unwrap();
+        assert_eq!(
+            load_document(&path).unwrap_err(),
+            "extracted.txt must stay inside its document bundle."
+        );
+        assert_eq!(fs::read(&outside).unwrap(), prior);
+        assert_eq!(fs::read_link(&member).unwrap(), outside);
+    }
+
+    #[test]
     #[expect(
         clippy::too_many_lines,
         reason = "one table of the 15 benchmark documents"
