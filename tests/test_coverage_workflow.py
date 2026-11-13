@@ -67,6 +67,29 @@ class CoverageWorkflowTests(unittest.TestCase):
                              "SF:packages/example/src/lib.rs\nDA:7,3\nDA:8,0\nend_of_record\n")
             self.assertEqual((self.component / (name + ".json")).read_text(), "{}")
 
+    def test_evatt_reports_require_child_refusal_counters_in_both_profiles(self):
+        self.component = self.root / "packages/evatt"
+        self.component.mkdir()
+        source = self.component / "src/main.rs"
+        source.parent.mkdir()
+        source.write_text("fn run() -> i32 {\n"
+                          "    if let Err(message) = stdio::configure() {\n"
+                          "        return 1;\n    }\n    0\n}\n", encoding="utf-8")
+        parent = self.component / "tests/cli.rs"
+        for debug, release in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            with self.subTest(debug=debug, release=release):
+                for profile, count in (("debug", debug), ("release", release)):
+                    (self.component / f"coverage-{profile}.lcov").write_text(
+                        f"SF:{source}\nDA:3,{count}\nend_of_record\n"
+                        f"SF:{parent}\nDA:3,7\nend_of_record\n", encoding="utf-8")
+                    (self.component / f"coverage-{profile}.json").write_text("{}", encoding="utf-8")
+                result = self.normalise()
+                if debug and release:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Evatt child stream-refusal counters are missing", result.stderr)
+
     def test_similarly_named_sibling_is_outside_repository(self):
         self.reports(self.root.with_name("repo-other") / "src/lib.rs")
         result = self.normalise()
@@ -228,7 +251,7 @@ class CoverageWorkflowTests(unittest.TestCase):
             for release in ([], ["--release"])
         ])
 
-    def test_windows_power_bi_flushes_profiles_without_continuous_counters(self):
+    def test_windows_normal_returning_binaries_flush_without_continuous_counters(self):
         bash = shutil.which("bash")
         if os.name == "nt":
             git = Path(shutil.which("git"))
@@ -248,6 +271,7 @@ source "$RUNNER_TEMP/coverage-env.sh"
 "$PROFILE_TEST_PYTHON" -c 'import json,os; print(json.dumps({name: os.environ.get(name) for name in ("LLVM_PROFILE_FILE", "ARP_CHILD_LLVM_PROFILE_FILE", "RUSTFLAGS")}))'
 """
         for component, continuous in (("apps/australian-accounting-power-bi", False),
+                                      ("packages/evatt", False),
                                       ("packages/review-ready-gate", True)):
             with self.subTest(component=component):
                 env = os.environ | {
