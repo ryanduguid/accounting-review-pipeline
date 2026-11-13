@@ -785,6 +785,28 @@ mod tests {
     }
 
     #[test]
+    fn malformed_documents_refuse_without_partial_values() {
+        for text in [
+            "1e+x",
+            "[1 2]",
+            r#"{"a" 1}"#,
+            r#"{"a":1 "b":2}"#,
+            r#""\x""#,
+            r#""\u1234"#,
+        ] {
+            assert_eq!(loads(text).unwrap_err(), LoadError::Invalid, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn numeric_arrays_round_trip_with_python_float_spelling() {
+        let value = loads("[-12.50,0.0,Infinity,-Infinity,null]").unwrap();
+        let expected = "[-12.5,0.0,Infinity,-Infinity,null]";
+        assert_eq!(canonical(&value), expected);
+        assert!(py_eq(&value, &loads(expected).unwrap(), false));
+    }
+
+    #[test]
     fn dumps_follows_cpython() {
         let value =
             loads("{\"b\":[1,2.5,\"\\u00e9\\ud800\\ud83d\\ude00\\u007f\"],\"a\":{},\"c\":[]}")

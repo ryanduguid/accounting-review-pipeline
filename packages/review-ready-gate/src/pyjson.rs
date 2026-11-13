@@ -806,6 +806,45 @@ mod tests {
     }
 
     #[test]
+    fn malformed_documents_refuse_without_partial_values() {
+        for text in [
+            "1e+x",
+            "[1 2]",
+            r#"{"a" 1}"#,
+            r#"{"a":1 "b":2}"#,
+            r#""\x""#,
+            r#""\u1234"#,
+        ] {
+            assert_eq!(loads(text).unwrap_err(), LoadError::Invalid, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn numeric_arrays_round_trip_with_python_float_spelling() {
+        let value = loads("[-12.50,0.0,Infinity,-Infinity,null]").unwrap();
+        let expected = "[-12.5,0.0,Infinity,-Infinity,null]";
+        assert_eq!(canonical(&value), expected);
+        assert!(py_eq(&value, &loads(expected).unwrap(), false));
+    }
+
+    #[test]
+    fn canonical_json_preserves_escaped_control_characters() {
+        let value = loads(r#""\"\\\/\b\t\n\f\r""#).unwrap();
+        assert_eq!(
+            value.as_pystr().unwrap().0,
+            vec![0x22, 0x5c, 0x2f, 8, 9, 10, 12, 13]
+        );
+        assert_eq!(canonical(&value), r#""\"\\/\b\t\n\f\r""#);
+    }
+
+    #[test]
+    fn dumps_sorts_only_when_requested_and_preserves_array_order() {
+        let value = loads(r#"{"z":[2,1],"a":0}"#).unwrap();
+        assert_eq!(dumps(&value, false), r#"{"z": [2, 1], "a": 0}"#);
+        assert_eq!(dumps(&value, true), r#"{"a": 0, "z": [2, 1]}"#);
+    }
+
+    #[test]
     fn dumps_follows_cpython() {
         let value =
             loads("{\"b\":[1,2.5,\"\\u00e9\\ud800\\ud83d\\ude00\\u007f\"],\"a\":{},\"c\":[]}")
