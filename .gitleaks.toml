@@ -55,4 +55,7 @@ paths = [
 regexes = [
   # The ATO's own ABN, the usual published example of a valid ABN.
   '''^51[ -]?824[ -]?753[ -]?556$''',
+  # Monthly Close's fabricated contact ABNs, 80 000 000 001 and 80 000 000 002,
+  # which its contact_register tests quote in expected messages.
+  '''^80[ -]?000[ -]?000[ -]?00[12]$''',
 ]
