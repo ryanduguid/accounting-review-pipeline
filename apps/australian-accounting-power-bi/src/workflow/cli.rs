@@ -1,13 +1,38 @@
 use super::{Result, export, files, html, json, projection, run};
 use std::{collections::BTreeMap, ffi::OsString, fs, io::Write, path::Path};
 
-const COMMANDS: [&str; 6] = ["build", "html", "fixtures", "verify", "export", "verify-export"];
+/// The positional command. Every command except `verify-export` locates the native
+/// producer directory before it runs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Command {
+    VerifyExport,
+    Located(Located),
+}
+
+/// A command that runs once the producer directory is located.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Located {
+    Build,
+    Html,
+    Fixtures,
+    Verify,
+    Export,
+}
+
+const COMMANDS: [(&str, Command); 6] = [
+    ("build", Command::Located(Located::Build)),
+    ("html", Command::Located(Located::Html)),
+    ("fixtures", Command::Located(Located::Fixtures)),
+    ("verify", Command::Located(Located::Verify)),
+    ("export", Command::Located(Located::Export)),
+    ("verify-export", Command::VerifyExport),
+];
 const OPTIONS: [&str; 6] = ["run", "bin-dir", "month", "review-note", "previous", "output"];
 const USAGE: &str = "usage: review-workflow [-h] --run RUN [--bin-dir BIN_DIR] [--month MONTH] [--review-note REVIEW_NOTE] [--previous PREVIOUS] [--output OUTPUT] {build,html,fixtures,verify,export,verify-export}";
 const HELP: &str = "Build and display one pinned, offline fabricated review case through existing CLIs.\n\npositional arguments:\n  {build,html,fixtures,verify,export,verify-export}\n\noptions:\n  -h, --help            show this help message and exit\n  --run RUN\n  --bin-dir BIN_DIR\n  --month MONTH         default: 9\n  --review-note REVIEW_NOTE\n  --previous PREVIOUS\n  --output OUTPUT\n";
 
 struct Arguments {
-    command: String,
+    command: Command,
     values: BTreeMap<&'static str, OsString>,
     month: u32,
 }
@@ -50,10 +75,12 @@ fn parse(args: &[OsString]) -> Result<Arguments> {
             return Err(format!("unrecognised arguments: {text}"));
         }
     }
-    let command = command.ok_or("the following arguments are required: command")?;
-    if !COMMANDS.contains(&command.as_str()) {
-        return Err(format!("argument command: invalid choice: {command:?}"));
-    }
+    let name = command.ok_or("the following arguments are required: command")?;
+    let command = COMMANDS
+        .iter()
+        .find(|(known, _)| *known == name)
+        .map(|(_, command)| *command)
+        .ok_or_else(|| format!("argument command: invalid choice: {name:?}"))?;
     if !values.contains_key("run") {
         return Err("the following arguments are required: --run".into());
     }
@@ -145,12 +172,15 @@ fn execute(args: &Arguments) -> Result<String> {
     let previous = args.path("previous");
     let note = args.path("review-note");
     let output = args.path("output");
-    if args.command == "verify-export" {
-        if previous.is_some() || note.is_some() || output.is_some() {
-            return Err("verify-export does not support --previous, --review-note or --output.".into());
+    let command = match args.command {
+        Command::VerifyExport => {
+            if previous.is_some() || note.is_some() || output.is_some() {
+                return Err("verify-export does not support --previous, --review-note or --output.".into());
+            }
+            return Ok(json::inline(&export::verify(run)?));
         }
-        return Ok(json::inline(&export::verify(run)?));
-    }
+        Command::Located(command) => command,
+    };
     // The executable directory locates sibling producers. It grants no privilege.
     // nosemgrep: rust.lang.security.current-exe.current-exe
     let default = std::env::current_exe()
@@ -159,8 +189,8 @@ fn execute(args: &Arguments) -> Result<String> {
         .ok_or("Cannot locate the native producer directory.")?
         .to_path_buf();
     let bin_dir = args.path("bin-dir").unwrap_or(&default);
-    match args.command.as_str() {
-        "export" => {
+    match command {
+        Located::Export => {
             if output.is_none() || previous.is_some() || note.is_some() {
                 return Err(
                     "Export requires --output and supports one run without --previous or --review-note.".into(),
@@ -168,13 +198,12 @@ fn execute(args: &Arguments) -> Result<String> {
             }
             export::export(run, bin_dir, output.unwrap())?;
         }
-        "build" => run::build(run, bin_dir, args.month, note)?,
-        "verify" => {
+        Located::Build => run::build(run, bin_dir, args.month, note)?,
+        Located::Verify => {
             run::verify(run)?;
         }
-        "html" => html_output(run, bin_dir, previous, output.ok_or("--output is required.")?)?,
-        "fixtures" => fixture_output(run, output.ok_or("--output is required.")?)?,
-        _ => unreachable!("validated command"),
+        Located::Html => html_output(run, bin_dir, previous, output.ok_or("--output is required.")?)?,
+        Located::Fixtures => fixture_output(run, output.ok_or("--output is required.")?)?,
     }
     Ok("Review workflow verification completed.".into())
 }
@@ -273,6 +302,27 @@ mod tests {
         let parsed = parse(&args).unwrap();
         assert_eq!(parsed.path("previous"), Some(Path::new("unused")));
         assert!(parse(&["verify", "--run", "unused", "--month", "8"].map(OsString::from)).is_ok());
+    }
+
+    #[test]
+    fn exactly_the_six_listed_commands_are_accepted() {
+        let command = |name: &str| parse(&[name, "--run", "unused"].map(OsString::from)).map(|args| args.command);
+        for (name, expected) in [
+            ("build", Command::Located(Located::Build)),
+            ("html", Command::Located(Located::Html)),
+            ("fixtures", Command::Located(Located::Fixtures)),
+            ("verify", Command::Located(Located::Verify)),
+            ("export", Command::Located(Located::Export)),
+            ("verify-export", Command::VerifyExport),
+        ] {
+            assert_eq!(command(name), Ok(expected));
+        }
+        for name in ["Verify", "verify-exports", "ver", ""] {
+            assert_eq!(
+                command(name),
+                Err(format!("argument command: invalid choice: {name:?}"))
+            );
+        }
     }
 
     #[test]
