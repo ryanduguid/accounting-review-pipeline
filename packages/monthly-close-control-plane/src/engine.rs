@@ -472,6 +472,53 @@ pub fn subledger_exceptions(
     result
 }
 
+/// `REVIEW` for each current account with a closing balance that no supplied
+/// subledger balance or computed equity reconciliation ties out, when its
+/// `Section` is Assets, Liabilities or Equity, or is none of those nor Revenue
+/// or Expenses, so whether it needs a reconciliation cannot be told.
+pub fn reconciliation_coverage_exceptions(
+    rows: &[TrialBalanceRow],
+    subledger: &BTreeMap<(String, String), Decimal>,
+    equity: Option<&Json>,
+) -> Vec<ExceptionItem> {
+    let reconciled: BTreeSet<String> = equity
+        .and_then(|result| result.at("accounts").as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|account| account.at("account_id").as_pystr())
+        .map(|id| id.to_utf8().unwrap_or_else(|| id.os_text()))
+        .collect();
+    let mut result = Vec::new();
+    for row in ordered_rows(rows) {
+        let balance = row.ytd_net();
+        if balance.is_zero()
+            || subledger.contains_key(&row.key())
+            || reconciled.contains(&row.account_id)
+        {
+            continue;
+        }
+        let reason = match pytext::casefold(&row.section).as_str() {
+            "revenue" | "expenses" => continue,
+            "assets" | "liabilities" | "equity" => {
+                "Balance-sheet account with a closing balance and no supplied subledger balance or equity reconciliation: this pack ties it to nothing."
+            }
+            _ => {
+                "Account with a closing balance and no supplied subledger balance or equity reconciliation, in a Section that is not Assets, Liabilities, Equity, Revenue or Expenses, so whether it needs a reconciliation cannot be told."
+            }
+        };
+        let mut item = ExceptionItem::new(
+            Control::ReconciliationCoverage,
+            Status::Review,
+            Some(row),
+            reason,
+            "Supply its reconciliation as a subledger balance, or select the equity account in an equity schedule, and run the review again; or retain why it needs none. This exception adjusts nothing.",
+        );
+        item.current_value = Some(balance);
+        result.push(item);
+    }
+    result
+}
+
 /// Compares the period's net GST movement, with the declared settlements added
 /// back, with 1/10 of the GST-exclusive taxable sales less 1/10 of the
 /// creditable purchases, and says whether the control ran. Sales and GST
@@ -1102,6 +1149,13 @@ pub fn review_with(
     } else {
         None
     };
+    // Runs only when required: it lists accounts no input ties out, which
+    // would otherwise change every pack that leaves one out.
+    if required_controls.contains(&Control::ReconciliationCoverage) {
+        exceptions.extend(decimal::with_precision(28, || {
+            reconciliation_coverage_exceptions(&current_rows, &subledger, equity_result.as_ref())
+        }));
+    }
     let supplied = |present| {
         if present {
             RunState::Ran
@@ -1116,6 +1170,7 @@ pub fn review_with(
         | Control::PeriodComparison
         | Control::PeriodVariance
         | Control::AccountMetadata
+        | Control::ReconciliationCoverage
         | Control::Required => RunState::Ran,
         Control::AccountMapping if config.mapping_path.is_some() && mapping.is_empty() => {
             RunState::Failed
