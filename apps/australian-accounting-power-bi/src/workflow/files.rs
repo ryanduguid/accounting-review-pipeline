@@ -519,45 +519,50 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn a_windows_directory_that_cannot_be_opened_is_reported_when_resolved() {
-        use std::os::windows::process::CommandExt;
-        fn icacls(path: &Path, args: &[&str]) -> std::process::Output {
-            std::process::Command::new("icacls")
-                .arg(path)
-                .args(args)
-                .creation_flags(0x0800_0000)
-                .output()
-                .unwrap()
-        }
-        /// Removes the deny entry so the temporary directory can be deleted. The test
-        /// checks the removal; dropping repeats it, the fallback after a panic.
-        struct Restore<'a>(&'a Path);
-        impl Restore<'_> {
-            fn remove(&self) -> std::process::Output {
-                icacls(self.0, &["/remove:d", "*S-1-1-0"])
-            }
-        }
-        impl Drop for Restore<'_> {
-            fn drop(&mut self) {
-                self.remove();
-            }
-        }
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            DELETE, FILE_DISPOSITION_INFO, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, FileDispositionInfo, SetFileInformationByHandle,
+        };
         let temporary = Temporary::new("pbi-denied-").unwrap();
         let denied = temporary.0.join("denied");
         fs::create_dir(&denied).unwrap();
-        // Everyone is denied every right on the directory. The walk's lookup still
-        // succeeds, answered from the parent's listing, but opening it to resolve fails.
-        let output = icacls(&denied, &["/deny", "*S-1-1-0:(F)"]);
-        let restore = Restore(&denied);
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+        // Marked for deletion with the classic disposition, the directory keeps its entry
+        // in the parent's listing until this handle closes, so the walk's lookup still
+        // succeeds, but every new open of it is refused whatever the caller's rights or
+        // privileges. Unlike a deny entry, backup semantics do not bypass this.
+        let pending = fs::OpenOptions::new()
+            .access_mode(DELETE)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&denied)
+            .unwrap();
+        let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+        // SAFETY: the handle is open and the buffer is a live FILE_DISPOSITION_INFO of
+        // the size passed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let marked = unsafe {
+            SetFileInformationByHandle(
+                pending.as_raw_handle(),
+                FileDispositionInfo,
+                (&raw const disposition).cast(),
+                size_of::<FILE_DISPOSITION_INFO>() as u32,
+            )
+        };
+        assert_ne!(marked, 0, "{}", std::io::Error::last_os_error());
         assert!(fs::symlink_metadata(&denied).unwrap().is_dir());
         let refusal = fs::canonicalize(&denied).unwrap_err();
         assert_eq!(refusal.kind(), std::io::ErrorKind::PermissionDenied);
         for path in [denied.clone(), denied.join("new-output")] {
             assert_eq!(ordinary(&path).unwrap_err(), refusal.to_string());
         }
-        let removed = restore.remove();
-        assert!(removed.status.success(), "{}", String::from_utf8_lossy(&removed.stdout));
-        drop(restore);
+        // Closing the last handle deletes the directory; then the temporary root goes.
+        drop(pending);
+        assert_eq!(
+            fs::symlink_metadata(&denied).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
         let root = temporary.0.clone();
         drop(temporary);
         assert_eq!(
