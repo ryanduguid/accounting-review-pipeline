@@ -459,6 +459,100 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn a_windows_reparse_point_that_is_not_a_link_is_refused() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Networking::WinSock::{
+            AF_UNIX, INVALID_SOCKET, SOCK_STREAM, SOCKADDR, SOCKADDR_UN, WSACleanup, WSADATA, WSAStartup, bind,
+            closesocket, socket,
+        };
+        // Binding an AF_UNIX socket creates a file whose reparse tag is not a name
+        // surrogate, so the standard library does not call it a symlink.
+        let temporary = Temporary::new("pbi-socket-").unwrap();
+        let path = temporary.0.join("socket");
+        let mut address = SOCKADDR_UN {
+            sun_family: AF_UNIX,
+            sun_path: [0; 108],
+        };
+        let name = path.to_str().unwrap().as_bytes();
+        assert!(
+            name.len() < address.sun_path.len(),
+            "temporary path too long for a socket"
+        );
+        for (slot, byte) in address.sun_path.iter_mut().zip(name) {
+            *slot = byte.cast_signed();
+        }
+        // SAFETY: data is writable and has the size WSAStartup fills.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let started = unsafe {
+            let mut data = std::mem::zeroed::<WSADATA>();
+            WSAStartup(0x0202, &raw mut data)
+        };
+        assert_eq!(started, 0);
+        // SAFETY: Winsock is started; the call takes no pointers.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let handle = unsafe { socket(AF_UNIX.into(), SOCK_STREAM, 0) };
+        assert_ne!(handle, INVALID_SOCKET, "AF_UNIX sockets need Windows 10 1803 or later");
+        // SAFETY: the address is initialised, live and as long as the length passed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let bound = unsafe {
+            bind(
+                handle,
+                (&raw const address).cast::<SOCKADDR>(),
+                size_of::<SOCKADDR_UN>() as i32,
+            )
+        };
+        // SAFETY: the socket is open and closed once; cleanup balances WSAStartup.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        unsafe {
+            closesocket(handle);
+            WSACleanup();
+        }
+        assert_eq!(bound, 0);
+        let metadata = fs::symlink_metadata(&path).unwrap();
+        assert!(!metadata.file_type().is_symlink());
+        assert_ne!(metadata.file_attributes() & 0x400, 0);
+        assert!(linked(&metadata));
+        assert_eq!(ordinary(&path).unwrap_err(), "Linked paths are not admitted.");
+        assert_eq!(read(&path.join("child")).unwrap_err(), "Linked paths are not admitted.");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_directory_that_cannot_be_opened_is_reported_when_resolved() {
+        use std::os::windows::process::CommandExt;
+        fn icacls(path: &Path, args: &[&str]) -> std::process::Output {
+            std::process::Command::new("icacls")
+                .arg(path)
+                .args(args)
+                .creation_flags(0x0800_0000)
+                .output()
+                .unwrap()
+        }
+        /// Removes the deny entry so the temporary directory can be deleted.
+        struct Restore<'a>(&'a Path);
+        impl Drop for Restore<'_> {
+            fn drop(&mut self) {
+                icacls(self.0, &["/remove:d", "*S-1-1-0"]);
+            }
+        }
+        let temporary = Temporary::new("pbi-denied-").unwrap();
+        let denied = temporary.0.join("denied");
+        fs::create_dir(&denied).unwrap();
+        // Everyone is denied every right on the directory. The walk's lookup still
+        // succeeds, answered from the parent's listing, but opening it to resolve fails.
+        let output = icacls(&denied, &["/deny", "*S-1-1-0:(F)"]);
+        let _restore = Restore(&denied);
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+        assert!(fs::symlink_metadata(&denied).unwrap().is_dir());
+        let refusal = fs::canonicalize(&denied).unwrap_err();
+        assert_eq!(refusal.kind(), std::io::ErrorKind::PermissionDenied);
+        for path in [denied.clone(), denied.join("new-output")] {
+            assert_eq!(ordinary(&path).unwrap_err(), refusal.to_string());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn ordinary_resolves_windows_spelling_before_appending_missing_output_names() {
         use std::os::windows::ffi::{OsStrExt, OsStringExt};
         use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
