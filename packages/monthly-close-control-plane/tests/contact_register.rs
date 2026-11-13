@@ -136,6 +136,23 @@ fn duplicate_contacts_invalid_abns_and_a_shared_abn_are_each_raised() {
 }
 
 #[test]
+fn all_whitespace_is_ignored_in_names_and_abns() {
+    // A name split by a space matches the same name without one, and an ABN
+    // separated by non-breaking spaces is read as its 11 digits.
+    let temp = TempDir::new();
+    let csv = "ContactID,Name,ABN\nC1,Fabricated Acme Pty,80\u{a0}000\u{a0}000\u{a0}001\n\
+               C2,Fabricated AcmePty,\n";
+    let (result, output) = review(&temp, "pack", Some(csv), &[]);
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    assert_eq!(
+        reasons(&pack(&output)),
+        [
+            "2 contacts have the same name once case and spacing are ignored: 'C1' ('Fabricated Acme Pty'), 'C2' ('Fabricated AcmePty')."
+        ]
+    );
+}
+
+#[test]
 fn a_clean_contacts_export_raises_nothing_and_counts_as_run() {
     let temp = TempDir::new();
     let clean = "ContactID,Name,ABN\nC1,Fabricated Lumbridge Supplies,80 000 000 001\n\

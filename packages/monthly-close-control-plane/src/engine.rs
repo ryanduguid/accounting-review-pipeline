@@ -552,7 +552,7 @@ fn contact_item(reason: &str, action: &str) -> ExceptionItem {
     )
 }
 
-/// The finding for a recorded ABN that `digits`, its spaces removed, show is
+/// The finding for a recorded ABN that `digits`, its whitespace removed, show is
 /// not a valid ABN.
 fn invalid_abn(contact: &Contact, digits: &str) -> ExceptionItem {
     let fault = if digits.len() == 11 && digits.bytes().all(|b| b.is_ascii_digit()) {
@@ -581,10 +581,10 @@ pub fn contact_register_exceptions(contacts: &[Contact]) -> Vec<ExceptionItem> {
     for contact in contacts {
         let name = pytext::casefold(&contact.name);
         by_name
-            .entry(name.split_whitespace().collect::<Vec<_>>().join(" "))
+            .entry(name.split_whitespace().collect())
             .or_default()
             .push(contact);
-        let digits = contact.abn.replace(' ', "");
+        let digits: String = contact.abn.split_whitespace().collect();
         if abn_check_digits_hold(&digits) {
             by_abn.entry(digits).or_default().push(contact);
         } else if !digits.is_empty() {

@@ -377,10 +377,11 @@ With a mapping that classes `gst_collected` and `gst_paid`, the declaration has
 exactly `Reference,Amount,Side` columns, and `Side` is `collected` or `paid`:
 the side whose accounts the settlement was posted to. A clearing journal that
 debits GST collected 1000.00 and credits GST paid 400.00 is 2 rows, 1000.00
-`collected` and -400.00 `paid`. A declaration that lists settlements without
-`Side` for a split mapping, or with `Side` for a `gst` mapping, or a `Side`
-other than those 2 stops the control in the same way. A header alone, in either
-shape, declares no settlements for either mapping.
+`collected` and -400.00 `paid`, each with its own `Reference`. A declaration
+that lists settlements without `Side` for a split mapping, or with `Side` for a
+`gst` mapping, or a `Side` other than those 2 stops the control in the same
+way. A header alone, in either shape, declares no settlements for either
+mapping.
 
 The control relies on the declaration and cannot verify it from trial-balance
 movements, which do not tell a settlement from other GST postings. A
@@ -545,7 +546,7 @@ into an exception.
 | `calculation_evidence` | With `--calculation-evidence` or `--require-calculation`: `BLOCKED` for an unreadable or self-inconsistent evidence file, including a computed figure with no manifest, or a producer finding; `REVIEW` for a missing required label, a recorded refusal or failure, a period that does not cover the report date or a figure whose evidence names no rate table ([checks](#what-is-checked-and-what-each-failure-earns)). | Whether the figure is right: this package has no calculator and never recomputes it. | Re-produce or supply the evidence, or remove a requirement deliberately; read a refusal as a result, never a nil amount. No client query. |
 | `equity_reconciliation` | With `--equity-schedule`: `REVIEW` when a selected equity account's closing balance, or the selected accounts' aggregate, differs from opening plus scheduled movements by more than `--reconciliation-tolerance`; `BLOCKED` when the schedule's completeness, currency evidence, account continuity or source metadata do not hold. | An equity account the schedule does not select, or whether the declared currency is true: the declaration is a supplied assertion. It infers no profit figure from the ledger. | Reconcile the independent movement records and retained source evidence ([equity reconciliation](docs/equity-reconciliation.md)). Drafts a client query for an account-level difference. |
 | `reconciliation_coverage` | With `--require-control reconciliation_coverage`: `REVIEW` for each current account with a closing balance (`YTDDebit - YTDCredit` not nil) that has no `--subledger` row and is not an equity account that `equity_reconciliation` computed, when its `Section` is `Assets`, `Liabilities` or `Equity`, or is none of those nor `Revenue` or `Expenses`, since whether such an account needs a reconciliation cannot be told. | Whether a supplied subledger balance or equity schedule is itself complete or right: any row counts as a tie, and its own control compares the figures. An account with a nil closing balance, which a reconciliation would tie to nil. | Reconcile each listed account and supply it as a subledger balance or an equity schedule, or retain why it needs none. No client query. |
-| `contact_register` | With `--contacts`: `REVIEW` for each contact whose `ABN` is not 11 digits once spaces are removed or fails the ABN check digits, for each valid ABN on more than one contact, and for each name on more than one contact once case and spacing are ignored. | Whether an ABN that passes the check digits is registered, current or the contact's own: nothing is looked up. A contact with a blank `ABN`, and duplicates whose names differ by more than case and spacing, such as `Pty Ltd` against `Pty. Limited`. | Confirm each ABN on the Australian Business Register's ABN Lookup, and merge contacts entered more than once in the ledger. No client query. |
+| `contact_register` | With `--contacts`: `REVIEW` for each contact whose `ABN` is not 11 digits once whitespace is removed or fails the ABN check digits, for each valid ABN on more than one contact, and for each name on more than one contact once case and spacing are ignored. | Whether an ABN that passes the check digits is registered, current or the contact's own: nothing is looked up. A contact with a blank `ABN`, and duplicates whose names differ by more than case and spacing, such as `Pty Ltd` against `Pty. Limited`. | Confirm each ABN on the Australian Business Register's ABN Lookup, and merge contacts entered more than once in the ledger. No client query. |
 | `required_control` | With `--require-control`: `REVIEW` for each named control that was skipped or failed. | Whether a control that ran was fed complete data: a subledger file with one row counts as run. | Supply the input the control needs, or remove the requirement deliberately. No client query. |
 
 ## Detection benchmark
@@ -664,7 +665,7 @@ ContactID,Name,ABN
 ```
 
 `ContactID` and `Name` must not be blank, and a `ContactID` may appear once.
-`ABN` may be blank, and then it is not checked; spaces in it are ignored. The
+`ABN` may be blank, and then it is not checked; whitespace in it is ignored. The
 check reads only this file: it does not look an ABN up. A contacts file with no
 rows is named under `controls_not_run`; without `--contacts` the control is not
 named there, so a pack without the option is unchanged.
