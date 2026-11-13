@@ -662,6 +662,67 @@ mod tests {
         }
     }
     #[test]
+    fn separate_negative_tolerances_fail_before_publication() {
+        let tmp = TempDir::new();
+        let output = tmp.join("out");
+        for (value, diagnostic) in [
+            ("-0.01", "must be a finite non-negative decimal"),
+            ("-.5", "must be a finite non-negative decimal"),
+            ("-1", "must be a finite non-negative decimal"),
+            ("-1.2.3", "expected one argument"),
+        ] {
+            let args = vec![
+                "gate".into(),
+                "--profile=bas".into(),
+                "--pack".into(),
+                test_support::examples().join("bas-ready").into_os_string(),
+                "--output".into(),
+                output.clone().into_os_string(),
+                "--tieout-tolerance".into(),
+                value.into(),
+            ];
+            let (code, stdout, stderr) = crate::stdio::capture(|| main(args));
+            assert_eq!(code, 1, "{value}");
+            assert!(stdout.is_empty());
+            assert!(stderr.contains(diagnostic), "{value}: {stderr}");
+            assert!(!output.exists());
+        }
+    }
+    #[test]
+    fn queue_help_describes_status_and_missing_control_reporting() {
+        let (code, stdout, stderr) =
+            crate::stdio::capture(|| main(vec!["queue".into(), "--help".into()]));
+        assert_eq!(code, 0);
+        assert!(stdout.contains("usage: review-ready queue"));
+        assert!(stdout.contains("controls not run"));
+        assert!(stderr.is_empty());
+    }
+    #[test]
+    fn invalid_help_assignment_and_text_origin_leave_no_outputs() {
+        let tmp = TempDir::new();
+        let output = tmp.join("out");
+        for (command, option, diagnostic) in [
+            ("gate", "--hel=value", "ignored explicit argument 'value'"),
+            (
+                "intake",
+                "--text-origin=unknown",
+                "choose from 'manual', 'pdf-inspector'",
+            ),
+        ] {
+            let args = vec![
+                command.into(),
+                option.into(),
+                "--output".into(),
+                output.clone().into_os_string(),
+            ];
+            let (code, stdout, stderr) = crate::stdio::capture(|| main(args));
+            assert_eq!(code, 1);
+            assert!(stdout.is_empty());
+            assert!(stderr.contains(diagnostic), "{stderr}");
+            assert!(!output.exists());
+        }
+    }
+    #[test]
     fn cli_returns_all_readiness_codes_and_verifies_each_pack() {
         for (example, status, expected) in [
             ("bas-ready", "READY", 0),
