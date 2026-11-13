@@ -36,8 +36,9 @@
 
 # v1.0.0
 
-- Relicensed from Apache-2.0 to FSL-1.1-ALv2 (Functional Source License, with
-  Apache-2.0 as the future licence). Released versions keep their licence.
+- Relicensed from Apache-2.0 to the Ryan Duguid Public Attribution Licence 1.0
+  (the FSL-1.1-ALv2 text with a public attribution condition, and Apache-2.0 as
+  the future licence). Released versions keep their licence.
 - Breaking: replace the Python runtime and `closecontrol` import API with the
   native Rust `close-control` command. Download the Linux x86_64 (musl) or
   Windows x86_64 executable from this GitHub Release, or install from this
