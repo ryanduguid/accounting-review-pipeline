@@ -483,11 +483,11 @@ mod tests {
             static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             // A fresh fabricated fixture directory, never used for a security decision.
-            // nosemgrep: rust.lang.security.temp-dir.temp-dir
             let nonce = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
+            // nosemgrep: rust.lang.security.temp-dir.temp-dir
             let path = std::env::temp_dir().join(format!("evatt-pypath-{}-{nonce}-{sequence}", std::process::id()));
             std::fs::create_dir(&path).unwrap();
             Self(path)
