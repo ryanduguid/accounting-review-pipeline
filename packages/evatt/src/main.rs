@@ -74,12 +74,17 @@ fn finish<W: std::io::Write, E: std::io::Write>(
     outcome.code
 }
 
-fn main() {
+fn main() -> std::process::ExitCode {
     // An unexpected failure exits 1, as an uncaught exception did in the Python release.
     std::panic::set_hook(Box::new(|info| {
         eprintln!("error: {info}");
-        std::process::exit(1);
     }));
+    // Return through the runtime so Windows also flushes LLVM's exit profile.
+    // CLI statuses are 0, 1, 2 and 120, all representable in an ExitCode.
+    std::process::ExitCode::from(std::panic::catch_unwind(run).unwrap_or(1) as u8)
+}
+
+fn run() -> i32 {
     // sys.argv as Python decodes it: undecodable bytes or UTF-16 stay as surrogates.
     // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
     // nosemgrep: rust.lang.security.args-os.args-os
@@ -88,11 +93,11 @@ fn main() {
     if let Err(message) = stdio::configure() {
         use std::io::Write;
         let _ = writeln!(std::io::stderr(), "error: {message}");
-        std::process::exit(1);
+        return 1;
     }
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| pypath::decode_os(&a)).collect();
     // A deeply nested JSON input recurses; give it the room CPython's own limit allows.
-    let code = std::thread::Builder::new()
+    std::thread::Builder::new()
         .stack_size(256 << 20)
         .spawn(move || {
             use std::io::IsTerminal;
@@ -119,6 +124,5 @@ fn main() {
         })
         .expect("the worker thread starts")
         .join()
-        .unwrap_or(1);
-    std::process::exit(code);
+        .unwrap_or(1)
 }
