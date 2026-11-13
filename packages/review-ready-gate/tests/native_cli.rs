@@ -30,6 +30,37 @@ fn fixture_command(profile: &str, pack: &std::path::Path, output: &std::path::Pa
         .env_remove("GIT_WORK_TREE");
     command
 }
+
+#[test]
+fn malformed_decimal_tolerances_refuse_before_reading_or_writing_a_pack() {
+    let tmp = TempDir::new();
+    for (value, representation) in [
+        ("1\u{a0}2", "'1\\xa02'"),
+        ("1e+", "'1e+'"),
+        (
+            "1e12345678901234567890123456",
+            "'1e12345678901234567890123456'",
+        ),
+    ] {
+        let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
+            .args(["gate", "--tieout-tolerance", value])
+            .current_dir(&tmp.0)
+            .env_remove("GIT_WORK_TREE")
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1), "{value:?}");
+        assert!(result.stdout.is_empty());
+        let stderr = String::from_utf8(result.stderr)
+            .unwrap()
+            .replace("\r\n", "\n");
+        assert!(stderr.starts_with("usage: review-ready gate"), "{stderr}");
+        assert!(stderr.ends_with(&format!(
+            "review-ready gate: error: argument --tieout-tolerance: not a decimal: {representation}\n"
+        )), "{stderr}");
+        assert_eq!(fs::read_dir(&tmp.0).unwrap().count(), 0);
+    }
+}
+
 #[test]
 fn checkout_markers_and_configured_work_trees_refuse_before_input_reads() {
     let tmp = TempDir::new();
