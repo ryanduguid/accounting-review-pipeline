@@ -313,7 +313,9 @@ Ryan Duguid, accountant in Newcastle NSW, provisional member of Chartered Accoun
 
 ## CI coverage
 
-The root [`ci.yml`](../../.github/workflows/ci.yml) runs these static guards as Rust tests. `tools/native_excel_acceptance.ps1`
+The root [`ci.yml`](../../.github/workflows/ci.yml) runs these static guards as Rust tests, and
+[`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml)
+lints and tests the Python tooling. `tools/native_excel_acceptance.ps1`
 (105 checks) and VBA end-to-end remain local Windows work. Power Query
 behaviour is not executed on GitHub-hosted runners. Tagged releases call
 `ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA.
