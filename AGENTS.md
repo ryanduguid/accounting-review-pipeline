@@ -111,8 +111,8 @@ the Monthly Close fuzz tool. New component locks enter the same audit automatica
 an empty or failed inventory fails the job. The same job runs shellcheck over the
 tracked shell scripts and actionlint over the workflows. The Excel
 adapter and grant application retain Python tooling checked with their own
-Ruff, mypy and unittest settings. The application Rust crates run in the
-standard-library workflow. Power BI uses native commands for its generator,
+Ruff, mypy and unittest settings. The adapter's and applications' Rust crates
+run in `ci.yml`'s `rust` job. Power BI uses native commands for its generator,
 review workflow and both review producers; Python is retained for frozen oracles.
 
 A change to the shared Xero trial-balance contract directory (`contracts/xero-trial-balance-v1/`) must run the exporter, all 3 review packages,

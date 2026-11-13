@@ -172,7 +172,7 @@ The test suite verifies:
 - All 6 report pages and 59 visuals are materialised, and every visual field binding resolves to a declared model column or measure. Regression checks cover alignment, overlap, shared component styles and unique query aliases.
 - Payday Super tests assert 12.0% SG rate, 7-business-day national calendar calculation and leap year GIC divisors (366 days in leap years per s 8AAD TAA).
 
-The root [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs the Rust checks and frozen workflow comparison on Linux and Windows, plus the pinned Microsoft PBIR validator. The [1.0 migration notes](docs/review-workflow-rust-migration.md) explain native command setup, compatibility limits and local comparison commands.
+The root [tests workflow](../../.github/workflows/ci.yml) runs the Rust checks and frozen workflow comparison on Linux and Windows; the [standard-library components workflow](../../.github/workflows/standard-library-components.yml) runs the pinned Microsoft PBIR validator. The [1.0 migration notes](docs/review-workflow-rust-migration.md) explain native command setup, compatibility limits and local comparison commands.
 
 ---
 

@@ -158,11 +158,7 @@ pub fn export(run: &Path, bin_dir: &Path, output: &Path) -> Result<PathBuf> {
     }
     let receipt = files::read(&run.join("receipt.json"))?;
     let receipt_hash = files::read(&run.join("receipt.sha256"))?;
-    let captured = json::parse(&receipt, "Receipt")?;
-    schema::receipt(&captured)?;
-    if !json::equal(&captured, &verified.receipt) || receipt_hash != digest(&receipt).as_bytes() {
-        return Err("Receipt changed during export.".into());
-    }
+    unchanged_receipt(&receipt, &receipt_hash, &verified.receipt)?;
     let mut members: Members = verified
         .snapshot
         .iter()
@@ -184,6 +180,17 @@ pub fn export(run: &Path, bin_dir: &Path, output: &Path) -> Result<PathBuf> {
     files::ordinary(&output)?;
     files::write_new(&output, &payload)?;
     Ok(output)
+}
+
+/// Refuses receipt bytes, read again for the archive, that no longer match the receipt
+/// verification accepted or their own digest file.
+fn unchanged_receipt(receipt: &[u8], receipt_hash: &[u8], verified: &Value) -> Result<()> {
+    let captured = json::parse(receipt, "Receipt")?;
+    schema::receipt(&captured)?;
+    if !json::equal(&captured, verified) || receipt_hash != digest(receipt).as_bytes() {
+        return Err("Receipt changed during export.".into());
+    }
+    Ok(())
 }
 
 fn capture_display(members: &mut Members, bin_dir: &Path) -> Result<()> {
@@ -435,6 +442,30 @@ mod tests {
         changed.insert("run/receipt.sha256".into(), digest(b"other").into_bytes());
         seal_manifest(&mut changed);
         assert!(refusal(&changed).contains("receipt digest differs"));
+    }
+
+    #[test]
+    fn a_receipt_read_again_must_match_the_verified_receipt_and_its_digest() {
+        let members = unsigned_members();
+        let (receipt, hash) = (&members["run/receipt.json"], &members["run/receipt.sha256"]);
+        let verified = json::parse(receipt, "Receipt").unwrap();
+        assert_eq!(unchanged_receipt(receipt, hash, &verified), Ok(()));
+        let changed = "Receipt changed during export.".to_owned();
+        assert_eq!(
+            unchanged_receipt(receipt, digest(b"other").as_bytes(), &verified),
+            Err(changed.clone())
+        );
+        let mut other = verified.clone();
+        other["period"] = "2024-09-30".into();
+        assert_eq!(unchanged_receipt(receipt, hash, &other), Err(changed));
+        let mut rewritten = verified;
+        rewritten["schema_version"] = 2.into();
+        let rewritten = json::bytes(&rewritten);
+        // The schema is checked before the comparison, as for the first read.
+        assert_eq!(
+            unchanged_receipt(&rewritten, digest(&rewritten).as_bytes(), &other),
+            Err("Unsupported review receipt.".to_owned())
+        );
     }
 
     #[test]

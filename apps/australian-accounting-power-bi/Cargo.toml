@@ -41,6 +41,10 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage
 [dev-dependencies]
 regex = "1"
 
+[target.'cfg(windows)'.dev-dependencies]
+# AF_UNIX sockets: the tests' reparse point that is not a link.
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }
+
 [lints.clippy]
 # The repository's 50-line function limit (clippy.toml), denied in CI.
 too_many_lines = "warn"
