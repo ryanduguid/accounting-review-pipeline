@@ -528,11 +528,17 @@ mod tests {
                 .output()
                 .unwrap()
         }
-        /// Removes the deny entry so the temporary directory can be deleted.
+        /// Removes the deny entry so the temporary directory can be deleted. The test
+        /// checks the removal; dropping repeats it, the fallback after a panic.
         struct Restore<'a>(&'a Path);
+        impl Restore<'_> {
+            fn remove(&self) -> std::process::Output {
+                icacls(self.0, &["/remove:d", "*S-1-1-0"])
+            }
+        }
         impl Drop for Restore<'_> {
             fn drop(&mut self) {
-                icacls(self.0, &["/remove:d", "*S-1-1-0"]);
+                self.remove();
             }
         }
         let temporary = Temporary::new("pbi-denied-").unwrap();
@@ -541,7 +547,7 @@ mod tests {
         // Everyone is denied every right on the directory. The walk's lookup still
         // succeeds, answered from the parent's listing, but opening it to resolve fails.
         let output = icacls(&denied, &["/deny", "*S-1-1-0:(F)"]);
-        let _restore = Restore(&denied);
+        let restore = Restore(&denied);
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
         assert!(fs::symlink_metadata(&denied).unwrap().is_dir());
         let refusal = fs::canonicalize(&denied).unwrap_err();
@@ -549,6 +555,15 @@ mod tests {
         for path in [denied.clone(), denied.join("new-output")] {
             assert_eq!(ordinary(&path).unwrap_err(), refusal.to_string());
         }
+        let removed = restore.remove();
+        assert!(removed.status.success(), "{}", String::from_utf8_lossy(&removed.stdout));
+        drop(restore);
+        let root = temporary.0.clone();
+        drop(temporary);
+        assert_eq!(
+            fs::symlink_metadata(&root).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
     }
 
     #[cfg(windows)]
