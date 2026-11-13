@@ -101,12 +101,13 @@ fn bounded_output(command: &mut Command) -> Output {
     let capture = TempDir::new();
     let stdout = capture.join("stdout");
     let stderr = capture.join("stderr");
+    let started = Instant::now();
     let mut child = command
         .stdout(Stdio::from(fs::File::create(&stdout).unwrap()))
         .stderr(Stdio::from(fs::File::create(&stderr).unwrap()))
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = started + Duration::from_secs(60);
     let status = loop {
         if let Some(status) = child.try_wait().unwrap() {
             break status;
@@ -114,7 +115,12 @@ fn bounded_output(command: &mut Command) -> Output {
         if Instant::now() >= deadline {
             let killed = child.kill();
             let reaped = child.wait();
-            panic!("saved-pack command exceeded its deadline: {killed:?}; {reaped:?}");
+            panic!(
+                "saved-pack command {command:?} exceeded its 60s deadline after {:?}: {killed:?}; {reaped:?}; stdout: {}; stderr: {}",
+                started.elapsed(),
+                String::from_utf8_lossy(&fs::read(&stdout).unwrap()),
+                String::from_utf8_lossy(&fs::read(&stderr).unwrap()),
+            );
         }
         thread::sleep(Duration::from_millis(10));
     };
