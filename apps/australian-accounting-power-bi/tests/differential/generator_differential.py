@@ -9,7 +9,8 @@
 
 The end-to-end check runs the Python script from a scratch application directory and
 the Rust binary in place, then compares exit codes, stdout (with each samples
-directory normalised) and the six files byte for byte. The function check sends
+directory normalised) and the six files byte for byte after the pinned legacy
+identifier migration. The function check sends
 generated requests to the payday oracle and compares notional earnings, business-day
 offsets, calendar refusals and GIC rate selection with the Python functions,
 including a replaced December-quarter rate as the Python suite patches it.
@@ -17,7 +18,6 @@ including a replaced December-quarter rate as the Python suite patches it.
 
 import argparse
 import datetime
-import importlib.util
 import random
 import shutil
 import subprocess
@@ -26,12 +26,15 @@ import tempfile
 from decimal import Decimal
 from pathlib import Path
 
+from legacy_fixture_migration import GENERATOR_SHA256, load_generator, migrate_samples, require_hash
+
 APP = Path(__file__).resolve().parents[2]
 FILES = ("sample-entities.csv", "sample-chart-of-accounts.csv", "sample-general-ledger.csv", "sample-budgets.csv",
          "sample-payroll-super.csv", "sample-ato-benchmarks.csv")
 
 
 def end_to_end(script: Path, binary: Path) -> list[str]:
+    require_hash(script.read_bytes(), GENERATOR_SHA256, "frozen Python generator")
     problems = []
     with tempfile.TemporaryDirectory(prefix="pbi-generator-") as scratch:
         tools = Path(scratch) / "app" / "tools"
@@ -47,17 +50,11 @@ def end_to_end(script: Path, binary: Path) -> list[str]:
         rust_out = rust.stdout.replace(str(rust_samples).encode(), b"<samples>")
         if python_out != rust_out or python.stderr != rust.stderr:
             problems.append(f"output {python_out!r} {python.stderr!r} != {rust_out!r} {rust.stderr!r}")
+        migrate_samples(python_samples)
         for name in FILES:
             if (python_samples / name).read_bytes() != (rust_samples / name).read_bytes():
                 problems.append(f"{name} differs")
     return problems
-
-
-def load(script: Path):
-    spec = importlib.util.spec_from_file_location("generate_fixtures", script)
-    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
-    return module
 
 
 def day(rng: random.Random, first: datetime.date, last: datetime.date) -> datetime.date:
@@ -108,7 +105,7 @@ def expected(module, parts: list[str]) -> str:
 
 
 def functions(script: Path, oracle: Path, cases: int, seed: int) -> list[str]:
-    module = load(script)
+    module = load_generator(script)
     rng = random.Random(seed)
     requests = [request(rng) for _ in range(cases)]
     stdin = "".join(" ".join(parts) + "\n" for parts in requests)

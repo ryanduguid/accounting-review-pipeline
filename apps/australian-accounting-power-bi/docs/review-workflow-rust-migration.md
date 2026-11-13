@@ -53,7 +53,10 @@ posts a journal or closes a period.
 
 Use CPython 3.15 and a separate checkout of
 `d48b9fe681f3a3ae278a90c43cfdce9b863589d4` as the oracle. Its Power BI application
-directory contains the original `tools/review_workflow.py` and fabricated samples.
+directory contains the original `tools/review_workflow.py`. The harness copies that
+unchanged program to a disposable directory and stages the current hash-validated
+case and 6 source CSVs beside it, matching the native binary's embedded inputs.
+The oracle checkout is unchanged.
 Python is required here to execute the original implementation; it is test
 tooling only. Build the two native producers and supply their shared directory.
 
@@ -75,6 +78,12 @@ readiness state, probe deadlines, output cleanup and archive admission. This
 does not establish complete equivalence to every removed Python test method.
 
 The retained generator and structural comparison scripts in `tests/differential/`
-use their earlier baselines and remain separate checks. Microsoft PBIR validation
+use Python baseline `73f2a4383d8e9810480c45dcd7daea4eb795aed6` and remain
+separate checks. `legacy_fixture_migration.py` pins the unchanged Python generator,
+all 7 frozen suites and all 6 legacy generator outputs. Its only translations are
+the approved ABN, blank ACNs and fabricated fund identifiers/names; hashes pin the
+complete resulting files. Every other byte remains comparable. The structural
+harness also runs and reports the new ABS title assertion separately from the
+paired Python/Rust assertions, including its pristine result and mutation failures. Microsoft PBIR validation
 checks report structure. Power BI Desktop refresh, screen-reader acceptance,
 macOS, hosted CI for this port and Aikido scans need separate verification.

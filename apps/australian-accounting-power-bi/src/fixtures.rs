@@ -59,9 +59,9 @@ fn d(text: &str) -> Decimal {
 /// so the shipped entity master passes the model's own validator. Keep it that way.
 const ENTITIES: &str = "\
 EntityID|LegalName|TradingName|ABN|ACN|TaxStructure|EntityRole|ANZSIC_Code|Currency|ConsolidationWeight
-ENT001|Varrock Ventures Pty Ltd|Varrock Advisory & Tech|51824753556|123456789|Company|Parent Operating|6962|AUD|1.0
-ENT002|Draynor Produce Pty Ltd|Draynor Fresh Foods|82147609350|234567890|Company|Trading Subsidiary|4122|AUD|1.0
-ENT003|Falador Freight Pty Ltd|Falador National Logistics|33087542991|345678901|Company|Logistics Subsidiary|4610|AUD|1.0
+ENT001|Varrock Ventures Pty Ltd|Varrock Advisory & Tech|99900000180||Company|Parent Operating|6962|AUD|1.0
+ENT002|Draynor Produce Pty Ltd|Draynor Fresh Foods|82147609350||Company|Trading Subsidiary|4122|AUD|1.0
+ENT003|Falador Freight Pty Ltd|Falador National Logistics|33087542991||Company|Logistics Subsidiary|4610|AUD|1.0
 ENT004|Ardougne Holdings Trust|Ardougne Commercial Property|12325678901||Unit Trust|Property Asset Trust|6712|AUD|1.0
 ";
 
@@ -506,8 +506,8 @@ const EMPLOYEES: &[(&str, &str, &str, &str, bool, &str, &str)] = &[
         "A. Vance",
         "145000.0",
         false,
-        "19323234999001",
-        "AustralianSuper",
+        "DEMO-FUND-001",
+        "Varrock Sample Super",
     ),
     (
         "EMP102",
@@ -515,8 +515,8 @@ const EMPLOYEES: &[(&str, &str, &str, &str, bool, &str, &str)] = &[
         "B. Sterling",
         "115000.0",
         false,
-        "16457520308001",
-        "ART Super",
+        "DEMO-FUND-002",
+        "Draynor Sample Super",
     ),
     (
         "EMP201",
@@ -524,8 +524,8 @@ const EMPLOYEES: &[(&str, &str, &str, &str, bool, &str, &str)] = &[
         "C. Miller",
         "68000.0",
         true,
-        "19323234999001",
-        "AustralianSuper",
+        "DEMO-FUND-001",
+        "Varrock Sample Super",
     ),
     (
         "EMP202",
@@ -533,8 +533,8 @@ const EMPLOYEES: &[(&str, &str, &str, &str, bool, &str, &str)] = &[
         "D. Chen",
         "72000.0",
         true,
-        "60905115063001",
-        "Hostplus",
+        "DEMO-FUND-003",
+        "Falador Sample Super",
     ),
     (
         "EMP301",
@@ -542,8 +542,8 @@ const EMPLOYEES: &[(&str, &str, &str, &str, bool, &str, &str)] = &[
         "E. Kowalski",
         "92000.0",
         false,
-        "16457520308001",
-        "ART Super",
+        "DEMO-FUND-002",
+        "Draynor Sample Super",
     ),
     (
         "EMP302",
@@ -551,8 +551,8 @@ const EMPLOYEES: &[(&str, &str, &str, &str, bool, &str, &str)] = &[
         "F. O'Connor",
         "88000.0",
         false,
-        "19323234999001",
-        "AustralianSuper",
+        "DEMO-FUND-001",
+        "Varrock Sample Super",
     ),
 ];
 
@@ -650,8 +650,7 @@ pub fn payroll(rates: &GicRates) -> Result<Table, String> {
 }
 
 /// Fabricated sample values invented for this model, not an ATO benchmark
-/// distribution or percentile, for ANZSIC 6962 (management advice), 4122 (fresh meat,
-/// fish and poultry retailing), 4610 (road freight) and 6712 (non-residential property
+/// distribution or percentile, for ANZSIC 6962 (management advice), 4122 (fruit and vegetable retailing), 4610 (road freight) and 6712 (non-residential property
 /// operators). The rows carry no source date, citation or percentile definition.
 const BENCHMARKS: &str = "\
 ANZSIC_Code|TurnoverRange|GrossProfitPct_Low|GrossProfitPct_Avg|GrossProfitPct_High|TotalExpensesPct_Avg|RentPct_Avg|MotorVehiclePct_Avg|LabourPct_Avg
