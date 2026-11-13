@@ -42,6 +42,18 @@ const REFUSALS: &[(&str, &str)] = &[
         r#"{"op":"cli","files":{"../escape-fixture.txt":""},"args":["--help"]}"#,
         "probe fixture path must stay inside its temporary directory",
     ),
+    (
+        r#"{"op":"cli","directories":["nested/fixture","../escape-fixture"],"args":["--help"]}"#,
+        "probe fixture path must stay inside its temporary directory",
+    ),
+    (
+        r#"{"op":"arithmetic","precision":"29","a":"1","b":"0","kind":"div"}"#,
+        "invalid probe precision",
+    ),
+    (
+        r#"{"op":"arithmetic","precision":"28","a":"1","b":"0","kind":"div"}"#,
+        "invalid probe arithmetic",
+    ),
 ];
 
 fn run_probe(requests: &[&str]) -> Output {
