@@ -135,6 +135,28 @@ fn probe_shape_and_tenant_refusals_allow_the_next_request() {
     assert_json(responses[5].at("ok"), r#""2.5""#);
 }
 
+#[test]
+fn probe_missing_operations_refuse_without_stopping_the_stream() {
+    let responses = probe_responses(&["{}", "[]", r#"{"op":"to_number","args":["2.50"]}"#]);
+    assert_refusal(&responses[0], "missing probe operation\n");
+    assert_refusal(&responses[1], "missing probe operation\n");
+    assert_json(responses[2].at("ok"), r#""2.5""#);
+}
+
+#[test]
+fn probe_manifest_arguments_refuse_without_stopping_the_stream() {
+    let responses = probe_responses(&[
+        r#"{"op":"manifest","args":["","fabricated-digest",{"tenantId":"fabricated","tenantName":"Fabricated"},"2026-06-30","accrual","2026-06-30T00:00:00+00:00"]}"#,
+        r#"{"op":"manifest","args":["nested/report.csv","fabricated-digest",{"tenantName":"Fabricated"},"2026-06-30","accrual","2026-06-30T00:00:00+00:00"]}"#,
+        r#"{"op":"manifest","args":["nested/report.csv","fabricated-digest",{"tenantId":"fabricated"},"2026-06-30","accrual","2026-06-30T00:00:00+00:00"]}"#,
+        r#"{"op":"to_number","args":["2.50"]}"#,
+    ]);
+    assert_refusal(&responses[0], "expected a manifest CSV filename\n");
+    assert_refusal(&responses[1], "'tenantId'\n");
+    assert_refusal(&responses[2], "'tenantName'\n");
+    assert_json(responses[3].at("ok"), r#""2.5""#);
+}
+
 fn assert_manifest(
     value: &Json,
     csv: &str,

@@ -64,12 +64,25 @@ fn amounts(value: &Json) -> Result<amount::Totals> {
     ])
 }
 
+fn require_tenant(value: &Json) -> Result<()> {
+    for key in ["tenantId", "tenantName"] {
+        if value.get(key).is_none() {
+            return Err(Failure::message(format!("'{key}'")));
+        }
+    }
+    Ok(())
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "runs one compatibility probe request"
 )]
 pub fn execute(input: &Json) -> Result<Json> {
-    let op = report::text(input.at("op"));
+    let op = report::text(
+        input
+            .get("op")
+            .ok_or_else(|| Failure::message("missing probe operation"))?,
+    );
     let args = match input.get("args") {
         Some(Json::Array(values)) => values.as_slice(),
         _ => &[],
@@ -194,22 +207,26 @@ pub fn execute(input: &Json) -> Result<Json> {
                 Json::str(&config.path),
             ]))
         }
-        "manifest" => Ok(publication::manifest(
-            std::path::Path::new(&string(0)),
-            &string(1),
-            arg(2),
-            &string(3),
-            &string(4),
-            &string(5),
-        )),
+        "manifest" => {
+            let filename = string(0);
+            let path = std::path::Path::new(&filename);
+            if path.file_name().is_none() {
+                return Err(Failure::message("expected a manifest CSV filename"));
+            }
+            require_tenant(arg(2))?;
+            Ok(publication::manifest(
+                path,
+                &string(1),
+                arg(2),
+                &string(3),
+                &string(4),
+                &string(5),
+            ))
+        }
         "csv_artifact" => {
             let (rows, totals) = report::build_rows(&records(arg(0)), arg(1), &string(2))?;
             amount::check_balanced(&totals, Some(rows.len()))?;
-            for key in ["tenantId", "tenantName"] {
-                if arg(1).get(key).is_none() {
-                    return Err(Failure::message(format!("'{key}'")));
-                }
-            }
+            require_tenant(arg(1))?;
             let bytes = report::csv_bytes(&rows)?;
             let digest: String = sha2::Sha256::digest(&bytes)
                 .iter()
