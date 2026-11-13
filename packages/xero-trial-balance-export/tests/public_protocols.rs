@@ -157,6 +157,74 @@ fn probe_manifest_arguments_refuse_without_stopping_the_stream() {
     assert_json(responses[3].at("ok"), r#""2.5""#);
 }
 
+#[test]
+fn probe_malformed_rows_refuse_without_stopping_the_stream() {
+    let responses = probe_responses(&[
+        r#"{"op":"build_rows","args":[[null],{"tenantId":"fabricated","tenantName":"Fabricated"},"2026-06-30"]}"#,
+        r#"{"op":"to_number","args":["2.50"]}"#,
+    ]);
+    assert_refusal(
+        &responses[0],
+        "error: Trial Balance has a missing or repeated account ID. Nothing written.\n",
+    );
+    assert_json(responses[1].at("ok"), r#""2.5""#);
+}
+
+#[test]
+fn probe_cache_documents_decode_or_refuse_without_stopping_the_stream() {
+    let responses = probe_responses(&[
+        r#"{"op":"decode_token_cache","args":["{\"access_token\":\"fabricated-access\",\"refresh_token\":\"fabricated-refresh\",\"expires_in\":1800,\"obtained_at\":0}"]}"#,
+        r#"{"op":"decode_token_cache","args":["{malformed"]}"#,
+        r#"{"op":"decode_token_cache","args":["[]"]}"#,
+        r#"{"op":"decode_token_cache","args":["{\"format\":\"fabricated\"}"]}"#,
+        r#"{"op":"to_number","args":["2.50"]}"#,
+    ]);
+    assert_json(
+        responses[0].at("ok"),
+        r#"[{"access_token":"fabricated-access","refresh_token":"fabricated-refresh","expires_in":1800,"obtained_at":0},true]"#,
+    );
+    for (response, message) in responses[1..4].iter().zip([
+        "error: token.json is unreadable or corrupt; the file was left unchanged. Run: xero-tb-auth\n",
+        "error: token.json is not a JSON object; the file was left unchanged. Run: xero-tb-auth\n",
+        "error: token.json has an invalid or unknown cache envelope; the file was left unchanged. Run: xero-tb-auth\n",
+    ]) {
+        assert_refusal(response, message);
+    }
+    assert_json(responses[4].at("ok"), r#""2.5""#);
+}
+
+#[test]
+fn probe_filename_tenants_refuse_without_stopping_the_stream() {
+    let responses = probe_responses(&[
+        r#"{"op":"default_output_filename","args":[{"tenantId":"fabricated"},"2026-06-30","accrual"]}"#,
+        r#"{"op":"default_output_filename","args":[{"tenantName":"Fabricated"},"2026-06-30","accrual"]}"#,
+        r#"{"op":"default_output_filename","args":[{},"2026-06-30","accrual"]}"#,
+        r#"{"op":"to_number","args":["2.50"]}"#,
+    ]);
+    assert_refusal(&responses[0], "'tenantName'\n");
+    assert_refusal(&responses[1], "'tenantId'\n");
+    assert_refusal(&responses[2], "'tenantName'\n");
+    assert_json(responses[3].at("ok"), r#""2.5""#);
+}
+
+#[test]
+fn probe_selection_tenants_refuse_without_stopping_the_stream() {
+    let responses = probe_responses(&[
+        r#"{"op":"select_tenant","args":[[{}],"fabricated"]}"#,
+        r#"{"op":"select_tenant","args":[[{"tenantId":"fabricated"}],"different"]}"#,
+        r#"{"op":"select_tenant","args":[[{"tenantId":"fabricated"}],"fabricated"]}"#,
+        r#"{"op":"select_tenant","args":[[{}]]}"#,
+        r#"{"op":"select_tenant","args":[[{}],""]}"#,
+        r#"{"op":"to_number","args":["2.50"]}"#,
+    ]);
+    assert_refusal(&responses[0], "'tenantId'\n");
+    assert_refusal(&responses[1], "'tenantName'\n");
+    assert_json(responses[2].at("ok"), r#"{"tenantId":"fabricated"}"#);
+    assert_json(responses[3].at("ok"), "{}");
+    assert_json(responses[4].at("ok"), "{}");
+    assert_json(responses[5].at("ok"), r#""2.5""#);
+}
+
 fn assert_manifest(
     value: &Json,
     csv: &str,

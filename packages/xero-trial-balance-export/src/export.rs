@@ -49,7 +49,21 @@ fn tenant_ids(items: &[&Json]) -> String {
         .join(", ")
 }
 
+fn require_connection_field(connections: &[Json], field: &str) -> Result<()> {
+    if connections
+        .iter()
+        .any(|connection| connection.get(field).is_none())
+    {
+        return Err(Failure::message(format!("'{field}'")));
+    }
+    Ok(())
+}
+
 pub fn select_tenant<'a>(connections: &'a [Json], requested: Option<&str>) -> Result<&'a Json> {
+    let requested = requested.filter(|value| !value.is_empty());
+    if requested.is_some() || connections.len() > 1 {
+        require_connection_field(connections, "tenantId")?;
+    }
     let ambiguity = |requested: &str, matches: &[&Json]| {
         Failure::message(format!(
             "\"{requested}\" matches more than one organisation ({}; tenant ids: {}) - narrow it.",
@@ -57,7 +71,7 @@ pub fn select_tenant<'a>(connections: &'a [Json], requested: Option<&str>) -> Re
             tenant_ids(matches)
         ))
     };
-    if let Some(requested) = requested.filter(|v| !v.is_empty()) {
+    if let Some(requested) = requested {
         let needle = pytext::lower(requested);
         let ids: Vec<_> = connections
             .iter()
@@ -69,6 +83,7 @@ pub fn select_tenant<'a>(connections: &'a [Json], requested: Option<&str>) -> Re
         if ids.len() > 1 {
             return Err(ambiguity(requested, &ids));
         }
+        require_connection_field(connections, "tenantName")?;
         let matches: Vec<_> = connections
             .iter()
             .filter(|item| pytext::lower(&report::text(item.at("tenantName"))).contains(&needle))
