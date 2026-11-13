@@ -532,8 +532,13 @@ jobs:
               environment.write(f"COVERAGE_RCFILE={config}\nCOVERAGE_FILE={output / '.coverage'}\n")
       - name: run the full Python suite with coverage
         run: uv run --locked --group dev coverage run -m pytest
+      # .github/requirements-unicode-coverage.in names the pin; regenerate the
+      # hashed file with uv pip compile (command in its header) when it changes.
       - name: run frozen Unicode generators with their supported interpreter
-        run: uv run --no-project --no-build --python 3.14.1 --with coverage==7.16.2 python -m coverage run -m unittest tests.test_unicode_generators -v
+        run: |
+          uv venv --no-project --python 3.14.1 "$RUNNER_TEMP/unicode-generators"
+          uv pip install --python "$RUNNER_TEMP/unicode-generators" --require-hashes --no-build -r .github/requirements-unicode-coverage.txt
+          "$RUNNER_TEMP/unicode-generators/bin/python" -m coverage run -m unittest tests.test_unicode_generators -v
       - name: retain every maintained Python source in the report
         shell: bash
         run: |
