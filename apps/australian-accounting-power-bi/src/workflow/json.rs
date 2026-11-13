@@ -396,6 +396,19 @@ mod tests {
         // neighbour lies below the power of two, where the spacing halves, so it does not
         // round-trip and Python keeps the odd digit.
         assert_eq!(float_repr(2f64.powi(-24)), "5.960464477539063e-08");
+        // 3 * 2^-24 is 1.78813934326171875e-07 exactly, midway between 2 round-tripping
+        // 17-digit forms. Python keeps the even one whichever neighbour the formatter
+        // returns; Rust's returns the upper, so the lower is supplied directly.
+        let tie = 3.0 * 2f64.powi(-24);
+        assert_eq!(float_repr(tie), "1.7881393432617188e-07");
+        assert_eq!(
+            shortest_half_even(tie, "17881393432617187".into(), -23),
+            "17881393432617188"
+        );
+        assert_eq!(
+            shortest_half_even(tie, "17881393432617188".into(), -23),
+            "17881393432617188"
+        );
         assert!(equal(&serde_json::json!(1.5), &serde_json::json!(1.5)));
         assert!(!equal(&serde_json::json!(1.5), &serde_json::json!(2.5)));
         assert!(!equal(&serde_json::json!(1), &serde_json::json!(1.5)));

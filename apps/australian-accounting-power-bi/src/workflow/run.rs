@@ -22,11 +22,8 @@ pub struct Verified {
 
 pub fn ready_revision(run: &Path) -> Result<Option<String>> {
     let control = files::ordinary(&run.join("readiness/.reviewready"))?;
-    match fs::symlink_metadata(&control) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.to_string()),
-        Ok(metadata) if !metadata.is_dir() => return Err("Readiness publication control is not a directory.".into()),
-        Ok(_) => {}
+    if !control_present(fs::symlink_metadata(&control))? {
+        return Ok(None);
     }
     let mut file = files::open_regular(&control.join("state.json"))?;
     if !files::single_link(&file)? {
@@ -55,6 +52,26 @@ pub fn ready_revision(run: &Path) -> Result<Option<String>> {
         return Err("Readiness publication is unresolved or unsupported.".into());
     }
     Ok(Some(state["revision"].as_str().unwrap().to_owned()))
+}
+
+/// Whether the readiness publication control exists, from its lookup: absent, a
+/// directory, or refused.
+fn control_present(lookup: std::io::Result<fs::Metadata>) -> Result<bool> {
+    match lookup {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.to_string()),
+        Ok(metadata) if !metadata.is_dir() => Err("Readiness publication control is not a directory.".into()),
+        Ok(_) => Ok(true),
+    }
+}
+
+/// Refuses a readiness publication that moved between the reads before and after
+/// verification.
+fn unchanged_revision(before: Option<String>, after: Option<String>) -> Result<()> {
+    if after != before {
+        return Err("Readiness publication changed during verification.".into());
+    }
+    Ok(())
 }
 
 fn required() -> BTreeSet<String> {
@@ -156,9 +173,7 @@ pub fn verify(run: &Path) -> Result<Verified> {
     validate_drivers(&drivers, &transactions, receipt["period"].as_str().unwrap())?;
     source_bindings(&doc, &drivers, &snapshot, &current, &prior, &transactions)?;
     invocations(&receipt)?;
-    if ready_revision(&run)? != revision {
-        return Err("Readiness publication changed during verification.".into());
-    }
+    unchanged_revision(revision, ready_revision(&run)?)?;
     Ok(Verified { receipt, snapshot })
 }
 
@@ -496,6 +511,41 @@ mod tests {
         }
         fs::write(&path, json::bytes(&serde_json::json!({"status":"pending"}))).unwrap();
         assert!(ready_revision(&cache.0).is_err());
+    }
+
+    #[test]
+    fn a_control_lookup_failure_other_than_absence_is_reported() {
+        use std::io::{Error, ErrorKind};
+        // `files::ordinary` has just admitted the same path, so only a concurrent change
+        // fails this lookup; the lookup result is therefore supplied directly.
+        assert_eq!(control_present(Err(Error::from(ErrorKind::NotFound))), Ok(false));
+        let denied = Error::from(ErrorKind::PermissionDenied);
+        let message = denied.to_string();
+        assert_eq!(control_present(Err(denied)), Err(message));
+        let cache = files::Temporary::new("pbi-run-control-").unwrap();
+        fs::write(cache.0.join("file"), b"fixture").unwrap();
+        assert_eq!(control_present(fs::symlink_metadata(&cache.0)), Ok(true));
+        assert_eq!(
+            control_present(fs::symlink_metadata(cache.0.join("file"))),
+            Err("Readiness publication control is not a directory.".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_readiness_revision_that_moved_during_verification_is_refused() {
+        let revision = |text: &str| Some(text.repeat(32));
+        assert_eq!(unchanged_revision(revision("a"), revision("a")), Ok(()));
+        assert_eq!(unchanged_revision(None, None), Ok(()));
+        for (before, after) in [
+            (revision("a"), revision("b")),
+            (None, revision("a")),
+            (revision("a"), None),
+        ] {
+            assert_eq!(
+                unchanged_revision(before, after),
+                Err("Readiness publication changed during verification.".to_owned())
+            );
+        }
     }
 
     #[test]

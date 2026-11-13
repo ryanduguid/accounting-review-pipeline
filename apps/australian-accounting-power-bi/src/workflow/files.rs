@@ -459,6 +459,120 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn a_windows_reparse_point_that_is_not_a_link_is_refused() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Networking::WinSock::{
+            AF_UNIX, INVALID_SOCKET, SOCK_STREAM, SOCKADDR, SOCKADDR_UN, WSACleanup, WSADATA, WSAStartup, bind,
+            closesocket, socket,
+        };
+        // Binding an AF_UNIX socket creates a file whose reparse tag is not a name
+        // surrogate, so the standard library does not call it a symlink.
+        let temporary = Temporary::new("pbi-socket-").unwrap();
+        let path = temporary.0.join("socket");
+        let mut address = SOCKADDR_UN {
+            sun_family: AF_UNIX,
+            sun_path: [0; 108],
+        };
+        let name = path.to_str().unwrap().as_bytes();
+        assert!(
+            name.len() < address.sun_path.len(),
+            "temporary path too long for a socket"
+        );
+        for (slot, byte) in address.sun_path.iter_mut().zip(name) {
+            *slot = byte.cast_signed();
+        }
+        // SAFETY: data is writable and has the size WSAStartup fills.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let started = unsafe {
+            let mut data = std::mem::zeroed::<WSADATA>();
+            WSAStartup(0x0202, &raw mut data)
+        };
+        assert_eq!(started, 0);
+        // SAFETY: Winsock is started; the call takes no pointers.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let handle = unsafe { socket(AF_UNIX.into(), SOCK_STREAM, 0) };
+        assert_ne!(handle, INVALID_SOCKET, "AF_UNIX sockets need Windows 10 1803 or later");
+        // SAFETY: the address is initialised, live and as long as the length passed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let bound = unsafe {
+            bind(
+                handle,
+                (&raw const address).cast::<SOCKADDR>(),
+                size_of::<SOCKADDR_UN>() as i32,
+            )
+        };
+        // SAFETY: the socket is open and closed once; cleanup balances WSAStartup.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        unsafe {
+            closesocket(handle);
+            WSACleanup();
+        }
+        assert_eq!(bound, 0);
+        let metadata = fs::symlink_metadata(&path).unwrap();
+        assert!(!metadata.file_type().is_symlink());
+        assert_ne!(metadata.file_attributes() & 0x400, 0);
+        assert!(linked(&metadata));
+        assert_eq!(ordinary(&path).unwrap_err(), "Linked paths are not admitted.");
+        assert_eq!(read(&path.join("child")).unwrap_err(), "Linked paths are not admitted.");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_directory_that_cannot_be_opened_is_reported_when_resolved() {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            DELETE, FILE_DISPOSITION_INFO, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, FileDispositionInfo, SetFileInformationByHandle,
+        };
+        let temporary = Temporary::new("pbi-denied-").unwrap();
+        let denied = temporary.0.join("denied");
+        fs::create_dir(&denied).unwrap();
+        // Marked for deletion with the classic disposition, the directory keeps its entry
+        // in the parent's listing until this handle closes, so the walk's lookup still
+        // succeeds, but every new open of it is refused whatever the caller's rights or
+        // privileges. Unlike a deny entry, backup semantics do not bypass this.
+        let pending = fs::OpenOptions::new()
+            .access_mode(DELETE)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&denied)
+            .unwrap();
+        let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+        // SAFETY: the handle is open and the buffer is a live FILE_DISPOSITION_INFO of
+        // the size passed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let marked = unsafe {
+            SetFileInformationByHandle(
+                pending.as_raw_handle(),
+                FileDispositionInfo,
+                (&raw const disposition).cast(),
+                size_of::<FILE_DISPOSITION_INFO>() as u32,
+            )
+        };
+        assert_ne!(marked, 0, "{}", std::io::Error::last_os_error());
+        assert!(fs::symlink_metadata(&denied).unwrap().is_dir());
+        let refusal = fs::canonicalize(&denied).unwrap_err();
+        assert_eq!(refusal.kind(), std::io::ErrorKind::PermissionDenied);
+        for path in [denied.clone(), denied.join("new-output")] {
+            assert_eq!(ordinary(&path).unwrap_err(), refusal.to_string());
+        }
+        // Closing the last handle deletes the directory; then the temporary root goes.
+        drop(pending);
+        assert_eq!(
+            fs::symlink_metadata(&denied).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+        let root = temporary.0.clone();
+        drop(temporary);
+        assert_eq!(
+            fs::symlink_metadata(&root).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn ordinary_resolves_windows_spelling_before_appending_missing_output_names() {
         use std::os::windows::ffi::{OsStrExt, OsStringExt};
         use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;

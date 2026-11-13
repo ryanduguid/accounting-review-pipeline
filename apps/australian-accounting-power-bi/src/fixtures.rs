@@ -116,6 +116,13 @@ const LEDGER_HEADER: &[&str] = &[
 
 type Lines<'a> = &'a [(&'a str, Decimal)];
 
+/// A journal not yet posted: date, entity and description, then debit and credit lines.
+type Entry = ([String; 3], Vec<(&'static str, Decimal)>, Vec<(&'static str, Decimal)>);
+
+fn entry(header: [&str; 3], debits: &[(&'static str, Decimal)], credits: &[(&'static str, Decimal)]) -> Entry {
+    (header.map(str::to_owned), debits.to_vec(), credits.to_vec())
+}
+
 /// Balanced journals in posting order, numbered from JNL1001.
 struct Ledger {
     rows: Vec<Vec<String>>,
@@ -133,6 +140,14 @@ fn total(lines: Lines<'_>) -> Decimal {
 impl Ledger {
     fn journal(&mut self, header: [&str; 3], debits: Lines<'_>, credits: Lines<'_>) -> Result<(), String> {
         self.journal_with(header, debits, credits, "", None)
+    }
+
+    /// Posts the entries in order, stopping at the first one refused.
+    fn post(&mut self, entries: Vec<Entry>) -> Result<(), String> {
+        for ([date, entity, description], debits, credits) in entries {
+            self.journal([&date, &entity, &description], &debits, &credits)?;
+        }
+        Ok(())
     }
 
     /// One journal. `counterparty` marks an intercompany journal; `key` keeps an
@@ -280,88 +295,96 @@ fn super_on(salary: &Decimal) -> Decimal {
 }
 
 /// Varrock Ventures (advisory) and Draynor Produce (fresh foods).
-fn advisory_and_produce(ledger: &mut Ledger, m: &Month) -> Result<(), String> {
+fn advisory_and_produce(m: &Month) -> Vec<Entry> {
+    let mut entries = Vec::new();
     let (revenue, salary) = (m.scaled("160000.0"), m.scaled("75000.0"));
     let super_amount = super_on(&salary);
-    ledger.journal(
+    entries.push(entry(
         [&m.mid, "ENT001", &m.label("Advisory Billings")],
         &[("110", revenue.clone())],
         &[("610", revenue)],
-    )?;
+    ));
     let (pay, liability) = (
         [("800", salary.clone()), ("805", super_amount.clone())],
         [("100", salary), ("330", super_amount)],
     );
-    ledger.journal([&m.end, "ENT001", &m.label("Monthly Payroll")], &pay, &liability)?;
+    entries.push(entry([&m.end, "ENT001", &m.label("Monthly Payroll")], &pay, &liability));
     let rent = [("820", d("12000.0")), ("830", d("3500.0"))];
-    ledger.journal(
+    entries.push(entry(
         [&m.end, "ENT001", &m.label("Operating Costs & Rent")],
         &rent,
         &[("100", d("15500.0"))],
-    )?;
+    ));
 
     let revenue = m.scaled("280000.0");
     let cost = revenue.mul(&d("0.58")).round(2);
     let salary = m.scaled("45000.0");
     let super_amount = super_on(&salary);
-    ledger.journal(
+    entries.push(entry(
         [&m.mid, "ENT002", &m.label("Food Retailing Sales")],
         &[("100", revenue.clone())],
         &[("600", revenue)],
-    )?;
-    ledger.journal(
+    ));
+    entries.push(entry(
         [&m.mid, "ENT002", &m.label("Produce Inventory Purchase")],
         &[("700", cost.clone())],
         &[("100", cost)],
-    )?;
+    ));
     let (pay, liability) = (
         [("800", salary.clone()), ("805", super_amount.clone())],
         [("100", salary), ("330", super_amount)],
     );
-    ledger.journal([&m.end, "ENT002", &m.label("Monthly Payroll")], &pay, &liability)?;
+    entries.push(entry([&m.end, "ENT002", &m.label("Monthly Payroll")], &pay, &liability));
     let store = [("820", d("8500.0")), ("810", d("4200.0"))];
-    ledger.journal(
+    entries.push(entry(
         [&m.end, "ENT002", &m.label("Store Operating Costs")],
         &store,
         &[("100", d("12700.0"))],
-    )
+    ));
+    entries
 }
 
 /// Falador Freight (logistics) and Ardougne Holdings Trust (property).
-fn freight_and_property(ledger: &mut Ledger, m: &Month) -> Result<(), String> {
+fn freight_and_property(m: &Month) -> Vec<Entry> {
+    let mut entries = Vec::new();
     let revenue = m.scaled("190000.0");
     let fuel = revenue.mul(&d("0.28")).round(2);
     let salary = m.scaled("60000.0");
     let super_amount = super_on(&salary);
-    ledger.journal(
+    entries.push(entry(
         [&m.mid, "ENT003", &m.label("Freight Service Revenue")],
         &[("110", revenue.clone())],
         &[("600", revenue)],
-    )?;
+    ));
     let fleet = [("710", fuel.clone()), ("810", d("6500.0"))];
     let paid = [("100", fuel.add(&d("6500.0")))];
-    ledger.journal([&m.mid, "ENT003", &m.label("Fleet Fuel & Maintenance")], &fleet, &paid)?;
+    entries.push(entry(
+        [&m.mid, "ENT003", &m.label("Fleet Fuel & Maintenance")],
+        &fleet,
+        &paid,
+    ));
     let (pay, liability) = (
         [("800", salary.clone()), ("805", super_amount.clone())],
         [("100", salary), ("330", super_amount)],
     );
-    ledger.journal([&m.end, "ENT003", &m.label("Driver Payroll")], &pay, &liability)?;
-    ledger.journal(
+    entries.push(entry([&m.end, "ENT003", &m.label("Driver Payroll")], &pay, &liability));
+    entries.push(entry(
         [&m.end, "ENT003", &m.label("Vehicle Depreciation")],
         &[("890", d("4500.0"))],
         &[("210", d("4500.0"))],
-    )?;
+    ));
 
-    ledger.journal(
+    entries.push(entry(
         [&m.mid, "ENT004", &m.label("Property Rent Collection")],
         &[("100", d("25000.0"))],
         &[("620", d("25000.0"))],
-    )?;
-    ledger.journal(
+    ));
+    entries.push(entry(
         [&m.end, "ENT004", &m.label("Bank Facility Interest")],
         &[("895", d("5200.0"))],
         &[("100", d("5200.0"))],
-    )
+    ));
+    entries
 }
 
 /// Strictly matched intercompany pairs for elimination: ENT001 charges ENT002 and
@@ -431,8 +454,8 @@ pub fn general_ledger() -> Result<Table, String> {
     opening_balances(&mut ledger)?;
     for index in 0..36 {
         let month = Month::new(index);
-        advisory_and_produce(&mut ledger, &month)?;
-        freight_and_property(&mut ledger, &month)?;
+        ledger.post(advisory_and_produce(&month))?;
+        ledger.post(freight_and_property(&month))?;
         intercompany(&mut ledger, &month)?;
     }
     Ok(Table {
@@ -703,7 +726,12 @@ const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 /// as `tools/generate_fixtures.py` did, returning the exit code. A report that cannot be
 /// written fails the command.
 pub fn command_line(directory: &Path, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
-    let (code, stream, text): (u8, &mut dyn Write, _) = match generate(directory) {
+    report(directory, generate(directory), stdout, stderr)
+}
+
+/// Writes the report of one generation outcome and returns the exit code.
+fn report(directory: &Path, outcome: Result<(), Error>, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
+    let (code, stream, text): (u8, &mut dyn Write, _) = match outcome {
         Ok(()) => (
             0,
             stdout,
@@ -739,6 +767,41 @@ mod tests {
             "Unbalanced journal 1001: Debits 10.00 != Credits 10.01"
         );
         assert!(ledger.rows.is_empty());
+    }
+
+    #[test]
+    fn posting_stops_at_the_first_unbalanced_entry_and_reports_a_value_error() {
+        let mut ledger = Ledger {
+            rows: Vec::new(),
+            journal_id: 1000,
+        };
+        let billing = |credit| {
+            entry(
+                ["2024-07-15", "ENT001", "Varrock Ventures billing"],
+                &[("110", d("10.00"))],
+                &[("610", d(credit))],
+            )
+        };
+        let refused = ledger.post(vec![billing("10.00"), billing("10.01"), billing("10.00")]);
+        let message = "Unbalanced journal 1002: Debits 10.00 != Credits 10.01";
+        assert_eq!(refused, Err(message.to_owned()));
+        // The first journal's 2 lines only: the refused journal and the one after it wrote nothing.
+        assert_eq!(ledger.rows.len(), 2);
+        assert!(ledger.rows.iter().all(|row| row[0] == "JNL1001"));
+
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let code = report(
+            Path::new("unused"),
+            refused.map_err(Error::from),
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(code, 1);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(stderr).unwrap(),
+            format!("ValueError: {message}{NEWLINE}")
+        );
     }
 
     #[test]
