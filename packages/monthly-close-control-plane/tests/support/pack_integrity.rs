@@ -6,7 +6,11 @@ use monthly_close_control_plane::{
     decimal::Decimal,
     models::{Control, ExceptionItem},
 };
-use std::time::SystemTime;
+use std::{
+    process::{Output, Stdio},
+    thread,
+    time::{Duration, Instant, SystemTime},
+};
 
 const JSON: &str = "close-review-pack.json";
 const SUMMARY: &str = "close-summary.md";
@@ -93,6 +97,49 @@ fn inventory(path: &Path) -> BTreeMap<String, (Vec<u8>, SystemTime)> {
         })
         .collect()
 }
+fn bounded_output(command: &mut Command) -> Output {
+    let capture = TempDir::new();
+    let stdout = capture.join("stdout");
+    let stderr = capture.join("stderr");
+    let mut child = command
+        .stdout(Stdio::from(fs::File::create(&stdout).unwrap()))
+        .stderr(Stdio::from(fs::File::create(&stderr).unwrap()))
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let killed = child.kill();
+            let reaped = child.wait();
+            panic!("saved-pack command exceeded its deadline: {killed:?}; {reaped:?}");
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+    Output {
+        status,
+        stdout: fs::read(stdout).unwrap(),
+        stderr: fs::read(stderr).unwrap(),
+    }
+}
+fn displayed(files: &BTreeMap<String, Vec<u8>>) {
+    let temp = TempDir::new();
+    for (name, bytes) in files {
+        fs::write(temp.join(name), bytes).unwrap();
+    }
+    let before = inventory(&temp.0);
+    let shown = bounded_output(
+        child_profile::command(BIN)
+            .args(["view", "--pack-dir"])
+            .arg(&temp.0),
+    );
+    assert_eq!(shown.status.code(), Some(0), "{shown:?}");
+    assert!(!shown.stdout.is_empty());
+    assert!(shown.stderr.is_empty(), "{shown:?}");
+    assert_eq!(inventory(&temp.0), before, "view changed the valid pack");
+}
 fn physically_refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
     let temp = TempDir::new();
     for (name, bytes) in files {
@@ -109,20 +156,22 @@ fn physically_refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
             .unwrap_err()
             .contains(diagnostic)
     );
-    let shown = child_profile::command(BIN)
-        .args(["view", "--pack-dir"])
-        .arg(&temp.0)
-        .output()
-        .unwrap();
+    let shown = bounded_output(
+        child_profile::command(BIN)
+            .args(["view", "--pack-dir"])
+            .arg(&temp.0),
+    );
     assert_eq!(shown.status.code(), Some(1), "{shown:?}");
     assert!(
         shown.stdout.is_empty(),
         "refused view emitted a review sheet"
     );
+    let stderr = String::from_utf8_lossy(&shown.stderr);
     assert!(
-        String::from_utf8_lossy(&shown.stderr).contains(diagnostic),
+        stderr.starts_with("close-control view: verification failed: "),
         "{shown:?}"
     );
+    assert!(stderr.contains(diagnostic), "{shown:?}");
     assert_eq!(
         inventory(&temp.0),
         before,
@@ -136,6 +185,149 @@ fn refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
         "expected {diagnostic:?}, got {error:?}"
     );
     physically_refused(files, diagnostic);
+}
+
+fn empty_query_pack() -> BTreeMap<String, Vec<u8>> {
+    let temp = TempDir::new();
+    for (name, date) in [("current", "2026-08-31"), ("prior", "2026-07-31")] {
+        let csv = format!(
+            "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n\
+             {date},Fabricated Varrock,Assets,A1,Bank,090,0.00,0.00,100.00,0.00\n\
+             {date},Fabricated Varrock,Equity,E1,Capital,300,0.00,0.00,0.00,100.00\n"
+        );
+        fs::write(temp.join(format!("{name}.csv")), csv).unwrap();
+    }
+    let output = temp.join("output");
+    let reviewed = bounded_output(
+        child_profile::command(BIN)
+            .args(["review", "--current"])
+            .arg(temp.join("current.csv"))
+            .arg("--prior")
+            .arg(temp.join("prior.csv"))
+            .arg("--output")
+            .arg(&output),
+    );
+    assert_eq!(reviewed.status.code(), Some(0), "{reviewed:?}");
+    let files = inventory(&output)
+        .into_iter()
+        .map(|(name, (bytes, _))| (name, bytes))
+        .collect();
+    let doc = document(&files);
+    assert!(doc.at("overall_status").is_str("PASS"));
+    assert!(doc.at("exceptions").as_array().unwrap().is_empty());
+    assert!(doc.at("client_queries").as_array().unwrap().is_empty());
+    displayed(&files);
+    files
+}
+fn archived_query_pack(baseline: &BTreeMap<String, Vec<u8>>) -> BTreeMap<String, Vec<u8>> {
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    let Json::Object(pairs) = &mut doc else {
+        panic!("pack object")
+    };
+    pairs.retain(|(key, _)| !key.is("client_queries") && !key.is("controls_not_run"));
+    save(&mut files, &doc);
+    files.remove(QUERIES).unwrap();
+    let text = summary(&files);
+    let start = text.find("\n## Client queries\n").unwrap();
+    let end = text.find("\n## Human acknowledgement\n").unwrap();
+    let archived = format!("{}{}", &text[..start], &text[end..]);
+    let archived = archived
+        .lines()
+        .filter(|line| {
+            !line.starts_with("- Client queries drafted:")
+                && !line.starts_with("- Controls not run:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    files.insert(SUMMARY.into(), archived.into_bytes());
+    viewer::verify_payloads(&files).unwrap();
+    displayed(&files);
+    files
+}
+
+#[test]
+fn empty_and_archived_query_sections_refuse_unwitnessed_content() {
+    let baseline = empty_query_pack();
+    let archived = archived_query_pack(&baseline);
+    let header =
+        "| Query | Control | Tenant | Account | Difference | Question | Evidence requested |";
+    let table = format!(
+        "{header}\n| --- | --- | --- | --- | ---: | --- | --- |\n\
+         | Q-001 | period_variance | Fabricated Varrock | Bank | 1.00 | Explain the difference? | Statement |"
+    );
+    for (source, before, after, diagnostic) in [
+        (
+            &baseline,
+            "\n\n## Human acknowledgement\n",
+            "\n## Human acknowledgement\n".into(),
+            "close-summary.md: the client-query section does not end where the writer ends it",
+        ),
+        (
+            &baseline,
+            "No exception raised a question for the client. Every exception in this pack, if any, is one the firm settles from its own records.",
+            table,
+            "close-summary.md: holds a client-query table while close-review-pack.json holds no queries",
+        ),
+        (
+            &archived,
+            "\n## Human acknowledgement\n",
+            format!("\n{header}\n## Human acknowledgement\n"),
+            "close-summary.md: holds a client-query table while the pack carries no client-query register; the register is half removed, not absent",
+        ),
+        (
+            &archived,
+            "\n## Scope\n",
+            "\n- Client queries drafted: 0.\n\n## Scope\n".into(),
+            "close-summary.md: states a client-query count while the pack carries no client-query register; the register is half removed, not absent",
+        ),
+    ] {
+        let mut files = source.clone();
+        change_summary(&mut files, before, &after);
+        refused(&files, diagnostic);
+    }
+}
+
+#[test]
+fn saved_source_and_calculation_witnesses_cannot_silently_lose_agreement() {
+    let baseline = evidence_pack();
+    displayed(&baseline);
+    let doc = document(&baseline);
+    let Json::Object(sources) = doc.at("source_sha256") else {
+        panic!("source digests")
+    };
+    let (label, digest) = &sources[0];
+    let digest = digest.as_pystr().unwrap().os_text();
+    let replacement = if digest == "0".repeat(64) { "1" } else { "0" }.repeat(64);
+    let mut changed_digest = baseline.clone();
+    change_summary(
+        &mut changed_digest,
+        &format!("- `{}`: `{digest}`", label.os_text()),
+        &format!("- `{}`: `{replacement}`", label.os_text()),
+    );
+    let mut missing_values = baseline.clone();
+    let mut missing_doc = document(&missing_values);
+    let Json::Object(entry) = first_mut(&mut missing_doc, &["calculation_evidence", "supplied"])
+    else {
+        panic!("calculation entry")
+    };
+    let original_members = entry.len();
+    entry.retain(|(name, _)| !name.is("values"));
+    assert_eq!(entry.len(), original_members - 1);
+    save(&mut missing_values, &missing_doc);
+    for (files, diagnostic) in [
+        (
+            changed_digest,
+            "source evidence disagrees: close-summary.md and close-review-pack.json list different source digests",
+        ),
+        (
+            missing_values,
+            "close-review-pack.json: a calculation_evidence entry has the wrong members (unknown: none; missing: values)",
+        ),
+    ] {
+        refused(&files, diagnostic);
+    }
 }
 
 #[test]
