@@ -476,6 +476,184 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 mod tests {
     use super::*;
 
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // A fresh fabricated fixture directory, never used for a security decision.
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            // nosemgrep: rust.lang.security.temp-dir.temp-dir
+            let path = std::env::temp_dir().join(format!("evatt-pypath-{}-{nonce}-{sequence}", std::process::id()));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn native_anchors_distinguish_absolute_and_rooted_names() {
+        let cases = if cfg!(windows) {
+            vec![
+                (r"C:\review\tb.csv", true, true),
+                (r"C:review\tb.csv", false, true),
+                (r"\review\tb.csv", false, true),
+                (r"\\server\share\tb.csv", true, true),
+                ("review/tb.csv", false, false),
+                ("", false, false),
+            ]
+        } else {
+            vec![
+                ("/review/tb.csv", true, true),
+                ("//server/share/tb.csv", true, true),
+                ("C:review/tb.csv", false, false),
+                (r"\review\tb.csv", false, false),
+                ("review/tb.csv", false, false),
+                ("", false, false),
+            ]
+        };
+        for (path, absolute, anchored) in cases {
+            assert_eq!(is_absolute(path), absolute, "{path:?}");
+            assert_eq!(has_anchor(path), anchored, "{path:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_splitroot_preserves_drive_unc_and_device_boundaries() {
+        for (path, expected) in [
+            (r"\review", ("", r"\", "review")),
+            (r"\\server", (r"\\server", "", "")),
+            (r"\\server\share", (r"\\server\share", "", "")),
+            (r"\\server\share\review", (r"\\server\share", r"\", "review")),
+            (
+                r"\\?\UNC\server\share\review",
+                (r"\\?\UNC\server\share", r"\", "review"),
+            ),
+            (r"\\?\unc\server\share", (r"\\?\unc\server\share", "", "")),
+            (r"\\.\device", (r"\\.\device", "", "")),
+            (r"C:\review", ("C:", r"\", "review")),
+            ("C:review", ("C:", "", "review")),
+            ("review", ("", "", "review")),
+        ] {
+            assert_eq!(splitroot(path), expected, "{path:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_display_keeps_unc_roots_and_relative_drive_like_parts() {
+        for (path, expected) in [
+            (r"\\server\share", r"\\server\share\"),
+            (r"\\?\UNC\server\share", r"\\?\UNC\server\share\"),
+            (r"\\.\device", r"\\.\device"),
+            ("./C:review", r".\C:review"),
+            ("./", "."),
+        ] {
+            assert_eq!(display(path), expected, "{path:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_unpaired_surrogates_round_trip_and_remain_distinct() {
+        use std::os::windows::ffi::OsStringExt;
+        let first = OsString::from_wide(&[b'C' as u16, b':' as u16, b'\\' as u16, 0xD800]);
+        let second = OsString::from_wide(&[b'C' as u16, b':' as u16, b'\\' as u16, 0xD801]);
+        assert_eq!(encode_os(&decode_os(&first)), first);
+        assert_eq!(encode_os(&decode_os(&second)), second);
+        assert!(!same_path(Path::new(&first), Path::new(&second)));
+        assert!(!is_within(Path::new(&first), Path::new(&second)));
+        assert!(same_path(Path::new(&first), Path::new(&first)));
+    }
+
+    #[test]
+    fn lexical_path_comparison_obeys_native_case_and_component_rules() {
+        assert!(same_path(Path::new("review/tb.csv"), Path::new("review/tb.csv")));
+        assert_eq!(
+            same_path(Path::new("Review/TB.csv"), Path::new("review/tb.csv")),
+            cfg!(windows)
+        );
+        assert!(!same_path(Path::new("review/tb.csv"), Path::new("review/other.csv")));
+        assert!(is_within(Path::new("review/sub/tb.csv"), Path::new("review")));
+        assert!(!is_within(Path::new("review-other/tb.csv"), Path::new("review")));
+        assert!(!is_within(Path::new("review"), Path::new("review/sub")));
+    }
+
+    #[test]
+    fn file_identity_follows_real_hard_links_and_distinguishes_copies() {
+        let scratch = Scratch::new();
+        let original = scratch.0.join("original.csv");
+        let alias = scratch.0.join("alias.csv");
+        let copy = scratch.0.join("copy.csv");
+        std::fs::write(&original, "fabricated trial balance").unwrap();
+        std::fs::hard_link(&original, &alias).unwrap();
+        std::fs::copy(&original, &copy).unwrap();
+        assert_eq!(file_id(&original).unwrap(), file_id(&alias).unwrap());
+        assert_ne!(file_id(&original).unwrap(), file_id(&copy).unwrap());
+        assert_eq!(file_id(&scratch.0).unwrap(), file_id(&scratch.0).unwrap());
+        assert_eq!(
+            file_id(&scratch.0.join("missing.csv")).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn resolve_rejects_nul_and_strict_missing_or_non_directory_paths() {
+        assert!(matches!(
+            resolve(Path::new("bad\0name"), false),
+            Err(ResolveError::Unusable)
+        ));
+        let scratch = Scratch::new();
+        let file = scratch.0.join("ordinary.csv");
+        std::fs::write(&file, "fabricated trial balance").unwrap();
+        let non_directory = resolve(&file.join("child"), true);
+        if cfg!(windows) {
+            // WinError 3 is FileNotFoundError; POSIX reports ENOTDIR instead.
+            assert!(matches!(non_directory, Err(ResolveError::NotFound)));
+        } else {
+            assert!(matches!(non_directory, Err(ResolveError::Unusable)));
+        }
+        assert!(matches!(
+            resolve(&scratch.0.join("missing"), true),
+            Err(ResolveError::NotFound)
+        ));
+        assert_eq!(
+            resolve(&scratch.0.join("missing/child"), false).unwrap(),
+            resolve(&scratch.0, true).unwrap().join("missing/child")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_distinguishes_symlink_loops_from_repeated_resolved_links() {
+        let scratch = Scratch::new();
+        let root = resolve(&scratch.0, true).unwrap();
+        std::os::unix::fs::symlink("cycle", root.join("cycle")).unwrap();
+        assert!(matches!(
+            resolve(&root.join("cycle"), true),
+            Err(ResolveError::Unusable)
+        ));
+        assert_eq!(
+            resolve(&root.join("cycle/child"), false).unwrap(),
+            root.join("cycle/child")
+        );
+        std::fs::create_dir(root.join("real")).unwrap();
+        std::os::unix::fs::symlink("real", root.join("link")).unwrap();
+        for strict in [false, true] {
+            assert_eq!(resolve(&root.join("link/../link"), strict).unwrap(), root.join("real"));
+        }
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn undecodable_arguments_round_trip_like_surrogateescape() {
