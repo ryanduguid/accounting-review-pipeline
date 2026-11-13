@@ -722,4 +722,32 @@ mod tests {
         );
         assert_eq!(d("1.235").format_places(2), Some("1.24".into()));
     }
+
+    #[test]
+    fn quantize_checks_context_bounds_signed_zero_and_rounding_carry() {
+        assert_eq!(
+            d("1").quantize(-1_000_027, Rounding::HalfEven),
+            Err(Signal::InvalidOperation)
+        );
+        assert_eq!(
+            d("-0")
+                .quantize(-2, Rounding::HalfEven)
+                .unwrap()
+                .to_sci_string(),
+            "-0.00"
+        );
+        assert_eq!(
+            d("9999999999999999999999999999.5").quantize(0, Rounding::HalfEven),
+            Err(Signal::InvalidOperation)
+        );
+    }
+
+    #[test]
+    fn special_formatting_and_tiny_exponents_preserve_decimal_signals() {
+        assert_eq!(d("-Infinity").to_sci_string(), "-Infinity");
+        assert_eq!(d("-NaN").to_sci_string(), "-NaN");
+        let underflow = d("1e-1000028").add(&d("0"));
+        assert_eq!(underflow.value.to_sci_string(), "0E-1000026");
+        assert!(underflow.inexact);
+    }
 }
