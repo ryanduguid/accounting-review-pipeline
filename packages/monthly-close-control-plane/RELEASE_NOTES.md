@@ -20,6 +20,12 @@
   and for each account with a balance and no tie whose `Section` is none of
   those nor `Revenue` or `Expenses`. The pack adds no member: the accounts are
   its exceptions. Without the requirement nothing changes.
+- `review` and `workbench` take `--contacts`, a `ContactID,Name,ABN` CSV, and
+  run a new control, `contact_register`: `REVIEW` for an ABN that is not 11
+  digits or fails the ABN check digits, for one valid ABN on several contacts,
+  and for one name on several contacts once case and spacing are ignored. A
+  blank ABN is not checked, and nothing is looked up. Without the option the
+  output is unchanged.
 
 # v1.0.0
 

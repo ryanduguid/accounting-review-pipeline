@@ -676,7 +676,8 @@ fn review_and_workbench_help_and_usage_show_the_gst_options() {
         assert_eq!(help.status.code(), Some(0), "{command}");
         let help = lf(help.stdout);
         assert!(help.contains(GST_USAGE), "{command}: {help}");
-        assert!(help.ends_with(GST_HELP), "{command}: {help}");
+        // `--contacts` follows the GST options.
+        assert!(help.contains(GST_HELP), "{command}: {help}");
         let usage = child_profile::command(BIN).arg(command).output().unwrap();
         assert_eq!(usage.status.code(), Some(1), "{command}");
         let usage = lf(usage.stderr);

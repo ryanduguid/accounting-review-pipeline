@@ -36,6 +36,7 @@ pub const SUBLEDGER_COLUMNS: [&str; 3] = ["Tenant", "AccountID", "SubledgerBalan
 pub const GST_MAPPING_COLUMNS: [&str; 2] = ["AccountID", "GSTClass"];
 pub const GST_SETTLEMENT_COLUMNS: [&str; 2] = ["Reference", "Amount"];
 pub const GST_SIDED_SETTLEMENT_COLUMNS: [&str; 3] = ["Reference", "Amount", "Side"];
+pub const CONTACT_COLUMNS: [&str; 3] = ["ContactID", "Name", "ABN"];
 #[derive(Clone, Debug)]
 pub struct SourceSnapshot {
     pub path: PathBuf,
@@ -477,6 +478,30 @@ pub fn load_gst_mapping(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, Gs
         ));
     }
     Ok(mapping)
+}
+
+/// A contacts export: each contact once by `ContactID`, with a name and an
+/// ABN that may be blank. The ABN is checked later, as a finding, not here.
+pub fn load_contacts(snapshot: &SourceSnapshot) -> Result<Vec<Contact>> {
+    let mut ids = BTreeSet::new();
+    let mut contacts = Vec::new();
+    for row in csv_rows(snapshot, &CONTACT_COLUMNS, "Contacts file")? {
+        let row = row?;
+        let id = row.text("ContactID", false)?;
+        if !ids.insert(id.clone()) {
+            return Err(format!(
+                "{}: duplicate ContactID {}.",
+                pypath::text(&snapshot.path),
+                pytext::repr(&id)
+            ));
+        }
+        contacts.push(Contact {
+            id,
+            name: row.text("Name", false)?,
+            abn: row.text("ABN", true)?,
+        });
+    }
+    Ok(contacts)
 }
 
 /// The declared BAS payments, refunds and clearing journals in the GST
