@@ -485,6 +485,92 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_roots_and_display_preserve_native_path_forms() {
+        for (raw, expected) in [
+            (r"\review", ("", r"\", "review")),
+            (r"\\server", (r"\\server", "", "")),
+            (
+                r"\\server\share\review",
+                (r"\\server\share", r"\", "review"),
+            ),
+        ] {
+            assert_eq!(splitroot(raw), expected, "{raw:?}");
+        }
+        for (raw, expected) in [
+            (r"\\server\share", r"\\server\share\"),
+            (r"\\?\UNC\server\share", r"\\?\UNC\server\share\"),
+            (r"\\.\device", r"\\.\device"),
+            ("./C:review", r".\C:review"),
+        ] {
+            assert_eq!(display(raw), expected, "{raw:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_lone_surrogates_round_trip_and_keep_distinct_path_identity() {
+        use std::os::windows::ffi::OsStringExt;
+        let first = OsString::from_wide(&[b'C' as u16, b':' as u16, b'\\' as u16, 0xD800]);
+        let second = OsString::from_wide(&[b'C' as u16, b':' as u16, b'\\' as u16, 0xD801]);
+        assert_eq!(encode_os(&decode_os(&first)), first);
+        assert_eq!(encode_os(&decode_os(&second)), second);
+        assert!(!same_path(Path::new(&first), Path::new(&second)));
+        assert!(!is_within(Path::new(&first), Path::new(&second)));
+        assert!(same_path(Path::new(&first), Path::new(&first)));
+    }
+
+    #[test]
+    fn resolve_rejects_nul_and_strict_missing_or_non_directory_paths() {
+        assert!(matches!(
+            resolve(Path::new("bad\0name"), false),
+            Err(ResolveError::Unusable)
+        ));
+        let temp = crate::test_support::TempDir::new();
+        let file = temp.0.join("ordinary.csv");
+        std::fs::write(&file, "fabricated review evidence").unwrap();
+        let non_directory = resolve(&file.join("child"), true);
+        if cfg!(windows) {
+            // WinError 3 is FileNotFoundError; POSIX reports ENOTDIR instead.
+            assert!(matches!(non_directory, Err(ResolveError::NotFound)));
+        } else {
+            assert!(matches!(non_directory, Err(ResolveError::Unusable)));
+        }
+        assert!(matches!(
+            resolve(&temp.0.join("missing"), true),
+            Err(ResolveError::NotFound)
+        ));
+        assert_eq!(
+            resolve(&temp.0.join("missing/child"), false).unwrap(),
+            resolve(&temp.0, true).unwrap().join("missing/child")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_distinguishes_symlink_loops_from_repeated_resolved_links() {
+        let temp = crate::test_support::TempDir::new();
+        let root = resolve(&temp.0, true).unwrap();
+        std::os::unix::fs::symlink("cycle", root.join("cycle")).unwrap();
+        assert!(matches!(
+            resolve(&root.join("cycle"), true),
+            Err(ResolveError::Unusable)
+        ));
+        assert_eq!(
+            resolve(&root.join("cycle/child"), false).unwrap(),
+            root.join("cycle/child")
+        );
+        std::fs::create_dir(root.join("real")).unwrap();
+        std::os::unix::fs::symlink("real", root.join("link")).unwrap();
+        for strict in [false, true] {
+            assert_eq!(
+                resolve(&root.join("link/../link"), strict).unwrap(),
+                root.join("real")
+            );
+        }
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn undecodable_arguments_round_trip_like_surrogateescape() {
