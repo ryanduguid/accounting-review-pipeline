@@ -415,3 +415,60 @@ fn separate_negative_thresholds_reach_the_decimal_validator() {
         assert!(std::fs::read_dir(&directory.0).unwrap().next().is_none());
     }
 }
+
+#[test]
+fn schedule_choices_escape_tabs_and_carriage_returns() {
+    let directory = temp::TempDir::new();
+    let output = child_profile::command(env!("CARGO_BIN_EXE_close-control"))
+        .args(["schedule", "--kind", "tab\tcarriage\rreturn"])
+        .current_dir(&directory.0)
+        .env("COLUMNS", "80")
+        .env("NO_COLOR", "1")
+        .env("PYTHON_COLORS", "0")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr)
+        .unwrap()
+        .replace("\r\n", "\n");
+    assert!(
+        stderr.starts_with("usage: close-control schedule"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.ends_with("close-control schedule: error: argument --kind: invalid choice: 'tab\\tcarriage\\rreturn' (choose from 'expenses', 'migration', 'interentity')\n"),
+        "{stderr}"
+    );
+    assert!(fs::read_dir(&directory.0).unwrap().next().is_none());
+}
+
+#[test]
+fn unexpected_csv_headings_preserve_literal_unicode_in_stderr() {
+    let inputs = temp::TempDir::new();
+    sources(&inputs, "Bank");
+    let current = inputs.join("current.csv");
+    let original = fs::read_to_string(&current).unwrap();
+    let (header, rows) = original.split_once('\n').unwrap();
+    fs::write(&current, format!("{header},\u{10F7FF}X\n{rows}")).unwrap();
+    let before = snapshot(&inputs.0);
+    let output = temp::TempDir::new();
+    let result = review_command(&inputs, &output.join("pack"))
+        .current_dir(&inputs.0)
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    assert!(result.stdout.is_empty());
+    let stderr = String::from_utf8(result.stderr)
+        .unwrap()
+        .replace("\r\n", "\n");
+    assert_eq!(
+        stderr,
+        format!(
+            "close-control: input error: {}: canonical schema mismatch (unexpected \u{10F7FF}X).\n",
+            current.display()
+        )
+    );
+    assert_eq!(snapshot(&inputs.0), before);
+    assert!(fs::read_dir(&output.0).unwrap().next().is_none());
+}
