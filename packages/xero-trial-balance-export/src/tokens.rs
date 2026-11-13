@@ -381,6 +381,69 @@ mod tests {
         assert!(decode_cache(br#"{"access_token":"a","access_token":"b"}"#).is_err());
     }
     #[test]
+    fn missing_cache_reports_authentication_without_creating_a_token_pair() {
+        let scratch = Scratch::new();
+        let path = paths::resolved(&scratch.0).unwrap().join("token.json");
+        let session = TokenSession::new(&path).unwrap();
+        assert_eq!(session.path(), path);
+        let failure = session.load().unwrap_err();
+        assert_eq!(failure.code, 1);
+        assert_eq!(failure.stderr, "No token.json - run: xero-tb-auth\n");
+        assert!(!path.exists());
+        assert_eq!(fs::read(publication::append(&path, ".lock")).unwrap(), [0]);
+    }
+    #[test]
+    fn lock_directory_refuses_loading_and_preserves_the_cache() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("token.json");
+        let prior = b"synthetic unreadable cache";
+        fs::write(&path, prior).unwrap();
+        let session = TokenSession::new(&path).unwrap();
+        let lock = publication::append(&path, ".lock");
+        fs::create_dir(&lock).unwrap();
+        let failure = session.load().unwrap_err();
+        assert_eq!(failure.code, 1);
+        assert!(
+            failure
+                .stderr
+                .contains("could not open the token cache lock")
+        );
+        assert!(
+            failure
+                .stderr
+                .contains("token.json was not read or changed")
+        );
+        assert_eq!(fs::read(&path).unwrap(), prior);
+        assert!(lock.is_dir());
+        assert_eq!(fs::read_dir(&lock).unwrap().count(), 0);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn a_retargeted_cache_link_is_refused_before_loading_or_saving() {
+        use std::os::unix::fs::symlink;
+        let scratch = Scratch::new();
+        let path = scratch.0.join("token.json");
+        let session = TokenSession::new(&path).unwrap();
+        let target = scratch.0.join("renamed.json");
+        let prior = b"synthetic unrelated document";
+        fs::write(&target, prior).unwrap();
+        symlink(&target, &path).unwrap();
+        for failure in [
+            session.load().unwrap_err(),
+            session.save(&synthetic(1800)).unwrap_err(),
+        ] {
+            assert_eq!(failure.code, 1);
+            assert_eq!(
+                failure.stderr,
+                "error: token cache path must be named token.json\n"
+            );
+        }
+        assert_eq!(fs::read(&target).unwrap(), prior);
+        assert_eq!(fs::read_link(&path).unwrap(), target);
+        assert!(!publication::append(&path, ".lock").exists());
+        assert!(!publication::append(&target, ".lock").exists());
+    }
+    #[test]
     fn lock_timeout_leaves_a_fabricated_unreadable_cache_unchanged() {
         let scratch = Scratch::new();
         let path = scratch.0.join("token.json");
