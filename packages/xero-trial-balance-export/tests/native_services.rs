@@ -498,3 +498,221 @@ fn locked_manifest_keeps_both_prior_outputs_and_cleans_the_reservation() {
         .unwrap();
     assert_blocked_manifest(&scratch, &path, &manifest);
 }
+
+struct TokenLayout {
+    root: Scratch,
+    home: PathBuf,
+    work: PathBuf,
+    temp: PathBuf,
+    install: PathBuf,
+    outside: PathBuf,
+    program: PathBuf,
+}
+
+impl TokenLayout {
+    fn new() -> Self {
+        let root = Scratch::new();
+        let [home, work, temp, install, outside] =
+            ["home", "work", "temp", "install", "outside"].map(|name| root.0.join(name));
+        for directory in [&home, &work, &temp, &install, &outside] {
+            fs::create_dir(directory).unwrap();
+        }
+        let original = Path::new(env!("CARGO_BIN_EXE_export-tb"));
+        let program = install.join(original.file_name().unwrap());
+        fs::copy(original, &program).unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(&program, fs::metadata(original).unwrap().permissions()).unwrap();
+        Self {
+            root,
+            home,
+            work,
+            temp,
+            install,
+            outside,
+            program,
+        }
+    }
+
+    fn command(&self) -> Command {
+        let mut cmd = command(self.program.to_str().unwrap(), &self.work);
+        cmd.env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("TMPDIR", &self.temp)
+            .env("TMP", &self.temp)
+            .env("TEMP", &self.temp)
+            .args([
+                "--date",
+                "2026-06-30",
+                "--tenant",
+                "fabricated-tenant",
+                "--out",
+                "tb.csv",
+            ]);
+        cmd
+    }
+
+    fn caches(&self) -> [PathBuf; 4] {
+        let state = if cfg!(windows) {
+            "AppData/Local"
+        } else {
+            ".local/state"
+        };
+        [
+            self.home.join(".xero/token.json"),
+            self.home.join("environment/token.json"),
+            self.install.join("token.json"),
+            self.home
+                .join(state)
+                .join("xero-trial-balance-export/token.json"),
+        ]
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TokenSelection {
+    Tilde,
+    BlankFlag,
+    Install,
+    State,
+}
+
+fn seed_cache(path: &Path, access: &str) -> Vec<u8> {
+    TokenSession::new(path)
+        .unwrap()
+        .save(&token_pair(access, "fabricated-refresh", 1800))
+        .unwrap();
+    fs::read(path).unwrap()
+}
+
+fn selection_command(layout: &TokenLayout, selection: TokenSelection, proxy: &Proxy) -> Command {
+    let mut cmd = layout.command();
+    cmd.env("HTTPS_PROXY", format!("http://{}", proxy.address))
+        .env(
+            "REQUESTS_CA_BUNDLE",
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native-https/ca.pem"),
+        );
+    match selection {
+        TokenSelection::Tilde => {
+            cmd.env("XERO_TOKEN_FILE", &layout.caches()[1])
+                .args(["--token-file", "~/.xero/token.json"]);
+        }
+        TokenSelection::BlankFlag => {
+            cmd.env("XERO_TOKEN_FILE", &layout.caches()[1])
+                .arg("--token-file=");
+        }
+        TokenSelection::Install => {}
+        TokenSelection::State => {
+            cmd.env("XERO_TOKEN_FILE", " \t ");
+        }
+    }
+    cmd
+}
+
+fn assert_token_selection(selection: TokenSelection) {
+    let layout = TokenLayout::new();
+    let caches = layout.caches();
+    let selected = match selection {
+        TokenSelection::Tilde => 0,
+        TokenSelection::BlankFlag => 1,
+        TokenSelection::Install => 2,
+        TokenSelection::State => 3,
+    };
+    let before: Vec<_> = caches
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| selected != 3 || *index != 2)
+        .map(|(index, path)| {
+            let access = if index == selected {
+                "fabricated-access"
+            } else {
+                "fabricated-decoy"
+            };
+            (path.clone(), seed_cache(path, access))
+        })
+        .collect();
+    let server_cache = caches[selected].clone();
+    let proxy = Proxy::new(2, move |request| {
+        service_reply(request, &server_cache, false, false)
+    });
+    let output = run(selection_command(&layout, selection, &proxy));
+    proxy.finish();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout)
+        .unwrap()
+        .replace("\r\n", "\n");
+    assert!(stdout.starts_with("Tenant: Fabricated Organisation\n"));
+    assert!(stdout.contains("Wrote 2 accounts to "));
+    assert!(stdout.contains("Balance check OK: movement debits = credits = 1.00; YTD = 1.00"));
+    assert!(stdout.contains("Wrote manifest "));
+    assert_published(&layout.work.join("tb.csv"), false);
+    for (path, bytes) in before {
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+    if selected == 3 {
+        assert!(!caches[2].exists());
+    }
+}
+
+#[test]
+fn native_token_cache_selection_honours_flags_environment_install_and_state() {
+    for selection in [
+        TokenSelection::Tilde,
+        TokenSelection::BlankFlag,
+        TokenSelection::Install,
+        TokenSelection::State,
+    ] {
+        assert_token_selection(selection);
+    }
+}
+
+fn owned_inventory(directory: &Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    for entry in fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        result.push(path.clone());
+        if path.is_dir() {
+            result.extend(owned_inventory(&path));
+        }
+    }
+    result.sort();
+    result
+}
+
+#[test]
+fn native_token_cache_refusals_preserve_all_owned_files() {
+    let layout = TokenLayout::new();
+    let environment = layout.home.join("environment/token.json");
+    let outside = layout.outside.join("token.json");
+    let caches = [&environment, &outside].map(|path| (path, seed_cache(path, "fabricated-decoy")));
+    let before = owned_inventory(&layout.root.0);
+    for (flag, message) in [
+        (
+            outside.as_os_str(),
+            "error: token cache path must stay under the home directory, the process working directory, the system temp directory, or the install directory.\n",
+        ),
+        (
+            std::ffi::OsStr::new("~"),
+            "error: token cache path must be named token.json\n",
+        ),
+    ] {
+        let mut cmd = layout.command();
+        cmd.env("XERO_TOKEN_FILE", &environment)
+            .env("HTTPS_PROXY", "http://127.0.0.1:1")
+            .arg("--token-file")
+            .arg(flag);
+        let output = run(cmd);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            message
+        );
+        assert_eq!(owned_inventory(&layout.root.0), before);
+        for (path, bytes) in &caches {
+            assert_eq!(fs::read(path).unwrap(), *bytes);
+        }
+    }
+}
