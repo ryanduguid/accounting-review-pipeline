@@ -608,6 +608,26 @@ const DEMO_SETTINGS: [(&str, &str); 3] = [
     ("--reconciliation-tolerance", "0.01"),
 ];
 
+/// Write the fabricated inputs into a new `OUTPUT/inputs`, each as a new file,
+/// with their flags. Anything already at those paths, such as a symbolic link
+/// put there after the emptiness check, is refused, so no existing file is
+/// written through.
+fn write_demo_inputs(output: &Path) -> Result<Vec<(&'static str, PathBuf)>> {
+    let inputs = output.join("inputs");
+    std::fs::create_dir_all(output)
+        .and_then(|()| std::fs::create_dir(&inputs))
+        .map_err(|error| format!("cannot create {}: {error}", pypath::text(&inputs)))?;
+    let mut written = Vec::new();
+    for (flag, name, bytes) in DEMO_INPUTS {
+        let path = inputs.join(name);
+        std::fs::File::create_new(&path)
+            .and_then(|mut file| std::io::Write::write_all(&mut file, bytes))
+            .map_err(|error| format!("cannot write {}: {error}", pypath::text(&path)))?;
+        written.push((flag, path));
+    }
+    Ok(written)
+}
+
 /// Write the fabricated inputs to `OUTPUT/inputs` and review them into
 /// `OUTPUT/pack`, as `review` would. `OUTPUT` must be new or empty, and
 /// outside any checkout.
@@ -621,15 +641,9 @@ fn demo(args: &Arguments) -> i32 {
                 pypath::text(&output)
             ));
         }
-        let inputs = output.join("inputs");
-        std::fs::create_dir_all(&inputs)
-            .map_err(|error| format!("cannot create {}: {error}", pypath::text(&inputs)))?;
         let raw = |path: &Path| vec![pypath::decode_os(path.as_os_str())];
         let mut options = BTreeMap::new();
-        for (flag, name, bytes) in DEMO_INPUTS {
-            let path = inputs.join(name);
-            std::fs::write(&path, bytes)
-                .map_err(|error| format!("cannot write {}: {error}", pypath::text(&path)))?;
+        for (flag, path) in write_demo_inputs(&output)? {
             options.insert(flag.to_owned(), raw(&path));
         }
         for (flag, value) in DEMO_SETTINGS {
@@ -918,6 +932,23 @@ pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A link put at `OUTPUT/inputs` after the emptiness check is refused, and
+    /// the file it leads to keeps its contents.
+    #[cfg(unix)]
+    #[test]
+    fn demo_inputs_refuse_a_link_in_place_of_their_directory() {
+        let temp = crate::test_support::TempDir::new();
+        let elsewhere = temp.join("elsewhere");
+        std::fs::create_dir(&elsewhere).unwrap();
+        let sentinel = elsewhere.join("current_trial_balance.csv");
+        std::fs::write(&sentinel, "keep").unwrap();
+        let output = temp.join("demo");
+        std::fs::create_dir(&output).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, output.join("inputs")).unwrap();
+        let error = write_demo_inputs(&output).unwrap_err();
+        assert!(error.starts_with("cannot create "), "{error}");
+        assert_eq!(std::fs::read_to_string(&sentinel).unwrap(), "keep");
+    }
     #[test]
     fn a_panicking_command_returns_failure() {
         assert_eq!(command_thread(|| panic!("synthetic command failure")), 1);

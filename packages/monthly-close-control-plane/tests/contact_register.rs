@@ -137,17 +137,18 @@ fn duplicate_contacts_invalid_abns_and_a_shared_abn_are_each_raised() {
 
 #[test]
 fn all_whitespace_is_ignored_in_names_and_abns() {
-    // A name split by a space matches the same name without one, and an ABN
-    // separated by non-breaking spaces is read as its 11 digits.
+    // A name split by a space or a non-breaking space matches the same name
+    // without one, and an ABN separated by non-breaking spaces is read as its
+    // 11 digits.
     let temp = TempDir::new();
     let csv = "ContactID,Name,ABN\nC1,Fabricated Acme Pty,80\u{a0}000\u{a0}000\u{a0}001\n\
-               C2,Fabricated AcmePty,\n";
+               C2,Fabricated AcmePty,\nC3,fabricated\u{a0}acmepty,\n";
     let (result, output) = review(&temp, "pack", Some(csv), &[]);
     assert_eq!(result.status.code(), Some(2), "{result:?}");
     assert_eq!(
         reasons(&pack(&output)),
         [
-            "2 contacts have the same name once case and spacing are ignored: 'C1' ('Fabricated Acme Pty'), 'C2' ('Fabricated AcmePty')."
+            "3 contacts have the same name once case and spacing are ignored: 'C1' ('Fabricated Acme Pty'), 'C2' ('Fabricated AcmePty'), 'C3' ('fabricated\\xa0acmepty')."
         ]
     );
 }
