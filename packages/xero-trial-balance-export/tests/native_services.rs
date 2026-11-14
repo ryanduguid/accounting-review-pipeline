@@ -89,6 +89,53 @@ fn run(mut command: Command) -> Output {
     }
 }
 
+#[cfg(feature = "probe")]
+#[test]
+fn differential_refuses_wrong_argument_counts_before_creating_files() {
+    let scratch = Scratch::new();
+    for args in [&[][..], &["unused"; 6][..]] {
+        let mut cmd = command(env!("CARGO_BIN_EXE_xero-tb-differential"), &scratch.0);
+        cmd.args(args).stdin(Stdio::null());
+        let output = run(cmd);
+        assert_eq!(output.status.code(), Some(1), "{output:?}");
+        assert!(output.stdout.is_empty(), "{output:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "Error: \"usage: xero-tb-differential PYTHON BASELINE_COMPONENT PROBE SEED COUNT\"\n"
+        );
+        assert!(fs::read_dir(&scratch.0).unwrap().next().is_none());
+    }
+}
+
+#[cfg(feature = "probe")]
+#[test]
+fn differential_refuses_invalid_numbers_before_reading_components() {
+    let scratch = Scratch::new();
+    for (seed, count) in [("not-a-seed", "0"), ("1", "-1")] {
+        let mut cmd = command(env!("CARGO_BIN_EXE_xero-tb-differential"), &scratch.0);
+        cmd.args([
+            "absent-python",
+            "absent-oracle",
+            "absent-probe",
+            seed,
+            count,
+        ])
+        .stdin(Stdio::null());
+        let output = run(cmd);
+        assert_eq!(output.status.code(), Some(1), "{output:?}");
+        assert!(output.stdout.is_empty(), "{output:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "Error: ParseIntError { kind: InvalidDigit }\n"
+        );
+        assert!(fs::read_dir(&scratch.0).unwrap().next().is_none());
+    }
+}
+
 fn tenant() -> Json {
     Json::object([
         ("tenantId", Json::str("fabricated-tenant")),
