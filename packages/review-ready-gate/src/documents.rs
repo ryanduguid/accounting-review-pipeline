@@ -1125,10 +1125,15 @@ mod tests {
         let path = bundle(&tmp, &source_text(), "Demo", "txt");
         let mut review = reviewed(&path);
         assert!(load_document(&path).is_ok());
-        if let Json::Object(mut fields) = review.at("fields").clone() {
-            fields.retain(|(name, _)| !name.is("gst_observed"));
-            set(&mut review, &["fields"], Json::Object(fields));
-        }
+        let fields = review.at("fields");
+        let retained = fields
+            .keys()
+            .unwrap()
+            .into_iter()
+            .filter(|name| !name.is("gst_observed"))
+            .map(|name| (name.clone(), fields.at(&name.to_utf8().unwrap()).clone()))
+            .collect();
+        set(&mut review, &["fields"], Json::Object(retained));
         fs::write(path.join(REVIEW_NAME), encoded(&review)).unwrap();
         assert_eq!(
             load_document(&path).err().unwrap(),
