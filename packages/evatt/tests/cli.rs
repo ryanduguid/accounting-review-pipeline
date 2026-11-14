@@ -69,6 +69,19 @@ impl Repo {
     fn get(&self, name: &str) -> Vec<u8> {
         std::fs::read(self.path(name)).unwrap()
     }
+    fn seed_outputs_and_snapshot(&self) -> [(&'static str, Vec<u8>); 5] {
+        for name in ["out.md", "out.md.manifest.json", "out.md.triage.md"] {
+            self.put(name, format!("fabricated previous {name}\n").as_bytes());
+        }
+        [
+            "in.md",
+            "entities.json",
+            "out.md",
+            "out.md.manifest.json",
+            "out.md.triage.md",
+        ]
+        .map(|name| (name, self.get(name)))
+    }
     fn configured(&self, mut c: Command) -> Command {
         c.current_dir(&self.root)
             .env("GIT_CONFIG_GLOBAL", self.path("absent-global"))
@@ -399,6 +412,137 @@ fn invalid_utf8_input_and_maps_preserve_every_existing_artifact() {
         for (name, expected) in before {
             assert_eq!(repo.get(name), expected, "{name}");
         }
+    }
+}
+
+#[test]
+fn malformed_entity_map_json_preserves_every_existing_artifact() {
+    let cases = [
+        (
+            "{".to_owned(),
+            "cannot read entity map entities.json: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+        ),
+        (
+            "1".repeat(4301),
+            "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit",
+        ),
+    ];
+    for (map, diagnostic) in cases {
+        let repo = Repo::new();
+        repo.put("entities.json", map.as_bytes());
+        let before = repo.seed_outputs_and_snapshot();
+        let output = repo.run(&repo.normal("redact"));
+        assert_eq!(code(&output), 1);
+        assert!(output.stdout.is_empty());
+        assert_eq!(stderr(&output), native_output(&format!("error: {diagnostic}\n")));
+        for (name, bytes) in before {
+            assert_eq!(repo.get(name), bytes, "{name}");
+        }
+    }
+}
+
+#[test]
+fn git_lookup_skips_directories_and_preserves_existing_artifacts() {
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    let expected = repo.run(&repo.normal("verify"));
+    assert_eq!(code(&expected), 2);
+    let directory = repo.path("git-search");
+    std::fs::create_dir(&directory).unwrap();
+    let name = if cfg!(windows) { "git.EXE" } else { "git" };
+    let obstruction = directory.join(name);
+    std::fs::create_dir(&obstruction).unwrap();
+    let original = std::env::var_os("PATH").unwrap();
+    let path = std::env::join_paths(std::iter::once(directory).chain(std::env::split_paths(&original))).unwrap();
+    let mut command = repo.command(&repo.normal("verify"));
+    command.env("PATH", path);
+    #[cfg(windows)]
+    command.env("PATHEXT", ".EXE");
+    let output = command.output().unwrap();
+    assert_eq!(code(&output), 2);
+    assert_eq!(output.stdout, expected.stdout);
+    assert_eq!(output.stderr, expected.stderr);
+    assert!(obstruction.is_dir());
+    for (name, bytes) in before {
+        assert_eq!(repo.get(name), bytes, "{name}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn missing_and_undecodable_windows_pathext_keep_lookup_contracts() {
+    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    let expected = repo.run(&repo.normal("verify"));
+    assert_eq!(code(&expected), 2);
+    let mut command = repo.command(&repo.normal("verify"));
+    let output = command.env_remove("PATHEXT").output().unwrap();
+    assert_eq!(code(&output), 2);
+    assert_eq!(output.stdout, expected.stdout);
+    assert_eq!(output.stderr, expected.stderr);
+    let mut command = repo.command(&repo.normal("verify"));
+    let output = command.env("PATHEXT", OsString::from_wide(&[0xD800])).output().unwrap();
+    assert_eq!(code(&output), 1);
+    assert!(output.stdout.is_empty());
+    assert!(stderr(&output).contains("git is not on PATH"));
+    for (name, bytes) in before {
+        assert_eq!(repo.get(name), bytes, "{name}");
+    }
+}
+
+#[test]
+fn record_path_propagates_real_filesystem_errors_without_changing_artifacts() {
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    repo.put("occupied", b"fabricated record-path sentinel\n");
+    #[cfg(unix)]
+    {
+        let path = repo.path("occupied/child");
+        assert_eq!(
+            evatt::files::record_path(&path).unwrap_err(),
+            format!("[Errno 20] Not a directory: '{}'", path.display())
+        );
+    }
+    #[cfg(windows)]
+    {
+        let error = evatt::files::record_path(&repo.path("bad|record.disclosure.json")).unwrap_err();
+        assert!(error.starts_with("[WinError 123]"), "{error}");
+        assert!(error.contains("bad|record.disclosure.json"), "{error}");
+    }
+    assert_eq!(repo.get("occupied"), b"fabricated record-path sentinel\n");
+    for (name, bytes) in before {
+        assert_eq!(repo.get(name), bytes, "{name}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_record_paths_refuse_real_file_and_directory_links() {
+    use std::os::windows::fs::{symlink_dir, symlink_file};
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    std::fs::create_dir(repo.path("records")).unwrap();
+    repo.put("records/record.json", b"fabricated disclosure evidence\n");
+    let file_link = repo.path("file-link.json");
+    let directory_link = repo.path("directory-link");
+    symlink_file(repo.path("records/record.json"), &file_link).unwrap();
+    symlink_dir(repo.path("records"), &directory_link).unwrap();
+    for (link, record) in [
+        (&file_link, file_link.clone()),
+        (&directory_link, directory_link.join("record.json")),
+    ] {
+        let target = std::fs::read_link(link).unwrap();
+        assert_eq!(
+            evatt::files::record_path(&record).unwrap_err(),
+            "disclosure record paths must not use links"
+        );
+        assert_eq!(std::fs::read_link(link).unwrap(), target);
+        assert!(std::fs::symlink_metadata(link).unwrap().file_type().is_symlink());
+        assert_eq!(repo.get("records/record.json"), b"fabricated disclosure evidence\n");
+    }
+    for (name, bytes) in before {
+        assert_eq!(repo.get(name), bytes, "{name}");
     }
 }
 
