@@ -18,7 +18,7 @@ Before tagging:
 
     Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
 4. Confirm the component's `VERSION` and `RELEASE_NOTES.md` describe the separately approved version. Keep the notes heading as `# vMAJOR.MINOR.PATCH`; the root caller supplies the tag namespace.
-5. After separate release approval, create an annotated tag on the current remote `main` commit, for example `git tag -a accounting-excel-toolkit/v1.0.0 -m "accounting-excel-toolkit/v1.0.0"` (use `-s` instead of `-a` when a signing key is configured), then push only that tag.
+5. After separate release approval, create an annotated tag on the current remote `main` commit, for example `git tag -a accounting-excel-toolkit/v1.0.1 -m "accounting-excel-toolkit/v1.0.1"` (use `-s` instead of `-a` when a signing key is configured), then push only that tag.
 
 The standalone repository published `v0.1.0`, `v0.1.2` and `v0.1.5`; its `v0.1.1`, `v0.1.3` and `v0.1.4` tags recorded failed preflights with no releases or assets, and pilot run 31822769922 recorded the `v0.1.1` Administration-read failure. Those tags and runs went with the repository. Do not reuse those version numbers. `VERSION` and `RELEASE_NOTES.md` describe `v1.0.1`; a later version needs its own version-and-notes change as well.
 

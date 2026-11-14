@@ -39,8 +39,8 @@ tag only with the owner's explicit approval for that release.
 
     ```bash
     git fetch origin main
-    git tag -a monthly-close-control-plane/v1.0.0 -m "monthly-close-control-plane/v1.0.0" origin/main
-    git push origin monthly-close-control-plane/v1.0.0
+    git tag -a monthly-close-control-plane/v1.1.0 -m "monthly-close-control-plane/v1.1.0" origin/main
+    git push origin monthly-close-control-plane/v1.1.0
     ```
 
 The workflow runs `cargo test --locked` and builds `close-control` with
