@@ -895,6 +895,10 @@ mod tests {
             stream_error(&std::io::Error::other("fabricated stream failure")),
             "OSError: fabricated stream failure"
         );
+        assert_eq!(
+            stream_error(&std::io::Error::from_raw_os_error(22)),
+            "OSError: [Errno 22] Invalid argument"
+        );
         #[cfg(windows)]
         assert_eq!(
             stream_error(&std::io::Error::from_raw_os_error(112)),

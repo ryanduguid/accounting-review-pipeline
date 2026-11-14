@@ -454,6 +454,21 @@ fn usage_errors_and_help_match_argparse() {
 }
 
 #[test]
+fn long_invalid_command_is_reported_without_a_spurious_suggestion() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let token = format!("{}valuate", "e".repeat(200));
+    let output = run(&env, &[&token]);
+    assert_eq!(output.code, 2);
+    assert!(output.out.is_empty());
+    assert!(output.err.ends_with(&format!(
+        "argument command: invalid choice: '{token}' (choose from 'evaluate', 'validate-review')\n"
+    )));
+    assert!(!output.err.contains("maybe you meant"));
+    assert!(!dir.path().join("build").exists());
+}
+
+#[test]
 fn explicit_help_and_ambiguous_options_match_argparse() {
     let dir = TempDir::new();
     let env = env(dir.path());
