@@ -1,3 +1,34 @@
+# v1.0.1
+
+The Power Query and VBA files keep their behaviour; 2 VBA comments now name the
+Rust test that pins their shared number format.
+
+## Fixed
+
+- The aged receivables manifest check reads `generated_at` as the frozen
+  Python reference does. A malformed ISO week date there used to pass; it now
+  raises 'Missing or malformed generated timestamp.' and the summary is
+  `REVIEW` (#521).
+- On Windows, an output path reached through a dangling link is compared
+  without its `\\?\` prefix, so the check that evidence is written outside
+  the checkout sees the same path form on both sides (#521).
+
+## Changed
+
+- Relicensed from FSL-1.1-ALv2 to the Ryan Duguid Public Attribution Licence
+  1.0: the FSL-1.1-ALv2 text with a public attribution condition, and
+  Apache-2.0 as the future licence. Released versions keep their licence
+  (#502). Source files carry copyright and SPDX licence headers (#499).
+- The static guards and release-archive checks run as Rust tests on Linux and
+  Windows instead of Python tests (#495). Native coverage and CLI contract tests
+  are added (#521).
+- README and contributor documentation corrections (#467, #470, #494, #554).
+
+## Known issues
+
+- `CompareFormulaRanges` in `vba/modFormulaCompare.bas` still has no recorded
+  native VBA acceptance.
+
 # v1.0.0
 
 The Power Query and VBA files keep their behaviour; the major version marks the

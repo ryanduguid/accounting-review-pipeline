@@ -4,7 +4,7 @@
 
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate
-- **Rust package**: `review-ready-gate` 1.0.1 (unreleased), binary only; 1.0.0 is the latest release.
+- **Rust package**: `review-ready-gate` 1.0.1, binary only.
 - **CLI command**: `review-ready`
 - **Domain**: Local, deterministic readiness gating for Australian public-practice workpaper packs (BAS, month-end, year-end).
 - **Control basis**: Required-artefact completeness, self-review assertions, open-item blocking, trial-balance integrity, GST 1A/1B tie-out, month-end bank rec, year-end tie-out matrix, and prior-finding repeats.
