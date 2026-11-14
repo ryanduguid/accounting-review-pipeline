@@ -1576,8 +1576,9 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
             if name.starts_with("cli-presentation-") {
                 let native = probe::decode(actual)?;
                 let python = probe::decode(&expected)?;
-                if probe::encode(native.at("ok").at("code"))
-                    == probe::encode(python.at("ok").at("code"))
+                if let Some(native) = native.get("ok").and_then(|ok| ok.get("code"))
+                    && let Some(python) = python.get("ok").and_then(|ok| ok.get("code"))
+                    && probe::encode(native) == probe::encode(python)
                 {
                     presentation += 1;
                     continue;
