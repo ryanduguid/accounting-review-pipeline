@@ -441,4 +441,121 @@ mod tests {
         assert_eq!(fs::read(&manifest).unwrap(), b"earlier manifest");
         assert_eq!(fs::read(&aside).unwrap(), b"reserved recovery");
     }
+
+    #[test]
+    fn temporary_refusals_preserve_missing_and_non_directory_parents() {
+        let scratch = Scratch::new();
+        let missing = scratch.0.join("missing");
+        let obstruction = scratch.0.join("blocked");
+        fs::write(&obstruction, b"keep obstruction").unwrap();
+        for parent in [&missing, &obstruction] {
+            let failure = temporary(parent, ".csv.tmp").unwrap_err();
+            assert_eq!(failure.code, 1);
+            assert!(failure.stdout.is_empty());
+            assert!(failure.stderr.starts_with(&format!(
+                "error: cannot write a temporary file in {} (",
+                pypath::text(parent)
+            )));
+            assert!(failure.stderr.ends_with(")\n"));
+            assert!(!missing.exists());
+            assert_eq!(fs::read(&obstruction).unwrap(), b"keep obstruction");
+            assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
+        }
+        let (path, mut file) = temporary(&scratch.0, ".csv.tmp").unwrap();
+        assert_eq!(path.parent(), Some(scratch.0.as_path()));
+        assert!(
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .ends_with(".csv.tmp")
+        );
+        file.write_all(b"usable temporary output").unwrap();
+        drop(file);
+        assert_eq!(fs::read(&path).unwrap(), b"usable temporary output");
+    }
+
+    #[test]
+    fn obstructed_restoration_retains_recovery_and_reports_manual_restore() {
+        for quiet in [false, true] {
+            let scratch = Scratch::new();
+            let csv = scratch.0.join("tb.csv");
+            let manifest = manifest_path(&csv);
+            fs::write(&csv, b"earlier CSV").unwrap();
+            fs::write(&manifest, b"earlier manifest").unwrap();
+            let aside = set_aside_manifest(&csv, quiet).unwrap().unwrap();
+            fs::create_dir(&manifest).unwrap();
+            let obstruction = manifest.join("keep");
+            fs::write(&obstruction, b"keep obstruction").unwrap();
+            let ((), stdout, stderr) =
+                crate::stdio::capture(|| restore_manifest(&aside, &csv, quiet));
+            assert!(stdout.is_empty());
+            let hidden = scratch.0.join("<filename withheld under --quiet>");
+            let shown_aside = if quiet { &hidden } else { &aside };
+            let shown_manifest = if quiet { &hidden } else { &manifest };
+            assert!(stderr.starts_with(&format!(
+                "warning: the earlier manifest is at {} and could not be restored to {} (",
+                pypath::text(shown_aside),
+                pypath::text(shown_manifest)
+            )));
+            assert!(stderr.ends_with("); rename it back by hand. The earlier CSV is unchanged.\n"));
+            assert_eq!(stderr.contains("tb.csv"), !quiet);
+            assert_eq!(
+                stderr.matches("<filename withheld under --quiet>").count(),
+                if quiet { 2 } else { 0 }
+            );
+            assert_eq!(fs::read(&aside).unwrap(), b"earlier manifest");
+            assert_eq!(fs::read(&csv).unwrap(), b"earlier CSV");
+            assert_eq!(fs::read(&obstruction).unwrap(), b"keep obstruction");
+            fs::remove_file(&obstruction).unwrap();
+            fs::remove_dir(&manifest).unwrap();
+            let ((), stdout, stderr) =
+                crate::stdio::capture(|| restore_manifest(&aside, &csv, quiet));
+            assert!(stdout.is_empty() && stderr.is_empty());
+            assert!(!aside.exists());
+            assert_eq!(fs::read(&manifest).unwrap(), b"earlier manifest");
+            assert_eq!(fs::read(&csv).unwrap(), b"earlier CSV");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn locked_obsolete_manifest_is_retained_until_manual_delete_is_possible() {
+        use std::os::windows::fs::OpenOptionsExt;
+        for quiet in [false, true] {
+            let scratch = Scratch::new();
+            let csv = scratch.0.join("tb.csv");
+            let manifest = manifest_path(&csv);
+            fs::write(&csv, b"earlier CSV").unwrap();
+            fs::write(&manifest, b"earlier manifest").unwrap();
+            let aside = set_aside_manifest(&csv, quiet).unwrap().unwrap();
+            fs::write(&csv, b"replacement CSV").unwrap();
+            let lock = OpenOptions::new()
+                .read(true)
+                .share_mode(3)
+                .open(&aside)
+                .unwrap();
+            let ((), stdout, stderr) = crate::stdio::capture(|| discard_manifest(&aside, quiet));
+            assert!(stdout.is_empty());
+            let hidden = scratch.0.join("<filename withheld under --quiet>");
+            let shown = if quiet { &hidden } else { &aside };
+            assert!(stderr.starts_with(&format!(
+                "warning: the earlier manifest set aside at {} could not be removed (",
+                pypath::text(shown)
+            )));
+            assert!(stderr.ends_with("); delete it by hand. It describes a previous export.\n"));
+            assert_eq!(stderr.contains("tb.csv"), !quiet);
+            assert_eq!(
+                stderr.matches("<filename withheld under --quiet>").count(),
+                usize::from(quiet)
+            );
+            assert_eq!(fs::read(&aside).unwrap(), b"earlier manifest");
+            assert_eq!(fs::read(&csv).unwrap(), b"replacement CSV");
+            assert!(!manifest.exists());
+            drop(lock);
+            let ((), stdout, stderr) = crate::stdio::capture(|| discard_manifest(&aside, quiet));
+            assert!(stdout.is_empty() && stderr.is_empty());
+            assert!(!aside.exists());
+            assert_eq!(fs::read(&csv).unwrap(), b"replacement CSV");
+        }
+    }
 }
