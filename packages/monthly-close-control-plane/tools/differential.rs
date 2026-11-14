@@ -11,6 +11,10 @@ use std::{
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+#[cfg(test)]
+#[path = "../tests/support/differential_refusals.rs"]
+mod tests;
+
 const ORACLE: &str = r#"
 import contextlib, dataclasses, datetime, decimal, hashlib, io, json, pathlib, sys, unicodedata, tempfile
 from unittest.mock import patch

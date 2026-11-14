@@ -1,5 +1,41 @@
 use super::*;
 
+#[test]
+fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Result<()> {
+    let version = Command::new("git").arg("--version").output()?;
+    assert!(version.status.success());
+    let mut command = Command::new("git");
+    command.arg("--version");
+    assert_eq!(
+        exchange(command, "")?,
+        String::from_utf8(version.stdout)?
+            .lines()
+            .collect::<Vec<_>>()
+    );
+    let scratch = Scratch::new()?;
+    let missing = scratch.0.join("missing");
+    assert!(!missing.exists());
+    let git = || {
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(&missing)
+            .args(["rev-parse", "--show-toplevel"]);
+        command
+    };
+    let failure = git().output()?;
+    assert!(!failure.status.success());
+    assert!(!failure.stderr.is_empty());
+    assert_eq!(
+        exchange(git(), "").unwrap_err().to_string(),
+        format!(
+            "comparison process failed: {}",
+            String::from_utf8_lossy(&failure.stderr)
+        )
+    );
+    Ok(())
+}
+
 fn review_result(example: &str, profile: &str) -> Result<Json> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("examples")
