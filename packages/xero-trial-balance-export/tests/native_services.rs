@@ -5,6 +5,9 @@
 mod child_profile;
 #[path = "../../../tests/support/directory_link.rs"]
 mod directory_link;
+#[cfg(target_os = "linux")]
+#[path = "support/headless_auth.rs"]
+mod headless_auth;
 #[path = "support/https_proxy.rs"]
 mod https_proxy;
 #[path = "support/report_fixture.rs"]
