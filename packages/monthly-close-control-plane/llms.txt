@@ -4,7 +4,7 @@
 
 ## Package overview
 - **Repository**: https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/monthly-close-control-plane
-- **Crate name**: `monthly-close-control-plane`, version 1.1.0 (unreleased); 1.0.0 is the latest release.
+- **Crate name**: `monthly-close-control-plane`, version 1.1.0.
 - **CLI command**: native Rust `close-control`; no Python runtime or import API.
   Released as Linux x86_64 and Windows x86_64 executables on
   `monthly-close-control-plane/v<version>` GitHub Releases, or built with Cargo.

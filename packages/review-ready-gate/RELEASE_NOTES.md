@@ -1,8 +1,25 @@
-# v1.0.1 (unreleased)
+# v1.0.1
+
+## Fixed
 
 - A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
   valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
-  build, the release build included, name its commit instead of `unknown`.
+  build, the release build included, name its commit instead of `unknown`. The
+  1.0.0 executables record `unknown` (#530).
+
+## Changed
+
+- Tests only: readiness input, document refusal, publication, probe, path,
+  decimal and differential start-up contracts gain regression tests (#544,
+  #546, #547, #551, #558). The command's behaviour is otherwise unchanged.
+- Documentation: the release guide and the 1.0.0 notes' licence name are
+  corrected (#532, #553).
+
+## Known issues
+
+- The `bas` profile has no instalment activity statement variant. A pack whose
+  activity statement has no labels 1A and 1B, as an IAS has none, is
+  `NOT_READY` with `TIEOUT_BREAK`.
 
 # v1.0.0
 

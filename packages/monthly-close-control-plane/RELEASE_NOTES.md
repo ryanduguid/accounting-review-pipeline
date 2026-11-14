@@ -1,38 +1,72 @@
-# v1.1.0 (unreleased)
+# v1.1.0
+
+## Added
 
 - `queue --summary` adds a roll-up of the displayed packs: how many are
   `PASS`, `REVIEW` and `BLOCKED` and which pack directories they are, how many
   packs and exceptions each control raised, and which controls did not run where.
   The client label is the pack directory's name. Without the flag the queue keeps
-  its bytes. `--s` remains an abbreviation for `--status`.
-- A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
-  valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
-  build, the release build included, name its commit instead of `unknown`.
-- `gst_reasonableness` accepts GST accounts classed `gst_collected` and
-  `gst_paid`, and then also compares each side with 1/10 of its taxable sales or
-  creditable purchases, so equal shortfalls on both sides, which offset in the
-  net figure, are raised for review. Its settlements declaration then takes a
-  `Side` column. Mappings that class GST accounts `gst` behave as before.
+  its bytes. `--s` remains an abbreviation for `--status` (#529).
 - `--require-control reconciliation_coverage` runs a new control,
   `reconciliation_coverage`, which raises `REVIEW` for each balance-sheet
   account (`Section` `Assets`, `Liabilities` or `Equity`) with a closing
   balance that no `--subledger` row or computed equity reconciliation ties out,
   and for each account with a balance and no tie whose `Section` is none of
   those nor `Revenue` or `Expenses`. The pack adds no member: the accounts are
-  its exceptions. Without the requirement nothing changes.
+  its exceptions. Without the requirement nothing changes (#536).
 - `review` and `workbench` take `--contacts`, a `ContactID,Name,ABN` CSV, and
   run a new control, `contact_register`: `REVIEW` for an ABN that is not 11
   digits or fails the ABN check digits, for one valid ABN on several contacts,
   and for one name on several contacts once case and spacing are ignored. A
   blank ABN is not checked, and nothing is looked up. Without the option the
-  output is unchanged.
+  output is unchanged (#536).
 - `close-control demo --output DIR` writes the fabricated example inputs, which
   are built into the executable, to `DIR/inputs` and reviews them into
   `DIR/pack`, so a downloaded executable shows a sample pack without a
   checkout. The pack is the one the `just demo` source command writes, byte for
   byte, and the command exits `2` like it. `DIR` must be new or empty and
   outside any version-control checkout; otherwise it exits `1` and writes
-  nothing.
+  nothing (#536).
+- The `close-review` skill installs as a Claude Code plugin with
+  `/plugin marketplace add ryanduguid/accounting-review-pipeline` and then
+  `/plugin install close-review@accounting-review-pipeline`. The plugin does not
+  install `close-control`; download and verify the executable from this release
+  (#533).
+
+## Changed
+
+- `gst_reasonableness` accepts GST accounts classed `gst_collected` and
+  `gst_paid`, and then also compares each side with 1/10 of its taxable sales or
+  creditable purchases, so equal shortfalls on both sides, which offset in the
+  net figure, are raised for review. Its settlements declaration then takes a
+  `Side` column. Mappings that class GST accounts `gst` behave as before (#536).
+- Tests only: path resolution, text and decimal boundaries, probe stream
+  framing and pack integrity gain regression tests (#544, #551, #552, #556).
+- Documentation: the reviewer quick start and the 1.0.0 notes' licence name are
+  corrected (#532, #553).
+
+## Fixed
+
+- A build that does not set `ACCOUNTING_REVIEW_SOURCE_COMMIT` now records a
+  valid `GITHUB_SHA` as the `producer` commit, so packs from a GitHub Actions
+  build, the release build included, name its commit instead of `unknown`. The
+  1.0.0 executables record `unknown` (#530).
+- A JSON input to `classify`, `compare`, `reconcile`, `schedule` or `view`, or
+  a `--equity-schedule` file, that ends straight after a complete `\uXXXX`
+  escape in an unclosed string, such as `"\u00e9`, is reported as an
+  unterminated string, as CPython reports it, instead of as an invalid escape.
+  It is refused either way (#543).
+
+## Known issues
+
+- `reconcile` reads every transaction row into memory before it applies its
+  100,000-item limit, so a file over the limit is refused only after it has
+  been read in full.
+- `src/tables.rs` names `tools/gen_unicode_tables.rs` as its generator, which
+  this component does not include. The file is a byte-for-byte copy of
+  Workpaper Review Gate's generated table, and no test checks that the 2
+  copies stay equal.
+- macOS builds and Aikido scans remain unverified for this release.
 
 # v1.0.0
 

@@ -60,7 +60,7 @@ The first MVP accepts the canonical CSV written by [xero-trial-balance-export](h
 
 ## Quick demo
 
-From the next release, a downloaded `close-control` executable runs the demo
+From 1.1.0, a downloaded `close-control` executable runs the demo
 without a checkout:
 
 ```bash

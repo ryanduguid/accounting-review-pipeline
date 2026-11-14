@@ -39,8 +39,8 @@ tag only with the owner's explicit approval for that release.
 
     ```bash
     git fetch origin main
-    git tag -a review-ready-gate/v1.0.0 -m "review-ready-gate/v1.0.0" origin/main
-    git push origin review-ready-gate/v1.0.0
+    git tag -a review-ready-gate/v1.0.1 -m "review-ready-gate/v1.0.1" origin/main
+    git push origin review-ready-gate/v1.0.1
     ```
 
 The workflow runs `cargo test --locked` and builds `review-ready` with
