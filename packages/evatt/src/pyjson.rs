@@ -738,6 +738,54 @@ pub fn int_cmp(value: &BigInt, bound: i64) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn object_lookup_preserves_present_null_and_rejects_nonobjects() {
+        for source in ["null", "false", "0", r#""text""#, "[]"] {
+            let value = loads(source).unwrap();
+            assert!(value.get("field").is_none(), "{source}");
+        }
+        let object = loads(r#"{"field":null}"#).unwrap();
+        assert!(matches!(object.get("field"), Some(Json::Null)));
+        assert!(object.get("missing").is_none());
+    }
+
+    #[test]
+    fn equality_keeps_different_json_types_distinct() {
+        for (left, right) in [
+            ("1", r#""1""#),
+            ("null", "false"),
+            ("[]", "{}"),
+            ("[1]", r#"["1"]"#),
+            (r#"{"x":1}"#, r#"{"x":"1"}"#),
+        ] {
+            let left = loads(left).unwrap();
+            let right = loads(right).unwrap();
+            assert!(!py_eq(&left, &right, false));
+            assert!(!py_eq(&right, &left, false));
+        }
+    }
+
+    #[test]
+    fn excessive_nesting_preserves_controlled_refusals_for_both_loaders() {
+        std::thread::Builder::new()
+            .stack_size(256 << 20)
+            .spawn(|| {
+                let accepted = format!("{}null{}", "[".repeat(500), "]".repeat(500));
+                let excessive = format!("{}null{}", "[".repeat(10_001), "]".repeat(10_001));
+                for load in [loads as fn(&str) -> Result<Json, LoadError>, loads_plain] {
+                    assert!(load(&accepted).is_ok());
+                    assert_eq!(
+                        load(&excessive).unwrap_err(),
+                        LoadError::Crash("maximum recursion depth exceeded while decoding a JSON document".into())
+                    );
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
     use super::*;
 
     #[test]

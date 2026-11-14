@@ -699,6 +699,23 @@ pub fn int_cmp(value: &BigInt, bound: i64) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn equality_keeps_different_json_types_distinct() {
+        for (left, right) in [
+            ("1", r#""1""#),
+            ("null", "false"),
+            ("[]", "{}"),
+            ("[1]", r#"["1"]"#),
+            (r#"{"x":1}"#, r#"{"x":"1"}"#),
+        ] {
+            let left = loads(left).unwrap();
+            let right = loads(right).unwrap();
+            assert!(!py_eq(&left, &right, false));
+            assert!(!py_eq(&right, &left, false));
+        }
+    }
+
     #[test]
     fn bounded_recursion_refuses_deep_documents_without_exhausting_the_stack() {
         std::thread::Builder::new()

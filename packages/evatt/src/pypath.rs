@@ -474,6 +474,25 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 
 #[cfg(test)]
 mod tests {
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_prefix_removal_preserves_unpaired_utf16_names() {
+        use std::os::windows::ffi::OsStringExt;
+        for (source, expected) in [
+            (r"\\?\C:\sample", r"C:\sample"),
+            (r"\\?\UNC\server\share\sample", r"\\server\share\sample"),
+            (r"C:\sample", r"C:\sample"),
+        ] {
+            let suffix = [0xD800, u16::from(b'x')];
+            let source: Vec<u16> = source.encode_utf16().chain(suffix).collect();
+            let expected: Vec<u16> = expected.encode_utf16().chain(suffix).collect();
+            let source = PathBuf::from(OsString::from_wide(&source));
+            let expected = PathBuf::from(OsString::from_wide(&expected));
+            assert_eq!(strip_verbatim(source), expected);
+        }
+    }
+
     use super::*;
 
     struct Scratch(PathBuf);
