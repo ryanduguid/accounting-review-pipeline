@@ -650,6 +650,19 @@ pub fn int_cmp(value: &BigInt, bound: i64) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn object_lookup_preserves_present_null_and_rejects_nonobjects() {
+        for source in ["null", "false", "0", r#""text""#, "[]"] {
+            let value = loads(source).unwrap();
+            assert!(value.get("field").is_none(), "{source}");
+        }
+        let object = loads(r#"{"field":null}"#).unwrap();
+        assert!(matches!(object.get("field"), Some(Json::Null)));
+        assert!(object.get("missing").is_none());
+        assert!(py_eq(object.get("field").unwrap(), &Json::Null, false));
+    }
+
     use super::*;
 
     #[test]

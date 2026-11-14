@@ -481,6 +481,72 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 
 #[cfg(test)]
 mod tests {
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_prefix_removal_preserves_unpaired_utf16_names() {
+        use std::os::windows::ffi::OsStringExt;
+        for (source, expected) in [
+            (r"\\?\C:\sample", r"C:\sample"),
+            (r"\\?\UNC\server\share\sample", r"\\server\share\sample"),
+            (r"C:\sample", r"C:\sample"),
+        ] {
+            let suffix = [0xD800, u16::from(b'x')];
+            let source: Vec<u16> = source.encode_utf16().chain(suffix).collect();
+            let expected: Vec<u16> = expected.encode_utf16().chain(suffix).collect();
+            let source = PathBuf::from(OsString::from_wide(&source));
+            let expected = PathBuf::from(OsString::from_wide(&expected));
+            assert_eq!(strip_verbatim(source), expected);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_root_splitting_preserves_drive_unc_and_relative_parts() {
+        for (source, expected) in [
+            (r"\Windows", ("", r"\", "Windows")),
+            (r"\\server", (r"\\server", "", "")),
+            (r"\\server\share", (r"\\server\share", "", "")),
+            (r"\\server\share\file", (r"\\server\share", r"\", "file")),
+            (r"\\?\UNC\server\share\file", (r"\\?\UNC\server\share", r"\", "file")),
+            (r"C:\file", ("C:", r"\", "file")),
+            ("C:relative", ("C:", "", "relative")),
+            ("relative", ("", "", "relative")),
+            ("./C:relative", ("", "", "./C:relative")),
+            (r"\\?\UNC\server\share", (r"\\?\UNC\server\share", "", "")),
+        ] {
+            assert_eq!(splitroot(source), expected, "{source}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_display_retains_unc_roots_and_relative_drive_boundaries() {
+        for (source, expected) in [
+            (r"\\server", r"\\server"),
+            (r"\\server\share", r"\\server\share\"),
+            (r"\\?\UNC\server\share", r"\\?\UNC\server\share\"),
+            ("./C:relative", r".\C:relative"),
+            (r"C:\file", r"C:\file"),
+        ] {
+            assert_eq!(display(source), expected, "{source}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_absolute_paths_require_both_drive_and_root() {
+        for (source, absolute, anchored) in [
+            (r"\Windows", false, true),
+            (r"C:\file", true, true),
+            ("C:relative", false, true),
+            ("relative", false, false),
+        ] {
+            assert_eq!(is_absolute(source), absolute, "{source}");
+            assert_eq!(has_anchor(source), anchored, "{source}");
+        }
+    }
+
     use super::*;
 
     #[cfg(not(windows))]

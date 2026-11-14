@@ -702,6 +702,18 @@ pub fn dumps_indent2(value: &Json) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn object_lookup_preserves_present_null_and_rejects_nonobjects() {
+        for source in ["null", "false", "0", r#""text""#, "[]"] {
+            let value = loads_bytes(source.as_bytes()).unwrap();
+            assert!(value.get("field").is_none(), "{source}");
+        }
+        let object = loads_bytes(r#"{"field":null}"#.as_bytes()).unwrap();
+        assert!(matches!(object.get("field"), Some(Json::Null)));
+        assert!(object.get("missing").is_none());
+    }
+
     use super::*;
 
     fn err(text: &[u8]) -> String {
