@@ -459,6 +459,71 @@ fn deeply_nested_json_is_a_named_input_error_in_the_real_process() {
 fn payloads(path: &std::path::Path) -> [Option<Vec<u8>>; 3] {
     review_ready_gate::report::PACK_NAMES.map(|name| fs::read(path.join(name)).ok())
 }
+#[test]
+fn publication_probe_refuses_wrong_argument_counts_before_creating_output() {
+    let tmp = TempDir::new();
+    for args in [
+        vec![],
+        vec!["output", "never"],
+        vec!["output", "never", "new", "extra"],
+    ] {
+        let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+            .args(args)
+            .current_dir(&tmp.0)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1));
+        assert!(result.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(result.stderr)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "usage: review-ready-publication-probe OUTPUT CHECKPOINT PREFIX\n"
+        );
+        assert_eq!(fs::read_dir(&tmp.0).unwrap().count(), 0);
+    }
+}
+#[test]
+fn publication_probe_refuses_a_checkout_without_creating_output() {
+    let tmp = TempDir::new();
+    let checkout = tmp.join("checkout");
+    fs::create_dir(&checkout).unwrap();
+    fs::write(checkout.join(".git"), b"fabricated checkout marker").unwrap();
+    let output = checkout.join("pack");
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+        .arg(&output)
+        .args(["never", "new"])
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(1));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("version-control checkout"));
+    assert!(!output.exists());
+    assert_eq!(fs::read_dir(&checkout).unwrap().count(), 1);
+    assert_eq!(
+        fs::read(checkout.join(".git")).unwrap(),
+        b"fabricated checkout marker"
+    );
+}
+#[test]
+fn publication_probe_preserves_an_output_path_occupied_by_a_file() {
+    let tmp = TempDir::new();
+    let output = tmp.join("occupied");
+    fs::write(&output, b"retain this file").unwrap();
+    let expected = fs::create_dir_all(&output).unwrap_err().to_string();
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
+        .arg(&output)
+        .args(["never", "new"])
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(1));
+    assert!(result.stdout.is_empty());
+    assert_eq!(String::from_utf8_lossy(&result.stderr).trim_end(), expected);
+    assert_eq!(fs::read(&output).unwrap(), b"retain this file");
+    assert_eq!(fs::read_dir(&tmp.0).unwrap().count(), 1);
+}
 #[cfg(feature = "probe")]
 fn seed(path: &std::path::Path) {
     let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready-publication-probe"))
@@ -511,6 +576,84 @@ fn paused(path: &std::path::Path, point: &str) -> Child {
     reader.join().unwrap();
     assert_eq!(line.unwrap().unwrap().trim(), format!("checkpoint {point}"));
     child
+}
+
+fn unrecorded_transaction(control: &std::path::Path) -> PathBuf {
+    let mut transactions: Vec<_> = fs::read_dir(control)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("tx-")
+        })
+        .collect();
+    assert_eq!(transactions.len(), 1);
+    transactions.pop().unwrap()
+}
+
+fn resume_publication(mut child: Child) -> (std::process::ExitStatus, String) {
+    use std::io::Write;
+    use std::time::{Duration, Instant};
+    child.0.stdin.take().unwrap().write_all(b"\n").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "publication did not resume");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let stderr = std::io::read_to_string(child.0.stderr.take().unwrap()).unwrap();
+    (status, stderr)
+}
+
+#[test]
+fn obstructed_state_write_preserves_the_old_generation_and_unrecorded_evidence() {
+    for retained_transaction in [false, true] {
+        let tmp = TempDir::new();
+        let output = tmp.join("output");
+        seed(&output);
+        let old = payloads(&output);
+        let revision = review_ready_gate::publication::snapshot_revision(&output).unwrap();
+        let control = output.join(review_ready_gate::publication::CONTROL_NAME);
+        let old_state = fs::read(control.join("state.json")).unwrap();
+        let child = paused(&output, "transaction-created");
+        let transaction = unrecorded_transaction(&control);
+        let pending_state = control.join("state.next");
+        fs::write(&pending_state, b"retain pending state").unwrap();
+        let expected = if retained_transaction {
+            fs::write(transaction.join("unknown"), b"retain transaction evidence").unwrap();
+            "unrecorded transaction remains; retain control for review".to_string()
+        } else {
+            fs::remove_dir(&transaction).unwrap();
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&pending_state)
+                .unwrap_err()
+                .to_string()
+        };
+        let (status, stderr) = resume_publication(child);
+        assert_eq!(status.code(), Some(1));
+        assert_eq!(stderr.trim_end(), expected);
+        assert_eq!(payloads(&output), old);
+        assert_eq!(fs::read(control.join("state.json")).unwrap(), old_state);
+        assert_eq!(
+            review_ready_gate::publication::snapshot_revision(&output).unwrap(),
+            revision
+        );
+        assert_eq!(fs::read(&pending_state).unwrap(), b"retain pending state");
+        if retained_transaction {
+            assert_eq!(
+                fs::read(transaction.join("unknown")).unwrap(),
+                b"retain transaction evidence"
+            );
+        } else {
+            assert!(!transaction.exists());
+        }
+    }
 }
 
 #[cfg(feature = "probe")]

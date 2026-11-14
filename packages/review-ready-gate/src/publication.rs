@@ -872,6 +872,47 @@ mod tests {
             assert_eq!(payloads(&tmp.0), rendered("new").map(Some));
         }
     }
+    #[cfg(unix)]
+    #[test]
+    fn an_output_file_propagates_directory_errors_without_replacing_it() {
+        let tmp = TempDir::new();
+        let output = tmp.join("occupied");
+        fs::write(&output, b"retain this file").unwrap();
+        assert_eq!(
+            publish(&output, &rendered("new")).unwrap_err().kind(),
+            io::ErrorKind::NotADirectory
+        );
+        assert_eq!(
+            snapshot_revision(&output).unwrap_err().kind(),
+            io::ErrorKind::NotADirectory
+        );
+        assert_eq!(fs::read(&output).unwrap(), b"retain this file");
+        assert_eq!(fs::read_dir(&tmp.0).unwrap().count(), 1);
+    }
+    #[test]
+    fn uninitialised_control_preserves_unknown_evidence_and_payloads() {
+        let tmp = TempDir::new();
+        for (name, bytes) in PACK_NAMES.iter().zip(rendered("old")) {
+            fs::write(tmp.join(name), bytes).unwrap();
+        }
+        let control = tmp.join(CONTROL_NAME);
+        fs::create_dir(&control).unwrap();
+        fs::write(control.join("writer.lock"), b"").unwrap();
+        fs::write(control.join("unknown"), b"retain this evidence").unwrap();
+        assert_eq!(
+            publish(&tmp.0, &rendered("new")).unwrap_err().to_string(),
+            "uninitialised publication control; retain recovery evidence"
+        );
+        assert_eq!(payloads(&tmp.0), rendered("old").map(Some));
+        assert_eq!(
+            fs::read(control.join("unknown")).unwrap(),
+            b"retain this evidence"
+        );
+        assert_eq!(
+            names(&entries(&control).unwrap()),
+            BTreeSet::from(["unknown".into(), "writer.lock".into()])
+        );
+    }
     #[cfg(windows)]
     #[test]
     fn post_commit_cleanup_denial_is_retryable_after_the_handle_closes() {
