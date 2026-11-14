@@ -274,9 +274,11 @@ jobs:
           baseline="$temp_root/review-ready-python-baseline"
           mkdir -p "$baseline"
           git -C "$GITHUB_WORKSPACE" archive 8061079d0b4206d064c54751aa047af8588fa265:packages/review-ready-gate | tar -xf - -C "$baseline"
-          cargo build --locked --features probe --bins
+          cargo build --locked --features probe --bins --example differential-negative-controls
           # The comparison and its probe return normally and flush coverage on exit.
           LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --bin review-ready-differential -- "$(command -v python)" "$baseline" 1
+          # Genuine incompatible programs must fail with the frozen oracle unchanged.
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --example differential-negative-controls -- "$(command -v python)" "$baseline" "$PWD/target/debug"
       - name: Compare Monthly Close Controls with the frozen Python baseline
         if: matrix.package_dir == 'packages/monthly-close-control-plane'
         run: |

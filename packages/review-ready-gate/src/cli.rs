@@ -723,6 +723,52 @@ mod tests {
         }
     }
     #[test]
+    fn non_unicode_intake_metadata_is_refused_before_reading_or_writing() {
+        let tmp = TempDir::new();
+        let output = tmp.join("out");
+        let invalid = pypath::encode_os(&crate::pyjson::PyStr(vec![0xDCFF]).os_text());
+        for (option, field) in [("--entity", "entity"), ("--text-version", "text_version")] {
+            let mut args = vec![
+                "intake".into(),
+                "--synthetic".into(),
+                "--source".into(),
+                "missing-source".into(),
+                "--text".into(),
+                "missing-text".into(),
+                "--text-origin".into(),
+                "manual".into(),
+                "--text-version".into(),
+                "manual".into(),
+                "--entity".into(),
+                "Fixture".into(),
+                "--period-end".into(),
+                "2026-03-31".into(),
+                "--output".into(),
+                output.clone().into_os_string(),
+            ];
+            let index = args.iter().position(|arg| arg == option).unwrap() + 1;
+            args[index] = invalid.clone();
+            let (code, stdout, stderr) = crate::stdio::capture(|| main(args));
+            assert_eq!(code, 1, "{option}");
+            assert!(stdout.is_empty());
+            assert_eq!(
+                stderr,
+                format!(
+                    "review-ready intake: {field} contains a control or formatting character.\n"
+                )
+            );
+            assert!(!output.exists());
+        }
+    }
+    #[test]
+    fn command_thread_reports_an_action_panic_as_a_failure() {
+        let (code, stdout, stderr) =
+            crate::stdio::capture(|| command_thread(|| panic!("fabricated command failure")));
+        assert_eq!(code, 1);
+        assert!(stdout.is_empty());
+        assert_eq!(stderr, "review-ready: command failed unexpectedly\n");
+    }
+    #[test]
     fn cli_returns_all_readiness_codes_and_verifies_each_pack() {
         for (example, status, expected) in [
             ("bas-ready", "READY", 0),
