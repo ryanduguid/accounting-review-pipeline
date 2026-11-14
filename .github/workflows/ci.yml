@@ -259,10 +259,12 @@ jobs:
           oracle_python="$oracle/bin/python"
           [ ! -f "$oracle/Scripts/python.exe" ] || oracle_python="$oracle/Scripts/python.exe"
           "$oracle_python" -m pip install --only-binary :all: --require-hashes -r tests/differential/requirements.lock
-          cargo build --locked --features probe
+          cargo build --locked --features probe --bins --example differential-negative-controls
           extension=""
           [ ! -f target/debug/xero-tb-probe.exe ] || extension=".exe"
           "target/debug/xero-tb-differential$extension" "$oracle_python" "$baseline" "target/debug/xero-tb-probe$extension" 1 10000
+          # Real incompatible programs must be detected with the genuine oracle unchanged.
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" "target/debug/examples/differential-negative-controls$extension" "$oracle_python" "$baseline" "$PWD/target/debug"
       - name: Compare the readiness gate with the frozen Python baseline
         if: matrix.package_dir == 'packages/review-ready-gate'
         run: |
