@@ -65,8 +65,17 @@ fn document_without(document: &Json, slot: &str) -> Json {
 }
 
 fn rendered_without(document: &Json, slot: &str) -> Result<Json> {
+    let mut expected = document_without(document, slot);
+    let profile = text(document.at("engagement_type")).unwrap();
+    let slots = review_ready_gate::profiles::slots_for(&profile)?;
+    let Json::Object(sources) = field_mut(&mut expected, "source_sha256").unwrap() else {
+        panic!("fixture must carry source evidence")
+    };
+    // The probe's canonical JSON sorts keys; the renderer lists evidence in
+    // profile capture order, which survives independently of the JSON order.
+    sources.sort_by_key(|(key, _)| slots.iter().position(|slot| key.is(slot.name)).unwrap());
     Ok(Json::Array(
-        probe::render_pack(&document_without(document, slot))?
+        probe::render_pack(&expected)?
             .iter()
             .map(|bytes| Json::str(&hex(bytes)))
             .collect(),
@@ -247,13 +256,19 @@ fn file_projection_refuses_changed_or_duplicated_markers_and_counts() -> Result<
             assert!(without_control_files(files(&result), &entry, 1, "fs_mapping")?.is_none());
         }
     }
+    let summary = String::from_utf8(unhex(&text(&files(&source)[1]).unwrap())?)?;
+    let newline = if summary.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     for replacement in [
-        "- Controls not run: 7.",
-        "- Controls not run: 2.\n- Controls not run: 2.",
+        "- Controls not run: 7.".to_owned(),
+        format!("- Controls not run: 2.{newline}- Controls not run: 2."),
     ] {
         let mut result = source.clone();
         change_file(&mut result, 1, |text| {
-            text.replace("- Controls not run: 2.", replacement)
+            text.replace("- Controls not run: 2.", &replacement)
         })?;
         assert!(without_control_files(files(&result), &entry, 1, "fs_mapping")?.is_none());
     }
