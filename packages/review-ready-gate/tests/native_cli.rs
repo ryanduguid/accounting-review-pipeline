@@ -3,6 +3,8 @@
 
 #[path = "../../../tests/support/child_profile.rs"]
 mod child_profile;
+#[path = "support/differential_cli.rs"]
+mod differential_cli;
 
 use review_ready_gate::probe::Json;
 use std::{fs, path::PathBuf, process::Command};
