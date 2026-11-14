@@ -618,6 +618,84 @@ impl TokenLayout {
     }
 }
 
+#[cfg(unix)]
+fn assert_selected_token_root_refusal() {
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+    let work = std::env::current_dir().unwrap();
+    let cache = home.join("token.json");
+    let target = work.join("token.json");
+    let session = TokenSession::new(&cache).unwrap();
+    let retained = b"fabricated cache bytes left unchanged\n";
+    fs::write(&target, retained).unwrap();
+    std::os::unix::fs::symlink(&target, &cache).unwrap();
+    assert!(TokenSession::new(&target).is_ok());
+    let mut refreshes = 0;
+    let failures = [
+        session.load().unwrap_err(),
+        session
+            .save(&token_pair("fabricated-access", "fabricated-refresh", 1800))
+            .unwrap_err(),
+        session
+            .access_token(true, |_| {
+                refreshes += 1;
+                Ok(token_pair("fabricated-access", "fabricated-refresh", 1800))
+            })
+            .unwrap_err(),
+    ];
+    for failure in failures {
+        assert_eq!(failure.code, 1);
+        assert_eq!(failure.stdout, "");
+        assert_eq!(
+            failure.stderr,
+            "error: token cache path escaped its allowed directory\n"
+        );
+    }
+    assert_eq!(refreshes, 0);
+    assert_eq!(fs::read(&target).unwrap(), retained);
+    assert_eq!(fs::read_link(&cache).unwrap(), target);
+    for directory in [&home, &work] {
+        let entries: Vec<_> = fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, ["token.json"]);
+    }
+    assert_eq!(fs::read_dir(std::env::temp_dir()).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn token_session_keeps_its_selected_root_after_symlink_retarget() {
+    const CHILD: &str = "ARP_TEST_TOKEN_SELECTED_ROOT_CHILD";
+    if std::env::var_os(CHILD).is_some() {
+        assert_selected_token_root_refusal();
+        return;
+    }
+    let layout = TokenLayout::new();
+    let program = std::env::current_exe().unwrap();
+    let mut child = command(program.to_str().unwrap(), &layout.work);
+    child
+        .env(CHILD, "1")
+        .env("HOME", &layout.home)
+        .env("USERPROFILE", &layout.home)
+        .env("TMPDIR", &layout.temp)
+        .env("TMP", &layout.temp)
+        .env("TEMP", &layout.temp)
+        .args([
+            "--exact",
+            "token_session_keeps_its_selected_root_after_symlink_retarget",
+            "--nocapture",
+        ]);
+    let output = run(child);
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 passed; 0 failed;")
+    );
+}
+
 #[derive(Clone, Copy)]
 enum TokenSelection {
     Tilde,
