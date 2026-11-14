@@ -10,6 +10,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
+#[path = "../tests/support/differential_projection.rs"]
+mod tests;
+
 const ORACLE: &str = r#"
 import contextlib, dataclasses, datetime, decimal, hashlib, io, json, os, pathlib, sys, unicodedata
 if sys.version_info[:2] != (3,15) or unicodedata.unidata_version != '17.0.0':
