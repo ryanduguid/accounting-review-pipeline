@@ -129,15 +129,21 @@ fn legacy_equity_verification_requires_all_recognised_packs() -> Result<()> {
 }
 
 #[test]
-fn failed_rendering_is_not_turned_into_driver_or_read_utility_cases() -> Result<()> {
+fn failed_rendering_adds_no_derived_driver_or_read_utility_cases() -> Result<()> {
     let corpus = Corpus(vec![Json::object([(
         "name",
         Json::str("render-review-config-absolute-0"),
     )])]);
+    let fixed = read_utility_cases(&Corpus(Vec::new()), &[])?;
+    assert_eq!(fixed.0.len(), 28);
+    let expected = probe::encode(&Json::Array(fixed.0));
     for body in [r#"{"error":"fabricated refusal"}"#, r#"{"ok":{}}"#] {
         let responses = [probe::decode(body)?];
         assert!(driver_cases(&corpus, &responses)?.0.is_empty());
-        assert!(read_utility_cases(&corpus, &responses)?.0.is_empty());
+        assert_eq!(
+            probe::encode(&Json::Array(read_utility_cases(&corpus, &responses)?.0)),
+            expected
+        );
     }
     Ok(())
 }
