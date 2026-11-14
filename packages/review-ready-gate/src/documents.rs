@@ -1035,4 +1035,130 @@ mod tests {
         );
         assert_eq!(fs::read(tmp.join("source.txt")).unwrap(), original);
     }
+
+    #[test]
+    fn intake_refuses_unsupported_original_extensions_and_text_origins() {
+        for (suffix, origin, expected) in [
+            (
+                "csv",
+                "manual",
+                "Original documents must be .txt or .pdf files.",
+            ),
+            ("txt", "ocr", "text_origin must be manual or pdf-inspector."),
+        ] {
+            let tmp = TempDir::new();
+            let source = tmp.join(format!("source.{suffix}"));
+            let text = tmp.join("extracted.txt");
+            let output = tmp.join("bundle");
+            fs::write(&source, source_text()).unwrap();
+            fs::write(&text, source_text()).unwrap();
+            assert_eq!(
+                create_intake(IntakeOptions {
+                    source: &source,
+                    text: &text,
+                    output: &output,
+                    entity: "Demo",
+                    period: "2026-03-31",
+                    origin,
+                    version: "",
+                })
+                .unwrap_err(),
+                expected
+            );
+            assert!(!output.exists());
+        }
+    }
+
+    #[test]
+    fn intake_limits_expanded_observations_even_when_source_text_fits() {
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let output = tmp.join("bundle");
+        let text = "Total: 1\n".repeat(20_000);
+        assert_eq!(text.len(), 180_000);
+        fs::write(&source, text).unwrap();
+        assert_eq!(
+            create_intake(IntakeOptions {
+                source: &source,
+                text: &source,
+                output: &output,
+                entity: "Demo",
+                period: "2026-03-31",
+                origin: "manual",
+                version: "",
+            })
+            .unwrap_err(),
+            "Extracted observations exceed the 1 MiB intake limit."
+        );
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn document_loading_refuses_bad_source_names_and_non_string_versions() {
+        let tmp = TempDir::new();
+        let path = bundle(&tmp, &source_text(), "Demo", "txt");
+        assert!(load_document(&path).is_ok());
+        let intake = path.join(INTAKE_NAME);
+        let original = json(&SourceSnapshot::capture(&intake, "intake").unwrap()).unwrap();
+        for (keys, replacement, expected) in [
+            (
+                &["source", "filename"][..],
+                Json::str("original.csv"),
+                "Document source must name original.txt or original.pdf.",
+            ),
+            (
+                &["text_version"][..],
+                Json::int(1),
+                "text_version must be a possibly empty string of at most 500 characters.",
+            ),
+        ] {
+            let mut manifest = original.clone();
+            set(&mut manifest, keys, replacement);
+            fs::write(&intake, encoded(&manifest)).unwrap();
+            assert_eq!(load_document(&path).err().unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn document_review_cannot_omit_a_whole_field_decision() {
+        let tmp = TempDir::new();
+        let path = bundle(&tmp, &source_text(), "Demo", "txt");
+        let mut review = reviewed(&path);
+        assert!(load_document(&path).is_ok());
+        let fields = review.at("fields");
+        let retained = fields
+            .keys()
+            .unwrap()
+            .into_iter()
+            .filter(|name| !name.is("gst_observed"))
+            .map(|name| (name.clone(), fields.at(&name.to_utf8().unwrap()).clone()))
+            .collect();
+        set(&mut review, &["fields"], Json::Object(retained));
+        fs::write(path.join(REVIEW_NAME), encoded(&review)).unwrap();
+        assert_eq!(
+            load_document(&path).err().unwrap(),
+            "Document review must include every field exactly once."
+        );
+    }
+
+    #[test]
+    fn missing_gst_observation_still_requires_human_transcription_review() {
+        let tmp = TempDir::new();
+        let text = source_text()
+            .lines()
+            .filter(|line| !line.starts_with("GST:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let path = bundle(&tmp, &text, "Demo", "txt");
+        let document = load_document(&path).unwrap();
+        let rendered = render_document(&document);
+        assert!(rendered.contains("GST:\n  no observation"), "{rendered}");
+        assert!(rendered.contains("Unresolved: Human transcription review is missing."));
+        let (findings, evidence) = document_controls(&[document], Some("Demo"), Some("2026-03-31"));
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].code, "DOCUMENT_REVIEW_REQUIRED");
+        assert_eq!(findings[0].status, "NOT_READY");
+        assert_eq!(findings[0].reason, "Human transcription review is missing.");
+        assert_eq!(evidence.len(), 3);
+    }
 }
