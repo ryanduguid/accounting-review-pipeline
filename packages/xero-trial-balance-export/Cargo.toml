@@ -48,6 +48,11 @@ name = "xero-tb-differential"
 path = "tools/differential.rs"
 required-features = ["probe"]
 
+[[example]]
+name = "differential-negative-controls"
+path = "tests/support/differential_negative_controls.rs"
+required-features = ["probe"]
+
 [features]
 probe = []
 tools = []
