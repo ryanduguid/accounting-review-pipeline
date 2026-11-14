@@ -124,6 +124,137 @@ fn review_command(output: &Path) -> Command {
 }
 
 #[test]
+fn optional_calculator_text_distinguishes_falsey_values_from_truthy_wrong_types() {
+    assert_eq!(
+        loaded(GOOD.as_bytes()).unwrap().calculator,
+        "urn:sbrm:calc:coal-lsl-levy"
+    );
+    for (falsey, truthy) in [
+        (Json::Bool(false), Json::Bool(true)),
+        (Json::int(0), Json::int(1)),
+        (Json::Float(0.0), Json::Float(1.0)),
+        (Json::Array(vec![]), Json::Array(vec![Json::Null])),
+    ] {
+        let mut value = record();
+        put(&mut value, &["calculation", "call", "calculator"], falsey);
+        let evidence = loaded(&bytes(value, true)).unwrap();
+        assert_eq!(evidence.calculator, "");
+        assert!(evidence.usable());
+        assert!(evidence.findings.is_empty());
+
+        let mut value = record();
+        put(&mut value, &["calculation", "call", "calculator"], truthy);
+        assert_eq!(
+            loaded(&bytes(value, true)).unwrap_err(),
+            "evidence.json: call.calculator must be a string."
+        );
+    }
+}
+
+#[test]
+fn decimal_evidence_reports_float_list_and_dictionary_types_and_blocks_reliance() {
+    let mut control = record();
+    put(
+        &mut control,
+        &["calculation", "normalised", "values", "levy"],
+        Json::str("1.50"),
+    );
+    assert_eq!(
+        loaded(&bytes(control, true)).unwrap().values["levy"].to_string(),
+        "1.50"
+    );
+    for (replacement, type_name) in [
+        (Json::Float(1.5), "float"),
+        (Json::Array(vec![]), "list"),
+        (Json::Object(vec![]), "dict"),
+    ] {
+        let mut value = record();
+        put(
+            &mut value,
+            &["calculation", "normalised", "values", "levy"],
+            replacement,
+        );
+        let content = bytes(value, true);
+        assert_eq!(
+            loaded(&content).unwrap_err(),
+            format!(
+                "evidence.json: normalised.values.levy is {type_name}, not a decimal string. A JSON number has already lost whatever the calculator meant by it."
+            )
+        );
+        let (_temp, pack) = reviewed(&content);
+        assert_eq!(pack.status, Status::Blocked);
+        assert!(pack.relied_on.is_empty());
+    }
+}
+
+#[test]
+fn calculation_digest_refuses_non_text_and_text_beyond_64_characters() {
+    assert_eq!(
+        loaded(GOOD.as_bytes()).unwrap().calculation_sha256.len(),
+        64
+    );
+    for (replacement, expected) in [
+        (
+            Json::int(1),
+            "evidence.json: calculation_sha256 must be a string.",
+        ),
+        (
+            Json::str(&"a".repeat(65)),
+            "evidence.json: calculation_sha256 is longer than 64 characters.",
+        ),
+    ] {
+        let mut value = record();
+        value.set("calculation_sha256", replacement);
+        assert_eq!(loaded(&bytes(value, false)).unwrap_err(), expected);
+    }
+}
+
+#[test]
+fn rate_table_uri_accepts_400_characters_and_refuses_401() {
+    for length in [400, 401] {
+        let uri = "u".repeat(length);
+        let mut value = record();
+        put(
+            &mut value,
+            &["calculation", "upstream", "manifest", "rate_table_uris"],
+            Json::Array(vec![Json::object([("uri", Json::str(&uri))])]),
+        );
+        let result = loaded(&bytes(value, true));
+        if length == 400 {
+            let evidence = result.unwrap();
+            assert_eq!(evidence.rate_tables, [uri]);
+            assert!(evidence.usable());
+        } else {
+            assert_eq!(
+                result.unwrap_err(),
+                "evidence.json: manifest.rate_table_uris[0].uri is longer than 400 characters."
+            );
+        }
+    }
+}
+
+#[test]
+fn normalised_value_names_accept_80_characters_and_refuse_81() {
+    for length in [80, 81] {
+        let name = "k".repeat(length);
+        let mut value = record();
+        part_mut(&mut value, &["calculation", "normalised", "values"])
+            .set(&name, Json::str("0.00"));
+        let result = loaded(&bytes(value, true));
+        if length == 80 {
+            let evidence = result.unwrap();
+            assert_eq!(evidence.values[&name].to_string(), "0.00");
+            assert!(evidence.usable());
+        } else {
+            assert_eq!(
+                result.unwrap_err(),
+                "evidence.json: normalised.values key is longer than 80 characters."
+            );
+        }
+    }
+}
+
+#[test]
 fn committed_evidence_is_fabricated_and_the_july_figure_is_usable() {
     let good = loaded(GOOD.as_bytes()).unwrap();
     let refused = loaded(REFUSED.as_bytes()).unwrap();
