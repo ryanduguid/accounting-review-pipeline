@@ -60,14 +60,20 @@ fn read_log(path: &Path) -> String {
         .replace("\r\n", "\n")
 }
 
-fn run(python: &Path, baseline: &Path, binaries: &Path, suite: &Scratch) -> Captured {
+fn run(
+    python: &Path,
+    baseline: &Path,
+    binaries: &Path,
+    suite: &Scratch,
+    probe_name: &str,
+) -> Captured {
     let stdout = suite.0.join("stdout.log");
     let stderr = suite.0.join("stderr.log");
     let mut command = child_profile::command(binary(binaries, "xero-tb-differential"));
     command
         .arg(python)
         .arg(baseline)
-        .arg(binary(&suite.0, "xero-tb-probe"))
+        .arg(binary(&suite.0, probe_name))
         .args(["1", "0"])
         .current_dir(&suite.0)
         .stdin(Stdio::null())
@@ -138,7 +144,7 @@ fn check_rejection(output: &Captured, value_differences: usize, cli_differences:
 fn mispackaged_suite(python: &Path, baseline: &Path, binaries: &Path) {
     let probe = binary(binaries, "xero-tb-probe");
     let suite = fixture(binaries, &probe, &probe);
-    let output = run(python, baseline, binaries, &suite);
+    let output = run(python, baseline, binaries, &suite, "xero-tb-probe");
     check_rejection(&output, 0, 108);
     assert_eq!(
         output
@@ -166,7 +172,10 @@ fn echoing_probe(python: &Path, baseline: &Path, binaries: &Path) {
         .canonicalize()
         .expect("real coreutils cat");
     let suite = fixture(binaries, &cat, &binary(binaries, "export-tb"));
-    let output = run(python, baseline, binaries, &suite);
+    // Multicall coreutils selects cat from the executable name.
+    fs::rename(binary(&suite.0, "xero-tb-probe"), binary(&suite.0, "cat"))
+        .expect("preserve the real cat invocation name");
+    let output = run(python, baseline, binaries, &suite, "cat");
     check_rejection(&output, 689, 0);
     let diagnostics: Vec<_> = output
         .stdout
