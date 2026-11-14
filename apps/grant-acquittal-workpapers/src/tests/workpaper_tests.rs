@@ -866,3 +866,128 @@ fn test_failed_write_leaves_no_final_pack_and_can_retry() {
     let written = pyjson::loads_bytes(&std::fs::read(output.join("workpaper.json")).unwrap()).unwrap();
     assert_eq!(pyjson::dumps_indent2(&written), pyjson::dumps_indent2(&result));
 }
+
+fn source_byte_snapshot(fixture: &Fixture) -> Vec<(String, Vec<u8>)> {
+    let mut files = std::fs::read_dir(fixture.source())
+        .unwrap()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            (
+                entry.file_name().into_string().unwrap(),
+                std::fs::read(entry.path()).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    files
+}
+
+fn directory_names(directory: &Path) -> Vec<String> {
+    let mut names = std::fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+fn assert_review_example_json(output: &Path, result: &Json) {
+    let written = pyjson::loads_bytes(&std::fs::read(output.join("workpaper.json")).unwrap()).unwrap();
+    assert!(written.at("status").is_str("REVIEW"));
+    assert!(written.at("ledger_total").is_str("6500"));
+    assert!(written.at("allocated_total").is_str("6300"));
+    assert!(written.at("unallocated_total").is_str("200"));
+    assert_eq!(rows(&written, "findings").len(), 5);
+    assert_eq!(pyjson::dumps_indent2(&written), pyjson::dumps_indent2(result));
+}
+
+#[test]
+fn write_files_preserves_existing_blockers_and_prior_sequential_output() {
+    for blocked in ["workpaper.json", "budget_lines.csv"] {
+        let fixture = Fixture::new();
+        let sources = source_byte_snapshot(&fixture);
+        let result = fixture.review().unwrap();
+        let output = fixture.root().join("output");
+        std::fs::create_dir(&output).unwrap();
+        let sentinel = b"Fabricated existing output sentinel";
+        std::fs::write(output.join(blocked), sentinel).unwrap();
+        let message = refused(workpaper::write_files(&result, &output));
+        assert!(message.starts_with("[Errno 17] File exists: "), "{message}");
+        assert!(message.contains(blocked), "{message}");
+        assert_eq!(std::fs::read(output.join(blocked)).unwrap(), sentinel);
+        let expected = if blocked == "workpaper.json" {
+            vec!["workpaper.json"]
+        } else {
+            assert_review_example_json(&output, &result);
+            vec!["budget_lines.csv", "workpaper.json"]
+        };
+        assert_eq!(directory_names(&output), expected);
+        assert_eq!(source_byte_snapshot(&fixture), sources);
+        assert!(fixture.temporary_directories().is_empty());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn parent_navigation_publishes_a_complete_review_pack() {
+    let fixture = Fixture::new();
+    let sources = source_byte_snapshot(&fixture);
+    let result = fixture.review().unwrap();
+    assert!(!fixture.root().join("created").exists());
+    let args = ["--input", SOURCE, "--output", "created/../output"]
+        .map(String::from)
+        .to_vec();
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    assert_eq!(
+        crate::cli::main("grant-workpaper", &args, fixture.root(), &mut stdout, &mut stderr),
+        2
+    );
+    assert_eq!(stdout, b"grant-workpaper: REVIEW; 5 review items\n");
+    assert!(stderr.is_empty());
+    let output = fixture.root().join("output");
+    assert_eq!(
+        directory_names(&output),
+        [
+            "allocation_evidence.csv",
+            "budget_lines.csv",
+            "contributions.csv",
+            "findings.csv",
+            "funding_movements.csv",
+            "ledger_tieout.csv",
+            "workpaper.json",
+            "workpaper.md",
+        ]
+    );
+    assert_review_example_json(&output, &result);
+    assert!(directory_names(&fixture.root().join("created")).is_empty());
+    assert!(fixture.temporary_directories().is_empty());
+    assert_eq!(source_byte_snapshot(&fixture), sources);
+}
+
+#[cfg(unix)]
+#[test]
+fn parent_navigation_preserves_a_regular_file_blocker() {
+    let fixture = Fixture::new();
+    let sources = source_byte_snapshot(&fixture);
+    let sentinel = b"Fabricated output-parent sentinel";
+    std::fs::write(fixture.root().join("blocker"), sentinel).unwrap();
+    assert!(!fixture.root().join("created").exists());
+    let args = ["--input", SOURCE, "--output", "created/../blocker/output"]
+        .map(String::from)
+        .to_vec();
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    assert_eq!(
+        crate::cli::main("grant-workpaper", &args, fixture.root(), &mut stdout, &mut stderr),
+        1
+    );
+    assert!(stdout.is_empty());
+    assert_eq!(
+        stderr,
+        b"grant-workpaper: [Errno 17] File exists: 'created/../blocker'\n"
+    );
+    assert_eq!(std::fs::read(fixture.root().join("blocker")).unwrap(), sentinel);
+    assert_eq!(directory_names(fixture.root()), ["blocker", "created", "inputs"]);
+    assert!(directory_names(&fixture.root().join("created")).is_empty());
+    assert!(fixture.temporary_directories().is_empty());
+    assert_eq!(source_byte_snapshot(&fixture), sources);
+}
