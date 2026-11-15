@@ -378,7 +378,16 @@ jobs:
           oracle_python="$(python -c 'import sys; print(sys.executable)')"
           suffix=
           if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
-          "$oracle_python" -I tests/differential/differential.py --script "$baseline/grant_workpaper.py" --binary "$PWD/target/debug/grant-workpaper$suffix" --cases 1500 --seed 20261012
+          "$oracle_python" -I -m unittest discover -s tests/differential -p test_timeout_artifacts.py
+          "$oracle_python" -I tests/differential/differential.py --script "$baseline/grant_workpaper.py" --binary "$PWD/target/debug/grant-workpaper$suffix" --cases 1500 --seed 20261012 --timeout-artifact "$temp_root/grant-differential-timeout.json"
+      - name: Retain a timed-out grant differential case
+        if: failure() && matrix.package_dir == 'apps/grant-acquittal-workpapers'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: grant-differential-timeout-${{ runner.os }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/grant-differential-timeout.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Run the bundled grant example from the release build
         if: matrix.package_dir == 'apps/grant-acquittal-workpapers'
         run: |
