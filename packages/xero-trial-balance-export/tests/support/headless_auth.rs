@@ -326,13 +326,13 @@ fn native_headless_authorisation_refusals_preserve_the_existing_cache() {
 }
 
 #[test]
-fn native_browser_launch_without_a_code_preserves_the_existing_cache() {
+fn native_browser_launch_ignores_a_codeless_callback_before_denial() {
     let layout = TokenLayout::new();
     let cache = layout.work.join("token.json");
     let before = seed_cache(&cache, "fabricated-prior-access");
     let modified = fs::metadata(&cache).unwrap().modified().unwrap();
     let redirect = redirect();
-    let proxy = Proxy::new(0, |_| panic!("missing code must not exchange tokens"));
+    let proxy = Proxy::new(0, |_| panic!("refused callbacks must not exchange tokens"));
     let (cmd, arguments) = recording_browser_command(&layout, &redirect, &proxy);
     let inventory = owned_inventory(&layout.root.0);
     let child = ConsentChild::start(cmd);
@@ -347,12 +347,13 @@ fn native_browser_launch_without_a_code_preserves_the_existing_cache() {
         format!("1\n{}\n", printed.trim())
     );
     callback(&redirect, &state, "fixture", "fabricated-no-code");
+    callback(&redirect, &state, "error", "access_denied");
     let output = child.finish();
     proxy.finish();
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
-        "error: OAuth callback contained no authorisation code. Nothing was saved.\n"
+        "Xero returned 'access_denied' - consent was denied or cancelled. Run again.\n"
     );
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
