@@ -225,6 +225,9 @@ pub fn render_transcript(summary: &Summary) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SAMPLE_HEADER: &str = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n";
+
     #[test]
     fn summary_proves_shape_balances_and_rejects_wrong_entities_dates_and_headers() {
         let sample = include_str!("../samples/sample-output.csv");
@@ -270,5 +273,69 @@ mod tests {
             assert_eq!(evaluate(&fixture_root().join(name)).is_ok(), passing);
         }
         assert!(declared_fixture(&component_root().join("samples/sample-output.csv")).is_err());
+    }
+
+    #[test]
+    fn summary_refuses_empty_and_unbalanced_rows_without_losing_the_failure_contract() {
+        for (rows, message) in [
+            ("", "the fabricated sample has no account rows"),
+            (
+                "2026-06-30,Sample Ledger,Assets,001,Sample Account,100,1,0,0,0\n",
+                "the fabricated movement columns do not balance",
+            ),
+            (
+                "2026-06-30,Sample Ledger,Assets,001,Sample Account,100,0,0,1,0\n",
+                "the fabricated YTD columns do not balance",
+            ),
+        ] {
+            assert_eq!(
+                summary(&format!("{SAMPLE_HEADER}{rows}"))
+                    .err()
+                    .expect("invalid rows must be refused"),
+                Failure {
+                    code: 1,
+                    stdout: String::new(),
+                    stderr: format!("{message}\n"),
+                }
+            );
+        }
+        let balanced = summary(&format!(
+            "{SAMPLE_HEADER}2026-06-30,Sample Ledger,Assets,001,Sample Debit,100,1,0,2,0\n\
+             2026-06-30,Sample Ledger,Assets,002,Sample Credit,200,0,1,0,2\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            (
+                balanced.tenant.as_str(),
+                balanced.date.as_str(),
+                balanced.rows,
+                balanced.columns,
+                balanced.movement.as_str(),
+                balanced.ytd.as_str(),
+            ),
+            ("Sample Ledger", "2026-06-30", 2, 10, "$1.00", "$2.00")
+        );
+    }
+
+    #[test]
+    fn summary_preserves_the_csv_data_field_size_boundary() {
+        let csv = |length| {
+            format!(
+                "{SAMPLE_HEADER}2026-06-30,Sample Ledger,Assets,001,{},100,0,0,0,0\n",
+                "a".repeat(length)
+            )
+        };
+        let accepted = summary(&csv(131_072)).unwrap();
+        assert_eq!((accepted.rows, accepted.columns), (1, 10));
+        assert_eq!(
+            summary(&csv(131_073))
+                .err()
+                .expect("the oversized data field must be refused"),
+            Failure {
+                code: 1,
+                stdout: String::new(),
+                stderr: "the fabricated sample has malformed CSV\n".into(),
+            }
+        );
     }
 }

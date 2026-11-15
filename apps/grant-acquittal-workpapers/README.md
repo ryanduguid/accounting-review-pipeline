@@ -192,6 +192,14 @@ It also runs Ruff with a pinned version on the utility. Local lint uses
 `tests/differential/differential.py` compares the binary with the 0.1.0 Python
 script on generated inputs, mutated CSV and JSON, output paths and command lines:
 
+Use `grant_workpaper.py` from the immutable
+[pre-port commit](https://github.com/ryanduguid/accounting-review-pipeline/blob/89cebd44f4b6ec276882cd69277935fa3ba980bc/apps/grant-acquittal-workpapers/grant_workpaper.py).
+CI extracts that script and runs 1,500 cases with seed `20261012` on Linux and
+Windows under Python 3.15, retaining native child coverage. The comparator
+normalises program names, working directories and random staging names; Python
+tracebacks are compared by exit code only.
+
 ```powershell
-python -I tests/differential/differential.py --script <path to grant_workpaper.py> --binary target/debug/grant-workpaper --cases 1500
+$oracleScript = 'C:\path\to\grant_workpaper.py'
+python -I tests\differential\differential.py --script $oracleScript --binary target\debug\grant-workpaper.exe --cases 1500 --seed 20261012
 ```

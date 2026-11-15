@@ -1,15 +1,13 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
-#[path = "../../../../tests/support/child_profile.rs"]
-mod child_profile;
 mod temp;
 
 use std::{
     env,
     fs::{self, File},
     path::{Path, PathBuf},
-    process::{Child, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -44,8 +42,9 @@ fn read_log(path: &Path) -> String {
 fn run(python: &Path, baseline: &Path, suite: &TempDir, label: &str) -> Captured {
     let stdout = suite.join(format!("{label}.stdout"));
     let stderr = suite.join(format!("{label}.stderr"));
+    // This comparer returns normally, so keep CI's exit-time profile mode.
     let mut child = Running(
-        child_profile::command(binary(&suite.0, "review-ready-differential"))
+        Command::new(binary(&suite.0, "review-ready-differential"))
             .arg(python)
             .arg(baseline)
             .arg("1")
@@ -61,7 +60,15 @@ fn run(python: &Path, baseline: &Path, suite: &TempDir, label: &str) -> Captured
         if let Some(status) = child.0.try_wait().unwrap() {
             break status;
         }
-        assert!(Instant::now() < deadline, "{label} control deadline");
+        if Instant::now() >= deadline {
+            let killed = child.0.kill();
+            let reaped = child.0.wait();
+            panic!(
+                "{label} control deadline; killed: {killed:?}; reaped: {reaped:?}; stdout: {}; stderr: {}",
+                read_log(&stdout),
+                read_log(&stderr)
+            );
+        }
         thread::sleep(Duration::from_millis(10));
     };
     Captured {
@@ -139,6 +146,7 @@ fn echoing_probe(python: &Path, baseline: &Path, suite: &TempDir) {
 fn main() {
     let args: Vec<_> = env::args_os().collect();
     assert_eq!(args.len(), 4, "expected PYTHON BASELINE BIN_DIR");
+    #[cfg(unix)]
     let python = Path::new(&args[1]);
     let baseline = Path::new(&args[2]);
     let binaries = Path::new(&args[3]);
@@ -148,8 +156,11 @@ fn main() {
         binary(&suite.0, "review-ready-differential"),
     )
     .unwrap();
+    // A missing probe must refuse before even an unavailable Python is started.
+    let unavailable_python = binary(&suite.0, "unavailable-python");
+    assert!(!unavailable_python.exists());
     check_refusal(
-        run(python, baseline, &suite, "missing-sibling"),
+        run(&unavailable_python, baseline, &suite, "missing-sibling"),
         "Error: \"build all probe binaries with cargo build --locked --features probe --bins before running the differential\"\n",
         "missing-sibling",
     );

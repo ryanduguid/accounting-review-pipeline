@@ -209,7 +209,7 @@ jobs:
           source "$RUNNER_TEMP/coverage-env.sh"
           cargo test --locked --test no_network
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane' || matrix.package_dir == 'adapters/accounting-excel-toolkit' || matrix.package_dir == 'apps/australian-accounting-power-bi'
+        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane' || matrix.package_dir == 'adapters/accounting-excel-toolkit' || matrix.package_dir == 'apps/australian-accounting-power-bi' || matrix.package_dir == 'apps/grant-acquittal-workpapers'
         with:
           python-version: '3.15'
       - name: Install the managed C decimal oracle toolchain
@@ -365,6 +365,20 @@ jobs:
           mapfile -d '' -t sources < "$RUNNER_TEMP/vba-sources"
           test "${#sources[@]}" -gt 0
           cargo run --locked --release --bin check-vba-encoding -- "${sources[@]}"
+      - name: Compare grant workpapers with the frozen Python release
+        if: matrix.package_dir == 'apps/grant-acquittal-workpapers'
+        run: |
+          source "$RUNNER_TEMP/coverage-env.sh"
+          temp_root="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
+          baseline="$temp_root/grant-python-baseline"
+          mkdir -p "$baseline"
+          git -C "$GITHUB_WORKSPACE" archive 89cebd44f4b6ec276882cd69277935fa3ba980bc:apps/grant-acquittal-workpapers grant_workpaper.py | tar -xf - -C "$baseline"
+          cargo build --locked --all-features --bins
+          oracle_python="$(python -c 'import sys; print(sys.executable)')"
+          suffix=
+          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
+          "$oracle_python" -I tests/differential/differential.py --script "$baseline/grant_workpaper.py" --binary "$PWD/target/debug/grant-workpaper$suffix" --cases 1500 --seed 20261012
       - name: Run the bundled grant example from the release build
         if: matrix.package_dir == 'apps/grant-acquittal-workpapers'
         run: |

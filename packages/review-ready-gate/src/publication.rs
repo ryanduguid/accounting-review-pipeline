@@ -723,6 +723,94 @@ mod tests {
         );
     }
     #[test]
+    fn missing_output_parent_refuses_publication_until_created() {
+        let tmp = TempDir::new();
+        let sentinel = tmp.join("sentinel.txt");
+        fs::write(&sentinel, b"fabricated neighbouring artifact\n").unwrap();
+        let output = tmp.join("missing/pack");
+        assert_eq!(
+            publish(&output, &rendered("new")).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(!tmp.join("missing").exists());
+        assert_eq!(
+            fs::read(&sentinel).unwrap(),
+            b"fabricated neighbouring artifact\n"
+        );
+        fs::create_dir_all(&output).unwrap();
+        publish(&output, &rendered("retry")).unwrap();
+        assert_eq!(payloads(&output), rendered("retry").map(Some));
+        assert_settled(&output);
+        assert_eq!(
+            fs::read(&sentinel).unwrap(),
+            b"fabricated neighbouring artifact\n"
+        );
+    }
+
+    #[test]
+    fn oversized_state_versions_preserve_a_settled_generation_for_recovery() {
+        for version in ["9223372036854775808", "-9223372036854775809"] {
+            let tmp = TempDir::new();
+            publish(&tmp.0, &rendered("old")).unwrap();
+            let control = tmp.join(CONTROL_NAME);
+            let path = control.join("state.json");
+            let original = fs::read_to_string(&path).unwrap();
+            let field = "\"format\": 1";
+            assert_eq!(original.matches(field).count(), 1);
+            let unsupported = original.replacen(field, &format!("\"format\": {version}"), 1);
+            fs::write(&path, &unsupported).unwrap();
+            let modified = fs::metadata(&path).unwrap().modified().unwrap();
+            assert_eq!(
+                publish(&tmp.0, &rendered("new")).unwrap_err().to_string(),
+                "publication state is unsupported; retain recovery evidence"
+            );
+            assert_eq!(fs::read_to_string(&path).unwrap(), unsupported);
+            assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
+            assert_eq!(payloads(&tmp.0), rendered("old").map(Some));
+            assert_eq!(
+                names(&entries(&control).unwrap()),
+                BTreeSet::from(["state.json".into(), "writer.lock".into()])
+            );
+            fs::write(&path, original).unwrap();
+            publish(&tmp.0, &rendered("retry")).unwrap();
+            assert_eq!(payloads(&tmp.0), rendered("retry").map(Some));
+            assert_settled(&tmp.0);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn initial_state_permission_denial_preserves_legacy_payloads_for_retry() {
+        use std::os::unix::fs::PermissionsExt;
+        struct RestorePermissions<'a>(&'a Path, fs::Permissions);
+        impl Drop for RestorePermissions<'_> {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(self.0, self.1.clone());
+            }
+        }
+        let tmp = TempDir::new();
+        for (name, bytes) in PACK_NAMES.into_iter().zip(rendered("old")) {
+            fs::write(tmp.join(name), bytes).unwrap();
+        }
+        let control = tmp.join(CONTROL_NAME);
+        drop(Admission::acquire(&control).unwrap());
+        let restore = RestorePermissions(&control, fs::metadata(&control).unwrap().permissions());
+        fs::set_permissions(&control, fs::Permissions::from_mode(0o500)).unwrap();
+        let result = publish(&tmp.0, &rendered("new"));
+        drop(restore);
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(payloads(&tmp.0), rendered("old").map(Some));
+        assert_eq!(
+            names(&entries(&control).unwrap()),
+            BTreeSet::from(["writer.lock".into()])
+        );
+        assert_eq!(fs::read(control.join("writer.lock")).unwrap(), b"1");
+        publish(&tmp.0, &rendered("retry")).unwrap();
+        assert_eq!(payloads(&tmp.0), rendered("retry").map(Some));
+        assert_settled(&tmp.0);
+    }
+
+    #[test]
     fn handled_precommit_failures_restore_every_existing_and_absent_slot() {
         for mask in 0..8 {
             for point in [

@@ -82,6 +82,44 @@ fn load_context(env: &Env) -> Result<(String, String)> {
 // --- CSV contract
 
 #[test]
+fn malformed_csv_snapshots_are_refused_without_changing_the_source() {
+    let header = "ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit";
+    let row = "2026-06-30,Unit Test Tenant,Assets,acct-100,Fabricated Bank,1000,0,0,0,0\n";
+    for (content, message) in [
+        (format!("{header}\n"), "CSV must contain at least one account row."),
+        (
+            format!("{header}\n{}", row.replace(",0\n", "\n")),
+            "CSV row 2 YTDCredit must be a decimal string.",
+        ),
+        (
+            format!("{header}\n{}", row.replace(",1000,", ",10\0A,")),
+            "CSV row 2 AccountCode must not contain control characters.",
+        ),
+        (
+            format!("{},{}\n", "R".repeat(131_073), header.split_once(',').unwrap().1),
+            "",
+        ),
+    ] {
+        let dir = TempDir::new();
+        let path = dir.path().join("source.csv");
+        write(&path, &content);
+        let expected = if message.is_empty() {
+            format!("source CSV cannot be parsed as CSV: {}.", path.display())
+        } else {
+            message.to_string()
+        };
+        assert_eq!(load_tb_path(&path).map(|_| ()), Err(Failure::Gateway(expected)));
+        assert_eq!(std::fs::read(&path).unwrap(), content.as_bytes());
+    }
+    let dir = TempDir::new();
+    let path = dir.path().join("valid.csv");
+    write(&path, &format!("{header}\n{row}"));
+    let rows = load_tb_path(&path).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].account_id, "acct-100");
+}
+
+#[test]
 fn test_reordered_header_is_refused_even_though_the_names_all_match() {
     let dir = TempDir::new();
     let path = tb(&dir, &[("AccountCode,Debit,Credit,", "AccountCode,Credit,Debit,")]);
@@ -466,6 +504,35 @@ fn test_policy_max_results_at_either_bound_is_accepted() {
             canonical(get(&policy, &["operations", "trial_balance_variance", "max_results"])),
             value.to_string()
         );
+    }
+}
+
+#[test]
+fn malformed_policy_operations_are_refused_and_the_valid_policy_recovers() {
+    for field in ["max_results", "minimum_absolute_delta", "minimum_percent_delta"] {
+        let dir = TempDir::new();
+        let mut sandbox = env(dir.path());
+        edit(&mut sandbox, POLICY, |policy| {
+            let path = ["operations", "trial_balance_variance", field];
+            if field == "max_results" {
+                remove(policy, &path);
+            } else {
+                set(policy, &path, Json::str("-0.01"));
+            }
+        });
+        let before = sandbox.bundle.files[POLICY].clone();
+        let message = if field == "max_results" {
+            "Policy operation has an invalid shape.".to_string()
+        } else {
+            format!("Policy {field} cannot be negative.")
+        };
+        assert_eq!(
+            load_policy_snapshot(&sandbox, &bundled(POLICY)).map(|_| ()),
+            Err(Failure::Gateway(message))
+        );
+        assert_eq!(sandbox.bundle.files[POLICY], before);
+        put(&mut sandbox, POLICY, &shipped_json(POLICY));
+        assert!(load_policy_snapshot(&sandbox, &bundled(POLICY)).is_ok());
     }
 }
 

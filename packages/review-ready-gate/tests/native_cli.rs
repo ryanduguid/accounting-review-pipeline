@@ -171,6 +171,157 @@ fn unreadable_checkout_metadata_is_refused_before_input_reads() {
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot be examined"));
     assert!(!parent.join("output").exists());
 }
+
+#[cfg(unix)]
+fn bounded_gate_output(command: &mut Command) -> std::process::Output {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let mut child = Child(
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "output inspection did not finish"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    child
+        .0
+        .stdout
+        .take()
+        .unwrap()
+        .take(8193)
+        .read_to_end(&mut stdout)
+        .unwrap();
+    child
+        .0
+        .stderr
+        .take()
+        .unwrap()
+        .take(8193)
+        .read_to_end(&mut stderr)
+        .unwrap();
+    assert!(stdout.len() <= 8192 && stderr.len() <= 8192);
+    std::process::Output {
+        status,
+        stdout,
+        stderr,
+    }
+}
+
+#[cfg(unix)]
+fn with_denied_directory_search(
+    directory: &std::path::Path,
+    probe: &std::path::Path,
+    command: &mut Command,
+) -> (std::io::Result<fs::Metadata>, std::process::Output) {
+    use std::os::unix::fs::PermissionsExt;
+    struct RestorePermissions<'a>(&'a std::path::Path, fs::Permissions);
+    impl Drop for RestorePermissions<'_> {
+        fn drop(&mut self) {
+            let _ = fs::set_permissions(self.0, self.1.clone());
+        }
+    }
+    let restore = RestorePermissions(directory, fs::metadata(directory).unwrap().permissions());
+    fs::set_permissions(directory, fs::Permissions::from_mode(0o0)).unwrap();
+    let denied = fs::symlink_metadata(probe);
+    let result = bounded_gate_output(command);
+    fs::set_permissions(directory, restore.1.clone()).unwrap();
+    drop(restore);
+    (denied, result)
+}
+
+#[cfg(unix)]
+#[test]
+fn unsearchable_output_preserves_existing_artifacts_until_a_readable_retry() {
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    fs::create_dir(&output).unwrap();
+    fs::write(output.join("keep.txt"), b"fabricated neighbour").unwrap();
+    let before = snapshot(&tmp.0);
+    let mut command = gate_command("bas-ready", &output);
+    command.current_dir(&tmp.0);
+    let (denied, result) =
+        with_denied_directory_search(&output, &output.join(".git"), &mut command);
+    assert_eq!(
+        denied.unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    assert!(result.stdout.is_empty());
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    assert!(
+        stderr.contains(&format!("{} cannot be examined", output.display())),
+        "{stderr}"
+    );
+    assert!(stderr.contains("os error 13"), "{stderr}");
+    assert_eq!(snapshot(&tmp.0), before);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 1);
+    let retry = bounded_gate_output(&mut command);
+    assert!(retry.status.success(), "{retry:?}");
+    assert_eq!(
+        fs::read(output.join("keep.txt")).unwrap(),
+        b"fabricated neighbour"
+    );
+    assert!(view_read_only(&output).status.success());
+}
+
+#[cfg(unix)]
+#[test]
+fn unsearchable_configured_work_tree_refuses_without_changing_either_tree() {
+    let tmp = TempDir::new();
+    let parent = tmp.join("restricted");
+    let work_tree = parent.join("worktree");
+    let output = tmp.join("output");
+    fs::create_dir_all(&work_tree).unwrap();
+    fs::create_dir(&output).unwrap();
+    fs::write(work_tree.join("keep.txt"), b"fabricated worktree").unwrap();
+    fs::write(output.join("keep.txt"), b"fabricated output").unwrap();
+    let before = snapshot(&tmp.0);
+    let mut command = gate_command("bas-ready", &output);
+    command.current_dir(&tmp.0).env("GIT_WORK_TREE", &work_tree);
+    let (denied, result) = with_denied_directory_search(&parent, &work_tree, &mut command);
+    assert_eq!(
+        denied.unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    assert!(result.stdout.is_empty());
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    assert!(
+        stderr.contains(&format!("{} cannot be examined", output.display())),
+        "{stderr}"
+    );
+    assert!(stderr.contains("os error 13"), "{stderr}");
+    assert_eq!(snapshot(&tmp.0), before);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(&work_tree).unwrap().count(), 1);
+    let retry = bounded_gate_output(&mut command);
+    assert!(retry.status.success(), "{retry:?}");
+    assert_eq!(
+        fs::read(work_tree.join("keep.txt")).unwrap(),
+        b"fabricated worktree"
+    );
+    assert_eq!(
+        fs::read(output.join("keep.txt")).unwrap(),
+        b"fabricated output"
+    );
+    assert!(view_read_only(&output).status.success());
+}
+
 fn snapshot(
     path: &std::path::Path,
 ) -> std::collections::BTreeMap<PathBuf, (Vec<u8>, std::time::SystemTime)> {
@@ -815,6 +966,76 @@ fn a_missing_signal_expires_the_checkpoint_and_rolls_back_the_publication() {
         std::array::from_fn(|i| Some(format!("next-{i}").into_bytes()))
     );
 }
+fn exchange_sigterm(handler: usize) -> usize {
+    #[cfg(windows)]
+    unsafe extern "C" {
+        #[link_name = "signal"]
+        fn crt_signal(signal: i32, handler: usize) -> usize;
+    }
+    // SAFETY: only the isolated test child calls this with a static callback or
+    // a handler returned by the same platform signal API.
+    #[cfg(unix)]
+    let previous = unsafe { libc::signal(libc::SIGTERM, handler) };
+    #[cfg(windows)]
+    let previous = unsafe { crt_signal(15, handler) };
+    assert_ne!(previous, usize::MAX);
+    previous
+}
+
+fn inherited_signal_child() {
+    use review_ready_gate::publication::{ManagedPublication, publish, snapshot_revision};
+    extern "C" fn inherited_sigterm(_: i32) {}
+    let handler = inherited_sigterm as *const () as usize;
+    let original = exchange_sigterm(handler);
+    let managed = ManagedPublication::default();
+    assert_eq!(exchange_sigterm(handler), handler);
+    let tmp = TempDir::new();
+    let rendered = std::array::from_fn(|i| format!("fabricated-signal-payload-{i}").into_bytes());
+    publish(&tmp.0, &rendered).unwrap();
+    assert_eq!(payloads(&tmp.0), rendered.map(Some));
+    assert!(snapshot_revision(&tmp.0).unwrap().is_some());
+    drop(managed);
+    assert_eq!(exchange_sigterm(original), handler);
+}
+
+#[test]
+fn inherited_sigterm_handler_survives_managed_default_and_drop() {
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let arguments = [
+        "--exact",
+        "inherited_sigterm_handler_survives_managed_default_and_drop",
+        "--test-threads=1",
+    ];
+    if let Some(marker) = std::env::var_os("ARP_PUBLICATION_SIGNAL_CHILD") {
+        assert_eq!(marker.to_str(), Some("inherited-handler-v1"));
+        assert_eq!(std::env::args().skip(1).collect::<Vec<_>>(), arguments);
+        inherited_signal_child();
+        return;
+    }
+    let mut child = Child(
+        child_profile::command(std::env::current_exe().unwrap())
+            .args(arguments)
+            .env("ARP_PUBLICATION_SIGNAL_CHILD", "inherited-handler-v1")
+            .env("RUST_BACKTRACE", "0")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "signal child did not finish");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let stderr = std::io::read_to_string(child.0.stderr.take().unwrap()).unwrap();
+    assert!(status.success(), "{stderr}");
+}
+
 #[cfg(all(unix, feature = "probe"))]
 #[test]
 fn managed_sigterm_finishes_rollback_and_keeps_postcommit_generation() {

@@ -146,7 +146,7 @@ fn displayed(files: &BTreeMap<String, Vec<u8>>) {
     assert!(shown.stderr.is_empty(), "{shown:?}");
     assert_eq!(inventory(&temp.0), before, "view changed the valid pack");
 }
-fn physically_refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
+fn physically_refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) -> (TempDir, Output) {
     let temp = TempDir::new();
     for (name, bytes) in files {
         fs::write(temp.join(name), bytes).unwrap();
@@ -183,6 +183,7 @@ fn physically_refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
         before,
         "verification or view changed the pack"
     );
+    (temp, shown)
 }
 fn refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
     let error = viewer::verify_payloads(files).unwrap_err();
@@ -191,6 +192,165 @@ fn refused(files: &BTreeMap<String, Vec<u8>>, diagnostic: &str) {
         "expected {diagnostic:?}, got {error:?}"
     );
     physically_refused(files, diagnostic);
+}
+
+fn refused_exactly_and_restored(
+    original: &BTreeMap<String, Vec<u8>>,
+    files: &BTreeMap<String, Vec<u8>>,
+    diagnostic: &str,
+) {
+    assert_eq!(viewer::verify_payloads(files).unwrap_err(), diagnostic);
+    let (temp, shown) = physically_refused(files, diagnostic);
+    assert_eq!(viewer::verify_pack(&temp.0).unwrap_err(), diagnostic);
+    assert_eq!(
+        viewer::render_review_sheet(&temp.0).unwrap_err(),
+        diagnostic
+    );
+    let ending = if cfg!(windows) { "\r\n" } else { "\n" };
+    assert_eq!(
+        String::from_utf8(shown.stderr).unwrap(),
+        format!("close-control view: verification failed: {diagnostic}{ending}")
+    );
+    assert_eq!(
+        files.keys().collect::<Vec<_>>(),
+        original.keys().collect::<Vec<_>>()
+    );
+    for (name, bytes) in original {
+        fs::write(temp.join(name), bytes).unwrap();
+    }
+    viewer::verify_pack(&temp.0).unwrap();
+    let restored = inventory(&temp.0);
+    let shown = bounded_output(
+        child_profile::command(BIN)
+            .args(["view", "--pack-dir"])
+            .arg(&temp.0),
+    );
+    assert_eq!(shown.status.code(), Some(0), "{shown:?}");
+    assert!(!shown.stdout.is_empty());
+    assert!(shown.stderr.is_empty(), "{shown:?}");
+    assert_eq!(
+        inventory(&temp.0),
+        restored,
+        "view changed the restored pack"
+    );
+}
+
+fn required_control_pack() -> BTreeMap<String, Vec<u8>> {
+    let mut config = ReviewConfig::new(
+        examples().join("current_trial_balance.csv"),
+        examples().join("prior_trial_balance.csv"),
+    );
+    config.required_controls.push("account_mapping".into());
+    let pack = engine::review_close(&config).unwrap();
+    let files = payloads(&pack);
+    viewer::verify_payloads(&files).unwrap();
+    files
+}
+
+#[test]
+fn malformed_required_control_rows_preserve_the_pack_and_recover() {
+    let baseline = required_control_pack();
+    for row in [
+        r#"{"name":"account_mapping"}"#,
+        r#"{"name":1,"state":"skipped"}"#,
+        r#"{"name":"account_mapping","state":1}"#,
+    ] {
+        let mut files = baseline.clone();
+        let mut doc = document(&files);
+        *first_mut(&mut doc, &["required_controls"]) = pyjson::loads(row).unwrap();
+        save(&mut files, &doc);
+        refused_exactly_and_restored(
+            &baseline,
+            &files,
+            "close-review-pack.json: required_controls must be a non-empty list of names and states",
+        );
+    }
+}
+
+#[test]
+fn required_control_exceptions_cannot_claim_pass_or_blocked() {
+    let baseline = required_control_pack();
+    for status in ["PASS", "BLOCKED"] {
+        let mut files = baseline.clone();
+        let mut doc = document(&files);
+        assert!(doc.at("overall_status").is_str("REVIEW"));
+        let Json::Array(exceptions) = part_mut(&mut doc, &["exceptions"]) else {
+            panic!("exceptions")
+        };
+        exceptions
+            .iter_mut()
+            .find(|row| row.at("control").is_str("required_control"))
+            .unwrap()
+            .set("status", Json::str(status));
+        save(&mut files, &doc);
+        refused_exactly_and_restored(
+            &baseline,
+            &files,
+            "close-review-pack.json: a required_control exception must be REVIEW",
+        );
+    }
+}
+
+#[test]
+fn raw_json_integer_limit_preserves_the_pack_and_recovers() {
+    let baseline = empty_query_pack();
+    let raw = String::from_utf8(baseline[JSON].clone()).unwrap();
+    let date = "\"2026-08-31\"";
+    assert_eq!(raw.matches(date).count(), 1);
+    for (digits, diagnostic) in [
+        (
+            4300,
+            "close-review-pack.json: current_report_dates must be a list of strings",
+        ),
+        (
+            4301,
+            "close-review-pack.json: not readable (Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits)",
+        ),
+    ] {
+        let mut files = baseline.clone();
+        files.insert(
+            JSON.into(),
+            raw.replace(date, &"1".repeat(digits)).into_bytes(),
+        );
+        refused_exactly_and_restored(&baseline, &files, diagnostic);
+    }
+}
+
+#[test]
+fn indented_markdown_underlines_cannot_replace_pack_headings() {
+    let baseline = empty_query_pack();
+    let mut files = baseline.clone();
+    change_summary(&mut files, "## Scope", "Scope\n    ---");
+    refused_exactly_and_restored(
+        &baseline,
+        &files,
+        "close-summary.md: the headings are not the ones the writer emits: holds ['# Monthly Close Review Pack', '## Source evidence', '## Exceptions', '## Client queries', '## Human acknowledgement'], expected ['# Monthly Close Review Pack', '## Scope', '## Source evidence', '## Exceptions', '## Client queries', '## Human acknowledgement']",
+    );
+}
+
+#[test]
+fn equity_source_digest_cannot_stand_in_for_reconciliation_evidence() {
+    let baseline = empty_query_pack();
+    let mut files = baseline.clone();
+    let mut doc = document(&files);
+    assert!(doc.get("equity_reconciliation").is_none());
+    let digest = "a".repeat(64);
+    put(
+        &mut doc,
+        &["source_sha256", "equity_schedule"],
+        Json::str(&digest),
+    );
+    save(&mut files, &doc);
+    change_summary(
+        &mut files,
+        "## Source evidence",
+        &format!("## Source evidence\n\n- `equity_schedule`: `{digest}`"),
+    );
+    refused_exactly_and_restored(
+        &baseline,
+        &files,
+        "Equity schedule source has no reconciliation evidence.",
+    );
 }
 
 fn empty_query_pack() -> BTreeMap<String, Vec<u8>> {

@@ -994,6 +994,12 @@ mod tests {
     }
 
     #[test]
+    fn parsed_float_representations_follow_python() {
+        let value = loads("[NaN, Infinity, -Infinity, 1.25]").unwrap();
+        assert_eq!(repr(&value), "[nan, inf, -inf, 1.25]");
+    }
+
+    #[test]
     fn loads_follows_cpython() {
         assert!(loads("{\"a\": NaN}").is_ok());
         assert_eq!(loads("\u{feff}{}").unwrap_err(), LoadError::Invalid);

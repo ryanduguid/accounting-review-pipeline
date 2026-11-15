@@ -16,6 +16,7 @@ use std::{
     fs,
     io::{Read, Write},
     process::{Child, Command, Stdio},
+    sync::Mutex,
     time::{Duration, Instant},
 };
 use xero_trial_balance_export::{
@@ -23,6 +24,9 @@ use xero_trial_balance_export::{
     cli,
     pyjson::{self, Json},
 };
+
+// Exclude sibling pre-exec children whilst the soon-to-close pipe reader exists.
+static PROBE_SPAWN: Mutex<()> = Mutex::new(());
 
 fn probe_command(scratch: &Scratch) -> Command {
     let mut command = child_profile::command(env!("CARGO_BIN_EXE_xero-tb-probe"));
@@ -45,7 +49,10 @@ impl Drop for RunningProbe {
 
 fn probe_output(requests: &[&str]) -> String {
     let scratch = Scratch::new();
-    let mut child = probe_command(&scratch).spawn().unwrap();
+    let mut child = {
+        let _spawning = PROBE_SPAWN.lock().unwrap();
+        probe_command(&scratch).spawn().unwrap()
+    };
     child
         .stdin
         .take()
@@ -97,8 +104,12 @@ fn non_array_row_collections_normalise_to_empty_rows_and_zero_totals() {
 fn closed_output_returns_without_input_eof() {
     let scratch = Scratch::new();
     let deadline = Instant::now() + Duration::from_secs(10);
-    let mut child = RunningProbe(probe_command(&scratch).spawn().unwrap());
-    drop(child.0.stdout.take().unwrap());
+    let mut child = {
+        let _spawning = PROBE_SPAWN.lock().unwrap();
+        let mut child = RunningProbe(probe_command(&scratch).spawn().unwrap());
+        drop(child.0.stdout.take().unwrap());
+        child
+    };
     let mut input = child.0.stdin.take().unwrap();
     input
         .write_all(b"{\"op\":\"format_amount\",\"args\":[\"0\"]}\n")
