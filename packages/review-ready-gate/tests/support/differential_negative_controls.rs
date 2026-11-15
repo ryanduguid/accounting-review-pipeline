@@ -99,6 +99,43 @@ fn response_count(python: &Path, baseline: &Path, suite: &TempDir) {
     );
 }
 
+#[cfg(unix)]
+fn echoing_probe(python: &Path, baseline: &Path, suite: &TempDir) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let sibling = suite.join("review-ready-probe");
+    fs::write(&sibling, "#!/bin/sh\nexec /usr/bin/cat\n").unwrap();
+    fs::set_permissions(&sibling, fs::Permissions::from_mode(0o700)).unwrap();
+    let output = run(python, baseline, suite, "echoing-probe");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "{}\n{}",
+        output.stdout,
+        output.stderr
+    );
+    assert_eq!(
+        output.stdout,
+        "seed 1: 7024 value/file/CLI cases; 0 CLI presentation differences; 0 recorded bas and year_end coverage differences; 7024 unexplained differences\n",
+        "stderr:\n{}",
+        output.stderr
+    );
+    assert_eq!(
+        output
+            .stderr
+            .lines()
+            .filter(|line| line.starts_with("difference "))
+            .count(),
+        12
+    );
+    assert!(
+        output.stderr.ends_with("Error: \"differential failed\"\n"),
+        "{}",
+        output.stderr
+    );
+    println!("Expected echoing-probe refusal: 7024 mismatches and 12 diagnostics");
+}
+
 fn main() {
     let args: Vec<_> = env::args_os().collect();
     assert_eq!(args.len(), 4, "expected PYTHON BASELINE BIN_DIR");
@@ -118,4 +155,6 @@ fn main() {
     );
     #[cfg(unix)]
     response_count(python, baseline, &suite);
+    #[cfg(unix)]
+    echoing_probe(python, baseline, &suite);
 }
