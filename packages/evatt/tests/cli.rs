@@ -990,3 +990,83 @@ fn default_windows_stdout_escapes_a_lone_low_surrogate_like_cpython() {
     assert_eq!(code(&output), 0, "{}", stderr(&output));
     assert_eq!(output.stdout, b"wrote out\xe9.md\r\n");
 }
+
+#[test]
+fn named_ascii_stdout_refuses_unicode_after_a_successful_restore() {
+    let repo = Repo::new();
+    repo.put("in.md", b"PERSON_01\n");
+    let before = repo.seed_outputs_and_snapshot();
+    let output = repo
+        .command(&[
+            "restore",
+            "--in",
+            "in.md",
+            "--map",
+            "entities.json",
+            "--out",
+            "résumé.md",
+        ])
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "ascii")
+        .env("PYTHONUNBUFFERED", "0")
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 1);
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        stderr(&output),
+        native_output("error: stdout cannot encode supplied text\n")
+    );
+    assert_eq!(repo.get("résumé.md"), b"Jane Roe\n");
+    for (name, expected) in before {
+        assert_eq!(repo.get(name), expected, "{name}");
+    }
+}
+
+#[test]
+fn utf8_signature_is_emitted_once_across_verify_writes() {
+    let repo = Repo::new();
+    let input = b"tfn: 1234567\n82. next\ntfn: 1234567\n82. next";
+    repo.put("in.md", input);
+    let mut expected = b"\xef\xbb\xbf".to_vec();
+    expected.extend_from_slice(
+        native_output("number: line 1\nnumber: line 3\n2 finding(s); this file is not ready to send\n").as_bytes(),
+    );
+    for unbuffered in ["0", "1"] {
+        let output = repo
+            .command(&repo.normal("verify"))
+            .env("PYTHONUTF8", "1")
+            .env("PYTHONIOENCODING", "utf-8-sig")
+            .env("PYTHONUNBUFFERED", unbuffered)
+            .output()
+            .unwrap();
+        assert_eq!(code(&output), 2, "{unbuffered}");
+        assert!(output.stderr.is_empty(), "{unbuffered}");
+        assert_eq!(output.stdout, expected, "{unbuffered}");
+        assert_eq!(repo.get("in.md"), input);
+        assert_eq!(repo.get("entities.json"), MAP.as_bytes());
+        for name in ["out.md", "out.md.manifest.json", "out.md.triage.md"] {
+            assert!(!repo.path(name).exists(), "{name}");
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn unbuffered_verify_write_failure_overrides_the_command_outcome() {
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    let output = repo
+        .command(&repo.normal("verify"))
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8:strict")
+        .env("PYTHONUNBUFFERED", "1")
+        .stdout(closed_pipe())
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 1);
+    assert_eq!(stderr(&output), native_output("error: cannot write CLI diagnostic\n"));
+    for (name, expected) in before {
+        assert_eq!(repo.get(name), expected, "{name}");
+    }
+}

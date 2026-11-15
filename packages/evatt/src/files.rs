@@ -637,4 +637,13 @@ mod tests {
             );
         }
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn empty_directory_operand_is_refused_with_a_dot_path() {
+        assert_eq!(
+            mkdir(Path::new("")).unwrap_err(),
+            "[Errno 2] No such file or directory: '.'"
+        );
+    }
 }
