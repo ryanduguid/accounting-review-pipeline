@@ -13,14 +13,24 @@ use monthly_close_control_plane::pyjson::{self, Json};
 use std::{
     fs,
     io::Write,
-    process::{Output, Stdio},
+    path::Path,
+    process::{Child, Command, Output, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
 
+// Keep another child from inheriting the reader before the disconnect fixture closes it.
+// Release the lock before request I/O or child waits.
+static PROBE_SPAWN: Mutex<()> = Mutex::new(());
+
 const MAPPING: &str = r#"{"op":"csv","kind":"mapping","path":"mapping.csv","hex":"4163636f756e7449442c52657669657747726f75700a41312c436173680a"}"#;
 const MAPPED: &str = r#"{"ok":{"A1":"Cash"}}"#;
 const REFUSALS: &[(&str, &str)] = &[
+    (
+        r#"{"op":"format_money","value":"1E+999999999999999999"}"#,
+        "decimal fixed-point output exceeds available memory",
+    ),
     (
         r#"{"op":"money","value":null}"#,
         "input.csv: row 2 has invalid Amount: ''.",
@@ -61,27 +71,21 @@ const REFUSALS: &[(&str, &str)] = &[
     ),
 ];
 
-fn run_probe(requests: &[&str]) -> Output {
-    let scratch = temp::TempDir::new();
-    let fixtures = scratch.join("fixtures");
-    fs::create_dir(&fixtures).unwrap();
-    let mut child = child_profile::command(env!("CARGO_BIN_EXE_close-control-probe"))
+fn probe_command(scratch: &temp::TempDir, fixtures: &Path) -> Command {
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_close-control-probe"));
+    command
         .current_dir(&scratch.0)
-        .env("TMPDIR", &fixtures)
-        .env("TMP", &fixtures)
-        .env("TEMP", &fixtures)
+        .env("TMPDIR", fixtures)
+        .env("TMP", fixtures)
+        .env("TEMP", fixtures)
         .env_remove("GIT_WORK_TREE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(format!("{}\n", requests.join("\n")).as_bytes())
-        .unwrap();
+        .stderr(Stdio::piped());
+    command
+}
+
+fn wait_probe(mut child: Child) -> Output {
     let deadline = Instant::now() + Duration::from_secs(15);
     while child.try_wait().unwrap().is_none() {
         if Instant::now() >= deadline {
@@ -91,11 +95,54 @@ fn run_probe(requests: &[&str]) -> Output {
         }
         thread::sleep(Duration::from_millis(10));
     }
-    let output = child.wait_with_output().unwrap();
+    child.wait_with_output().unwrap()
+}
+
+fn run_probe(requests: &[&str]) -> Output {
+    let scratch = temp::TempDir::new();
+    let fixtures = scratch.join("fixtures");
+    fs::create_dir(&fixtures).unwrap();
+    let mut child = {
+        let _lock = PROBE_SPAWN.lock().unwrap();
+        probe_command(&scratch, &fixtures).spawn().unwrap()
+    };
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{}\n", requests.join("\n")).as_bytes())
+        .unwrap();
+    let output = wait_probe(child);
     assert_eq!(fs::read_dir(&fixtures).unwrap().count(), 0);
     fs::remove_dir(&fixtures).unwrap();
     assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 0);
     output
+}
+
+#[test]
+fn closed_output_exits_without_waiting_for_input_eof() {
+    let scratch = temp::TempDir::new();
+    let fixtures = scratch.join("fixtures");
+    fs::create_dir(&fixtures).unwrap();
+    let mut child = {
+        let _lock = PROBE_SPAWN.lock().unwrap();
+        let mut child = probe_command(&scratch, &fixtures).spawn().unwrap();
+        drop(child.stdout.take().unwrap());
+        child
+    };
+    let mut input = child.stdin.take().unwrap();
+    if let Err(error) = writeln!(input, "{MAPPING}").and_then(|()| input.flush()) {
+        let _ = child.kill();
+        let output = child.wait_with_output().unwrap();
+        panic!("could not write probe request: {error}; {output:?}");
+    }
+    let output = wait_probe(child);
+    drop(input);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    assert_eq!(fs::read_dir(&fixtures).unwrap().count(), 0);
+    fs::remove_dir(&fixtures).unwrap();
+    assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 0);
 }
 
 #[test]
@@ -189,6 +236,34 @@ fn external_output_guard_returns_the_resolved_directory() {
         fs::canonicalize(&external.0).unwrap(),
     );
     assert_eq!(fs::read_dir(&external.0).unwrap().count(), 0);
+}
+
+#[test]
+fn checkout_output_refusal_preserves_the_directory_and_next_request() {
+    let checkout = temp::TempDir::new();
+    fs::create_dir(checkout.join(".git")).unwrap();
+    let root = fs::canonicalize(&checkout.0).unwrap();
+    let root = root.to_str().unwrap();
+    let root = if let Some(tail) = root.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{tail}")
+    } else {
+        root.strip_prefix(r"\\?\").unwrap_or(root).to_owned()
+    };
+    let request = pyjson::canonical(&Json::object([
+        ("op", Json::str("output_guard")),
+        ("path", Json::str(root.as_str())),
+    ]));
+    let error = format!(
+        "{root} is inside the version-control checkout at {root}, which holds .git. A review pack names a client's accounts and balances, so it belongs in an access-controlled directory outside version control. Point --output somewhere outside that checkout."
+    );
+    let response = pyjson::canonical(&Json::object([("error", Json::str(&error))]));
+    assert_probe_responses(&[&request, MAPPING], &[&response, MAPPED]);
+    let entries: Vec<_> = fs::read_dir(&checkout.0)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(entries, [".git"]);
+    assert_eq!(fs::read_dir(checkout.join(".git")).unwrap().count(), 0);
 }
 
 const INTEGRITY_CSV: &[u8] = b"ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit\n2026-07-31,Fixture,Assets,A1,Cash,100,3,1,8,2\n";
