@@ -740,6 +740,22 @@ pub fn int_cmp(value: &BigInt, bound: i64) -> Ordering {
 mod tests {
 
     #[test]
+    fn integer_bounds_preserve_precision_beyond_i64() {
+        for (source, bound, expected) in [
+            ("-9223372036854775809", i64::MIN, Ordering::Less),
+            ("-9223372036854775808", i64::MIN, Ordering::Equal),
+            ("9223372036854775807", i64::MAX, Ordering::Equal),
+            ("9223372036854775808", i64::MAX, Ordering::Greater),
+            ("-1", 0, Ordering::Less),
+            ("0", 0, Ordering::Equal),
+            ("1", 0, Ordering::Greater),
+        ] {
+            let value = loads(source).unwrap();
+            assert_eq!(int_cmp(value.as_plain_int().unwrap(), bound), expected, "{source}");
+        }
+    }
+
+    #[test]
     fn object_lookup_preserves_present_null_and_rejects_nonobjects() {
         for source in ["null", "false", "0", r#""text""#, "[]"] {
             let value = loads(source).unwrap();
