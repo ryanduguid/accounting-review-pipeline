@@ -5,15 +5,19 @@
 
     python differential.py --script <grant_workpaper.py from the Python release> \
         --binary <target/debug/grant-workpaper> [--cases N] [--seed S]
+        [--timeout-artifact PATH]
 
 Each case writes the same mutated inputs into two working directories, runs
 both implementations with the same arguments, and compares exit codes,
 stdout, stderr and every file left behind. The program name in argparse
 messages, the working directory path and random staging names are normalised;
 a CPython traceback is compared by exit code only.
+Timeout artifacts retain fabricated case bytes as base64 without copying the
+child environment or interpreting case filenames as artifact paths.
 """
 
 import argparse
+import base64
 import csv
 import io
 import json
@@ -273,12 +277,59 @@ def normalise(data, cwd, progs):
     return re.sub(rb"\.grant-workpaper-[a-z0-9_]{8}", b".grant-workpaper-<random>", data)
 
 
+def encoded_bytes(value):
+    return None if value is None else base64.b64encode(value).decode("ascii")
+
+
+def artifact_argument(value):
+    return {"bytes_base64": encoded_bytes(value)} if isinstance(value, bytes) else {"text": value}
+
+
+def retain_timeout(path, case, seed, index, phase, error, completed):
+    print(f"comparison timeout: seed={seed} case={index} label={case.label!r} phase={phase}", file=sys.stderr)
+    if path is None:
+        return
+    report = {
+        "schema_version": 1, "seed": seed, "index": index, "label": case.label,
+        "phase": phase, "timeout_seconds": error.timeout,
+        "command": [artifact_argument(value) for value in error.cmd],
+        "argv": [artifact_argument(value) for value in case.argv],
+        "input_name": None if case.input_name is None else artifact_argument(case.input_name),
+        "files": {name: encoded_bytes(value) for name, value in case.files.items()},
+        "extra": {name: encoded_bytes(value) for name, value in case.extra.items()},
+        "stdout_base64": encoded_bytes(error.stdout), "stderr_base64": encoded_bytes(error.stderr),
+        "completed": [{"phase": "python", "returncode": result.returncode,
+                       "stdout_base64": encoded_bytes(result.stdout), "stderr_base64": encoded_bytes(result.stderr)}
+                      for result in completed],
+    }
+    try:
+        with Path(path).open("x", encoding="utf-8") as artifact:
+            json.dump(report, artifact, ensure_ascii=True, indent=2, sort_keys=True)
+            artifact.write("\n")
+    except OSError as error:
+        print(f"could not retain timeout artifact: {error}", file=sys.stderr)
+
+
+def run_pair(script, binary, case, cwd_py, cwd_rs, *, seed, index, timeout_artifact):
+    commands = [("python", [sys.executable, "-I", str(script), *case.argv], cwd_py),
+                ("rust", [str(binary), *case.argv], cwd_rs)]
+    completed = []
+    for phase, command, cwd in commands:
+        try:
+            completed.append(subprocess.run(command, cwd=cwd, capture_output=True, timeout=120, env=child_env()))
+        except subprocess.TimeoutExpired as error:
+            retain_timeout(timeout_artifact, case, seed, index, phase, error, completed)
+            raise
+    return completed
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--script", required=True)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--cases", type=int, default=400)
     parser.add_argument("--seed", type=int, default=20261012)
+    parser.add_argument("--timeout-artifact", type=Path, help="retain the fabricated case if a child times out")
     args = parser.parse_args()
     script, binary = Path(args.script).resolve(), Path(args.binary).resolve()
     rng = random.Random(args.seed)
@@ -304,9 +355,8 @@ def main():
             for cwd in (cwd_py, cwd_rs):
                 cwd.mkdir(parents=True)
                 place(cwd, case)
-            python = subprocess.run([sys.executable, "-I", str(script), *case.argv], cwd=cwd_py, capture_output=True,
-                                    timeout=120, env=child_env())
-            rust = subprocess.run([str(binary), *case.argv], cwd=cwd_rs, capture_output=True, timeout=120, env=child_env())
+            python, rust = run_pair(script, binary, case, cwd_py, cwd_rs, seed=args.seed, index=index,
+                                    timeout_artifact=args.timeout_artifact)
             problems = []
             if python.returncode != rust.returncode:
                 problems.append(f"exit python={python.returncode} rust={rust.returncode}")
