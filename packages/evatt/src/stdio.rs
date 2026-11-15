@@ -419,4 +419,60 @@ mod tests {
         assert!(encode(&lone, false, &Encoding::Utf8).is_err());
         assert_eq!(encode(&lone, true, &Encoding::Utf8).unwrap(), br"\ud800");
     }
+
+    #[test]
+    fn surrogatepass_preserves_utf8_payload_and_refuses_other_codecs() {
+        for (cp, expected) in [
+            (0xD800, [b'A', 0xED, 0xA0, 0x80, b'Z']),
+            (0xDFFF, [b'A', 0xED, 0xBF, 0xBF, b'Z']),
+        ] {
+            let mut text = String::from("A");
+            pytext::push_code_point(&mut text, cp);
+            text.push('Z');
+            // PythonText adds the UTF-8 signature; this helper returns payload bytes.
+            for encoding in [Encoding::Utf8, Encoding::Utf8Sig] {
+                assert_eq!(
+                    encode_with(&text, &encoding, ErrorPolicy::SurrogatePass).unwrap(),
+                    expected,
+                    "U+{cp:04X}"
+                );
+            }
+            for encoding in [Encoding::Ascii, Encoding::Latin1, Encoding::Windows1252] {
+                assert!(encode_with(&text, &encoding, ErrorPolicy::SurrogatePass).is_err());
+            }
+            assert!(encode_with(&text, &Encoding::Utf8, ErrorPolicy::Strict).is_err());
+        }
+    }
+
+    #[test]
+    fn ignore_and_replace_preserve_representable_siblings() {
+        let cases: [(Encoding, &str, &[u8], &[u8]); 3] = [
+            (Encoding::Ascii, "Aé😀Z", b"AZ", b"A??Z"),
+            (Encoding::Latin1, "Aé😀Z", b"A\xe9Z", b"A\xe9?Z"),
+            (Encoding::Windows1252, "A€😀Z", b"A\x80Z", b"A\x80?Z"),
+        ];
+        for (encoding, text, ignored, replaced) in cases {
+            assert_eq!(encode_with(text, &encoding, ErrorPolicy::Ignore).unwrap(), ignored);
+            assert_eq!(encode_with(text, &encoding, ErrorPolicy::Replace).unwrap(), replaced);
+            assert!(encode_with(text, &encoding, ErrorPolicy::Strict).is_err());
+        }
+    }
+
+    #[test]
+    fn ignore_and_replace_handle_lone_surrogates_without_losing_ascii() {
+        let mut text = String::from("A");
+        pytext::push_code_point(&mut text, 0xD800);
+        text.push('Z');
+        for encoding in [
+            Encoding::Utf8,
+            Encoding::Utf8Sig,
+            Encoding::Ascii,
+            Encoding::Latin1,
+            Encoding::Windows1252,
+        ] {
+            assert_eq!(encode_with(&text, &encoding, ErrorPolicy::Ignore).unwrap(), b"AZ");
+            assert_eq!(encode_with(&text, &encoding, ErrorPolicy::Replace).unwrap(), b"A?Z");
+            assert!(encode_with(&text, &encoding, ErrorPolicy::Strict).is_err());
+        }
+    }
 }
