@@ -1,15 +1,13 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
-#[path = "../../../../tests/support/child_profile.rs"]
-mod child_profile;
 mod temp;
 
 use std::{
     env,
     fs::{self, File},
     path::{Path, PathBuf},
-    process::{Child, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -45,7 +43,8 @@ fn run(python: &Path, baseline: &Path, suite: &TempDir, label: &str) -> Captured
     let stdout = suite.join(format!("{label}.stdout"));
     let stderr = suite.join(format!("{label}.stderr"));
     let mut child = Running(
-        child_profile::command(binary(&suite.0, "close-control-differential"))
+        // This comparer returns normally; preserve the caller's exit-time profile.
+        Command::new(binary(&suite.0, "close-control-differential"))
             .arg(python)
             .arg(baseline)
             .arg("1")
