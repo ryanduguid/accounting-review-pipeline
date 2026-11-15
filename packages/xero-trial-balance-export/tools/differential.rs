@@ -632,6 +632,7 @@ mod tests {
     use super::*;
 
     const EOF_FIXTURE: &str = "XERO_DIFFERENTIAL_EOF_FIXTURE";
+    static FIXTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn teardown_allows_the_child_to_finish_after_input_eof() {
@@ -662,7 +663,31 @@ mod tests {
         assert!(elapsed < Duration::from_secs(10));
     }
 
-    fn run_fixture(stall: bool) -> (io::Result<Vec<u8>>, Duration) {
+    #[test]
+    fn cli_timeout_terminates_the_child_and_allows_recovery() {
+        let _guard = FIXTURE_LOCK.lock().unwrap();
+        let (directory, mut command) = fixture_command(true);
+        let started = Instant::now();
+        let error = command_output(&mut command).unwrap_err();
+        let elapsed = started.elapsed();
+        let ready = fs::read(directory.join("ready")).unwrap();
+        let finished = fs::read(directory.join("finished"));
+        fs::remove_dir_all(&directory).unwrap();
+        assert_eq!(error.to_string(), "CLI exceeded ten-second deadline");
+        assert!(elapsed >= Duration::from_secs(10));
+        assert_eq!(ready, b"ready");
+        assert_eq!(finished.unwrap_err().kind(), io::ErrorKind::NotFound);
+
+        let (directory, mut command) = fixture_command(false);
+        let (code, _, stderr) = command_output(&mut command).unwrap();
+        let finished = fs::read(directory.join("finished")).unwrap();
+        fs::remove_dir_all(&directory).unwrap();
+        assert_eq!(code, 0);
+        assert!(stderr.is_empty());
+        assert_eq!(finished, b"normal shutdown");
+    }
+
+    fn fixture_command(stall: bool) -> (std::path::PathBuf, Command) {
         let mut nonce = [0_u8; 16];
         getrandom::fill(&mut nonce).unwrap();
         let nonce: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -675,10 +700,17 @@ mod tests {
                 "tests::teardown_allows_the_child_to_finish_after_input_eof",
                 "--nocapture",
             ])
-            .env(EOF_FIXTURE, &directory);
+            .env(EOF_FIXTURE, &directory)
+            .env_remove("XERO_DIFFERENTIAL_STALL_FIXTURE");
         if stall {
             command.env("XERO_DIFFERENTIAL_STALL_FIXTURE", "1");
         }
+        (directory, command)
+    }
+
+    fn run_fixture(stall: bool) -> (io::Result<Vec<u8>>, Duration) {
+        let _guard = FIXTURE_LOCK.lock().unwrap();
+        let (directory, mut command) = fixture_command(stall);
         let process = Process::start(&mut command).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         while !directory.join("ready").is_file() && Instant::now() < deadline {
