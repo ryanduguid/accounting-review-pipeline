@@ -187,7 +187,7 @@ fn nested_command(temp: &temp::TempDir, case: &str) -> Command {
             command = comparison_command(temp, &json);
         }
         "reconcile" => {
-            command = reconciliation_command(temp, &json);
+            command = reconciliation_command(temp, Some(&json));
         }
         other => panic!("Unknown fixture: {other}"),
     }
@@ -211,7 +211,7 @@ fn comparison_command(temp: &temp::TempDir, json: &Path) -> Command {
     command
 }
 
-fn reconciliation_command(temp: &temp::TempDir, json: &Path) -> Command {
+fn reconciliation_command(temp: &temp::TempDir, json: Option<&Path>) -> Command {
     let mut command = child_profile::command(env!("CARGO_BIN_EXE_close-control"));
     command
         .args(["reconcile", "--transactions"])
@@ -231,11 +231,11 @@ fn reconciliation_command(temp: &temp::TempDir, json: &Path) -> Command {
             "0",
             "--closing-balance",
             "0",
-            "--opening-items",
-        ])
-        .arg(json)
-        .arg("--output")
-        .arg(temp.join("refused"));
+        ]);
+    if let Some(json) = json {
+        command.arg("--opening-items").arg(json);
+    }
+    command.arg("--output").arg(temp.join("refused"));
     command
 }
 
@@ -471,4 +471,91 @@ fn unexpected_csv_headings_preserve_literal_unicode_in_stderr() {
     );
     assert_eq!(snapshot(&inputs.0), before);
     assert!(fs::read_dir(&output.0).unwrap().next().is_none());
+}
+
+#[test]
+fn unknown_review_arguments_preserve_sources_and_existing_output() {
+    let inputs = temp::TempDir::new();
+    sources(&inputs, "Bank");
+    let output = inputs.join("pack");
+    fs::create_dir(&output).unwrap();
+    fs::write(output.join("sentinel.txt"), "existing review evidence\n").unwrap();
+    let before = snapshot(&inputs.0);
+    let directories = [&inputs.0, &output];
+    let modified = directories.map(|path| fs::metadata(path).unwrap().modified().unwrap());
+    for (prefix, suffix, diagnostic) in [
+        (false, vec!["--", "--help"], "-- --help"),
+        (false, vec!["-x"], "-x"),
+        (true, vec![], "--unknown"),
+    ] {
+        let mut command = review_command(&inputs, &output);
+        if prefix {
+            let args: Vec<_> = command.get_args().map(|arg| arg.to_owned()).collect();
+            command = child_profile::command(env!("CARGO_BIN_EXE_close-control"));
+            command
+                .arg("--unknown")
+                .args(args)
+                .env_remove("GIT_WORK_TREE");
+        }
+        let result = command
+            .args(suffix)
+            .current_dir(&inputs.0)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1), "{diagnostic}: {result:?}");
+        assert!(result.stdout.is_empty(), "{diagnostic}");
+        let stderr = String::from_utf8(result.stderr)
+            .unwrap()
+            .replace("\r\n", "\n");
+        assert_eq!(
+            stderr,
+            format!(
+                "usage: close-control [-h]\n                     {{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo}} ...\nclose-control: error: unrecognized arguments: {diagnostic}\n"
+            )
+        );
+        assert_eq!(snapshot(&inputs.0), before, "{diagnostic}");
+        assert_eq!(
+            directories.map(|path| fs::metadata(path).unwrap().modified().unwrap()),
+            modified
+        );
+    }
+}
+
+#[test]
+fn reconciliation_refuses_empty_and_populated_existing_directories() {
+    let inputs = temp::TempDir::new();
+    fs::write(
+        inputs.join("transactions.csv"),
+        reconciliation::COLUMNS.join(",")
+            + "\nSynthetic,CLEAR,AUD,T1,2026-09-01,R,Debit,1,0\nSynthetic,CLEAR,AUD,T2,2026-09-02,R,Credit,0,1\n",
+    )
+    .unwrap();
+    let output = inputs.join("refused");
+    fs::create_dir(&output).unwrap();
+    for populated in [false, true] {
+        if populated {
+            fs::write(output.join("sentinel.txt"), "previous reconciliation\n").unwrap();
+        }
+        let before = snapshot(&inputs.0);
+        let directories = [&inputs.0, &output];
+        let modified = directories.map(|path| fs::metadata(path).unwrap().modified().unwrap());
+        let result = reconciliation_command(&inputs, None)
+            .current_dir(&inputs.0)
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(1), "{populated}: {result:?}");
+        assert!(result.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(result.stderr)
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "close-control reconcile: Output already exists; use a new directory for each run.\n"
+        );
+        assert!(output.is_dir());
+        assert_eq!(snapshot(&inputs.0), before, "{populated}");
+        assert_eq!(
+            directories.map(|path| fs::metadata(path).unwrap().modified().unwrap()),
+            modified
+        );
+    }
 }

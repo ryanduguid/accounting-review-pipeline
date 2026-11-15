@@ -288,10 +288,12 @@ jobs:
           baseline="$temp_root/monthly-close-python-baseline"
           mkdir -p "$baseline"
           git -C "$GITHUB_WORKSPACE" archive 2523f118bd9f1a5bda6e3540e06647a03371fe04:packages/monthly-close-control-plane | tar -xf - -C "$baseline"
-          cargo build --locked --features probe --bins
+          cargo build --locked --features probe --bins --example differential-negative-controls
           # This normally returning comparison uses exit-time flushing: continuous
           # writes exceed the oracle deadline on its full Windows corpus.
           LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --bin close-control-differential -- "$(command -v python)" "$baseline" 1
+          # Run genuine negative controls in an owned sibling directory.
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --example differential-negative-controls -- "$(command -v python)" "$baseline" "$PWD/target/debug"
       - name: Check out the frozen Python Excel tools
         if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
