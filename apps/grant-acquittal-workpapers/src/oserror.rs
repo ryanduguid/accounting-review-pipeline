@@ -319,6 +319,12 @@ mod windows_tests {
             ("C:x", "C:x", r"C:x\agreements.json"),
             ("//server/share", r"\\server\share\", r"\\server\share\agreements.json"),
             ("//server", r"\\server", r"\\server\agreements.json\"),
+            (
+                "//?/uNc/server/share",
+                r"\\?\uNc\server\share\",
+                r"\\?\uNc\server\share\agreements.json",
+            ),
+            (r".\C:folder", r".\C:folder", r".\C:folder\agreements.json"),
             ("a/", "a", r"a\agreements.json"),
             ("/a//b/.", r"\a\b", r"\a\b\agreements.json"),
         ] {

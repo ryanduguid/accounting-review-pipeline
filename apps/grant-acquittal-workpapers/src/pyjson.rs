@@ -871,6 +871,8 @@ mod tests {
 
     #[test]
     fn dumps_and_repr_match_cpython() {
+        let booleans = loads_bytes(b"[true,false]").unwrap();
+        assert_eq!(dumps_indent2(&booleans), "[\n  true,\n  false\n]");
         let value = loads_bytes(b"{\"b\": [1, 2.5, \"\\u00e9\"], \"a\": {}}").unwrap();
         assert_eq!(
             dumps_indent2(&value),

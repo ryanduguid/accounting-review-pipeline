@@ -102,6 +102,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wraps_digit_hyphens_at_the_last_fitting_boundary() {
+        assert_eq!(wrap("grant-12-34567890", 11), ["grant-12-", "34567890"]);
+    }
+
+    #[test]
     fn wraps_like_python_textwrap() {
         // textwrap.wrap("validate a human acknowledgement/escalation record", 24)
         assert_eq!(
