@@ -40,6 +40,35 @@ fn assert_refused_before_publication(fixture: &Fixture, expected: &str) {
 }
 
 #[test]
+fn parsed_json_money_refuses_numeric_zero_and_control_whitespace() {
+    for (input, shown) in [("0.0", "0.0"), ("-0.0", "-0.0"), (r#""\t\n\r""#, r"'\t\n\r'")] {
+        let value = pyjson::loads_bytes(input.as_bytes()).unwrap();
+        assert_eq!(
+            workpaper::money_json(&value).unwrap_err(),
+            workpaper::Failure::Error(format!(
+                "Expected a non-negative decimal string with at most 2 places: {shown}"
+            ))
+        );
+    }
+    let valid = pyjson::loads_bytes(br#""0.00""#).unwrap();
+    assert_eq!(workpaper::money_json(&valid).unwrap().to_string(), "0.00");
+}
+
+#[test]
+fn csv_refuses_utf8_encoded_surrogates_and_accepts_valid_ids() {
+    assert_eq!(
+        workpaper::rows(b"id\n\xed\xa0\x80\n", "id", "id").unwrap_err(),
+        workpaper::Failure::Error(
+            "'utf-8' codec can't decode byte 0xed in position 3: invalid continuation byte".into()
+        )
+    );
+    assert_eq!(
+        workpaper::rows(b"id\nfabricated\n", "id", "id").unwrap(),
+        vec![vec![("id".into(), "fabricated".into())]]
+    );
+}
+
+#[test]
 fn agreement_header_refusals_preserve_source_and_publish_nothing() {
     for (field, value, message) in [
         (
