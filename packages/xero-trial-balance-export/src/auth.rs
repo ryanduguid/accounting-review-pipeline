@@ -449,6 +449,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn permission_denied_callback_bind_explains_the_registration_fix() {
+        let config = callback_config("http://localhost/callback").unwrap();
+        let error = std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "fabricated callback bind refusal",
+        );
+        let failure = bind_error(&config, error);
+        assert_eq!(failure.code, 1);
+        assert!(failure.stdout.is_empty());
+        assert_eq!(
+            failure.stderr,
+            "error: not permitted to listen on localhost:80 for the OAuth callback (fabricated callback bind refusal). Ports below 1024 usually need elevated rights, and a redirect URI with no port uses 80. Point XERO_REDIRECT_URI at a port such as 8400 and add the same URI to the app at developer.xero.com.\n"
+        );
+    }
+
+    #[test]
     fn configuration_checks_the_parsed_host_and_final_path_segment() {
         for (uri, diagnostic) in [
             ("http://user@/callback", "must include a host"),
