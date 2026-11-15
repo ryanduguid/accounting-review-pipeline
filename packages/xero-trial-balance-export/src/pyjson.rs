@@ -884,4 +884,32 @@ mod tests {
             &wrong[..wrong.len().min(10)]
         );
     }
+
+    #[test]
+    fn an_empty_object_schema_refuses_non_objects() {
+        let array = loads("[]").unwrap();
+        assert!(array.keys().is_none());
+        assert!(!array.has_exact_keys(&[]));
+        assert!(loads("{}").unwrap().has_exact_keys(&[]));
+    }
+
+    #[test]
+    fn integer_bounds_preserve_precision_beyond_i64() {
+        for (input, bound, expected) in [
+            ("-9223372036854775809", i64::MIN, Ordering::Less),
+            ("9223372036854775808", i64::MAX, Ordering::Greater),
+            ("-9223372036854775808", i64::MIN, Ordering::Equal),
+            ("9223372036854775807", i64::MAX, Ordering::Equal),
+            ("-1", 0, Ordering::Less),
+            ("0", 0, Ordering::Equal),
+            ("1", 0, Ordering::Greater),
+        ] {
+            let value = loads(input).unwrap();
+            assert_eq!(
+                int_cmp(value.as_plain_int().unwrap(), bound),
+                expected,
+                "{input} against {bound}"
+            );
+        }
+    }
 }
