@@ -12,22 +12,40 @@ mod scratch;
 use base64::Engine;
 use scratch::Scratch;
 use sha2::{Digest, Sha256};
-use std::{fs, io::Write, process::Stdio};
+use std::{
+    fs,
+    io::{Read, Write},
+    process::{Child, Command, Stdio},
+    time::{Duration, Instant},
+};
 use xero_trial_balance_export::{
     amount::Amount,
     cli,
     pyjson::{self, Json},
 };
 
-fn probe_output(requests: &[&str]) -> String {
-    let scratch = Scratch::new();
-    let mut child = child_profile::command(env!("CARGO_BIN_EXE_xero-tb-probe"))
+fn probe_command(scratch: &Scratch) -> Command {
+    let mut command = child_profile::command(env!("CARGO_BIN_EXE_xero-tb-probe"));
+    command
         .current_dir(&scratch.0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+        .stderr(Stdio::piped());
+    command
+}
+
+struct RunningProbe(Child);
+
+impl Drop for RunningProbe {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn probe_output(requests: &[&str]) -> String {
+    let scratch = Scratch::new();
+    let mut child = probe_command(&scratch).spawn().unwrap();
     child
         .stdin
         .take()
@@ -62,6 +80,54 @@ fn assert_refusal(response: &Json, message: &str) {
     assert_json(response.at("code"), "1");
     assert!(response.at("stdout").is_str(""));
     assert!(response.at("stderr").is_str(message), "{response:?}");
+}
+
+#[test]
+fn non_array_row_collections_normalise_to_empty_rows_and_zero_totals() {
+    let responses = probe_responses(&[
+        r#"{"op":"build_rows","args":[null,{"tenantId":"fabricated","tenantName":"Fabricated"},"2026-06-30"]}"#,
+        r#"{"op":"build_rows","args":[[],{"tenantId":"fabricated","tenantName":"Fabricated"},"2026-06-30"]}"#,
+    ]);
+    for response in responses {
+        assert_json(response.at("ok"), r#"[[],["0.0","0.0","0.0","0.0"]]"#);
+    }
+}
+
+#[test]
+fn closed_output_returns_without_input_eof() {
+    let scratch = Scratch::new();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut child = RunningProbe(probe_command(&scratch).spawn().unwrap());
+    drop(child.0.stdout.take().unwrap());
+    let mut input = child.0.stdin.take().unwrap();
+    input
+        .write_all(b"{\"op\":\"format_amount\",\"args\":[\"0\"]}\n")
+        .unwrap();
+    input.flush().unwrap();
+    let status = loop {
+        assert!(
+            Instant::now() < deadline,
+            "closed-output probe return deadline"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+    };
+    let mut stderr = String::new();
+    child
+        .0
+        .stderr
+        .take()
+        .unwrap()
+        .take(8192)
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert!(status.success(), "{status}: {stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+    assert!(fs::read_dir(&scratch.0).unwrap().next().is_none());
+    // Keep stdin open through observed exit so EOF cannot satisfy the contract.
+    drop(input);
 }
 
 #[test]

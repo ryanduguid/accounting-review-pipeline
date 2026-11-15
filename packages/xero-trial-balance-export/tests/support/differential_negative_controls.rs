@@ -1,8 +1,6 @@
 // Copyright 2026 Ryan Duguid
 // SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
-#[path = "../../../../tests/support/child_profile.rs"]
-mod child_profile;
 mod scratch;
 
 use scratch::Scratch;
@@ -10,7 +8,7 @@ use std::{
     env,
     fs::{self, File},
     path::{Path, PathBuf},
-    process::{Child, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -69,7 +67,8 @@ fn run(
 ) -> Captured {
     let stdout = suite.0.join("stdout.log");
     let stderr = suite.0.join("stderr.log");
-    let mut command = child_profile::command(binary(binaries, "xero-tb-differential"));
+    // Keep the caller's exit-time profile for this normally returning full comparer.
+    let mut command = Command::new(binary(binaries, "xero-tb-differential"));
     command
         .arg(python)
         .arg(baseline)
