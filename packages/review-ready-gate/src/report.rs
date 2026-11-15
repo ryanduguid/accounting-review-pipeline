@@ -491,3 +491,84 @@ mod source_commit_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod rendering_contract_tests {
+    use super::*;
+    use crate::{decimal::Decimal, engine, test_support};
+
+    #[test]
+    fn spreadsheet_formulas_are_prefixed_in_csv_and_preserved_in_json() {
+        for prefix in ["=", "+", "-", "@"] {
+            for whitespace in ["", "\t", "\u{a0}", "\u{2003}"] {
+                let value = format!("{whitespace}{prefix}fabricated");
+                assert_eq!(csv_safe(&value), format!("'{value}"));
+            }
+        }
+        for harmless in ["", "ordinary", "1+2", "\t123", "\u{a0}plain"] {
+            assert_eq!(csv_safe(harmless), harmless);
+        }
+        let mut pack = test_support::ready_pack();
+        pack.status = "NOT_READY".into();
+        pack.findings = vec![Finding::new(
+            "FORMULA",
+            "NOT_READY",
+            "\u{a0}=slot",
+            "+reason",
+            " \t@review",
+        )];
+        assert_eq!(
+            as_csv(&pack),
+            "code,status,slot,repeat,reason,reviewer_action\r\nFORMULA,NOT_READY,'\u{a0}=slot,false,'+reason,' \t@review\r\n"
+        );
+        let raw = finding_json(&pack.findings[0]);
+        for (field, value) in [
+            ("slot", "\u{a0}=slot"),
+            ("reason", "+reason"),
+            ("reviewer_action", " \t@review"),
+        ] {
+            assert_eq!(raw.at(field).as_pystr().unwrap().to_utf8().unwrap(), value);
+        }
+    }
+
+    #[test]
+    fn multiline_acknowledgements_escape_headings_without_changing_readiness() {
+        let tmp = test_support::TempDir::new();
+        let note = tmp.join("note.json");
+        let comment = "First line.\n# Fabricated heading\nLast line.";
+        fs::write(
+            &note,
+            crate::pyjson::canonical(&Json::object([
+                ("reviewer_initials", Json::str("XY")),
+                ("reviewed_on", Json::str("2026-04-12")),
+                ("comment", Json::str(comment)),
+            ])),
+        )
+        .unwrap();
+        let input = test_support::examples().join("bas-not-ready");
+        let review = |note| {
+            engine::review_pack("bas", &input, note, Decimal::parse("0.01").unwrap(), &[]).unwrap()
+        };
+        let original = review(None);
+        let acknowledged = review(Some(note.as_path()));
+        assert_eq!(original.status, "NOT_READY");
+        assert_eq!(acknowledged.status, original.status);
+        assert_eq!(acknowledged.findings, original.findings);
+        assert!(
+            as_markdown(&acknowledged).unwrap().contains(
+                "- Comment:\n  > First line.\n  > \\# Fabricated heading\n  > Last line."
+            )
+        );
+        assert_eq!(
+            as_json(&acknowledged)
+                .unwrap()
+                .at("acknowledgement")
+                .at("comment")
+                .as_pystr()
+                .unwrap()
+                .to_utf8()
+                .unwrap(),
+            comment
+        );
+    }
+}
