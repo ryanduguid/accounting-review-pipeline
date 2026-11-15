@@ -492,6 +492,36 @@ fn missing_and_undecodable_windows_pathext_keep_lookup_contracts() {
 }
 
 #[test]
+fn recursive_output_directory_conflicts_preserve_existing_artifacts() {
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    repo.put("occupied", b"fabricated directory-conflict sentinel\n");
+    let target = repo.path("missing/../occupied/child/output.md");
+    let error = evatt::files::write(&target, "fabricated replacement\n", "\n").unwrap_err();
+    #[cfg(unix)]
+    {
+        assert_eq!(
+            error,
+            format!(
+                "[Errno 17] File exists: '{}'",
+                evatt::files::text(&repo.path("missing/../occupied"))
+            )
+        );
+        assert!(repo.path("missing").is_dir());
+    }
+    #[cfg(windows)]
+    {
+        assert!(error.starts_with("[WinError "), "{error}");
+        assert!(error.contains("occupied"), "{error}");
+    }
+    assert!(!target.exists());
+    assert_eq!(repo.get("occupied"), b"fabricated directory-conflict sentinel\n");
+    for (name, bytes) in before {
+        assert_eq!(repo.get(name), bytes, "{name}");
+    }
+}
+
+#[test]
 fn record_path_propagates_real_filesystem_errors_without_changing_artifacts() {
     let repo = Repo::new();
     let before = repo.seed_outputs_and_snapshot();
