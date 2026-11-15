@@ -56,6 +56,11 @@ name = "close-control-differential"
 path = "tools/differential.rs"
 required-features = ["probe"]
 
+[[example]]
+name = "differential-negative-controls"
+path = "tests/support/differential_negative_controls.rs"
+required-features = ["probe"]
+
 [profile.release]
 lto = true
 codegen-units = 1
