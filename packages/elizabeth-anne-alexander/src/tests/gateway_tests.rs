@@ -476,6 +476,39 @@ fn test_review_timestamps_require_an_explicit_timezone() {
     }
 }
 
+#[test]
+fn malformed_decision_timestamps_preserve_the_run_and_valid_decisions_recover() {
+    for timestamp in [
+        "2026-06-30T10:00:",
+        "2026-06-30T10:00.",
+        "2026-06-30T24:01Z",
+        "2026-06-30T25:00Z",
+    ] {
+        let dir = TempDir::new();
+        let sandbox = env(dir.path());
+        let paths = decided_run(&sandbox, "ACKNOWLEDGED");
+        let expected = validate(&sandbox, &paths).unwrap();
+        let inputs = [&paths.model, &paths.evidence, &paths.receipt];
+        let before = inputs.map(|path| std::fs::read(path).unwrap());
+        let valid = std::fs::read(&paths.decision).unwrap();
+        let mut decision = read_json(&paths.decision);
+        set(&mut decision, &["reviewed_at"], Json::str(timestamp));
+        write_json(&paths.decision, &decision);
+        let invalid = std::fs::read(&paths.decision).unwrap();
+        assert_eq!(
+            validate(&sandbox, &paths).map(|_| ()),
+            Err(Failure::Gateway(
+                "human decision reviewed_at must be an ISO 8601 timestamp.".into()
+            ))
+        );
+        assert_eq!(inputs.map(|path| std::fs::read(path).unwrap()), before);
+        assert_eq!(std::fs::read(&paths.decision).unwrap(), invalid);
+        std::fs::write(&paths.decision, valid).unwrap();
+        assert_eq!(canonical(&validate(&sandbox, &paths).unwrap()), canonical(&expected));
+        assert_eq!(inputs.map(|path| std::fs::read(path).unwrap()), before);
+    }
+}
+
 fn load_tb_text(dir: &TempDir, text: &str) -> crate::util::Result<Vec<BalanceRow>> {
     let path = dir.path().join("bad.csv");
     write(&path, text);

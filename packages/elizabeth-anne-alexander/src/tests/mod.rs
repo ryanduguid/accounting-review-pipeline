@@ -47,9 +47,10 @@ impl TempDir {
             COUNTER.fetch_add(1, Ordering::Relaxed)
         );
         let path = std::env::temp_dir().join(name);
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).unwrap();
-        TempDir(crate::pypath::resolve(&path, true).unwrap())
+        std::fs::create_dir(&path).unwrap();
+        let mut owned = TempDir(path);
+        owned.0 = crate::pypath::resolve(&owned.0, true).unwrap();
+        owned
     }
 
     pub fn path(&self) -> &Path {

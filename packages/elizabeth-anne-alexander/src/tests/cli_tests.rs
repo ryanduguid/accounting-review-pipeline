@@ -517,3 +517,91 @@ fn invalid_validation_paths_preserve_the_existing_output_and_remove_staging() {
     }
     assert_eq!(snapshot(dir.path()), before);
 }
+
+#[cfg(unix)]
+#[test]
+fn looping_validation_destinations_preserve_inputs_remove_staging_and_recover() {
+    for (index, publish) in [persist::write_validation, persist::write_validation_by_path]
+        .into_iter()
+        .enumerate()
+    {
+        let dir = TempDir::new();
+        let sandbox = env(dir.path());
+        let run_dir = run_evaluation(&sandbox);
+        let out = dir.path().join("build/validation.json");
+        assert_eq!(validate_to(&sandbox, &run_dir, &out).code, 0);
+        let summary = read_json(&out);
+        let inputs = snapshot(&run_dir);
+        std::fs::remove_file(&out).unwrap();
+        std::os::unix::fs::symlink("validation.json", &out).unwrap();
+        let protected = [
+            "reviewer-evidence.json",
+            "receipt.json",
+            "decision.json",
+            "model-result.json",
+        ]
+        .map(|name| Location::Disk(run_dir.join(name)));
+        let shown = if index == 0 { Path::new("validation.json") } else { &out };
+        assert_eq!(
+            publish(&summary, &out, &protected),
+            Err(Failure::Gateway(format!(
+                "validation output cannot be written to {}: [Errno {}] Too many levels of symbolic links: '{}'.",
+                out.display(),
+                libc::ELOOP,
+                shown.display()
+            )))
+        );
+        assert_eq!(std::fs::read_link(&out).unwrap(), Path::new("validation.json"));
+        assert!(std::fs::symlink_metadata(&out).unwrap().file_type().is_symlink());
+        assert_eq!(snapshot(&run_dir), inputs);
+        assert!(
+            std::fs::read_dir(out.parent().unwrap()).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".partial"))
+        );
+        std::fs::remove_file(&out).unwrap();
+        publish(&summary, &out, &protected).unwrap();
+        assert_eq!(pyjson::canonical(&read_json(&out)), pyjson::canonical(&summary));
+        assert_eq!(snapshot(&run_dir), inputs);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn lexical_parent_obstructions_preserve_inputs_and_recover_after_replacement() {
+    for publish in [persist::write_validation, persist::write_validation_by_path] {
+        let dir = TempDir::new();
+        let sandbox = env(dir.path());
+        let run_dir = run_evaluation(&sandbox);
+        let summary_path = dir.path().join("build/validation.json");
+        assert_eq!(validate_to(&sandbox, &run_dir, &summary_path).code, 0);
+        let summary = read_json(&summary_path);
+        let inputs = snapshot(&run_dir);
+        let blocker = dir.path().join("blocker");
+        write(&blocker, "fabricated owned obstruction\n");
+        let out = dir.path().join("new/../blocker/validation.json");
+        assert_eq!(
+            publish(&summary, &out, &[]),
+            Err(Failure::Gateway(format!(
+                "validation output cannot be written to {}: [Errno {}] File exists: '{}'.",
+                out.display(),
+                libc::EEXIST,
+                out.parent().unwrap().display()
+            )))
+        );
+        assert_eq!(
+            std::fs::read_to_string(&blocker).unwrap(),
+            "fabricated owned obstruction\n"
+        );
+        assert!(dir.path().join("new").is_dir());
+        assert_eq!(snapshot(&run_dir), inputs);
+        assert_eq!(std::fs::read_dir(dir.path().join("new")).unwrap().count(), 0);
+        std::fs::remove_file(&blocker).unwrap();
+        std::fs::create_dir(&blocker).unwrap();
+        publish(&summary, &out, &[]).unwrap();
+        assert_eq!(pyjson::canonical(&read_json(&out)), pyjson::canonical(&summary));
+        assert_eq!(snapshot(&run_dir), inputs);
+    }
+}
