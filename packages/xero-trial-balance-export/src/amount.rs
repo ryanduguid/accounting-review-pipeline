@@ -309,4 +309,31 @@ mod tests {
         assert!(large.add(&Amount::parse("1e-30").unwrap()).is_err());
         assert!(!Amount::parse(".004").unwrap().is_zero());
     }
+
+    #[test]
+    fn addition_discards_only_redundant_coefficient_zeros() {
+        let one = Amount::parse(&format!("1.{}", "0".repeat(60))).unwrap();
+        let sum = one.add(&Amount::parse("1").unwrap()).unwrap();
+        assert_eq!(sum.format(), "2.0");
+        assert!(sum.equal(&Amount::parse("2").unwrap()));
+        let difference = sum.sub(&one).unwrap();
+        assert_eq!(difference.format(), "1.0");
+        assert!(difference.equal(&Amount::parse("1").unwrap()));
+    }
+
+    #[test]
+    fn exponent_bounds_refuse_unsupported_literals_before_arithmetic() {
+        for input in ["1e1000000000000000000", "1e-1999999999999999997"] {
+            assert_eq!(
+                Amount::parse(input).unwrap_err(),
+                Failure {
+                    code: 1,
+                    stdout: String::new(),
+                    stderr: format!(
+                        "error: report cell \"{input}\" is not an amount. The API shape may have changed, or this is not a trial balance report.\n"
+                    ),
+                }
+            );
+        }
+    }
 }
