@@ -510,6 +510,36 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     #[test]
+    fn an_open_directory_is_not_a_regular_disclosure_record() {
+        struct OwnedDirectory(PathBuf);
+        impl Drop for OwnedDirectory {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let path = std::env::temp_dir().join(format!("evatt-directory-handle-{}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        let owned = OwnedDirectory(path);
+        let sentinel = owned.0.join("sentinel.txt");
+        std::fs::write(&sentinel, b"fabricated directory contents\n").unwrap();
+        #[cfg(unix)]
+        let file = std::fs::File::open(&owned.0).unwrap();
+        #[cfg(windows)]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .access_mode(0)
+                .custom_flags(0x0200_0000)
+                .open(&owned.0)
+                .unwrap()
+        };
+        assert!(file.metadata().unwrap().is_dir());
+        assert!(!one_link_open(&file).unwrap());
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"fabricated directory contents\n");
+        drop(file);
+    }
+
+    #[test]
     fn missing_windows_entries_short_circuit_metadata_but_unknown_errors_do_not() {
         for code in [2, 3] {
             assert!(!attribute_requires_lstat(u32::MAX, Some(code)).unwrap());

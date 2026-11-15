@@ -266,6 +266,7 @@ mod tests {
         let text = decode_os(raw);
         assert_eq!(pytext::repr_os(&text), "'in\\udcff'");
         assert_eq!(encode_os(&text), raw);
+        assert_eq!(path_text(Path::new(raw)), text);
         // A genuine private-use character from the carrier's range stays itself.
         let genuine = OsStr::from_bytes("in\u{10FCFF}\u{10F7FF}".as_bytes());
         let genuine_text = decode_os(genuine);
@@ -300,6 +301,12 @@ mod windows_tests {
             ("C:x", "C:x", r"C:x\agreements.json"),
             ("//server/share", r"\\server\share\", r"\\server\share\agreements.json"),
             ("//server", r"\\server", r"\\server\agreements.json\"),
+            (
+                r"\\?\UNC\server\share",
+                r"\\?\UNC\server\share\",
+                r"\\?\UNC\server\share\agreements.json",
+            ),
+            ("./C:review", r".\C:review", r".\C:review\agreements.json"),
             ("a/", "a", r"a\agreements.json"),
             ("/a//b/.", r"\a\b", r"\a\b\agreements.json"),
         ] {
@@ -315,5 +322,92 @@ mod windows_tests {
         let text = decode_os(&raw);
         assert_eq!(pytext::repr_os(&text), r"'in\ud800'");
         assert_eq!(encode_os(&text), raw);
+        assert_eq!(path_text(Path::new(&raw)), text);
+    }
+}
+
+#[cfg(test)]
+mod error_contract_tests {
+    use super::*;
+    use std::{fs, path::PathBuf};
+
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("evatt-oserror-{}-{nonce}-{sequence}", std::process::id()));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn errors_without_os_codes_preserve_their_native_message() {
+        let open = fs::File::open("sample\0name").unwrap_err();
+        let rename = fs::rename("sample\0name", "unused").unwrap_err();
+        assert_eq!(open.raw_os_error(), None);
+        assert_eq!(rename.raw_os_error(), None);
+        assert_eq!(file_error(&open, "sample\0name"), open.to_string());
+        assert_eq!(os_error(&rename, "sample\0name", Some("unused")), rename.to_string());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_filesystem_errors_use_cpython_file_errnos() {
+        let scratch = Scratch::new();
+        let existing = scratch.0.join("existing");
+        fs::write(&existing, b"fabricated file").unwrap();
+        let missing = fs::File::open(scratch.0.join("missing")).unwrap_err();
+        let exists = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&existing)
+            .unwrap_err();
+        let not_directory = fs::read_dir(&existing).unwrap_err();
+        for (error, label, codes, expected) in [
+            (
+                missing,
+                "missing",
+                vec![2],
+                "[Errno 2] No such file or directory: 'missing'",
+            ),
+            (exists, "existing", vec![80, 183], "[Errno 17] File exists: 'existing'"),
+            (
+                not_directory,
+                "existing",
+                vec![267],
+                "[Errno 20] Not a directory: 'existing'",
+            ),
+        ] {
+            assert!(codes.contains(&error.raw_os_error().unwrap()), "{error:?}");
+            assert_eq!(file_error(&error, label), expected);
+        }
+        assert_eq!(fs::read(&existing).unwrap(), b"fabricated file");
+        assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_rename_errors_include_both_supplied_paths() {
+        let scratch = Scratch::new();
+        let error = fs::rename(scratch.0.join("missing"), scratch.0.join("destination")).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(2));
+        assert_eq!(
+            os_error(&error, "missing", Some("destination")),
+            "[Errno 2] No such file or directory: 'missing' -> 'destination'"
+        );
+        assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 0);
     }
 }
