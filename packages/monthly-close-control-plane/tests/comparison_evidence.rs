@@ -8,7 +8,14 @@ use monthly_close_control_plane::{
     pyjson::{self, Json},
     report, sha256, viewer,
 };
-use std::{collections::BTreeMap, fs, path::Path, time::SystemTime};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::Path,
+    process::{Child, Output, Stdio},
+    thread,
+    time::{Duration, Instant, SystemTime},
+};
 
 #[path = "../../../tests/support/child_profile.rs"]
 mod child_profile;
@@ -392,6 +399,155 @@ fn save_schedule(config: &ReviewConfig, schedule: &Json) {
         pyjson::pretty(schedule),
     )
     .unwrap();
+}
+
+struct RunningView(Child);
+
+impl Drop for RunningView {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn bounded_view(directory: &Path) -> Output {
+    let capture = TempDir::new();
+    let stdout = capture.join("stdout");
+    let stderr = capture.join("stderr");
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut child = RunningView(
+        child_profile::command(env!("CARGO_BIN_EXE_close-control"))
+            .args(["view", "--pack-dir"])
+            .arg(directory)
+            .stdout(Stdio::from(fs::File::create(&stdout).unwrap()))
+            .stderr(Stdio::from(fs::File::create(&stderr).unwrap()))
+            .spawn()
+            .unwrap(),
+    );
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "saved equity view exceeded 60s");
+        thread::sleep(Duration::from_millis(10));
+    };
+    Output {
+        status,
+        stdout: fs::read(stdout).unwrap(),
+        stderr: fs::read(stderr).unwrap(),
+    }
+}
+
+fn saved_payloads(directory: &Path) -> BTreeMap<String, Vec<u8>> {
+    inventory(directory)
+        .into_iter()
+        .map(|(name, (bytes, _))| (name, bytes))
+        .collect()
+}
+
+fn successful_equity_view(directory: &Path) -> Output {
+    let shown = bounded_view(directory);
+    assert!(
+        shown.status.success() && shown.stderr.is_empty() && !shown.stdout.is_empty(),
+        "{shown:?}"
+    );
+    shown
+}
+
+fn equity_summary_disagreement(summary: &str) -> String {
+    let digests: Vec<_> = summary
+        .lines()
+        .filter_map(|line| line.strip_prefix("- Result digest: "))
+        .collect();
+    assert_eq!(digests.len(), 1);
+    let digest = digests[0];
+    assert_eq!(digest.len(), 64);
+    assert!(
+        digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    );
+    let body = |status| {
+        format!(
+            "['', '- Result: {status}; currency: AUD.', '- Currency evidence: Fabricated ledger export currency declaration.', '- Result digest: {digest}', '', '| Account | Opening | Movement | Expected close | Actual close | Unexplained |', '| --- | ---: | ---: | ---: | ---: | ---: |', '| E1 | 0 | 0 | 0 | 0 | 0 |', '| Total | 0 | 0 | 0 | 0 | 0 |', '', '| Movement | Account | Date | Debit | Credit | Description | Evidence |', '| --- | --- | --- | ---: | ---: | --- | --- |', '']"
+        )
+    };
+    format!(
+        "close-summary.md: the 'Equity reconciliation' section disagrees with close-review-pack.json: renders {}, expected {}",
+        body("REVIEW"),
+        body("PASS")
+    )
+}
+
+fn assert_equity_summary_refused(inputs: &Path, directory: &Path, diagnostic: &str) {
+    let before_inputs = inventory(inputs);
+    let before_pack = inventory(directory);
+    for error in [
+        viewer::verify_payloads(&saved_payloads(directory)).unwrap_err(),
+        viewer::verify_pack(directory).unwrap_err(),
+        viewer::render_review_sheet(directory).unwrap_err(),
+    ] {
+        assert_eq!(error, diagnostic);
+    }
+    let shown = bounded_view(directory);
+    assert_eq!(shown.status.code(), Some(1), "{shown:?}");
+    assert!(shown.stdout.is_empty(), "{shown:?}");
+    let ending = if cfg!(windows) { "\r\n" } else { "\n" };
+    assert_eq!(
+        String::from_utf8(shown.stderr).unwrap(),
+        format!("close-control view: verification failed: {diagnostic}{ending}")
+    );
+    assert_eq!(inventory(inputs), before_inputs);
+    assert_eq!(inventory(directory), before_pack);
+}
+
+#[test]
+fn saved_equity_summary_disagreement_preserves_evidence_and_recovers() {
+    let inputs = equity_fixture();
+    let config = equity_config(&inputs, "2027-01-31", "2027-02-28");
+    save_schedule(
+        &config,
+        &equity_schedule(&config, "2027-01-31", "2027-02-28"),
+    );
+    let before_inputs = inventory(&inputs.0);
+    let output = TempDir::new();
+    let directory = output.join("pack");
+    write_pack(&config, &directory);
+    let original = saved_payloads(&directory);
+    let before_pack = inventory(&directory);
+    viewer::verify_payloads(&original).unwrap();
+    let rendered = viewer::render_review_sheet(&directory).unwrap();
+    let shown = successful_equity_view(&directory);
+    assert_eq!(inventory(&directory), before_pack);
+    assert_eq!(inventory(&inputs.0), before_inputs);
+    let summary = String::from_utf8(original["close-summary.md"].clone()).unwrap();
+    let needle = "- Result: PASS; currency: AUD.";
+    assert_eq!(summary.matches(needle).count(), 1);
+    let diagnostic = equity_summary_disagreement(&summary);
+    fs::write(
+        directory.join("close-summary.md"),
+        summary.replacen(needle, "- Result: REVIEW; currency: AUD.", 1),
+    )
+    .unwrap();
+    assert_equity_summary_refused(&inputs.0, &directory, &diagnostic);
+    fs::write(
+        directory.join("close-summary.md"),
+        &original["close-summary.md"],
+    )
+    .unwrap();
+    assert_eq!(saved_payloads(&directory), original);
+    let restored = inventory(&directory);
+    for (name, state) in before_pack {
+        if name != "close-summary.md" {
+            assert_eq!(restored[&name], state);
+        }
+    }
+    viewer::verify_pack(&directory).unwrap();
+    assert_eq!(viewer::render_review_sheet(&directory).unwrap(), rendered);
+    let recovered = successful_equity_view(&directory);
+    assert_eq!(recovered.stdout, shown.stdout);
+    assert_eq!(inventory(&directory), restored);
+    assert_eq!(inventory(&inputs.0), before_inputs);
 }
 
 fn assert_scope_incomparable(result: &Json, scope: &str) {
