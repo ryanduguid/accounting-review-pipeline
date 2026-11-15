@@ -40,6 +40,16 @@ fn read_log(path: &Path) -> String {
 }
 
 fn run(python: &Path, baseline: &Path, suite: &TempDir, label: &str) -> Captured {
+    run_observing(python, baseline, suite, label, || {})
+}
+
+fn run_observing(
+    python: &Path,
+    baseline: &Path,
+    suite: &TempDir,
+    label: &str,
+    mut observe: impl FnMut(),
+) -> Captured {
     let stdout = suite.join(format!("{label}.stdout"));
     let stderr = suite.join(format!("{label}.stderr"));
     // This comparer returns normally, so keep CI's exit-time profile mode.
@@ -57,6 +67,7 @@ fn run(python: &Path, baseline: &Path, suite: &TempDir, label: &str) -> Captured
     );
     let deadline = Instant::now() + Duration::from_secs(180);
     let status = loop {
+        observe();
         if let Some(status) = child.0.try_wait().unwrap() {
             break status;
         }
@@ -143,10 +154,92 @@ fn echoing_probe(python: &Path, baseline: &Path, suite: &TempDir) {
     println!("Expected echoing-probe refusal: 7024 mismatches and 12 diagnostics");
 }
 
+#[cfg(unix)]
+fn assert_oracle_stopped(pid: u32) {
+    // Signal zero only queries whether the owned oracle process still exists.
+    let result = unsafe { libc::kill(i32::try_from(pid).unwrap(), 0) };
+    let error = std::io::Error::last_os_error();
+    assert_eq!(result, -1, "oracle {pid} still exists");
+    assert_eq!(error.raw_os_error(), Some(libc::ESRCH), "{error}");
+}
+
+#[cfg(windows)]
+fn assert_oracle_stopped(pid: u32) {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, WAIT_OBJECT_0},
+        System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+    };
+
+    // The owned PID is queried without requesting permission to terminate it.
+    let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+    if process.is_null() {
+        let error = std::io::Error::last_os_error();
+        assert_eq!(error.raw_os_error(), Some(ERROR_INVALID_PARAMETER as i32));
+        return;
+    }
+    // The non-null process handle stays open through this zero-duration wait.
+    let status = unsafe { WaitForSingleObject(process, 0) };
+    let closed = unsafe { CloseHandle(process) };
+    assert_ne!(closed, 0);
+    assert_eq!(status, WAIT_OBJECT_0, "oracle {pid} is still running");
+}
+
+fn check_recovery(python: &Path, baseline: &Path, suite: &TempDir) {
+    let output = run(python, baseline, suite, "timeout-recovery");
+    assert_eq!(output.status.code(), Some(0), "{}", output.stderr);
+    assert!(output.stderr.is_empty(), "{}", output.stderr);
+    assert_eq!(
+        output.stdout,
+        "seed 1: 7024 value/file/CLI cases; 21 CLI presentation differences; 50 recorded bas and year_end coverage differences; 0 unexplained differences\n"
+    );
+    println!("Recovered after oracle timeout: 7024 cases, 0 unexplained differences");
+}
+
+fn oracle_timeout(python: &Path, baseline: &Path, suite: &TempDir, binaries: &Path) {
+    fs::copy(
+        binary(binaries, "review-ready-probe"),
+        binary(&suite.0, "review-ready-probe"),
+    )
+    .unwrap();
+    let oracle = TempDir::new();
+    let package = oracle.join("reviewready");
+    fs::create_dir(&package).unwrap();
+    fs::write(package.join("cli.py"), "").unwrap();
+    fs::write(
+        package.join("__init__.py"),
+        "import os, pathlib, time\npathlib.Path(__file__).with_name('oracle.pid').write_text(str(os.getpid()), encoding='utf-8')\ntime.sleep(170)\n",
+    )
+    .unwrap();
+    let marker = package.join("oracle.pid");
+    let mut observed = None;
+    let output = run_observing(python, &oracle.0, suite, "oracle-timeout", || {
+        if observed.is_none() {
+            observed = fs::read_to_string(&marker)
+                .ok()
+                .and_then(|text| text.parse::<u32>().ok())
+                .filter(|&pid| pid > 0)
+                .map(|pid| (pid, Instant::now()));
+        }
+    });
+    let (pid, started) = observed.expect("owned oracle wrote its PID marker");
+    assert!(
+        started.elapsed() < Duration::from_secs(150),
+        "oracle timeout took {:?}; stderr: {}",
+        started.elapsed(),
+        output.stderr
+    );
+    check_refusal(
+        output,
+        "Error: \"comparison process exceeded its 120-second deadline\"\n",
+        "oracle-timeout",
+    );
+    assert_oracle_stopped(pid);
+    check_recovery(python, baseline, suite);
+}
+
 fn main() {
     let args: Vec<_> = env::args_os().collect();
     assert_eq!(args.len(), 4, "expected PYTHON BASELINE BIN_DIR");
-    #[cfg(unix)]
     let python = Path::new(&args[1]);
     let baseline = Path::new(&args[2]);
     let binaries = Path::new(&args[3]);
@@ -168,4 +261,5 @@ fn main() {
     response_count(python, baseline, &suite);
     #[cfg(unix)]
     echoing_probe(python, baseline, &suite);
+    oracle_timeout(python, baseline, &suite, binaries);
 }
