@@ -489,6 +489,28 @@ mod tests {
         }
         assert_eq!(retry_after(None, now), 5);
     }
+
+    #[test]
+    fn retry_headers_preserve_legacy_dates_and_refuse_invalid_dates() {
+        let now = chrono::DateTime::from_timestamp(784111733, 0).unwrap();
+        for (header, seconds) in [
+            ("Sun, 06 Nov 1994 08:49:37 GMT", 44),
+            ("Sun,06 Nov 1994 08:49:37 GMT", 44),
+            ("06 Nov 1994 09:49:37+0100", 44),
+            ("06 Nov 1994 07:49:37-0100", 44),
+            ("06 Nov GMT 08:49:37 1994", 44),
+            ("06 Nov 1994 08.49.37 GMT", 44),
+            ("06 Nov 1994 08:49:37:00 GMT", 5),
+            ("06 Nov 10000 08:49:37 GMT", 5),
+            ("06 Nov 1994 08:49 GMT", 7),
+            ("06 Nov 1994 08:49:37 -2400", 5),
+            ("06 Nov 1994 08:49:37 -2359", 86384),
+            ("Sun, 06 Nov 1994 08:49:37 GMT", 44),
+        ] {
+            assert_eq!(retry_after(Some(header), now), seconds, "{header}");
+        }
+    }
+
     #[test]
     fn one_rate_retry_and_one_forced_refresh_use_the_persisted_pair() {
         let scratch = Scratch::new();

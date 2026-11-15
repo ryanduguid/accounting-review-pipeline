@@ -278,6 +278,79 @@ pub fn require_output_directory(cwd: &Path, manifest: bool, quiet: bool) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn owned_files(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        let mut files = std::collections::BTreeMap::new();
+        for entry in std::fs::read_dir(root).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files.extend(owned_files(&path));
+            } else {
+                files.insert(path.clone(), std::fs::read(path).unwrap());
+            }
+        }
+        files
+    }
+
+    #[test]
+    fn entry_inspection_preserves_native_errors_and_owned_files() {
+        let scratch = crate::testing::Scratch::new();
+        let root = resolved(&scratch.0).unwrap();
+        let retained = root.join("retained.csv");
+        std::fs::write(&retained, b"fabricated prior export\n").unwrap();
+        let before = owned_files(&root);
+        let missing = root.join("missing.csv");
+        assert_eq!(entry_exists(&retained), Ok(true));
+        assert_eq!(entry_exists(&missing), Ok(false));
+        assert_eq!(entry_exists(&retained.join("child.csv")), Ok(false));
+        let invalid = root.join("invalid\0.csv");
+        let native = std::fs::symlink_metadata(&invalid).unwrap_err();
+        let label = format!(
+            "{}{}invalid\0.csv",
+            pypath::text(&root),
+            std::path::MAIN_SEPARATOR
+        );
+        assert_eq!(
+            entry_exists(&invalid).unwrap_err(),
+            Failure::message(format!(
+                "error: cannot inspect {label} ({native}); export stopped."
+            ))
+        );
+        assert_eq!(entry_exists(&retained), Ok(true));
+        assert_eq!(entry_exists(&missing), Ok(false));
+        assert_eq!(owned_files(&root), before);
+    }
+
+    #[test]
+    fn representative_git_refusal_preserves_the_checkout_and_recovers() {
+        let scratch = crate::testing::Scratch::new();
+        let root = resolved(&scratch.0).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["init", "--quiet"])
+                .arg(&root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let ignore = root.join(".gitignore");
+        std::fs::write(&ignore, "*.csv.tmp\n").unwrap();
+        let output = root.join("synthetic-organisation.csv");
+        let before = owned_files(&root);
+        assert_eq!(
+            require_ignored_output(&output, false, false, true).unwrap_err(),
+            Failure::message(format!(
+                "a run here would write synthetic-organisation.csv inside the version-control checkout at {}, and git ignores none of those. The names are stand-ins: a default filename takes the organisation's name, and the staged files take a random one. An export holds a client's balances and its manifest names the organisation, so write it outside the checkout, or ignore the output directory there first.",
+                pypath::text(&root)
+            ))
+        );
+        assert_eq!(owned_files(&root), before);
+        std::fs::write(&ignore, "*.csv.tmp\n*.csv\n").unwrap();
+        let restored = owned_files(&root);
+        assert_eq!(require_ignored_output(&output, false, false, true), Ok(()));
+        assert_eq!(owned_files(&root), restored);
+    }
+
     #[test]
     fn output_and_cache_containment() {
         let cwd = std::env::temp_dir();

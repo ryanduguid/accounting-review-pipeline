@@ -807,6 +807,64 @@ fn owned_inventory(directory: &Path) -> Vec<PathBuf> {
     result
 }
 
+fn assert_empty_root_refusal(layout: &TokenLayout, cache: &Path, key: &str, empty: &Path) {
+    let proxy = Proxy::new(0, |_| panic!("empty roots must refuse before a request"));
+    let mut cmd = layout.command();
+    cmd.env("XERO_TOKEN_FILE", cache)
+        .env("HTTPS_PROXY", format!("http://{}", proxy.address))
+        .env(key, empty);
+    let output = run(cmd);
+    proxy.finish();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .replace("\r\n", "\n"),
+        "error: the TLS CA bundle contains no certificates; no Xero request was made.\n"
+    );
+}
+
+fn assert_valid_roots_recover(layout: &TokenLayout, cache: &Path) {
+    let server_cache = cache.to_path_buf();
+    let proxy = Proxy::new(2, move |request| {
+        service_reply(request, &server_cache, false, false)
+    });
+    let output = run(selection_command(layout, TokenSelection::BlankFlag, &proxy));
+    proxy.finish();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("Wrote 2 accounts to ")
+    );
+    assert_published(&layout.work.join("tb.csv"), false);
+}
+
+#[test]
+fn empty_tls_roots_preserve_the_selected_cache_and_valid_roots_recover() {
+    let layout = TokenLayout::new();
+    let cache = layout.caches()[1].clone();
+    let before_cache = seed_cache(&cache, "fabricated-access");
+    let lock = publication::append(&cache, ".lock");
+    let before_lock = fs::read(&lock).unwrap();
+    let empty = layout.home.join("empty-roots.pem");
+    fs::write(&empty, []).unwrap();
+    let before = owned_inventory(&layout.root.0);
+    for key in ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"] {
+        assert_empty_root_refusal(&layout, &cache, key, &empty);
+        assert_eq!(owned_inventory(&layout.root.0), before);
+        assert_eq!(fs::read(&cache).unwrap(), before_cache);
+        assert_eq!(fs::read(&lock).unwrap(), before_lock);
+        assert!(fs::read(&empty).unwrap().is_empty());
+    }
+    assert_valid_roots_recover(&layout, &cache);
+    assert_eq!(fs::read(&cache).unwrap(), before_cache);
+    assert_eq!(fs::read(&lock).unwrap(), before_lock);
+    assert!(fs::read(&empty).unwrap().is_empty());
+}
+
 #[test]
 fn native_token_cache_refusals_preserve_all_owned_files() {
     let layout = TokenLayout::new();
