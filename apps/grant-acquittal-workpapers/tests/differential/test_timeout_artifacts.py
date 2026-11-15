@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
 
 import base64
+import importlib.util
 import io
 import json
 import subprocess
@@ -11,7 +12,12 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-import differential
+SPEC = importlib.util.spec_from_file_location(
+    "grant_timeout_differential", Path(__file__).with_name("differential.py")
+)
+assert SPEC is not None and SPEC.loader is not None
+differential = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(differential)
 
 
 class TimeoutArtifacts(unittest.TestCase):
