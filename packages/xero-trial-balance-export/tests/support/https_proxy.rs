@@ -41,6 +41,9 @@ impl Proxy {
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = Arc::clone(&stop);
         let worker = thread::spawn(move || {
+            if expected == 0 {
+                return count_connections(&listener, &stopping);
+            }
             let config = configuration();
             let deadline = Instant::now() + Duration::from_secs(40);
             let mut count = 0;
@@ -84,6 +87,28 @@ impl Drop for Proxy {
             let _ = worker.join();
         }
     }
+}
+
+fn count_connections(listener: &TcpListener, stopping: &AtomicBool) -> io::Result<usize> {
+    let deadline = Instant::now() + Duration::from_secs(40);
+    let mut count = 0;
+    loop {
+        let stopped = stopping.load(Ordering::Relaxed);
+        if accept(listener, deadline)?.is_some() {
+            count += 1;
+        } else if stopped {
+            return Ok(count);
+        }
+    }
+}
+
+#[test]
+#[should_panic(expected = "every expected native request must reach the fixture")]
+fn zero_request_proxy_observes_a_connection_queued_before_finish() {
+    let proxy = Proxy::new(0, |_| panic!("zero mode must not enter a TLS exchange"));
+    let socket = TcpStream::connect_timeout(&proxy.address, Duration::from_secs(2)).unwrap();
+    drop(socket);
+    proxy.finish();
 }
 
 fn configuration() -> Arc<ServerConfig> {

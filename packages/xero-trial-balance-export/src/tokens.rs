@@ -462,6 +462,41 @@ mod tests {
         assert!(session.lock_with_budget(Duration::from_millis(1)).is_ok());
     }
     #[test]
+    fn failed_refresh_preserves_the_cache_and_releases_the_transaction_lock() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("token.json");
+        let session = TokenSession::new(&path).unwrap();
+        session.save(&synthetic(1800)).unwrap();
+        let before = fs::read(&path).unwrap();
+        let modified = fs::metadata(&path).unwrap().modified().unwrap();
+        let lock = publication::append(&path, ".lock");
+        let lock_before = fs::read(&lock).unwrap();
+        let inventory = || {
+            let mut names: Vec<_> = fs::read_dir(&scratch.0)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+            names.sort();
+            names
+        };
+        let names = inventory();
+        for attempt in 1..=2 {
+            let expected = Failure::message(format!("fabricated refresh refusal {attempt}"));
+            let failure = session
+                .access_token(true, |refresh| {
+                    assert_eq!(refresh, "synthetic-refresh");
+                    Err(expected.clone())
+                })
+                .unwrap_err();
+            assert_eq!(failure, expected);
+            assert_eq!(fs::read(&path).unwrap(), before);
+            assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
+            assert_eq!(fs::read(&lock).unwrap(), lock_before);
+            assert_eq!(inventory(), names);
+            drop(session.lock_with_budget(Duration::ZERO).unwrap());
+        }
+    }
+    #[test]
     fn saves_and_loads_fabricated_pairs_with_platform_protection() {
         let scratch = Scratch::new();
         let path = scratch.0.join("token.json");

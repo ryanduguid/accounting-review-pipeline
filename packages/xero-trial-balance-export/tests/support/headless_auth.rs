@@ -133,7 +133,10 @@ fn auth_command(layout: &TokenLayout, redirect: &str, proxy: &Proxy) -> Command 
 
 fn consent_state(child: &ConsentChild, redirect: &str) -> String {
     assert_eq!(child.line(), HEADLESS);
-    let printed = child.line();
+    consent_url_state(&child.line(), redirect)
+}
+
+fn consent_url_state(printed: &str, redirect: &str) -> String {
     let url = reqwest::Url::parse(printed.trim()).unwrap();
     assert_eq!(url.origin().ascii_serialization(), "https://login.xero.com");
     assert_eq!(url.path(), "/identity/connect/authorize");
@@ -159,6 +162,26 @@ fn consent_state(child: &ConsentChild, redirect: &str) -> String {
         16
     );
     state.into()
+}
+
+fn recording_browser_command(
+    layout: &TokenLayout,
+    redirect: &str,
+    proxy: &Proxy,
+) -> (Command, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut cmd = auth_command(layout, redirect, proxy);
+    let browser = layout.root.0.join("empty-path/xdg-open");
+    let arguments = layout.root.0.join("browser-arguments");
+    fs::write(&arguments, b"").unwrap();
+    fs::write(
+        &browser,
+        "#!/bin/sh\nprintf '%s\\n' \"$#\" \"$@\" > \"$FABRICATED_BROWSER_ARGUMENTS\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&browser, fs::Permissions::from_mode(0o700)).unwrap();
+    cmd.env("FABRICATED_BROWSER_ARGUMENTS", &arguments);
+    (cmd, arguments)
 }
 
 fn callback(redirect: &str, state: &str, field: &str, value: &str) {
@@ -300,6 +323,45 @@ fn native_headless_authorisation_refusals_preserve_the_existing_cache() {
         assert_eq!(fs::read(cache).unwrap(), before);
         assert_eq!(owned_inventory(&layout.root.0), inventory);
     }
+}
+
+#[test]
+fn native_browser_launch_ignores_a_codeless_callback_before_denial() {
+    let layout = TokenLayout::new();
+    let cache = layout.work.join("token.json");
+    let before = seed_cache(&cache, "fabricated-prior-access");
+    let modified = fs::metadata(&cache).unwrap().modified().unwrap();
+    let redirect = redirect();
+    let proxy = Proxy::new(0, |_| panic!("refused callbacks must not exchange tokens"));
+    let (cmd, arguments) = recording_browser_command(&layout, &redirect, &proxy);
+    let inventory = owned_inventory(&layout.root.0);
+    let child = ConsentChild::start(cmd);
+    let opening = "Opening browser for Xero consent...\n";
+    let guidance = "If the browser did not open, paste this URL into one:\n";
+    assert_eq!(child.line(), opening);
+    assert_eq!(child.line(), guidance);
+    let printed = child.line();
+    let state = consent_url_state(&printed, &redirect);
+    assert_eq!(
+        fs::read_to_string(arguments).unwrap(),
+        format!("1\n{}\n", printed.trim())
+    );
+    callback(&redirect, &state, "fixture", "fabricated-no-code");
+    callback(&redirect, &state, "error", "access_denied");
+    let output = child.finish();
+    proxy.finish();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "Xero returned 'access_denied' - consent was denied or cancelled. Run again.\n"
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("{opening}{guidance}{printed}")
+    );
+    assert_eq!(fs::read(&cache).unwrap(), before);
+    assert_eq!(fs::metadata(cache).unwrap().modified().unwrap(), modified);
+    assert_eq!(owned_inventory(&layout.root.0), inventory);
 }
 
 #[test]
