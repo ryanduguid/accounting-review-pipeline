@@ -1511,6 +1511,14 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     if !root.join("reviewready/cli.py").is_file() {
         return Err("oracle component source is missing".into());
     }
+    let executable = env::current_exe()?.with_file_name(if cfg!(windows) {
+        "review-ready-probe.exe"
+    } else {
+        "review-ready-probe"
+    });
+    if !executable.is_file() {
+        return Err("build all probe binaries with cargo build --locked --features probe --bins before running the differential".into());
+    }
     let scratch = Scratch::new()?;
     let mut corpus = Corpus(Vec::new());
     money(&mut corpus, seed);
@@ -1541,14 +1549,6 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         .arg(&root)
         .env("PYTHONIOENCODING", "utf-8");
     let expected = exchange(oracle, &corpus)?;
-    let executable = env::current_exe()?.with_file_name(if cfg!(windows) {
-        "review-ready-probe.exe"
-    } else {
-        "review-ready-probe"
-    });
-    if !executable.is_file() {
-        return Err("build all probe binaries with cargo build --locked --features probe --bins before running the differential".into());
-    }
     let actual: Vec<_> = names
         .into_iter()
         .zip(exchange(Command::new(executable), &corpus)?)
