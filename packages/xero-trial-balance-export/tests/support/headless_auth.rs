@@ -117,7 +117,7 @@ fn redirect() -> String {
 
 fn auth_command(layout: &TokenLayout, redirect: &str, proxy: &Proxy) -> Command {
     let empty_path = layout.root.0.join("empty-path");
-    fs::create_dir(&empty_path).unwrap();
+    fs::create_dir_all(&empty_path).unwrap();
     let mut cmd = command(env!("CARGO_BIN_EXE_xero-tb-auth"), &layout.work);
     contain(&mut cmd, layout);
     cmd.env("PATH", &empty_path)
@@ -209,6 +209,10 @@ fn callback(redirect: &str, state: &str, field: &str, value: &str) {
 }
 
 fn exchange_reply(request: Request, redirect: &str, complete: bool) -> String {
+    exchange_reply_for_code(request, redirect, complete, "fabricated+code & consent")
+}
+
+fn exchange_reply_for_code(request: Request, redirect: &str, complete: bool, code: &str) -> String {
     assert_eq!(request.authority, "identity.xero.com:443");
     assert_eq!(request.method, "POST");
     assert_eq!(request.target, "/connect/token");
@@ -229,7 +233,7 @@ fn exchange_reply(request: Request, redirect: &str, complete: bool) -> String {
         form,
         [
             ("grant_type".into(), "authorization_code".into()),
-            ("code".into(), "fabricated+code & consent".into()),
+            ("code".into(), code.into()),
             ("redirect_uri".into(), redirect.into()),
         ]
     );
@@ -239,6 +243,64 @@ fn exchange_reply(request: Request, redirect: &str, complete: bool) -> String {
         Json::object([("access_token", Json::str("fabricated-access"))])
     };
     pyjson::canonical(&response)
+}
+
+fn consent_exchange(cmd: Command, redirect: &str, code: &str) -> (Output, String, String) {
+    let child = ConsentChild::start(cmd);
+    assert_eq!(child.line(), HEADLESS);
+    let printed = child.line();
+    let state = consent_url_state(&printed, redirect);
+    callback(redirect, &state, "code", code);
+    (child.finish(), format!("{HEADLESS}{printed}"), state)
+}
+
+fn recover_authorisation(layout: &TokenLayout, prior_state: &str, lock_bytes: &[u8]) {
+    let location = redirect();
+    let reply_redirect = location.clone();
+    let proxy = Proxy::new(1, move |request| {
+        exchange_reply_for_code(request, &reply_redirect, true, "fabricated-recovery-code")
+    });
+    let (output, banner, state) = consent_exchange(
+        auth_command(layout, &location, &proxy),
+        &location,
+        "fabricated-recovery-code",
+    );
+    proxy.finish();
+    assert_ne!(state, prior_state);
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, format!("{banner}{SAVED}").as_bytes());
+    let cache = layout.work.join("token.json");
+    let saved = TokenSession::new(&cache).unwrap().load().unwrap();
+    assert!(saved.at("access_token").is_str("fabricated-access"));
+    assert!(saved.at("refresh_token").is_str("fabricated-refresh"));
+    assert_eq!(
+        fs::read(publication::append(&cache, ".lock")).unwrap(),
+        lock_bytes
+    );
+}
+
+#[test]
+fn native_headless_authorisation_transport_failure_preserves_cache_and_recovers() {
+    let layout = TokenLayout::new();
+    let cache = layout.work.join("token.json");
+    seed_cache(&cache, "fabricated-prior-access");
+    let before = cache_snapshot(&cache);
+    let location = redirect();
+    let reply_redirect = location.clone();
+    let proxy = Proxy::incomplete(1, move |request| {
+        exchange_reply(request, &reply_redirect, true)
+    });
+    let cmd = auth_command(&layout, &location, &proxy);
+    let inventory = owned_inventory(&layout.root.0);
+    let (output, banner, state) = consent_exchange(cmd, &location, "fabricated+code & consent");
+    proxy.finish();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, banner.as_bytes());
+    assert_eq!(output.stderr, TOKEN_TRANSPORT_REFUSAL.as_bytes());
+    assert_eq!(cache_snapshot(&cache), before);
+    assert_eq!(owned_inventory(&layout.root.0), inventory);
+    recover_authorisation(&layout, &state, &before.1);
 }
 
 #[test]

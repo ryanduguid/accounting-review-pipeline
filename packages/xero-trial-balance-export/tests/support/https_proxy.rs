@@ -33,8 +33,29 @@ pub struct Proxy {
     expected: usize,
 }
 
+#[derive(Clone, Copy)]
+enum ResponseFraming {
+    Complete,
+    Incomplete,
+}
+
 impl Proxy {
-    pub fn new(expected: usize, mut reply: impl FnMut(Request) -> String + Send + 'static) -> Self {
+    pub fn new(expected: usize, reply: impl FnMut(Request) -> String + Send + 'static) -> Self {
+        Self::framed(expected, ResponseFraming::Complete, reply)
+    }
+
+    pub fn incomplete(
+        expected: usize,
+        reply: impl FnMut(Request) -> String + Send + 'static,
+    ) -> Self {
+        Self::framed(expected, ResponseFraming::Incomplete, reply)
+    }
+
+    fn framed(
+        expected: usize,
+        framing: ResponseFraming,
+        mut reply: impl FnMut(Request) -> String + Send + 'static,
+    ) -> Self {
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
@@ -51,7 +72,7 @@ impl Proxy {
                 let Some(stream) = accept(&listener, deadline)? else {
                     continue;
                 };
-                exchange(stream, &config, &mut reply)?;
+                exchange(stream, &config, framing, &mut reply)?;
                 count += 1;
             }
             Ok(count)
@@ -149,6 +170,7 @@ fn accept(listener: &TcpListener, deadline: Instant) -> io::Result<Option<TcpStr
 fn exchange(
     mut socket: TcpStream,
     config: &Arc<ServerConfig>,
+    framing: ResponseFraming,
     reply: &mut impl FnMut(Request) -> String,
 ) -> io::Result<()> {
     socket.set_nonblocking(false)?;
@@ -172,7 +194,7 @@ fn exchange(
     write!(
         tls,
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
+        body.len() + usize::from(matches!(framing, ResponseFraming::Incomplete))
     )?;
     tls.flush()?;
     tls.conn.send_close_notify();
