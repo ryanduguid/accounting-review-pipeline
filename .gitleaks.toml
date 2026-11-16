@@ -1,6 +1,6 @@
 # Secret and client-identifier scanning, run by .github/workflows/secrets.yml.
 #
-# The default gitleaks rules cover credentials. The 4 rules below add the
+# The default betterleaks rules cover credentials. The 4 rules below add the
 # identifiers this repository must never hold for a real person or client: a
 # tax file number, ABN, bank detail or Medicare number. They are the rules
 # australian-accounting-skills runs, anchored on the label rather than the
