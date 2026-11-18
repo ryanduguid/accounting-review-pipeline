@@ -432,7 +432,11 @@ fn strip_word<'a>(text: &'a str, word: &str) -> Option<&'a str> {
 /// bytes, so a line of many numbers is read in linear time.
 fn account_labelled(text: &str, start: usize) -> bool {
     let from = text.floor_char_boundary(start.saturating_sub(LABEL_REACH));
-    let before = text[from..start].rsplit('\n').next().unwrap_or_default().to_ascii_lowercase();
+    let before = text[from..start]
+        .rsplit('\n')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let trim = |s: &str| {
         s.trim_end_matches(|c: char| c.is_whitespace() || c == MARKUP_BLANK || ":#.-=*_`(|".contains(c))
             .len()

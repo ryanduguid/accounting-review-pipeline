@@ -212,6 +212,20 @@ fn atomic_joiners_keep_bounded_growth() {
     }
 }
 
+/// Each labelled account number looks back a bounded distance along its line.
+#[test]
+fn account_labels_keep_bounded_growth() {
+    growth(
+        "residual sweep of labelled account numbers",
+        |n| {
+            let text = "account 123456 ".repeat(n);
+            Box::new(move || assert!(!redact::residual(&text).unwrap().is_empty()))
+        },
+        5_000,
+        20_000,
+    );
+}
+
 #[test]
 fn number_and_ambiguity_sweeps_keep_bounded_growth() {
     for unit in ["9", "9-", "9.,", "9\t ", "-", " "] {
@@ -228,16 +242,6 @@ fn number_and_ambiguity_sweeps_keep_bounded_growth() {
             20_000,
         );
     }
-    // Each labelled account number looks back a bounded distance along its line.
-    growth(
-        "residual sweep of labelled account numbers",
-        |n| {
-            let text = "account 123456 ".repeat(n);
-            Box::new(move || assert!(!redact::residual(&text).unwrap().is_empty()))
-        },
-        5_000,
-        20_000,
-    );
     for (i, unit) in [
         "TFN: 1234567\n82. next\n".into(),
         "2123\n456701) next\n".into(),

@@ -361,7 +361,7 @@ when this table, its header or its totals drift from the corpus.
 
 | Workpaper | Documents | Planted values | Misses | Residual fragments | Blind-spot values missed | False halts | False candidates | Halt rate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `bank-reconciliation` | 100 | 600 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
+| `bank-reconciliation` | 100 | 700 | 0 | 0 | 0 of 0 | 50 | 200 | 100.0% |
 | `client-queries` | 100 | 600 | 0 | 0 | 0 of 0 | 50 | 300 | 100.0% |
 | `close-review` | 100 | 300 | 0 | 0 | 0 of 0 | 50 | 546 | 100.0% |
 | `columnar-balances` | 100 | 0 | 0 | 0 | 0 of 0 | 0 | 0 | 0.0% |
@@ -370,10 +370,10 @@ when this table, its header or its totals drift from the corpus.
 | `gst-tie-out` | 100 | 800 | 0 | 0 | 100 of 100 | 50 | 200 | 100.0% |
 | `payroll-tie-out` | 100 | 1300 | 0 | 0 | 0 of 0 | 50 | 200 | 100.0% |
 | `split-identifiers` | 100 | 400 | 0 | 0 | 0 of 0 | 0 | 0 | 100.0% |
-| Total | 900 | 5000 | 0 | 0 | 399 of 400 | 350 | 2183 | 88.9% |
+| Total | 900 | 5100 | 0 | 0 | 299 of 300 | 350 | 2183 | 88.9% |
 
 0 misses does not mean nothing gets through. Planted values are the shapes the sweep
-was built for; the hard cases are the blind-spot values, and 399 of 400 passed. Each row repeats one
+was built for; the hard cases are the blind-spot values, and 299 of 300 passed. Each row repeats one
 template with fixed prose and only its slots varying, so the sample behaves like 9
 templates, not 900 independent documents, and a halt rate mostly reports that prose.
 
