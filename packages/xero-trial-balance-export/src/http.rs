@@ -215,7 +215,7 @@ pub fn refresh(http: &impl Http, credentials: &Credentials, refresh_token: &str)
     pyjson::loads_response(&response.body).map_err(|_| Failure::message("error: Xero returned a non-JSON token response; the existing token cache was left untouched."))
 }
 
-pub fn retry_after(value: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> u64 {
+pub fn retry_after(value: Option<&str>, now: jiff::Timestamp) -> u64 {
     let Some(value) = value else {
         return 5;
     };
@@ -230,7 +230,8 @@ pub fn retry_after(value: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> u
     let parsed = crate::http_date::parse(value);
     match parsed {
         Some(time) => {
-            let milliseconds = time.timestamp_millis() - now.timestamp_millis();
+            // Whole milliseconds since the epoch, rounded down for an instant before it.
+            let milliseconds = time.as_millis() - now.as_nanosecond().div_euclid(1_000_000);
             if milliseconds <= 0 {
                 0
             } else {
@@ -264,11 +265,12 @@ pub fn api_get(
                     "error: Xero is still rate limiting after a {wait}s wait - re-run later."
                 )));
             }
-            wait = retry_after(response.retry_after.as_deref(), chrono::Utc::now());
+            wait = retry_after(response.retry_after.as_deref(), jiff::Timestamp::now());
             if wait > 60 {
                 let asked = crate::amount::shown(response.retry_after.as_deref().unwrap_or("None"));
-                let reset = (chrono::Local::now() + chrono::Duration::seconds(wait as i64))
-                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+                let reset = (jiff::ZonedDateTime::now()
+                    + jiff::SignedDuration::from_secs(wait as i64))
+                .strftime("%Y-%m-%dT%H:%M:%S%:z");
                 return Err(Failure::message(format!(
                     "error: Xero rate limit hit and sent Retry-After: {asked}, over the 60s cap this script will sleep for. The limit resets at or after {reset} - re-run after that (computed from the clamped {wait}s wait; the real reset may be later)."
                 )));
@@ -476,7 +478,7 @@ mod tests {
     }
     #[test]
     fn retry_header_grammar_and_clamp() {
-        let now = chrono::DateTime::from_timestamp(1780000000, 0).unwrap();
+        let now = jiff::Timestamp::from_second(1780000000).unwrap();
         for (text, expected) in [
             ("0", 0),
             ("000010", 10),
@@ -492,7 +494,7 @@ mod tests {
 
     #[test]
     fn retry_headers_preserve_legacy_dates_and_refuse_invalid_dates() {
-        let now = chrono::DateTime::from_timestamp(784111733, 0).unwrap();
+        let now = jiff::Timestamp::from_second(784111733).unwrap();
         for (header, seconds) in [
             ("Sun, 06 Nov 1994 08:49:37 GMT", 44),
             ("Sun,06 Nov 1994 08:49:37 GMT", 44),
@@ -509,6 +511,50 @@ mod tests {
         ] {
             assert_eq!(retry_after(Some(header), now), seconds, "{header}");
         }
+    }
+
+    #[test]
+    fn retry_dates_count_whole_milliseconds_up_to_the_end_of_9999() {
+        let at = |second, nanosecond| jiff::Timestamp::new(second, nanosecond).unwrap();
+        for (header, now, seconds) in [
+            // Half a millisecond before the epoch counts as one whole millisecond.
+            ("Thu, 01 Jan 1970 00:00:00 GMT", at(-1, 999_500_000), 1),
+            ("Thu, 01 Jan 1970 00:00:00 GMT", at(0, 0), 0),
+            (
+                "Sun, 06 Nov 1994 08:49:37 GMT",
+                at(784111776, 999_500_000),
+                1,
+            ),
+            ("Fri, 31 Dec 9999 23:59:59 -2359", at(1780000000, 0), 86400),
+        ] {
+            assert_eq!(retry_after(Some(header), now), seconds, "{header}");
+        }
+    }
+
+    #[test]
+    fn long_rate_limit_names_the_reset_in_local_time_to_the_second() {
+        let scratch = Scratch::new();
+        let http = Scripted::new(
+            &scratch.0.join("token.json"),
+            vec![response(429, "", Some("86400"))],
+        );
+        let expected = jiff::Timestamp::now() + jiff::SignedDuration::from_secs(86400);
+        let stderr = scripted_get(&http).unwrap_err().stderr;
+        let reset = stderr
+            .split("resets at or after ")
+            .nth(1)
+            .and_then(|rest| rest.split(" - re-run").next())
+            .unwrap();
+        // RFC 3339 with whole seconds and a numeric offset, never Z or a zone name.
+        let bytes = reset.as_bytes();
+        assert!(
+            reset.len() == 25 && matches!(bytes[19], b'+' | b'-') && bytes[22] == b':',
+            "{reset}"
+        );
+        let instant: jiff::Timestamp = reset.parse().unwrap();
+        let local = instant.to_zoned_datetime(jiff::tz::TimeZone::system());
+        assert_eq!(&reset[19..], local.strftime("%:z").to_string());
+        assert!(instant.duration_since(expected).abs() < jiff::SignedDuration::from_secs(60));
     }
 
     #[test]

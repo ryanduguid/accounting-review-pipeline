@@ -171,12 +171,13 @@ pub fn execute(input: &Json) -> Result<Json> {
                 .get("now")
                 .and_then(tokens::number)
                 .and_then(|n| {
-                    chrono::DateTime::from_timestamp(
+                    jiff::Timestamp::new(
                         n.floor() as i64,
-                        ((n.fract() * 1_000_000_000.0).round() as u32).min(999_999_999),
+                        ((n.fract() * 1_000_000_000.0).round() as u32).min(999_999_999) as i32,
                     )
+                    .ok()
                 })
-                .unwrap_or_else(chrono::Utc::now);
+                .unwrap_or_else(jiff::Timestamp::now);
             let value = string(0);
             Ok(Json::int(http::retry_after(
                 if matches!(arg(0), Json::Null) {

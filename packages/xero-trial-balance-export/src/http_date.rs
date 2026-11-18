@@ -1,6 +1,7 @@
 //! Retry-After date grammar, adapted from CPython 3.15 email._parseaddr.
 use crate::pytext;
-use chrono::{DateTime, NaiveDate, Utc};
+use jiff::SignedDuration;
+use jiff::civil::DateTime;
 
 fn integer(value: &str) -> Option<i64> {
     let value: String = value
@@ -15,11 +16,14 @@ fn integer(value: &str) -> Option<i64> {
     value.parse().ok()
 }
 
+/// The parsed instant as time since the Unix epoch. It is computed from the
+/// civil date and time, so every year from 1 to 9999 fits at any offset;
+/// `Timestamp` ends at 9999-12-30T22:00:00.999999999Z.
 #[expect(
     clippy::too_many_lines,
     reason = "parses every accepted HTTP date form"
 )]
-pub fn parse(value: &str) -> Option<DateTime<Utc>> {
+pub fn parse(value: &str) -> Option<SignedDuration> {
     let mut fields: Vec<String> = value.split_whitespace().map(str::to_owned).collect();
     let first = fields.first()?;
     if first.ends_with(',')
@@ -85,7 +89,7 @@ pub fn parse(value: &str) -> Option<DateTime<Utc>> {
     if !months.contains(&month.as_str()) {
         (day, month) = (month, day.to_ascii_lowercase());
     }
-    let month = (months.iter().position(|&m| m == month)? % 12 + 1) as u32;
+    let month = (months.iter().position(|&m| m == month)? % 12 + 1) as i8;
     day = day.trim_end_matches(',').into();
     if year.find(':').is_some_and(|i| i > 0) {
         std::mem::swap(&mut year, &mut time);
@@ -114,8 +118,10 @@ pub fn parse(value: &str) -> Option<DateTime<Utc>> {
     if !(1..=9999).contains(&year) {
         return None;
     }
-    let date = NaiveDate::from_ymd_opt(year as i32, month, integer(&day)?.try_into().ok()?)?;
-    let date = date.and_hms_opt(
+    let date = DateTime::new(
+        year as i16,
+        month,
+        integer(&day)?.try_into().ok()?,
         integer(parts[0])?.try_into().ok()?,
         integer(parts[1])?.try_into().ok()?,
         if parts.len() == 3 {
@@ -123,7 +129,9 @@ pub fn parse(value: &str) -> Option<DateTime<Utc>> {
         } else {
             0
         },
-    )?;
+        0,
+    )
+    .ok()?;
     let zone = zone.to_ascii_uppercase();
     let offset = match zone.as_str() {
         "UT" | "UTC" | "GMT" | "Z" => 0,
@@ -142,8 +150,8 @@ pub fn parse(value: &str) -> Option<DateTime<Utc>> {
     if seconds >= 86400 {
         return None;
     }
-    date.and_utc()
-        .checked_sub_signed(chrono::Duration::seconds(if offset < 0 {
+    date.duration_since(DateTime::constant(1970, 1, 1, 0, 0, 0, 0))
+        .checked_sub(SignedDuration::from_secs(if offset < 0 {
             -seconds
         } else {
             seconds
@@ -161,12 +169,23 @@ mod tests {
             "Sun Nov  6 08:49:37 1994",
             "06 Nov 1994 08:49:37",
         ] {
-            assert_eq!(parse(value).unwrap().timestamp(), 784111777);
+            assert_eq!(parse(value).unwrap().as_secs(), 784111777);
         }
         assert_eq!(
-            parse("Tue, 06 Nov 1994 08:49:37 EST").unwrap().timestamp(),
+            parse("Tue, 06 Nov 1994 08:49:37 EST").unwrap().as_secs(),
             784129777
         );
         assert!(parse("06 Nov 1994 25:00:00 GMT").is_none());
+    }
+
+    #[test]
+    fn the_last_day_of_9999_parses_at_any_offset() {
+        for (value, seconds) in [
+            ("Fri, 31 Dec 9999 23:59:59 GMT", 253_402_300_799),
+            ("Fri, 31 Dec 9999 23:59:59 -2359", 253_402_387_139),
+            ("Fri, 31 Dec 9999 00:00:00 +2359", 253_402_128_060),
+        ] {
+            assert_eq!(parse(value).map(|t| t.as_secs()), Some(seconds), "{value}");
+        }
     }
 }

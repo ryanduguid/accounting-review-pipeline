@@ -179,10 +179,7 @@ fn negative_number(value: &str) -> bool {
 )]
 pub fn parse(args: &[OsString], prog: &str, auth: bool) -> Result<Option<Options>> {
     let mut options = Options {
-        date: chrono::Local::now()
-            .date_naive()
-            .format("%Y-%m-%d")
-            .to_string(),
+        date: jiff::ZonedDateTime::now().date().to_string(),
         tenant: None,
         out: None,
         token: None,
@@ -330,29 +327,31 @@ pub fn iso_date(value: &str) -> Result<String> {
     {
         return Err(failure());
     }
-    let year: i32 = value[..4].parse().map_err(|_| failure())?;
+    let year: i16 = value[..4].parse().map_err(|_| failure())?;
     if !(1..=9999).contains(&year) {
         return Err(failure());
     }
     let date = if value.len() == 10 && value.as_bytes()[4] == b'-' && value.as_bytes()[7] == b'-' {
-        chrono::NaiveDate::from_ymd_opt(
+        jiff::civil::Date::new(
             year,
             value[5..7].parse().map_err(|_| failure())?,
             value[8..10].parse().map_err(|_| failure())?,
         )
+        .ok()
     } else if value.len() == 8 && value.bytes().all(|b| b.is_ascii_digit()) {
-        chrono::NaiveDate::from_ymd_opt(
+        jiff::civil::Date::new(
             year,
             value[4..6].parse().map_err(|_| failure())?,
             value[6..8].parse().map_err(|_| failure())?,
         )
+        .ok()
     } else {
         let remainder = value[4..].strip_prefix('-').unwrap_or(&value[4..]);
         let week = remainder.strip_prefix('W').ok_or_else(failure)?;
         if week.len() < 2 {
             return Err(failure());
         }
-        let number: u32 = week[..2].parse().map_err(|_| failure())?;
+        let number: i8 = week[..2].parse().map_err(|_| failure())?;
         let remaining = &week[2..];
         if !remaining.is_empty() && remaining.starts_with('-') != (value.as_bytes()[4] == b'-') {
             return Err(failure());
@@ -364,22 +363,15 @@ pub fn iso_date(value: &str) -> Result<String> {
         let day = if rest.is_empty() {
             1
         } else {
-            rest[..1].parse::<u32>().map_err(|_| failure())?
+            rest[..1].parse().map_err(|_| failure())?
         };
-        let weekday = match day {
-            1 => chrono::Weekday::Mon,
-            2 => chrono::Weekday::Tue,
-            3 => chrono::Weekday::Wed,
-            4 => chrono::Weekday::Thu,
-            5 => chrono::Weekday::Fri,
-            6 => chrono::Weekday::Sat,
-            7 => chrono::Weekday::Sun,
-            _ => return Err(failure()),
-        };
-        chrono::NaiveDate::from_isoywd_opt(year, number, weekday)
+        let weekday = jiff::civil::Weekday::from_monday_one_offset(day).map_err(|_| failure())?;
+        jiff::civil::ISOWeekDate::new(year, number, weekday)
+            .ok()
+            .map(jiff::civil::ISOWeekDate::date)
     };
-    date.filter(|d| (1..=9999).contains(&chrono::Datelike::year(d)))
-        .map(|d| d.format("%Y-%m-%d").to_string())
+    date.filter(|d| (1..=9999).contains(&d.year()))
+        .map(|d| d.to_string())
         .ok_or_else(failure)
 }
 
@@ -512,5 +504,38 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn iso_dates_keep_the_calendar_and_years_1_to_9999() {
+        for (value, date) in [
+            ("0001-01-01", "0001-01-01"),
+            ("00010101", "0001-01-01"),
+            ("0001-W01-1", "0001-01-01"),
+            ("9999-12-31", "9999-12-31"),
+            ("9999-W52-5", "9999-12-31"),
+            ("2024-02-29", "2024-02-29"),
+            ("2000-02-29", "2000-02-29"),
+            ("2026-W01", "2025-12-29"),
+            ("2026-+1-05", "2026-01-05"),
+        ] {
+            assert_eq!(iso_date(value).unwrap(), date, "{value}");
+        }
+        for invalid in [
+            "9999-W52-6",
+            "1900-02-29",
+            "2026-04-31",
+            "2026-13-01",
+            "2026-00-10",
+            "2026--1-05",
+            "2026-W00-1",
+            "2026-W27-0",
+            "2026-W27-8",
+            "0000-W01-1",
+        ] {
+            assert!(iso_date(invalid).is_err(), "{invalid}");
+        }
+        let today = parse(&[], "export-tb", false).unwrap().unwrap().date;
+        assert_eq!(iso_date(&today).unwrap(), today);
     }
 }

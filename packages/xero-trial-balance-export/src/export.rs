@@ -209,13 +209,13 @@ fn as_at_date(title: &str) -> Option<String> {
         "November",
         "December",
     ];
-    let month = months.iter().position(|&m| m == fields[1])? as u32 + 1;
-    let year: i32 = fields[2].parse().ok()?;
+    let month = months.iter().position(|&m| m == fields[1])? as i8 + 1;
+    let year: i16 = fields[2].parse().ok()?;
     if !(1..=9999).contains(&year) {
         return None;
     }
-    let date = chrono::NaiveDate::from_ymd_opt(year, month, fields[0].parse().ok()?)?;
-    Some(date.format("%Y-%m-%d").to_string())
+    let date = jiff::civil::Date::new(year, month, fields[0].parse().ok()?).ok()?;
+    Some(date.to_string())
 }
 
 #[expect(
@@ -398,6 +398,21 @@ mod tests {
         )
     }
 
+    #[test]
+    fn as_at_titles_keep_the_calendar_and_years_1_to_9999() {
+        for (title, date) in [
+            ("As at 30 June 2026", Some("2026-06-30")),
+            ("As at 1 January 0001", Some("0001-01-01")),
+            ("As at 31 December 9999", Some("9999-12-31")),
+            ("As at 29 February 2024", Some("2024-02-29")),
+            ("As at 29 February 1900", None),
+            ("As at 31 April 2026", None),
+            ("As at 1 January 0000", None),
+            ("As at 0 January 2026", None),
+        ] {
+            assert_eq!(as_at_date(title).as_deref(), date, "{title}");
+        }
+    }
     #[test]
     fn publish_reports_totals_then_quiet_rerun_removes_the_prior_sidecar() {
         let scratch = Scratch::new();
