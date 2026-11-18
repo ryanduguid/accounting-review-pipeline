@@ -318,7 +318,9 @@ pub fn write_manifest(
     basis: &str,
     quiet: bool,
 ) -> Result<PathBuf> {
-    let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+    let generated_at = jiff::Timestamp::now()
+        .strftime("%Y-%m-%dT%H:%M:%S%:z")
+        .to_string();
     let payload = format!(
         "{}\n",
         pyjson::pretty(&manifest(path, digest, tenant, date, basis, &generated_at))
@@ -424,6 +426,26 @@ mod tests {
         );
         assert_eq!(fs::read(&temp).unwrap(), b"complete balanced export");
         assert!(destination.is_dir());
+    }
+    #[test]
+    fn manifest_time_is_whole_seconds_with_a_numeric_utc_offset() {
+        let scratch = Scratch::new();
+        let csv = scratch.0.join("tb.csv");
+        let tenant = Json::object([
+            ("tenantId", Json::str("synthetic-tenant")),
+            ("tenantName", Json::str("Synthetic Organisation")),
+        ]);
+        let before = jiff::Timestamp::now();
+        let manifest = write_manifest(&csv, "digest", &tenant, "2026-06-30", "cash", true).unwrap();
+        let manifest = pyjson::loads(&fs::read_to_string(manifest).unwrap()).unwrap();
+        let generated = report::text(manifest.at("export").at("generated_at"));
+        // RFC 3339 with whole seconds and +00:00, never Z.
+        assert!(
+            generated.len() == 25 && generated.ends_with("+00:00"),
+            "{generated}"
+        );
+        let generated: jiff::Timestamp = generated.parse().unwrap();
+        assert!(generated.duration_since(before).abs() < jiff::SignedDuration::from_secs(60));
     }
     #[test]
     fn parked_manifest_restores_without_overwriting_an_existing_recovery_file() {
