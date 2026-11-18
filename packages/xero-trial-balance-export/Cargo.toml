@@ -17,7 +17,7 @@ reqwest = { version = "0.13.5", features = ["form", "query"] }
 base64 = "0.23.1"
 getrandom = "0.4"
 unicode-normalization = "0.1.25"
-chrono = "0.4"
+jiff = "1.0.1"
 tokio = { version = "1.53", features = ["rt", "time", "net"] }
 socket2 = "0.6"
 
