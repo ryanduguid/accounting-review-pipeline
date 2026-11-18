@@ -508,6 +508,34 @@ fn a_split_window_over_named_tokens_adds_nothing() {
     assert_eq!(values, ["1234 5678", "8765 4321"]);
 }
 
+/// A 6 or 7 digit number straight after an account label once passed whole: it
+/// is too short for the number sweep and has no check digit.
+#[test]
+fn a_labelled_account_number_halts() {
+    let found = hidden(&[
+        ("Account number 123456\n", "123456"),
+        ("account no. 1234567\n", "1234567"),
+        ("Acct: 123 456\n", "123456"),
+        ("A/C # 1234567\n", "1234567"),
+        ("**Account number:** 12-345-67\n", "1234567"),
+        ("BSB 062-000, account number 123456\n", "123456"),
+        ("Bank account\t1234567 opened\n", "1234567"),
+    ]);
+    assert!(found.is_empty(), "{found:?}");
+    for document in [
+        "Reference 123456\n",
+        "Accounts 123456\n",
+        "Account 12345\n",
+        "Account balance 123456\n",
+        "Accountant 1234567\n",
+        "Account no. 1,234.56\n",
+        "123456 account\n",
+    ] {
+        let result = redact::redact(document, &[]).unwrap();
+        assert!(result.unknowns.is_empty(), "{document:?}: {:?}", result.unknowns);
+    }
+}
+
 /// The README's limits: each of these leaves redaction with no halt.
 #[test]
 fn the_documented_limits_still_pass() {

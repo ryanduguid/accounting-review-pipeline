@@ -10,7 +10,7 @@ is the record of the judgement calls made along the way.
 Every entry below is a decision taken without asking, on the reasoning stated, with
 the cost of being wrong. Rework anything here that reads wrong.
 
-## Rulings (46)
+## Rulings (50)
 
 1. this ledger's first line uses a hyphen, not the em dash the skill template shows. Reason: the repository prose guard rejects em dashes in written files, and the recovery contract only requires the first line to name the plan file, which a hyphen preserves. Cost if wrong: a future controller matching the template literally could fail to recognise the ledger and re-dispatch completed tasks, so the plan path is spelt out in full on that line.
 2. `verify.findings` runs the residual sweep over the redacted form rather than the raw text. Reason: running it raw reported a known client twice, once as a mapped entity and again as an unclassified name, which buries the genuinely unknown items the operator must act on. Cost if wrong: verify under-reports a name that is in the map but which the operator wanted re-surfaced, caught by Task 6's verify tests.
@@ -130,6 +130,18 @@ wrap joins whole groups only, and tokens the sweep already names stay separate, 
 because Python 0.2.0's vectors hold those results. The README lists the known
 limits, and they are not exhaustive. `123` `456` `782` on their own paragraphs are outside it: the structured
 pattern replaces them, and only forms such as `123   456`, a blank line, `782` pass.
+
+50. (19 November 2026) halt on a 6 or 7 digit number straight after an account
+label: `account`, `acct` or `a/c` in any case, then optionally `number`, `num` or
+`no` and punctuation or markup, within 40 bytes on its line. Reason: a labelled bank
+account number such as `account number 123456` passed whole, being too short for
+the number sweep and without a check digit. It halts with kind `number`, so the
+operator maps it as an `entity`, as ruling 46 has the operator do for longer account
+references; no structured pattern rewrites it one-way. The label must end straight
+before the number, because `account` is a common word in workpapers and a 40-byte
+reach either side caught prose such as `quoted on the running balance account`.
+Cost: a 6 or 7 digit general ledger code written after `Account` halts too, and an
+unlabelled account number still passes.
 
 ## Deferred minors, shipped as they are (28)
 

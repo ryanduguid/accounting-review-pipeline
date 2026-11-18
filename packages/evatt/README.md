@@ -158,8 +158,11 @@ classifying the remainder. A token with exactly one dot and no other separator,
 or comma thousands groups with an optional decimal part, is treated as an
 amount. Such an amount halts only if its 9, 10 or 11 digits pass a TFN, ACN,
 Medicare or ABN check. Other tokens of 8 or more digits halt, including dotted
-identifiers, IPv4 addresses and long version strings. Shorter runs, including
-6 and 7 digit account numbers, remain outside this sweep. Ordinary long
+identifiers, IPv4 addresses and long version strings. A 6 or 7 digit token halts
+only straight after an account label: `account`, `acct` or `a/c` in any case,
+optionally followed by `number`, `num` or `no` and punctuation, as in
+`Account number: 123456`. Map it as an `entity`. Other shorter runs, including
+unlabelled account numbers, remain outside this sweep. Ordinary long
 references can halt too; this policy has no established false positive rate on
 real workpapers, and [Detection benchmark](#detection-benchmark) measures fabricated
 ones only. The fabricated `negatives.md` sample now halts on its 8-digit statutory
@@ -349,8 +352,8 @@ each place the sweep saw its value, though triage lists a value once a line. A m
 is an occurrence left in the output whole with no candidate covering it. A residual
 fragment counts an occurrence that leaves any of a word or digit group of 3 or more
 characters in the output with no candidate covering it; a miss counts here too. A blind-spot value
-comes from the limits above and is expected to pass unnoticed: a 6 or 7 digit
-account number, an initial or a name in lower case. A false halt is a fully mapped
+comes from the limits above and is expected to pass unnoticed: a 7 digit
+reference with no account label, an initial or a name in lower case. A false halt is a fully mapped
 document that halts on a false candidate. A false candidate covers no planted value.
 Halt rate is the share of documents that halt. The counts measure these fabricated
 documents only, not accuracy on real workpapers. `cargo test --test benchmark` fails

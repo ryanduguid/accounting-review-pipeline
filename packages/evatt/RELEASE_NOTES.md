@@ -121,6 +121,7 @@ fabricated. Windows execution remains a separate verification gate.
   exclusions and remaining detection limits in the README before upgrading.
 - Replace both identifiers when an email is written straight against a phone number, ABN or other identifier, so `(02) 9876 5432jane@example.com` becomes `PHONE_01EMAIL_01`, where it had become `PHONE_01jane@example.com`. Whichever started second was dropped, and the rest of it stayed in the sanitised output with no halt.
 - Halt on a TFN, ABN, ACN or Medicare number whose digit groups sit further apart than a token gap, as in `123   456   782`, `123 / 456 / 782`, `123;456;782`, `<td>123</td><td>456</td><td>782</td>`, `123*456*782` or a number wrapped inside a blockquote. These left strict redaction unchanged with no halt, found by the property test in `tests/redaction_property.rs`. Existing workpapers holding such a number now halt, and so do most columns of whole numbers, because any 9, 10 or 11 digit stretch that passes a check halts. Amounts with cents do not join unless an identifier label sits near them, so an unlabelled `1234.56   782` still passes with valid TFN digits in it. The README lists the known limits.
+- Halt on a 6 or 7 digit number straight after an account label, as in `account number 123456`, `Acct: 123 456` or `A/C # 1234567`. Such a bank account number passed whole: it is too short for the number sweep and has no check digit. Map it as an `entity`. A 6 or 7 digit ledger code written after `Account` halts too (DECISIONS.md ruling 50).
 
 # v0.2.0
 

@@ -228,6 +228,16 @@ fn number_and_ambiguity_sweeps_keep_bounded_growth() {
             20_000,
         );
     }
+    // Each labelled account number looks back a bounded distance along its line.
+    growth(
+        "residual sweep of labelled account numbers",
+        |n| {
+            let text = "account 123456 ".repeat(n);
+            Box::new(move || assert!(!redact::residual(&text).unwrap().is_empty()))
+        },
+        5_000,
+        20_000,
+    );
     for (i, unit) in [
         "TFN: 1234567\n82. next\n".into(),
         "2123\n456701) next\n".into(),

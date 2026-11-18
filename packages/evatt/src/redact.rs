@@ -274,6 +274,10 @@ const IDENTIFIER_LABELS: [&str; 7] = [
     "business number",
     "company number",
 ];
+/// Words that say the figure straight after them is a bank account number.
+const ACCOUNT_LABELS: [&str; 3] = ["account", "acct", "a/c"];
+/// Words that may stand between an account label and its number.
+const ACCOUNT_QUALIFIERS: [&str; 3] = ["number", "num", "no"];
 /// How far along a line a label counts as near, in bytes.
 const LABEL_REACH: usize = 40;
 /// What `without_markup` writes over a tag or a character reference.
@@ -414,6 +418,30 @@ fn near_label(text: &str, span: (usize, usize)) -> bool {
         let words: Vec<_> = spaced.split_whitespace().collect();
         names_identifier(&words.join(" ")) || names_identifier(&side.replace(MARKUP_BLANK, ""))
     })
+}
+
+/// `text` without a trailing `word`, if `word` ends it as a whole word.
+fn strip_word<'a>(text: &'a str, word: &str) -> Option<&'a str> {
+    let head = text.strip_suffix(word)?;
+    (!head.chars().next_back().is_some_and(char::is_alphanumeric)).then_some(head)
+}
+
+/// Whether an account label, in any case, ends the line before `start`, past
+/// punctuation, markup and a qualifier such as `number` or `no.`, as in
+/// `Account number: 123456` and `A/C 1234567`. The look-back is `LABEL_REACH`
+/// bytes, so a line of many numbers is read in linear time.
+fn account_labelled(text: &str, start: usize) -> bool {
+    let from = text.floor_char_boundary(start.saturating_sub(LABEL_REACH));
+    let before = text[from..start].rsplit('\n').next().unwrap_or_default().to_ascii_lowercase();
+    let trim = |s: &str| {
+        s.trim_end_matches(|c: char| c.is_whitespace() || c == MARKUP_BLANK || ":#.-=*_`(|".contains(c))
+            .len()
+    };
+    let mut rest = &before[..trim(&before)];
+    if let Some(head) = ACCOUNT_QUALIFIERS.iter().find_map(|word| strip_word(rest, word)) {
+        rest = &head[..trim(head)];
+    }
+    ACCOUNT_LABELS.iter().any(|label| strip_word(rest, label).is_some())
 }
 
 /// Each 9, 10 and 11 digit window of one chain of runs that crosses a split gap
@@ -563,7 +591,9 @@ pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
         }
         let value = &text[start..end];
         let digits: String = value.chars().filter(|c| pytext::is_decimal(*c as u32)).collect();
-        if digits.chars().count() < 8 {
+        // A labelled bank account number has 6 or 7 digits too.
+        let count = digits.chars().count();
+        if count < 8 && !((6..=7).contains(&count) && account_labelled(text, start)) {
             continue;
         }
         if patterns::full("_AMOUNT", value)? && !passes_identifier_check(&digits)? {
