@@ -175,7 +175,8 @@ fn fill(kind: &str, rng: &mut Rng) -> (String, Class, Option<&'static str>) {
             let date = format!("{} {} 19{}", rng.below(27) + 1, rng.pick(&MONTHS), rng.digits(2));
             (date, Class::Planted, Some("entity"))
         }
-        "account_number" => (rng.digits(6), Class::BlindSpot, None),
+        // The template labels it, so the sweep halts on it until it is mapped.
+        "account_number" => (rng.digits(6), Class::Planted, Some("entity")),
         "client_reference" => (rng.digits(7), Class::BlindSpot, None),
         "initials" => (
             format!("{}. {}", &rng.pick(&GIVEN)[..1], rng.pick(&FAMILY)),

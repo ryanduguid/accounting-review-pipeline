@@ -212,6 +212,20 @@ fn atomic_joiners_keep_bounded_growth() {
     }
 }
 
+/// Each labelled account number looks back a bounded distance along its line.
+#[test]
+fn account_labels_keep_bounded_growth() {
+    growth(
+        "residual sweep of labelled account numbers",
+        |n| {
+            let text = "account 123456 ".repeat(n);
+            Box::new(move || assert!(!redact::residual(&text).unwrap().is_empty()))
+        },
+        5_000,
+        20_000,
+    );
+}
+
 #[test]
 fn number_and_ambiguity_sweeps_keep_bounded_growth() {
     for unit in ["9", "9-", "9.,", "9\t ", "-", " "] {
