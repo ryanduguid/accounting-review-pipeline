@@ -520,6 +520,8 @@ fn a_labelled_account_number_halts() {
         ("**Account number:** 12-345-67\n", "1234567"),
         ("BSB 062-000, account number 123456\n", "123456"),
         ("Bank account\t1234567 opened\n", "1234567"),
+        ("<td>Account number</td><td>123456</td>\n", "123456"),
+        ("Account&nbsp;no.&nbsp;1234567\n", "1234567"),
     ]);
     assert!(found.is_empty(), "{found:?}");
     for document in [

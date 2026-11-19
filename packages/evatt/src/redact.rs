@@ -428,11 +428,12 @@ fn strip_word<'a>(text: &'a str, word: &str) -> Option<&'a str> {
 
 /// Whether an account label, in any case, ends the line before `start`, past
 /// punctuation, markup and a qualifier such as `number` or `no.`, as in
-/// `Account number: 123456` and `A/C 1234567`. The look-back is `LABEL_REACH`
-/// bytes, so a line of many numbers is read in linear time.
-fn account_labelled(text: &str, start: usize) -> bool {
+/// `Account number: 123456`, `A/C 1234567` and `<td>Account</td><td>123456`. The
+/// look-back is `LABEL_REACH` bytes, so a line of many numbers is read in linear
+/// time. A tag the look-back cuts or one closing after `start` stays as text.
+fn account_labelled(text: &str, start: usize, stats: &mut ScanStats) -> bool {
     let from = text.floor_char_boundary(start.saturating_sub(LABEL_REACH));
-    let before = text[from..start]
+    let before = without_markup(&text[from..start], stats)
         .rsplit('\n')
         .next()
         .unwrap_or_default()
@@ -597,7 +598,7 @@ pub fn numbers_counted(text: &str) -> Result<(Vec<Span>, ScanStats)> {
         let digits: String = value.chars().filter(|c| pytext::is_decimal(*c as u32)).collect();
         // A labelled bank account number has 6 or 7 digits too.
         let count = digits.chars().count();
-        if count < 8 && !((6..=7).contains(&count) && account_labelled(text, start)) {
+        if count < 8 && !((6..=7).contains(&count) && account_labelled(text, start, &mut stats)) {
             continue;
         }
         if patterns::full("_AMOUNT", value)? && !passes_identifier_check(&digits)? {
