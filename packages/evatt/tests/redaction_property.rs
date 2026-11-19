@@ -521,7 +521,16 @@ fn a_labelled_account_number_halts() {
         ("BSB 062-000, account number 123456\n", "123456"),
         ("Bank account\t1234567 opened\n", "1234567"),
         ("<td>Account number</td><td>123456</td>\n", "123456"),
+        // The 40-byte look-back starts inside the first tag.
+        (
+            "<td class=\"statement-detail\">Account number</td><td>123456</td>\n",
+            "123456",
+        ),
         ("Account&nbsp;no.&nbsp;1234567\n", "1234567"),
+        ("Acc No. 123456\n", "123456"),
+        ("BSB/Acc 123456\n", "123456"),
+        ("Account, number 123456\n", "123456"),
+        ("Account number, 1234567\n", "1234567"),
     ]);
     assert!(found.is_empty(), "{found:?}");
     for document in [
@@ -530,6 +539,7 @@ fn a_labelled_account_number_halts() {
         "Account 12345\n",
         "Account balance 123456\n",
         "Accountant 1234567\n",
+        "Accrued 123456\n",
         "Account no. 1,234.56\n",
         "123456 account\n",
     ] {

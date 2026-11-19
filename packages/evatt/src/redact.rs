@@ -275,7 +275,7 @@ const IDENTIFIER_LABELS: [&str; 7] = [
     "company number",
 ];
 /// Words that say the figure straight after them is a bank account number.
-const ACCOUNT_LABELS: [&str; 3] = ["account", "acct", "a/c"];
+const ACCOUNT_LABELS: [&str; 4] = ["account", "acct", "acc", "a/c"];
 /// Words that may stand between an account label and its number.
 const ACCOUNT_QUALIFIERS: [&str; 3] = ["number", "num", "no"];
 /// How far along a line a label counts as near, in bytes.
@@ -439,7 +439,7 @@ fn account_labelled(text: &str, start: usize, stats: &mut ScanStats) -> bool {
         .unwrap_or_default()
         .to_ascii_lowercase();
     let trim = |s: &str| {
-        s.trim_end_matches(|c: char| c.is_whitespace() || c == MARKUP_BLANK || ":#.-=*_`(|".contains(c))
+        s.trim_end_matches(|c: char| c.is_whitespace() || c == MARKUP_BLANK || ":#.,-=*_`(|".contains(c))
             .len()
     };
     let mut rest = &before[..trim(&before)];

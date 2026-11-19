@@ -132,7 +132,7 @@ limits, and they are not exhaustive. `123` `456` `782` on their own paragraphs a
 pattern replaces them, and only forms such as `123   456`, a blank line, `782` pass.
 
 50. (19 November 2026) halt on a 6 or 7 digit number straight after an account
-label: `account`, `acct` or `a/c` in any case, then optionally `number`, `num` or
+label: `account`, `acct`, `acc` or `a/c` in any case, then optionally `number`, `num` or
 `no` and punctuation or markup, within 40 bytes on its line. Reason: a labelled bank
 account number such as `account number 123456` passed whole, being too short for
 the number sweep and without a check digit. It halts with kind `number`, so the

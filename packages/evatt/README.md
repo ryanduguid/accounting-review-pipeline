@@ -159,7 +159,7 @@ or comma thousands groups with an optional decimal part, is treated as an
 amount. Such an amount halts only if its 9, 10 or 11 digits pass a TFN, ACN,
 Medicare or ABN check. Other tokens of 8 or more digits halt, including dotted
 identifiers, IPv4 addresses and long version strings. A 6 or 7 digit token halts
-only straight after an account label: `account`, `acct` or `a/c` in any case,
+only straight after an account label: `account`, `acct`, `acc` or `a/c` in any case,
 optionally followed by `number`, `num` or `no` and punctuation, as in
 `Account number: 123456`. Map it as an `entity`. Other shorter runs, including
 unlabelled account numbers, remain outside this sweep. Ordinary long
