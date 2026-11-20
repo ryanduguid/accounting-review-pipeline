@@ -7,7 +7,7 @@ use crate::{
     pyjson::{self, Json},
     tokens::TokenSession,
 };
-use std::time::Duration;
+use std::{borrow::Cow, time::Duration};
 
 pub const TOKEN_URL: &str = "https://identity.xero.com/connect/token";
 pub const CONNECTIONS_URL: &str = "https://api.xero.com/connections";
@@ -41,6 +41,41 @@ pub struct NativeHttp {
     runtime: tokio::runtime::Runtime,
 }
 
+fn certificates(environment: &crate::config::Environment) -> Result<Vec<reqwest::Certificate>> {
+    let custom = environment
+        .process_only("REQUESTS_CA_BUNDLE")
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            environment
+                .process_only("CURL_CA_BUNDLE")
+                .filter(|v| !v.is_empty())
+        });
+    let (roots, parse_error) = if let Some(path) = custom {
+        let roots = std::fs::read(crate::pypath::encode_os(&path)).map_err(|_| {
+            Failure::message(
+                "error: the configured TLS CA bundle cannot be read; no Xero request was made.",
+            )
+        })?;
+        (
+            Cow::Owned(roots),
+            "error: the configured TLS CA bundle is malformed; no Xero request was made.",
+        )
+    } else {
+        (
+            Cow::Borrowed(include_bytes!("../data/cacert.pem").as_slice()),
+            "error: bundled Xero TLS roots are unreadable",
+        )
+    };
+    let certificates =
+        reqwest::Certificate::from_pem_bundle(&roots).map_err(|_| Failure::message(parse_error))?;
+    if certificates.is_empty() {
+        return Err(Failure::message(
+            "error: the TLS CA bundle contains no certificates; no Xero request was made.",
+        ));
+    }
+    Ok(certificates)
+}
+
 impl NativeHttp {
     pub fn new(environment: &crate::config::Environment) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -49,25 +84,7 @@ impl NativeHttp {
             .map_err(|e| Failure::message(e.to_string()))?;
         let client = {
             let _entered = runtime.enter();
-            let custom = environment
-                .process_only("REQUESTS_CA_BUNDLE")
-                .filter(|v| !v.is_empty())
-                .or_else(|| {
-                    environment
-                        .process_only("CURL_CA_BUNDLE")
-                        .filter(|v| !v.is_empty())
-                });
-            let roots=match custom {
-                Some(path)=>std::fs::read(crate::pypath::encode_os(&path)).map_err(|_|Failure::message("error: the configured TLS CA bundle cannot be read; no Xero request was made."))?,
-                None=>include_bytes!("../data/cacert.pem").to_vec(),
-            };
-            let certificates = reqwest::Certificate::from_pem_bundle(&roots)
-                .map_err(|_| Failure::message("error: bundled Xero TLS roots are unreadable"))?;
-            if certificates.is_empty() {
-                return Err(Failure::message(
-                    "error: the TLS CA bundle contains no certificates; no Xero request was made.",
-                ));
-            }
+            let certificates = certificates(environment)?;
             // Proxies come from reqwest's process-environment default, never the cwd .env.
             let builder = reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(30))
@@ -634,6 +651,45 @@ mod tests {
             assert_eq!(http.posts.borrow().len(), posts);
         }
     }
+    #[test]
+    fn malformed_configured_ca_bundle_is_named_in_the_error() {
+        const CHILD: &str = "XERO_TB_TEST_MALFORMED_CA_CHILD";
+        let scratch = Scratch::new();
+        if std::env::var_os(CHILD).is_some() {
+            let environment =
+                crate::config::Environment::load(&scratch.0.join("absent-settings")).unwrap();
+            assert_eq!(
+                NativeHttp::new(&environment).err(),
+                Some(Failure::message(
+                    "error: the configured TLS CA bundle is malformed; no Xero request was made.",
+                )),
+            );
+            return;
+        }
+        let roots = scratch.0.join("synthetic-roots.pem");
+        std::fs::write(
+            &roots,
+            "-----BEGIN CERTIFICATE-----\n!!\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "http::tests::malformed_configured_ca_bundle_is_named_in_the_error",
+            ])
+            .env(CHILD, "1")
+            .env("REQUESTS_CA_BUNDLE", roots)
+            .env_remove("CURL_CA_BUNDLE")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
     #[test]
     #[expect(
         clippy::too_many_lines,
