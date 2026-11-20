@@ -652,6 +652,24 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_non_strict_resolve_follows_relative_and_absolute_dangling_links() {
+        use std::os::windows::fs::symlink_file;
+
+        let scratch = Scratch::new();
+        let root = resolve(&scratch.0, true).unwrap();
+        let missing = root.join("missing.csv");
+        let absolute = root.join("absolute-link.csv");
+        let relative = root.join("relative-link.csv");
+        symlink_file(&missing, &absolute).unwrap();
+        symlink_file("absolute-link.csv", &relative).unwrap();
+
+        assert_eq!(strip_verbatim(resolve(&relative, false).unwrap()), missing);
+        assert!(matches!(resolve(&relative, true), Err(ResolveError::NotFound)));
+        assert!(!missing.exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn resolve_distinguishes_symlink_loops_from_repeated_resolved_links() {
