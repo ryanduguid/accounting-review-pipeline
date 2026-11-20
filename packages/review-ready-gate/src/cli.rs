@@ -139,17 +139,20 @@ impl Arguments {
     }
 }
 fn option_operand(value: &str) -> bool {
-    let Some(suffix) = value.strip_prefix('-') else {
+    let mut chars = value.chars();
+    if chars.next() != Some('-') || value.contains(' ') {
         return true;
+    }
+
+    // CPython 3.15 argparse accepts a leading decimal digit after '-' or '-.'.
+    let digit = match chars.next() {
+        None => return true,
+        Some('.') => chars.next(),
+        first => first,
     };
-    // CPython 3.15 argparse recognises a negative number by its prefix.
-    let number = suffix.strip_prefix('.').unwrap_or(suffix);
-    suffix.is_empty()
-        || value.contains(' ')
-        || number
-            .chars()
-            .next()
-            .is_some_and(|ch| pytext::decimal_value(ch as u32).is_some())
+    digit
+        .and_then(|ch| pytext::decimal_value(u32::from(ch)))
+        .is_some()
 }
 #[expect(
     clippy::too_many_lines,
