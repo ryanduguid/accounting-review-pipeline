@@ -20,7 +20,8 @@ On Windows use `venv/Scripts/python.exe` and the `.exe` binaries. CI runs this
 comparison on Linux and Windows. The corpus includes captured report inputs,
 generated malformed responses, decimal boundaries, Unicode, callback URLs,
 byte-for-byte CSV and manifest output, and command arguments at 4 terminal
-widths. It also verifies that Python and Rust exclude each other from the same
+widths, including a positive height and Unicode decimal dimensions. It also
+verifies that Python and Rust exclude each other from the same
 fabricated token-cache lock and release it successfully. A mismatch or process
 deadline exits non-zero.
 

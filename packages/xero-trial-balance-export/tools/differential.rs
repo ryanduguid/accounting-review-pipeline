@@ -362,7 +362,12 @@ fn compare_cli(
     ];
     let mut differences = 0;
     for (module, binary) in [("export_tb", "export-tb"), ("auth", "xero-tb-auth")] {
-        for columns in [20, 40, 80, 120] {
+        for (columns, lines) in [
+            ("20", "0"),
+            (" \u{0664}_\u{0660} ", "+\u{0662}\u{0664}"),
+            ("80", "0"),
+            ("120", "0"),
+        ] {
             for flags in cases {
                 let script = format!(
                     "{CLI_MIGRATION}\nsys.argv[0]='{binary}';import {module};{module}.{}()",
@@ -383,7 +388,8 @@ fn compare_cli(
                         .env_remove("XERO_CLIENT_ID")
                         .env_remove("XERO_CLIENT_SECRET")
                         .env("XERO_TOKEN_FILE", directory.join("synthetic/token.json"))
-                        .env("COLUMNS", columns.to_string())
+                        .env("COLUMNS", columns)
+                        .env("LINES", lines)
                         .env("TERM", "dumb")
                         .env("NO_COLOR", "1")
                         .env("PYTHONIOENCODING", "utf-8");
@@ -394,7 +400,7 @@ fn compare_cli(
                     differences += 1;
                     if differences <= 20 {
                         println!(
-                            "CLI {binary} columns={columns} {flags:?}\nPython {:?}\nRust {:?}",
+                            "CLI {binary} columns={columns:?} lines={lines:?} {flags:?}\nPython {:?}\nRust {:?}",
                             (
                                 expected.0,
                                 String::from_utf8_lossy(&expected.1),

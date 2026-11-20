@@ -168,8 +168,9 @@ pub fn encoding(stderr: bool) -> Result<Encoding, &'static str> {
         // resolve to UTF-8 even when PYTHONIOENCODING names the stream codec.
         let (name, codeset) = posix_locale();
         let utf8_locale = utf8_mode(name.as_deref())?
-            // PEP 538 coerces C or POSIX to C.UTF-8 unless PYTHONCOERCECLOCALE=0.
+            // PEP 538 skips coercion when LC_ALL overrides the locale.
             || (matches!(name.as_deref(), Some("C" | "POSIX"))
+                && std::env::var_os("LC_ALL").is_none_or(|value| value.is_empty())
                 && std::env::var("PYTHONCOERCECLOCALE").as_deref() != Ok("0"))
             || codeset.as_deref().is_some_and(|c| codec(c).is_ok_and(|e| matches!(e, Encoding::Utf8)));
         if !utf8_locale {
