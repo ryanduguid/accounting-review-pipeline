@@ -172,13 +172,13 @@ fn command_help_wraps_without_requiring_or_changing_workpapers() {
         }
         args.push("--help");
         let mut rendered = Vec::new();
-        for width in ["20", "80"] {
-            let output = repo
-                .command(&args)
-                .env("COLUMNS", width)
-                .env("LINES", "24")
-                .output()
-                .unwrap();
+        for (width, height) in [("20", Some("24")), ("80", Some("24")), ("20", None)] {
+            let mut process = repo.command(&args);
+            process.env("COLUMNS", width).env_remove("LINES");
+            if let Some(height) = height {
+                process.env("LINES", height);
+            }
+            let output = process.output().unwrap();
             assert_eq!(code(&output), 0, "{args:?}: {}", stderr(&output));
             assert!(output.stderr.is_empty());
             let help = String::from_utf8(output.stdout).unwrap();
@@ -195,6 +195,7 @@ fn command_help_wraps_without_requiring_or_changing_workpapers() {
             rendered.push(help);
         }
         assert_ne!(rendered[0], rendered[1], "{args:?} did not respect COLUMNS");
+        assert_eq!(rendered[0], rendered[2], "{args:?} ignored COLUMNS without LINES");
     }
     assert_eq!(repo.get("in.md"), original);
     assert_eq!(repo.get("entities.json"), MAP.as_bytes());
@@ -1075,6 +1076,42 @@ fn c_locale_requires_coercion_when_utf8_mode_is_disabled() {
             assert!(output.stdout.is_empty());
             assert!(stderr(&output).starts_with("error: unsupported stream encoding"));
         }
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
+fn utf8_locale_aliases_keep_cpythons_distinct_stdout_error_handlers() {
+    use std::os::unix::ffi::OsStrExt;
+
+    // Older glibc installations may have no UTF-8 locale under this name.
+    let alias = Command::new("locale").arg("charmap").env("LC_ALL", "C.UTF8").output();
+    if !alias.is_ok_and(|out| out.status.success() && out.stdout == b"UTF-8\n") {
+        return;
+    }
+
+    for (locale, expected_code, expected_stdout, expected_stderr) in [
+        ("C.UTF-8", 0, &b"wrote out\xe9.md\n"[..], ""),
+        ("C.UTF8", 1, &b""[..], "error: stdout cannot encode supplied text\n"),
+    ] {
+        let repo = Repo::new();
+        repo.put("in.md", b"PERSON_01\n");
+        let out = std::ffi::OsStr::from_bytes(b"out\xe9.md");
+        let result = repo
+            .command(&["restore", "--in", "in.md", "--map", "entities.json", "--out"])
+            .arg(out)
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .env_remove("LC_CTYPE")
+            .env("PYTHONUTF8", "0")
+            .env("PYTHONCOERCECLOCALE", "0")
+            .env_remove("PYTHONIOENCODING")
+            .output()
+            .unwrap();
+        assert_eq!(code(&result), expected_code, "{locale}: {}", stderr(&result));
+        assert_eq!(result.stdout, expected_stdout, "{locale}");
+        assert_eq!(stderr(&result), expected_stderr, "{locale}");
+        assert_eq!(std::fs::read(repo.root.join(out)).unwrap(), b"Jane Roe\n", "{locale}");
     }
 }
 
