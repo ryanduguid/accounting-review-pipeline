@@ -643,12 +643,14 @@ fn test_a_model_number_equal_to_an_account_code_is_not_a_disclosure() {
 #[test]
 fn test_a_model_number_out_of_shape_trips_the_disclosure_check() {
     for (field, leaf) in [
-        ("delta", "Name acct-1"),
-        ("delta", "200"),
-        ("current_ytd_net", "1e3"),
-        ("percent_change", "16.67"),
+        ("delta", Json::str("Name acct-1")),
+        ("delta", Json::str("200")),
+        ("current_ytd_net", Json::str("1e3")),
+        ("percent_change", Json::str("16.67")),
+        ("delta", Json::int(200)),
+        ("percent_change", Json::Bool(true)),
     ] {
-        let model = Json::object([("findings", Json::Array(vec![Json::object([(field, Json::str(leaf))])]))]);
+        let model = Json::object([("findings", Json::Array(vec![Json::object([(field, leaf)])]))]);
         assert_refused(
             redact(&model, &[row("acct-1", "Revenue", "0.00")]),
             "raw source display data",
@@ -668,6 +670,15 @@ fn test_every_source_display_value_the_readme_names_is_forbidden_as_a_leaf() {
             "raw source display data",
         );
     }
+}
+
+#[test]
+fn test_a_source_display_value_nested_in_model_metadata_is_refused() {
+    let rows = [row("acct-1", "Revenue", "0.00")];
+    let safe = parse(r#"{"metadata": {"details": ["Fabricated variance"]}, "findings": []}"#);
+    redact(&safe, &rows).unwrap();
+    let disclosed = parse(r#"{"metadata": {"details": ["Name acct-1"]}, "findings": []}"#);
+    assert_refused(redact(&disclosed, &rows), "raw source display data");
 }
 
 #[test]
@@ -760,6 +771,20 @@ fn test_a_run_id_that_disagrees_across_the_pack_is_refused() {
     refused_after(Some(&restamp), None, None, "must refer to the same run_id");
     refused_after(None, Some(&restamp), None, "must refer to the same run_id");
     refused_after(None, None, Some(&restamp), "must refer to the same run_id");
+}
+
+#[test]
+fn test_reviewer_evidence_with_non_list_items_is_refused() {
+    for value in [Json::Null, Json::object([("unexpected", Json::int(1))])] {
+        let replace = |e: &mut Json| set(e, &["items"], value.clone());
+        refused_after(Some(&replace), None, None, "Reviewer evidence items must be a list");
+    }
+}
+
+#[test]
+fn test_a_receipt_missing_a_required_field_is_refused() {
+    let omit = |r: &mut Json| remove(r, &["code_version"]);
+    refused_after(None, Some(&omit), None, "receipt must contain exactly");
 }
 
 #[test]

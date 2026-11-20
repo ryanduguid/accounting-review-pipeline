@@ -865,6 +865,18 @@ mod tests {
     }
 
     #[test]
+    fn equally_short_float_spellings_use_the_even_upper_candidate() {
+        let value = 1.0 + 3.0 * 2f64.powi(-17);
+        let lower = "10000228881835937";
+        assert_eq!(format!("{lower}e-16").parse::<f64>().unwrap(), value);
+        assert_eq!(
+            shortest_half_even(value, lower.to_owned(), -16),
+            "10000228881835938"
+        );
+        assert_eq!(float_repr(value), "1.0000228881835938");
+    }
+
+    #[test]
     fn float_repr_matches_cpython_corpus() {
         // CPython 3.15's repr for doubles chosen to exercise ties between two
         // equally short spellings: bits in hex, then the repr.
