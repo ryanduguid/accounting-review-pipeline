@@ -457,11 +457,11 @@ fn md_cells(line: &str) -> Vec<String> {
     }
     cells.iter().map(|c| pytext::strip(c).into()).collect()
 }
-fn scope_values(summary: &str, label: &str) -> Vec<String> {
+fn scope_values<'a>(lines: &[&'a str], label: &str) -> Vec<&'a str> {
     let prefix = format!("- {label}: ");
-    pytext::split_lines(summary)
+    lines
         .iter()
-        .filter_map(|line| line.strip_prefix(&prefix).map(str::to_owned))
+        .filter_map(|line| line.strip_prefix(&prefix))
         .collect()
 }
 #[expect(
@@ -573,6 +573,7 @@ fn verify_agreement(
             }
         }
     }
+    let lines = pytext::split_lines(summary);
     if findings.is_empty() {
         if summary.contains(FINDING_HEADER) {
             return Err(format!(
@@ -580,7 +581,6 @@ fn verify_agreement(
             ));
         }
     } else {
-        let lines = pytext::split_lines(summary);
         let headers: Vec<_> = lines
             .iter()
             .enumerate()
@@ -679,7 +679,7 @@ fn verify_agreement(
             ),
         ),
     ] {
-        let values = scope_values(summary, label);
+        let values = scope_values(&lines, label);
         if values.len() != 1 {
             return Err(format!(
                 "{SUMMARY_NAME}: expected exactly one {} scope line, found {}",
@@ -692,11 +692,11 @@ fn verify_agreement(
                 "{} disagrees: {JSON_NAME} says {}, {SUMMARY_NAME} says {}",
                 label.to_lowercase(),
                 pytext::repr(&expected),
-                pytext::repr(&values[0])
+                pytext::repr(values[0])
             ));
         }
     }
-    let counts = scope_values(summary, "Findings");
+    let counts = scope_values(&lines, "Findings");
     if counts.len() != 1 {
         return Err(format!(
             "{SUMMARY_NAME}: expected exactly one 'Findings' scope line, found {}",
@@ -723,7 +723,7 @@ fn verify_agreement(
         return Err(format!(
             "finding counts disagree: {JSON_NAME} says {}, {SUMMARY_NAME} says {}",
             pytext::repr(&expected),
-            pytext::repr(&counts[0])
+            pytext::repr(counts[0])
         ));
     }
     Ok(evidence)
