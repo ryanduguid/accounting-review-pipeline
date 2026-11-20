@@ -157,14 +157,14 @@ fn help(prog: &str, t: &Theme) -> String {
     )
 }
 
-enum Class {
-    Flag(&'static str, Option<(String, bool)>),
+enum Class<'a> {
+    Flag(&'static str, Option<(&'a str, bool)>),
     UnknownOption,
     Positional,
 }
 
 /// argparse's `_parse_optional` for this parser.
-fn classify(token: &str) -> Result<Class, String> {
+fn classify(token: &str) -> Result<Class<'_>, String> {
     if token.is_empty() || !token.starts_with('-') {
         return Ok(Class::Positional);
     }
@@ -177,7 +177,7 @@ fn classify(token: &str) -> Result<Class, String> {
     if let Some((name, value)) = token.split_once('=')
         && let Some(exact) = FLAGS.iter().find(|f| **f == name)
     {
-        return Ok(Class::Flag(exact, Some((value.to_string(), true))));
+        return Ok(Class::Flag(exact, Some((value, true))));
     }
     let mut found = option_prefix_matches(token);
     match found.len() {
@@ -197,28 +197,28 @@ fn classify(token: &str) -> Result<Class, String> {
     Ok(Class::UnknownOption)
 }
 
-type PrefixMatch = (&'static str, Option<(String, bool)>);
+type PrefixMatch<'a> = (&'static str, Option<(&'a str, bool)>);
 
 /// argparse's `_get_option_tuples`: the flags a token abbreviates, with any explicit value.
-fn option_prefix_matches(token: &str) -> Vec<PrefixMatch> {
+fn option_prefix_matches(token: &str) -> Vec<PrefixMatch<'_>> {
     if token.starts_with("--") {
         let (prefix, explicit) = match token.split_once('=') {
-            Some((name, value)) => (name, Some((value.to_string(), true))),
+            Some((name, value)) => (name, Some((value, true))),
             None => (token, None),
         };
         return FLAGS
             .iter()
             .filter(|f| f.starts_with(prefix))
-            .map(|f| (*f, explicit.clone()))
+            .map(|f| (*f, explicit))
             .collect();
     }
-    let short: String = token.chars().take(2).collect();
-    let rest: String = token.chars().skip(2).collect();
+    let short_end = token.char_indices().nth(2).map_or(token.len(), |(index, _)| index);
+    let (short, rest) = token.split_at(short_end);
     FLAGS
         .iter()
         .filter_map(|f| {
             if *f == short {
-                Some((*f, Some((rest.clone(), false))))
+                Some((*f, Some((rest, false))))
             } else {
                 f.starts_with(token).then_some((*f, None))
             }
@@ -240,21 +240,21 @@ enum Exit {
     Error(String),
 }
 
-fn parse(args: &[String]) -> Result<(String, String), Exit> {
-    let mut extras: Vec<String> = Vec::new();
+fn parse(args: &[String]) -> Result<(&str, &str), Exit> {
+    let mut extras = Vec::new();
     let mut input = None;
     let mut output = None;
     let mut index = 0;
     while let Some(token) = args.get(index) {
         index += 1;
         if token == "--" {
-            extras.extend(args[index - 1..].iter().cloned());
+            extras.extend(args[index - 1..].iter().map(String::as_str));
             break;
         }
         let (flag, explicit) = match classify(token).map_err(Exit::Error)? {
             Class::Flag(flag, explicit) => (flag, explicit),
             Class::UnknownOption | Class::Positional => {
-                extras.push(token.clone());
+                extras.push(token.as_str());
                 continue;
             }
         };
@@ -266,7 +266,7 @@ fn parse(args: &[String]) -> Result<(String, String), Exit> {
             None => match args.get(index) {
                 Some(next) if next != "--" && matches!(classify(next), Ok(Class::Positional)) => {
                     index += 1;
-                    next.clone()
+                    next.as_str()
                 }
                 _ => return Err(Exit::Error(format!("argument {flag}: expected one argument"))),
             },
@@ -294,14 +294,14 @@ fn parse(args: &[String]) -> Result<(String, String), Exit> {
 }
 
 /// `-h`/`--help`: print help, unless it was given an explicit value argparse refuses.
-fn help_exit(flag: &str, explicit: Option<(String, bool)>) -> Exit {
+fn help_exit(flag: &str, explicit: Option<(&str, bool)>) -> Exit {
     match explicit {
         None => Exit::Help,
         // `-hX` is `-h` followed by the short flags in X, so help still wins.
         Some((rest, false)) if flag == "-h" && !rest.is_empty() && !rest.starts_with('-') => Exit::Help,
         Some((rest, _)) => Exit::Error(format!(
             "argument -h/--help: ignored explicit argument {}",
-            pytext::repr_os(&rest)
+            pytext::repr_os(rest)
         )),
     }
 }
@@ -357,10 +357,10 @@ pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, std
         }
     };
     // Path("") is ".", as argparse's type=Path made it.
-    let input = if input.is_empty() { ".".to_string() } else { input };
-    let output = if output.is_empty() { ".".to_string() } else { output };
-    let result = workpaper::review(&input, cwd);
-    let outcome = result.and_then(|result| workpaper::write(&result, &output, cwd).map(|()| result));
+    let input = if input.is_empty() { "." } else { input };
+    let output = if output.is_empty() { "." } else { output };
+    let result = workpaper::review(input, cwd);
+    let outcome = result.and_then(|result| workpaper::write(&result, output, cwd).map(|()| result));
     match outcome {
         Ok(result) => report(&result, stdout, stderr),
         // A diagnostic that cannot be written raised from the handler: exit 1,
@@ -379,6 +379,27 @@ pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, std
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_long_option_name_reports_all_candidates_in_order() {
+        let (mut out, mut error) = (Vec::new(), Vec::new());
+        assert_eq!(
+            main(
+                "grant-workpaper",
+                &["--=fabricated".into()],
+                Path::new("."),
+                &mut out,
+                &mut error
+            ),
+            2
+        );
+        assert!(out.is_empty());
+        assert!(
+            String::from_utf8(error)
+                .unwrap()
+                .contains("ambiguous option: --=fabricated could match --help, --input, --output")
+        );
+    }
 
     #[test]
     fn usage_and_help_match_argparse() {
