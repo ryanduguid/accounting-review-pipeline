@@ -99,10 +99,9 @@ fn drivers_publish_the_default_limit_and_refuse_negative_limits() {
     let output = temp.join("negative-drivers");
     let negative = run(&output, &["--top", "-1"]);
     assert_eq!(negative.status.code(), Some(1));
-    assert_eq!(
-        negative.stderr,
-        b"close-control drivers: --top must be at least 1.\n"
-    );
+    let newline = if cfg!(windows) { "\r\n" } else { "\n" };
+    let expected = format!("close-control drivers: --top must be at least 1.{newline}");
+    assert_eq!(negative.stderr, expected.as_bytes());
     assert!(!output.exists());
 }
 
