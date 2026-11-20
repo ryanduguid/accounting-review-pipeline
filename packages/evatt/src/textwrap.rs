@@ -107,6 +107,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn breaks_long_words_at_fitting_hyphens() {
+        assert_eq!(wrap("use x-application now", 10), ["use x-", "applicatio", "n now"]);
+        assert_eq!(
+            wrap("see --configuration next", 9),
+            ["see --con", "figuratio", "n next"]
+        );
+    }
+
+    #[test]
     fn wraps_like_python_textwrap() {
         // textwrap.wrap("validate a human acknowledgement/escalation record", 24)
         assert_eq!(
