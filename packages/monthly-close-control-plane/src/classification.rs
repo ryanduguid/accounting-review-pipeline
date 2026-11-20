@@ -370,6 +370,39 @@ mod tests {
     }
 
     #[test]
+    fn classification_refuses_a_reversed_coding_period() {
+        let [transactions, evidence] = ["transactions.csv", "coding.json"]
+            .map(|name| pypath::resolve(Path::new(name), false).unwrap());
+        let source = SourceSnapshot::new(
+            &transactions,
+            b"Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit\nSynthetic,AUD100,AUD,T1,2026-09-01,R,Synthetic,12.34,0\n".to_vec(),
+        );
+        let policy = Json::object([
+            ("schema_version", Json::int(1)),
+            ("tenant", Json::str("Synthetic")),
+            ("currency", Json::str("AUD")),
+            ("period_start", Json::str("2026-09-30")),
+            ("period_end", Json::str("2026-09-01")),
+            ("original_sha256", Json::str(&source.sha256)),
+            ("current_sha256", Json::str(&source.sha256)),
+            ("expectations", Json::Array(Vec::new())),
+        ]);
+        let assertions = SourceSnapshot::new(&evidence, pyjson::canonical(&policy).into_bytes());
+        let paths = [transactions.clone(), transactions, evidence];
+        let result = classify_with(&paths, "AUD", &mut |path, _| {
+            Ok([&source, &assertions]
+                .into_iter()
+                .find(|snapshot| snapshot.path == path)
+                .unwrap()
+                .clone())
+        });
+        assert_eq!(
+            result.unwrap_err(),
+            "period_start must not follow period_end."
+        );
+    }
+
+    #[test]
     #[expect(
         clippy::too_many_lines,
         reason = "one recoding scenario with its assertions"

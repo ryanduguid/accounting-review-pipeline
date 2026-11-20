@@ -109,27 +109,17 @@ pub fn iso(text: &str) -> Result<Date> {
 }
 
 pub fn iso_json(value: &Json) -> Result<Date> {
-    match value {
-        Json::Str(text) => iso_cps(&text.0),
-        // Python 3.15's wording; earlier versions said "fromisoformat: argument must be str".
-        other => fail(format!(
-            "fromisoformat() argument must be str, not {}",
-            type_name(other)
-        )),
-    }
-}
-
-/// The name CPython's type errors give a parsed value's type.
-fn type_name(value: &Json) -> &'static str {
-    match value {
+    let kind = match value {
+        Json::Str(text) => return iso_cps(&text.0),
         Json::Null => "None",
         Json::Bool(_) => "bool",
         Json::Int(_) => "int",
         Json::Float(_) => "float",
-        Json::Str(_) => "str",
         Json::Array(_) => "list",
         Json::Object(_) => "dict",
-    }
+    };
+    // Python 3.15 names the type of an invalid argument.
+    fail(format!("fromisoformat() argument must be str, not {kind}"))
 }
 
 /// `text_field(value, label, required=...)` on code points.
@@ -876,7 +866,6 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 fn get_text(row: &Json, key: &str) -> String {
     match row.get(key) {
         Some(Json::Str(s)) => s.lossy(),
-        Some(Json::Int(digits)) => digits.clone(),
         Some(other) => pyjson::repr(other),
         None => String::new(),
     }
@@ -1191,6 +1180,27 @@ mod tests {
         for number in ["-1320", "0", "12.50", "plain"] {
             assert_eq!(safe_cell(number), number);
         }
+    }
+
+    #[test]
+    fn csv_tables_keep_first_seen_fields_and_render_non_string_values() {
+        let rows = [
+            Json::object([("reference", Json::str("first")), ("amount", Json::Int("42".into()))]),
+            Json::object([("reference", Json::str("second")), ("reviewed", Json::Bool(true))]),
+        ];
+        assert_eq!(
+            csv_table(&rows),
+            "reference,amount,reviewed\r\nfirst,42,\r\nsecond,,True\r\n"
+        );
+    }
+
+    #[test]
+    fn staging_refuses_a_missing_parent_without_creating_it() {
+        let temp = crate::tests::TempDir::new();
+        let parent = temp.path().join("missing-parent");
+        let error = temporary_directory(&parent).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(!parent.exists());
     }
 
     #[test]
