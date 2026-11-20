@@ -170,6 +170,16 @@ mod tests {
         assert_eq!(repr("caf\u{e9}"), "'caf\u{e9}'");
         assert_eq!(repr_code_points(&[0xD800]), "'\\ud800'");
         assert_eq!(repr("\u{e0001}"), "'\\U000e0001'");
+        assert_eq!(repr("a\\b\tc\nd\re"), r"'a\\b\tc\nd\re'");
+        assert_eq!(repr_os("\u{10F7FF}x"), r"'\U0010f7ffx'");
+    }
+
+    #[test]
+    fn recognises_ascii_controls_and_delete() {
+        assert!(has_control("\t"));
+        assert!(has_control("\x7f"));
+        assert!(!has_control("safe text"));
+        assert!(!has_control("\u{85}"));
     }
 }
 
