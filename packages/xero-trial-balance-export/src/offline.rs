@@ -275,6 +275,63 @@ mod tests {
         assert!(declared_fixture(&component_root().join("samples/sample-output.csv")).is_err());
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn declared_fixture_refuses_windows_device_namespaces() {
+        for name in [
+            r"\\.\synthetic-fixture.csv",
+            "//./synthetic-fixture.csv",
+            "//?/synthetic-fixture.csv",
+            r"\\?/synthetic-fixture.csv",
+            r"//?\synthetic-fixture.csv",
+        ] {
+            assert_eq!(
+                declared_fixture(Path::new(name)).unwrap_err(),
+                Failure {
+                    code: 2,
+                    stdout: String::new(),
+                    stderr: "error: fixture path must not use a Windows device namespace\n".into(),
+                },
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn fixture_reader_reports_unreadable_and_malformed_csv() {
+        let scratch = crate::testing::Scratch::new();
+        let path = scratch.0.join("fabricated.csv");
+        assert_eq!(
+            read_rows(&path).unwrap_err(),
+            Failure::message("error: fabricated CSV cannot be read")
+        );
+
+        let missing_cells = format!("{SAMPLE_HEADER}2026-06-30,Sample Ledger\n");
+        let oversized_header = "a".repeat(131_073);
+        for (data, error) in [
+            (&[0xff][..], "error: fabricated CSV is not UTF-8"),
+            (
+                b"Date,Amount\n",
+                "error: fixture does not have the exact exporter header",
+            ),
+            (
+                SAMPLE_HEADER.as_bytes(),
+                "error: fixture has no account rows",
+            ),
+            (
+                missing_cells.as_bytes(),
+                "error: fabricated CSV has missing cells",
+            ),
+            (
+                oversized_header.as_bytes(),
+                "error: malformed fabricated CSV",
+            ),
+        ] {
+            std::fs::write(&path, data).unwrap();
+            assert_eq!(read_rows(&path).unwrap_err(), Failure::message(error));
+        }
+    }
+
     #[test]
     fn summary_refuses_empty_and_unbalanced_rows_without_losing_the_failure_contract() {
         for (rows, message) in [
