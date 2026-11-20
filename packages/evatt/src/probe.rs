@@ -212,3 +212,18 @@ fn main() {
         println!("{}", pyjson::canonical(&answer));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detector_records_ambiguous_spans_in_character_coordinates() {
+        let request = Json::object([("text", Json::str("Example α TFN: 0000.\u{b}00000.\u{b}0\n"))]);
+        let response = detector(&request).unwrap();
+        assert_eq!(
+            pyjson::canonical(response.at("ambiguous")),
+            r#"[[10,15,26,"0000.\u000b00000"]]"#
+        );
+    }
+}
