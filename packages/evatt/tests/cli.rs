@@ -1041,6 +1041,43 @@ fn undecodable_python_variables_refuse_and_pathext_is_ignored_on_posix() {
     assert!(!repo.path("out.md").exists());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn c_locale_requires_coercion_when_utf8_mode_is_disabled() {
+    let repo = Repo::new();
+    for (all, utf8_mode, coerce, expected) in [
+        ("", "0", "1", 0),
+        ("", "0", "0", 1),
+        ("C", "0", "1", 1),
+        ("C", "1", "1", 0),
+    ] {
+        let output = repo
+            .command(&["--help"])
+            .env("LANG", "C")
+            .env("LC_ALL", all)
+            .env_remove("LC_CTYPE")
+            .env("PYTHONUTF8", utf8_mode)
+            .env("PYTHONCOERCECLOCALE", coerce)
+            .env_remove("PYTHONIOENCODING")
+            .env("COLUMNS", "80")
+            .env("LINES", "24")
+            .output()
+            .unwrap();
+        assert_eq!(
+            code(&output),
+            expected,
+            "LC_ALL={all:?}, UTF-8 mode={utf8_mode}, coercion={coerce}"
+        );
+        if expected == 0 {
+            assert!(output.stdout.starts_with(b"usage: evatt"));
+            assert!(output.stderr.is_empty());
+        } else {
+            assert!(output.stdout.is_empty());
+            assert!(stderr(&output).starts_with("error: unsupported stream encoding"));
+        }
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn legacy_windows_stream_modes_refuse_and_empty_values_count_as_unset() {

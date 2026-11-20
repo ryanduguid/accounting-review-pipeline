@@ -414,6 +414,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rendering_refuses_a_finding_that_cannot_be_written_as_utf8() {
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/bas-not-ready");
+        let mut document = example_document("bas", &fixtures, "0.01").unwrap();
+        assert!(render_pack(&document).is_ok());
+
+        let Json::Object(fields) = &mut document else {
+            panic!("expected the example readiness document");
+        };
+        let (_, findings) = fields
+            .iter_mut()
+            .find(|(key, _)| key.is("findings"))
+            .unwrap();
+        let Json::Array(findings) = findings else {
+            panic!("expected a list of findings");
+        };
+        let Json::Object(finding) = &mut findings[0] else {
+            panic!("expected a finding object");
+        };
+        let (_, reason) = finding
+            .iter_mut()
+            .find(|(key, _)| key.is("reason"))
+            .unwrap();
+        *reason = decode(r#""fabricated \uD800""#).unwrap();
+
+        crate::viewer::verify_schema(&document).unwrap();
+        assert_eq!(
+            render_pack(&document).unwrap_err(),
+            "fixture finding fields must be strings"
+        );
+    }
+
+    #[test]
     fn dropping_the_queue_command_leaves_the_frozen_command_choices() {
         let (code, _, usage) = crate::stdio::capture(|| crate::cli::main(vec!["--".into()]));
         assert_eq!(code, 1);
