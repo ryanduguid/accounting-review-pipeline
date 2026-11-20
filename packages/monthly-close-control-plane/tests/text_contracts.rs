@@ -10,6 +10,9 @@ use monthly_close_control_plane::{
 };
 use std::{fs, path::Path, path::PathBuf};
 
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
+
 #[path = "support/temp.rs"]
 mod temp;
 use temp::TempDir;
@@ -61,6 +64,46 @@ fn saved_date_pack(prior: &[&str], current: &[&str]) -> (TempDir, PathBuf, PathB
     )
     .unwrap();
     (temp, directory, transactions)
+}
+
+#[test]
+fn drivers_publish_the_default_limit_and_refuse_negative_limits() {
+    let (temp, directory, transactions) = saved_date_pack(&["2026-06-30"], &["2026-07-31"]);
+    let run = |output: &Path, limit: &[&str]| {
+        child_profile::command(env!("CARGO_BIN_EXE_close-control"))
+            .arg("drivers")
+            .arg("--pack-dir")
+            .arg(&directory)
+            .arg("--transactions")
+            .arg(&transactions)
+            .args(["--currency", "AUD"])
+            .arg("--output")
+            .arg(output)
+            .args(limit)
+            .output()
+            .unwrap()
+    };
+    let output = temp.join("default-drivers");
+    let default = run(&output, &[]);
+    assert_eq!(
+        default.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&default.stderr)
+    );
+    let json = fs::read_to_string(output.join("variance-drivers.json")).unwrap();
+    let result = pyjson::loads(&json).unwrap();
+    assert!(result.at("status").is_str("REVIEW"));
+    assert_eq!(pyjson::canonical(result.at("top")), "5");
+
+    let output = temp.join("negative-drivers");
+    let negative = run(&output, &["--top", "-1"]);
+    assert_eq!(negative.status.code(), Some(1));
+    assert_eq!(
+        negative.stderr,
+        b"close-control drivers: --top must be at least 1.\n"
+    );
+    assert!(!output.exists());
 }
 
 #[test]
