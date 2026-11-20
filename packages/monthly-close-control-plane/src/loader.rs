@@ -700,6 +700,27 @@ mod tests {
     }
 
     #[test]
+    fn source_snapshot_reports_an_existing_directory_as_unreadable() {
+        let temporary = crate::test_support::TempDir::new();
+        let path = temporary.join("source.csv");
+        fs::create_dir(&path).unwrap();
+        let error = SourceSnapshot::capture(&path, "Trial-balance file").unwrap_err();
+        assert!(
+            error.starts_with(&format!(
+                "Trial-balance file could not be read: {} (",
+                pypath::text(&path)
+            )),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn debit_amounts_refuse_a_second_decimal_separator() {
+        let error = parse_money(Some("12.3.4"), "Debit", 2, Path::new("input.csv")).unwrap_err();
+        assert_eq!(error, "input.csv: row 2 has invalid Debit: '12.3.4'.");
+    }
+
+    #[test]
     fn validation_precedence_and_strict_balance_policy_match_the_source() {
         let header = TB_COLUMNS.join(",");
         let input = format!(
