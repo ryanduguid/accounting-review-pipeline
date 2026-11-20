@@ -7,7 +7,7 @@ use crate::{
     pyjson::{self, Json},
     tokens::TokenSession,
 };
-use std::time::Duration;
+use std::{borrow::Cow, time::Duration};
 
 pub const TOKEN_URL: &str = "https://identity.xero.com/connect/token";
 pub const CONNECTIONS_URL: &str = "https://api.xero.com/connections";
@@ -41,6 +41,33 @@ pub struct NativeHttp {
     runtime: tokio::runtime::Runtime,
 }
 
+fn certificates(custom: Option<&std::path::Path>) -> Result<Vec<reqwest::Certificate>> {
+    let (roots, parse_error) = if let Some(path) = custom {
+        let roots = std::fs::read(path).map_err(|_| {
+            Failure::message(
+                "error: the configured TLS CA bundle cannot be read; no Xero request was made.",
+            )
+        })?;
+        (
+            Cow::Owned(roots),
+            "error: the configured TLS CA bundle is malformed; no Xero request was made.",
+        )
+    } else {
+        (
+            Cow::Borrowed(include_bytes!("../data/cacert.pem").as_slice()),
+            "error: bundled Xero TLS roots are unreadable",
+        )
+    };
+    let certificates =
+        reqwest::Certificate::from_pem_bundle(&roots).map_err(|_| Failure::message(parse_error))?;
+    if certificates.is_empty() {
+        return Err(Failure::message(
+            "error: the TLS CA bundle contains no certificates; no Xero request was made.",
+        ));
+    }
+    Ok(certificates)
+}
+
 impl NativeHttp {
     pub fn new(environment: &crate::config::Environment) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -49,25 +76,16 @@ impl NativeHttp {
             .map_err(|e| Failure::message(e.to_string()))?;
         let client = {
             let _entered = runtime.enter();
-            let custom = environment
+            let configured_roots = environment
                 .process_only("REQUESTS_CA_BUNDLE")
                 .filter(|v| !v.is_empty())
                 .or_else(|| {
                     environment
                         .process_only("CURL_CA_BUNDLE")
                         .filter(|v| !v.is_empty())
-                });
-            let roots=match custom {
-                Some(path)=>std::fs::read(crate::pypath::encode_os(&path)).map_err(|_|Failure::message("error: the configured TLS CA bundle cannot be read; no Xero request was made."))?,
-                None=>include_bytes!("../data/cacert.pem").to_vec(),
-            };
-            let certificates = reqwest::Certificate::from_pem_bundle(&roots)
-                .map_err(|_| Failure::message("error: bundled Xero TLS roots are unreadable"))?;
-            if certificates.is_empty() {
-                return Err(Failure::message(
-                    "error: the TLS CA bundle contains no certificates; no Xero request was made.",
-                ));
-            }
+                })
+                .map(|path| crate::pypath::encode_os(&path));
+            let certificates = certificates(configured_roots.as_deref().map(std::path::Path::new))?;
             // Proxies come from reqwest's process-environment default, never the cwd .env.
             let builder = reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(30))
@@ -634,6 +652,34 @@ mod tests {
             assert_eq!(http.posts.borrow().len(), posts);
         }
     }
+    #[test]
+    fn configured_ca_bundle_refusals_distinguish_read_parse_and_empty() {
+        let scratch = Scratch::new();
+        let roots = scratch.0.join("synthetic-roots.pem");
+        assert_eq!(
+            certificates(Some(&roots)).err(),
+            Some(Failure::message(
+                "error: the configured TLS CA bundle cannot be read; no Xero request was made.",
+            ))
+        );
+        for (contents, diagnostic) in [
+            (
+                "-----BEGIN CERTIFICATE-----\n!!\n-----END CERTIFICATE-----\n",
+                "error: the configured TLS CA bundle is malformed; no Xero request was made.",
+            ),
+            (
+                "",
+                "error: the TLS CA bundle contains no certificates; no Xero request was made.",
+            ),
+        ] {
+            std::fs::write(&roots, contents).unwrap();
+            assert_eq!(
+                certificates(Some(&roots)).err(),
+                Some(Failure::message(diagnostic))
+            );
+        }
+    }
+
     #[test]
     #[expect(
         clippy::too_many_lines,
