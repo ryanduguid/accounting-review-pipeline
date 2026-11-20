@@ -72,12 +72,17 @@ fn python_stdout(unbuffered: bool) -> Box<dyn std::io::Write + Send> {
     Box::new(std::io::BufWriter::with_capacity(128 * 1024, stdout))
 }
 
-fn main() {
+fn main() -> std::process::ExitCode {
     // An unexpected failure exits 1, as an uncaught exception did in the Python script.
     std::panic::set_hook(Box::new(|info| {
         eprintln!("grant-workpaper: internal error: {info}");
-        std::process::exit(1);
     }));
+    // Return through the runtime so Windows flushes LLVM's exit profile.
+    // The CLI uses exit statuses 0, 1, 2 and 120.
+    std::process::ExitCode::from(std::panic::catch_unwind(run).unwrap_or(1) as u8)
+}
+
+fn run() -> i32 {
     // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
     // nosemgrep: rust.lang.security.args-os.args-os
     let mut argv = std::env::args_os();
@@ -89,7 +94,7 @@ fn main() {
     let args: Vec<String> = argv.map(|arg| oserror::decode_os(&arg)).collect();
     let cwd = std::env::current_dir().expect("the working directory must exist");
     // Deeply nested JSON recurses; give it the room CPython's own limit allows.
-    let code = std::thread::Builder::new()
+    std::thread::Builder::new()
         .stack_size(256 << 20)
         .spawn(move || {
             use std::io::Write;
@@ -122,6 +127,5 @@ fn main() {
         })
         .expect("the worker thread starts")
         .join()
-        .unwrap_or(1);
-    std::process::exit(code);
+        .unwrap_or(1)
 }
