@@ -76,8 +76,11 @@ fn read_rows(path: &Path) -> Result<Vec<Vec<String>>> {
     let rows = reader
         .by_ref()
         .map(|row| {
-            row.map_err(|_| Failure::message("error: malformed fabricated CSV"))?
-                .values
+            let row = row.map_err(|_| Failure::message("error: malformed fabricated CSV"))?;
+            if row.has_extra {
+                return Err(Failure::message("error: fabricated CSV has extra cells"));
+            }
+            row.values
                 .into_iter()
                 .map(|v| {
                     v.ok_or_else(|| Failure::message("error: fabricated CSV has missing cells"))
@@ -140,8 +143,12 @@ pub fn summary(text: &str) -> Result<Summary> {
     let rows = reader
         .by_ref()
         .map(|row| {
-            row.map_err(|_| Failure::message("the fabricated sample has malformed CSV"))?
-                .values
+            let row =
+                row.map_err(|_| Failure::message("the fabricated sample has malformed CSV"))?;
+            if row.has_extra {
+                return Err(Failure::message("the fabricated sample has extra cells"));
+            }
+            row.values
                 .into_iter()
                 .map(|value| {
                     value.ok_or_else(|| Failure::message("the fabricated sample has missing cells"))
@@ -330,6 +337,23 @@ mod tests {
             std::fs::write(&path, data).unwrap();
             assert_eq!(read_rows(&path).unwrap_err(), Failure::message(error));
         }
+    }
+
+    #[test]
+    fn offline_readers_refuse_rows_wider_than_the_export_header() {
+        let scratch = crate::testing::Scratch::new();
+        let path = scratch.0.join("fabricated.csv");
+        let csv = format!(
+            "{SAMPLE_HEADER}2026-06-30,Sample Ledger,Assets,001,Sample Account,100,0,0,0,0,extra\n"
+        );
+        std::fs::write(&path, &csv).unwrap();
+        assert_eq!(
+            (read_rows(&path).err(), summary(&csv).err()),
+            (
+                Some(Failure::message("error: fabricated CSV has extra cells")),
+                Some(Failure::message("the fabricated sample has extra cells")),
+            )
+        );
     }
 
     #[test]
