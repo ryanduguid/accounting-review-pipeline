@@ -184,14 +184,11 @@ pub fn validate_report_identity(report: &Json, requested: &str) -> Result<()> {
 }
 
 fn as_at_date(title: &str) -> Option<String> {
-    let fields: Vec<_> = title.strip_prefix("As at ")?.split(' ').collect();
-    if fields.len() != 3
-        || !(1..=2).contains(&fields[0].len())
-        || fields[2].len() != 4
-        || !fields[0]
-            .bytes()
-            .chain(fields[2].bytes())
-            .all(|b| b.is_ascii_digit())
+    let (day, rest) = title.strip_prefix("As at ")?.split_once(' ')?;
+    let (month_name, year) = rest.split_once(' ')?;
+    if !(1..=2).contains(&day.len())
+        || year.len() != 4
+        || !day.bytes().chain(year.bytes()).all(|b| b.is_ascii_digit())
     {
         return None;
     }
@@ -209,12 +206,12 @@ fn as_at_date(title: &str) -> Option<String> {
         "November",
         "December",
     ];
-    let month = months.iter().position(|&m| m == fields[1])? as i8 + 1;
-    let year: i16 = fields[2].parse().ok()?;
+    let month = months.iter().position(|&m| m == month_name)? as i8 + 1;
+    let year: i16 = year.parse().ok()?;
     if !(1..=9999).contains(&year) {
         return None;
     }
-    let date = jiff::civil::Date::new(year, month, fields[0].parse().ok()?).ok()?;
+    let date = jiff::civil::Date::new(year, month, day.parse().ok()?).ok()?;
     Some(date.to_string())
 }
 
@@ -407,8 +404,11 @@ mod tests {
             ("As at 29 February 2024", Some("2024-02-29")),
             ("As at 29 February 1900", None),
             ("As at 31 April 2026", None),
+            ("As at 30", None),
+            ("As at 30 June", None),
             ("As at 30 June 26", None),
             ("As at 30  June 2026", None),
+            ("As at 30 June 2026 ", None),
             ("As at 1 January 0000", None),
             ("As at 0 January 2026", None),
         ] {
