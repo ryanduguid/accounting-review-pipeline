@@ -414,6 +414,42 @@ fn archived_query_pack(baseline: &BTreeMap<String, Vec<u8>>) -> BTreeMap<String,
 }
 
 #[test]
+fn queue_marks_archived_query_counts_and_control_coverage_as_unrecorded() {
+    let current = empty_query_pack();
+    let archived = archived_query_pack(&current);
+    let root = TempDir::new();
+    let [old, new] = [("archived", archived), ("current", current)].map(|(name, files)| {
+        let directory = root.join(name);
+        fs::create_dir(&directory).unwrap();
+        for (name, bytes) in files {
+            fs::write(directory.join(name), bytes).unwrap();
+        }
+        directory
+    });
+    let before = [inventory(&old), inventory(&new)];
+    let output = bounded_output(
+        child_profile::command(BIN)
+            .args(["queue", "--summary", "--pack-dir"])
+            .arg(&old)
+            .arg("--pack-dir")
+            .arg(&new),
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let text = String::from_utf8(output.stdout).unwrap();
+    let row = text
+        .lines()
+        .find(|line| line.starts_with("| ") && line.contains("/archived |"))
+        .unwrap();
+    let columns: Vec<_> = row.split('|').map(str::trim).collect();
+    assert_eq!(columns[5], "not recorded");
+    assert_eq!(columns[7], "not recorded");
+    assert!(text.contains("Summary of the 2 displayed pack(s)"));
+    assert!(text.contains("1 displayed pack(s) do not record control coverage, so their omitted controls are not counted."));
+    assert_eq!([inventory(&old), inventory(&new)], before);
+}
+
+#[test]
 fn empty_and_archived_query_sections_refuse_unwitnessed_content() {
     let baseline = empty_query_pack();
     let archived = archived_query_pack(&baseline);
