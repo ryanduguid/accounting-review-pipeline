@@ -41,9 +41,23 @@ fn real_console_uses_native_width_and_colours_on_both_streams() {
     windows_console::check(
         "real_console_uses_native_width_and_colours_on_both_streams",
         env!("CARGO_BIN_EXE_grant-workpaper"),
-        HELP80,
-        usage,
-        2,
+        80,
+        &[
+            windows_console::Case {
+                name: "help",
+                args: &["--help"],
+                expected: HELP80,
+                exit_code: 0,
+                colour: true,
+            },
+            windows_console::Case {
+                name: "usage",
+                args: &[],
+                expected: usage,
+                exit_code: 2,
+                colour: true,
+            },
+        ],
     );
 }
 

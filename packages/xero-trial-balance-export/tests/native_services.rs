@@ -14,6 +14,11 @@ mod https_proxy;
 mod report_fixture;
 #[path = "support/scratch.rs"]
 mod scratch;
+#[cfg(windows)]
+// The shared module follows Evatt and Elizabeth Anne Alexander's 120-column format.
+#[rustfmt::skip]
+#[path = "../../../tests/support/windows_console.rs"]
+mod windows_console;
 
 use base64::Engine;
 use https_proxy::{Proxy, Request};
@@ -39,6 +44,23 @@ const EXPECTED_CSV: &str = concat!(
 );
 
 const TOKEN_TRANSPORT_REFUSAL: &str = "error: could not reach Xero (error decoding response body for url (https://identity.xero.com/connect/token)) - re-run later.\n";
+
+#[cfg(windows)]
+#[test]
+fn export_help_uses_the_real_windows_console_width() {
+    windows_console::check(
+        "export_help_uses_the_real_windows_console_width",
+        env!("CARGO_BIN_EXE_export-tb"),
+        60,
+        &[windows_console::Case {
+            name: "help",
+            args: &["--help"],
+            expected: include_str!("fixtures/cli/export-help60.txt"),
+            exit_code: 0,
+            colour: false,
+        }],
+    );
+}
 
 fn command(program: &str, directory: &Path) -> Command {
     let mut cmd = child_profile::command(program);

@@ -1036,6 +1036,50 @@ mod tests {
         assert_eq!(fs::read(tmp.join("source.txt")).unwrap(), original);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn intake_refuses_output_below_a_directory_where_it_cannot_create_a_parent() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let extracted = tmp.join("extracted.txt");
+        let locked = tmp.join("read-only");
+        let parent = locked.join("missing");
+        let output = parent.join("bundle");
+        let text = source_text();
+        fs::write(&source, &text).unwrap();
+        fs::write(&extracted, &text).unwrap();
+        fs::create_dir(&locked).unwrap();
+        let permissions = fs::metadata(&locked).unwrap().permissions();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+
+        let probe = fs::create_dir(locked.join("probe"));
+        let result = if probe.is_err() {
+            Some(create_intake(IntakeOptions {
+                source: &source,
+                text: &extracted,
+                output: &output,
+                entity: "Demo",
+                period: "2026-03-31",
+                origin: "manual",
+                version: "",
+            }))
+        } else {
+            None
+        };
+        fs::set_permissions(&locked, permissions).unwrap();
+        if let Some(result) = result {
+            let error = probe.unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            assert_eq!(result.unwrap_err(), error.to_string());
+            assert!(!parent.exists());
+        }
+        assert_eq!(fs::read_to_string(&source).unwrap(), text);
+        assert_eq!(fs::read_to_string(&extracted).unwrap(), text);
+        assert!(!output.exists());
+    }
+
     #[test]
     fn intake_refuses_unsupported_original_extensions_and_text_origins() {
         for (suffix, origin, expected) in [

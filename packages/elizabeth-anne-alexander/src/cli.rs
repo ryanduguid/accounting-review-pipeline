@@ -871,6 +871,8 @@ mod tests {
 
     #[test]
     fn difflib_ratio_suggests_like_python() {
+        assert_eq!(close_match("", &["evaluate", ""]), Some(""));
+        assert_eq!(close_match("", &["evaluate"]), None);
         assert_eq!(
             close_match("evalute", &["evaluate", "validate-review"]),
             Some("evaluate")

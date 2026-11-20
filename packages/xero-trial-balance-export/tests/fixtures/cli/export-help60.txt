@@ -1,0 +1,35 @@
+usage: export-tb [-h] [--date DATE] [--tenant TENANT]
+                 [--out OUT] [--payments-only] [--quiet]
+                 [--no-manifest] [--token-file TOKEN_FILE]
+
+Export a Xero Trial Balance to CSV.
+
+options:
+  -h, --help            show this help message and exit
+  --date DATE           Report date YYYY-MM-DD
+  --tenant TENANT       Tenant name substring or exact
+                        tenantId (required when multiple
+                        orgs are connected)
+  --out OUT             Output CSV path relative to the
+                        current working directory
+  --payments-only       Cash-basis report
+  --quiet               Do not print the organisation
+                        name, the export totals or the
+                        written filenames, which carry the
+                        organisation name by default. The
+                        output directory, the account
+                        count and every warning still
+                        print.
+  --no-manifest         Do not write the
+                        <out>.manifest.json that records
+                        the tenant, basis and SHA-256 of
+                        the export
+  --token-file TOKEN_FILE
+                        Path to the token cache
+                        (token.json). This flag takes
+                        precedence over the
+                        XERO_TOKEN_FILE environment
+                        variable; the default is the per-
+                        user state directory (or a
+                        leftover executable-adjacent
+                        token.json).
