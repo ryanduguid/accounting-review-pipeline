@@ -13,8 +13,6 @@ use crate::pytext;
 struct Opt {
     flag: &'static str,
     dest: &'static str,
-    required: bool,
-    help: Option<&'static str>,
 }
 
 struct Command {
@@ -23,63 +21,56 @@ struct Command {
     options: &'static [Opt],
 }
 
-const fn opt(flag: &'static str, dest: &'static str, required: bool, help: Option<&'static str>) -> Opt {
-    Opt {
-        flag,
-        dest,
-        required,
-        help,
-    }
-}
+const INPUT: Opt = Opt {
+    flag: "--in",
+    dest: "SOURCE",
+};
+const MAP: Opt = Opt {
+    flag: "--map",
+    dest: "ENTITY_MAP",
+};
+const OUTPUT: Opt = Opt {
+    flag: "--out",
+    dest: "OUT",
+};
+const DESTINATION: Opt = Opt {
+    flag: "--destination",
+    dest: "DESTINATION",
+};
+const DECISION_REF: Opt = Opt {
+    flag: "--decision-ref",
+    dest: "DECISION_REF",
+};
+const RECORD: Opt = Opt {
+    flag: "--record",
+    dest: "RECORD",
+};
 
 static COMMANDS: [Command; 5] = [
     Command {
         name: "redact",
         help: "raw markdown to sanitised markdown",
-        options: &[
-            opt("--in", "SOURCE", true, None),
-            opt("--map", "ENTITY_MAP", true, None),
-            opt("--out", "OUT", true, None),
-        ],
+        options: &[INPUT, MAP, OUTPUT],
     },
     Command {
         name: "restore",
         help: "reverse the entity map over an answer",
-        options: &[
-            opt("--in", "SOURCE", true, None),
-            opt("--map", "ENTITY_MAP", true, None),
-            opt("--out", "OUT", true, None),
-        ],
+        options: &[INPUT, MAP, OUTPUT],
     },
     Command {
         name: "verify",
         help: "re-scan a sanitised file",
-        options: &[
-            opt("--in", "SOURCE", true, None),
-            opt("--map", "ENTITY_MAP", true, None),
-        ],
+        options: &[INPUT, MAP],
     },
     Command {
         name: "disclosure-record",
         help: "record local evidence for an intended disclosure",
-        options: &[
-            opt("--in", "SOURCE", true, None),
-            opt("--map", "ENTITY_MAP", true, None),
-            opt("--destination", "DESTINATION", true, None),
-            opt("--decision-ref", "DECISION_REF", true, None),
-            opt("--out", "OUT", true, None),
-        ],
+        options: &[INPUT, MAP, DESTINATION, DECISION_REF, OUTPUT],
     },
     Command {
         name: "disclosure-check",
         help: "check local evidence; does not authenticate permission",
-        options: &[
-            opt("--in", "SOURCE", true, None),
-            opt("--map", "ENTITY_MAP", true, None),
-            opt("--destination", "DESTINATION", true, None),
-            opt("--decision-ref", "DECISION_REF", true, None),
-            opt("--record", "RECORD", true, None),
-        ],
+        options: &[INPUT, MAP, DESTINATION, DECISION_REF, RECORD],
     },
 ];
 
@@ -290,16 +281,9 @@ fn command_usage(prog: &str, command: &Command, t: &Theme) -> String {
             "{}{} {}{}{}",
             t.summary_long_option, option.flag, t.summary_label, option.dest, t.reset
         );
-        parts.push(if option.required {
-            Part {
-                plain,
-                coloured: colour,
-            }
-        } else {
-            Part {
-                plain: format!("[{plain}]"),
-                coloured: format!("[{colour}]"),
-            }
+        parts.push(Part {
+            plain,
+            coloured: colour,
         });
     }
     usage(&format!("{prog} {}", command.name), &parts, &[], t)
@@ -319,7 +303,7 @@ fn command_help(prog: &str, command: &Command, t: &Theme) -> String {
                 plain,
                 coloured: colour,
             },
-            o.help,
+            None,
         )
     }));
     format!(
@@ -467,7 +451,7 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
     let missing: Vec<&str> = command
         .options
         .iter()
-        .filter(|o| o.required && !values.contains_key(o.flag))
+        .filter(|o| !values.contains_key(o.flag))
         .map(|o| o.flag)
         .collect();
     if !missing.is_empty() {
