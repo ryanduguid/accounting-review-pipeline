@@ -432,30 +432,26 @@ fn summary_evidence(summary: &str) -> Vec<SourceEvidence> {
     }
     found
 }
-fn md_cells(line: &str) -> Vec<String> {
-    let mut chars = line.chars();
+fn md_cells(line: &str) -> Vec<&str> {
+    let mut chars = line.char_indices();
     let mut cells = Vec::new();
-    let mut cell = String::new();
-    while let Some(c) = chars.next() {
+    let mut start = 0;
+    while let Some((at, c)) = chars.next() {
         if c == '\\' {
-            cell.push(c);
-            if let Some(next) = chars.next() {
-                cell.push(next);
-            }
+            chars.next();
         } else if c == '|' {
-            cells.push(std::mem::take(&mut cell));
-        } else {
-            cell.push(c);
+            cells.push(pytext::strip(&line[start..at]));
+            start = at + 1;
         }
     }
-    cells.push(cell);
-    if cells.first().is_some_and(|c| pytext::strip(c).is_empty()) {
+    cells.push(pytext::strip(&line[start..]));
+    if cells.first() == Some(&"") {
         cells.remove(0);
     }
-    if cells.last().is_some_and(|c| pytext::strip(c).is_empty()) {
+    if cells.last() == Some(&"") {
         cells.pop();
     }
-    cells.iter().map(|c| pytext::strip(c).into()).collect()
+    cells
 }
 fn scope_values<'a>(lines: &[&'a str], label: &str) -> Vec<&'a str> {
     let prefix = format!("- {label}: ");
@@ -646,7 +642,7 @@ fn verify_agreement(
                         "{column} disagrees on finding {}: {JSON_NAME} says {}, {SUMMARY_NAME} says {}",
                         i + 1,
                         pytext::repr(&expected),
-                        pytext::repr(&actual)
+                        pytext::repr(actual)
                     ));
                 }
             }

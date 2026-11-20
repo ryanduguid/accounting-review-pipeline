@@ -98,15 +98,22 @@ pub fn csv_safe(value: &str) -> String {
     }
 }
 pub fn md_cell(value: &str) -> String {
-    value
+    let mut escaped = String::new();
+    for word in value
         .split(|c: char| pytext::is_space(c as u32))
         .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-        .replace('\\', "\\\\")
-        .replace('|', "\\|")
-        .replace('*', "\\*")
-        .replace('`', "\\`")
+    {
+        if !escaped.is_empty() {
+            escaped.push(' ');
+        }
+        for ch in word.chars() {
+            if matches!(ch, '\\' | '|' | '*' | '`') {
+                escaped.push('\\');
+            }
+            escaped.push(ch);
+        }
+    }
+    escaped
 }
 fn note_lines(comment: &str) -> Vec<String> {
     if !comment.contains(['\r', '\n']) {

@@ -317,7 +317,7 @@ fn escaped_finding_pack(tmp: &TempDir) -> std::path::PathBuf {
     fs::write(
         input.join("open_items.csv"),
         "ItemID,Severity,Owner,DueDate,Status,Description,Resolution\n\
-         OI-escaped,BLOCKING,AB,2026-04-08,OPEN,Fabricated pipe | and slash \\ witness,\n",
+         OI-escaped,BLOCKING,AB,2026-04-08,OPEN,Fabricated pipe | and slash \\ witness with * and ` near Å,\n",
     )
     .unwrap();
     let pack =
@@ -337,10 +337,10 @@ fn viewer_preserves_literal_pipe_and_backslash_in_finding_text() {
     };
     assert_eq!(findings.len(), 1);
     assert!(findings[0].at("reason").is_str(
-        "Blocking open item OI-escaped still OPEN with no resolution: Fabricated pipe | and slash \\ witness"
+        "Blocking open item OI-escaped still OPEN with no resolution: Fabricated pipe | and slash \\ witness with * and ` near Å"
     ));
     assert!(verified.summary.contains(
-        "| NOT_READY | OPEN_ITEM_BLOCKING | open_items | no | Blocking open item OI-escaped still OPEN with no resolution: Fabricated pipe \\| and slash \\\\ witness |"
+        "| NOT_READY | OPEN_ITEM_BLOCKING | open_items | no | Blocking open item OI-escaped still OPEN with no resolution: Fabricated pipe \\| and slash \\\\ witness with \\* and \\` near Å |"
     ));
 }
 
