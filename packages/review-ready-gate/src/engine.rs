@@ -909,6 +909,22 @@ mod tests {
         review_pack(profile, dir, None, Decimal::parse("0.01").unwrap(), &[])
     }
     #[test]
+    fn review_refuses_missing_and_regular_file_pack_paths() {
+        let temp = TempDir::new();
+        let missing = temp.join("missing-pack");
+        let file = temp.join("pack.txt");
+        let fixture = b"synthetic pack placeholder";
+        fs::write(&file, fixture).unwrap();
+        for path in [&missing, &file] {
+            assert_eq!(
+                review("bas", path).unwrap_err(),
+                format!("pack directory does not exist: {}.", path.display())
+            );
+        }
+        assert!(!missing.exists());
+        assert_eq!(fs::read(file).unwrap(), fixture);
+    }
+    #[test]
     fn examples_preserve_profiles_statuses_and_repeat_findings() {
         for (example, profile, status) in [
             ("bas-ready", "bas", "READY"),
@@ -1189,6 +1205,29 @@ mod tests {
         row.findings
             .push(Finding::new("test", "BLOCKED", "slot", "reason", "action"));
         assert_eq!(overall(&row.findings), "BLOCKED");
+    }
+    #[test]
+    fn trial_balance_totals_refuse_rounding_across_accounts() {
+        let source = SourceSnapshot::capture(
+            &test_support::examples().join("bas-ready/trial_balance.csv"),
+            "tb",
+        )
+        .unwrap();
+        let mut rows = load_canonical_tb(&source).unwrap();
+        rows.truncate(2);
+        let large = amount("100000000000000000000000000000.00");
+        for row in &mut rows {
+            row.credit = Decimal::zero();
+            row.ytd_credit = Decimal::zero();
+        }
+        rows[0].debit = large.clone();
+        rows[0].ytd_debit = large.clone();
+        rows[1].debit = amount("0.01");
+        rows[1].ytd_debit = amount("0.01");
+        assert_eq!(tb_balanced(&rows[..1]).unwrap(), (large.clone(), large));
+        assert_eq!(tb_balanced(&rows).unwrap_err(), TB_PRECISION);
+        rows[1].debit = Decimal::zero();
+        assert_eq!(tb_balanced(&rows).unwrap_err(), TB_PRECISION);
     }
     #[test]
     fn bas_allowance_is_strictly_under_one_dollar_and_rounded_bank_control_is_preserved() {
