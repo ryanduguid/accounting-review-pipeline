@@ -155,15 +155,15 @@ pub(crate) fn extract(text: &str) -> Json {
             let Some(index) = FIELDS.iter().position(|(_, name)| *name == label) else {
                 continue;
             };
-            let raw = pytext::strip(raw);
-            let (value, error) = match field_value(FIELDS[index].0, &Json::str(raw)) {
+            let raw = Json::str(pytext::strip(raw));
+            let (value, error) = match field_value(FIELDS[index].0, &raw) {
                 Ok(v) => (Json::str(&v), String::new()),
                 Err(e) => (Json::Null, e),
             };
             fields[index].push(Json::object([
                 ("page", Json::int(page as i64 + 1)),
                 ("line", Json::int(line as i64 + 1)),
-                ("raw", Json::str(raw)),
+                ("raw", raw),
                 ("value", value),
                 ("error", Json::str(&error)),
             ]));
@@ -185,7 +185,8 @@ fn manifest(
     origin: &str,
     version: &str,
 ) -> Result<Json> {
-    string(&Json::str(entity), "entity", false)?;
+    let entity = Json::str(entity);
+    string(&entity, "entity", false)?;
     loader::parse_iso_date(period, "period_end", Path::new(INTAKE_NAME), None)?;
     let extension = source
         .path
@@ -199,7 +200,8 @@ fn manifest(
     if !["manual", "pdf-inspector"].contains(&origin) {
         return Err("text_origin must be manual or pdf-inspector.".into());
     }
-    string(&Json::str(version), "text_version", origin == "manual")?;
+    let version = Json::str(version);
+    string(&version, "text_version", origin == "manual")?;
     if extension == "txt" && source.content != text.content {
         return Err("A text original and its extracted text must have identical bytes.".into());
     }
@@ -207,11 +209,11 @@ fn manifest(
     Ok(Json::object([
         ("schema_version", Json::str("document-intake.v1")),
         ("mode", Json::str("synthetic")),
-        ("entity_ref", Json::str(entity)),
+        ("entity_ref", entity),
         ("period_end", Json::str(period)),
         ("extractor", Json::str("labelled-invoice.v1")),
         ("text_origin", Json::str(origin)),
-        ("text_version", Json::str(version)),
+        ("text_version", version),
         (
             "source",
             Json::object([
@@ -1115,6 +1117,42 @@ mod tests {
         assert_eq!(fs::read_to_string(&source).unwrap(), text);
         assert_eq!(fs::read_to_string(&extracted).unwrap(), text);
         assert!(load_document(&output).is_ok());
+    }
+
+    #[test]
+    fn intake_preserves_a_file_created_by_another_writer() {
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let output = tmp.join("intake");
+        let unowned = output.join(TEXT_NAME);
+        let text = source_text();
+        fs::write(&source, &text).unwrap();
+        let options = IntakeOptions {
+            source: &source,
+            text: &source,
+            output: &output,
+            entity: "Demo",
+            period: "2026-03-31",
+            origin: "manual",
+            version: "",
+        };
+        let unowned_contents = b"fabricated text from another writer";
+        let mut attempts = 0;
+        let error = create_intake_with(options, |file, content| {
+            attempts += 1;
+            file.write_all(content)?;
+            fs::write(&unowned, unowned_contents)
+        })
+        .unwrap_err();
+
+        let already_exists = File::create_new(&unowned).unwrap_err();
+        assert_eq!(already_exists.kind(), io::ErrorKind::AlreadyExists);
+        assert!(error.starts_with(&format!("Document intake write failed ({already_exists})")));
+        assert!(error.contains("its incomplete output could not be removed"));
+        assert_eq!(attempts, 1);
+        assert_eq!(fs::read(&unowned).unwrap(), unowned_contents);
+        assert_eq!(fs::read_dir(&output).unwrap().count(), 1);
+        assert_eq!(fs::read_to_string(&source).unwrap(), text);
     }
 
     #[cfg(unix)]
