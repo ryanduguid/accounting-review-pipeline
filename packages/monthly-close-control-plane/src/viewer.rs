@@ -8,7 +8,8 @@ use crate::{
     engine::{self, RunState},
     equity, pycsv,
     pyjson::{self, Json, LoadError, PyStr},
-    pypath, pytext, report,
+    pypath, pytext,
+    report::{self, md_cell, note_lines},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -535,17 +536,6 @@ fn repr_lines(lines: &[&str]) -> String {
             .collect(),
     ))
 }
-fn md_cell(value: &str) -> String {
-    value
-        .split(|c: char| pytext::is_space(c as u32))
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-        .replace('\\', "\\\\")
-        .replace('|', "\\|")
-        .replace('*', "\\*")
-        .replace('`', "\\`")
-}
 fn normalise(value: &str) -> String {
     value
         .split(|c: char| pytext::is_space(c as u32))
@@ -568,20 +558,6 @@ fn account(value: &Json) -> String {
     } else {
         pieces.join(" / ")
     }
-}
-fn note_lines(comment: &str) -> Vec<String> {
-    if !comment.contains(['\r', '\n']) {
-        return vec![format!("- Comment: {}", md_cell(comment))];
-    }
-    let mut lines = vec!["- Comment:".into()];
-    for raw in pytext::split_lines(comment) {
-        let mut line = md_cell(raw);
-        if line.starts_with('#') {
-            line.insert(0, '\\');
-        }
-        lines.push(format!("  > {line}").trim_end().into());
-    }
-    lines
 }
 fn indented(line: &str) -> Option<&str> {
     let spaces = line.bytes().take_while(|&b| b == b' ').count();
