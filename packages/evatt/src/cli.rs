@@ -654,6 +654,25 @@ mod tests {
     }
 
     #[test]
+    fn verify_accepts_hyphen_prefixed_input_paths() {
+        for input in ["-", "-0.25", "-Quarter 4.md"] {
+            let args = ["verify", "--in", input, "--map", "entities.json"].map(str::to_owned);
+            let parsed = parse("evatt", &args).ok().expect("verify accepts the input path");
+            assert_eq!(parsed.command, "verify");
+            assert_eq!(parsed.values["--in"], input);
+        }
+    }
+
+    #[test]
+    fn verify_reports_help_after_the_option_terminator_as_an_extra_argument() {
+        let result = diagnostics(&["verify", "--in", "in.md", "--map", "entities.json", "--", "--help"]);
+        assert_eq!(
+            result.lines().last(),
+            Some("evatt: error: unrecognized arguments: -- --help")
+        );
+    }
+
+    #[test]
     fn private_parent_diagnostics_do_not_change_ordinary_child_parsers() {
         let child = diagnostics(&["redact", "--record"]);
         assert!(child.contains("the following arguments are required: --in, --map, --out"));
