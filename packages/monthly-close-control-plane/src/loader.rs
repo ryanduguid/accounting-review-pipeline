@@ -773,4 +773,16 @@ mod tests {
             "input.csv: review note could not be read (JSON member 'comment' appears more than once.)."
         );
     }
+
+    #[test]
+    fn acknowledgement_reports_the_json_integer_digit_limit() {
+        let comment = "1".repeat(4301);
+        let note = snapshot(&format!(
+            r#"{{"reviewer_initials":"DR","reviewed_on":"2026-03-31","comment":{comment}}}"#
+        ));
+        assert_eq!(
+            load_reviewer_acknowledgement(Some(&note)).unwrap_err(),
+            "input.csv: review note could not be read (Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits)."
+        );
+    }
 }
