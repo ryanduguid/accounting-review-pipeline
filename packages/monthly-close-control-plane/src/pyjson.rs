@@ -688,7 +688,7 @@ fn sorted_pairs(pairs: &[(PyStr, Json)]) -> Vec<&(PyStr, Json)> {
     sorted
 }
 
-fn write_scalar(out: &mut String, value: &Json) -> bool {
+fn write_canonical(out: &mut String, value: &Json) {
     match value {
         Json::Null => out.push_str("null"),
         Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -699,45 +699,35 @@ fn write_scalar(out: &mut String, value: &Json) -> bool {
         }
         Json::Float(f) => out.push_str(&float_repr(*f)),
         Json::Str(s) => write_str(out, s),
-        _ => return false,
+        Json::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_canonical(out, item);
+            }
+            out.push(']');
+        }
+        Json::Object(pairs) => {
+            out.push('{');
+            for (i, (key, item)) in sorted_pairs(pairs).into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_str(out, key);
+                out.push(':');
+                write_canonical(out, item);
+            }
+            out.push('}');
+        }
     }
-    true
 }
 
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
 pub fn canonical(value: &Json) -> String {
-    fn go(out: &mut String, value: &Json) {
-        if write_scalar(out, value) {
-            return;
-        }
-        match value {
-            Json::Array(items) => {
-                out.push('[');
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    go(out, item);
-                }
-                out.push(']');
-            }
-            Json::Object(pairs) => {
-                out.push('{');
-                for (i, (key, item)) in sorted_pairs(pairs).into_iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    write_str(out, key);
-                    out.push(':');
-                    go(out, item);
-                }
-                out.push('}');
-            }
-            _ => unreachable!("scalars are written above"),
-        }
-    }
     let mut out = String::new();
-    go(&mut out, value);
+    write_canonical(&mut out, value);
     out
 }
 
@@ -791,9 +781,7 @@ pub fn canonical_utf8(value: &Json) -> Result<String, &'static str> {
                 }
                 out.push('}');
             }
-            _ => {
-                write_scalar(out, value);
-            }
+            scalar => write_canonical(out, scalar),
         }
         Ok(())
     }
@@ -802,12 +790,9 @@ pub fn canonical_utf8(value: &Json) -> Result<String, &'static str> {
     Ok(out)
 }
 
-/// `json.dumps(value, indent=2, sort_keys=True)`.
+/// `json.dumps(value, sort_keys=sort_keys, ensure_ascii=True)`.
 pub fn dumps(value: &Json, sort_keys: bool) -> String {
     fn go(out: &mut String, value: &Json, sort: bool) {
-        if write_scalar(out, value) {
-            return;
-        }
         match value {
             Json::Array(items) => {
                 out.push('[');
@@ -836,7 +821,7 @@ pub fn dumps(value: &Json, sort_keys: bool) -> String {
                 }
                 out.push('}');
             }
-            _ => unreachable!("scalars already written"),
+            scalar => write_canonical(out, scalar),
         }
     }
     let mut out = String::new();
@@ -862,6 +847,10 @@ fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {
     fn append(out: &mut Vec<u32>, text: &str) {
         out.extend(text.chars().map(u32::from));
     }
+    fn indent(out: &mut Vec<u32>, level: usize) {
+        out.push(u32::from('\n'));
+        out.extend(std::iter::repeat_n(u32::from(' '), level * 2));
+    }
     fn quoted(out: &mut Vec<u32>, text: &PyStr, ascii: bool) {
         if ascii {
             let mut raw = String::new();
@@ -886,28 +875,18 @@ fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {
         out.push(34);
     }
     fn go(out: &mut Vec<u32>, value: &Json, level: usize, sort: bool, ascii: bool) {
-        if let Json::Str(text) = value {
-            quoted(out, text, ascii);
-            return;
-        }
-        let mut scalar = String::new();
-        if write_scalar(&mut scalar, value) {
-            append(out, &scalar);
-            return;
-        }
-        let inner = format!("\n{}", "  ".repeat(level + 1));
-        let outer = format!("\n{}", "  ".repeat(level));
         match value {
+            Json::Str(text) => quoted(out, text, ascii),
             Json::Array(items) if items.is_empty() => append(out, "[]"),
             Json::Object(pairs) if pairs.is_empty() => append(out, "{}"),
             Json::Array(items) => {
                 out.push(91);
                 for (i, item) in items.iter().enumerate() {
                     append(out, if i > 0 { "," } else { "" });
-                    append(out, &inner);
+                    indent(out, level + 1);
                     go(out, item, level + 1, sort, ascii);
                 }
-                append(out, &outer);
+                indent(out, level);
                 out.push(93);
             }
             Json::Object(pairs) => {
@@ -919,15 +898,19 @@ fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {
                 };
                 for (i, (key, item)) in pairs.into_iter().enumerate() {
                     append(out, if i > 0 { "," } else { "" });
-                    append(out, &inner);
+                    indent(out, level + 1);
                     quoted(out, key, ascii);
                     append(out, ": ");
                     go(out, item, level + 1, sort, ascii);
                 }
-                append(out, &outer);
+                indent(out, level);
                 out.push(125);
             }
-            _ => unreachable!("scalars are written above"),
+            scalar => {
+                let mut rendered = String::new();
+                write_canonical(&mut rendered, scalar);
+                append(out, &rendered);
+            }
         }
     }
     let mut out = Vec::new();
