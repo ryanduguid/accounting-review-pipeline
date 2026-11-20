@@ -79,6 +79,50 @@ fn load_context(env: &Env) -> Result<(String, String)> {
     Ok((current.rows[0].report_date.iso(), prior.rows[0].report_date.iso()))
 }
 
+#[test]
+fn evaluate_reports_the_total_when_findings_are_truncated() {
+    let dir = TempDir::new();
+    let mut sandbox = env(dir.path());
+    let mut current = shipped(CURRENT_CSV);
+    current.push_str("2026-06-30,Demo Entity Pty Ltd,Assets,acct-790,Demo Cash Clearing,1090,0.00,0.00,9000.00,0.00\n");
+    current.push_str(
+        "2026-06-30,Demo Entity Pty Ltd,Revenue,acct-391,Demo Additional Sales,4090,0.00,0.00,0.00,9000.00\n",
+    );
+    let digest = sha256_hex(current.as_bytes());
+    sandbox.bundle.files.insert(CURRENT_CSV.into(), current.into_bytes());
+    edit(&mut sandbox, CURRENT_MANIFEST, |manifest| {
+        set(manifest, &["export", "sha256"], Json::str(&digest));
+    });
+    edit(&mut sandbox, POLICY, |policy| {
+        set(
+            policy,
+            &["operations", "trial_balance_variance", "max_results"],
+            parse("1"),
+        );
+    });
+
+    let mut args = EVALUATE.to_vec();
+    args.extend(["--out", "build/truncated"]);
+    let result = run(&sandbox, &args);
+    assert_eq!(result.code, 0, "{}", result.err);
+    assert_eq!(
+        result.out.lines().next(),
+        Some(
+            "elizabeth-anne-alexander: REVIEW_READY; 1 bounded finding(s); TRUNCATED at max_results, 2 total finding(s)"
+        )
+    );
+    let output = dir.path().join("build/truncated");
+    for (file, list) in [("model-result.json", "findings"), ("reviewer-evidence.json", "items")] {
+        let record = read_json(&output.join(file));
+        assert_eq!(canonical(record.at("total_findings")), "2", "{file}");
+        assert!(matches!(record.at("truncated"), Json::Bool(true)), "{file}");
+        assert!(
+            matches!(record.at(list), Json::Array(items) if items.len() == 1),
+            "{file}"
+        );
+    }
+}
+
 // --- CSV contract
 
 #[test]

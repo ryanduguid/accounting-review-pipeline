@@ -468,6 +468,49 @@ fn git_lookup_skips_directories_and_preserves_existing_artifacts() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn git_timeout_preserves_files_and_redaction_can_retry() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let repo = Repo::new();
+    let before = repo.seed_outputs_and_snapshot();
+    let search = repo.path("git-search");
+    std::fs::create_dir(&search).unwrap();
+    let git = search.join("git");
+    // Replace the shell so the timeout has only one process to stop.
+    std::fs::write(&git, b"#!/bin/sh\nexec sleep 120\n").unwrap();
+    std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let original = std::env::var_os("PATH").unwrap();
+    let path = std::env::join_paths(std::iter::once(search).chain(std::env::split_paths(&original))).unwrap();
+
+    let output = repo.command(&repo.normal("redact")).env("PATH", path).output().unwrap();
+    assert_eq!(code(&output), 1);
+    assert!(output.stdout.is_empty());
+    let error = stderr(&output);
+    assert!(
+        error.starts_with("error: cannot ask git about entities.json in "),
+        "{error}"
+    );
+    assert!(
+        error.contains("', 'ls-files', '--error-unmatch', '--', 'entities.json']' timed out after 30 seconds"),
+        "{error}"
+    );
+    assert!(
+        error.ends_with("; put git on PATH and re-run once the repository is idle\n"),
+        "{error}"
+    );
+    for (name, bytes) in before {
+        assert_eq!(repo.get(name), bytes, "{name}");
+    }
+
+    let retry = repo.run(&repo.normal("redact"));
+    assert_eq!(code(&retry), 0, "{}", stderr(&retry));
+    assert_eq!(repo.get("out.md"), b"PERSON_01\nTFN: TFN_01\n");
+    let checked = repo.run(&["verify", "--in", "out.md", "--map", "entities.json"]);
+    assert_eq!(code(&checked), 0, "{}", stderr(&checked));
+}
+
 #[cfg(windows)]
 #[test]
 fn missing_and_undecodable_windows_pathext_keep_lookup_contracts() {

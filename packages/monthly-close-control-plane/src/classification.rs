@@ -356,6 +356,20 @@ pub fn classify_with(
 mod tests {
     use super::*;
     #[test]
+    fn classification_posting_keeps_credit_amounts_on_the_credit_side() {
+        let source = SourceSnapshot::new(
+            Path::new("synthetic-credits.csv"),
+            b"Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit\nSynthetic,NEW,AUD,T1,2026-09-01,R,Synthetic credit,0,12.34\n".to_vec(),
+        );
+        let date = Date::new(2026, 9, 1).unwrap();
+        let postings = selection(&source, "AUD", "Synthetic", date, date).unwrap();
+        assert_eq!(postings.len(), 1);
+        let posted = posting(postings.values().next().unwrap());
+        assert!(posted.at("Debit").is_str("0.00"));
+        assert!(posted.at("Credit").is_str("12.34"));
+    }
+
+    #[test]
     #[expect(
         clippy::too_many_lines,
         reason = "one recoding scenario with its assertions"
