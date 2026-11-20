@@ -407,12 +407,48 @@ mod tests {
             ("As at 29 February 2024", Some("2024-02-29")),
             ("As at 29 February 1900", None),
             ("As at 31 April 2026", None),
+            ("As at 30 June 26", None),
+            ("As at 30  June 2026", None),
             ("As at 1 January 0000", None),
             ("As at 0 January 2026", None),
         ] {
             assert_eq!(as_at_date(title).as_deref(), date, "{title}");
         }
     }
+
+    #[test]
+    fn quiet_export_keeps_the_manifest_and_withholds_its_name() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("fabricated-organisation.csv");
+        let (rows, tenant) = fabricated();
+        let (result, stdout, stderr) =
+            stdio::capture(|| publish(&rows, &tenant, "2026-06-30", &path, false, true, false));
+        result.unwrap();
+        assert_eq!(
+            stdout,
+            format!(
+                "Wrote 2 accounts to {} (filename withheld under --quiet)\n\
+                 Wrote manifest beside the export (filename withheld under --quiet)\n",
+                crate::pypath::text(&scratch.0)
+            )
+        );
+        assert!(stderr.is_empty());
+        assert!(path.is_file());
+        assert!(publication::manifest_path(&path).is_file());
+    }
+
+    #[test]
+    fn an_empty_connection_list_reports_that_no_org_is_authorised() {
+        let response = Json::Array(Vec::new());
+        let connections = validated_connections(&response).unwrap();
+        assert_eq!(
+            select_tenant(connections, None).unwrap_err(),
+            Failure::message(
+                "No Xero organisations authorised for this app - run xero-tb-auth again."
+            )
+        );
+    }
+
     #[test]
     fn publish_reports_totals_then_quiet_rerun_removes_the_prior_sidecar() {
         let scratch = Scratch::new();

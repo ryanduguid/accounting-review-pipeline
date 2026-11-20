@@ -128,7 +128,12 @@ mod tests {
     fn synthetic_dotenv_preserves_first_value_quotes_bom_and_platform_key_case() {
         let scratch = crate::testing::Scratch::new();
         let file = scratch.0.join("synthetic-settings");
-        std::fs::write(&file,"\u{feff}# synthetic settings\nXERO_SYNTHETIC_ONLY = 'first'\nXERO_SYNTHETIC_ONLY=second\nxero_synthetic_lower=lower\n").unwrap();
+        std::fs::write(
+            &file,
+            "\u{feff}# synthetic settings\nXERO_SYNTHETIC_UNASSIGNED\n = ignored\n\
+             XERO_SYNTHETIC_ONLY = 'first'\nXERO_SYNTHETIC_ONLY=second\nxero_synthetic_lower=lower\n",
+        )
+        .unwrap();
         let environment = Environment::load(&file).unwrap();
         assert_eq!(
             environment.get("XERO_SYNTHETIC_ONLY").as_deref(),
@@ -138,7 +143,21 @@ mod tests {
             environment.get("XERO_SYNTHETIC_LOWER").as_deref(),
             if cfg!(windows) { Some("lower") } else { None }
         );
+        assert_eq!(environment.dotenv.len(), 2);
         std::fs::write(&file, [0xff, 0xfe, 0]).unwrap();
         assert!(Environment::load(&file).is_err());
+    }
+
+    #[test]
+    fn isolated_lookup_reads_only_its_fabricated_settings() {
+        let mut environment = Environment::isolated();
+        environment
+            .dotenv
+            .insert("XERO_SYNTHETIC_ONLY".into(), "fabricated".into());
+        assert_eq!(
+            environment.get("XERO_SYNTHETIC_ONLY").as_deref(),
+            Some("fabricated")
+        );
+        assert_eq!(environment.get("XERO_SYNTHETIC_MISSING"), None);
     }
 }

@@ -405,7 +405,7 @@ mod tests {
     }
     #[test]
     fn malformed_account_code_suffixes_keep_the_original_name() {
-        for name in ["Cash closing)", "Service\nCharge (100)"] {
+        for name in ["Service Charge ", "Cash closing)", "Service\nCharge (100)"] {
             assert_eq!(account_parts(name), (name, ""));
         }
     }
