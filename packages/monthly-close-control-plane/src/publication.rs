@@ -588,6 +588,39 @@ mod tests {
         assert!(!output.join("first").exists());
         assert_eq!(fs::read(output.join("second")).unwrap(), b"unowned");
     }
+    #[test]
+    fn partial_reservation_reports_a_missing_parent_without_creating_it() {
+        let temp = TempDir::new();
+        let missing = temp.0.join("not-created");
+        let error = partial(&missing.join("report.md")).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn new_directory_write_failure_rolls_back_if_an_output_was_removed() {
+        let temp = TempDir::new();
+        let output = temp.0.join("pack");
+        let result = write_new_with(
+            &output,
+            || {
+                Ok(vec![
+                    ("first".into(), b"first".to_vec()),
+                    ("second".into(), b"second".to_vec()),
+                ])
+            },
+            &mut |file, bytes| {
+                if bytes == b"second" {
+                    fs::remove_file(output.join("first"))?;
+                    return Err(io::Error::other("injected write failure"));
+                }
+                file.write_all(bytes)
+            },
+        );
+        assert_eq!(result.unwrap_err(), "injected write failure");
+        assert!(!output.exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn dangling_checkout_markers_and_symlinked_outputs_are_refused() {
