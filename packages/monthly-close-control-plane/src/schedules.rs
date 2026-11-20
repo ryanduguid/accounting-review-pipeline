@@ -677,4 +677,65 @@ mod tests {
                 .starts_with("Invalid schedule JSON:")
         );
     }
+
+    #[test]
+    fn schedules_refuse_missing_kind_specific_fields() {
+        let raw = br#"{"schema_version":1,"currency":"AUD","cutoff":"2026-09-30"}"#;
+        let source = SourceSnapshot::new(Path::new("schedule.json"), raw.to_vec());
+        for (kind, expected) in [
+            (
+                "expenses",
+                "expenses: expected exactly schema_version tenant currency cutoff invoices claims payments ledger_balance.",
+            ),
+            (
+                "migration",
+                "migration: expected exactly schema_version tenant currency cutoff mapping before after.",
+            ),
+            (
+                "interentity",
+                "interentity: expected exactly schema_version currency cutoff entities records.",
+            ),
+        ] {
+            assert_eq!(review_snapshot(&source, kind).unwrap_err(), expected);
+        }
+    }
+
+    #[test]
+    fn migration_refuses_zero_weights_and_duplicate_account_pairs() {
+        for mapping in [
+            r#"[{"mapping_id":"map-1","source_account":"100","target_account":"200","weight":"0"}]"#,
+            r#"[
+                {"mapping_id":"map-1","source_account":"100","target_account":"200","weight":"0.5"},
+                {"mapping_id":"map-2","source_account":"100","target_account":"200","weight":"0.5"}
+            ]"#,
+        ] {
+            let raw = format!(
+                r#"{{
+                    "schema_version":1,"tenant":"Demo","currency":"AUD","cutoff":"2026-09-30",
+                    "mapping":{mapping},
+                    "before":[{{"row_id":"row-1","item_id":"item-1","account":"100",
+                               "amount":"15.00","reference":"ref-1","tax_code":"NONE"}}],
+                    "after":[]
+                }}"#
+            );
+            let source = SourceSnapshot::new(Path::new("schedule.json"), raw.into_bytes());
+            assert_eq!(
+                review_snapshot(&source, "migration").unwrap_err(),
+                "Mapping weights must be positive and source/target pairs unique."
+            );
+        }
+    }
+
+    #[test]
+    fn interentity_refuses_duplicate_entity_ids() {
+        let raw = br#"{
+            "schema_version":1,"currency":"AUD","cutoff":"2026-09-30",
+            "entities":["demo-entity","demo-entity"],"records":[]
+        }"#;
+        let source = SourceSnapshot::new(Path::new("schedule.json"), raw.to_vec());
+        assert_eq!(
+            review_snapshot(&source, "interentity").unwrap_err(),
+            "Entity IDs must be unique."
+        );
+    }
 }
