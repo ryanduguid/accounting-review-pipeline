@@ -7,10 +7,7 @@ use crate::{
     amount::{self, Amount, Totals},
     pycsv, report,
 };
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 pub fn component_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -156,19 +153,17 @@ pub fn summary(text: &str) -> Result<Summary> {
                 .collect::<Result<Vec<_>>>()
         })
         .collect::<Result<Vec<_>>>()?;
-    if rows.is_empty() {
-        return Err(Failure::message(
-            "the fabricated sample has no account rows",
-        ));
-    }
-    let tenants: BTreeSet<_> = rows.iter().map(|row| row[1].clone()).collect();
-    let dates: BTreeSet<_> = rows.iter().map(|row| row[0].clone()).collect();
-    if tenants.len() != 1 {
+    let (first, rest) = rows
+        .split_first()
+        .ok_or_else(|| Failure::message("the fabricated sample has no account rows"))?;
+    let tenant = &first[1];
+    let date = &first[0];
+    if rest.iter().any(|row| &row[1] != tenant) {
         return Err(Failure::message(
             "the fabricated sample has multiple tenants",
         ));
     }
-    if dates.len() != 1 {
+    if rest.iter().any(|row| &row[0] != date) {
         return Err(Failure::message(
             "the fabricated sample has multiple report dates",
         ));
@@ -185,8 +180,8 @@ pub fn summary(text: &str) -> Result<Summary> {
         ));
     }
     Ok(Summary {
-        tenant: tenants.into_iter().next().unwrap(),
-        date: dates.into_iter().next().unwrap(),
+        tenant: tenant.clone(),
+        date: date.clone(),
         rows: rows.len(),
         columns,
         movement: format!("${}", totals[0].grouped_two()),
@@ -202,18 +197,15 @@ fn html(value: &str) -> String {
         .replace('\'', "&#x27;")
 }
 pub fn render_svg(summary: &Summary) -> String {
-    let mut svg = include_str!("../tools/quick-proof.svg.template").to_owned();
-    for (key, value) in [
-        ("tenant", html(&summary.tenant)),
-        ("date", html(&summary.date)),
-        ("rows", summary.rows.to_string()),
-        ("columns", summary.columns.to_string()),
-        ("movement", html(&summary.movement)),
-        ("ytd", html(&summary.ytd)),
-    ] {
-        svg = svg.replace(&format!("{{{key}}}"), &value);
-    }
-    svg
+    format!(
+        include_str!("../tools/quick-proof.svg.template"),
+        tenant = html(&summary.tenant),
+        date = html(&summary.date),
+        rows = summary.rows,
+        columns = summary.columns,
+        movement = html(&summary.movement),
+        ytd = html(&summary.ytd),
+    )
 }
 pub fn render_transcript(summary: &Summary) -> String {
     format!(
@@ -270,6 +262,20 @@ mod tests {
         assert!(render_svg(&summary).contains("10-row trial balance"));
         assert!(render_transcript(&summary).contains("$126,334.50"));
     }
+
+    #[test]
+    fn svg_preserves_placeholder_text_in_escaped_tenant_names() {
+        let sample = include_str!("../samples/sample-output.csv");
+        let sample = sample.replace("Catherby Fisheries Pty Ltd", "A & B {date} <{rows}>");
+        let summary = summary(&sample).unwrap();
+        let svg = render_svg(&summary);
+        assert!(
+            svg.contains(">A &amp; B {date} &lt;{rows}&gt;</text>"),
+            "{svg}"
+        );
+        assert!(svg.contains("FABRICATED OFFLINE PROOF  |  2026-06-30</text>"));
+    }
+
     #[test]
     fn only_declared_fabricated_fixtures_are_read() {
         for (name, passing) in [
