@@ -56,18 +56,6 @@ fn repr(value: &Json) -> String {
     }
 }
 
-fn type_name(value: &Json) -> &'static str {
-    match value {
-        Json::Null => "NoneType",
-        Json::Bool(_) => "bool",
-        Json::Int(_) => "int",
-        Json::Float(_) => "float",
-        Json::Str(_) => "str",
-        Json::Array(_) => "list",
-        Json::Object(_) => "dict",
-    }
-}
-
 pub fn truth(value: &Json) -> bool {
     match value {
         Json::Null => false,
@@ -108,14 +96,16 @@ fn objects<'a>(container: &'a Json, key: &str, where_: &str) -> Result<&'a [Json
 }
 
 fn cell_text(value: &Json, where_: &str) -> Result<String> {
-    match value {
-        Json::Null => Ok(String::new()),
-        Json::Str(_) | Json::Int(_) | Json::Float(_) => Ok(text(value)),
-        _ => Err(Failure::message(format!(
-            "error: report {where_} has a cell Value that is not text or a number ({}). The API shape may have changed, or this is not a trial balance report.",
-            type_name(value)
-        ))),
-    }
+    let kind = match value {
+        Json::Null => return Ok(String::new()),
+        Json::Str(_) | Json::Int(_) | Json::Float(_) => return Ok(text(value)),
+        Json::Bool(_) => "bool",
+        Json::Array(_) => "list",
+        Json::Object(_) => "dict",
+    };
+    Err(Failure::message(format!(
+        "error: report {where_} has a cell Value that is not text or a number ({kind}). The API shape may have changed, or this is not a trial balance report."
+    )))
 }
 
 fn cell_values(row: &Json, where_: &str) -> Result<Vec<String>> {
@@ -366,6 +356,57 @@ mod tests {
             let (header, rows) = flatten(&report).unwrap();
             assert_eq!(header, [expected]);
             assert!(rows.is_empty());
+        }
+    }
+    #[test]
+    fn header_refuses_unsupported_cell_types_with_an_exact_diagnostic() {
+        for (raw, kind) in [("true", "bool"), ("[]", "list"), ("{}", "dict")] {
+            let report = crate::pyjson::loads(&format!(
+                r#"{{"Rows":[{{"RowType":"Header","Cells":[{{"Value":{raw}}}]}}]}}"#
+            ))
+            .unwrap();
+            let error = flatten(&report).unwrap_err();
+            assert_eq!(
+                error,
+                Failure::message(format!(
+                    "error: report top level has a cell Value that is not text or a number ({kind}). The API shape may have changed, or this is not a trial balance report."
+                ))
+            );
+        }
+    }
+    #[test]
+    fn report_uses_explicit_section_and_account_metadata() {
+        let report = crate::pyjson::loads(
+            r#"{
+                "Rows": [
+                    {"RowType": "Header", "Cells": [
+                        {"Value": "Account"}, {"Value": "Debit"},
+                        {"Value": "Section"}, {"Value": "AccountID"}
+                    ]},
+                    {"RowType": "Section", "Title": "Assets", "Rows": [
+                        {"RowType": "Row", "Cells": [
+                            {"Value": "Cash (100)", "Attributes": [{"Id": "account", "Value": "A100"}]},
+                            {"Value": 5}, {"Value": "cell section"}, {"Value": "cell account ID"}
+                        ]}
+                    ]},
+                    {"RowType": "Section", "Title": 0.0, "Rows": [
+                        {"RowType": "SummaryRow", "Cells": [
+                            {"Value": ""}, {"Value": 5}, {"Value": ""}, {"Value": ""}
+                        ]}
+                    ]}
+                ]
+            }"#,
+        )
+        .unwrap();
+        let (_, entries) = flatten(&report).unwrap();
+        let (rows, _) = build_rows(&entries, &Json::Null, "2026-03-31").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(&rows[0][2..7], ["Assets", "A100", "Cash", "100", "5.0"]);
+    }
+    #[test]
+    fn malformed_account_code_suffixes_keep_the_original_name() {
+        for name in ["Cash closing)", "Service\nCharge (100)"] {
+            assert_eq!(account_parts(name), (name, ""));
         }
     }
     #[test]
