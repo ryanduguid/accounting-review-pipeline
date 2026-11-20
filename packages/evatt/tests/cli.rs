@@ -804,6 +804,48 @@ fn disclosure_is_private_exclusive_versioned_and_bound_to_unchanged_bytes() {
 }
 
 #[test]
+fn disclosure_refuses_an_invalid_entity_map_without_changing_evidence() {
+    let repo = Repo::new();
+    let payload = b"PERSON_01\n";
+    repo.put("in.md", payload);
+    assert_eq!(code(&repo.disclosure("disclosure-record")), 0);
+    let record = repo.get("out.disclosure.json");
+    let invalid_map = b"Sample Sensitive Sentinel: {";
+    repo.put("entities.json", invalid_map);
+
+    for command in ["disclosure-record", "disclosure-check"] {
+        let output = repo.disclosure(command);
+        assert_eq!(code(&output), 1, "{output:?}");
+        assert!(output.stdout.is_empty(), "{output:?}");
+        assert_eq!(
+            stderr(&output),
+            native_output("error: cannot use entity map; it must be valid, ignored and untracked\n")
+        );
+        assert_eq!(repo.get("out.disclosure.json"), record);
+        assert_eq!(repo.get("in.md"), payload);
+        assert_eq!(repo.get("entities.json"), invalid_map);
+    }
+}
+
+#[test]
+fn disclosure_check_reports_a_missing_record_without_creating_it() {
+    let repo = Repo::new();
+    let payload = b"PERSON_01\n";
+    repo.put("in.md", payload);
+
+    let output = repo.disclosure("disclosure-check");
+    assert_eq!(code(&output), 1, "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert_eq!(
+        stderr(&output),
+        native_output("error: cannot read or create disclosure files; existing files are never overwritten\n")
+    );
+    assert!(!repo.path("out.disclosure.json").exists());
+    assert_eq!(repo.get("in.md"), payload);
+    assert_eq!(repo.get("entities.json"), MAP.as_bytes());
+}
+
+#[test]
 fn surrogate_restore_leaves_the_same_empty_file_and_one_error_line() {
     let repo = Repo::new();
     repo.put("in.md", b"PERSON_01");
