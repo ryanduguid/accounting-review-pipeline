@@ -138,17 +138,18 @@ impl Arguments {
             })
     }
 }
-fn negative_number(text: &str) -> bool {
-    let Some(text) = text.strip_prefix('-') else {
-        return false;
+fn option_operand(value: &str) -> bool {
+    let Some(suffix) = value.strip_prefix('-') else {
+        return true;
     };
-    let mut parts = text.split('.');
-    let before = parts.next().unwrap();
-    let after = parts.next();
-    let digits = |s: &str| s.chars().all(|c| pytext::decimal_value(c as u32).is_some());
-    parts.next().is_none()
-        && digits(before)
-        && after.map_or(!before.is_empty(), |a| !a.is_empty() && digits(a))
+    // CPython 3.15 argparse recognises a negative number by its prefix.
+    let number = suffix.strip_prefix('.').unwrap_or(suffix);
+    suffix.is_empty()
+        || value.contains(' ')
+        || number
+            .chars()
+            .next()
+            .is_some_and(|ch| pytext::decimal_value(ch as u32).is_some())
 }
 #[expect(
     clippy::too_many_lines,
@@ -226,12 +227,9 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
         let value = if let Some(value) = assigned {
             value.to_owned()
         } else {
-            let Some(value) = args.get(i) else {
+            let Some(value) = args.get(i).filter(|value| option_operand(value)) else {
                 return Err(format!("argument {flag}: expected one argument"));
             };
-            if value.starts_with('-') && value != "-" && !negative_number(value) {
-                return Err(format!("argument {flag}: expected one argument"));
-            }
             i += 1;
             value.clone()
         };
@@ -669,7 +667,7 @@ mod tests {
             ("-0.01", "must be a finite non-negative decimal"),
             ("-.5", "must be a finite non-negative decimal"),
             ("-1", "must be a finite non-negative decimal"),
-            ("-1.2.3", "expected one argument"),
+            ("-1.2.3", "not a decimal: '-1.2.3'"),
         ] {
             let args = vec![
                 "gate".into(),
@@ -688,6 +686,40 @@ mod tests {
             assert!(!output.exists());
         }
     }
+    #[test]
+    fn intake_option_operands_follow_argparse_315_prefixes() {
+        for value in [
+            "-7.5.2", "-.5part", "-４", "-.٤", "-7.5", "-", "- demo", "Fixture",
+        ] {
+            let args = [
+                "--synthetic",
+                "--source=fixture.txt",
+                "--text=fixture.txt",
+                "--text-origin=manual",
+                "--period-end=2026-03-31",
+                "--output=fixture-output",
+                "--entity",
+                value,
+            ]
+            .map(str::to_owned);
+            let parsed = parse("intake", &args).unwrap().unwrap();
+            assert_eq!(parsed.text("--entity"), value);
+        }
+
+        for value in ["-.", "-.x", "-²", "--"] {
+            let args = ["--entity", value].map(str::to_owned);
+            assert_eq!(
+                parse("intake", &args).err().as_deref(),
+                Some("argument --entity: expected one argument"),
+                "{value}"
+            );
+        }
+        assert_eq!(
+            parse("intake", &["--entity".into()]).err().as_deref(),
+            Some("argument --entity: expected one argument")
+        );
+    }
+
     #[test]
     fn queue_help_describes_status_and_missing_control_reporting() {
         let (code, stdout, stderr) =
