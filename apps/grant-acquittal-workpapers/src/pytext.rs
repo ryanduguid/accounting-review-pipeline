@@ -178,6 +178,8 @@ mod tests {
         let pair = "\u{10F7FF}\u{10F800}";
         assert_eq!(repr(pair), r"'\U0010f7ff\U0010f800'");
         assert_eq!(repr_os(pair), r"'\ud800'");
+        assert_eq!(repr_os("\u{10F7FF}"), r"'\U0010f7ff'");
+        assert_eq!(repr_os("\u{10F7FF}Z"), r"'\U0010f7ffZ'");
         assert_eq!(repr("200"), "'200'");
         assert_eq!(repr("it's"), "\"it's\"");
         assert_eq!(repr("a'b\"c"), "'a\\'b\"c'");
