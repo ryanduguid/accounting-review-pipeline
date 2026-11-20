@@ -156,21 +156,18 @@ fn error(prog: &str, auth: bool, message: String) -> Failure {
     }
 }
 
-fn negative_number(value: &str) -> bool {
-    let Some(value) = value.strip_prefix('-') else {
-        return false;
+fn option_operand(value: &str) -> bool {
+    let Some(suffix) = value.strip_prefix('-') else {
+        return true;
     };
-    let mut dots = 0;
-    !value.is_empty()
-        && value.bytes().all(|b| {
-            if b == b'.' {
-                dots += 1;
-                dots == 1
-            } else {
-                b.is_ascii_digit()
-            }
-        })
-        && value.bytes().any(|b| b.is_ascii_digit())
+    // CPython 3.15 argparse recognises a negative number by its prefix.
+    let number = suffix.strip_prefix('.').unwrap_or(suffix);
+    suffix.is_empty()
+        || value.contains(' ')
+        || number
+            .chars()
+            .next()
+            .is_some_and(|ch| pytext::decimal_value(ch as u32).is_some())
 }
 
 #[expect(
@@ -282,9 +279,7 @@ pub fn parse(args: &[OsString], prog: &str, auth: bool) -> Result<Option<Options
         let value = if let Some(value) = explicit {
             value.to_string()
         } else {
-            let Some(value) = values.get(index).filter(|s| {
-                !s.starts_with('-') || negative_number(s) || *s == "-" || s.contains(' ')
-            }) else {
+            let Some(value) = values.get(index).filter(|s| option_operand(s)) else {
                 return Err(error(
                     prog,
                     auth,
@@ -507,6 +502,36 @@ mod tests {
     }
 
     #[test]
+    fn option_operands_follow_argparse_315_negative_number_prefixes() {
+        for value in [
+            "-7.5.2", "-.5part", "-４", "-.٤", "-7.5", "-", "- demo", "Demo",
+        ] {
+            let options = parse(
+                &["--tenant".into(), value.into(), "--quiet".into()],
+                "export-tb",
+                false,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(options.tenant.as_deref(), Some(value));
+            assert!(options.quiet, "{value}");
+        }
+        for value in ["-.", "-.x", "-²", "--"] {
+            let failure = parse(&["--tenant".into(), value.into()], "export-tb", false)
+                .err()
+                .unwrap();
+            assert_eq!(failure.code, 2, "{value}");
+            assert!(
+                failure
+                    .stderr
+                    .contains("argument --tenant: expected one argument"),
+                "{value}: {}",
+                failure.stderr
+            );
+        }
+    }
+
+    #[test]
     fn iso_dates_keep_the_calendar_and_years_1_to_9999() {
         for (value, date) in [
             ("0001-01-01", "0001-01-01"),
@@ -517,6 +542,7 @@ mod tests {
             ("2024-02-29", "2024-02-29"),
             ("2000-02-29", "2000-02-29"),
             ("2026-W01", "2025-12-29"),
+            ("2026W272", "2026-06-30"),
             ("2026-+1-05", "2026-01-05"),
         ] {
             assert_eq!(iso_date(value).unwrap(), date, "{value}");
@@ -531,6 +557,7 @@ mod tests {
             "2026-W00-1",
             "2026-W27-0",
             "2026-W27-8",
+            "2026W27080",
             "0000-W01-1",
         ] {
             assert!(iso_date(invalid).is_err(), "{invalid}");
