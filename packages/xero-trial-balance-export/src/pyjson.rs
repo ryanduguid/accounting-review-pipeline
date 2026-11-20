@@ -589,7 +589,7 @@ fn sorted_pairs(pairs: &[(PyStr, Json)]) -> Vec<&(PyStr, Json)> {
     sorted
 }
 
-fn write_scalar(out: &mut String, value: &Json) -> bool {
+fn write_canonical(out: &mut String, value: &Json) {
     match value {
         Json::Null => out.push_str("null"),
         Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -600,56 +600,46 @@ fn write_scalar(out: &mut String, value: &Json) -> bool {
         }
         Json::Float(f) => out.push_str(&float_repr(*f)),
         Json::Str(s) => write_str(out, s),
-        _ => return false,
+        Json::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_canonical(out, item);
+            }
+            out.push(']');
+        }
+        Json::Object(pairs) => {
+            out.push('{');
+            for (i, (key, item)) in sorted_pairs(pairs).into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_str(out, key);
+                out.push(':');
+                write_canonical(out, item);
+            }
+            out.push('}');
+        }
     }
-    true
 }
 
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
 pub fn canonical(value: &Json) -> String {
-    fn go(out: &mut String, value: &Json) {
-        if write_scalar(out, value) {
-            return;
-        }
-        match value {
-            Json::Array(items) => {
-                out.push('[');
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    go(out, item);
-                }
-                out.push(']');
-            }
-            Json::Object(pairs) => {
-                out.push('{');
-                for (i, (key, item)) in sorted_pairs(pairs).into_iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    write_str(out, key);
-                    out.push(':');
-                    go(out, item);
-                }
-                out.push('}');
-            }
-            _ => unreachable!("scalars are written above"),
-        }
-    }
     let mut out = String::new();
-    go(&mut out, value);
+    write_canonical(&mut out, value);
     out
 }
 
 /// `json.dumps(value, indent=2, sort_keys=True)`.
 pub fn pretty(value: &Json) -> String {
+    fn indent(out: &mut String, level: usize) {
+        out.push('\n');
+        out.extend(std::iter::repeat_n(' ', level * 2));
+    }
+
     fn go(out: &mut String, value: &Json, level: usize) {
-        if write_scalar(out, value) {
-            return;
-        }
-        let inner = format!("\n{}", "  ".repeat(level + 1));
-        let outer = format!("\n{}", "  ".repeat(level));
         match value {
             Json::Array(items) if items.is_empty() => out.push_str("[]"),
             Json::Object(pairs) if pairs.is_empty() => out.push_str("{}"),
@@ -657,25 +647,25 @@ pub fn pretty(value: &Json) -> String {
                 out.push('[');
                 for (i, item) in items.iter().enumerate() {
                     out.push_str(if i > 0 { "," } else { "" });
-                    out.push_str(&inner);
+                    indent(out, level + 1);
                     go(out, item, level + 1);
                 }
-                out.push_str(&outer);
+                indent(out, level);
                 out.push(']');
             }
             Json::Object(pairs) => {
                 out.push('{');
                 for (i, (key, item)) in sorted_pairs(pairs).into_iter().enumerate() {
                     out.push_str(if i > 0 { "," } else { "" });
-                    out.push_str(&inner);
+                    indent(out, level + 1);
                     write_str(out, key);
                     out.push_str(": ");
                     go(out, item, level + 1);
                 }
-                out.push_str(&outer);
+                indent(out, level);
                 out.push('}');
             }
-            _ => unreachable!("scalars are written above"),
+            scalar => write_canonical(out, scalar),
         }
     }
     let mut out = String::new();
