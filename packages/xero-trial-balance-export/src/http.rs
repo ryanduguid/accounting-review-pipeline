@@ -41,17 +41,9 @@ pub struct NativeHttp {
     runtime: tokio::runtime::Runtime,
 }
 
-fn certificates(environment: &crate::config::Environment) -> Result<Vec<reqwest::Certificate>> {
-    let custom = environment
-        .process_only("REQUESTS_CA_BUNDLE")
-        .filter(|v| !v.is_empty())
-        .or_else(|| {
-            environment
-                .process_only("CURL_CA_BUNDLE")
-                .filter(|v| !v.is_empty())
-        });
+fn certificates(custom: Option<&std::path::Path>) -> Result<Vec<reqwest::Certificate>> {
     let (roots, parse_error) = if let Some(path) = custom {
-        let roots = std::fs::read(crate::pypath::encode_os(&path)).map_err(|_| {
+        let roots = std::fs::read(path).map_err(|_| {
             Failure::message(
                 "error: the configured TLS CA bundle cannot be read; no Xero request was made.",
             )
@@ -84,7 +76,16 @@ impl NativeHttp {
             .map_err(|e| Failure::message(e.to_string()))?;
         let client = {
             let _entered = runtime.enter();
-            let certificates = certificates(environment)?;
+            let configured_roots = environment
+                .process_only("REQUESTS_CA_BUNDLE")
+                .filter(|v| !v.is_empty())
+                .or_else(|| {
+                    environment
+                        .process_only("CURL_CA_BUNDLE")
+                        .filter(|v| !v.is_empty())
+                })
+                .map(|path| crate::pypath::encode_os(&path));
+            let certificates = certificates(configured_roots.as_deref().map(std::path::Path::new))?;
             // Proxies come from reqwest's process-environment default, never the cwd .env.
             let builder = reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(30))
@@ -652,42 +653,31 @@ mod tests {
         }
     }
     #[test]
-    fn malformed_configured_ca_bundle_is_named_in_the_error() {
-        const CHILD: &str = "XERO_TB_TEST_MALFORMED_CA_CHILD";
+    fn configured_ca_bundle_refusals_distinguish_read_parse_and_empty() {
         let scratch = Scratch::new();
-        if std::env::var_os(CHILD).is_some() {
-            let environment =
-                crate::config::Environment::load(&scratch.0.join("absent-settings")).unwrap();
-            assert_eq!(
-                NativeHttp::new(&environment).err(),
-                Some(Failure::message(
-                    "error: the configured TLS CA bundle is malformed; no Xero request was made.",
-                )),
-            );
-            return;
-        }
         let roots = scratch.0.join("synthetic-roots.pem");
-        std::fs::write(
-            &roots,
-            "-----BEGIN CERTIFICATE-----\n!!\n-----END CERTIFICATE-----\n",
-        )
-        .unwrap();
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "http::tests::malformed_configured_ca_bundle_is_named_in_the_error",
-            ])
-            .env(CHILD, "1")
-            .env("REQUESTS_CA_BUNDLE", roots)
-            .env_remove("CURL_CA_BUNDLE")
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
+        assert_eq!(
+            certificates(Some(&roots)).err(),
+            Some(Failure::message(
+                "error: the configured TLS CA bundle cannot be read; no Xero request was made.",
+            ))
         );
+        for (contents, diagnostic) in [
+            (
+                "-----BEGIN CERTIFICATE-----\n!!\n-----END CERTIFICATE-----\n",
+                "error: the configured TLS CA bundle is malformed; no Xero request was made.",
+            ),
+            (
+                "",
+                "error: the TLS CA bundle contains no certificates; no Xero request was made.",
+            ),
+        ] {
+            std::fs::write(&roots, contents).unwrap();
+            assert_eq!(
+                certificates(Some(&roots)).err(),
+                Some(Failure::message(diagnostic))
+            );
+        }
     }
 
     #[test]
