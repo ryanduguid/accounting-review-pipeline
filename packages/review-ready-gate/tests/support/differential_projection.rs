@@ -36,6 +36,46 @@ fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Res
     Ok(())
 }
 
+#[test]
+fn document_fixture_collisions_preserve_existing_files_and_abort_comparisons() -> Result<()> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for blocked in [
+        "unreviewed.txt",
+        "bundle-unreviewed",
+        "document-pack-absent",
+    ] {
+        let scratch = Scratch::new()?;
+        let existing = scratch.0.join(blocked);
+        fs::create_dir(&existing)?;
+        let marker = existing.join("keep.txt");
+        fs::write(&marker, b"fabricated existing output")?;
+        let mut corpus = Corpus(Vec::new());
+
+        let error = document_packs(&mut corpus, root, &scratch.0).unwrap_err();
+        match blocked {
+            "bundle-unreviewed" => assert_eq!(
+                error.to_string(),
+                "Document intake requires a new output directory; existing files stay intact."
+            ),
+            "document-pack-absent" => assert_eq!(
+                error.downcast_ref::<std::io::Error>().unwrap().kind(),
+                std::io::ErrorKind::AlreadyExists
+            ),
+            _ => assert!(error.downcast_ref::<std::io::Error>().is_some()),
+        }
+        if blocked == "document-pack-absent" {
+            assert_eq!(corpus.0.len(), 1);
+            assert!(corpus.0[0].at("name").is_str("document-pack-absent"));
+            assert!(corpus.0[0].at("op").is_str("review_pack"));
+        } else {
+            assert!(corpus.0.is_empty(), "{blocked}");
+        }
+        assert_eq!(fs::read(&marker)?, b"fabricated existing output");
+        assert_eq!(fs::read_dir(&existing)?.count(), 1);
+    }
+    Ok(())
+}
+
 fn review_result(example: &str, profile: &str) -> Result<Json> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("examples")
