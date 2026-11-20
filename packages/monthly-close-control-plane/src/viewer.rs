@@ -614,8 +614,7 @@ fn section_heading(line: &str) -> bool {
             .next()
             .is_some_and(|c| pytext::is_space(c as u32))
 }
-fn verify_headings(summary: &str, register: bool, evidence: bool, equity: bool) -> Result<()> {
-    let lines = pytext::split_lines(summary);
+fn verify_headings(lines: &[&str], register: bool, evidence: bool, equity: bool) -> Result<()> {
     for (index, line) in lines.iter().enumerate() {
         if indented(line)
             .is_some_and(|s| s.starts_with("```") || s.starts_with("~~~") || s.starts_with('<'))
@@ -665,34 +664,33 @@ fn verify_headings(summary: &str, register: bool, evidence: bool, equity: bool) 
         repr_lines(&expected)
     ))
 }
-fn section<'a>(summary: &'a str, heading: &str) -> Result<Vec<&'a str>> {
-    let lines = pytext::split_lines(summary);
-    let indices: Vec<_> = lines
+fn section<'a, 'text>(lines: &'a [&'text str], heading: &str) -> Result<&'a [&'text str]> {
+    let mut indices = lines
         .iter()
         .enumerate()
-        .filter(|(_, s)| **s == heading)
-        .map(|(i, _)| i)
-        .collect();
-    if indices.len() != 1 {
+        .filter_map(|(i, line)| (*line == heading).then_some(i));
+    let first = indices.next();
+    let count = usize::from(first.is_some()) + indices.count();
+    let Some(index) = first.filter(|_| count == 1) else {
         return Err(format!(
-            "{S}: expected exactly one {} heading, found {}",
-            pytext::repr(heading),
-            indices.len()
+            "{S}: expected exactly one {} heading, found {count}",
+            pytext::repr(heading)
         ));
-    }
-    let start = indices[0] + 1;
-    let end = (start..lines.len())
-        .find(|&i| section_heading(lines[i]))
-        .unwrap_or(lines.len());
-    Ok(lines[start..end].to_vec())
+    };
+    let rest = &lines[index + 1..];
+    let end = rest
+        .iter()
+        .position(|line| section_heading(line))
+        .unwrap_or(rest.len());
+    Ok(&rest[..end])
 }
 fn rebuilt_section(
-    summary: &str,
+    lines: &[&str],
     heading: &str,
     expected: &[String],
     trailing: bool,
 ) -> Result<()> {
-    let actual = section(summary, heading)?;
+    let actual = section(lines, heading)?;
     let mut wanted = vec![""];
     wanted.extend(expected.iter().map(String::as_str));
     if trailing {
@@ -702,7 +700,7 @@ fn rebuilt_section(
         return Err(format!(
             "{S}: the {} section disagrees with {J}: renders {}, expected {}",
             pytext::repr(heading.trim_start_matches(['#', ' '])),
-            repr_lines(&actual),
+            repr_lines(actual),
             repr_lines(&wanted)
         ));
     }
@@ -823,8 +821,8 @@ fn query_counts(summary: &str) -> Vec<String> {
         .collect()
 }
 #[expect(clippy::too_many_lines, reason = "checks the client queries section")]
-fn verify_queries(summary: &str, queries: &[Json]) -> Result<()> {
-    let section = section(summary, "## Client queries")?;
+fn verify_queries(summary: &str, lines: &[&str], queries: &[Json]) -> Result<()> {
+    let section = section(lines, "## Client queries")?;
     if !normalise(&section.join(" ")).contains("These are draft questions for the preparer, derived from the exceptions above. Nothing has been sent to anyone.") {return Err(format!("{S}: the client-query boundary statement is missing or altered"));}
     let counts = query_counts(summary);
     if counts.len() != 1 {
@@ -977,8 +975,8 @@ fn slug(value: &str) -> bool {
     })
 }
 #[expect(clippy::too_many_lines, reason = "parses the evidence section rows")]
-fn evidence_rows(summary: &str) -> Result<(Vec<String>, EvidenceRows)> {
-    let section = section(summary, EVIDENCE_HEADING)?;
+fn evidence_rows(lines: &[&str]) -> Result<(Vec<String>, EvidenceRows)> {
+    let section = section(lines, EVIDENCE_HEADING)?;
     let lead = ["", EVIDENCE_PREAMBLE, ""];
     if !section.starts_with(&lead) {
         return Err(format!(
@@ -1131,9 +1129,9 @@ fn encoded_str(value: &Json) -> String {
     clippy::too_many_lines,
     reason = "checks the evidence block against the summary"
 )]
-fn verify_evidence(block: &Json, summary: &str, sources: &Json) -> Result<()> {
+fn verify_evidence(block: &Json, lines: &[&str], sources: &Json) -> Result<()> {
     if matches!(block, Json::Null) {
-        if pytext::split_lines(summary)
+        if lines
             .iter()
             .any(|line| pytext::strip(line) == EVIDENCE_HEADER)
         {
@@ -1155,7 +1153,7 @@ fn verify_evidence(block: &Json, summary: &str, sources: &Json) -> Result<()> {
         return Ok(());
     }
     let (supplied, required) = evidence_lists(block)?;
-    let (summary_required, summary_rows) = evidence_rows(summary)?;
+    let (summary_required, summary_rows) = evidence_rows(lines)?;
     if required.iter().map(text).collect::<Vec<_>>() != summary_required {
         return Err(format!(
             "calculation evidence disagrees: {J} requires {}, {S} states {}",
@@ -1289,8 +1287,9 @@ fn verify_agreement(
     queries: Option<&[Json]>,
 ) -> Result<()> {
     let evidence = get(document, "calculation_evidence");
+    let lines = pytext::split_lines(summary);
     verify_headings(
-        summary,
+        &lines,
         queries.is_some(),
         !matches!(evidence, Json::Null),
         document.get("equity_reconciliation").is_some(),
@@ -1332,7 +1331,7 @@ fn verify_agreement(
             "source evidence disagrees: {S} and {J} list different source digests"
         ));
     }
-    verify_evidence(evidence, summary, sources)?;
+    verify_evidence(evidence, &lines, sources)?;
     let exceptions = document.at("exceptions").as_array().unwrap();
     if let Some(result) = document.get("equity_reconciliation") {
         equity::validate_result(result, sources, exceptions)?;
@@ -1349,7 +1348,7 @@ fn verify_agreement(
             return Err("Equity dates disagree with the pack.".into());
         }
         rebuilt_section(
-            summary,
+            &lines,
             "## Equity reconciliation",
             &equity::summary_lines(result),
             true,
@@ -1377,12 +1376,9 @@ fn verify_agreement(
             &QUERY_FIELDS,
             true,
         )?;
-        verify_queries(summary, json_queries)?;
+        verify_queries(summary, &lines, json_queries)?;
     } else {
-        if pytext::split_lines(summary)
-            .iter()
-            .any(|line| pytext::strip(line) == QUERY_HEADER)
-        {
+        if lines.iter().any(|line| pytext::strip(line) == QUERY_HEADER) {
             return Err(format!(
                 "{S}: holds a client-query table while the pack carries no client-query register; the register is half removed, not absent"
             ));
@@ -1394,14 +1390,14 @@ fn verify_agreement(
         }
     }
     rebuilt_section(
-        summary,
+        &lines,
         "## Scope",
         &expected_scope(document, queries.is_some())?,
         true,
     )?;
-    rebuilt_section(summary, "## Exceptions", &exception_lines(exceptions), true)?;
+    rebuilt_section(&lines, "## Exceptions", &exception_lines(exceptions), true)?;
     rebuilt_section(
-        summary,
+        &lines,
         "## Human acknowledgement",
         &acknowledgement_lines(document.at("acknowledgement")),
         false,
@@ -1652,6 +1648,23 @@ mod tests {
         report,
         test_support::TempDir,
     };
+
+    #[test]
+    fn summary_section_borrows_rows_and_requires_a_unique_heading() {
+        let heading = "## Scope";
+        let lines = ["# Review", heading, "", "period", "", "## Exceptions"];
+        assert_eq!(section(&lines, heading).unwrap(), &lines[2..5]);
+        for (lines, count) in [
+            (&lines[..1], 0),
+            (&[heading, "period", heading, "", heading][..], 3),
+        ] {
+            assert_eq!(
+                section(lines, heading).unwrap_err(),
+                format!("{S}: expected exactly one '## Scope' heading, found {count}")
+            );
+        }
+    }
+
     fn fixture(tenant: &str, comment: Option<&str>) -> BTreeMap<String, Vec<u8>> {
         let tb = |date| {
             format!(
