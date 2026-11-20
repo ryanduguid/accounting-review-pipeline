@@ -93,9 +93,25 @@ pub fn unprotect(data: &[u8]) -> Result<Vec<u8>> {
     transform(data, false)
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn windows_token_protection_is_explicitly_unavailable() {
+        let bytes = b"synthetic token-cache bytes";
+        for failure in [protect(bytes).unwrap_err(), unprotect(bytes).unwrap_err()] {
+            assert_eq!(failure.code, 1);
+            assert!(failure.stdout.is_empty());
+            assert_eq!(
+                failure.stderr,
+                "error: Windows DPAPI is unavailable on this platform; token.json was not changed.\n"
+            );
+        }
+    }
+
+    #[cfg(windows)]
     #[test]
     fn real_windows_dpapi_round_trip_and_corruption() {
         let original = b"synthetic-win32-round-trip-7302 \0\xff binary tail";

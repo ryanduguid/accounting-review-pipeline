@@ -496,6 +496,49 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"usable temporary output");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn unable_to_create_csv_temporary_preserves_an_existing_export() {
+        use std::os::unix::fs::PermissionsExt;
+
+        struct RestorePermissions<'a>(&'a Path, fs::Permissions);
+        impl Drop for RestorePermissions<'_> {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(self.0, self.1.clone());
+            }
+        }
+
+        let scratch = Scratch::new();
+        let csv = scratch.0.join("tb.csv");
+        fs::write(&csv, b"previous export").unwrap();
+        let restore =
+            RestorePermissions(&scratch.0, fs::metadata(&scratch.0).unwrap().permissions());
+        fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o500)).unwrap();
+        // A process that can bypass this mode cannot exercise the refusal.
+        match File::create_new(scratch.0.join("permission-probe")) {
+            Ok(_) => return,
+            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied),
+        }
+        let result = write_csv(&[], &csv, false);
+        drop(restore);
+
+        let failure = result.unwrap_err();
+        assert_eq!(failure.code, 1);
+        assert!(failure.stdout.is_empty());
+        assert!(
+            failure
+                .stderr
+                .starts_with("error: cannot write a temporary file in ")
+        );
+        assert!(
+            failure
+                .stderr
+                .ends_with("; the report was fetched but nothing was written.\n")
+        );
+        assert_eq!(fs::read(&csv).unwrap(), b"previous export");
+        assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 1);
+    }
+
     #[test]
     fn obstructed_restoration_retains_recovery_and_reports_manual_restore() {
         for quiet in [false, true] {

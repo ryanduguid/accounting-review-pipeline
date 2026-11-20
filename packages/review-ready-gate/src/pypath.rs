@@ -566,6 +566,20 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_relative_file_link_resolves_against_its_parent() {
+        let temp = crate::test_support::TempDir::new();
+        let source = resolve(&temp.0, true).unwrap().join("evidence");
+        std::fs::create_dir(&source).unwrap();
+        let link = source.join("review.csv");
+        std::os::windows::fs::symlink_file("pending.csv", &link).unwrap();
+
+        let missing = source.join("pending.csv");
+        assert_eq!(strip_verbatim(resolve(&link, false).unwrap()), missing);
+        assert!(matches!(resolve(&link, true), Err(ResolveError::NotFound)));
+    }
+
     #[cfg(unix)]
     #[test]
     fn resolve_distinguishes_symlink_loops_from_repeated_resolved_links() {

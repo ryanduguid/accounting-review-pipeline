@@ -566,6 +566,20 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_non_strict_resolution_keeps_the_tail_after_a_dangling_directory_link() {
+        let temp = crate::test_support::TempDir::new();
+        let root = resolve(&temp.0, true).unwrap();
+        let link = root.join("current");
+        std::os::windows::fs::symlink_dir("pending", &link).unwrap();
+
+        let report = link.join("trial-balance.csv");
+        let resolved = strip_verbatim(resolve(&report, false).unwrap());
+        assert_eq!(resolved, root.join("pending").join("trial-balance.csv"));
+        assert!(!resolved.exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn resolve_distinguishes_symlink_loops_from_repeated_resolved_links() {
