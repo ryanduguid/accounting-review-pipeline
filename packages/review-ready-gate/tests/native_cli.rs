@@ -34,6 +34,54 @@ fn fixture_command(profile: &str, pack: &std::path::Path, output: &std::path::Pa
 }
 
 #[test]
+fn the_probe_resolves_external_outputs_and_refuses_checkout_outputs() {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let tmp = TempDir::new();
+    let checkout = tmp.join("checkout");
+    fs::create_dir_all(checkout.join(".git")).unwrap();
+    let mut probe = child_profile::command(env!("CARGO_BIN_EXE_review-ready-probe"))
+        .current_dir(&tmp.0)
+        .env_remove("GIT_WORK_TREE")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    probe
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            br#"{"op":"output_guard","path":"Fox River"}
+{"op":"output_guard","path":"checkout/output"}
+"#,
+        )
+        .unwrap();
+    let result = probe.wait_with_output().unwrap();
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let mut rows = stdout
+        .lines()
+        .map(|row| review_ready_gate::probe::decode(row).unwrap());
+    let accepted = rows.next().unwrap();
+    let path = PathBuf::from(accepted.at("ok").as_pystr().unwrap().to_utf8().unwrap());
+    assert_eq!(path.file_name().unwrap(), "Fox River");
+    assert_eq!(
+        fs::canonicalize(path.parent().unwrap()).unwrap(),
+        fs::canonicalize(&tmp.0).unwrap()
+    );
+    let refused = rows.next().unwrap();
+    let error = refused.at("error").as_pystr().unwrap().to_utf8().unwrap();
+    assert!(error.contains("version-control checkout"), "{error}");
+    assert!(rows.next().is_none());
+    assert!(!path.exists());
+    assert!(!checkout.join("output").exists());
+}
+
+#[test]
 fn unrecognized_arguments_are_reported_before_reading_or_writing_a_pack() {
     let tmp = TempDir::new();
     for (args, unknown) in [
