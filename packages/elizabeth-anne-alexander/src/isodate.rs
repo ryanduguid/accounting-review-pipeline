@@ -347,6 +347,7 @@ mod tests {
         assert_eq!(ok("2026W26").as_deref(), Some("2026-06-22"));
         assert_eq!(ok("2026-W26-2").as_deref(), Some("2026-06-23"));
         assert_eq!(ok("2026W262").as_deref(), Some("2026-06-23"));
+        assert_eq!(ok("2026W262xx").as_deref(), Some("2026-06-23"));
         assert_eq!(ok("2026-W53-1").as_deref(), Some("2026-12-28"));
         assert_eq!(ok("2020-W53-7").as_deref(), Some("2021-01-03"));
         assert_eq!(ok("0001-01-01").as_deref(), Some("0001-01-01"));
@@ -358,6 +359,9 @@ mod tests {
             "0000-01-01",
             "2026-02-29",
             "2027-W53",
+            "0000-W01-1",
+            "2026-W26X2",
+            "9999-W52-7",
         ] {
             assert_eq!(ok(bad), None, "{bad}");
         }

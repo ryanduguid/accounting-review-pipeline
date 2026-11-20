@@ -154,6 +154,32 @@ pub fn from_ordinal(value: i32) -> Option<Date> {
 mod tests {
     use super::*;
     #[test]
+    fn week_dates_match_cpython_at_year_boundaries() {
+        for (input, expected) in [
+            ("2026-W01", Some("2025-12-29")),
+            ("2026W011", Some("2025-12-29")),
+            // CPython accepts the trailing bytes in this 10-byte basic form.
+            ("2026W011xx", Some("2025-12-29")),
+            ("2020-W53-7", Some("2021-01-03")),
+            ("9999-W52-5", Some("9999-12-31")),
+            ("9999-W52-7", None),
+            ("2026-W0X-1", None),
+            ("2026-W01X1", None),
+            ("2026-W01-X", None),
+        ] {
+            let actual = python_date_fromisoformat(input).map(|date| date.iso());
+            assert_eq!(actual.as_deref(), expected, "{input}");
+        }
+    }
+
+    #[test]
+    fn ordinals_count_the_leap_day_before_march() {
+        let date = Date::new(2024, 3, 1).unwrap();
+        assert_eq!(ordinal(date), 738_946);
+        assert_eq!(from_ordinal(738_946), Some(date));
+    }
+
+    #[test]
     fn extended_calendar_only() {
         for date in ["0001-01-01", "2000-02-29", "2026-03-31", "9999-12-31"] {
             assert_eq!(date_fromisoformat(date).unwrap().iso(), date);

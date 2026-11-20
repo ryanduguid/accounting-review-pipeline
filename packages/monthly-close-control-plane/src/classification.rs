@@ -370,36 +370,43 @@ mod tests {
     }
 
     #[test]
-    fn classification_refuses_a_reversed_coding_period() {
+    fn classification_refuses_an_invalid_period_end_and_reversed_dates() {
         let [transactions, evidence] = ["transactions.csv", "coding.json"]
             .map(|name| pypath::resolve(Path::new(name), false).unwrap());
         let source = SourceSnapshot::new(
             &transactions,
             b"Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit\nSynthetic,AUD100,AUD,T1,2026-09-01,R,Synthetic,12.34,0\n".to_vec(),
         );
-        let policy = Json::object([
-            ("schema_version", Json::int(1)),
-            ("tenant", Json::str("Synthetic")),
-            ("currency", Json::str("AUD")),
-            ("period_start", Json::str("2026-09-30")),
-            ("period_end", Json::str("2026-09-01")),
-            ("original_sha256", Json::str(&source.sha256)),
-            ("current_sha256", Json::str(&source.sha256)),
-            ("expectations", Json::Array(Vec::new())),
-        ]);
-        let assertions = SourceSnapshot::new(&evidence, pyjson::canonical(&policy).into_bytes());
-        let paths = [transactions.clone(), transactions, evidence];
-        let result = classify_with(&paths, "AUD", &mut |path, _| {
-            Ok([&source, &assertions]
-                .into_iter()
-                .find(|snapshot| snapshot.path == path)
-                .unwrap()
-                .clone())
-        });
-        assert_eq!(
-            result.unwrap_err(),
-            "period_start must not follow period_end."
+        let invalid_end = format!(
+            "{}:period_end must be an ISO date.",
+            pypath::text(&evidence)
         );
+        let paths = [transactions.clone(), transactions, evidence];
+        for (end, expected) in [
+            ("2026-09-01", "period_start must not follow period_end."),
+            ("2026-09-31", invalid_end.as_str()),
+        ] {
+            let policy = Json::object([
+                ("schema_version", Json::int(1)),
+                ("tenant", Json::str("Synthetic")),
+                ("currency", Json::str("AUD")),
+                ("period_start", Json::str("2026-09-30")),
+                ("period_end", Json::str(end)),
+                ("original_sha256", Json::str(&source.sha256)),
+                ("current_sha256", Json::str(&source.sha256)),
+                ("expectations", Json::Array(Vec::new())),
+            ]);
+            let assertions =
+                SourceSnapshot::new(&paths[2], pyjson::canonical(&policy).into_bytes());
+            let result = classify_with(&paths, "AUD", &mut |path, _| {
+                Ok([&source, &assertions]
+                    .into_iter()
+                    .find(|snapshot| snapshot.path == path)
+                    .unwrap()
+                    .clone())
+            });
+            assert_eq!(result.unwrap_err(), expected);
+        }
     }
 
     #[test]
