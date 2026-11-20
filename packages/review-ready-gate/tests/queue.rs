@@ -145,6 +145,59 @@ fn a_status_filter_narrows_the_list_and_its_summary() {
 }
 
 #[test]
+fn a_status_filter_with_no_matches_reports_the_verified_count() {
+    let temp = TempDir::new();
+    let packs = book(&temp);
+    let result = queue(&packs[..1], &["--status", "BLOCKED", "--summary"]);
+    assert_eq!(result.status.code(), Some(0), "{result:?}");
+    assert!(result.stderr.is_empty(), "{result:?}");
+    let text = stdout(&result);
+    assert!(text.contains("Verified 1 distinct pack(s); displaying 0."));
+    assert!(text.contains("No verified packs match the supplied filters."));
+    assert!(!text.contains("Summary of the"));
+    assert!(!text.contains("Verified artefact SHA-256"));
+}
+
+#[cfg(feature = "probe")]
+#[test]
+fn the_summary_marks_control_coverage_from_older_packs_as_unrecorded() {
+    use review_ready_gate::{
+        probe::{self, Json},
+        report::PACK_NAMES,
+    };
+
+    let temp = TempDir::new();
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/bas-ready");
+    let mut document = probe::example_document("bas", &example, "0.01").unwrap();
+    let Json::Object(members) = &mut document else {
+        panic!("example pack must be an object");
+    };
+    let before = members.len();
+    members.retain(|(key, _)| !key.is("controls_not_run"));
+    assert_eq!(members.len(), before - 1);
+    let older = temp.join("older-bas-pack");
+    fs::create_dir(&older).unwrap();
+    for (name, payload) in PACK_NAMES
+        .into_iter()
+        .zip(probe::render_pack(&document).unwrap())
+    {
+        fs::write(older.join(name), payload).unwrap();
+    }
+
+    let result = queue(&[older], &["--summary"]);
+    assert_eq!(result.status.code(), Some(0), "{result:?}");
+    assert!(result.stderr.is_empty(), "{result:?}");
+    let text = listing(&result);
+    assert!(
+        text.contains("| older-bas-pack | bas | 2026-03-31 | READY | 0 | none | not recorded |")
+    );
+    assert!(text.contains("No displayed pack records a finding."));
+    assert!(text.contains("No displayed pack records a control that did not run."));
+    assert!(text.contains("1 displayed pack(s) do not record control coverage"));
+    assert!(!text.contains("| Control not run | Packs | Clients |"));
+}
+
+#[test]
 fn an_edited_pack_fails_the_whole_queue_even_when_a_filter_would_hide_it() {
     let temp = TempDir::new();
     let packs = book(&temp);
