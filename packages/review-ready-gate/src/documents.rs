@@ -13,8 +13,8 @@ use crate::{
 use num_traits::ToPrimitive;
 use std::{
     collections::BTreeSet,
-    fs::{self, OpenOptions},
-    io::{Read, Write},
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Write},
     path::Path,
 };
 
@@ -239,11 +239,19 @@ pub struct IntakeOptions<'a> {
     pub origin: &'a str,
     pub version: &'a str,
 }
+
+pub fn create_intake(options: IntakeOptions<'_>) -> Result<std::path::PathBuf> {
+    create_intake_with(options, |file, content| file.write_all(content))
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "validates and writes one document intake"
 )]
-pub fn create_intake(options: IntakeOptions<'_>) -> Result<std::path::PathBuf> {
+fn create_intake_with(
+    options: IntakeOptions<'_>,
+    mut write: impl FnMut(&mut File, &[u8]) -> io::Result<()>,
+) -> Result<std::path::PathBuf> {
     let output = crate::report::require_output_outside_repository(options.output)?;
     if output.exists() {
         return Err(
@@ -311,18 +319,39 @@ pub fn create_intake(options: IntakeOptions<'_>) -> Result<std::path::PathBuf> {
     }
     fs::create_dir(&output).map_err(|e| e.to_string())?;
     let filename = loader::json_text(manifest.at("source").at("filename")).unwrap();
-    for (name, content) in [
+    let files = [
         (filename.as_str(), source.content),
         (TEXT_NAME, text.content),
         (INTAKE_NAME, bytes),
         ("document-review.example.json", encoded(&review)),
-    ] {
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(output.join(name))
-            .and_then(|mut f| f.write_all(&content))
-            .map_err(|e| e.to_string())?;
+    ];
+    let mut opened = 0;
+    let result = (|| -> io::Result<()> {
+        for (name, content) in &files {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(output.join(name))?;
+            opened += 1;
+            write(&mut file, content)?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        let mut cleanup = Ok(());
+        for (name, _) in files[..opened].iter().rev() {
+            if let Err(error) = fs::remove_file(output.join(name))
+                && error.kind() != io::ErrorKind::NotFound
+            {
+                cleanup = cleanup.and(Err(error));
+            }
+        }
+        return Err(match cleanup.and(fs::remove_dir(&output)) {
+            Ok(()) => error.to_string(),
+            Err(cleanup_error) => format!(
+                "Document intake write failed ({error}) and its incomplete output could not be removed ({cleanup_error})."
+            ),
+        });
     }
     Ok(output)
 }
@@ -1048,6 +1077,44 @@ mod tests {
                 .contains("new output directory")
         );
         assert_eq!(fs::read(tmp.join("source.txt")).unwrap(), original);
+    }
+
+    #[test]
+    fn intake_can_retry_after_a_partial_write() {
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let extracted = tmp.join("text.txt");
+        let output = tmp.join("intake");
+        let text = source_text();
+        fs::write(&source, &text).unwrap();
+        fs::write(&extracted, &text).unwrap();
+        let options = || IntakeOptions {
+            source: &source,
+            text: &extracted,
+            output: &output,
+            entity: "Demo",
+            period: "2026-03-31",
+            origin: "manual",
+            version: "",
+        };
+        let mut attempts = 0;
+        let error = create_intake_with(options(), |file, content| {
+            attempts += 1;
+            if attempts == 2 {
+                file.write_all(&content[..1])?;
+                return Err(io::Error::other("test write interrupted"));
+            }
+            file.write_all(content)
+        })
+        .unwrap_err();
+        assert_eq!(error, "test write interrupted");
+        assert_eq!(attempts, 2);
+        assert!(!output.exists());
+
+        create_intake(options()).unwrap();
+        assert_eq!(fs::read_to_string(&source).unwrap(), text);
+        assert_eq!(fs::read_to_string(&extracted).unwrap(), text);
+        assert!(load_document(&output).is_ok());
     }
 
     #[cfg(unix)]
