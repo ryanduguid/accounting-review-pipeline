@@ -731,6 +731,8 @@ mod tests {
                         Err(e) => panic!("synthetic HTTP accept: {e}"),
                     }
                 };
+                // Winsock inherits the listener's nonblocking mode on accept.
+                socket.set_nonblocking(false).unwrap();
                 socket
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
