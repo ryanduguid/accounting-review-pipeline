@@ -104,6 +104,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn breaks_long_words_at_fitting_hyphens() {
+        assert_eq!(
+            wrap("use 1-2-3456789 now", 10),
+            ["use 1-2-", "3456789", "now"]
+        );
+    }
+
+    #[test]
     fn wraps_like_python_textwrap() {
         // textwrap.wrap("validate a human acknowledgement/escalation record", 24)
         assert_eq!(
