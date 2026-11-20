@@ -4,10 +4,6 @@
 use std::path::Path;
 
 use xero_trial_balance_export::{Failure, Result, offline, stdio};
-#[expect(
-    clippy::too_many_lines,
-    reason = "the proof tool's arguments and steps together"
-)]
 fn run(args: &[String], root: &Path) -> Result<()> {
     if args == ["--help"] || args == ["-h"] {
         stdio::out("usage: xero-tb-proof [--check]\n");
