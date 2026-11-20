@@ -476,6 +476,32 @@ mod tests {
             &[("date", "2026-06-30")],
         )
     }
+
+    #[test]
+    fn trial_balance_fetch_propagates_the_http_refusal_without_replaying_it() {
+        let scratch = Scratch::new();
+        let http = Scripted::new(
+            &scratch.0.join("token.json"),
+            vec![response(403, "fabricated response body", None)],
+        );
+        let tenant = Json::object([("tenantId", Json::str("synthetic-tenant"))]);
+        let failure = crate::export::fetch_rows(
+            &http,
+            &http.session,
+            &credentials(),
+            &tenant,
+            "2026-06-30",
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(
+            failure,
+            Failure::message(format!("error: Xero returned HTTP 403 for {REPORT_URL}."))
+        );
+        assert_eq!(&*http.gets.borrow(), &["synthetic-before-access"]);
+        assert!(http.posts.borrow().is_empty());
+    }
+
     #[test]
     fn retry_header_grammar_and_clamp() {
         let now = jiff::Timestamp::from_second(1780000000).unwrap();
