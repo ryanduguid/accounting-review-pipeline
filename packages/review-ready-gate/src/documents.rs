@@ -142,40 +142,40 @@ pub(crate) fn field_value(field: &str, value: &Json) -> Result<String> {
     Ok(raw.into())
 }
 pub(crate) fn extract(text: &str) -> Json {
-    let mut fields: Vec<(PyStr, Json)> = FIELDS
-        .iter()
-        .map(|(name, _)| (PyStr::from(*name), Json::Array(Vec::new())))
-        .collect();
+    let mut fields: [Vec<Json>; FIELDS.len()] = Default::default();
     for (page, content) in text.split('\u{c}').enumerate() {
         for (line, mut raw_line) in pytext::split_lines(content).into_iter().enumerate() {
             let hashes = raw_line.bytes().take_while(|&b| b == b'#').count();
             if (1..=6).contains(&hashes) && raw_line.as_bytes().get(hashes) == Some(&b' ') {
                 raw_line = raw_line[hashes..].trim_start_matches(' ');
             }
-            for (index, (field, label)) in FIELDS.iter().enumerate() {
-                let Some(raw) = raw_line.strip_prefix(&format!("{label}:")) else {
-                    continue;
-                };
-                let raw = pytext::strip(raw);
-                let (value, error) = match field_value(field, &Json::str(raw)) {
-                    Ok(v) => (Json::str(&v), String::new()),
-                    Err(e) => (Json::Null, e),
-                };
-                let row = Json::object([
-                    ("page", Json::int(page as i64 + 1)),
-                    ("line", Json::int(line as i64 + 1)),
-                    ("raw", Json::str(raw)),
-                    ("value", value),
-                    ("error", Json::str(&error)),
-                ]);
-                let Json::Array(rows) = &mut fields[index].1 else {
-                    unreachable!()
-                };
-                rows.push(row);
-            }
+            let Some((label, raw)) = raw_line.split_once(':') else {
+                continue;
+            };
+            let Some(index) = FIELDS.iter().position(|(_, name)| *name == label) else {
+                continue;
+            };
+            let raw = pytext::strip(raw);
+            let (value, error) = match field_value(FIELDS[index].0, &Json::str(raw)) {
+                Ok(v) => (Json::str(&v), String::new()),
+                Err(e) => (Json::Null, e),
+            };
+            fields[index].push(Json::object([
+                ("page", Json::int(page as i64 + 1)),
+                ("line", Json::int(line as i64 + 1)),
+                ("raw", Json::str(raw)),
+                ("value", value),
+                ("error", Json::str(&error)),
+            ]));
         }
     }
-    Json::Object(fields)
+    Json::Object(
+        FIELDS
+            .into_iter()
+            .zip(fields)
+            .map(|((name, _), rows)| (PyStr::from(name), Json::Array(rows)))
+            .collect(),
+    )
 }
 fn manifest(
     source: &SourceSnapshot,
@@ -629,6 +629,20 @@ pub fn render_document(bundle: &DocumentBundle) -> String {
 mod tests {
     use super::*;
     use crate::test_support::{self, TempDir};
+
+    #[test]
+    fn extraction_keeps_colons_in_values_and_requires_exact_labels() {
+        let fields = extract("## Supplier: Demo: Parts\nSupplier : ignored\n");
+        let expected = Json::Array(vec![Json::object([
+            ("page", Json::int(1)),
+            ("line", Json::int(1)),
+            ("raw", Json::str("Demo: Parts")),
+            ("value", Json::str("Demo: Parts")),
+            ("error", Json::str("")),
+        ])]);
+        assert!(pyjson::py_eq(fields.at("supplier"), &expected, false));
+    }
+
     fn bundle(tmp: &TempDir, text: &str, entity: &str, suffix: &str) -> std::path::PathBuf {
         let source = tmp.join(format!("source.{suffix}"));
         let extracted = tmp.join("text.txt");
