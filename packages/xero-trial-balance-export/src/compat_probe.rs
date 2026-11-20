@@ -310,12 +310,10 @@ pub fn run() {
 #[cfg(test)]
 mod regression {
     use super::*;
-    #[test]
-    fn captured_python_test_behaviours() {
-        let captured =
-            pyjson::loads(include_str!("../tests/fixtures/python-value-cases.json")).unwrap();
-        let Json::Array(cases) = captured.at("cases") else {
-            panic!("case array");
+
+    fn compare_captured_cases(captured: &Json) -> std::result::Result<(), String> {
+        let Some(Json::Array(cases)) = captured.get("cases") else {
+            return Err("case array".to_owned());
         };
         let mut differences = Vec::new();
         for case in cases {
@@ -346,8 +344,10 @@ mod regression {
                 ));
             }
         }
-        assert!(
-            differences.is_empty(),
+        if differences.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
             "{} differences among {} cases:\n{}",
             differences.len(),
             cases.len(),
@@ -357,6 +357,34 @@ mod regression {
                 .cloned()
                 .collect::<Vec<_>>()
                 .join("\n")
+        ))
+    }
+
+    #[test]
+    fn captured_python_test_behaviours() {
+        let captured =
+            pyjson::loads(include_str!("../tests/fixtures/python-value-cases.json")).unwrap();
+        compare_captured_cases(&captured).unwrap();
+    }
+
+    #[test]
+    fn captured_case_diagnostics_report_shape_errors_and_value_differences() {
+        assert_eq!(
+            compare_captured_cases(&Json::Null),
+            Err("case array".to_owned())
+        );
+        let captured = pyjson::loads(
+            r#"{"cases":[
+                {"test":"Fox River","request":{"op":"excel_safe","args":["Fox River"]},
+                 "expected":{"ok":"Fox River"}},
+                {"test":"caption","request":{"op":"excel_safe","args":["Actual"]},
+                 "expected":{"ok":"Expected"}}
+            ]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            compare_captured_cases(&captured).unwrap_err(),
+            "1 differences among 2 cases:\ncaption / excel_safe: expected {\"ok\":\"Expected\"} got {\"ok\":\"Actual\"}"
         );
     }
 }
