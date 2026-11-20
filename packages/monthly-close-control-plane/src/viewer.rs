@@ -1456,34 +1456,28 @@ pub fn verify_payloads(payloads: &BTreeMap<String, Vec<u8>>) -> Result<VerifiedP
             .collect(),
     })
 }
-fn read_artefact(directory: &Path, name: &str) -> Result<Vec<u8>> {
-    let path = directory.join(name);
-    fs::read(&path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::IsADirectory {
-            format!("{name}: expected a file, found a directory")
-        } else if e.kind() == std::io::ErrorKind::NotFound {
-            format!("{name}: not found in {}", pypath::text(directory))
-        } else {
-            format!(
-                "{name}: could not be read from {} ({e})",
-                pypath::text(directory)
-            )
-        }
-    })
-}
 pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
     let mut payloads = BTreeMap::new();
-    for name in &PACK_NAMES[..3] {
-        payloads.insert(name.to_string(), read_artefact(directory, name)?);
-    }
-    match fs::read(directory.join(Q)) {
-        Ok(bytes) => {
-            payloads.insert(Q.into(), bytes);
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => {
-            read_artefact(directory, Q)?;
-            return Err(format!("{Q}: could not be read"));
+    for name in PACK_NAMES {
+        match fs::read(directory.join(name)) {
+            Ok(bytes) => {
+                payloads.insert(name.into(), bytes);
+            }
+            Err(e) if name == Q && e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(match e.kind() {
+                    std::io::ErrorKind::IsADirectory => {
+                        format!("{name}: expected a file, found a directory")
+                    }
+                    std::io::ErrorKind::NotFound => {
+                        format!("{name}: not found in {}", pypath::text(directory))
+                    }
+                    _ => format!(
+                        "{name}: could not be read from {} ({e})",
+                        pypath::text(directory)
+                    ),
+                });
+            }
         }
     }
     verify_payloads(&payloads)
@@ -1717,7 +1711,11 @@ mod tests {
             .join("\n")
             + "\n";
         payloads.insert(S.into(), old.into_bytes());
-        let pack = verify_payloads(&payloads).unwrap();
+        let temp = TempDir::new();
+        for (name, bytes) in payloads {
+            fs::write(temp.0.join(name), bytes).unwrap();
+        }
+        let pack = verify_pack(&temp.0).unwrap();
         assert!(pack.queries.is_none());
         assert!(
             render_verified(&pack)
