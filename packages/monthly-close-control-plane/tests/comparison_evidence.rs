@@ -341,6 +341,44 @@ fn a_financial_year_reset_does_not_turn_absent_variances_into_resolved_findings(
     assert_eq!([inventory(&previous), inventory(&current)], before);
 }
 
+#[test]
+fn pack_preserves_material_variances_when_prior_balances_are_zero() {
+    let temp = TempDir::new();
+    let prior = temp.join("january.csv");
+    let current = temp.join("february.csv");
+    fs::write(&prior, trial_balance("2027-01-31", "0")).unwrap();
+    fs::write(&current, trial_balance("2027-02-28", "3000")).unwrap();
+
+    let pack = engine::review_close(&ReviewConfig::new(current, prior)).unwrap();
+    let output = temp.join("pack");
+    write_rendered_pack(&pack, &output);
+    let verified = viewer::verify_pack(&output).unwrap();
+    for rows in [
+        verified.document.at("exceptions").as_array().unwrap(),
+        &verified.exceptions,
+    ] {
+        let variances: Vec<_> = rows
+            .iter()
+            .filter(|row| row.at("control").is_str("period_variance"))
+            .collect();
+        assert_eq!(variances.len(), 2);
+        for (account, movement) in [("A", "3000.00"), ("R", "-3000.00")] {
+            let row = variances
+                .iter()
+                .find(|row| row.at("account_id").is_str(account))
+                .unwrap();
+            assert!(row.at("status").is_str("REVIEW"));
+            assert!(row.at("prior_value").is_str("0.00"));
+            assert!(row.at("current_value").is_str(movement));
+            assert!(row.at("difference").is_str(movement));
+            assert!(
+                row.at("percentage_change")
+                    .is_str("n/a (prior period zero)")
+            );
+        }
+    }
+}
+
 fn equity_fixture() -> TempDir {
     let temp = TempDir::new();
     for (date, amount) in [
