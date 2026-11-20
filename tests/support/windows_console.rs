@@ -13,7 +13,6 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-const WIDTH: usize = 80;
 const NO_WINDOW: u32 = 0x0800_0000;
 const LAUNCH: &str = r#"
 $ErrorActionPreference = 'Stop'
@@ -30,10 +29,18 @@ try {
 }
 "#;
 
+pub struct Case<'a> {
+    pub name: &'a str,
+    pub args: &'a [&'a str],
+    pub expected: &'a str,
+    pub exit_code: i32,
+    pub colour: bool,
+}
+
 /// Re-enter this one test in an owned, hidden console, then run the real CLI.
-pub fn check(name: &str, binary: &str, help: &str, usage: &str, error_code: i32) {
+pub fn check(name: &str, binary: &str, width: usize, cases: &[Case<'_>]) {
     if std::env::var("ARP_CONSOLE_TEST_NAME").as_deref() == Ok(name) {
-        observe(binary, help, usage, error_code);
+        observe(binary, width, cases);
         return;
     }
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -54,9 +61,10 @@ pub fn check(name: &str, binary: &str, help: &str, usage: &str, error_code: i32)
         directory.display()
     );
     assert_eq!(fs::read(directory.join("passed")).unwrap(), b"passed\n");
-    for file in ["help.txt", "usage.txt", "passed"] {
-        fs::remove_file(directory.join(file)).unwrap();
+    for case in cases {
+        fs::remove_file(directory.join(format!("{}.txt", case.name))).unwrap();
     }
+    fs::remove_file(directory.join("passed")).unwrap();
     fs::remove_dir(directory).unwrap();
 }
 
@@ -104,31 +112,39 @@ fn stop(child: &mut Child) {
     );
 }
 
-fn observe(binary: &str, help: &str, usage: &str, error_code: i32) {
+fn observe(binary: &str, width: usize, cases: &[Case<'_>]) {
     let directory = PathBuf::from(std::env::var_os("ARP_CONSOLE_RECEIPTS").unwrap());
-    let height = help.lines().count().max(usage.lines().count()).max(24) + 2;
-    let console = Console::new(height);
-    for (label, args, expected, code) in [("help", vec!["--help"], help, 0), ("usage", vec![], usage, error_code)] {
+    let height = cases
+        .iter()
+        .map(|case| case.expected.lines().count())
+        .max()
+        .unwrap()
+        .max(24)
+        + 2;
+    let console = Console::new(width, height);
+    for case in cases {
         console.clear();
         let mut command = crate::child_profile::command(binary);
-        command.args(args).stdin(Stdio::null());
+        command.args(case.args).stdin(Stdio::null());
         for name in ["PYTHON_COLORS", "NO_COLOR", "FORCE_COLOR", "TERM", "COLUMNS", "LINES"] {
             command.env_remove(name);
         }
         let status = wait(&mut command, Duration::from_secs(5));
         let (screen, attributes) = console.read();
-        fs::write(directory.join(format!("{label}.txt")), &screen).unwrap();
-        assert_eq!(status.code(), Some(code), "{label}");
-        assert_eq!(screen, physical_rows(expected), "{label}");
-        assert!(
+        fs::write(directory.join(format!("{}.txt", case.name)), &screen).unwrap();
+        assert_eq!(status.code(), Some(case.exit_code), "{}", case.name);
+        assert_eq!(screen, physical_rows(case.expected, width), "{}", case.name);
+        assert_eq!(
             attributes.iter().any(|&value| value != 7),
-            "{label}: colour roles missing"
+            case.colour,
+            "{}: console colour",
+            case.name
         );
     }
     fs::write(directory.join("passed"), b"passed\n").unwrap();
 }
 
-fn physical_rows(text: &str) -> String {
+fn physical_rows(text: &str, width: usize) -> String {
     assert!(text.is_ascii(), "console fixture must have unambiguous cell widths");
     let mut rows = Vec::new();
     for line in text.lines() {
@@ -137,7 +153,7 @@ fn physical_rows(text: &str) -> String {
         } else {
             rows.extend(
                 line.as_bytes()
-                    .chunks(WIDTH)
+                    .chunks(width)
                     .map(|chunk| String::from_utf8(chunk.to_vec()).unwrap()),
             );
         }
@@ -209,6 +225,7 @@ unsafe extern "system" {
 struct Console {
     handle: Handle,
     cells: u32,
+    width: usize,
 }
 
 fn succeeded(result: i32) {
@@ -216,26 +233,27 @@ fn succeeded(result: i32) {
 }
 
 impl Console {
-    fn new(height: usize) -> Self {
+    fn new(width: usize, height: usize) -> Self {
         let mut info = BufferInfo::default();
+        let width = i16::try_from(width).unwrap();
         let height = i16::try_from(height).unwrap();
         // SAFETY: fixed Win32 handles and valid, correctly laid out buffers.
         unsafe {
             let handle = GetStdHandle(-11i32 as u32);
             succeeded(GetConsoleScreenBufferInfo(handle, &mut info));
             let larger = Coord {
-                x: info.size.x.max(80),
+                x: info.size.x.max(width),
                 y: info.size.y.max(height),
             };
             succeeded(SetConsoleScreenBufferSize(handle, larger));
             let window = Rect {
                 left: 0,
                 top: 0,
-                right: 79,
+                right: width - 1,
                 bottom: 23,
             };
             succeeded(SetConsoleWindowInfo(handle, 1, &window));
-            succeeded(SetConsoleScreenBufferSize(handle, Coord { x: 80, y: height }));
+            succeeded(SetConsoleScreenBufferSize(handle, Coord { x: width, y: height }));
             for stream in [-11i32, -12] {
                 let mut mode = 0;
                 let output = GetStdHandle(stream as u32);
@@ -244,7 +262,8 @@ impl Console {
             }
             Self {
                 handle,
-                cells: WIDTH as u32 * height as u32,
+                cells: width as u32 * height as u32,
+                width: width as usize,
             }
         }
     }
@@ -297,7 +316,7 @@ impl Console {
             assert_eq!(read, self.cells);
         }
         let rows = text
-            .chunks(WIDTH)
+            .chunks(self.width)
             .map(|row| String::from_utf16(row).unwrap().trim_end().to_owned())
             .collect::<Vec<_>>();
         (rows.join("\n").trim_end().to_owned() + "\n", attributes)

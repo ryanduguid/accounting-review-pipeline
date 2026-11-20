@@ -30,9 +30,23 @@ fn real_console_uses_native_width_and_colours_on_both_streams() {
     windows_console::check(
         "real_console_uses_native_width_and_colours_on_both_streams",
         env!("CARGO_BIN_EXE_elizabeth-anne-alexander"),
-        include_str!("fixtures/cli/main-help80.txt"),
-        include_str!("fixtures/cli/main-required80.txt"),
-        2,
+        80,
+        &[
+            windows_console::Case {
+                name: "help",
+                args: &["--help"],
+                expected: include_str!("fixtures/cli/main-help80.txt"),
+                exit_code: 0,
+                colour: true,
+            },
+            windows_console::Case {
+                name: "usage",
+                args: &[],
+                expected: include_str!("fixtures/cli/main-required80.txt"),
+                exit_code: 2,
+                colour: true,
+            },
+        ],
     );
 }
 
