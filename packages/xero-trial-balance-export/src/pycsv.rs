@@ -98,18 +98,18 @@ impl Record {
     /// `parse_process_char` for one character, or `None` for the end-of-line
     /// marker _csv.c feeds after each line.
     fn step(&mut self, c: Option<char>) -> Result<(), CsvError> {
-        if self.state == State::StartRecord {
-            match c {
-                None => return Ok(()),
+        match self.state {
+            State::StartRecord => match c {
+                None => Ok(()),
                 Some('\n' | '\r') => {
                     self.state = State::EatCrnl;
-                    return Ok(());
+                    Ok(())
                 }
-                Some(_) => self.state = State::StartField,
-            }
-        }
-        match self.state {
-            State::StartRecord => unreachable!("handled above"),
+                Some(ch) => {
+                    self.state = State::StartField;
+                    self.unquoted(Some(ch))
+                }
+            },
             State::StartField | State::InField => self.unquoted(c),
             State::InQuotedField => match c {
                 None => Ok(()),
