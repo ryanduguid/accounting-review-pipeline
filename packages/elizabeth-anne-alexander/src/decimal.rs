@@ -35,7 +35,7 @@ pub enum Rounding {
 enum Kind {
     Finite,
     Infinite,
-    NaN,
+    NaN { signaling: bool, payload: String },
 }
 
 /// A decimal value: `(-1)**negative * coefficient * 10**exp` for finite values.
@@ -211,9 +211,12 @@ impl Decimal {
     /// `str(self)`, Python's to-sci-string with a capital `E`.
     pub fn to_sci_string(&self) -> String {
         let sign = if self.negative { "-" } else { "" };
-        match self.kind {
+        match &self.kind {
             Kind::Infinite => return format!("{sign}Infinity"),
-            Kind::NaN => return format!("{sign}NaN"),
+            Kind::NaN { signaling, payload } => {
+                let name = if *signaling { "sNaN" } else { "NaN" };
+                return format!("{sign}{name}{payload}");
+            }
             Kind::Finite => {}
         }
         let len = self.digits.len() as i128;
@@ -236,6 +239,9 @@ impl Decimal {
     /// the gateway admits can carry an exponent near -10**18, whose fixed-point
     /// form has that many digits.
     pub fn to_fixed_string(&self) -> Option<String> {
+        if !self.is_finite() {
+            return Some(self.to_sci_string());
+        }
         let sign = if self.negative { "-" } else { "" };
         let value = if self.is_zero() && self.exp > 0 {
             finite(self.negative, "0".into(), 0)
@@ -360,10 +366,17 @@ fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
     if lower == "inf" || lower == "infinity" {
         return Some(Some(special(Kind::Infinite)));
     }
-    ["snan", "nan"].iter().find_map(|prefix| {
-        let payload = lower.strip_prefix(prefix)?;
-        Some(payload.bytes().all(|b| b.is_ascii_digit()).then(|| special(Kind::NaN)))
-    })
+    [("snan", true), ("nan", false)]
+        .into_iter()
+        .find_map(|(prefix, signaling)| {
+            let payload = lower.strip_prefix(prefix)?;
+            Some(payload.bytes().all(|b| b.is_ascii_digit()).then(|| {
+                special(Kind::NaN {
+                    signaling,
+                    payload: payload.trim_start_matches('0').to_owned(),
+                })
+            }))
+        })
 }
 
 /// The exponent after `e`, saturated like libmpdec's strtoexp; anything this

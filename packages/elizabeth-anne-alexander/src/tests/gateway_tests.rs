@@ -1442,6 +1442,23 @@ fn test_decimal_padding_reports_context_overflow_without_panicking() {
 }
 
 #[test]
+fn formatter_retains_non_finite_decimal_spelling() {
+    for (input, expected) in [
+        ("inf", "Infinity"),
+        ("-Infinity", "-Infinity"),
+        ("NaN0007", "NaN7"),
+        ("-sNaN12", "-sNaN12"),
+        ("NaN000", "NaN"),
+        ("+sNaN000", "sNaN"),
+        ("-NaN", "-NaN"),
+    ] {
+        let value = d(input);
+        assert_eq!(decimal_string(&value).unwrap(), expected, "{input}");
+        assert_eq!(value.to_sci_string(), expected, "{input}");
+    }
+}
+
+#[test]
 fn test_an_absurd_percentage_is_refused_not_raised_out_of_the_projection() {
     assert_refused(percent_string(&d("1E+30")), "supported magnitude range");
     assert_eq!(percent_string(&d("0.183333")).unwrap(), "18.3333");

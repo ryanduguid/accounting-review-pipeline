@@ -476,7 +476,7 @@ pub fn load_request_snapshot(env: &Env, location: &Location, policy: &Json) -> R
 
 /// At least 2 decimal places, padded and never rounded.
 pub fn decimal_string(value: &Decimal) -> Result<String> {
-    let value = if value.exponent() > -2 {
+    let value = if value.is_finite() && value.exponent() > -2 {
         // The padding is exact, but can exceed the decimal context's precision.
         value
             .quantize(-2, Rounding::HalfEven)
