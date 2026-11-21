@@ -109,24 +109,20 @@ mod tests {
     use super::*;
     #[test]
     fn failed_stream_writes_are_observable() {
-        struct Refused;
-        impl Write for Refused {
-            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-                Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
+        fn closed_pipe() -> std::io::PipeWriter {
+            let (reader, writer) = std::io::pipe().unwrap();
+            drop(reader);
+            writer
         }
         assert!(!failed());
         assert_eq!(
             crate::cli::command_thread(|| {
-                write(Refused, b"status");
+                write(closed_pipe(), b"status");
                 0
             }),
             1
         );
-        write(Refused, b"status");
+        write(closed_pipe(), b"status");
         assert!(failed());
         assert!(!failed());
     }
