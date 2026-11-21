@@ -5,6 +5,7 @@
 //! Local filesystem and git guard, preserving checks and their order.
 use crate::{entities, oserror, patterns::Result, pyjson, pypath};
 use std::{
+    borrow::Cow,
     ffi::OsString,
     io::{self, Read},
     path::{Path, PathBuf},
@@ -54,9 +55,9 @@ pub fn write(path: &Path, content: &str, ending: &str) -> Result<()> {
             .unwrap_or(Path::new(".")),
     )?;
     let content = if ending == "\n" {
-        content.to_string()
+        Cow::Borrowed(content)
     } else {
-        content.replace('\n', ending)
+        Cow::Owned(content.replace('\n', ending))
     };
     let file = std::fs::File::create(path).map_err(|e| oserror::file_error(&e, &text(path)))?;
     crate::persist::text(file, content.as_bytes()).map_err(|e| oserror::file_error(&e, &text(path)))

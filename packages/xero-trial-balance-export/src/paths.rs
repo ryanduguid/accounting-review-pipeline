@@ -116,15 +116,19 @@ pub fn output_path(requested: Option<&Path>, default: &str, cwd: &Path) -> Resul
 }
 
 pub fn entry_exists(path: &Path) -> Result<bool> {
+    entry_metadata(path).map(|metadata| metadata.is_some())
+}
+
+pub(crate) fn entry_metadata(path: &Path) -> Result<Option<std::fs::Metadata>> {
     match std::fs::symlink_metadata(path) {
-        Ok(_) => Ok(true),
+        Ok(metadata) => Ok(Some(metadata)),
         Err(e)
             if matches!(
                 e.kind(),
                 std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
             ) =>
         {
-            Ok(false)
+            Ok(None)
         }
         Err(e) => Err(Failure::message(format!(
             "error: cannot inspect {} ({e}); export stopped.",
