@@ -67,8 +67,16 @@ const REFUSALS: &[(&str, &str)] = &[
         "invalid probe precision",
     ),
     (
-        r#"{"op":"arithmetic","precision":"28","a":"1","b":"0","kind":"div"}"#,
+        r#"{"op":"arithmetic","precision":"28","a":"1","b":"0","kind":"unknown"}"#,
         "invalid probe arithmetic",
+    ),
+    (
+        r#"{"op":"arithmetic","precision":"28","a":"1","b":"0","kind":"div"}"#,
+        "[<class 'decimal.DivisionByZero'>]",
+    ),
+    (
+        r#"{"op":"arithmetic","precision":"28","a":"0","b":"-0.00","kind":"div"}"#,
+        "[<class 'decimal.DivisionUndefined'>]",
     ),
 ];
 

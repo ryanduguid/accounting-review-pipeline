@@ -130,11 +130,11 @@ fn echoing_probe(python: &Path, baseline: &Path, suite: &TempDir) {
     assert!(
         output
             .stderr
-            .ends_with("Error: \"36554 unexplained differences in 36554 cases\"\n"),
+            .ends_with("Error: \"36635 unexplained differences in 36635 cases\"\n"),
         "{}",
         output.stderr
     );
-    println!("Expected echoing-probe refusal: 36554 mismatches and 12 diagnostics");
+    println!("Expected echoing-probe refusal: 36635 mismatches and 12 diagnostics");
 }
 
 #[cfg(unix)]
@@ -202,10 +202,10 @@ fn check_recovery(python: &Path, baseline: &Path, suite: &TempDir) {
             "13 legacy financial scenarios and 8 equity renders satisfy fixed outcome assertions\n",
             "5 legacy balance and financial-year comparisons satisfy fixed outcome assertions\n",
             "8 legacy equity saved packs verify with fixed status assertions\n",
-            "seed 1: 36554 value/core/evidence/render cases, 2734 verification cases, 552 driver cases, 258 comparison/queue cases and 835 CLI cases; 0 unexplained differences\n",
+            "seed 1: 36635 value/core/evidence/render cases, 2734 verification cases, 552 driver cases, 258 comparison/queue cases and 835 CLI cases; 0 unexplained differences\n",
         )
     );
-    println!("Recovered after oracle timeout: 40933 cases, 0 unexplained differences");
+    println!("Recovered after oracle timeout: 41014 cases, 0 unexplained differences");
 }
 
 fn oracle_timeout(python: &Path, baseline: &Path, suite: &TempDir, binaries: &Path) {
