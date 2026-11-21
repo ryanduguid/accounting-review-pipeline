@@ -38,9 +38,10 @@ impl<W: std::io::Write> std::io::Write for PythonText<W> {
 
 /// `PYTHONUNBUFFERED` as CPython reads it: set and not an integer equal to 0.
 fn python_unbuffered() -> bool {
-    std::env::var("PYTHONUNBUFFERED").is_ok_and(|value| {
+    std::env::var_os("PYTHONUNBUFFERED").is_some_and(|value| {
         !value.is_empty()
             && value
+                .to_string_lossy()
                 .trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r'])
                 .parse::<i32>()
                 != Ok(0)

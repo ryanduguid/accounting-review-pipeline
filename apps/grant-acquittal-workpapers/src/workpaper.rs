@@ -901,12 +901,23 @@ fn array<'a>(value: &'a Json, key: &str) -> Result<&'a [Json]> {
     }
 }
 
-/// `write_files(result, output)`.
-pub fn write_files(result: &Json, output: &Path) -> Result<()> {
+fn validated_tables(result: &Json) -> Result<[&[Json]; TABLES.len()]> {
     let mut tables = [&[][..]; TABLES.len()];
     for (name, rows) in TABLES.into_iter().zip(&mut tables) {
         *rows = array(result, name)?;
+        if let Some(index) = rows.iter().position(|row| !matches!(row, Json::Object(_))) {
+            return fail(format!("Invalid workpaper: {name}[{index}] must be an object"));
+        }
     }
+    Ok(tables)
+}
+
+/// `write_files(result, output)`.
+pub fn write_files(result: &Json, output: &Path) -> Result<()> {
+    write_validated_files(result, output, validated_tables(result)?)
+}
+
+fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.len()]) -> Result<()> {
     write_new(
         &output.join("workpaper.json"),
         &text_mode(&(pyjson::dumps_indent2(result) + "\n")),
@@ -1128,6 +1139,7 @@ pub fn write(result: &Json, output_raw: &str, cwd: &Path) -> Result<()> {
     if output.exists() || output.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) {
         return fail(output_shown);
     }
+    let tables = validated_tables(result)?;
     let parent = output
         .parent()
         .map(Path::to_path_buf)
@@ -1144,7 +1156,7 @@ pub fn write(result: &Json, output_raw: &str, cwd: &Path) -> Result<()> {
     let outcome = (|| -> Result<()> {
         let staged = temporary.join("complete");
         std::fs::create_dir(&staged).map_err(|e| Failure::Error(os_error(&e, &oserror::path_text(&staged), None)))?;
-        write_files(result, &staged)?;
+        write_validated_files(result, &staged, tables)?;
         #[cfg(test)]
         faults::check("publish", &output).map_err(|e| Failure::Error(os_error(&e, &output_shown, None)))?;
         publish_directory(&staged, &output, &output_shown)

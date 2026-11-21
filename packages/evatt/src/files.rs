@@ -141,6 +141,13 @@ pub fn absolute(path: &Path) -> Result<PathBuf> {
             _ => out.push(part.as_os_str()),
         }
     }
+    #[cfg(unix)]
+    if path.as_os_str().as_encoded_bytes().starts_with(b"//") {
+        // Components collapses a double root, which POSIX abspath preserves.
+        let mut double_root = OsString::from("/");
+        double_root.push(out);
+        return Ok(PathBuf::from(double_root));
+    }
     Ok(out)
 }
 
@@ -534,6 +541,22 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn absolute_preserves_a_posix_double_root_after_normalisation() {
+        use std::os::unix::ffi::OsStrExt;
+
+        for (raw, expected) in [
+            (b"//".as_slice(), b"//".as_slice()),
+            (b"//a/..", b"//"),
+            (b"//a/../b/./fixture-\xff", b"//b/fixture-\xff"),
+            (b"///a/../b", b"/b"),
+        ] {
+            let path = Path::new(std::ffi::OsStr::from_bytes(raw));
+            assert_eq!(absolute(path).unwrap().as_os_str().as_bytes(), expected);
+        }
+    }
 
     #[test]
     fn read_preserves_the_dominant_line_ending_and_normalises_crlf() {
