@@ -755,13 +755,12 @@ mod tests {
     #[test]
     fn recheck_refuses_a_different_canonical_output_location() {
         let temp = TempDir::new();
-        let destination = temp.join("destination");
-        let alias = temp.join("alias");
+        let base = pypath::resolve(&temp.0, true).unwrap();
+        let destination = base.join("destination");
+        let nested = base.join("nested");
+        let alias = nested.join("..").join("destination");
         fs::create_dir(&destination).unwrap();
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&destination, &alias).unwrap();
-        #[cfg(windows)]
-        std::os::windows::fs::symlink_dir(&destination, &alias).unwrap();
+        fs::create_dir(&nested).unwrap();
 
         let approved = require_output_outside_repository(&destination).unwrap();
         recheck_output(&approved).unwrap();
