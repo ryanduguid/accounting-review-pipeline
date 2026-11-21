@@ -1061,6 +1061,10 @@ fn publish(_staged: &Path, _output: &Path) -> std::io::Result<()> {
 fn temporary_directory(parent: &Path) -> std::io::Result<PathBuf> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let parent = std::path::absolute(parent)?;
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
     for attempt in 0u32..100 {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1070,10 +1074,8 @@ fn temporary_directory(parent: &Path) -> std::io::Result<PathBuf> {
             .map(|i| b"abcdefghijklmnopqrstuvwxyz0123456789_"[((seed >> (i * 4)) as usize + i * 7) % 37] as char)
             .collect();
         let candidate = parent.join(format!(".grant-workpaper-{name}"));
-        #[cfg_attr(not(unix), allow(unused_mut))]
-        let mut builder = std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        #[cfg(test)]
+        faults::check("stage_directory", &candidate)?;
         match builder.create(&candidate) {
             Ok(()) => return Ok(candidate),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -1137,7 +1139,8 @@ pub fn write(result: &Json, output_raw: &str, cwd: &Path) -> Result<()> {
 }
 
 /// Test-only failure injection at the points the Python tests patched:
-/// inspecting and reading contributions.csv, writing a file, and publishing.
+/// inspecting and reading contributions.csv, creating staging directories,
+/// writing a file, and publishing.
 #[cfg(test)]
 pub mod faults {
     use std::cell::RefCell;
@@ -1201,6 +1204,46 @@ mod tests {
         let error = temporary_directory(&parent).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
         assert!(!parent.exists());
+    }
+
+    #[test]
+    fn staging_retries_an_occupied_name_and_preserves_existing_contents() {
+        let temp = crate::tests::TempDir::new();
+        let mut first = true;
+        let _hook = faults::install(move |point, candidate| {
+            assert_eq!(point, "stage_directory");
+            if std::mem::take(&mut first) {
+                std::fs::create_dir(candidate)?;
+                std::fs::write(candidate.join("existing"), b"another run")?;
+            }
+            Ok(())
+        });
+
+        let staged = temporary_directory(temp.path()).unwrap();
+        assert_eq!(std::fs::read_dir(&staged).unwrap().count(), 0);
+        let other: Vec<_> = std::fs::read_dir(temp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path != &staged)
+            .collect();
+        assert_eq!(other.len(), 1);
+        assert_eq!(std::fs::read(other[0].join("existing")).unwrap(), b"another run");
+    }
+
+    #[test]
+    fn staging_returns_already_exists_when_every_attempt_collides() {
+        let temp = crate::tests::TempDir::new();
+        let attempts = std::rc::Rc::new(std::cell::Cell::new(0));
+        let called = attempts.clone();
+        let _hook = faults::install(move |point, candidate| {
+            assert_eq!(point, "stage_directory");
+            called.set(called.get() + 1);
+            std::fs::create_dir_all(candidate)
+        });
+
+        let error = temporary_directory(temp.path()).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(attempts.get(), 100);
     }
 
     #[test]

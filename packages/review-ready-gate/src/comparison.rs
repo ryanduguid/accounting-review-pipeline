@@ -7,7 +7,6 @@ use crate::{
     pyjson::{self, Json, PyStr},
     pytext, viewer,
 };
-use num_bigint::BigUint;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -145,6 +144,12 @@ fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
     Ok(result)
 }
 fn unmatched_documents(previous: &Json, current: &Json) -> Result<BTreeSet<String>> {
+    fn index_key(slot: &str) -> (usize, &str) {
+        // Source slots have ASCII decimal indices. Compare their significant digits.
+        let digits = slot.trim_start_matches("document_").trim_start_matches('0');
+        (digits.len(), digits)
+    }
+
     let mut unmatched: BTreeSet<_> = findings(previous)
         .iter()
         .map(|f| text(f.at("slot")))
@@ -155,11 +160,7 @@ fn unmatched_documents(previous: &Json, current: &Json) -> Result<BTreeSet<Strin
         *available.entry(digest).or_default() += 1;
     }
     let mut before = document_sources(previous)?;
-    before.sort_by_key(|(slot, _)| {
-        slot.trim_start_matches("document_")
-            .parse::<BigUint>()
-            .unwrap()
-    });
+    before.sort_by(|(left, _), (right, _)| index_key(left).cmp(&index_key(right)));
     for (slot, digest) in before {
         let count = available.entry(digest).or_default();
         if *count > 0 {
@@ -402,6 +403,26 @@ mod tests {
             );
             assert_eq!(document_sources(&previous).unwrap()[0].0, "document_001");
         }
+    }
+
+    #[test]
+    fn document_indices_sort_by_magnitude_and_significant_digits() {
+        let lower = format!("document_{}{}", "0".repeat(4), "9".repeat(80));
+        let higher = format!("document_1{}", "0".repeat(80));
+        let highest = format!("document_2{}", "0".repeat(80));
+        let previous_slots = [
+            highest.as_str(),
+            higher.as_str(),
+            lower.as_str(),
+            "document_000",
+        ];
+        let previous = document(&previous_slots, &previous_slots);
+        let current = document(&[], &["document_001", "document_002", "document_003"]);
+
+        assert_eq!(
+            unmatched_documents(&previous, &current).unwrap(),
+            BTreeSet::from([highest])
+        );
     }
 
     #[test]

@@ -245,17 +245,23 @@ fn write_new_with(
     render: impl FnOnce() -> Result<Vec<(String, Vec<u8>)>>,
     write: &mut impl FnMut(&mut fs::File, &[u8]) -> io::Result<()>,
 ) -> Result<PathBuf> {
+    const EXISTING_OUTPUT: &str =
+        "Output already exists. Choose a new directory to preserve the previous run.";
     let output = require_output_outside_repository(output)?;
     if output.exists() {
-        return Err(
-            "Output already exists. Choose a new directory to preserve the previous run.".into(),
-        );
+        return Err(EXISTING_OUTPUT.into());
     }
     let files = render()?;
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    fs::create_dir(&output).map_err(|e| e.to_string())?;
+    fs::create_dir(&output).map_err(|error| {
+        if error.kind() == io::ErrorKind::AlreadyExists {
+            EXISTING_OUTPUT.into()
+        } else {
+            error.to_string()
+        }
+    })?;
     let mut created = Vec::new();
     let result = (|| -> io::Result<()> {
         for (name, bytes) in files {
@@ -695,17 +701,42 @@ mod tests {
         let output = temp.0.join("pack");
         fs::create_dir(&output).unwrap();
         fs::write(output.join("keep"), b"previous").unwrap();
-        let mut rendered = false;
+        let rendered = std::cell::Cell::new(false);
+        let render = || {
+            rendered.set(true);
+            Ok(vec![("report.txt".into(), b"new".to_vec())])
+        };
         assert!(
-            write_new_files(&output, || {
-                rendered = true;
-                Ok(Vec::new())
-            })
-            .unwrap_err()
-            .starts_with("Output already exists.")
+            write_new_files(&output, render)
+                .unwrap_err()
+                .starts_with("Output already exists.")
         );
-        assert!(!rendered);
+        assert!(!rendered.get());
         assert_eq!(fs::read(output.join("keep")).unwrap(), b"previous");
+
+        let written = write_new_files(&temp.0.join("fresh/pack"), render).unwrap();
+        assert!(rendered.get());
+        assert_eq!(fs::read(written.join("report.txt")).unwrap(), b"new");
+    }
+
+    #[test]
+    fn new_directory_exports_keep_a_pack_published_during_rendering() {
+        let temp = TempDir::new();
+        let output = temp.0.join("pack");
+        let existing = output.join("report.txt");
+        let error = write_new_files(&output, || {
+            fs::create_dir(&output).unwrap();
+            fs::write(&existing, b"first run").unwrap();
+            Ok(vec![("report.txt".into(), b"second run".to_vec())])
+        })
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "Output already exists. Choose a new directory to preserve the previous run."
+        );
+        assert_eq!(fs::read(&existing).unwrap(), b"first run");
+        assert_eq!(inventory(&output), ["report.txt"]);
     }
     #[test]
     fn new_directory_write_failure_removes_only_created_members() {

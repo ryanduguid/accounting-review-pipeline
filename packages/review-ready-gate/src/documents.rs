@@ -531,9 +531,11 @@ fn review_issues(
         let value = field_value(name, decision.at("value"))?;
         let page =
             page.ok_or_else(|| format!("{name}.page must identify a page in the extracted text."))?;
-        let Json::Array(rows) = manifest.at("fields").at(name) else {
-            unreachable!()
-        };
+        let rows = manifest
+            .at("fields")
+            .at(name)
+            .as_array()
+            .expect("validated manifest field must be an array");
         if (rows.len() != 1
             || !rows[0].at("value").is_str(&value)
             || rows[0]
@@ -654,9 +656,11 @@ pub fn render_document(bundle: &DocumentBundle) -> String {
     }
     for (name, label) in FIELDS {
         lines.push(format!("{label}:"));
-        let Json::Array(rows) = m.at("fields").at(name) else {
-            unreachable!()
-        };
+        let rows = m
+            .at("fields")
+            .at(name)
+            .as_array()
+            .expect("validated manifest field must be an array");
         for row in rows {
             lines.push(format!(
                 "  observed page {}, line {}: {}",
@@ -893,23 +897,20 @@ mod tests {
         )
         .unwrap();
         let benchmark = json(&benchmark).unwrap();
-        let Json::Array(cases) = benchmark.at("cases") else {
-            panic!("benchmark list")
-        };
+        let cases = benchmark.at("cases").as_array().expect("benchmark list");
         assert_eq!(cases.len(), 15);
         for case in cases {
             let tmp = TempDir::new();
             let mut text = source_text();
-            let Json::Array(replacements) = case.at("replace") else {
-                panic!("replace list")
-            };
+            let replacements = case.at("replace").as_array().expect("replace list");
             for replacement in replacements {
-                let Json::Array(pair) = replacement else {
-                    panic!("replacement pair")
-                };
+                let [from, to]: &[Json; 2] = replacement
+                    .as_array()
+                    .and_then(|pair| pair.try_into().ok())
+                    .expect("replacement pair");
                 text = text.replace(
-                    &loader::json_text(&pair[0]).unwrap(),
-                    &loader::json_text(&pair[1]).unwrap(),
+                    &loader::json_text(from).unwrap(),
+                    &loader::json_text(to).unwrap(),
                 );
             }
             text.push_str(&loader::json_text(case.at("append")).unwrap());
@@ -919,9 +920,7 @@ mod tests {
                     .unwrap(),
             )
             .unwrap();
-            let Json::Object(expected) = case.at("expected") else {
-                panic!("expected object")
-            };
+            let expected = case.at("expected").as_object().expect("expected object");
             for (field, value) in expected {
                 assert!(
                     pyjson::py_eq(
@@ -943,9 +942,7 @@ mod tests {
                 .map(|(name, _)| (*name).to_owned())
                 .collect();
             unresolved.sort();
-            let Json::Array(expected) = case.at("unresolved") else {
-                panic!("unresolved list")
-            };
+            let expected = case.at("unresolved").as_array().expect("unresolved list");
             let mut expected: Vec<_> = expected
                 .iter()
                 .map(|v| loader::json_text(v).unwrap())
@@ -1005,9 +1002,12 @@ mod tests {
         fs::write(path.join(REVIEW_NAME), encoded(&review)).unwrap();
         let loaded = load_document(&path).unwrap();
         assert!(loaded.issues.is_empty());
-        let Json::Array(rows) = loaded.manifest.at("fields").at("total") else {
-            unreachable!()
-        };
+        let rows = loaded
+            .manifest
+            .at("fields")
+            .at("total")
+            .as_array()
+            .expect("loaded total field must be an array");
         assert!(rows[0].at("raw").is_str("unreadable"));
         let sheet = render_document(&loaded);
         assert!(sheet.contains("\"110.00\""));

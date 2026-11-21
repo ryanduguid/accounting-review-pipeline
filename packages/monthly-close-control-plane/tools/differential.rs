@@ -1,6 +1,6 @@
 //! Compare fabricated inputs with the frozen CPython implementation.
 use monthly_close_control_plane::probe::{self, Json, PyStr};
-use monthly_close_control_plane::pyjson;
+use monthly_close_control_plane::{pyjson, sha256};
 use std::{
     env, fs,
     io::Write,
@@ -849,9 +849,49 @@ fn evidence(c: &mut Corpus, root: &Path) -> Result<()> {
     }
     Ok(())
 }
+fn equity_schedule(prior: &str, current: &str, accounts: &[&str], movements: Vec<Json>) -> Json {
+    Json::object([
+        ("schema_version", Json::int(1)),
+        ("tenant", Json::str("Synthetic")),
+        ("opening_date", Json::str("2026-08-31")),
+        ("closing_date", Json::str("2026-09-30")),
+        ("currency", Json::str("AUD")),
+        ("basis", Json::str("ledger_equity")),
+        ("prior_source_sha256", Json::str(&sha256(prior.as_bytes()))),
+        (
+            "current_source_sha256",
+            Json::str(&sha256(current.as_bytes())),
+        ),
+        (
+            "equity_account_ids",
+            Json::Array(accounts.iter().map(|id| Json::str(id)).collect()),
+        ),
+        ("complete", Json::Bool(true)),
+        ("movements", Json::Array(movements)),
+    ])
+}
+
+fn equity_movement(
+    id: &str,
+    date: &str,
+    debit: &str,
+    credit: &str,
+    description: Json,
+    reference: &str,
+) -> Json {
+    Json::object([
+        ("movement_id", Json::str(id)),
+        ("date", Json::str(date)),
+        ("account_id", Json::str("E")),
+        ("debit", Json::str(debit)),
+        ("credit", Json::str(credit)),
+        ("description", description),
+        ("evidence_reference", Json::str(reference)),
+    ])
+}
+
 #[expect(clippy::too_many_lines, reason = "builds the equity corpus cases")]
 fn equity(c: &mut Corpus, seed: u64) -> Result<()> {
-    use monthly_close_control_plane::sha256;
     fn source(name: &str, bytes: &[u8]) -> Json {
         Json::object([("path", Json::str(name)), ("hex", Json::str(&hex(bytes)))])
     }
@@ -862,18 +902,15 @@ fn equity(c: &mut Corpus, seed: u64) -> Result<()> {
     }
     let prior = tb("2026-08-31", "100", "Equity");
     let current = tb("2026-09-30", "125", "Equity");
-    let movement = probe::decode(
-        r#"{"movement_id":"m","date":"2026-09-01","account_id":"E","debit":"0","credit":"25","description":"Synthetic contribution","evidence_reference":"Fabricated record"}"#,
-    )?;
-    let mut base = probe::decode(
-        r#"{"schema_version":1,"tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","basis":"ledger_equity","prior_source_sha256":"","current_source_sha256":"","equity_account_ids":["E"],"complete":true,"movements":[]}"#,
-    )?;
-    base.set("prior_source_sha256", Json::str(&sha256(prior.as_bytes())));
-    base.set(
-        "current_source_sha256",
-        Json::str(&sha256(current.as_bytes())),
+    let movement = equity_movement(
+        "m",
+        "2026-09-01",
+        "0",
+        "25",
+        Json::str("Synthetic contribution"),
+        "Fabricated record",
     );
-    base.set("movements", Json::Array(vec![movement.clone()]));
+    let base = equity_schedule(&prior, &current, &["E"], vec![movement.clone()]);
     let push = |c: &mut Corpus,
                 name: &str,
                 op: &str,
@@ -1286,17 +1323,7 @@ fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     ] {
         let old = equity_tb("2026-08-31", "100", "100", "200");
         let new = equity_tb("2026-09-30", first, second, total);
-        let mut schedule = probe::decode(
-            r#"{"schema_version":1,"tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","basis":"ledger_equity","equity_account_ids":["E","F"],"complete":true,"movements":[]}"#,
-        )?;
-        schedule.set(
-            "prior_source_sha256",
-            Json::str(&monthly_close_control_plane::sha256(old.as_bytes())),
-        );
-        schedule.set(
-            "current_source_sha256",
-            Json::str(&monthly_close_control_plane::sha256(new.as_bytes())),
-        );
+        let schedule = equity_schedule(&old, &new, &["E", "F"], Vec::new());
         c.push(
             format!("review-equity-legacy-{label}"),
             "review",
@@ -1326,17 +1353,15 @@ fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     };
     let old = debit_tb("2026-08-31", "100");
     let new = debit_tb("2026-09-30", "125");
-    let mut schedule = probe::decode(
-        r#"{"schema_version":1,"tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","basis":"ledger_equity","equity_account_ids":["E"],"complete":true,"movements":[{"movement_id":"loss","date":"2026-09-30","account_id":"E","debit":"25","credit":"0","description":"Loss transfer","evidence_reference":"Fabricated independent closing record"}]}"#,
-    )?;
-    schedule.set(
-        "prior_source_sha256",
-        Json::str(&monthly_close_control_plane::sha256(old.as_bytes())),
+    let movement = equity_movement(
+        "loss",
+        "2026-09-30",
+        "25",
+        "0",
+        Json::str("Loss transfer"),
+        "Fabricated independent closing record",
     );
-    schedule.set(
-        "current_source_sha256",
-        Json::str(&monthly_close_control_plane::sha256(new.as_bytes())),
-    );
+    let schedule = equity_schedule(&old, &new, &["E"], vec![movement]);
     c.push(
         "review-equity-legacy-debit-loss",
         "review",
@@ -1562,22 +1587,15 @@ fn reviews(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
     .into_iter()
     .enumerate()
     {
-        let mut schedule = probe::decode(
-            r#"{"schema_version":1,"tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","basis":"ledger_equity","prior_source_sha256":"","current_source_sha256":"","equity_account_ids":["E"],"complete":true,"movements":[]}"#,
-        )?;
-        schedule.set(
-            "prior_source_sha256",
-            Json::str(&monthly_close_control_plane::sha256(prior.as_bytes())),
+        let movement = equity_movement(
+            "m",
+            "2026-09-30",
+            "0",
+            "500",
+            description,
+            "Synthetic record",
         );
-        schedule.set(
-            "current_source_sha256",
-            Json::str(&monthly_close_control_plane::sha256(current.as_bytes())),
-        );
-        let mut movement = probe::decode(
-            r#"{"movement_id":"m","date":"2026-09-30","account_id":"E","debit":"0","credit":"500","description":"synthetic","evidence_reference":"Synthetic record"}"#,
-        )?;
-        movement.set("description", description);
-        schedule.set("movements", Json::Array(vec![movement]));
+        let schedule = equity_schedule(&prior, &current, &["E"], vec![movement]);
         let mut pairs = base.clone();
         pairs.push((
             "equity_schedule",
