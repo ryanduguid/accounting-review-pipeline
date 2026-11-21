@@ -474,6 +474,15 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn strict_resolve_distinguishes_metadata_errors_from_missing_paths() {
+        let overlong = std::path::Path::new("/").join("a".repeat(4_096));
+        assert!(matches!(
+            super::resolve(&overlong, true),
+            Err(super::ResolveError::Unusable)
+        ));
+    }
 
     #[cfg(windows)]
     #[test]
