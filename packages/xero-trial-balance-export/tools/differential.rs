@@ -367,6 +367,7 @@ fn compare_cli(
         &["--date", "--help"],
     ];
     let mut differences = 0;
+    let notice = CLI_LICENCE_NOTICE.replace('\n', if cfg!(windows) { "\r\n" } else { "\n" });
     for (module, binary) in [("export_tb", "export-tb"), ("auth", "xero-tb-auth")] {
         for (columns, lines) in [
             ("20", "0"),
@@ -402,7 +403,7 @@ fn compare_cli(
                 }
                 let mut expected = command_output(&mut source)?;
                 if expected.0 == 0 && expected.1.starts_with(b"usage: ") {
-                    expected.1.extend_from_slice(CLI_LICENCE_NOTICE.as_bytes());
+                    expected.1.extend_from_slice(notice.as_bytes());
                 }
                 let actual = command_output(&mut rust)?;
                 if expected != actual {
