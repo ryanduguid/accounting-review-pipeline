@@ -1287,7 +1287,6 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
     let bytes = reader.join().map_err(|_| "oracle output thread panicked");
     let errors = errors.join().map_err(|_| "oracle error thread panicked");
     let status = status?;
-    written??;
     let bytes = bytes??;
     let errors = errors??;
     if !status.success() {
@@ -1297,6 +1296,7 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
         )
         .into());
     }
+    written??;
     Ok(String::from_utf8(bytes)?
         .lines()
         .map(str::to_owned)
