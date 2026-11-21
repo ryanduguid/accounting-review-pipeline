@@ -1004,6 +1004,33 @@ fn non_object_table_row_is_refused_before_publication() {
 }
 
 #[test]
+fn non_unicode_table_cells_are_refused_without_output() {
+    let fixture = Fixture::new();
+    let output = fixture.root().join("files");
+    std::fs::create_dir(&output).unwrap();
+    for (json, kind) in [
+        (r#"[{"\ud800":"first","\\ud800":"literal"}]"#, "names"),
+        (r#"[{"reference":"\ud800"}]"#, "values"),
+    ] {
+        let mut result = fixture.review().unwrap();
+        let Json::Object(fields) = &mut result else {
+            panic!("fixture must produce a workpaper object");
+        };
+        fields.iter_mut().find(|(key, _)| key.is("findings")).unwrap().1 =
+            pyjson::loads_bytes(json.as_bytes()).unwrap();
+        let expected = format!("Invalid workpaper: findings[0] field {kind} must be valid Unicode");
+
+        assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
+        assert!(directory_names(&output).is_empty());
+        assert_eq!(
+            refused(workpaper::write(&result, "missing-parent/published", fixture.root())),
+            expected
+        );
+        assert!(!fixture.root().join("missing-parent").exists());
+    }
+}
+
+#[test]
 fn write_files_preserves_existing_blockers_and_prior_sequential_output() {
     for blocked in ["workpaper.json", "budget_lines.csv"] {
         let fixture = Fixture::new();

@@ -903,10 +903,27 @@ fn array<'a>(value: &'a Json, key: &str) -> Result<&'a [Json]> {
 
 fn validated_tables(result: &Json) -> Result<[&[Json]; TABLES.len()]> {
     let mut tables = [&[][..]; TABLES.len()];
+    let is_unicode = |points: &[u32]| points.iter().copied().all(|point| char::from_u32(point).is_some());
     for (name, rows) in TABLES.into_iter().zip(&mut tables) {
         *rows = array(result, name)?;
-        if let Some(index) = rows.iter().position(|row| !matches!(row, Json::Object(_))) {
-            return fail(format!("Invalid workpaper: {name}[{index}] must be an object"));
+        for (index, row) in rows.iter().enumerate() {
+            let Json::Object(fields) = row else {
+                return fail(format!("Invalid workpaper: {name}[{index}] must be an object"));
+            };
+            for (key, value) in fields {
+                if !is_unicode(&key.0) {
+                    return fail(format!(
+                        "Invalid workpaper: {name}[{index}] field names must be valid Unicode"
+                    ));
+                }
+                if let Json::Str(text) = value
+                    && !is_unicode(&text.0)
+                {
+                    return fail(format!(
+                        "Invalid workpaper: {name}[{index}] field values must be valid Unicode"
+                    ));
+                }
+            }
         }
     }
     Ok(tables)
@@ -933,13 +950,13 @@ fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.
 
 /// `csv.DictWriter` over the union of the rows' keys, with formula-like cells escaped.
 fn csv_table(table: &[Json]) -> String {
-    let mut fields: Vec<String> = Vec::new();
+    let mut fields = Vec::new();
+    let mut seen = HashSet::new();
     for row in table {
         if let Json::Object(pairs) = row {
             for (key, _) in pairs {
-                let key = key.lossy();
-                if !fields.contains(&key) {
-                    fields.push(key);
+                if seen.insert(key.0.as_slice()) {
+                    fields.push(key.lossy());
                 }
             }
         }
