@@ -460,6 +460,27 @@ fn test_duplicate_ledger_id_is_refused() {
 }
 
 #[test]
+fn ledger_tieout_follows_input_order_after_allocation_lookup() {
+    let fixture = Fixture::new();
+    let baseline = fixture.review().unwrap();
+    fixture.edit_csv("ledger.csv", |rows| rows.reverse());
+    let reversed = fixture.review().unwrap();
+
+    let expected: Vec<_> = rows(&baseline, "ledger_tieout").iter().rev().collect();
+    let actual = rows(&reversed, "ledger_tieout");
+    assert_eq!(actual.len(), expected.len());
+    for (actual, expected) in actual.iter().zip(expected) {
+        assert_eq!(pyjson::dumps_indent2(actual), pyjson::dumps_indent2(expected));
+    }
+    for section in ["allocation_evidence", "budget_lines"] {
+        assert_eq!(
+            pyjson::dumps_indent2(reversed.at(section)),
+            pyjson::dumps_indent2(baseline.at(section)),
+        );
+    }
+}
+
+#[test]
 fn test_zero_is_valid_but_missing_or_nonfinite_is_not() {
     let fixture = Fixture::new();
     assert!(fixture.review().unwrap().at("status").is_str("REVIEW"));
