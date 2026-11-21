@@ -150,15 +150,14 @@ fn account_id(row: &Json, where_: &str) -> Result<String> {
 pub fn flatten(report: &Json) -> Result<(Vec<String>, Vec<Record>)> {
     let mut header = Vec::new();
     let mut flat = Vec::new();
-    let mut controls: Vec<(Option<Vec<usize>>, Vec<Record>)> = Vec::new();
+    let mut controls = Vec::new();
     for top in objects(report, "Rows", "top level")? {
         match top.get("RowType").and_then(Json::as_pystr) {
             Some(kind) if kind.is("Header") => {
                 header = cell_values(top, "top level")?;
-                let repeated: BTreeSet<_> = header
-                    .iter()
-                    .filter(|title| header.iter().filter(|t| t == title).count() > 1)
-                    .collect();
+                let mut seen = HashSet::with_capacity(header.len());
+                let repeated: BTreeSet<_> =
+                    header.iter().filter(|title| !seen.insert(*title)).collect();
                 if !repeated.is_empty() {
                     return Err(Failure::message(format!(
                         "error: report header repeats the column title(s) {}, so the cells under them cannot be told apart. The API shape may have changed, or this is not a trial balance report.",
@@ -173,7 +172,8 @@ pub fn flatten(report: &Json) -> Result<(Vec<String>, Vec<Record>)> {
             Some(kind) if kind.is("Section") => {
                 let section = top.get("Title").cloned().unwrap_or_else(|| Json::str(""));
                 let where_ = format!("section \"{}\"", amount::shown(&text(&section)));
-                let (mut indices, mut summaries) = (Vec::new(), Vec::new());
+                let start = flat.len();
+                let mut summaries = Vec::new();
                 for row in objects(top, "Rows", &where_)? {
                     if !row
                         .get("RowType")
@@ -192,15 +192,13 @@ pub fn flatten(report: &Json) -> Result<(Vec<String>, Vec<Record>)> {
                         "AccountID",
                         Json::str(&account_id(row, &where_)?),
                     );
-                    indices.push(flat.len());
                     flat.push(entry);
                 }
-                let selected = if !truth(&section) && indices.is_empty() {
-                    None
-                } else {
-                    Some(indices)
-                };
-                controls.push((selected, summaries));
+                if !summaries.is_empty() {
+                    let rows = start..flat.len();
+                    let selected = (truth(&section) || !rows.is_empty()).then_some(rows);
+                    controls.push((selected, summaries));
+                }
             }
             Some(kind) if kind.is("SummaryRow") => {
                 controls.push((None, vec![record(top, &header, "grand total")?]))
@@ -208,13 +206,11 @@ pub fn flatten(report: &Json) -> Result<(Vec<String>, Vec<Record>)> {
             _ => {}
         }
     }
-    for (indices, summaries) in controls {
-        if summaries.is_empty() {
-            continue;
-        }
+    for (range, summaries) in controls {
+        let rows = range.map_or(flat.as_slice(), |range| &flat[range]);
         let mut totals = std::array::from_fn(|_| Amount::zero());
-        for index in indices.unwrap_or_else(|| (0..flat.len()).collect()) {
-            totals = amount::add_totals(&totals, &row_amounts(&flat[index])?)?;
+        for row in rows {
+            totals = amount::add_totals(&totals, &row_amounts(row)?)?;
         }
         for summary in summaries {
             if !row_amounts(&summary)?
@@ -403,6 +399,60 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(&rows[0][2..7], ["Assets", "A100", "Cash", "100", "5.0"]);
     }
+    #[test]
+    fn section_and_grand_summaries_use_their_own_rows() {
+        let input = r#"{"Rows":[
+            {"RowType":"Header","Cells":[{"Value":"Debit"}]},
+            {"RowType":"Section","Title":"First","Rows":[
+                {"RowType":"Row","Cells":[{"Value":"3.25"}]},
+                {"RowType":"SummaryRow","Cells":[{"Value":"3.25"}]}
+            ]},
+            {"RowType":"Section","Title":"No accounts","Rows":[
+                {"RowType":"SummaryRow","Cells":[{"Value":"0"}]}
+            ]},
+            {"RowType":"SummaryRow","Cells":[{"Value":"7.75"}]},
+            {"RowType":"Section","Rows":[
+                {"RowType":"Row","Cells":[{"Value":"4.50"}]},
+                {"RowType":"SummaryRow","Cells":[{"Value":"4.50"}]}
+            ]},
+            {"RowType":"Section","Title":"","Rows":[
+                {"RowType":"SummaryRow","Cells":[{"Value":"7.75"}]}
+            ]}
+        ]}"#;
+        let report = crate::pyjson::loads(input).unwrap();
+        let (_, rows) = flatten(&report).unwrap();
+        let debits: Vec<_> = rows
+            .iter()
+            .map(|row| text(get(row, "Debit").unwrap()))
+            .collect();
+        assert_eq!(debits, ["3.25", "4.50"]);
+
+        let wrong_grand_total = input.replacen("7.75", "3.25", 1);
+        let report = crate::pyjson::loads(&wrong_grand_total).unwrap();
+        assert_eq!(
+            flatten(&report).unwrap_err(),
+            Failure::message(
+                "error: Trial Balance summary contradicts the account rows. Nothing written."
+            )
+        );
+    }
+
+    #[test]
+    fn repeated_header_titles_are_reported_once_in_sorted_order() {
+        let report = crate::pyjson::loads(
+            r#"{"Rows":[{"RowType":"Header","Cells":[
+                {"Value":"Z"},{"Value":"A"},{"Value":"Z"},{"Value":"A"},{"Value":"A"}
+            ]}]}"#,
+        )
+        .unwrap();
+        assert!(
+            flatten(&report)
+                .unwrap_err()
+                .stderr
+                .contains("repeats the column title(s) A, Z,")
+        );
+    }
+
     #[test]
     fn malformed_account_code_suffixes_keep_the_original_name() {
         for name in ["Service Charge ", "Cash closing)", "Service\nCharge (100)"] {
