@@ -906,6 +906,9 @@ pub fn write_files(result: &Json, output: &Path) -> Result<()> {
     let mut tables = [&[][..]; TABLES.len()];
     for (name, rows) in TABLES.into_iter().zip(&mut tables) {
         *rows = array(result, name)?;
+        if let Some(index) = rows.iter().position(|row| !matches!(row, Json::Object(_))) {
+            return fail(format!("Invalid workpaper: {name}[{index}] must be an object"));
+        }
     }
     write_new(
         &output.join("workpaper.json"),
