@@ -496,9 +496,6 @@ fn arithmetic(c: &mut Corpus) {
         for (i, a) in values.iter().enumerate() {
             for (j, b) in values.iter().enumerate() {
                 for kind in ["add", "sub", "mul", "div"] {
-                    if kind == "div" && (j == 0 || j == 1 || j == 8) {
-                        continue;
-                    }
                     c.push(
                         format!("arithmetic-{precision}-{i}-{j}-{kind}"),
                         "arithmetic",

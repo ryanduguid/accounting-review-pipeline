@@ -215,11 +215,11 @@ jobs:
           source "$RUNNER_TEMP/coverage-env.sh"
           cargo test --locked --test no_network
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'packages/monthly-close-control-plane' || matrix.package_dir == 'adapters/accounting-excel-toolkit' || matrix.package_dir == 'apps/australian-accounting-power-bi' || matrix.package_dir == 'apps/grant-acquittal-workpapers'
+        if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'adapters/accounting-excel-toolkit' || matrix.package_dir == 'apps/australian-accounting-power-bi' || matrix.package_dir == 'apps/grant-acquittal-workpapers'
         with:
           python-version: '3.15'
       - name: Install the managed C decimal oracle toolchain
-        if: matrix.package_dir == 'packages/elizabeth-anne-alexander'
+        if: matrix.package_dir == 'packages/elizabeth-anne-alexander' || matrix.package_dir == 'packages/monthly-close-control-plane'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.5"
@@ -290,17 +290,24 @@ jobs:
         if: matrix.package_dir == 'packages/monthly-close-control-plane'
         run: |
           source "$RUNNER_TEMP/coverage-env.sh"
+          uv python install 3.15.0
+          oracle_python="$(uv python find --managed-python 3.15.0)"
           temp_root="$RUNNER_TEMP"
-          if [ "$RUNNER_OS" = Windows ]; then temp_root="$(cygpath -u "$temp_root")"; fi
+          if [ "$RUNNER_OS" = Windows ]; then
+            temp_root="$(cygpath -u "$temp_root")"
+            oracle_python="$(cygpath -u "$oracle_python")"
+          fi
+          # Decimal exception text in the frozen comparison requires C _decimal.
+          "$oracle_python" -c "import _decimal, decimal; assert decimal.Decimal is _decimal.Decimal"
           baseline="$temp_root/monthly-close-python-baseline"
           mkdir -p "$baseline"
           git -C "$GITHUB_WORKSPACE" archive 2523f118bd9f1a5bda6e3540e06647a03371fe04:packages/monthly-close-control-plane | tar -xf - -C "$baseline"
           cargo build --locked --features probe --bins --example differential-negative-controls
           # This normally returning comparison uses exit-time flushing: continuous
           # writes exceed the oracle deadline on its full Windows corpus.
-          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --bin close-control-differential -- "$(command -v python)" "$baseline" 1
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --bin close-control-differential -- "$oracle_python" "$baseline" 1
           # Run genuine negative controls in an owned sibling directory.
-          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --example differential-negative-controls -- "$(command -v python)" "$baseline" "$PWD/target/debug"
+          LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE/\%c/}" cargo run --locked --features probe --example differential-negative-controls -- "$oracle_python" "$baseline" "$PWD/target/debug"
       - name: Check out the frozen Python Excel tools
         if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

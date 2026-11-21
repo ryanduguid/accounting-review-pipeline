@@ -575,7 +575,8 @@ fn arithmetic(request: &Json) -> Result<Json> {
             }
             Multiply => Ok(render(a.mul(&b), false)),
             Divide if !b.is_zero() => Ok(render(a.div(&b), false)),
-            Divide => Err("invalid probe arithmetic".into()),
+            Divide if a.is_zero() => Err("[<class 'decimal.DivisionUndefined'>]".into()),
+            Divide => Err("[<class 'decimal.DivisionByZero'>]".into()),
         }
     })
 }
@@ -1117,6 +1118,32 @@ mod tests {
         );
     }
 }
+#[test]
+fn arithmetic_probe_reports_cpython_zero_divisor_signals() {
+    for (a, b, signal) in [
+        ("0", "-0.00", "DivisionUndefined"),
+        ("-0.00", "0", "DivisionUndefined"),
+        ("1", "0", "DivisionByZero"),
+        ("-1E-100", "0E+10", "DivisionByZero"),
+    ] {
+        let request = Json::object([
+            ("op", Json::str("arithmetic")),
+            ("precision", Json::str("28")),
+            ("kind", Json::str("div")),
+            ("a", Json::str(a)),
+            ("b", Json::str(b)),
+        ]);
+        assert_eq!(
+            encode(&evaluate(&request)),
+            encode(&Json::object([(
+                "error",
+                Json::str(&format!("[<class 'decimal.{signal}'>]")),
+            )])),
+            "{a} / {b}"
+        );
+    }
+}
+
 #[test]
 fn arithmetic_probe_matches_python_for_non_finite_values() {
     let invalid = "[<class 'decimal.InvalidOperation'>]";

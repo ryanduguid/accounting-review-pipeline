@@ -894,28 +894,29 @@ const TABLES: [&str; 6] = [
     "findings",
 ];
 
-fn array<'a>(value: &'a Json, key: &str) -> &'a [Json] {
-    let Json::Array(items) = value.at(key) else {
-        unreachable!("built as lists")
-    };
-    items
+fn array<'a>(value: &'a Json, key: &str) -> Result<&'a [Json]> {
+    match value.get(key) {
+        Some(Json::Array(items)) => Ok(items),
+        _ => fail(format!("Invalid workpaper: {key} must be a list")),
+    }
 }
 
 /// `write_files(result, output)`.
 pub fn write_files(result: &Json, output: &Path) -> Result<()> {
+    let mut tables = [&[][..]; TABLES.len()];
+    for (name, rows) in TABLES.into_iter().zip(&mut tables) {
+        *rows = array(result, name)?;
+    }
     write_new(
         &output.join("workpaper.json"),
         &text_mode(&(pyjson::dumps_indent2(result) + "\n")),
     )?;
-    for name in TABLES {
-        write_new(
-            &output.join(format!("{name}.csv")),
-            csv_table(array(result, name)).as_bytes(),
-        )?;
+    for (name, rows) in TABLES.into_iter().zip(tables) {
+        write_new(&output.join(format!("{name}.csv")), csv_table(rows).as_bytes())?;
     }
     write_new(
         &output.join("workpaper.md"),
-        &text_mode(&markdown_report(result).join("\n")),
+        &text_mode(&markdown_report(result)?.join("\n")),
     )
 }
 
@@ -944,7 +945,7 @@ fn csv_table(table: &[Json]) -> String {
 }
 
 /// workpaper.md's lines.
-fn markdown_report(result: &Json) -> Vec<String> {
+fn markdown_report(result: &Json) -> Result<Vec<String>> {
     let mut lines = vec![
         "# Grant acquittal workpaper".to_string(),
         String::new(),
@@ -969,7 +970,7 @@ fn markdown_report(result: &Json) -> Vec<String> {
         "| Grant | Closing cash allocation | Unspent funding workpaper |".into(),
         "| --- | ---: | ---: |".into(),
     ];
-    for row in array(result, "funding_movements") {
+    for row in array(result, "funding_movements")? {
         lines.push(format!(
             "| {} | {} | {} |",
             markdown(&get_text(row, "grant_id")),
@@ -978,7 +979,7 @@ fn markdown_report(result: &Json) -> Vec<String> {
         ));
     }
     lines.extend([String::new(), "## Items requiring review".to_string(), String::new()]);
-    let found = array(result, "findings");
+    let found = array(result, "findings")?;
     for row in found {
         lines.push(format!(
             "- {}: {}",
@@ -990,7 +991,7 @@ fn markdown_report(result: &Json) -> Vec<String> {
         lines.push("No differences found in the supplied evidence.".into());
     }
     lines.extend([String::new(), get_text(result, "scope"), String::new()]);
-    lines
+    Ok(lines)
 }
 
 /// Atomically publish a complete directory without replacing any destination.

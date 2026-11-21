@@ -57,6 +57,7 @@ fn the_probe_resolves_external_outputs_and_refuses_checkout_outputs() {
         .write_all(
             br#"{"op":"output_guard","path":"Fox River"}
 {"op":"output_guard","path":"checkout/output"}
+{"op":"output_guard","path":"native-\udcff"}
 "#,
         )
         .unwrap();
@@ -77,6 +78,9 @@ fn the_probe_resolves_external_outputs_and_refuses_checkout_outputs() {
     let refused = rows.next().unwrap();
     let error = refused.at("error").as_pystr().unwrap().to_utf8().unwrap();
     assert!(error.contains("version-control checkout"), "{error}");
+    let native = rows.next().unwrap();
+    let suffix: Vec<_> = "native-".chars().map(u32::from).chain([0xdcff]).collect();
+    assert!(native.at("ok").as_pystr().unwrap().0.ends_with(&suffix));
     assert!(rows.next().is_none());
     assert!(!path.exists());
     assert!(!checkout.join("output").exists());
