@@ -218,6 +218,14 @@ fn publish_with(
     Ok(destinations)
 }
 
+fn recheck_output(output: &Path) -> Result<()> {
+    let current = require_output_outside_repository(output)?;
+    if !pypath::same_path(output, &current) {
+        return Err("The approved output path changed whilst preparing the pack.".into());
+    }
+    Ok(())
+}
+
 pub fn write_review_pack(
     pack: &crate::engine::CloseReviewPack,
     output: &Path,
@@ -231,6 +239,7 @@ fn write_review_pack_with(
     let output = require_output_outside_repository(output)?;
     fs::create_dir_all(&output).map_err(|e| e.to_string())?;
     let rendered = render()?;
+    recheck_output(&output)?;
     publish_with(
         &output,
         &rendered,
@@ -252,6 +261,7 @@ fn write_new_with(
         return Err(EXISTING_OUTPUT.into());
     }
     let files = render()?;
+    recheck_output(&output)?;
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -717,6 +727,47 @@ mod tests {
         let written = write_new_files(&temp.0.join("fresh/pack"), render).unwrap();
         assert!(rendered.get());
         assert_eq!(fs::read(written.join("report.txt")).unwrap(), b"new");
+    }
+
+    #[test]
+    fn review_pack_rechecks_the_repository_boundary_after_rendering() {
+        let temp = TempDir::new();
+        let output = temp.join("pack");
+        let before = write_review_pack_with(&output, || Ok(data("old"))).unwrap();
+
+        let result = write_review_pack_with(&output, || {
+            fs::write(temp.join(".git"), b"checkout marker").unwrap();
+            Ok(data("new"))
+        });
+
+        assert!(
+            result
+                .unwrap_err()
+                .contains("is inside the version-control checkout")
+        );
+        for (i, path) in before.iter().enumerate() {
+            assert_eq!(fs::read(path).unwrap(), data("old")[i]);
+        }
+        assert_eq!(inventory(&output).len(), before.len());
+    }
+
+    #[test]
+    fn new_directory_rechecks_the_repository_boundary_after_rendering() {
+        let temp = TempDir::new();
+        let output = temp.join("pack");
+
+        let result = write_new_files(&output, || {
+            fs::write(temp.join(".git"), b"checkout marker").unwrap();
+            Ok(vec![("report.txt".into(), b"new report".to_vec())])
+        });
+
+        assert!(
+            result
+                .unwrap_err()
+                .contains("is inside the version-control checkout")
+        );
+        assert!(!output.exists());
+        assert_eq!(inventory(&temp.0), [".git"]);
     }
 
     #[test]
