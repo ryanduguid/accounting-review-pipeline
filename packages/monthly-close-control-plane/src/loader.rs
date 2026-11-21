@@ -183,13 +183,16 @@ pub(crate) fn input_text(
     empty: bool,
 ) -> Result<String> {
     let text = pytext::strip(value.unwrap_or(""));
-    let path = pypath::text(path);
     if text.is_empty() && !empty {
-        return Err(format!("{path}: row {row} has an empty {field}."));
+        return Err(format!(
+            "{}: row {row} has an empty {field}.",
+            pypath::text(path)
+        ));
     }
     if pytext::control_or_format(text, false) {
         return Err(format!(
-            "{path}: row {row} {field} contains a control or formatting character."
+            "{}: row {row} {field} contains a control or formatting character.",
+            pypath::text(path)
         ));
     }
     Ok(text.into())

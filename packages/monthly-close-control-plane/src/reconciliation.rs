@@ -85,8 +85,7 @@ pub fn money(value: &str, field: &str, path: &Path, row: usize) -> Result<Decima
 pub fn fixed(value: &Decimal) -> String {
     value.format_places(2).expect("bounded transaction amount")
 }
-#[expect(clippy::too_many_lines, reason = "validates every column of one row")]
-fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> {
+fn opening_item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<(Json, Date)> {
     if !value.has_exact_keys(&COLUMNS)
         || COLUMNS.iter().any(|key| value.at(key).as_pystr().is_none())
     {
@@ -95,18 +94,23 @@ fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> 
             pypath::text(path)
         ));
     }
+    item(identity, path, row, |key, empty| {
+        loader::json_input_text(value.at(key), key, row, path, empty)
+    })
+}
+
+fn item(
+    identity: &Json,
+    path: &Path,
+    row: usize,
+    read_text: impl Fn(&str, bool) -> Result<String>,
+) -> Result<(Json, Date)> {
     let mut result = Json::Object(
         COLUMNS
             .iter()
             .map(|key| {
-                loader::json_input_text(
-                    value.at(key),
-                    key,
-                    row,
-                    path,
-                    ["Reference", "Description"].contains(key),
-                )
-                .map(|v| (PyStr::from(*key), Json::str(&v)))
+                read_text(key, ["Reference", "Description"].contains(key))
+                    .map(|value| (PyStr::from(*key), Json::str(&value)))
             })
             .collect::<Result<_>>()?,
     );
@@ -133,7 +137,7 @@ fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> 
             pypath::text(path)
         ));
     }
-    date(&field(&result, "Date"))?;
+    let when = date(&field(&result, "Date"))?;
     let debit = money(&field(&result, "Debit"), "Debit", path, row)?;
     let credit = money(&field(&result, "Credit"), "Credit", path, row)?;
     if debit < Decimal::zero()
@@ -147,7 +151,7 @@ fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> 
     }
     result.set("Debit", Json::str(&fixed(&debit)));
     result.set("Credit", Json::str(&fixed(&credit)));
-    Ok(result)
+    Ok((result, when))
 }
 fn total<'a>(items: impl IntoIterator<Item = &'a Json>) -> Decimal {
     items.into_iter().fold(Decimal::zero(), |sum, item| {
@@ -219,10 +223,12 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
         || !pyjson::py_eq(payload.at("identity"), identity, true)
         || payload.at("period_end").as_pystr().is_none()
         || payload.at("balance").as_pystr().is_none()
-        || !matches!(payload.at("notes"), Json::Object(_))
     {
         return Err(invalid_schema.into());
     }
+    let Json::Object(notes) = payload.at("notes") else {
+        return Err(invalid_schema.into());
+    };
     let previous = date(&field(&payload, "period_end"))?;
     if isodate::ordinal(start) - isodate::ordinal(previous) != 1 {
         return Err("Opening items must come from the immediately preceding period.".into());
@@ -231,8 +237,8 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
         if !matches!(value, Json::Object(_)) {
             return Err("Opening items must be transaction objects.".into());
         }
-        let row = item(value, identity, &source.path, index + 1)?;
-        if date(&field(&row, "Date"))? > previous {
+        let (row, when) = opening_item(value, identity, &source.path, index + 1)?;
+        if when > previous {
             return Err("Opening item dates cannot be later than their period end.".into());
         }
         *value = row;
@@ -251,9 +257,6 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
     if total(&items) != money(&balance, "amount", Path::new("configuration"), 0)? {
         return Err("Opening items do not equal their recorded balance.".into());
     }
-    let Json::Object(notes) = payload.at("notes") else {
-        unreachable!()
-    };
     let invalid_notes = "Opening review notes must name outstanding transaction IDs.";
     if notes.len() > items.len() {
         return Err(invalid_notes.into());
@@ -398,6 +401,18 @@ pub struct ReconcileConfig {
     pub decisions: Option<PathBuf>,
     pub decisions_escaped: bool,
 }
+fn source_evidence(source: SourceSnapshot) -> Json {
+    Json::object([
+        (
+            "file",
+            Json::Str(PyStr::from_os_text(&pypath::decode_os(
+                source.path.file_name().unwrap_or_default(),
+            ))),
+        ),
+        ("sha256", Json::str(&source.sha256)),
+    ])
+}
+
 pub fn reconcile(config: &ReconcileConfig) -> Result<Json> {
     reconcile_with(config, &mut SourceSnapshot::capture)
 }
@@ -463,6 +478,7 @@ pub fn reconcile_with(
             .map(|s| opening(s, &identity, start))
             .transpose()?
             .unwrap_or_default();
+        let opening_evidence = opening_source.map(source_evidence);
         let remaining = MAX_RECONCILIATION_ITEMS.saturating_sub(old.len());
         let mut current = (old.len() <= MAX_RECONCILIATION_ITEMS).then(Vec::new);
         for row in loader::csv_rows(&transactions, &COLUMNS, "Transactions")? {
@@ -474,19 +490,15 @@ pub fn reconcile_with(
                     row.number
                 ));
             }
-            let values = Json::Object(
-                COLUMNS
-                    .iter()
-                    .map(|key| {
-                        (
-                            PyStr::from(*key),
-                            Json::str(row.values[*key].as_deref().unwrap()),
-                        )
-                    })
-                    .collect(),
-            );
-            let value = item(&values, &identity, &config.transactions, row.number)?;
-            let when = date(&field(&value, "Date"))?;
+            let (value, when) = item(&identity, &config.transactions, row.number, |key, empty| {
+                loader::input_text(
+                    row.values[key].as_deref(),
+                    key,
+                    row.number,
+                    &config.transactions,
+                    empty,
+                )
+            })?;
             if !(start <= when && when <= end) {
                 return Err(format!(
                     "{}: row {} falls outside the reporting period.",
@@ -503,6 +515,7 @@ pub fn reconcile_with(
                 }
             }
         }
+        let transaction_evidence = source_evidence(transactions);
         let Some(current) = current else {
             return Err(
                 "A reconciliation supports at most 100,000 outstanding and current items.".into(),
@@ -527,6 +540,7 @@ pub fn reconcile_with(
             );
         }
         let allocations = decisions(decisions_source.as_ref(), &items, config.decisions_escaped)?;
+        let decision_evidence = decisions_source.map(source_evidence);
         let accepted: BTreeSet<_> = allocations
             .iter()
             .filter(|a| a.decision == "accept")
@@ -603,31 +617,15 @@ pub fn reconcile_with(
                 .map(|row| row.at("TransactionID").clone())
                 .collect()
         });
-        let mut sources = vec![(PyStr::from("transactions"), transactions)];
-        if let Some(source) = opening_source {
-            sources.push((PyStr::from("opening_items"), source));
-        }
-        if let Some(source) = decisions_source {
-            sources.push((PyStr::from("decisions"), source));
-        }
         let sources = Json::Object(
-            sources
-                .into_iter()
-                .map(|(key, source)| {
-                    (
-                        key,
-                        Json::object([
-                            (
-                                "file",
-                                Json::Str(PyStr::from_os_text(&pypath::decode_os(
-                                    source.path.file_name().unwrap_or_default(),
-                                ))),
-                            ),
-                            ("sha256", Json::str(&source.sha256)),
-                        ]),
-                    )
-                })
-                .collect(),
+            [
+                ("transactions", Some(transaction_evidence)),
+                ("opening_items", opening_evidence),
+                ("decisions", decision_evidence),
+            ]
+            .into_iter()
+            .filter_map(|(key, evidence)| evidence.map(|value| (PyStr::from(key), value)))
+            .collect(),
         );
         let mut pack = Json::object([
             ("schema", Json::str("clearing-reconciliation-v1")),

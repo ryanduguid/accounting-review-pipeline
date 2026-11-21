@@ -128,14 +128,32 @@ fn iso_week_date(year: i32, week: u32, weekday: u32) -> Option<Date> {
     if !(1..=9999).contains(&year) {
         return None;
     }
-    let first_weekday = (ordinal(year, 1, 1) + 6) % 7;
-    let long_year = first_weekday == 3 || (first_weekday == 2 && is_leap(year));
+    let previous_year = year - 1;
+    // 0001-01-01 was Monday. ISO week 1 contains 4 January.
+    let jan1_weekday = (previous_year * 365 + previous_year / 4 - previous_year / 100 + previous_year / 400) % 7;
+    let leap = is_leap(year);
+    let long_year = jan1_weekday == 3 || (jan1_weekday == 2 && leap);
     if week == 0 || week > 53 || (week == 53 && !long_year) || !(1..=7).contains(&weekday) {
         return None;
     }
-    let jan4 = ordinal(year, 1, 4);
-    let week1_monday = jan4 - (jan4 + 6) % 7;
-    from_ordinal(week1_monday + (week as i64 - 1) * 7 + weekday as i64 - 1)
+    let week1_monday = 4 - (jan1_weekday + 3) % 7;
+    let day = week1_monday + (week as i32 - 1) * 7 + weekday as i32 - 1;
+    let length = if leap { 366 } else { 365 };
+    if day < 1 {
+        return Date::new(year - 1, 12, (31 + day) as u32);
+    }
+    if day > length {
+        return Date::new(year + 1, 1, (day - length) as u32);
+    }
+    let mut day = day as u32;
+    for month in 1..12 {
+        let length = days_in_month(year, month);
+        if day <= length {
+            return Date::new(year, month, day);
+        }
+        day -= length;
+    }
+    Date::new(year, 12, day)
 }
 
 /// Matches `\d` (any Unicode decimal digit) `count` times; returns the ASCII digits or `None` if any is non-ASCII.
@@ -350,6 +368,8 @@ mod tests {
         assert_eq!(ok("2026W262xx").as_deref(), Some("2026-06-23"));
         assert_eq!(ok("2026-W53-1").as_deref(), Some("2026-12-28"));
         assert_eq!(ok("2020-W53-7").as_deref(), Some("2021-01-03"));
+        assert_eq!(ok("2019-W01-1").as_deref(), Some("2018-12-31"));
+        assert_eq!(ok("0001-W01-1").as_deref(), Some("0001-01-01"));
         assert_eq!(ok("0001-01-01").as_deref(), Some("0001-01-01"));
         for bad in [
             "2026-06",
