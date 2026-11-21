@@ -16,6 +16,8 @@ use std::{
 pub const BOUNDARY: &str = "Comparison is a review aid. It does not approve a file, change a computed status or record who changed what. Packs carry no wall-clock time, so the reviewer records who made each change and why.";
 
 const DETAILS: [&str; 4] = ["status", "repeat", "reason", "reviewer_action"];
+const SKIPPED_CONTROL: [&str; 3] = ["slot", "filename", "reason"];
+
 fn text(value: &Json) -> String {
     value.as_pystr().unwrap().to_utf8().unwrap()
 }
@@ -62,14 +64,17 @@ fn thresholds_differ(previous: &Json, current: &Json) -> bool {
     Decimal::parse(&text(previous.at("thresholds").at("tieout_tolerance"))).unwrap()
         != Decimal::parse(&text(current.at("thresholds").at("tieout_tolerance"))).unwrap()
 }
-fn coverage(document: &Json) -> Option<Vec<String>> {
+fn coverage(document: &Json) -> Option<Vec<[&PyStr; SKIPPED_CONTROL.len()]>> {
     document.get("controls_not_run").map(|c| {
         let Json::Array(items) = c else {
             unreachable!()
         };
-        let mut c: Vec<_> = items.iter().map(pyjson::canonical).collect();
-        c.sort();
-        c
+        let mut rows: Vec<_> = items
+            .iter()
+            .map(|item| SKIPPED_CONTROL.map(|key| item.at(key).as_pystr().unwrap()))
+            .collect();
+        rows.sort_unstable();
+        rows
     })
 }
 fn document_slot(slot: &str) -> bool {
@@ -432,6 +437,28 @@ mod tests {
             ),
             BTreeSet::from([highest])
         );
+    }
+
+    #[test]
+    fn skipped_controls_compare_by_values_and_multiplicity() {
+        let first = Json::object([
+            ("slot", Json::str("tax")),
+            ("filename", Json::str("résumé.csv")),
+            ("reason", Json::str("Two lines\nwith a quote: \"")),
+        ]);
+        let second = Json::object([
+            ("reason", Json::str("Source not supplied")),
+            ("slot", Json::str("bank")),
+            ("filename", Json::str("銀行.csv")),
+        ]);
+        let pack = |items| Json::object([("controls_not_run", Json::Array(items))]);
+        let before = pack(vec![first.clone(), second.clone(), first.clone()]);
+        let reordered = pack(vec![second.clone(), first.clone(), first.clone()]);
+        let one_removed = pack(vec![first, second]);
+
+        assert_eq!(coverage(&before), coverage(&reordered));
+        assert_ne!(coverage(&before), coverage(&one_removed));
+        assert_ne!(coverage(&pack(Vec::new())), coverage(&Json::Null));
     }
 
     #[test]
