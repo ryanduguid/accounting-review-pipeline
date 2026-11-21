@@ -484,6 +484,24 @@ fn test_request_bound_to_another_policy_is_refused() {
 }
 
 #[test]
+fn test_request_rejects_malformed_direct_policy_sections() {
+    let dir = TempDir::new();
+    let sandbox = env(dir.path());
+    let (mut policy, _) = load_policy_snapshot(&sandbox, &bundled(POLICY)).unwrap();
+    for malformed in [Json::Null, Json::Array(vec![Json::Bool(true)])] {
+        set(
+            &mut policy,
+            &["operations", "trial_balance_variance", "allowed_sections"],
+            malformed,
+        );
+        assert_refused(
+            load_request_snapshot(&sandbox, &bundled(REQUEST), &policy).map(|_| ()),
+            "Policy allowed_sections must be a list of strings.",
+        );
+    }
+}
+
+#[test]
 fn test_policy_model_projection_must_match_the_code_contract() {
     for reorder in [true, false] {
         let dir = TempDir::new();

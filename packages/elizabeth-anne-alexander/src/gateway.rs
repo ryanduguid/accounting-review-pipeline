@@ -425,10 +425,7 @@ pub fn load_policy_snapshot(env: &Env, location: &Location) -> Result<(Json, Fil
     ]) {
         return refuse("Policy operation has an invalid shape.");
     }
-    if !matches!(operation.at("allowed_sections"), Json::Array(items) if items.iter().all(|i| matches!(i, Json::Str(_))))
-    {
-        return refuse("Policy allowed_sections must be a list of strings.");
-    }
+    allowed_sections(operation)?;
     let max_ok = operation
         .at("max_results")
         .as_plain_int()
@@ -442,6 +439,13 @@ pub fn load_policy_snapshot(env: &Env, location: &Location) -> Result<(Json, Fil
         }
     }
     Ok((policy, policy_snapshot))
+}
+
+fn allowed_sections(operation: &Json) -> Result<&[Json]> {
+    match operation.at("allowed_sections") {
+        Json::Array(items) if items.iter().all(|item| matches!(item, Json::Str(_))) => Ok(items),
+        _ => refuse("Policy allowed_sections must be a list of strings."),
+    }
 }
 
 pub fn load_request_snapshot(env: &Env, location: &Location, policy: &Json) -> Result<(Json, FileSnapshot)> {
@@ -459,14 +463,8 @@ pub fn load_request_snapshot(env: &Env, location: &Location, policy: &Json) -> R
     if !pyjson::py_eq(request.at("policy_id"), policy.at("policy_id"), false) {
         return refuse("Request policy_id does not match the selected policy.");
     }
-    let Json::Array(allowed) = policy
-        .at("operations")
-        .at("trial_balance_variance")
-        .at("allowed_sections")
-    else {
-        unreachable!("validated by load_policy_snapshot");
-    };
-    if !allowed
+    let operation = policy.at("operations").at("trial_balance_variance");
+    if !allowed_sections(operation)?
         .iter()
         .any(|section| pyjson::py_eq(request.at("section"), section, true))
     {
