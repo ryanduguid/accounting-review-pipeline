@@ -210,18 +210,16 @@ pub fn classify_with(
         .iter()
         .enumerate()
     {
-        if !row.has_exact_keys(&FIELDS) {
-            return Err("Each coding assertion needs exactly the documented fields.".into());
-        }
-        let Json::Object(members) = row else {
-            unreachable!()
+        let members = match row {
+            Json::Object(members) if row.has_exact_keys(&FIELDS) => members,
+            _ => return Err("Each coding assertion needs exactly the documented fields.".into()),
         };
         if members.iter().any(|(_, value)| value.as_pystr().is_none()) {
             return Err("Coding assertion fields must be text.".into());
         }
-        let mut row = row.clone();
-        for (key, value) in members {
-            let key = key.to_utf8().unwrap();
+        let mut normalised = Vec::with_capacity(members.len());
+        for (name, value) in members {
+            let key = name.to_utf8().unwrap();
             let text = loader::json_input_text(
                 value,
                 &key,
@@ -229,8 +227,9 @@ pub fn classify_with(
                 &assertions.path,
                 ["expected_account_id", "purpose", "evidence_reference"].contains(&key.as_str()),
             )?;
-            row.set(&key, Json::str(&text));
+            normalised.push((name.clone(), Json::str(&text)));
         }
+        let row = Json::Object(normalised);
         let key = (
             field(&row, "original_account_id"),
             field(&row, "transaction_id"),

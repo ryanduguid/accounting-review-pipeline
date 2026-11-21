@@ -244,9 +244,12 @@ impl Decimal {
         }
         if let Some(nan) = operands.into_iter().find(|value| value.kind == Kind::NaN) {
             let start = nan.digits.len().saturating_sub(precision() as usize);
-            let mut result = nan.clone();
-            result.digits = nan.digits[start..].trim_start_matches('0').to_owned();
-            return Some(Ok(result));
+            return Some(Ok(Decimal {
+                negative: nan.negative,
+                digits: nan.digits[start..].trim_start_matches('0').to_owned(),
+                exp: nan.exp,
+                kind: Kind::NaN,
+            }));
         }
 
         let left_infinite = self.kind == Kind::Infinite;
@@ -715,6 +718,19 @@ mod tests {
 
     fn d(text: &str) -> Decimal {
         Decimal::parse(text).unwrap()
+    }
+
+    #[cfg(feature = "probe")]
+    #[test]
+    fn quiet_nan_arithmetic_retains_only_the_precision_limited_payload() {
+        let input = d(&format!("-NaN{}{}42", "9".repeat(4_096), "0".repeat(78)));
+        let result = with_precision(80, || {
+            input
+                .probe_special_arithmetic(&d("2"), ProbeArithmetic::Multiply)
+                .unwrap()
+                .unwrap()
+        });
+        assert_eq!(result.to_sci_string(), "-NaN42");
     }
 
     #[test]

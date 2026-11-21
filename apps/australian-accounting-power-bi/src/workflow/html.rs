@@ -13,11 +13,18 @@ use std::{collections::BTreeSet, path::Path};
 const REPORT_POLICY: &str = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 
 fn esc(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#x27;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 fn field(value: &Value, key: &str) -> String {
@@ -25,6 +32,10 @@ fn field(value: &Value, key: &str) -> String {
 }
 
 pub fn render(run: &Path, bin_dir: &Path, previous: Option<&Path>) -> Result<String> {
+    render_projected(run, bin_dir, previous).map(|(html, _)| html)
+}
+
+pub(super) fn render_projected(run: &Path, bin_dir: &Path, previous: Option<&Path>) -> Result<(String, Snapshot)> {
     let verified = run::verify(run)?;
     let manifests = &verified.receipt["producer_manifests"];
     for (command, folder) in [("close-control", "close"), ("review-ready", "readiness")] {
@@ -46,7 +57,8 @@ pub fn render(run: &Path, bin_dir: &Path, previous: Option<&Path>) -> Result<Str
     if run::verify(run)? != verified {
         return Err("Current run changed during display.".into());
     }
-    document(&projected, &verified.receipt, comparison.as_ref())
+    let html = document(&projected, &verified.receipt, comparison.as_ref())?;
+    Ok((html, projected))
 }
 
 fn changes(run: &Path, previous: &Path, bin_dir: &Path, verified: &run::Verified) -> Result<(String, Value)> {
@@ -364,6 +376,7 @@ mod tests {
     #[test]
     fn displayed_text_is_escaped_and_empty_evidence_is_explicit() {
         assert_eq!(esc("<&\"'>"), "&lt;&amp;&quot;&#x27;&gt;");
+        assert_eq!(esc("Crème &amp; 🧾"), "Crème &amp;amp; 🧾");
         assert!(journal(1, &[], "AUD").contains("No journal rows"));
         let values = finding_values(&[json!({"current_value":"<script>","status":"REVIEW"})]);
         assert!(!values.contains("<script>"));

@@ -153,12 +153,14 @@ impl Json {
 
     /// `set(obj) == required` for a dict; false for anything else.
     pub fn has_exact_keys(&self, required: &[&str]) -> bool {
-        match self.keys() {
-            Some(keys) => {
-                keys.len() == required.len()
-                    && required.iter().all(|r| keys.iter().any(|k| k.is(r)))
+        match self {
+            Self::Object(members) => {
+                members.len() == required.len()
+                    && required
+                        .iter()
+                        .all(|required| members.iter().any(|(key, _)| key.is(required)))
             }
-            None => false,
+            _ => false,
         }
     }
 
@@ -939,6 +941,24 @@ mod tests {
             .unwrap();
     }
     use super::*;
+
+    #[test]
+    fn exact_keys_require_all_fields_of_an_object_in_any_order() {
+        let required = ["first", "second"];
+        assert!(
+            loads(r#"{"second":null,"first":true}"#)
+                .unwrap()
+                .has_exact_keys(&required)
+        );
+        for text in [
+            r#"["first","second"]"#,
+            r#"{"first":true}"#,
+            r#"{"first":true,"other":false}"#,
+            r#"{"first":true,"second":null,"other":false}"#,
+        ] {
+            assert!(!loads(text).unwrap().has_exact_keys(&required), "{text}");
+        }
+    }
 
     #[test]
     fn float_repr_matches_python() {

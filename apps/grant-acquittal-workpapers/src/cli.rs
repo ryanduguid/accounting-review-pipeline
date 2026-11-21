@@ -387,6 +387,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_failed_status_write_keeps_the_published_workpaper() {
+        struct FailedStatus;
+        impl Write for FailedStatus {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let fixture = crate::tests::Fixture::new();
+        let args = ["--input", crate::tests::SOURCE, "--output", "published"].map(String::from);
+        let mut stderr = Vec::new();
+        assert_eq!(
+            main("grant-workpaper", &args, fixture.root(), &mut FailedStatus, &mut stderr),
+            1
+        );
+        let diagnostic = oserror::stream_error(&std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+        assert_eq!(
+            stderr,
+            format!("grant-workpaper: internal error: {diagnostic}\n").as_bytes()
+        );
+
+        let saved = std::fs::read(fixture.root().join("published/workpaper.json")).unwrap();
+        assert_eq!(
+            crate::pyjson::dumps_indent2(&crate::pyjson::loads_bytes(&saved).unwrap()),
+            crate::pyjson::dumps_indent2(&fixture.review().unwrap())
+        );
+    }
+
+    #[test]
     fn an_empty_long_option_name_reports_all_candidates_in_order() {
         let (mut out, mut error) = (Vec::new(), Vec::new());
         assert_eq!(

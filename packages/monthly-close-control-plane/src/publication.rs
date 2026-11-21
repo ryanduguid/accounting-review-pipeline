@@ -753,6 +753,25 @@ mod tests {
     }
 
     #[test]
+    fn recheck_refuses_a_different_canonical_output_location() {
+        let temp = TempDir::new();
+        let base = pypath::resolve(&temp.0, true).unwrap();
+        let destination = base.join("destination");
+        let nested = base.join("nested");
+        let alias = nested.join("..").join("destination");
+        fs::create_dir(&destination).unwrap();
+        fs::create_dir(&nested).unwrap();
+
+        let approved = require_output_outside_repository(&destination).unwrap();
+        recheck_output(&approved).unwrap();
+        assert_eq!(
+            recheck_output(&alias).unwrap_err(),
+            "The approved output path changed whilst preparing the pack."
+        );
+        assert!(inventory(&destination).is_empty());
+    }
+
+    #[test]
     fn new_directory_rechecks_the_repository_boundary_after_rendering() {
         let temp = TempDir::new();
         let output = temp.join("pack");
