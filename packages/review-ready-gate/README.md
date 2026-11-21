@@ -34,7 +34,7 @@ Released executables for Linux x86_64 and Windows x86_64 ship on
 
 [![tests](https://img.shields.io/github/actions/workflow/status/ryanduguid/accounting-review-pipeline/ci.yml?branch=main&label=tests&labelColor=000000&style=flat)](https://github.com/ryanduguid/accounting-review-pipeline/actions/workflows/ci.yml)<br>
 [![Rust stable](https://img.shields.io/badge/rust-stable-66023C?logo=rust&labelColor=000000&style=flat&logoColor=E5E4E2)](https://www.rust-lang.org/)
-[![License: Ryan Duguid Public Attribution Licence 1.0](https://img.shields.io/badge/License-Public%20Attribution%201.0-66023C?labelColor=000000&style=flat)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-66023C?labelColor=000000&style=flat)](LICENSE)
 
 </div>
 
@@ -460,6 +460,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 
 ## Licence
 
-Licensed under the [Ryan Duguid Public Attribution Licence 1.0](LICENSE), the FSL-1.1-ALv2 text with a public attribution condition. You may use, modify and redistribute it for any purpose except a Competing Use as defined in LICENSE (making it available to others in a competing commercial product or service), and each version becomes available under Apache-2.0 2 years after it is made available. For versions made available from 4 November 2026, LICENSE's Public Attribution Condition applies to the FSL grant: anyone who makes a copy, port or derivative available outside their organisation must credit Ryan Duguid publicly, with a link to this repository. Internal use is exempt, and the condition does not apply to each version's Apache-2.0 licence. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it.
+Ryan Duguid's code is licensed under [AGPL-3.0-or-later](LICENSE) with [section 7(b) attribution terms](NOTICE). Keep the copyright notices in [NOTICE](NOTICE) when you redistribute or adapt it.
+
+Versions released before this change keep the licences they were released with, including any future grants under those terms.
 
 <sub>Not tax, financial, audit or legal advice. Boundary statement: [DISCLAIMER.md](DISCLAIMER.md).</sub>

@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use std::ffi::OsString;
 use std::fs;
@@ -173,6 +174,11 @@ pub fn collect_targets(arguments: &[OsString], directory: &Path) -> Result<Vec<P
     }
     Ok(targets)
 }
+
+const LICENCE_NOTICE: &str = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/adapters/accounting-excel-toolkit/LICENSE\n";
 
 pub fn run(
     arguments: &[OsString],

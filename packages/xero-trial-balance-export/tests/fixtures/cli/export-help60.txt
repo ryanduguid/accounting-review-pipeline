@@ -33,3 +33,7 @@ options:
                         user state directory (or a
                         leftover executable-adjacent
                         token.json).
+
+Copyright 2026 Ryan Duguid. No warranty.
+AGPL-3.0-or-later with additional terms (see NOTICE).
+Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/xero-trial-balance-export/LICENSE

@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use crate::{
     Failure, Result,
@@ -107,6 +108,11 @@ fn usage(prog: &str, auth: bool, width: usize) -> String {
     format!("{}\n", lines.join("\n"))
 }
 
+const LICENCE_NOTICE: &str = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/xero-trial-balance-export/LICENSE\n";
+
 pub fn help(prog: &str, auth: bool) -> String {
     let width = width();
     let description = if auth {
@@ -148,6 +154,7 @@ pub fn help(prog: &str, auth: bool) -> String {
             out.push_str(&format!("{}{line}\n", " ".repeat(position)));
         }
     }
+    out.push_str(LICENCE_NOTICE);
     out
 }
 

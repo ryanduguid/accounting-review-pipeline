@@ -14,3 +14,7 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --version             show program's version number and exit
+
+Copyright 2026 Ryan Duguid. No warranty.
+AGPL-3.0-or-later with additional terms (see NOTICE).
+Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/evatt/LICENSE

@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! A denylist, not a proof: this fails if the shipped dependency tree lists one of
 //! the crates below or `src` holds one of the socket spellings. An unlisted crate,

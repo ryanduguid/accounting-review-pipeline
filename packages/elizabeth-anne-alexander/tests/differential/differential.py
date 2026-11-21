@@ -1,5 +1,6 @@
 # Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 """Differential test: the released Python package against the Rust binary.
 
@@ -609,6 +610,14 @@ def compare(env, case, keep):
             for stream in ("stdout", "stderr"):
                 a = normalise(getattr(python, stream), py_map)
                 b = normalise(getattr(rust, stream), rs_map)
+                if stream == "stdout":
+                    licence = (
+                        b'\n'
+                        b'Copyright 2026 Ryan Duguid. No warranty.\n'
+                        b'AGPL-3.0-or-later with additional terms (see NOTICE).\n'
+                        b'Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/elizabeth-anne-alexander/LICENSE\n'
+                    )
+                    b = b.removesuffix(licence).removesuffix(licence.replace(b"\n", b"\r\n"))
                 if a != b:
                     problems.append(f"{stream}\n  python: {a[:600]!r}\n  rust:   {b[:600]!r}")
             files_py, files_rs = snapshot(cwd_py), snapshot(cwd_rs)

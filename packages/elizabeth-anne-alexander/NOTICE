@@ -1,27 +1,16 @@
 elizabeth-anne-alexander
-Copyright 2026 Ryan Duguid (https://github.com/ryanduguid)
+Copyright 2026 Ryan Duguid
 
-This software is licensed under the Ryan Duguid Public Attribution Licence,
-Version 1.0: the Functional Source License, Version 1.1, ALv2 Future License
-(FSL-1.1-ALv2) text with a Public Attribution Condition; see LICENSE.
+Licensed under the GNU Affero General Public License, version 3 or (at your option) any later version; see LICENSE
 
-Public attribution applies when you rely on the FSL grant of a version released
-with the condition (from 4 November 2026) to redistribute or make available a
-copy, modification or derivative: name Ryan Duguid and link to this repository
-in its README or main documentation and in any credits screen. Internal use is
-exempt.
+Additional terms under section 7 of the GNU Affero General Public License,
+version 3
 
-For each version, an additional licence under the Apache License, Version 2.0
-becomes effective on the second anniversary of the date that version was made
-available. The condition does not apply to that licence.
+Under section 7(b), you must preserve attribution identifying Ryan Duguid as
+the author of his material retained in a covered work, either in that
+material or in the Appropriate Legal Notices displayed by works containing
+it. The attribution may be reworded to reflect modifications. Ryan Duguid
+asks, but does not require, that it link to https://github.com/ryanduguid/accounting-review-pipeline.
 
-Versions made available before the condition keep the terms they were released
-with.
-
-Redistribution under the FSL grant requires including its terms or a link to
-them and keeping the copyright notices supplied with the software.
-Redistribution under another applicable licence follows that licence's
-conditions.
-
-This product includes work by Ryan Duguid
-(https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/elizabeth-anne-alexander).
+Versions released before this change keep the licences they were released with,
+including any future grants under those terms.

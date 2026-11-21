@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use super::{convert, inspect_export, output_csv, text};
 use std::{
@@ -210,7 +211,13 @@ fn execute(arguments: &Arguments) -> Result<String, String> {
 pub fn run(arguments: &[OsString]) -> (u8, String, String) {
     let arguments = match parse(arguments) {
         Ok(arguments) => arguments,
-        Err((0, help)) => return (0, text::terminal(&help), String::new()),
+        Err((0, help)) => {
+            return (
+                0,
+                text::terminal(&format!("{help}{}", crate::LICENCE_NOTICE)),
+                String::new(),
+            );
+        }
         Err((code, error)) => return (code, String::new(), text::terminal(&error)),
     };
     match execute(&arguments) {

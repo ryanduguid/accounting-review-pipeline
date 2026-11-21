@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! `main(argv)` with the argparse behaviour the script had: usage, help,
 //! option abbreviations, and exit 2 for a refused command line.
@@ -145,12 +146,17 @@ fn format_rows(rows: &[(Part, Option<&str>)], width: usize) -> String {
     out
 }
 
+const LICENCE_NOTICE: &str = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/grant-acquittal-workpapers/LICENSE\n";
+
 fn help(prog: &str, t: &Theme) -> String {
     let width = width();
     let options = format_rows(&help_rows(t), width);
     let description = wrap(DESCRIPTION, width.max(11)).join("\n");
     format!(
-        "{}\n\n{description}\n\n{}options:{}\n{options}",
+        "{}\n\n{description}\n\n{}options:{}\n{options}{LICENCE_NOTICE}",
         usage(prog, t),
         t.heading,
         t.reset

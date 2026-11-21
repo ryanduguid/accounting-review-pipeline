@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use super::{SAMPLE, transactions_cases};
 use std::{
@@ -37,7 +38,21 @@ fn check<A: AsRef<OsStr> + Debug>(
         .output()
         .map_err(|e| e.to_string())?;
     let streams_match = if exact {
-        expected.stdout == actual.stdout && expected.stderr == actual.stderr
+        let licence = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/adapters/accounting-excel-toolkit/LICENSE\n";
+        let licence = if cfg!(windows) {
+            licence.replace('\n', "\r\n")
+        } else {
+            licence.to_owned()
+        };
+        expected.stdout
+            == actual
+                .stdout
+                .strip_suffix(licence.as_bytes())
+                .unwrap_or(&actual.stdout)
+            && expected.stderr == actual.stderr
     } else {
         match expected.status.code() {
             Some(0) => !actual.stdout.is_empty() && actual.stderr.is_empty(),
