@@ -453,9 +453,10 @@ fn one_link_before(path: &Path, metadata: &std::fs::Metadata) -> Result<bool> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT};
         let file = std::fs::OpenOptions::new()
             .access_mode(0)
-            .custom_flags(0x0200_0000)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
             .open(path)
             .map_err(|e| oserror::os_error(&e, &text(path), None))?;
         one_link_open(&file)
@@ -475,15 +476,39 @@ fn one_link_open(file: &std::fs::File) -> Result<bool> {
     #[cfg(windows)]
     {
         use std::os::windows::io::AsRawHandle;
-        use windows_sys::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
-        let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+        use windows_sys::Win32::Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, GetFileInformationByHandle,
+        };
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
         // SAFETY: the file owns this handle and info is writable, correctly sized storage.
-        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
             return Err(io::Error::last_os_error().to_string());
         }
-        // SAFETY: the call succeeded and initialised the structure.
-        Ok(unsafe { info.assume_init() }.nNumberOfLinks == 1)
+        Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
     }
+}
+
+fn open_record(path: &Path) -> Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    // Validate the same handle that will supply the record data.
+    let file = options.open(path).map_err(|e| oserror::file_error(&e, &text(path)))?;
+    if !one_link_open(&file)? {
+        return Err("disclosure record must be a regular file with one link".into());
+    }
+    Ok(file)
 }
 
 pub fn record_read(path: &Path) -> Result<Vec<u8>> {
@@ -492,17 +517,7 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
     if !one_link_before(path, &before)? {
         return Err("disclosure record must be a regular file with one link".into());
     }
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(path).map_err(|e| oserror::file_error(&e, &text(path)))?;
-    if !one_link_open(&file)? {
-        return Err("disclosure record must be a regular file with one link".into());
-    }
+    let file = open_record(path)?;
     let mut bytes = Vec::new();
     file.take((crate::disclosure::MAX_RECORD_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
@@ -513,14 +528,17 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct OwnedDirectory(PathBuf);
+
+    impl Drop for OwnedDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn an_open_directory_is_not_a_regular_disclosure_record() {
-        struct OwnedDirectory(PathBuf);
-        impl Drop for OwnedDirectory {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir_all(&self.0);
-            }
-        }
         let path = std::env::temp_dir().join(format!("evatt-directory-handle-{}", std::process::id()));
         std::fs::create_dir(&path).unwrap();
         let owned = OwnedDirectory(path);
@@ -541,6 +559,32 @@ mod tests {
         assert!(!one_link_open(&file).unwrap());
         assert_eq!(std::fs::read(&sentinel).unwrap(), b"fabricated directory contents\n");
         drop(file);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_disclosure_record_handle_refuses_a_file_link() {
+        let path = std::env::temp_dir().join(format!("evatt-record-handle-{}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        let directory = OwnedDirectory(path);
+        let target = directory.0.join("record.json");
+        let link = directory.0.join("link.json");
+        let contents = b"fabricated disclosure record";
+        std::fs::write(&target, contents).unwrap();
+        std::os::windows::fs::symlink_file(&target, &link).unwrap();
+
+        assert!(open_record(&target).is_ok());
+        assert_eq!(
+            open_record(&link).unwrap_err(),
+            "disclosure record must be a regular file with one link"
+        );
+        let hard_link = directory.0.join("hard-link.json");
+        std::fs::hard_link(&target, &hard_link).unwrap();
+        assert_eq!(
+            open_record(&target).unwrap_err(),
+            "disclosure record must be a regular file with one link"
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), contents);
     }
 
     #[test]
