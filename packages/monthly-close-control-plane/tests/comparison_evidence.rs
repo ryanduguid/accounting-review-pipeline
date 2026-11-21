@@ -4,7 +4,9 @@
 use monthly_close_control_plane::{
     comparison::{self, CompareConfig},
     decimal::Decimal,
-    engine::{self, CloseReviewPack, ReviewConfig},
+    engine::{self, CloseReviewPack, ReviewConfig, RowMap},
+    isodate::date_fromisoformat,
+    models::TrialBalanceRow,
     pyjson::{self, Json},
     report, sha256, viewer,
 };
@@ -59,6 +61,74 @@ fn inventory(directory: &Path) -> BTreeMap<String, (Vec<u8>, SystemTime)> {
             )
         })
         .collect()
+}
+
+fn period_accounts(date: &str, entries: &[(&str, &str, &str, &str)]) -> RowMap {
+    let report_date = date_fromisoformat(date).unwrap();
+    entries
+        .iter()
+        .map(|&(tenant, id, name, ytd)| {
+            let row = TrialBalanceRow {
+                report_date,
+                tenant: tenant.into(),
+                section: "Assets".into(),
+                account_id: id.into(),
+                account_name: name.into(),
+                account_code: "100".into(),
+                debit: Decimal::zero(),
+                credit: Decimal::zero(),
+                ytd_debit: Decimal::parse(ytd).unwrap(),
+                ytd_credit: Decimal::zero(),
+            };
+            (row.key(), row)
+        })
+        .collect()
+}
+
+#[test]
+fn period_findings_keep_tenants_and_account_order_across_both_balances() {
+    let current = period_accounts(
+        "2026-09-30",
+        &[
+            ("B", "A", "Bank", "1"),
+            ("A", "C", "Bank", "2"),
+            ("A", "B", "Renamed", "10"),
+        ],
+    );
+    let prior = period_accounts(
+        "2026-08-31",
+        &[
+            ("C", "A", "Bank", "4"),
+            ("A", "B", "Before", "3"),
+            ("A", "A", "Bank", "5"),
+        ],
+    );
+    let zero = Decimal::zero();
+    let findings = engine::period_comparison_exceptions(&current, &prior, &zero, &zero);
+    let keys: Vec<_> = findings
+        .iter()
+        .map(|item| {
+            (
+                item.tenant.as_str(),
+                item.account_id.as_str(),
+                item.control.as_str(),
+                item.current_value.is_some(),
+                item.prior_value.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            ("A", "A", "period_comparison", false, true),
+            ("A", "B", "period_variance", true, true),
+            ("A", "B", "account_metadata", true, true),
+            ("A", "C", "period_comparison", true, false),
+            ("B", "A", "period_comparison", true, false),
+            ("C", "A", "period_comparison", false, true),
+        ]
+    );
+    assert_eq!(findings[1].difference, Some(Decimal::parse("7").unwrap()));
 }
 
 #[test]

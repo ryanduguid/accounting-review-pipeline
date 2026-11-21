@@ -723,12 +723,12 @@ fn refuse_input_collision(out: &Path, inputs: &gateway::ReviewInputs) -> Result<
     Ok(())
 }
 
-fn protected_locations(inputs: &gateway::ReviewInputs) -> Vec<Location> {
-    vec![
-        Location::Disk(inputs.evidence.clone()),
-        Location::Disk(inputs.receipt.clone()),
-        inputs.decision.clone(),
-        Location::Disk(inputs.model.clone()),
+fn protected_locations(inputs: gateway::ReviewInputs) -> [Location; 4] {
+    [
+        Location::Disk(inputs.evidence),
+        Location::Disk(inputs.receipt),
+        inputs.decision,
+        Location::Disk(inputs.model),
     ]
 }
 
@@ -792,19 +792,17 @@ fn run_validate(
     out: Option<&Path>,
     stdout: &mut dyn Write,
 ) -> Result<(), Failure> {
-    let mut target = None;
-    if let Some(out) = out {
-        let resolved = env.within_build(out, "validation output", false)?;
-        refuse_input_collision(
-            &resolved,
-            &gateway::review_input_paths(env, evidence, receipt, decision)?,
-        )?;
-        target = Some(resolved);
+    let target = out
+        .map(|out| env.within_build(out, "validation output", false))
+        .transpose()?;
+    // The output guard must use the same resolved paths as validation.
+    let inputs = gateway::review_input_paths(env, evidence, receipt, decision)?;
+    if let Some(target) = &target {
+        refuse_input_collision(target, &inputs)?;
     }
-    let validation = gateway::validate_review(env, evidence, receipt, decision)?;
+    let validation = gateway::validate_review_inputs(env, &inputs)?;
     if let Some(target) = target {
-        let inputs = gateway::review_input_paths(env, evidence, receipt, decision)?;
-        persist::write_validation(&validation, &target, &protected_locations(&inputs))?;
+        persist::write_validation(&validation, &target, &protected_locations(inputs))?;
     }
     let text = |key: &str| {
         crate::pyjson::canonical(validation.at(key))

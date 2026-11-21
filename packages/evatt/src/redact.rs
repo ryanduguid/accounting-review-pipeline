@@ -776,7 +776,10 @@ fn numbers_into_addresses(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
 }
 
 pub fn residual(text: &str) -> Result<Vec<Unknown>> {
-    let lines = Lines::new(text);
+    residual_with_lines(text, &Lines::new(text))
+}
+
+fn residual_with_lines(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
     let mut found = Vec::new();
     for (kind, name) in [("address", "ADDRESS"), ("date", "DOB")] {
         for m in patterns::matches(name, text)? {
@@ -795,19 +798,18 @@ pub fn residual(text: &str) -> Result<Vec<Unknown>> {
     names.sort_by(|a, b| (a.line, &a.value).cmp(&(b.line, &b.value)));
     let numeric = masked.blank("CARRIED_PLACEHOLDER")?;
     let ambiguous = Mask::new(text).blank("CARRIED_PLACEHOLDER")?;
-    found.extend(number_unknowns(&numeric, &ambiguous, &lines)?);
-    found.extend(numbers_into_addresses(text, &lines)?);
+    found.extend(number_unknowns(&numeric, &ambiguous, lines)?);
+    found.extend(numbers_into_addresses(text, lines)?);
     found.extend(once_a_line(names));
     Ok(found)
 }
 
-fn input_placeholders(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
+fn input_placeholders(text: &str, redacted: &str, lines: &Lines) -> Result<Vec<Unknown>> {
     let input = patterns::matches("CARRIED_PLACEHOLDER", text)?;
     let carried: HashSet<_> = input.iter().map(|m| m.name("token").unwrap().as_str()).collect();
     if carried.is_empty() {
         return Ok(Vec::new());
     }
-    let lines = Lines::new(redacted);
     let mut found = BTreeMap::new();
     for m in patterns::matches("CARRIED_PLACEHOLDER", redacted)? {
         let t = m.name("token").unwrap();
@@ -848,13 +850,15 @@ fn input_placeholders(text: &str, redacted: &str) -> Result<Vec<Unknown>> {
 /// for the sweep over `redacted` to read as a number, so the source must name them.
 /// Money spellings count here as they do in the sweep. `kept` holds, for each byte of
 /// `text`, whether it reached the output.
-fn cut_numbers(text: &str, redacted: &str, kept: &[bool]) -> Result<Vec<Unknown>> {
+fn cut_numbers(text: &str, lines: &Lines, kept: &[bool]) -> Result<Vec<Unknown>> {
     if kept.iter().all(|byte| *byte) {
         return Ok(Vec::new());
     }
     let cut = split_identifiers(text, Some(kept), &mut ScanStats::default())?;
+    if cut.is_empty() {
+        return Ok(Vec::new());
+    }
     let input_lines = Lines::new(text);
-    let lines = Lines::new(redacted);
     Ok(patterns::merge(cut)
         .into_iter()
         .map(|(start, end)| {
@@ -915,12 +919,13 @@ pub fn redact(text: &str, entries: &[Entity]) -> Result<Redaction> {
         kept[*at] = true;
     }
     let redacted = second.text;
-    let mut unknowns = input_placeholders(&text, &redacted)?;
-    unknowns.extend(residual(&redacted)?);
+    let lines = Lines::new(&redacted);
+    let mut unknowns = input_placeholders(&text, &redacted, &lines)?;
+    unknowns.extend(residual_with_lines(&redacted, &lines)?);
     for u in &mut unknowns {
         u.spans = u.spans.iter().filter_map(|s| source_span(&origin, s.0, s.1)).collect();
     }
-    unknowns.extend(cut_numbers(&text, &redacted, &kept)?);
+    unknowns.extend(cut_numbers(&text, &lines, &kept)?);
     for (kind, n) in entities {
         if let Some((_, old)) = counts.iter_mut().find(|(k, _)| k == &kind) {
             *old += n;

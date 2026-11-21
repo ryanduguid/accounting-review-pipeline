@@ -17,6 +17,7 @@ use crate::{
     pytext, queries, report,
 };
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
@@ -224,13 +225,19 @@ pub fn period_comparison_exceptions(
     absolute_threshold: &Decimal,
     percentage_threshold: &Decimal,
 ) -> Vec<ExceptionItem> {
-    let keys: BTreeSet<_> = current.keys().chain(prior.keys()).collect();
+    let mut current = current.iter().peekable();
+    let mut prior = prior.iter().peekable();
     let mut result = Vec::new();
-    for key in keys {
-        let current = current.get(key);
-        let prior = prior.get(key);
-        match (current, prior) {
-            (None, Some(prior)) => {
+    loop {
+        let order = match (current.peek(), prior.peek()) {
+            (Some((current_key, _)), Some((prior_key, _))) => current_key.cmp(prior_key),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => break,
+        };
+        match order {
+            Ordering::Greater => {
+                let (_, prior) = prior.next().unwrap();
                 let mut item = ExceptionItem::new(
                     Control::PeriodComparison,
                     Status::Review,
@@ -241,7 +248,8 @@ pub fn period_comparison_exceptions(
                 item.prior_value = Some(prior.ytd_net());
                 result.push(item);
             }
-            (Some(current), None) => {
+            Ordering::Less => {
+                let (_, current) = current.next().unwrap();
                 let mut item = ExceptionItem::new(
                     Control::PeriodComparison,
                     Status::Review,
@@ -252,7 +260,9 @@ pub fn period_comparison_exceptions(
                 item.current_value = Some(current.ytd_net());
                 result.push(item);
             }
-            (Some(current), Some(prior)) => {
+            Ordering::Equal => {
+                let (_, current) = current.next().unwrap();
+                let (_, prior) = prior.next().unwrap();
                 let current_net = current.ytd_net();
                 let prior_net = prior.ytd_net();
                 let difference = current_net.sub(&prior_net).value;
@@ -312,7 +322,6 @@ pub fn period_comparison_exceptions(
                     result.push(item);
                 }
             }
-            (None, None) => unreachable!("key came from the source maps"),
         }
     }
     result
