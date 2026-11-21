@@ -1717,6 +1717,52 @@ Retained earnings,900,CREDIT
         );
     }
     #[test]
+    fn gst_roll_forward_refuses_rounding_even_when_the_trial_balance_balances() {
+        let examples = test_support::examples().join("bas-ready");
+        let mut balances = load_canonical_tb(
+            &SourceSnapshot::capture(&examples.join("trial_balance.csv"), "tb").unwrap(),
+        )
+        .unwrap();
+        balances.truncate(4);
+        for row in &mut balances {
+            row.debit = Decimal::zero();
+            row.credit = Decimal::zero();
+            row.ytd_debit = Decimal::zero();
+            row.ytd_credit = Decimal::zero();
+        }
+        let large = amount("100000000000000000000000000000.00");
+        let cent = amount("0.01");
+        balances[0].ytd_credit = large.clone();
+        balances[1].ytd_debit = large;
+        balances[2].ytd_credit = cent.clone();
+        balances[3].ytd_debit = cent.clone();
+        assert_eq!(
+            tb_balanced(&balances).unwrap(),
+            (Decimal::zero(), Decimal::zero())
+        );
+
+        let mut gst = load_gst_control(
+            &SourceSnapshot::capture(&examples.join("gst_control_gl.csv"), "gst").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(gst.len(), 2);
+        for (row, account) in gst.iter_mut().zip([&balances[0], &balances[2]]) {
+            row.account_id.clone_from(&account.account_id);
+        }
+        let loaded = Loaded {
+            trial_balance: Some(balances),
+            gst_control_gl: Some(gst),
+            ..Loaded::default()
+        };
+        let mut findings = Vec::new();
+        assert_eq!(
+            apply_gst_roll_forward(&loaded, &mut findings, &cent).unwrap_err(),
+            BAS_PRECISION
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
     fn the_gst_control_rolls_forward_to_the_trial_balance_within_tolerance() {
         for (closing, ties) in [
             ("7500.00", true),
