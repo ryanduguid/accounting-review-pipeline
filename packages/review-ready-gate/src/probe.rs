@@ -34,9 +34,8 @@ fn text(value: &Json) -> Result<String> {
         .ok_or_else(|| "probe requires a string".into())
 }
 fn path(value: &Json) -> Result<PathBuf> {
-    Ok(PathBuf::from(pypath::encode_os(&pypath::display(&text(
-        value,
-    )?))))
+    let raw = value.as_pystr().ok_or("probe requires a string")?.os_text();
+    Ok(PathBuf::from(pypath::encode_os(&pypath::display(&raw))))
 }
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -415,6 +414,21 @@ pub fn render_pack(document: &Json) -> Result<[Vec<u8>; 3]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probe_paths_preserve_literal_private_use_characters() {
+        for name in [
+            "case\u{10f7ff}\u{10f800}.csv",
+            "case\u{10f7ff}\u{10f7ff}.csv",
+        ] {
+            let value = Json::str(name);
+            let resolved = path(&value).unwrap();
+            assert_eq!(
+                pypath::decode_os(resolved.as_os_str()),
+                value.as_pystr().unwrap().os_text(),
+            );
+        }
+    }
 
     #[test]
     fn probe_stops_processing_requests_when_a_reply_cannot_be_flushed() {
