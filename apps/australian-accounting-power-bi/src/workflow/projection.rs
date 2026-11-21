@@ -39,7 +39,10 @@ fn text(value: &Value, name: &str) -> String {
 }
 
 pub fn projection(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
-    let verified = run::verify(path)?;
+    project_verified(&run::verify(path)?)
+}
+
+pub(super) fn project_verified(verified: &run::Verified) -> Result<BTreeMap<String, Vec<u8>>> {
     let receipt = &verified.receipt;
     let snapshot = &verified.snapshot;
     let close = run::snapshot_file(snapshot, "close/close-review-pack.json")?;
