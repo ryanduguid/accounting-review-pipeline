@@ -989,14 +989,8 @@ fn wide_triage_shares_one_context_and_quotes_it_once() {
 
 #[cfg(unix)]
 fn closed_pipe() -> std::process::Stdio {
-    use std::os::fd::{FromRawFd, OwnedFd};
-    let mut descriptors = [0; 2];
-    // SAFETY: descriptors is writable storage for both newly owned pipe ends.
-    assert_eq!(unsafe { libc::pipe(descriptors.as_mut_ptr()) }, 0);
-    // SAFETY: pipe succeeded; these descriptors have no other Rust owners.
-    let reader = unsafe { OwnedFd::from_raw_fd(descriptors[0]) };
-    // SAFETY: pipe succeeded; this descriptor has no other Rust owner.
-    let writer = unsafe { OwnedFd::from_raw_fd(descriptors[1]) };
+    // Prevent a concurrently spawned test process from holding the reader open.
+    let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
     std::process::Stdio::from(writer)
 }
