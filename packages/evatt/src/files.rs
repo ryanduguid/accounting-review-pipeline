@@ -75,7 +75,11 @@ pub fn bytes(path: &Path) -> Result<Vec<u8>> {
 
 pub fn read(path: &Path) -> Result<(String, &'static str)> {
     let raw = String::from_utf8(bytes(path)?).map_err(|e| utf8_error(e.as_bytes(), e.utf8_error()))?;
+    // LF input already has the internal line endings.
     let crlf = raw.matches("\r\n").count();
+    if crlf == 0 {
+        return Ok((raw, "\n"));
+    }
     let ending = if crlf > raw.matches('\n').count() - crlf {
         "\r\n"
     } else {
@@ -529,6 +533,22 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_preserves_the_dominant_line_ending_and_normalises_crlf() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("fabricated.md");
+        for (input, normalised, ending) in [
+            ("", "", "\n"),
+            ("first\nsecond\n", "first\nsecond\n", "\n"),
+            ("first\rsecond", "first\rsecond", "\n"),
+            ("first\r\nsecond\n", "first\nsecond\n", "\n"),
+            ("first\r\nsecond\r\nthird\n", "first\nsecond\nthird\n", "\r\n"),
+        ] {
+            std::fs::write(&path, input).unwrap();
+            assert_eq!(read(&path).unwrap(), (normalised.to_string(), ending));
+        }
+    }
 
     #[test]
     fn an_open_directory_is_not_a_regular_disclosure_record() {
