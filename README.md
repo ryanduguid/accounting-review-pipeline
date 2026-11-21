@@ -197,7 +197,7 @@ spellings, and records where the consumers differ.
 
 ## Review-pack contract
 
-The [LodgeiT workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
+The [workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
 import, workpaper and review patterns to Accounting Review Pipeline's components,
 with a checklist for using their local evidence outputs.
 
@@ -312,7 +312,7 @@ require explicit approval.
 Accounting Review Pipeline's close controls read local trial balance exports and, for `drivers`,
 `classify` and `reconcile`, supplied transactions. None of those 3 commands is a journal-level
 population test. The Xero trial-balance exporter is the exception to local files, because it pulls
-through Xero OAuth/API. These cover nearby ground (each read on the date shown):
+through Xero OAuth/API. Xero's own tools cover nearby ground (each read on the date shown):
 
 - Xero's built-in [General Ledger Exceptions report](https://central.xero.com/0/article/General-Ledger-Exceptions-report)
   (read 12 November 2026) lists transaction lines that are 2 or more standard deviations above or
@@ -326,15 +326,6 @@ through Xero OAuth/API. These cover nearby ground (each read on the date shown):
   publishes how many seeded cases each control detects and misses
   ([Detection benchmark](packages/monthly-close-control-plane/README.md#detection-benchmark)), and writes
   its pack as local files.
-- [RecHound AI Workflows](https://rechound.com/features/ai-connections) (read 12 November 2026):
-  an existing Claude, ChatGPT, Copilot, Gemini CLI or Cursor assistant connects to RecHound's server
-  URL and reads the user's reconciliations, workpaper support and attachments for companies synced
-  from Xero. Access is read-only: it cannot reconcile, edit support, sign off or post to Xero. What
-  the assistant reads goes to that AI provider.
-- [adoptai/cpa-skills](https://github.com/adoptai/cpa-skills) (read 5 November 2026): agent skills and scripts
-  for close, tax and audit work in US practice, which refuse to deliver a workpaper that does not tie.
-- [divyanshus2404/journal-entry-testing](https://github.com/divyanshus2404/journal-entry-testing) (read 5 November 2026):
-  a PySpark journal entry testing pipeline on Databricks.
 - [XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server) (read 5 November 2026): the MCP server from
   Xero's developer organisation, for agents working directly with Xero.
 
