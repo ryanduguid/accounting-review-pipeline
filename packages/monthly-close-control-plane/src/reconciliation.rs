@@ -12,7 +12,7 @@ use crate::{
     pypath, pytext,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -248,14 +248,22 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
     if total(&items) != money(&balance, "amount", Path::new("configuration"), 0)? {
         return Err("Opening items do not equal their recorded balance.".into());
     }
-    let identifiers: BTreeSet<_> = items.iter().map(|r| field(r, "TransactionID")).collect();
     let Json::Object(notes) = payload.at("notes") else {
         unreachable!()
     };
-    if notes.iter().any(|(key, value)| {
-        !key.to_utf8().is_some_and(|s| identifiers.contains(&s)) || value.as_pystr().is_none()
-    }) {
-        return Err("Opening review notes must name outstanding transaction IDs.".into());
+    let invalid_notes = "Opening review notes must name outstanding transaction IDs.";
+    if notes.len() > items.len() {
+        return Err(invalid_notes.into());
+    }
+    let mut unmatched_notes: HashSet<_> = notes.iter().map(|(key, _)| key).collect();
+    for row in &items {
+        if unmatched_notes.is_empty() {
+            break;
+        }
+        unmatched_notes.remove(row.at("TransactionID").as_pystr().unwrap());
+    }
+    if !unmatched_notes.is_empty() || notes.iter().any(|(_, value)| value.as_pystr().is_none()) {
+        return Err(invalid_notes.into());
     }
     let mut result = Notes::default();
     for (key, value) in notes {
@@ -722,6 +730,50 @@ mod tests {
             .unwrap()
             .1
     }
+
+    #[test]
+    fn opening_notes_must_refer_to_a_carried_transaction() {
+        let previous = month(
+            ("2026-09-01", "2026-09-30"),
+            ("0", "0"),
+            TRANSACTIONS.split_once('\n').unwrap().1,
+            None,
+            "",
+        );
+        let mut carry =
+            pyjson::loads(std::str::from_utf8(&carried_forward(&previous)).unwrap()).unwrap();
+        let identity = carry.at("identity").clone();
+        let next = date("2026-10-01").unwrap();
+        let read = |carry: &Json| {
+            let source = SourceSnapshot::new(
+                Path::new("opening.json"),
+                pyjson::pretty(carry).into_bytes(),
+            );
+            opening(&source, &identity, next).map(|(_, notes)| notes.into_json())
+        };
+
+        carry.set("notes", Json::object([("T2", Json::str("Révisé"))]));
+        assert!(read(&carry).unwrap().at("T2").is_str("Révisé"));
+        for notes in [
+            Json::object([
+                ("T1", Json::str("Valid")),
+                ("missing", Json::str("Unknown")),
+            ]),
+            Json::object([("T1", Json::Null)]),
+            Json::object([
+                ("T1", Json::str("Valid")),
+                ("T2", Json::str("Also valid")),
+                ("missing", Json::str("Unknown")),
+            ]),
+        ] {
+            carry.set("notes", notes);
+            assert_eq!(
+                read(&carry).unwrap_err(),
+                "Opening review notes must name outstanding transaction IDs."
+            );
+        }
+    }
+
     #[test]
     fn three_months_flag_only_an_item_carried_over_more_than_one_period() {
         let june = month(
