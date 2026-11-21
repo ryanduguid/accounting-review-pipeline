@@ -203,28 +203,31 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
             }
         )
     })?;
-    if !payload.has_exact_keys(&[
-        "schema",
-        "identity",
-        "period_end",
-        "balance",
-        "items",
-        "notes",
-    ]) || !payload.at("schema").is_str("clearing-carry-v1")
+    let invalid_schema = "Opening items have an invalid schema or a different account identity.";
+    let Json::Object(mut fields) = payload else {
+        return Err(invalid_schema.into());
+    };
+    let Some(index) = fields.iter().position(|(key, _)| key.is("items")) else {
+        return Err(invalid_schema.into());
+    };
+    let (_, Json::Array(mut items)) = fields.remove(index) else {
+        return Err(invalid_schema.into());
+    };
+    let payload = Json::Object(fields);
+    if !payload.has_exact_keys(&["schema", "identity", "period_end", "balance", "notes"])
+        || !payload.at("schema").is_str("clearing-carry-v1")
         || !pyjson::py_eq(payload.at("identity"), identity, true)
         || payload.at("period_end").as_pystr().is_none()
         || payload.at("balance").as_pystr().is_none()
-        || payload.at("items").as_array().is_none()
         || !matches!(payload.at("notes"), Json::Object(_))
     {
-        return Err("Opening items have an invalid schema or a different account identity.".into());
+        return Err(invalid_schema.into());
     }
     let previous = date(&field(&payload, "period_end"))?;
     if isodate::ordinal(start) - isodate::ordinal(previous) != 1 {
         return Err("Opening items must come from the immediately preceding period.".into());
     }
-    let mut items = Vec::new();
-    for (index, value) in payload.at("items").as_array().unwrap().iter().enumerate() {
+    for (index, value) in items.iter_mut().enumerate() {
         if !matches!(value, Json::Object(_)) {
             return Err("Opening items must be transaction objects.".into());
         }
@@ -232,7 +235,7 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
         if date(&field(&row, "Date"))? > previous {
             return Err("Opening item dates cannot be later than their period end.".into());
         }
-        items.push(row);
+        *value = row;
     }
     let balance = payload
         .at("balance")
