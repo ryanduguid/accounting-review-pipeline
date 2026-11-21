@@ -91,7 +91,9 @@ mod tests {
         }
     }
     impl ClosingWrite for BrokenWriter {
-        fn close(self) -> io::Result<()> {
+        // Flush, then close, as the buffered file writer does.
+        fn close(mut self) -> io::Result<()> {
+            self.flush()?;
             self.closed.set(true);
             if self.failure == "close" {
                 Err(io::Error::other("fabricated close failure"))
