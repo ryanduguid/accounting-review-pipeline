@@ -2,6 +2,8 @@
 //! duplicate-field hook, including the decoder's error messages and positions,
 //! and `json.dumps(value, indent=2)` with keys in insertion order.
 
+use std::fmt::Write as _;
+
 use crate::pytext;
 
 /// A Python `str`: Unicode code points, possibly including lone surrogates.
@@ -36,10 +38,15 @@ impl PyStr {
     }
 
     pub fn lossy(&self) -> String {
-        self.0
-            .iter()
-            .map(|&cp| char::from_u32(cp).map_or_else(|| format!("\\u{cp:04x}"), String::from))
-            .collect()
+        let mut out = String::with_capacity(self.0.len());
+        for &cp in &self.0 {
+            if let Some(ch) = char::from_u32(cp) {
+                out.push(ch);
+            } else {
+                write!(out, "\\u{cp:04x}").expect("formatting into a String cannot fail");
+            }
+        }
+        out
     }
 }
 
@@ -722,6 +729,13 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn lossy_text_keeps_unicode_and_formats_invalid_code_points() {
+        let text = PyStr(vec!['a' as u32, 'é' as u32, '𐍈' as u32, 0xd800, 0x110000]);
+
+        assert_eq!(text.lossy(), r"aé𐍈\ud800\u110000");
+    }
 
     fn err(text: &[u8]) -> String {
         match loads_bytes(text).unwrap_err() {
