@@ -588,7 +588,6 @@ fn assert_blocked_manifest(scratch: &Scratch, path: &Path, sentinel: &Path) {
     assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 2);
 }
 
-#[cfg(unix)]
 #[test]
 fn occupied_manifest_directory_keeps_both_prior_outputs_and_cleans_the_reservation() {
     let scratch = Scratch::new();

@@ -214,8 +214,18 @@ pub fn write_csv(rows: &[report::OutputRow], path: &Path, quiet: bool) -> Result
 
 pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
     let manifest = manifest_path(path);
-    if !paths::entry_exists(&manifest)? {
+    let Some(metadata) = paths::entry_metadata(&manifest)? else {
         return Ok(None);
+    };
+    let move_error = |e: std::io::Error| {
+        Failure::message(format!(
+            "error: a manifest from an earlier export, {}, could not be set aside ({e}), so the CSV and current manifest are unchanged and the fetched report is not kept.",
+            shown_path(&manifest, quiet)
+        ))
+    };
+    // Windows can replace the reservation file with a directory.
+    if metadata.is_dir() {
+        return Err(move_error(std::io::ErrorKind::IsADirectory.into()));
     }
     let aside = append(&manifest, ".previous");
     let mut options = OpenOptions::new();
@@ -241,10 +251,7 @@ pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
                 shown_path(&aside, quiet)
             );
         }
-        return Err(Failure::message(format!(
-            "error: a manifest from an earlier export, {}, could not be set aside ({e}), so the CSV and current manifest are unchanged and the fetched report is not kept.",
-            shown_path(&manifest, quiet)
-        )));
+        return Err(move_error(e));
     }
     Ok(Some(aside))
 }
