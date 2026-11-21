@@ -111,24 +111,34 @@ pub fn rows(data: &[u8]) -> Result<Vec<Row>> {
 }
 
 pub fn csv(columns: &[&str], rows: &[Vec<String>]) -> Vec<u8> {
-    let header: Vec<_> = columns.iter().map(|column| (*column).to_owned()).collect();
-    std::iter::once(&header)
-        .chain(rows)
-        .map(|row| {
-            row.iter()
-                .map(|value| {
-                    if value.contains([',', '"', '\n']) || (row.len() == 1 && value.is_empty()) {
-                        format!("\"{}\"", value.replace('"', "\"\""))
-                    } else {
-                        value.clone()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(",")
-                + "\n"
-        })
-        .collect::<String>()
-        .into_bytes()
+    let mut output = String::new();
+    write_csv_row(&mut output, columns.iter().copied());
+    for row in rows {
+        write_csv_row(&mut output, row.iter().map(String::as_str));
+    }
+    output.into_bytes()
+}
+
+fn write_csv_row<'a>(output: &mut String, row: impl ExactSizeIterator<Item = &'a str>) {
+    let single = row.len() == 1;
+    for (index, value) in row.enumerate() {
+        if index > 0 {
+            output.push(',');
+        }
+        if value.contains([',', '"', '\n']) || (single && value.is_empty()) {
+            output.push('"');
+            for (index, part) in value.split('"').enumerate() {
+                if index > 0 {
+                    output.push_str("\"\"");
+                }
+                output.push_str(part);
+            }
+            output.push('"');
+        } else {
+            output.push_str(value);
+        }
+    }
+    output.push('\n');
 }
 
 pub fn field<'a>(row: &'a Row, name: &str) -> Result<&'a str> {
@@ -308,6 +318,19 @@ fn transactions(case: &Value, ledger: &[Row]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn csv_preserves_quoted_fields_and_distinguishes_empty_rows_and_fields() {
+        let rows = [
+            vec!["café, commerçant".into(), "a\"b".into(), "line\r\nnext".into()],
+            vec!["".into(), "".into(), "".into()],
+        ];
+        assert_eq!(
+            csv(&["name", "reference", "description"], &rows),
+            "name,reference,description\n\"café, commerçant\",\"a\"\"b\",\"line\r\nnext\"\n,,\n".as_bytes()
+        );
+        assert_eq!(csv(&[""], &[vec![], vec!["".into()]]), b"\"\"\n\n\"\"\n");
+    }
 
     fn cents(text: &str) -> i128 {
         let (sign, text) = text.strip_prefix('-').map_or((1, text), |text| (-1, text));
