@@ -971,10 +971,10 @@ fn malformed_result_leaves_no_partial_workpaper() {
         assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
         assert!(directory_names(&output).is_empty());
         assert_eq!(
-            refused(workpaper::write(&result, "published", fixture.root())),
+            refused(workpaper::write(&result, "missing-parent/published", fixture.root())),
             expected
         );
-        assert!(!fixture.root().join("published").exists());
+        assert!(!fixture.root().join("missing-parent").exists());
         assert!(fixture.temporary_directories().is_empty());
     }
     assert_eq!(source_byte_snapshot(&fixture), sources);
@@ -996,10 +996,10 @@ fn non_object_table_row_is_refused_before_publication() {
     assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
     assert!(directory_names(&output).is_empty());
     assert_eq!(
-        refused(workpaper::write(&result, "published", fixture.root())),
+        refused(workpaper::write(&result, "missing-parent/published", fixture.root())),
         expected
     );
-    assert!(!fixture.root().join("published").exists());
+    assert!(!fixture.root().join("missing-parent").exists());
     assert!(fixture.temporary_directories().is_empty());
 }
 
