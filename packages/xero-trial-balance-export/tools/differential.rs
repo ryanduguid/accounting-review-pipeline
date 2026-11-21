@@ -156,6 +156,14 @@ impl Drop for Process {
     }
 }
 
+fn check_lock_contention(result: Result<(), fs::TryLockError>) -> io::Result<()> {
+    match result {
+        Err(fs::TryLockError::WouldBlock) => Ok(()),
+        Err(fs::TryLockError::Error(error)) => Err(error),
+        Ok(()) => Err(io::Error::other("Rust acquired the Python-held token lock")),
+    }
+}
+
 fn compare_locks(python: &Path, baseline: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let directory = env::temp_dir().join(format!("xero-differential-lock-{}", std::process::id()));
     fs::create_dir(&directory)?;
@@ -193,9 +201,7 @@ fn compare_locks(python: &Path, baseline: &Path) -> Result<(), Box<dyn std::erro
         .read(true)
         .write(true)
         .open(&lock_path)?;
-    if !matches!(native.try_lock(), Err(fs::TryLockError::WouldBlock)) {
-        return Err("Rust acquired the Python-held token lock".into());
-    }
+    check_lock_contention(native.try_lock())?;
     if !matches!(oracle.query(&Json::str("release"))?, Json::Bool(true)) {
         return Err("Python did not release the token lock".into());
     }
@@ -649,6 +655,19 @@ mod tests {
 
     const EOF_FIXTURE: &str = "XERO_DIFFERENTIAL_EOF_FIXTURE";
     static FIXTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn expected_lock_contention_is_distinct_from_an_io_error_or_acquisition() {
+        assert!(check_lock_contention(Err(fs::TryLockError::WouldBlock)).is_ok());
+        let denied = io::ErrorKind::PermissionDenied;
+        let error = check_lock_contention(Err(fs::TryLockError::Error(denied.into()))).unwrap_err();
+        assert_eq!(error.kind(), denied);
+        let error = check_lock_contention(Ok(())).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Rust acquired the Python-held token lock"
+        );
+    }
 
     #[test]
     fn teardown_allows_the_child_to_finish_after_input_eof() {
