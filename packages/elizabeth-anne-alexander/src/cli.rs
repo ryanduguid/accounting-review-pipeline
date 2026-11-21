@@ -413,28 +413,28 @@ enum Exit {
 }
 
 /// How argparse's `_parse_optional` classifies one token against a parser's flags.
-enum Class<'a> {
+enum Class<'flag, 'arg> {
     /// A flag, with an explicit argument (`--flag=value`, or `-hvalue` for a short
     /// flag) and whether `=` introduced it.
-    Flag(&'a str, Option<(String, bool)>),
+    Flag(&'flag str, Option<(&'arg str, bool)>),
     UnknownOption,
     Positional,
 }
 
-fn classify<'a>(token: &str, flags: &[&'a str]) -> Result<Class<'a>, String> {
+fn classify<'flag, 'arg>(token: &'arg str, flags: &[&'flag str]) -> Result<Class<'flag, 'arg>, String> {
     if token.is_empty() || !token.starts_with('-') {
         return Ok(Class::Positional);
     }
     if let Some(exact) = flags.iter().find(|f| **f == token) {
         return Ok(Class::Flag(exact, None));
     }
-    if pytext::py_len(token) == 1 {
+    if token == "-" {
         return Ok(Class::Positional);
     }
     if let Some((name, value)) = token.split_once('=')
         && let Some(exact) = flags.iter().find(|f| **f == name)
     {
-        return Ok(Class::Flag(exact, Some((value.to_string(), true))));
+        return Ok(Class::Flag(exact, Some((value, true))));
     }
     let mut found = option_prefix_matches(token, flags);
     match found.len() {
@@ -454,26 +454,28 @@ fn classify<'a>(token: &str, flags: &[&'a str]) -> Result<Class<'a>, String> {
     Ok(Class::UnknownOption)
 }
 
+type PrefixMatch<'flag, 'arg> = (&'flag str, Option<(&'arg str, bool)>);
+
 /// argparse's `_get_option_tuples`: the flags a token abbreviates, with any explicit value.
-fn option_prefix_matches<'a>(token: &str, flags: &[&'a str]) -> Vec<(&'a str, Option<(String, bool)>)> {
+fn option_prefix_matches<'flag, 'arg>(token: &'arg str, flags: &[&'flag str]) -> Vec<PrefixMatch<'flag, 'arg>> {
     if token.starts_with("--") {
         let (prefix, explicit) = match token.split_once('=') {
-            Some((name, value)) => (name, Some((value.to_string(), true))),
+            Some((name, value)) => (name, Some((value, true))),
             None => (token, None),
         };
         return flags
             .iter()
             .filter(|f| f.starts_with(prefix))
-            .map(|f| (*f, explicit.clone()))
+            .map(|f| (*f, explicit))
             .collect();
     }
-    let short: String = token.chars().take(2).collect();
-    let rest: String = token.chars().skip(2).collect();
+    let end = token.char_indices().nth(2).map_or(token.len(), |(at, _)| at);
+    let (short, rest) = token.split_at(end);
     flags
         .iter()
         .filter_map(|f| {
             if *f == short {
-                Some((*f, Some((rest.clone(), false))))
+                Some((*f, Some((rest, false))))
             } else {
                 f.starts_with(token).then_some((*f, None))
             }
@@ -491,14 +493,14 @@ fn looks_like_negative_number(body: &str) -> bool {
 }
 
 /// argparse's handling of an explicit argument given to the zero-argument help flag.
-fn help_or_error(flag: &str, explicit: Option<(String, bool)>) -> Result<(), String> {
+fn help_or_error(flag: &str, explicit: Option<(&str, bool)>) -> Result<(), String> {
     match explicit {
         None => Ok(()),
         // "-hx": the rest is read as further short flags, and help runs first.
         Some((rest, false)) if flag == "-h" && !rest.is_empty() && !rest.starts_with('-') => Ok(()),
         Some((rest, _)) => Err(format!(
             "argument -h/--help: ignored explicit argument {}",
-            pytext::repr_os(&rest)
+            pytext::repr_os(rest)
         )),
     }
 }
@@ -520,7 +522,7 @@ fn sub_exit(prog: &str, command: &Command, message: String) -> Exit {
 }
 
 fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
-    let mut extras: Vec<String> = Vec::new();
+    let mut extras = Vec::new();
     let (command, index) = parse_command(prog, args, &mut extras)?;
     let values = parse_options(prog, command, &args[index..], &mut extras)?;
     let missing: Vec<&str> = command
@@ -562,7 +564,11 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
 
 /// The main parser up to the subcommand: its help flag, unknown options kept as
 /// extras, and the command choice. Returns the command and the index after it.
-fn parse_command(prog: &str, args: &[String], extras: &mut Vec<String>) -> Result<(&'static Command, usize), Exit> {
+fn parse_command<'arg>(
+    prog: &str,
+    args: &'arg [String],
+    extras: &mut Vec<&'arg str>,
+) -> Result<(&'static Command, usize), Exit> {
     let mut index = 0;
     let mut options_ended = false;
     loop {
@@ -581,7 +587,7 @@ fn parse_command(prog: &str, args: &[String], extras: &mut Vec<String>) -> Resul
                     return Err(Exit::Help(main_help(prog, argtheme::theme(Stream::Stdout))));
                 }
                 Class::UnknownOption => {
-                    extras.push(token.clone());
+                    extras.push(token);
                     continue;
                 }
                 Class::Positional => {}
@@ -609,28 +615,28 @@ fn invalid_choice(token: &str) -> String {
 }
 
 /// The subcommand's options after its name.
-fn parse_options(
+fn parse_options<'arg>(
     prog: &str,
     command: &Command,
-    args: &[String],
-    extras: &mut Vec<String>,
-) -> Result<BTreeMap<&'static str, String>, Exit> {
+    args: &'arg [String],
+    extras: &mut Vec<&'arg str>,
+) -> Result<BTreeMap<&'static str, &'arg str>, Exit> {
     let sub_error = |message: String| sub_exit(prog, command, message);
     let mut flags: Vec<&'static str> = vec!["-h", "--help"];
     flags.extend(command.options.iter().map(|o| o.flag));
-    let mut values: BTreeMap<&'static str, String> = BTreeMap::new();
+    let mut values = BTreeMap::new();
     let mut index = 0;
     while let Some(token) = args.get(index) {
         index += 1;
         if token == "--" {
             // Everything from here is positional, and this parser takes none.
-            extras.extend(args[index - 1..].iter().cloned());
+            extras.extend(args[index - 1..].iter().map(String::as_str));
             break;
         }
         let (flag, explicit) = match classify(token, &flags).map_err(sub_error)? {
             Class::Flag(flag, explicit) => (flag, explicit),
             Class::UnknownOption | Class::Positional => {
-                extras.push(token.clone());
+                extras.push(token);
                 continue;
             }
         };
@@ -643,7 +649,7 @@ fn parse_options(
             None => match args.get(index) {
                 Some(next) if next != "--" && matches!(classify(next, &flags), Ok(Class::Positional)) => {
                     index += 1;
-                    next.clone()
+                    next.as_str()
                 }
                 _ => return Err(sub_error(format!("argument {flag}: expected one argument"))),
             },
