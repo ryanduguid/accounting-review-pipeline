@@ -50,7 +50,7 @@ fn cps(text: &str) -> Vec<u32> {
 
 /// `money(value)` for a CSV string.
 pub fn money(text: &str) -> Result<Amount> {
-    money_cps(&cps(text)).ok_or_else(|| {
+    money_cps(text.chars().map(u32::from)).ok_or_else(|| {
         Failure::Error(format!(
             "Expected a non-negative decimal string with at most 2 places: {}",
             pytext::repr(text)
@@ -61,7 +61,7 @@ pub fn money(text: &str) -> Result<Amount> {
 /// `money(value)` for a parsed JSON value.
 pub fn money_json(value: &Json) -> Result<Amount> {
     let parsed = match value {
-        Json::Str(text) => money_cps(&text.0),
+        Json::Str(text) => money_cps(text.0.iter().copied()),
         _ => None,
     };
     parsed.ok_or_else(|| {
@@ -73,22 +73,25 @@ pub fn money_json(value: &Json) -> Result<Amount> {
 }
 
 /// `re.fullmatch(r"\d{1,16}(?:\.\d{1,2})?", value)` then `Decimal(value)`; `\d` is any Unicode digit.
-fn money_cps(text: &[u32]) -> Option<Amount> {
-    let digits = |part: &[u32]| {
-        part.iter()
-            .map(|&c| pytext::decimal_value(c))
-            .collect::<Option<Vec<u32>>>()
-    };
-    let (int, frac) = match text.iter().position(|&c| c == '.' as u32) {
-        Some(at) => (&text[..at], Some(&text[at + 1..])),
-        None => (text, None),
-    };
-    let int = digits(int).filter(|d| (1..=16).contains(&d.len()))?;
-    let frac = match frac {
-        Some(frac) => digits(frac).filter(|d| (1..=2).contains(&d.len()))?,
-        None => Vec::new(),
-    };
-    Some(Amount::from_digits(&int, &frac))
+fn money_cps(text: impl Iterator<Item = u32>) -> Option<Amount> {
+    let mut digits = [0; 18];
+    let mut digit_count = 0;
+    let mut point = None;
+    for code_point in text {
+        if code_point == u32::from('.') {
+            if point.replace(digit_count).is_some() {
+                return None;
+            }
+        } else {
+            *digits.get_mut(digit_count)? = pytext::decimal_value(code_point)?;
+            digit_count += 1;
+        }
+    }
+    let whole = point.unwrap_or(digit_count);
+    if !(1..=16).contains(&whole) || point.is_some() && !(1..=2).contains(&(digit_count - whole)) {
+        return None;
+    }
+    Some(Amount::from_digits(&digits[..whole], &digits[whole..digit_count]))
 }
 
 /// `iso(value)`: a date written exactly as `YYYY-MM-DD`.
@@ -1361,6 +1364,12 @@ mod tests {
         assert_eq!(money("1000").unwrap().to_string(), "1000");
         assert_eq!(money("12.5").unwrap().to_string(), "12.5");
         assert_eq!(money("\u{661}\u{662}").unwrap().to_string(), "12");
+        let full_width = "1234567890123456.０٩";
+        assert_eq!(money(full_width).unwrap().to_string(), "1234567890123456.09");
+        assert_eq!(
+            money_json(&Json::str(full_width)).unwrap().to_string(),
+            "1234567890123456.09"
+        );
         for bad in [
             "",
             "NaN",
@@ -1371,6 +1380,9 @@ mod tests {
             "12345678901234567",
             " 1",
             "1.",
+            ".1",
+            "1..2",
+            "1234567890123456789",
         ] {
             assert!(money(bad).is_err(), "{bad}");
         }
