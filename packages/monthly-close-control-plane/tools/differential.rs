@@ -1195,9 +1195,39 @@ fn equity(c: &mut Corpus, seed: u64) -> Result<()> {
             if index % 3 == 0 { "1000" } else { "0.0001" },
         );
     }
-    let mut result = probe::decode(
-        r#"{"schema_version":1,"basis":"ledger_equity","tenant":"Synthetic","opening_date":"2026-08-31","closing_date":"2026-09-30","currency":"AUD","currency_evidence":"Synthetic report","schedule_sha256":"test","status":"PASS","issues":[],"accounts":[{"account_id":"E","movement_ids":[],"opening":"100","movement":"0","expected_close":"100","actual_close":"100","unexplained":"0"}],"total":{"opening":"100","movement":"0","expected_close":"100","actual_close":"100","unexplained":"0"},"movements":[],"tolerance":"0.01","complete":true}"#,
-    )?;
+    let account = Json::object([
+        ("account_id", Json::str("E")),
+        ("movement_ids", Json::Array(Vec::new())),
+        ("opening", Json::str("100")),
+        ("movement", Json::str("0")),
+        ("expected_close", Json::str("100")),
+        ("actual_close", Json::str("100")),
+        ("unexplained", Json::str("0")),
+    ]);
+    let total = Json::object([
+        ("opening", Json::str("100")),
+        ("movement", Json::str("0")),
+        ("expected_close", Json::str("100")),
+        ("actual_close", Json::str("100")),
+        ("unexplained", Json::str("0")),
+    ]);
+    let mut result = Json::object([
+        ("schema_version", Json::int(1)),
+        ("basis", Json::str("ledger_equity")),
+        ("tenant", Json::str("Synthetic")),
+        ("opening_date", Json::str("2026-08-31")),
+        ("closing_date", Json::str("2026-09-30")),
+        ("currency", Json::str("AUD")),
+        ("currency_evidence", Json::str("Synthetic report")),
+        ("schedule_sha256", Json::str("test")),
+        ("status", Json::str("PASS")),
+        ("issues", Json::Array(Vec::new())),
+        ("accounts", Json::Array(vec![account])),
+        ("total", total),
+        ("movements", Json::Array(Vec::new())),
+        ("tolerance", Json::str("0.01")),
+        ("complete", Json::Bool(true)),
+    ]);
     let sources = Json::object([("equity_schedule", Json::str("test"))]);
     let mut validate = |name: &str, value: Json| {
         c.push(
@@ -1779,34 +1809,10 @@ fn reconciliation(c: &mut Corpus, seed: u64) -> Result<()> {
         ("opening_balance", Json::str("0")),
         ("closing_balance", Json::str("0")),
     ]);
-    let push = |c: &mut Corpus, name: &str, request: Json| {
-        let Json::Object(pairs) = request else {
-            panic!("fixture")
-        };
-        c.push(
-            name,
-            "reconcile",
-            pairs
-                .into_iter()
-                .map(|(k, v)| {
-                    let key = match k.to_utf8().unwrap().as_str() {
-                        "transactions" => "transactions",
-                        "tenant" => "tenant",
-                        "account_id" => "account_id",
-                        "currency" => "currency",
-                        "period_start" => "period_start",
-                        "period_end" => "period_end",
-                        "opening_balance" => "opening_balance",
-                        "closing_balance" => "closing_balance",
-                        "opening_items" => "opening_items",
-                        "decisions" => "decisions",
-                        "decisions_escaped" => "decisions_escaped",
-                        _ => unreachable!(),
-                    };
-                    (key, v)
-                })
-                .collect(),
-        );
+    let push = |c: &mut Corpus, name: &str, mut request: Json| {
+        request.set("name", Json::str(name));
+        request.set("op", Json::str("reconcile"));
+        c.0.push(request);
     };
     push(c, "reconcile-suggestion-is-not-acceptance", base.clone());
     for (name, amounts, closing, decisions) in [

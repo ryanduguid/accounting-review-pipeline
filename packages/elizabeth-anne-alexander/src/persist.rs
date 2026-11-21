@@ -80,13 +80,13 @@ fn unique_name(prefix: &str, suffix: &str, attempt: u32) -> String {
 }
 
 /// `tempfile.TemporaryDirectory(dir=parent, prefix=prefix)`: a new private directory.
-fn make_temp_dir(parent: &Path, prefix: &str) -> io::Result<PathBuf> {
+fn make_temp_dir(mut candidate_at: impl FnMut(u32) -> PathBuf) -> io::Result<PathBuf> {
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
     for attempt in 0..100 {
-        let candidate = parent.join(unique_name(prefix, "", attempt));
-        #[cfg_attr(not(unix), allow(unused_mut))]
-        let mut builder = std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        let candidate = candidate_at(attempt);
         match builder.create(&candidate) {
             Ok(()) => return Ok(candidate),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -159,7 +159,7 @@ pub(crate) fn write_evaluation_with(
         ))
     };
     mkdir_parents(&output_dir).map_err(|(error, at)| fail(os_error(&error, Some(&at), None)))?;
-    let staging = make_temp_dir(&output_dir, ".evaluation-")
+    let staging = make_temp_dir(|attempt| output_dir.join(unique_name(".evaluation-", "", attempt)))
         .map_err(|error| fail(os_error(&error, Some(&output_dir.join(".evaluation-")), None)))?;
     let result = (|| -> std::result::Result<(), String> {
         let pack = [
@@ -411,6 +411,54 @@ fn write_staged_by_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn staging_directory_retries_without_replacing_the_occupied_directory() {
+        let temp = crate::tests::TempDir::new();
+        let occupied = temp.path().join("attempt-0");
+        std::fs::create_dir(&occupied).unwrap();
+        std::fs::write(occupied.join("prior"), b"first run").unwrap();
+
+        let staging = make_temp_dir(|attempt| temp.path().join(format!("attempt-{attempt}"))).unwrap();
+
+        assert_eq!(staging, temp.path().join("attempt-1"));
+        assert_eq!(std::fs::read_dir(&staging).unwrap().count(), 0);
+        assert_eq!(std::fs::read(occupied.join("prior")).unwrap(), b"first run");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::metadata(&staging).unwrap().permissions().mode();
+            assert_eq!(permissions & 0o077, 0);
+        }
+    }
+
+    #[test]
+    fn staging_directory_stops_after_the_retry_limit() {
+        let temp = crate::tests::TempDir::new();
+        let mut attempts = 0;
+        let error = make_temp_dir(|_| {
+            attempts += 1;
+            temp.path().to_path_buf()
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(attempts, 100);
+    }
+
+    #[test]
+    fn staging_directory_does_not_retry_a_missing_parent() {
+        let temp = crate::tests::TempDir::new();
+        let parent = temp.path().join("missing");
+        let error = make_temp_dir(|attempt| {
+            assert_eq!(attempt, 0);
+            parent.join("stage")
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert!(!parent.exists());
+    }
 
     #[test]
     fn custom_io_diagnostics_keep_the_full_message() {

@@ -10,7 +10,8 @@ use crate::{
     pypath, pytext,
 };
 use std::{
-    fs,
+    ffi::OsStr,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -357,7 +358,7 @@ pub fn as_csv(pack: &ReadinessPack) -> String {
     out
 }
 
-fn enclosing_repository(directory: &Path) -> std::io::Result<Option<(PathBuf, String)>> {
+fn enclosing_repository(directory: &Path) -> io::Result<Option<(PathBuf, String)>> {
     for candidate in directory.ancestors() {
         for marker in [".git", ".hg", ".svn", ".bzr"] {
             match fs::symlink_metadata(candidate.join(marker)) {
@@ -370,34 +371,38 @@ fn enclosing_repository(directory: &Path) -> std::io::Result<Option<(PathBuf, St
                 Err(e)
                     if matches!(
                         e.kind(),
-                        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
                     ) => {}
                 Err(e) => return Err(e),
             }
         }
     }
     // This is the single non-secret Git setting the original output guard reads.
-    if let Some(value) = std::env::var_os("GIT_WORK_TREE").filter(|s| !s.is_empty()) {
-        let work_tree = pypath::resolve(Path::new(&value), false)
-            .map_err(|_| std::io::Error::other("cannot resolve GIT_WORK_TREE"))?;
+    let configured = std::env::var_os("GIT_WORK_TREE");
+    enclosing_configured_tree(directory, configured.as_deref(), pypath::file_id)
+}
+
+fn enclosing_configured_tree(
+    directory: &Path,
+    configured: Option<&OsStr>,
+    mut identity: impl FnMut(&Path) -> io::Result<(u64, u64)>,
+) -> io::Result<Option<(PathBuf, String)>> {
+    if let Some(value) = configured.filter(|s| !s.is_empty()) {
+        const REASON: &str = "which the GIT_WORK_TREE environment variable names";
+        let work_tree = pypath::resolve(Path::new(value), false)
+            .map_err(|_| io::Error::other("cannot resolve GIT_WORK_TREE"))?;
         for candidate in directory.ancestors() {
             if pypath::same_path(candidate, &work_tree) {
-                return Ok(Some((
-                    work_tree,
-                    "which the GIT_WORK_TREE environment variable names".into(),
-                )));
+                return Ok(Some((work_tree, REASON.into())));
             }
-            match (pypath::file_id(candidate), pypath::file_id(&work_tree)) {
+            match (identity(candidate), identity(&work_tree)) {
                 (Ok(a), Ok(b)) if a == b => {
-                    return Ok(Some((
-                        work_tree,
-                        "which the GIT_WORK_TREE environment variable names".into(),
-                    )));
+                    return Ok(Some((work_tree, REASON.into())));
                 }
                 (Err(e), _) | (_, Err(e))
                     if !matches!(
                         e.kind(),
-                        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
                     ) =>
                 {
                     return Err(e);
@@ -496,6 +501,50 @@ mod source_commit_tests {
 mod rendering_contract_tests {
     use super::*;
     use crate::{decimal::Decimal, engine, test_support};
+
+    #[test]
+    fn configured_output_tree_uses_the_ancestor_identity() {
+        let temp = test_support::TempDir::new();
+        let tree = temp.join("checkout");
+        fs::create_dir(&tree).unwrap();
+        let resolved = pypath::resolve(&tree, true).unwrap();
+        let ancestor = temp.join("same-identity");
+        let output = ancestor.join("pending/pack");
+        let matched = enclosing_configured_tree(&output, Some(tree.as_os_str()), |path| {
+            if path == ancestor || path == resolved {
+                Ok((3, 18))
+            } else {
+                Err(io::Error::from(io::ErrorKind::NotFound))
+            }
+        })
+        .unwrap();
+
+        assert_eq!(
+            matched,
+            Some((
+                resolved,
+                "which the GIT_WORK_TREE environment variable names".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn configured_output_tree_propagates_identity_refusal() {
+        let temp = test_support::TempDir::new();
+        let tree = temp.join("checkout");
+        fs::create_dir(&tree).unwrap();
+        let output = temp.join("pending/pack");
+        let error = enclosing_configured_tree(&output, Some(tree.as_os_str()), |_| {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "identity unavailable",
+            ))
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(error.to_string(), "identity unavailable");
+    }
 
     #[test]
     fn spreadsheet_formulas_are_prefixed_in_csv_and_preserved_in_json() {
