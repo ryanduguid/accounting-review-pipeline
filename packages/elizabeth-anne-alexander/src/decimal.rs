@@ -73,6 +73,8 @@ fn finite(negative: bool, digits: String, exp: i128) -> Decimal {
     let trimmed = digits.trim_start_matches('0');
     let digits = if trimmed.is_empty() {
         "0".to_string()
+    } else if trimmed.len() == digits.len() {
+        digits
     } else {
         trimmed.to_string()
     };
@@ -225,7 +227,7 @@ impl Decimal {
         if self.adjusted() > EMAX || self.adjusted() - exp + 1 > PREC {
             return Err(Signal::InvalidOperation);
         }
-        let answer = rescale(self, exp, rounding);
+        let answer = rescale_nonzero(self, exp, rounding);
         if answer.adjusted() > EMAX || answer.digits.len() as i128 > PREC {
             return Err(Signal::InvalidOperation);
         }
@@ -504,29 +506,26 @@ fn round_change(digits: &str, keep: usize, rounding: Rounding) -> i8 {
     }
 }
 
-fn rescale(value: &Decimal, exp: i128, rounding: Rounding) -> Decimal {
-    if value.is_zero() {
-        return finite(value.negative, "0".into(), exp);
-    }
+fn rescale_nonzero(value: &Decimal, exp: i128, rounding: Rounding) -> Decimal {
     if value.exp >= exp {
-        let padded = value.digits.clone() + &"0".repeat((value.exp - exp) as usize);
+        let padding = (value.exp - exp) as usize;
+        let mut padded = String::with_capacity(value.digits.len() + padding);
+        padded.push_str(&value.digits);
+        padded.extend(std::iter::repeat_n('0', padding));
         return finite(value.negative, padded, exp);
     }
-    let mut source = value.clone();
-    let mut keep = value.digits.len() as i128 + value.exp - exp;
+    let keep = value.digits.len() as i128 + value.exp - exp;
     if keep < 0 {
-        source = finite(value.negative, "1".into(), exp - 1);
-        keep = 0;
+        // The entire value lies below one tenth of the rounding unit.
+        return finite(value.negative, "0".into(), exp);
     }
     let keep = keep as usize;
-    let changed = round_change(&source.digits, keep, rounding);
-    let mut coeff = source.digits[..keep].to_string();
-    if coeff.is_empty() {
-        coeff = "0".into();
-    }
-    if changed == 1 {
-        coeff = (big(&coeff) + 1u32).to_string();
-    }
+    let prefix = if keep == 0 { "0" } else { &value.digits[..keep] };
+    let coeff = if round_change(&value.digits, keep, rounding) == 1 {
+        (big(prefix) + 1u32).to_string()
+    } else {
+        prefix.to_string()
+    };
     finite(value.negative, coeff, exp)
 }
 
@@ -586,11 +585,11 @@ fn add(a: &Decimal, b: &Decimal) -> Outcome {
     }
     if a.is_zero() {
         let exp = exp.max(b.exp - PREC - 1);
-        return fix(rescale(b, exp, Rounding::HalfEven), Rounding::HalfEven);
+        return fix(rescale_nonzero(b, exp, Rounding::HalfEven), Rounding::HalfEven);
     }
     if b.is_zero() {
         let exp = exp.max(a.exp - PREC - 1);
-        return fix(rescale(a, exp, Rounding::HalfEven), Rounding::HalfEven);
+        return fix(rescale_nonzero(a, exp, Rounding::HalfEven), Rounding::HalfEven);
     }
     // _normalize: a tiny operand is replaced by 10**exp, which rounds identically.
     let (mut tmp, mut other) = if a.exp < b.exp {
@@ -701,5 +700,22 @@ mod tests {
         assert_eq!(fixed("0E-3"), "0.000");
         assert_eq!(fixed("0E+3"), "0");
         assert_eq!(d("0E-999999999999").to_fixed_string(), None);
+    }
+
+    #[test]
+    fn quantize_keeps_signed_zero_and_rounds_borrowed_digits() {
+        for (value, rounding, expected) in [
+            ("-0E+800", Rounding::HalfEven, "-0.00"),
+            ("-7E-100", Rounding::HalfUp, "-0.00"),
+            ("-0.005", Rounding::HalfEven, "-0.00"),
+            ("-0.005", Rounding::HalfUp, "-0.01"),
+            ("2.345", Rounding::HalfEven, "2.34"),
+            ("2.355", Rounding::HalfEven, "2.36"),
+            ("9.999", Rounding::HalfEven, "10.00"),
+            ("1E+2", Rounding::HalfUp, "100.00"),
+        ] {
+            let result = d(value).quantize(-2, rounding).unwrap();
+            assert_eq!(result.to_sci_string(), expected);
+        }
     }
 }
