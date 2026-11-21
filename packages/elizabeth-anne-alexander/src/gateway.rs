@@ -476,13 +476,15 @@ pub fn load_request_snapshot(env: &Env, location: &Location, policy: &Json) -> R
 
 /// At least 2 decimal places, padded and never rounded.
 pub fn decimal_string(value: &Decimal) -> Result<String> {
+    let padded;
     let value = if value.is_finite() && value.exponent() > -2 {
         // The padding is exact, but can exceed the decimal context's precision.
-        value
+        padded = value
             .quantize(-2, Rounding::HalfEven)
-            .map_err(|_| Failure::Crash("[<class 'decimal.InvalidOperation'>]".into()))?
+            .map_err(|_| Failure::Crash("[<class 'decimal.InvalidOperation'>]".into()))?;
+        &padded
     } else {
-        value.clone()
+        value
     };
     value
         .to_fixed_string()

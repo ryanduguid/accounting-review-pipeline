@@ -1459,6 +1459,35 @@ fn formatter_retains_non_finite_decimal_spelling() {
 }
 
 #[test]
+fn decimal_format_and_comparison_preserve_scale_and_sign() {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+
+    for (input, expected) in [
+        ("-0e2", "-0"),
+        ("-0.000", "-0.000"),
+        ("1e3", "1000"),
+        ("12.3400", "12.3400"),
+        ("0.12", "0.12"),
+        ("-0.0012", "-0.0012"),
+    ] {
+        assert_eq!(d(input).to_fixed_string().as_deref(), Some(expected), "{input}");
+    }
+    for (left, right, expected) in [
+        ("12", "12.000", Equal),
+        ("12", "12.001", Less),
+        ("-12", "-12.001", Greater),
+        ("12.01", "12.0200", Less),
+        ("12.001", "12", Greater),
+    ] {
+        assert_eq!(d(left).cmp_value(&d(right)), expected, "{left} vs {right}");
+    }
+    assert_eq!(
+        d("2.5").quantize(0, crate::decimal::Rounding::HalfEven).unwrap(),
+        d("2")
+    );
+}
+
+#[test]
 fn test_an_absurd_percentage_is_refused_not_raised_out_of_the_projection() {
     assert_refused(percent_string(&d("1E+30")), "supported magnitude range");
     assert_eq!(percent_string(&d("0.183333")).unwrap(), "18.3333");

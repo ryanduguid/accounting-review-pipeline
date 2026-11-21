@@ -243,21 +243,39 @@ impl Decimal {
             return Some(self.to_sci_string());
         }
         let sign = if self.negative { "-" } else { "" };
-        let value = if self.is_zero() && self.exp > 0 {
-            finite(self.negative, "0".into(), 0)
+        let exponent = if self.is_zero() && self.exp > 0 { 0 } else { self.exp };
+        let digits = &self.digits;
+        let dotplace = exponent + digits.len() as i128;
+        let length = if dotplace <= 0 {
+            digits.len() as i128 - dotplace + 2
+        } else if dotplace < digits.len() as i128 {
+            digits.len() as i128 + 1
         } else {
-            self.clone()
-        };
-        let dotplace = value.exp + value.digits.len() as i128;
-        let length = value.digits.len() as i128 + dotplace.unsigned_abs() as i128;
+            dotplace
+        } + sign.len() as i128;
         // shortcut: the cut-off where CPython raises MemoryError depends on the
         // machine; 1 GiB of digits is treated as out of memory here.
         // Set a measured memory budget if a legitimate input needs more digits.
         if length > 1 << 30 {
             return None;
         }
-        let (intpart, fracpart) = place_point(&value.digits, dotplace, false);
-        Some(format!("{sign}{intpart}{fracpart}"))
+        let mut output = String::new();
+        output.try_reserve_exact(length as usize).ok()?;
+        output.push_str(sign);
+        if dotplace <= 0 {
+            output.push_str("0.");
+            output.extend(std::iter::repeat_n('0', (-dotplace) as usize));
+            output.push_str(digits);
+        } else if dotplace < digits.len() as i128 {
+            let (integer, fraction) = digits.split_at(dotplace as usize);
+            output.push_str(integer);
+            output.push('.');
+            output.push_str(fraction);
+        } else {
+            output.push_str(digits);
+            output.extend(std::iter::repeat_n('0', dotplace as usize - digits.len()));
+        }
+        Some(output)
     }
 
     pub fn cmp_value(&self, other: &Decimal) -> Ordering {
@@ -278,9 +296,16 @@ impl Decimal {
         }
         let magnitude = match self.adjusted().cmp(&other.adjusted()) {
             Ordering::Equal => {
-                let pad = |d: &Decimal, e: i128| d.digits.clone() + &"0".repeat((d.exp - e).max(0) as usize);
-                let low = self.exp.min(other.exp);
-                pad(self, low).cmp(&pad(other, low))
+                let left = self.digits.as_bytes();
+                let right = other.digits.as_bytes();
+                let shared = left.len().min(right.len());
+                left[..shared].cmp(&right[..shared]).then_with(|| {
+                    let tail = &left[shared..];
+                    let other_tail = &right[shared..];
+                    tail.iter()
+                        .any(|&digit| digit != b'0')
+                        .cmp(&other_tail.iter().any(|&digit| digit != b'0'))
+                })
             }
             ordering => ordering,
         };
