@@ -1004,6 +1004,115 @@ fn non_object_table_row_is_refused_before_publication() {
 }
 
 #[test]
+fn non_unicode_table_cells_are_refused_without_output() {
+    let fixture = Fixture::new();
+    let output = fixture.root().join("files");
+    std::fs::create_dir(&output).unwrap();
+    for (json, kind) in [
+        (r#"[{"\ud800":"first","\\ud800":"literal"}]"#, "names"),
+        (r#"[{"reference":"\ud800"}]"#, "values"),
+    ] {
+        let mut result = fixture.review().unwrap();
+        let Json::Object(fields) = &mut result else {
+            panic!("fixture must produce a workpaper object");
+        };
+        fields.iter_mut().find(|(key, _)| key.is("findings")).unwrap().1 =
+            pyjson::loads_bytes(json.as_bytes()).unwrap();
+        let expected = format!("Invalid workpaper: findings[0] field {kind} must be valid Unicode");
+
+        assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
+        assert!(directory_names(&output).is_empty());
+        assert_eq!(
+            refused(workpaper::write(&result, "missing-parent/published", fixture.root())),
+            expected
+        );
+        assert!(!fixture.root().join("missing-parent").exists());
+    }
+}
+
+#[test]
+fn incomplete_report_is_refused_before_output() {
+    let fixture = Fixture::new();
+    let output = fixture.root().join("files");
+    std::fs::create_dir(&output).unwrap();
+    let valid = fixture.review().unwrap();
+
+    for (table, name) in [
+        (None, "entity"),
+        (None, "ledger_start"),
+        (None, "ledger_end"),
+        (None, "status"),
+        (None, "ledger_total"),
+        (None, "allocated_total"),
+        (None, "unallocated_total"),
+        (None, "scope"),
+        (Some("funding_movements"), "grant_id"),
+        (Some("funding_movements"), "closing_cash_allocation"),
+        (Some("funding_movements"), "unspent_funding_workpaper"),
+        (Some("findings"), "code"),
+        (Some("findings"), "reference"),
+    ] {
+        let mut result = valid.clone();
+        let Json::Object(fields) = &mut result else {
+            panic!("fixture must produce a workpaper object");
+        };
+        let fields = if let Some(table) = table {
+            let rows = &mut fields.iter_mut().find(|(key, _)| key.is(table)).unwrap().1;
+            let Json::Array(rows) = rows else {
+                panic!("fixture must produce a table");
+            };
+            let Json::Object(fields) = &mut rows[0] else {
+                panic!("fixture must produce a table row");
+            };
+            fields
+        } else {
+            fields
+        };
+        let count = fields.len();
+        fields.retain(|(key, _)| !key.is(name));
+        assert_eq!(fields.len(), count - 1, "{name}");
+        let expected = format!("Invalid workpaper: report field {name} is missing");
+        assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
+        assert!(directory_names(&output).is_empty());
+        assert_eq!(
+            refused(workpaper::write(&result, "missing-parent/published", fixture.root())),
+            expected
+        );
+        assert!(!fixture.root().join("missing-parent").exists());
+        assert!(fixture.temporary_directories().is_empty());
+    }
+
+    workpaper::write_files(&valid, &output).unwrap();
+    assert_eq!(directory_names(&output).len(), 8);
+}
+
+#[test]
+fn invalid_report_text_is_refused_before_output() {
+    let fixture = Fixture::new();
+    let output = fixture.root().join("files");
+    std::fs::create_dir(&output).unwrap();
+
+    for (field, json, problem) in [
+        ("entity", r#""\ud800""#, "must be valid Unicode"),
+        ("scope", "null", "must be text"),
+    ] {
+        let mut result = fixture.review().unwrap();
+        let Json::Object(fields) = &mut result else {
+            panic!("fixture must produce a workpaper object");
+        };
+        fields.iter_mut().find(|(key, _)| key.is(field)).unwrap().1 = pyjson::loads_bytes(json.as_bytes()).unwrap();
+        let expected = format!("Invalid workpaper: report field {field} {problem}");
+        assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
+        assert!(directory_names(&output).is_empty());
+        assert_eq!(
+            refused(workpaper::write(&result, "missing-parent/published", fixture.root())),
+            expected
+        );
+        assert!(!fixture.root().join("missing-parent").exists());
+    }
+}
+
+#[test]
 fn write_files_preserves_existing_blockers_and_prior_sequential_output() {
     for blocked in ["workpaper.json", "budget_lines.csv"] {
         let fixture = Fixture::new();

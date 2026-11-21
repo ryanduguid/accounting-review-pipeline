@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use super::*;
 use crate::decimal::Decimal;
 use crate::gateway::{
-    ALLOWED_DECISIONS, BalanceRow, MODEL_PROJECTION, assert_model_is_redacted, decimal, iso_timestamp, percent_string,
-    validate_review, variance_findings,
+    ALLOWED_DECISIONS, BalanceRow, MODEL_PROJECTION, assert_model_is_redacted, decimal, decimal_string, iso_timestamp,
+    percent_string, validate_review, variance_findings,
 };
 use crate::isodate::Date;
 use crate::persist::{self, Ops, REAL_OPS};
@@ -1424,6 +1424,21 @@ fn test_an_absurd_magnitude_is_refused_not_raised_out_of_the_balance_gate() {
             .to_sci_string(),
         "-999999999999999999"
     );
+}
+
+#[test]
+fn test_decimal_padding_reports_context_overflow_without_panicking() {
+    let overflow = decimal_string(&d("1E+26")).unwrap_err();
+    assert_eq!(overflow, Failure::Crash("[<class 'decimal.InvalidOperation'>]".into()));
+    assert_eq!(String::from(overflow), "[<class 'decimal.InvalidOperation'>]");
+    for (input, expected) in [
+        ("1E+25", "10000000000000000000000000.00"),
+        ("-0.0", "-0.00"),
+        ("-1.2", "-1.20"),
+        ("1.230", "1.230"),
+    ] {
+        assert_eq!(decimal_string(&d(input)).unwrap(), expected, "{input}");
+    }
 }
 
 #[test]

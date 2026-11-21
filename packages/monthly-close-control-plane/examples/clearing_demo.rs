@@ -105,8 +105,8 @@ fn run(output: &Path) -> Result<()> {
     );
     Ok(())
 }
-fn main() {
-    std::process::exit(cli::command_thread(|| {
+fn main() -> std::process::ExitCode {
+    let status = cli::command_thread(|| {
         let args: Vec<_> = std::env::args_os().skip(1).collect();
         if args == ["--help"] || args == ["-h"] {
             monthly_close_control_plane::outln!("usage: close-control-clearing-demo --output PATH");
@@ -123,7 +123,8 @@ fn main() {
                 1
             }
         }
-    }));
+    });
+    std::process::ExitCode::from(u8::try_from(status).unwrap_or(1))
 }
 #[cfg(test)]
 #[path = "../tests/support/temp.rs"]

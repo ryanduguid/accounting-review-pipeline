@@ -33,13 +33,12 @@ fn findings(document: &Json) -> &[Json] {
     };
     items
 }
-fn groups(document: &Json) -> BTreeMap<(String, String), Vec<&Json>> {
+fn groups(document: &Json) -> BTreeMap<(&PyStr, &PyStr), Vec<&Json>> {
     let mut groups: BTreeMap<_, Vec<_>> = BTreeMap::new();
     for item in findings(document) {
-        groups
-            .entry((text(item.at("code")), text(item.at("slot"))))
-            .or_default()
-            .push(item);
+        let code = item.at("code").as_pystr().unwrap();
+        let slot = item.at("slot").as_pystr().unwrap();
+        groups.entry((code, slot)).or_default().push(item);
     }
     groups
 }
@@ -273,14 +272,21 @@ fn finding_changes(previous: &Json, current: &Json, unmatched: &BTreeSet<String>
     let thresholds_changed = thresholds_differ(previous, current);
     let coverage = current.get("controls_not_run");
     let not_run: BTreeSet<_> = match coverage {
-        Some(Json::Array(items)) => items.iter().map(|c| text(c.at("slot"))).collect(),
+        Some(Json::Array(items)) => items
+            .iter()
+            .map(|control| control.at("slot").as_pystr().unwrap())
+            .collect(),
         _ => BTreeSet::new(),
     };
-    let keys: BTreeSet<_> = before.keys().chain(after.keys()).collect();
+    let unmatched: BTreeSet<_> = unmatched
+        .iter()
+        .map(|slot| PyStr::from(slot.as_str()))
+        .collect();
+    let keys: BTreeSet<_> = before.keys().chain(after.keys()).copied().collect();
     keys.into_iter()
         .map(|key @ (code, slot)| {
-            let old = before.get(key).map(Vec::as_slice);
-            let new = after.get(key).map(Vec::as_slice);
+            let old = before.get(&key).map(Vec::as_slice);
+            let new = after.get(&key).map(Vec::as_slice);
             let change = match (old, new) {
                 (None, _) => "NEW",
                 (_, None)
@@ -296,8 +302,8 @@ fn finding_changes(previous: &Json, current: &Json, unmatched: &BTreeSet<String>
                 _ => "CHANGED",
             };
             Json::object([
-                ("code", Json::str(code)),
-                ("slot", Json::str(slot)),
+                ("code", Json::Str(code.clone())),
+                ("slot", Json::Str(slot.clone())),
                 ("change", Json::str(change)),
                 ("previous", rendered_findings(old)),
                 ("current", rendered_findings(new)),
@@ -459,6 +465,50 @@ mod tests {
         assert_eq!(coverage(&before), coverage(&reordered));
         assert_ne!(coverage(&before), coverage(&one_removed));
         assert_ne!(coverage(&pack(Vec::new())), coverage(&Json::Null));
+    }
+
+    #[test]
+    fn finding_groups_preserve_unicode_order_and_skipped_scope() {
+        let finding = |slot| {
+            Json::object([
+                ("code", Json::str("RULE")),
+                ("slot", Json::str(slot)),
+                ("status", Json::str("NOT_READY")),
+                ("repeat", Json::str("false")),
+                ("reason", Json::str("Unmatched balance")),
+                ("reviewer_action", Json::str("Review source")),
+            ])
+        };
+        let pack = |items, skipped| {
+            Json::object([
+                ("findings", Json::Array(items)),
+                ("controls_not_run", Json::Array(skipped)),
+                (
+                    "thresholds",
+                    Json::object([("tieout_tolerance", Json::str("0.01"))]),
+                ),
+            ])
+        };
+        let previous = pack(vec![finding("🔎"), finding("é"), finding("Z")], Vec::new());
+        let current = pack(
+            vec![finding("Z"), finding("𐍈")],
+            vec![Json::object([("slot", Json::str("é"))])],
+        );
+
+        let changes = finding_changes(&previous, &current, &BTreeSet::from(["🔎".to_owned()]));
+        let summary: Vec<_> = changes
+            .iter()
+            .map(|item| (text(item.at("slot")), text(item.at("change"))))
+            .collect();
+        assert_eq!(
+            summary,
+            [
+                ("Z".to_owned(), "RECURRING".to_owned()),
+                ("é".to_owned(), "NOT_COMPARABLE".to_owned()),
+                ("𐍈".to_owned(), "NEW".to_owned()),
+                ("🔎".to_owned(), "NOT_COMPARABLE".to_owned()),
+            ]
+        );
     }
 
     #[test]
