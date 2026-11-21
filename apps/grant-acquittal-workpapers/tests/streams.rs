@@ -72,6 +72,21 @@ fn unbuffered_stdout_fails_at_the_write() {
     assert!(stderr.ends_with(&format!("{CLOSED_PIPE}\n")), "{stderr}");
 }
 
+#[cfg(unix)]
+#[test]
+fn non_utf8_unbuffered_value_enables_immediate_writes() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let result = child_profile::command(env!("CARGO_BIN_EXE_grant-workpaper"))
+        .arg("--help")
+        .env("PYTHONUNBUFFERED", OsStr::from_bytes(&[0xff]))
+        .stdout(closed_pipe())
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(0));
+    assert!(result.stderr.is_empty());
+}
+
 #[test]
 fn an_unwritable_diagnostic_loses_the_original_code() {
     // Buffered stderr keeps the failed line pending until exit (120);
