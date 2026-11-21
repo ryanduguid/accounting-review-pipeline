@@ -68,6 +68,25 @@ fn certificates(custom: Option<&std::path::Path>) -> Result<Vec<reqwest::Certifi
     Ok(certificates)
 }
 
+fn client_with_roots(
+    builder: reqwest::ClientBuilder,
+    custom: Option<&std::path::Path>,
+) -> Result<reqwest::Client> {
+    builder
+        .tls_certs_only(certificates(custom)?)
+        .build()
+        .map_err(|e| {
+            let context = if custom.is_some() {
+                " using the configured TLS CA bundle"
+            } else {
+                ""
+            };
+            Failure::message(format!(
+                "error: could not initialise the Xero HTTP client{context} ({e})"
+            ))
+        })
+}
+
 impl NativeHttp {
     pub fn new(environment: &crate::config::Environment) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -85,7 +104,6 @@ impl NativeHttp {
                         .filter(|v| !v.is_empty())
                 })
                 .map(|path| crate::pypath::encode_os(&path));
-            let certificates = certificates(configured_roots.as_deref().map(std::path::Path::new))?;
             // Proxies come from reqwest's process-environment default, never the cwd .env.
             let builder = reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(30))
@@ -93,7 +111,6 @@ impl NativeHttp {
                 .retry(reqwest::retry::never())
                 .redirect(reqwest::redirect::Policy::limited(30))
                 .http1_only()
-                .tls_certs_only(certificates)
                 .user_agent("python-requests/2.34.2");
             #[cfg(test)]
             let builder = if environment.is_isolated() {
@@ -101,11 +118,10 @@ impl NativeHttp {
             } else {
                 builder
             };
-            builder.build().map_err(|e| {
-                Failure::message(format!(
-                    "error: could not initialise the Xero HTTP client ({e})"
-                ))
-            })?
+            client_with_roots(
+                builder,
+                configured_roots.as_deref().map(std::path::Path::new),
+            )?
         };
         Ok(Self { client, runtime })
     }
@@ -678,6 +694,31 @@ mod tests {
                 Some(Failure::message(diagnostic))
             );
         }
+    }
+
+    #[test]
+    fn xero_client_refuses_invalid_certificates_with_a_bundle_diagnostic() {
+        let scratch = Scratch::new();
+        let roots = scratch.0.join("synthetic-roots.pem");
+        std::fs::write(
+            &roots,
+            "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        assert_eq!(certificates(Some(&roots)).unwrap().len(), 1);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let _entered = runtime.enter();
+        let error =
+            client_with_roots(reqwest::Client::builder().no_proxy(), Some(&roots)).unwrap_err();
+        assert_eq!(
+            error,
+            Failure::message(
+                "error: could not initialise the Xero HTTP client using the configured TLS CA bundle (builder error)"
+            )
+        );
     }
 
     #[test]
