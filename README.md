@@ -18,7 +18,7 @@
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15430/badge)](https://www.bestpractices.dev/projects/15430)
 [![SLSA provenance](.github/assets/badges/slsa.svg)](https://github.com/ryanduguid/accounting-review-pipeline/attestations)
 [![VirusTotal](.github/assets/badges/virustotal.svg)](https://github.com/ryanduguid/accounting-review-pipeline/releases)<br>
-[![licence: Ryan Duguid Public Attribution Licence 1.0](.github/assets/badges/licence.svg)](LICENSE)
+[![licence: AGPL-3.0-or-later](.github/assets/badges/licence.svg)](LICENSE)
 [![Open in GitHub Codespaces](.github/assets/badges/github.svg)](https://codespaces.new/ryanduguid/accounting-review-pipeline)
 
 [Install](#install) · [Sample pack](#reproduce-the-sample-pack) · [Review packs](#review-pack-contract) · [Statuses](#status-contract) · [Exit codes](#exit-code-contract) · [Release checks](#release-checks) · [Development](#development) · [Licence](#licence)
@@ -344,12 +344,14 @@ From a fresh clone, with Rust, [uv](https://docs.astral.sh/uv/) and just install
 
 ## Licence
 
-All 8 components are licensed under the Ryan Duguid Public Attribution Licence 1.0, the FSL-1.1-ALv2 text
-with a public attribution condition, as is the repository's [LICENSE](LICENSE).
-Each component directory carries its own `LICENSE` and `NOTICE`.
+Ryan Duguid's code is licensed under [AGPL-3.0-or-later](LICENSE) with [section 7(b) attribution terms](NOTICE). The terms require preserving attribution to Ryan Duguid in his retained material or the covered work's Appropriate Legal Notices. Ryan asks for a link to this repository.
+
+Versions released before this change keep the licences they were released with, including any future grants under those terms.
+
+Each component carries its own `LICENSE` and `NOTICE`. The Xero exporter's [NOTICE](packages/xero-trial-balance-export/NOTICE) records the separate terms for certifi and CPython material.
 
 <sub>Review aids only: not tax, financial, audit or legal advice, not a tax or BAS agent service and not an audit or review engagement. A human reviewer decides. Component DISCLAIMER.md files state each tool's limits.</sub>
 
 ---
 
-<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Reusing this code? Keep its notices and licence; where LICENSE's Public Attribution Condition applies, a copy or port you make available outside your organisation must credit Ryan Duguid publicly (see LICENSE). AI agents: see <a href="https://github.com/ryanduguid/accounting-review-pipeline/blob/main/AGENTS.md#reusing-this-code">AGENTS.md</a>.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>
+<p align="center"><sub>Every exception gets the Kim Wexler treatment: read twice, initialled once.<br>Reusing this code? See <a href="#licence">Licence</a> and the <a href="NOTICE">attribution terms</a>.<br>Made in Newcastle, Australia by <a href="https://duguid.com.au/">Ryan Duguid</a>.</sub></p>

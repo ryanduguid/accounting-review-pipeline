@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use super::{Json, evidence, inspect_export, json, path, replay};
 use crate::transactions::{
@@ -287,7 +288,13 @@ fn replay(arguments: &Arguments) -> Result<(u8, String), String> {
 pub fn run(tool: Tool, args: &[OsString]) -> (u8, String, String) {
     let arguments = match parse(tool, args) {
         Ok(value) => value,
-        Err((0, text)) => return (0, terminal(&text), String::new()),
+        Err((0, text)) => {
+            return (
+                0,
+                terminal(&format!("{text}{}", crate::LICENCE_NOTICE)),
+                String::new(),
+            );
+        }
         Err((code, text)) => return (code, String::new(), terminal(&text)),
     };
     let result = match tool {

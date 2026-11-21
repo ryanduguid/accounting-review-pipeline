@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! What the Xero contract's fixtures leave open: quoted CSV, leading-zero
 //! account codes, Unicode text and numeric spellings. Each consumer keeps the

@@ -243,6 +243,11 @@ fn main_usage(prog: &str, t: &Theme) -> String {
     )
 }
 
+const LICENCE_NOTICE: &str = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/evatt/LICENSE\n";
+
 fn main_help(prog: &str, t: &Theme) -> String {
     let mut positional: Vec<Row> = vec![(2, coloured(&choices(), t.action, t), None)];
     positional.extend(
@@ -263,7 +268,7 @@ fn main_help(prog: &str, t: &Theme) -> String {
     let description = wrap(DESCRIPTION, width().max(11)).join("\n");
     let heading = |text: &str| format!("{}{text}:{}", t.heading, t.reset);
     format!(
-        "{}\n\n{description}\n\n{}\n{positional}\n{}\n{options}",
+        "{}\n\n{description}\n\n{}\n{positional}\n{}\n{options}{LICENCE_NOTICE}",
         main_usage(prog, t),
         heading("positional arguments"),
         heading("options")

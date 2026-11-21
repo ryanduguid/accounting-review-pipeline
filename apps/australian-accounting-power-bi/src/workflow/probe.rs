@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! Test-only comparison surface for the frozen Python workflow.
 
@@ -15,6 +16,24 @@ pub fn bundled_fixture_files() -> Result<std::collections::BTreeMap<String, Vec<
         include_bytes!("../../samples/shared-review-case.json").to_vec(),
     );
     Ok(sources)
+}
+
+/// Rebuild the frozen oracle ZIP after the authorised change to its review HTML.
+pub fn export_with_review_html(payload: &[u8], revise: impl FnOnce(&[u8]) -> Result<Vec<u8>>) -> Result<Vec<u8>> {
+    let mut members = archive::decode(payload)?;
+    let html = members.get_mut("review.html").ok_or("Missing review HTML.")?;
+    *html = revise(html)?;
+    let (size, sha256) = (html.len(), digest(html));
+    let manifest = members
+        .get_mut("export-manifest.json")
+        .ok_or("Missing export manifest.")?;
+    let mut document = json::parse(manifest, "Export manifest")?;
+    let record = document["members"]
+        .get_mut("review.html")
+        .ok_or("Missing review HTML record.")?;
+    *record = json!({"size": size, "sha256": sha256});
+    *manifest = json::bytes(&document);
+    archive::encode(&members)
 }
 
 pub fn evaluate(request: &Value) -> Value {

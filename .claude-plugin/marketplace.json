@@ -24,7 +24,7 @@
       "source": "./packages/monthly-close-control-plane",
       "strict": true,
       "homepage": "https://duguid.com.au/tools/monthly-close-controls/",
-      "license": "LicenseRef-Duguid-Public-Attribution-1.0"
+      "license": "AGPL-3.0-or-later"
     }
   ]
 }

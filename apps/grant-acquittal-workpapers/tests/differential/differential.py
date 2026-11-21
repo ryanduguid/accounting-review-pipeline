@@ -1,5 +1,6 @@
 # Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 """Differential test: grant_workpaper.py against the Rust grant-workpaper binary.
 
@@ -364,6 +365,14 @@ def main():
                 for stream in ("stdout", "stderr"):
                     a = normalise(getattr(python, stream), cwd_py, (script.name,))
                     b = normalise(getattr(rust, stream), cwd_rs, (binary.name,))
+                    if stream == "stdout":
+                        licence = (
+                            b'\n'
+                            b'Copyright 2026 Ryan Duguid. No warranty.\n'
+                            b'AGPL-3.0-or-later with additional terms (see NOTICE).\n'
+                            b'Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/grant-acquittal-workpapers/LICENSE\n'
+                        )
+                        b = b.removesuffix(licence).removesuffix(licence.replace(b"\n", b"\r\n"))
                     if a != b:
                         problems.append(f"{stream}\n  python: {a[:500]!r}\n  rust:   {b[:500]!r}")
                 files_py, files_rs = snapshot(cwd_py), snapshot(cwd_rs)

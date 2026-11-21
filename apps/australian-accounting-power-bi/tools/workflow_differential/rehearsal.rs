@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use super::{Result, Settings, Value};
 use sha2::{Digest, Sha256};
@@ -157,7 +158,7 @@ pub fn run(settings: &Settings, root: &Path) -> Result<[PathBuf; 2]> {
         commands.call(native, &args, 0)?;
         outputs.push(path);
     }
-    same_file(&outputs[0], &outputs[1])?;
+    same_review_html(&outputs[0], &outputs[1])?;
     semantic_refusals(&commands, root, &runs[1])?;
     unsealed_refusals(&commands, root, &runs[1])?;
     export_refusal(&commands, root, &runs[1])?;
@@ -255,12 +256,13 @@ fn artifacts(commands: &Commands<'_>, root: &Path, run: &Path, month: &str) -> R
             ] {
                 same_file(&paths[0].join(name), &paths[1].join(name))?;
             }
+        } else if command == "html" {
+            same_review_html(&paths[0], &paths[1])?;
         } else {
-            same_file(&paths[0], &paths[1])?;
-        }
-        if command == "export" {
+            same_export(&paths[0], &paths[1])?;
             let month = ["--month".as_ref(), "99999999999999999999".as_ref()];
             commands.pair("verify-export", &paths[0], &month, 0)?;
+            commands.pair("verify-export", &paths[1], &month, 0)?;
         }
     }
     Ok(())
@@ -279,6 +281,42 @@ fn digest(data: &[u8]) -> String {
 fn same_file(left: &Path, right: &Path) -> Result<()> {
     if bytes(left)? != bytes(right)? {
         return Err(format!("File bytes differ: {left:?} / {right:?}"));
+    }
+    Ok(())
+}
+
+// The frozen Python renderer predates the notice. Preserve the existing bytes and
+// use the output format's line ending for the notice and the new final newline.
+fn expected_review_html(python: &[u8], newline: &[u8]) -> Result<Vec<u8>> {
+    const END: &[u8] = b"</main></body></html>";
+    const NOTICE: &str = concat!(
+        "<footer><p>Copyright 2026 Ryan Duguid. No warranty. Licensed under ",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/LICENSE\">AGPL-3.0-or-later</a> with ",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/NOTICE\">additional attribution terms</a>.</p></footer>",
+    );
+    let body = python
+        .strip_suffix(END)
+        .ok_or("Unexpected end of frozen review HTML.")?;
+    Ok([body, NOTICE.as_bytes(), newline, END, newline].concat())
+}
+
+fn same_review_html(python: &Path, native: &Path) -> Result<()> {
+    let newline = if cfg!(windows) { b"\r\n".as_slice() } else { b"\n" };
+    if expected_review_html(&bytes(python)?, newline)? != bytes(native)? {
+        return Err(format!(
+            "Review HTML differs beyond the licence notice: {python:?} / {native:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn same_export(python: &Path, native: &Path) -> Result<()> {
+    let archive = bytes(python)?;
+    let expected = super::probe::export_with_review_html(&archive, |html| expected_review_html(html, b"\n"))?;
+    if expected != bytes(native)? {
+        return Err(format!(
+            "Export ZIP differs beyond the licence notice: {python:?} / {native:?}"
+        ));
     }
     Ok(())
 }
@@ -603,6 +641,32 @@ mod tests {
         refused_for(&native, "Rust wording").unwrap();
         let unexpected = refused_for(&native, "Receipt digest differs.").unwrap_err();
         assert!(unexpected.ends_with("got: Rust wording"), "{unexpected}");
+    }
+
+    #[test]
+    fn standalone_review_requires_native_newlines_and_unchanged_content() {
+        let workspace = Temporary::new().unwrap();
+        let python = workspace.0.join("python.html");
+        let native = workspace.0.join("rust.html");
+        let frozen = b"<main><p>Original report</p></main></body></html>";
+        fs::write(&python, frozen).unwrap();
+
+        let lf = expected_review_html(frozen, b"\n").unwrap();
+        let crlf = expected_review_html(frozen, b"\r\n").unwrap();
+        let (expected, wrong_newlines) = if cfg!(windows) { (crlf, lf) } else { (lf, crlf) };
+        fs::write(&native, &expected).unwrap();
+        same_review_html(&python, &native).unwrap();
+
+        let mut changed = expected;
+        changed[b"<main><p>".len()] = b'A';
+        for mismatch in [wrong_newlines, changed] {
+            fs::write(&native, mismatch).unwrap();
+            assert!(
+                same_review_html(&python, &native)
+                    .unwrap_err()
+                    .starts_with("Review HTML differs beyond the licence notice:")
+            );
+        }
     }
 
     #[test]
