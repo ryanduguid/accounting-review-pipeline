@@ -1133,6 +1133,49 @@ mod tests {
     }
 
     #[test]
+    fn intake_reports_member_cleanup_failure_and_removes_other_members() {
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let output = tmp.join("intake");
+        let replaced = output.join(TEXT_NAME);
+        let marker = replaced.join("unowned");
+        fs::write(&source, source_text()).unwrap();
+        let mut writes = 0;
+        let error = create_intake_with(
+            IntakeOptions {
+                source: &source,
+                text: &source,
+                output: &output,
+                entity: "Demo",
+                period: "2026-03-31",
+                origin: "manual",
+                version: "",
+            },
+            |file, content| {
+                writes += 1;
+                if writes == 3 {
+                    fs::remove_file(&replaced)?;
+                    fs::create_dir(&replaced)?;
+                    fs::write(&marker, b"preserve")?;
+                    return Err(io::Error::other("test write interrupted"));
+                }
+                file.write_all(content)
+            },
+        )
+        .unwrap_err();
+        assert!(!output.join("original.txt").exists());
+        assert!(!output.join(INTAKE_NAME).exists());
+        assert_eq!(fs::read(&marker).unwrap(), b"preserve");
+        let cleanup_error = fs::remove_file(&replaced).unwrap_err();
+        assert_eq!(
+            error,
+            format!(
+                "Document intake write failed (test write interrupted) and its incomplete output could not be removed ({cleanup_error})."
+            )
+        );
+    }
+
+    #[test]
     fn intake_preserves_a_file_created_by_another_writer() {
         let tmp = TempDir::new();
         let source = tmp.join("source.txt");
