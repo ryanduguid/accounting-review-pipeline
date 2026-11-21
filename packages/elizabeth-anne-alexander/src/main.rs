@@ -41,11 +41,11 @@ impl<W: std::io::Write> std::io::Write for PythonText<W> {
 fn python_unbuffered() -> bool {
     std::env::var_os("PYTHONUNBUFFERED").is_some_and(|value| {
         !value.is_empty()
-            && value.to_str().is_none_or(|text| {
-                text.trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r'])
-                    .parse::<i32>()
-                    != Ok(0)
-            })
+            && value
+                .to_string_lossy()
+                .trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r'])
+                .parse::<i32>()
+                != Ok(0)
     })
 }
 
