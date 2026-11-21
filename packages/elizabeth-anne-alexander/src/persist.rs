@@ -27,13 +27,13 @@ fn text_mode_json(payload: &Json) -> Vec<u8> {
 pub fn os_error(error: &io::Error, filename: Option<&Path>, other: Option<&Path>) -> String {
     let code = error.raw_os_error();
     let mut message = error.to_string();
-    if let Some(at) = message.rfind(" (os error ") {
-        message.truncate(at);
-    }
-    if cfg!(windows) {
-        message = message
-            .trim_end_matches(|c: char| c == '.' || c.is_whitespace())
-            .to_string();
+    if code.is_some() {
+        if let Some(at) = message.rfind(" (os error ") {
+            message.truncate(at);
+        }
+        if cfg!(windows) {
+            message.truncate(message.trim_end_matches(|c: char| c == '.' || c.is_whitespace()).len());
+        }
     }
     let tag = match code {
         Some(code) if cfg!(windows) => format!("[WinError {code}] "),
@@ -406,4 +406,20 @@ fn write_staged_by_path(
     drop(file);
     let _ = std::fs::remove_file(&temporary);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_io_diagnostics_keep_the_full_message() {
+        let message = "write stopped (os error detail). ";
+        let error = io::Error::other(message);
+        assert_eq!(os_error(&error, None, None), message);
+        assert_eq!(
+            os_error(&error, Some(Path::new("staged")), Some(Path::new("output"))),
+            "write stopped (os error detail). : 'staged' -> 'output'"
+        );
+    }
 }
