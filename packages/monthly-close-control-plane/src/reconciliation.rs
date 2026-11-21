@@ -402,6 +402,18 @@ pub struct ReconcileConfig {
     pub decisions: Option<PathBuf>,
     pub decisions_escaped: bool,
 }
+fn source_evidence(source: SourceSnapshot) -> Json {
+    Json::object([
+        (
+            "file",
+            Json::Str(PyStr::from_os_text(&pypath::decode_os(
+                source.path.file_name().unwrap_or_default(),
+            ))),
+        ),
+        ("sha256", Json::str(&source.sha256)),
+    ])
+}
+
 pub fn reconcile(config: &ReconcileConfig) -> Result<Json> {
     reconcile_with(config, &mut SourceSnapshot::capture)
 }
@@ -467,6 +479,7 @@ pub fn reconcile_with(
             .map(|s| opening(s, &identity, start))
             .transpose()?
             .unwrap_or_default();
+        let opening_evidence = opening_source.map(source_evidence);
         let remaining = MAX_RECONCILIATION_ITEMS.saturating_sub(old.len());
         let mut current = (old.len() <= MAX_RECONCILIATION_ITEMS).then(Vec::new);
         for row in loader::csv_rows(&transactions, &COLUMNS, "Transactions")? {
@@ -503,6 +516,7 @@ pub fn reconcile_with(
                 }
             }
         }
+        let transaction_evidence = source_evidence(transactions);
         let Some(current) = current else {
             return Err(
                 "A reconciliation supports at most 100,000 outstanding and current items.".into(),
@@ -527,6 +541,7 @@ pub fn reconcile_with(
             );
         }
         let allocations = decisions(decisions_source.as_ref(), &items, config.decisions_escaped)?;
+        let decision_evidence = decisions_source.map(source_evidence);
         let accepted: BTreeSet<_> = allocations
             .iter()
             .filter(|a| a.decision == "accept")
@@ -603,31 +618,15 @@ pub fn reconcile_with(
                 .map(|row| row.at("TransactionID").clone())
                 .collect()
         });
-        let mut sources = vec![(PyStr::from("transactions"), transactions)];
-        if let Some(source) = opening_source {
-            sources.push((PyStr::from("opening_items"), source));
-        }
-        if let Some(source) = decisions_source {
-            sources.push((PyStr::from("decisions"), source));
-        }
         let sources = Json::Object(
-            sources
-                .into_iter()
-                .map(|(key, source)| {
-                    (
-                        key,
-                        Json::object([
-                            (
-                                "file",
-                                Json::Str(PyStr::from_os_text(&pypath::decode_os(
-                                    source.path.file_name().unwrap_or_default(),
-                                ))),
-                            ),
-                            ("sha256", Json::str(&source.sha256)),
-                        ]),
-                    )
-                })
-                .collect(),
+            [
+                ("transactions", Some(transaction_evidence)),
+                ("opening_items", opening_evidence),
+                ("decisions", decision_evidence),
+            ]
+            .into_iter()
+            .filter_map(|(key, evidence)| evidence.map(|value| (PyStr::from(key), value)))
+            .collect(),
         );
         let mut pack = Json::object([
             ("schema", Json::str("clearing-reconciliation-v1")),
