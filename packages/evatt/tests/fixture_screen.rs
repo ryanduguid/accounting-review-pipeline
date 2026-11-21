@@ -71,7 +71,8 @@ fn identifiers(text: &str) -> patterns::Result<Findings> {
     let text = pytext::nfc(&text.replace("\r\n", "\n").replace(',', ";"));
     let lines = Lines::new(&text);
     let mut found = BTreeSet::new();
-    for span in patterns::structured_spans(&text)? {
+    let (structured, ambiguous) = patterns::structured_and_ambiguous(&text)?;
+    for span in structured {
         if !CHECKED.contains(&span.kind.as_str()) {
             continue;
         }
@@ -83,7 +84,7 @@ fn identifiers(text: &str) -> patterns::Result<Findings> {
         }
     }
     // structured_spans leaves a number that runs into a list marker for triage.
-    for a in patterns::ambiguous(&text)? {
+    for a in ambiguous {
         let digits = patterns::digits(&a.value);
         for kind in CHECKED {
             if patterns::valid(kind, &digits)? {
@@ -236,6 +237,10 @@ fn a_planted_checksum_valid_tfn_fails_and_an_invalid_one_passes() {
     assert_eq!(
         check("p.md", b"Medicare: 2123 4567\n0. 1/1\n", ""),
         ["p.md:1: checksum-valid medicare"]
+    );
+    assert_eq!(
+        check("p.md", b"TFN: 123 456 782\nMedicare: 2123 4567\n0. 1/1\n", ""),
+        ["p.md:1: checksum-valid tfn", "p.md:2: checksum-valid medicare"]
     );
     assert!(check("p.md", b"TFN: 123 456 789\n", "").is_empty());
     assert!(check("p.csv", b"id,tfn,code\n1,123456789,7\n", "").is_empty());

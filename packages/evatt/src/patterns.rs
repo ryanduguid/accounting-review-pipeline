@@ -148,6 +148,9 @@ pub fn ambiguous(text: &str) -> Result<Vec<Ambiguous>> {
         .iter()
         .map(|m| m.get(0).unwrap().start())
         .collect();
+    if markers.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut found = BTreeMap::new();
     let kinds = ["abn", "medicare", "tfn", "acn", "abn", "medicare", "tfn", "acn"];
     for (i, kind) in kinds.iter().enumerate() {
@@ -198,7 +201,13 @@ pub fn intersects(intervals: &[(usize, usize)], start: usize, end: usize) -> boo
 }
 
 pub fn structured_spans(text: &str) -> Result<Vec<Span>> {
-    let protected = merge(ambiguous(text)?.iter().map(|a| (a.start, a.end)).collect());
+    structured_and_ambiguous(text).map(|(spans, _)| spans)
+}
+
+/// Return the structured and wrapped identifiers from the same scan.
+pub fn structured_and_ambiguous(text: &str) -> Result<(Vec<Span>, Vec<Ambiguous>)> {
+    let ambiguous = ambiguous(text)?;
+    let protected = merge(ambiguous.iter().map(|a| (a.start, a.end)).collect());
     let mut found = Vec::new();
     for (priority, &(kind, name)) in STRUCTURED.iter().enumerate() {
         if kind == "email" {
@@ -242,7 +251,7 @@ pub fn structured_spans(text: &str) -> Result<Vec<Span>> {
         });
         consumed = end;
     }
-    Ok(taken)
+    Ok((taken, ambiguous))
 }
 
 pub fn statutory(value: &str) -> Result<bool> {
