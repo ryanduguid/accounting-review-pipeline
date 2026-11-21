@@ -331,9 +331,11 @@ pub fn evaluate(request: &str) -> Result<String> {
 pub static OMIT_PRODUCER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 pub fn main() -> i32 {
     OMIT_PRODUCER.store(true, std::sync::atomic::Ordering::Relaxed);
-    let stdin = io::stdin();
-    let mut stdout = io::stdout().lock();
-    for line in stdin.lock().lines() {
+    serve(io::stdin().lock(), io::stdout().lock())
+}
+
+fn serve(input: impl BufRead, mut output: impl Write) -> i32 {
+    for line in input.lines() {
         let result = line
             .map_err(|e| e.to_string())
             .and_then(|line| evaluate(&line));
@@ -344,8 +346,8 @@ pub fn main() -> i32 {
                 return 1;
             }
         };
-        if writeln!(stdout, "{result}")
-            .and_then(|()| stdout.flush())
+        if writeln!(output, "{result}")
+            .and_then(|()| output.flush())
             .is_err()
         {
             return 1;
@@ -413,6 +415,40 @@ pub fn render_pack(document: &Json) -> Result<[Vec<u8>; 3]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probe_stops_processing_requests_when_a_reply_cannot_be_flushed() {
+        #[derive(Default)]
+        struct ClosedOutput(Vec<u8>);
+
+        impl Write for ClosedOutput {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.0.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::ErrorKind::BrokenPipe.into())
+            }
+        }
+
+        let mut input = &b"{\"op\":\"unknown\"}\n{\"op\":\"another\"}\n"[..];
+        let mut output = ClosedOutput::default();
+        assert_eq!(serve(&mut input, &mut output), 1);
+        assert_eq!(output.0, b"{\"error\":\"unsupported probe operation\"}\n");
+        assert_eq!(input, b"{\"op\":\"another\"}\n");
+    }
+
+    #[test]
+    fn missing_example_directory_preserves_the_original_diagnostic() {
+        let scratch = crate::test_support::TempDir::new();
+        let missing = scratch.join("missing-pack");
+        assert_eq!(
+            example_document("bas", &missing, "0.01").unwrap_err(),
+            format!("pack directory does not exist: {}.", pypath::text(&missing))
+        );
+        assert!(!missing.exists());
+    }
 
     #[test]
     fn rendering_refuses_a_finding_that_cannot_be_written_as_utf8() {

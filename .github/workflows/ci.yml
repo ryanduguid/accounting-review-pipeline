@@ -90,7 +90,8 @@ jobs:
     name: ${{ matrix.package_dir }} / rust (${{ matrix.os }})
     permissions:
       contents: read
-    timeout-minutes: 30
+    # Allow for slower Windows Monthly Close runners after coverage tests finish.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && matrix.package_dir == 'packages/monthly-close-control-plane' && 45 || 30 }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

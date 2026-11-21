@@ -373,15 +373,18 @@ fn supported_windows_path_spellings_bind_the_same_real_trial_balance() {
 }
 
 #[test]
-fn separate_negative_thresholds_reach_the_decimal_validator() {
+fn separate_threshold_values_preserve_option_and_decimal_diagnostics() {
     let invalid_negative = "must be a finite non-negative decimal";
     let cases = [
         ("-0.5", invalid_negative),
         ("-1", invalid_negative),
         ("-.5", invalid_negative),
+        ("-١", invalid_negative),
         ("-1e2", invalid_negative),
         ("-0.5.0", "not a decimal: '-0.5.0'"),
         ("-.5.0", "not a decimal: '-.5.0'"),
+        ("-", "not a decimal: '-'"),
+        ("not-decimal", "not a decimal: 'not-decimal'"),
         ("--prior", "expected one argument"),
         ("-x1", "expected one argument"),
     ];

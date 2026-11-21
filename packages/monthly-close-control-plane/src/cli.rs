@@ -239,13 +239,17 @@ impl Arguments {
         .expect("parser checked decimal")
     }
 }
-fn negative_number(text: &str) -> bool {
+fn looks_like_option(text: &str) -> bool {
     let Some(text) = text.strip_prefix('-') else {
         return false;
     };
+    if text.is_empty() {
+        return false;
+    }
     // CPython 3.15 argparse matches the prefix `-\.?\d`, leaving validation to the option.
     let text = text.strip_prefix('.').unwrap_or(text);
-    text.chars()
+    !text
+        .chars()
         .next()
         .is_some_and(|ch| pytext::decimal_value(ch as u32).is_some())
 }
@@ -355,7 +359,7 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
             let value = args
                 .get(i)
                 .ok_or_else(|| format!("argument {flag}: expected one argument"))?;
-            if value.starts_with('-') && value != "-" && !negative_number(value) {
+            if looks_like_option(value) {
                 return Err(format!("argument {flag}: expected one argument"));
             }
             i += 1;
