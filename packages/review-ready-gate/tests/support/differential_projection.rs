@@ -6,12 +6,7 @@ fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Res
     assert!(version.status.success());
     let mut command = Command::new("git");
     command.arg("--version");
-    assert_eq!(
-        exchange(command, "")?,
-        String::from_utf8(version.stdout)?
-            .lines()
-            .collect::<Vec<_>>()
-    );
+    assert_eq!(exchange(command, "")?, String::from_utf8(version.stdout)?);
     let scratch = Scratch::new()?;
     let missing = scratch.0.join("missing");
     assert!(!missing.exists());

@@ -113,6 +113,32 @@ fn remove_quietly(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
+fn rollback(
+    replaced: Vec<(&Path, Option<PathBuf>)>,
+    replace: &mut impl FnMut(&Path, &Path) -> io::Result<()>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    for (destination, parked) in replaced.into_iter().rev() {
+        if let Some(parked) = parked {
+            if let Err(error) = replace(&parked, destination) {
+                failures.push(format!(
+                    "Could not restore {} from {} ({error})",
+                    destination.display(),
+                    parked.display()
+                ));
+            }
+        } else if let Err(error) = fs::remove_file(destination)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            failures.push(format!(
+                "Could not remove the newly installed {} ({error})",
+                destination.display()
+            ));
+        }
+    }
+    failures
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "stages and publishes the pack files together"
@@ -139,7 +165,7 @@ fn publish_with(
         }
         return Err(error);
     }
-    let mut replaced: Vec<(PathBuf, Option<PathBuf>)> = Vec::new();
+    let mut replaced = Vec::new();
     let swaps = (|| -> io::Result<()> {
         for (staged, destination) in staged.iter().zip(&destinations) {
             let parked = if destination.is_file() {
@@ -153,27 +179,31 @@ fn publish_with(
                 None
             };
             if let Err(error) = replace(staged, destination) {
-                if let Some(parked) = &parked {
-                    let _ = replace(parked, destination);
+                if let Some(parked) = parked {
+                    replaced.push((destination.as_path(), Some(parked)));
                 }
                 return Err(error);
             }
-            replaced.push((destination.clone(), parked));
+            replaced.push((destination.as_path(), parked));
         }
         Ok(())
     })();
     if let Err(error) = swaps {
-        for (destination, parked) in replaced.iter().rev() {
-            if let Some(parked) = parked {
-                let _ = replace(parked, destination);
-            } else {
-                remove_quietly(destination);
-            }
-        }
+        let failures = rollback(replaced, replace);
         for path in &staged {
             remove_quietly(path);
         }
-        return Err(error);
+        return if failures.is_empty() {
+            Err(error)
+        } else {
+            Err(io::Error::new(
+                error.kind(),
+                format!(
+                    "Review pack publication failed ({error}). Rollback failed. {}",
+                    failures.join(". ")
+                ),
+            ))
+        };
     }
     for (_, parked) in replaced {
         if let Some(path) = parked {
@@ -482,6 +512,55 @@ mod tests {
             assert_eq!(observed, indices);
         }
     }
+
+    #[test]
+    fn failed_restorations_report_recovery_paths_and_preserve_parked_members() {
+        let temp = TempDir::new();
+        let old = data("old");
+        let new = data("new");
+        let paths = publish_with(&temp.0, &old, &mut write, &mut replace).unwrap();
+        let failed_paths = [paths[2].as_path(), paths[1].as_path()];
+        let install_error = "injected installation failure";
+        let restore_error = "injected restoration failure";
+        let mut installation_failed = false;
+        let mut retained = Vec::new();
+        let error = publish_with(&temp.0, &new, &mut write, &mut |source, destination| {
+            if !installation_failed && destination == failed_paths[0] {
+                installation_failed = true;
+                return Err(io::Error::new(io::ErrorKind::Interrupted, install_error));
+            }
+            if installation_failed && failed_paths.contains(&destination) {
+                retained.push((source.to_owned(), destination.to_owned()));
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    restore_error,
+                ));
+            }
+            replace(source, destination)
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+        assert_eq!(retained.len(), 2);
+        let message = error.to_string();
+        assert!(message.contains(install_error), "{message}");
+        assert_eq!(message.matches(restore_error).count(), 2, "{message}");
+        for ((parked, destination), index) in retained.iter().zip([2, 1]) {
+            assert_eq!(destination, &paths[index]);
+            for path in [parked, destination] {
+                assert!(
+                    message.contains(path.to_string_lossy().as_ref()),
+                    "{message}"
+                );
+            }
+            assert_eq!(fs::read(parked).unwrap(), old[index]);
+        }
+        assert_eq!(fs::read(&paths[0]).unwrap(), old[0]);
+        assert_eq!(fs::read(&paths[1]).unwrap(), new[1]);
+        assert!(!paths[2].exists());
+        assert_eq!(fs::read(&paths[3]).unwrap(), old[3]);
+        assert_eq!(inventory(&temp.0).len(), 5);
+    }
     #[test]
     fn failed_new_pack_removes_only_members_it_installed() {
         let temp = TempDir::new();
@@ -497,6 +576,47 @@ mod tests {
         .unwrap_err();
         assert!(inventory(&temp.0).is_empty());
     }
+
+    #[test]
+    fn rollback_reports_a_new_member_it_cannot_remove() {
+        let temp = TempDir::new();
+        let names = crate::report::PACK_FILE_NAMES;
+        let paths = names.map(|name| temp.0.join(name));
+        let keep = paths[0].join("keep");
+        let error = publish_with(
+            &temp.0,
+            &data("new"),
+            &mut write,
+            &mut |source, destination| {
+                if destination == paths[1].as_path() {
+                    fs::remove_file(&paths[0])?;
+                    fs::create_dir(&paths[0])?;
+                    fs::write(&keep, b"keep")?;
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "injected installation failure",
+                    ));
+                }
+                replace(source, destination)
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+        let message = error.to_string();
+        assert!(
+            message.contains("injected installation failure"),
+            "{message}"
+        );
+        assert!(
+            message.contains("Could not remove the newly installed"),
+            "{message}"
+        );
+        assert!(message.contains(&*paths[0].to_string_lossy()), "{message}");
+        assert_eq!(fs::read(keep).unwrap(), b"keep");
+        assert_eq!(inventory(&temp.0), [names[0]]);
+    }
+
     #[test]
     fn destination_directory_is_preserved_and_prior_pack_rolled_back() {
         let temp = TempDir::new();

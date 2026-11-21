@@ -1244,7 +1244,7 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     clippy::too_many_lines,
     reason = "drives one review oracle exchange over stdio"
 )]
-fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
+fn exchange(mut command: Command, corpus: &str) -> Result<String> {
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1297,10 +1297,7 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
         .into());
     }
     written??;
-    Ok(String::from_utf8(bytes)?
-        .lines()
-        .map(str::to_owned)
-        .collect())
+    Ok(String::from_utf8(bytes)?)
 }
 fn field_mut<'a>(value: &'a mut Json, key: &str) -> Option<&'a mut Json> {
     let Json::Object(fields) = value else {
@@ -1542,38 +1539,43 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         .iter()
         .map(|r| r.at("name").as_pystr().unwrap().to_utf8().unwrap())
         .collect();
-    let corpus: String = corpus.0.iter().map(|r| probe::encode(r) + "\n").collect();
+    let mut input = String::new();
+    for request in corpus.0 {
+        input.push_str(&probe::encode(&request));
+        input.push('\n');
+    }
     let mut oracle = Command::new(python);
     oracle
         .args(["-I", "-B", "-c", ORACLE])
         .arg(&root)
         .env("PYTHONIOENCODING", "utf-8");
-    let expected = exchange(oracle, &corpus)?;
-    let actual = exchange(Command::new(executable), &corpus)?;
+    let expected = exchange(oracle, &input)?;
+    let actual = exchange(Command::new(executable), &input)?;
+    drop(input);
     let requests = names.len();
-    if expected.len() != requests || actual.len() != requests {
+    let expected_count = expected.lines().count();
+    let actual_count = actual.lines().count();
+    if expected_count != requests || actual_count != requests {
         return Err(format!(
-            "comparison expected {requests} responses per process, received {} from the oracle and {} from the native probe",
-            expected.len(),
-            actual.len()
+            "comparison expected {requests} responses per process, received {expected_count} from the oracle and {actual_count} from the native probe"
         )
         .into());
     }
     let mut mismatches = 0;
     let mut presentation = 0;
     let mut recorded = 0;
-    for ((name, actual), expected) in names.iter().zip(&actual).zip(expected) {
-        if !probe::equivalent(actual, &expected)? {
+    for ((name, actual), expected) in names.iter().zip(actual.lines()).zip(expected.lines()) {
+        if !probe::equivalent(actual, expected)? {
             if let Some(slot) = slot_the_baseline_lacks(name)
                 && let Some(native) = without_absent_control(actual, slot)?
-                && probe::equivalent(&native, &expected)?
+                && probe::equivalent(&native, expected)?
             {
                 recorded += 1;
                 continue;
             }
             if name.starts_with("cli-presentation-") {
                 let native = probe::decode(actual)?;
-                let python = probe::decode(&expected)?;
+                let python = probe::decode(expected)?;
                 if let Some(native) = native.get("ok").and_then(|ok| ok.get("code"))
                     && let Some(python) = python.get("ok").and_then(|ok| ok.get("code"))
                     && probe::encode(native) == probe::encode(python)
@@ -1593,8 +1595,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         }
     }
     println!(
-        "seed {seed}: {} value/file/CLI cases; {presentation} CLI presentation differences; {recorded} recorded bas and year_end coverage differences; {mismatches} unexplained differences",
-        actual.len()
+        "seed {seed}: {actual_count} value/file/CLI cases; {presentation} CLI presentation differences; {recorded} recorded bas and year_end coverage differences; {mismatches} unexplained differences"
     );
     if mismatches != 0 {
         return Err("differential failed".into());
