@@ -285,23 +285,24 @@ fn same_file(left: &Path, right: &Path) -> Result<()> {
     Ok(())
 }
 
-// The frozen Python renderer predates this legal notice. Require the exact addition
-// and final LF; compare every other byte, including the rebuilt canonical ZIP.
-fn expected_review_html(python: &[u8]) -> Result<Vec<u8>> {
+// The frozen Python renderer predates the notice. Preserve the existing bytes and
+// use the output format's line ending for the notice and the new final newline.
+fn expected_review_html(python: &[u8], newline: &[u8]) -> Result<Vec<u8>> {
     const END: &[u8] = b"</main></body></html>";
     const NOTICE: &str = concat!(
         "<footer><p>Copyright 2026 Ryan Duguid. No warranty. Licensed under ",
         "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/LICENSE\">AGPL-3.0-or-later</a> with ",
-        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/NOTICE\">additional attribution terms</a>.</p></footer>\n",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/NOTICE\">additional attribution terms</a>.</p></footer>",
     );
     let body = python
         .strip_suffix(END)
         .ok_or("Unexpected end of frozen review HTML.")?;
-    Ok([body, NOTICE.as_bytes(), END, b"\n"].concat())
+    Ok([body, NOTICE.as_bytes(), newline, END, newline].concat())
 }
 
 fn same_review_html(python: &Path, native: &Path) -> Result<()> {
-    if expected_review_html(&bytes(python)?)? != bytes(native)? {
+    let newline = if cfg!(windows) { b"\r\n".as_slice() } else { b"\n" };
+    if expected_review_html(&bytes(python)?, newline)? != bytes(native)? {
         return Err(format!(
             "Review HTML differs beyond the licence notice: {python:?} / {native:?}"
         ));
@@ -311,7 +312,7 @@ fn same_review_html(python: &Path, native: &Path) -> Result<()> {
 
 fn same_export(python: &Path, native: &Path) -> Result<()> {
     let archive = bytes(python)?;
-    let expected = super::probe::export_with_review_html(&archive, expected_review_html)?;
+    let expected = super::probe::export_with_review_html(&archive, |html| expected_review_html(html, b"\n"))?;
     if expected != bytes(native)? {
         return Err(format!(
             "Export ZIP differs beyond the licence notice: {python:?} / {native:?}"
@@ -640,6 +641,32 @@ mod tests {
         refused_for(&native, "Rust wording").unwrap();
         let unexpected = refused_for(&native, "Receipt digest differs.").unwrap_err();
         assert!(unexpected.ends_with("got: Rust wording"), "{unexpected}");
+    }
+
+    #[test]
+    fn standalone_review_requires_native_newlines_and_unchanged_content() {
+        let workspace = Temporary::new().unwrap();
+        let python = workspace.0.join("python.html");
+        let native = workspace.0.join("rust.html");
+        let frozen = b"<main><p>Original report</p></main></body></html>";
+        fs::write(&python, frozen).unwrap();
+
+        let lf = expected_review_html(frozen, b"\n").unwrap();
+        let crlf = expected_review_html(frozen, b"\r\n").unwrap();
+        let (expected, wrong_newlines) = if cfg!(windows) { (crlf, lf) } else { (lf, crlf) };
+        fs::write(&native, &expected).unwrap();
+        same_review_html(&python, &native).unwrap();
+
+        let mut changed = expected;
+        changed[b"<main><p>".len()] = b'A';
+        for mismatch in [wrong_newlines, changed] {
+            fs::write(&native, mismatch).unwrap();
+            assert!(
+                same_review_html(&python, &native)
+                    .unwrap_err()
+                    .starts_with("Review HTML differs beyond the licence notice:")
+            );
+        }
     }
 
     #[test]
