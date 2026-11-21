@@ -168,7 +168,12 @@ fn publish_with(
     let mut replaced = Vec::new();
     let swaps = (|| -> io::Result<()> {
         for (staged, destination) in staged.iter().zip(&destinations) {
-            let parked = if destination.is_file() {
+            let preserve_prior = match fs::symlink_metadata(destination) {
+                Ok(metadata) => !metadata.is_dir(),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error),
+            };
+            let parked = if preserve_prior {
                 let parked = partial(destination)?;
                 if let Err(e) = replace(destination, &parked) {
                     remove_quietly(&parked);
@@ -618,6 +623,39 @@ mod tests {
     }
 
     #[test]
+    fn failed_pack_install_restores_a_dangling_member_link() {
+        let temp = TempDir::new();
+        let names = crate::report::PACK_FILE_NAMES;
+        let [first, second, ..] = names.map(|name| temp.0.join(name));
+        let missing = Path::new("unavailable-evidence.csv");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(missing, &first).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(missing, &first).unwrap();
+
+        let error = publish_with(
+            &temp.0,
+            &data("new"),
+            &mut write,
+            &mut |source, destination| {
+                if destination == second.as_path() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "injected installation failure",
+                    ));
+                }
+                replace(source, destination)
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+        let restored = fs::read_link(&first).expect("the previous link must survive rollback");
+        assert_eq!(restored, missing);
+        assert_eq!(inventory(&temp.0), [names[0]]);
+    }
+
+    #[test]
     fn destination_directory_is_preserved_and_prior_pack_rolled_back() {
         let temp = TempDir::new();
         let paths = publish_with(&temp.0, &data("old"), &mut write, &mut replace).unwrap();
@@ -760,6 +798,44 @@ mod tests {
         );
         assert_eq!(result.unwrap_err(), "injected write failure");
         assert!(!output.exists());
+    }
+
+    #[test]
+    fn new_directory_cleanup_reports_member_removal_failure_and_continues() {
+        let temp = TempDir::new();
+        let output = temp.0.join("pack");
+        let replaced = output.join("second");
+        let marker = replaced.join("unowned");
+        let result = write_new_with(
+            &output,
+            || {
+                Ok(vec![
+                    ("first".into(), b"first".to_vec()),
+                    ("second".into(), b"second".to_vec()),
+                    ("third".into(), b"third".to_vec()),
+                ])
+            },
+            &mut |file, bytes| {
+                file.write_all(bytes)?;
+                if bytes == b"third" {
+                    fs::remove_file(&replaced)?;
+                    fs::create_dir(&replaced)?;
+                    fs::write(&marker, b"preserve")?;
+                    return Err(io::Error::other("injected write failure"));
+                }
+                Ok(())
+            },
+        );
+        assert!(!output.join("first").exists());
+        assert!(!output.join("third").exists());
+        assert_eq!(fs::read(&marker).unwrap(), b"preserve");
+        let cleanup = fs::remove_file(&replaced).unwrap_err();
+        assert_eq!(
+            result.unwrap_err(),
+            format!(
+                "Output write failed (injected write failure) and its incomplete output could not be removed ({cleanup})."
+            )
+        );
     }
 
     #[cfg(unix)]

@@ -3,6 +3,7 @@
 
 use crate::Result;
 use std::collections::BTreeSet;
+use std::sync::LazyLock;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Slot {
@@ -83,13 +84,17 @@ const YEAR: &[Slot] = &[
     PRIOR,
 ];
 
-/// The names `--require-control` accepts: every slot of every profile.
-pub fn control_names() -> BTreeSet<&'static str> {
+pub(crate) static CONTROL_NAMES: LazyLock<BTreeSet<&'static str>> = LazyLock::new(|| {
     [BAS, MONTH, YEAR]
         .into_iter()
         .flatten()
         .map(|slot| slot.name)
         .collect()
+});
+
+/// The names `--require-control` accepts: every slot of every profile.
+pub fn control_names() -> BTreeSet<&'static str> {
+    CONTROL_NAMES.clone()
 }
 
 pub fn slots_for(profile: &str) -> Result<&'static [Slot]> {
@@ -101,5 +106,32 @@ pub fn slots_for(profile: &str) -> Result<&'static [Slot]> {
             "unknown engagement profile {}; expected one of: bas, month_end, year_end.",
             crate::pytext::repr(profile)
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::control_names;
+
+    #[test]
+    fn caller_can_edit_its_control_names_without_changing_the_registry() {
+        let mut names = control_names();
+        assert!(names.remove("trial_balance"));
+        assert!(names.insert("not_a_control"));
+        assert_eq!(
+            control_names().into_iter().collect::<Vec<_>>(),
+            [
+                "activity_statement",
+                "bank_rec",
+                "fs_mapping",
+                "gst_control_gl",
+                "open_items",
+                "prior_findings",
+                "prior_trial_balance",
+                "self_review",
+                "tie_out_matrix",
+                "trial_balance",
+            ]
+        );
     }
 }

@@ -142,12 +142,18 @@ pub fn review_pack(
 /// The named controls, sorted and without repeats, or a refusal: a mistyped
 /// name would otherwise require nothing and pass quietly.
 fn required_control_names(names: &[String]) -> Result<Vec<String>> {
-    let known = profiles::control_names();
-    if let Some(name) = names.iter().find(|name| !known.contains(name.as_str())) {
+    if let Some(name) = names
+        .iter()
+        .find(|name| !profiles::CONTROL_NAMES.contains(name.as_str()))
+    {
         return Err(format!(
             "--require-control {} is not a control. Name one of: {}.",
             pytext::repr(name),
-            known.into_iter().collect::<Vec<_>>().join(", ")
+            profiles::CONTROL_NAMES
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     Ok(names

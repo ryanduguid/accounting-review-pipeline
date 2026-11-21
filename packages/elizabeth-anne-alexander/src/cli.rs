@@ -91,14 +91,19 @@ struct Part {
 fn usage(prog: &str, opt_parts: &[Part], pos_parts: &[Part], t: &Theme) -> String {
     let prefix = "usage: ";
     let text_width = width();
-    let plain: Vec<&str> = opt_parts.iter().chain(pos_parts).map(|p| p.plain.as_str()).collect();
-    let rest = if prefix.len() + pytext::py_len(&format!("{prog} {}", plain.join(" "))) <= text_width {
-        let coloured: Vec<&str> = opt_parts.iter().chain(pos_parts).map(|p| p.coloured.as_str()).collect();
-        format!(" {}", coloured.join(" "))
+    let parts = opt_parts.iter().chain(pos_parts);
+    let usage_width =
+        prefix.len() + pytext::py_len(prog) + parts.clone().map(|part| 1 + pytext::py_len(&part.plain)).sum::<usize>();
+    let mut output = format!("{}{prefix}{}{}{prog}{}", t.usage, t.reset, t.prog, t.reset);
+    if usage_width <= text_width {
+        for part in parts {
+            output.push(' ');
+            output.push_str(&part.coloured);
+        }
     } else {
-        wrapped_usage(prog, opt_parts, pos_parts, text_width)
-    };
-    format!("{}{prefix}{}{}{prog}{}{rest}", t.usage, t.reset, t.prog, t.reset)
+        output.push_str(&wrapped_usage(prog, opt_parts, pos_parts, text_width));
+    }
+    output
 }
 
 /// The wrapped usage after the program name, as `_format_usage` lays it out.
@@ -113,15 +118,9 @@ fn wrapped_usage(prog: &str, opt_parts: &[Part], pos_parts: &[Part], text_width:
             plain: prog.to_string(),
             coloured: prog.to_string(),
         }];
-        let lines = if !opt_parts.is_empty() {
-            head.extend(opt_parts.iter().cloned());
-            let mut lines = get_lines(&head, &indent, true);
-            lines.extend(get_lines(pos_parts, &indent, false));
-            lines
-        } else {
-            head.extend(pos_parts.iter().cloned());
-            get_lines(&head, &indent, true)
-        };
+        head.extend(opt_parts.iter().cloned());
+        let mut lines = get_lines(&head, &indent, true);
+        lines.extend(get_lines(pos_parts, &indent, false));
         return lines.join("\n")[prog.len()..].to_string();
     }
     let indent = " ".repeat(prefix_len);
