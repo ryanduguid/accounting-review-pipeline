@@ -493,10 +493,14 @@ pub fn decimal_string(value: &Decimal) -> Result<String> {
 
 /// A change ratio as a percentage quantized to 4 decimal places.
 pub fn percent_string(ratio: &Decimal) -> Result<String> {
-    match ratio
-        .mul(&Decimal::parse("100").unwrap())
-        .quantize(-4, Rounding::HalfUp)
-    {
+    let scaled;
+    let ratio = if ratio.is_finite() {
+        scaled = ratio.mul(&Decimal::parse("100").unwrap());
+        &scaled
+    } else {
+        ratio
+    };
+    match ratio.quantize(-4, Rounding::HalfUp) {
         Ok(value) => decimal_string(&value),
         Err(_) => refuse("Percentage change is outside the supported magnitude range."),
     }

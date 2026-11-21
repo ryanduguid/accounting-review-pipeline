@@ -1511,6 +1511,26 @@ fn decimal_format_and_comparison_preserve_scale_and_sign() {
 }
 
 #[test]
+fn decimal_quantize_and_percentage_preserve_nan_or_refuse_invalid_operands() {
+    use crate::decimal::{Rounding, Signal};
+
+    for (value, expected) in [
+        ("NaN", "NaN"),
+        ("-NaN9000123456789012345678901234567", "-NaN123456789012345678901234567"),
+    ] {
+        assert_eq!(
+            d(value).quantize(-4, Rounding::HalfUp).unwrap().to_sci_string(),
+            expected
+        );
+        assert_eq!(percent_string(&d(value)).unwrap(), expected);
+    }
+    for value in ["-sNaN3", "Infinity", "-Infinity"] {
+        assert_eq!(d(value).quantize(-4, Rounding::HalfUp), Err(Signal::InvalidOperation));
+        assert_refused(percent_string(&d(value)), "supported magnitude range");
+    }
+}
+
+#[test]
 fn test_an_absurd_percentage_is_refused_not_raised_out_of_the_projection() {
     assert_refused(percent_string(&d("1E+30")), "supported magnitude range");
     assert_eq!(percent_string(&d("0.183333")).unwrap(), "18.3333");

@@ -192,6 +192,23 @@ impl Decimal {
 
     /// `self.quantize(Decimal(f"1E{exp}"), rounding=rounding)`.
     pub fn quantize(&self, exp: i128, rounding: Rounding) -> Result<Decimal, Signal> {
+        match &self.kind {
+            Kind::Infinite | Kind::NaN { signaling: true, .. } => return Err(Signal::InvalidOperation),
+            Kind::NaN {
+                signaling: false,
+                payload,
+            } => {
+                let payload = payload[payload.len().saturating_sub(PREC as usize)..].trim_start_matches('0');
+                return Ok(special(
+                    self.negative,
+                    Kind::NaN {
+                        signaling: false,
+                        payload: payload.into(),
+                    },
+                ));
+            }
+            Kind::Finite => {}
+        }
         if !(ETINY..=EMAX).contains(&exp) {
             return Err(Signal::InvalidOperation);
         }
@@ -394,27 +411,33 @@ fn parse_ascii(text: &str) -> Option<Decimal> {
     Some(value)
 }
 
-/// Infinity and the NaNs: `Some(None)` for a NaN with a malformed payload,
-/// `None` when the text is not a special value at all.
-fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
-    let special = |kind| Decimal {
+fn special(negative: bool, kind: Kind) -> Decimal {
+    Decimal {
         negative,
         digits: "0".into(),
         exp: 0,
         kind,
-    };
+    }
+}
+
+/// Infinity and the NaNs: `Some(None)` for a NaN with a malformed payload,
+/// `None` when the text is not a special value at all.
+fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
     if lower == "inf" || lower == "infinity" {
-        return Some(Some(special(Kind::Infinite)));
+        return Some(Some(special(negative, Kind::Infinite)));
     }
     [("snan", true), ("nan", false)]
         .into_iter()
         .find_map(|(prefix, signaling)| {
             let payload = lower.strip_prefix(prefix)?;
             Some(payload.bytes().all(|b| b.is_ascii_digit()).then(|| {
-                special(Kind::NaN {
-                    signaling,
-                    payload: payload.trim_start_matches('0').to_owned(),
-                })
+                special(
+                    negative,
+                    Kind::NaN {
+                        signaling,
+                        payload: payload.trim_start_matches('0').to_owned(),
+                    },
+                )
             }))
         })
 }
