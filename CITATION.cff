@@ -10,7 +10,6 @@ abstract: "Runs deterministic month-end close checks on Xero trial-balance expor
 repository-code: "https://github.com/ryanduguid/accounting-review-pipeline"
 url: "https://duguid.com.au/tools/"
 license: AGPL-3.0-or-later
-license-url: "https://github.com/ryanduguid/accounting-review-pipeline/blob/main/LICENSE"
 keywords:
   - accounting
   - accounting-automation
