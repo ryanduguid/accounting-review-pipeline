@@ -753,6 +753,26 @@ mod tests {
     }
 
     #[test]
+    fn recheck_refuses_a_different_canonical_output_location() {
+        let temp = TempDir::new();
+        let destination = temp.join("destination");
+        let alias = temp.join("alias");
+        fs::create_dir(&destination).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&destination, &alias).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(&destination, &alias).unwrap();
+
+        let approved = require_output_outside_repository(&destination).unwrap();
+        recheck_output(&approved).unwrap();
+        assert_eq!(
+            recheck_output(&alias).unwrap_err(),
+            "The approved output path changed whilst preparing the pack."
+        );
+        assert!(inventory(&destination).is_empty());
+    }
+
+    #[test]
     fn new_directory_rechecks_the_repository_boundary_after_rendering() {
         let temp = TempDir::new();
         let output = temp.join("pack");
