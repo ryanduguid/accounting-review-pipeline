@@ -152,9 +152,12 @@ pub fn text_field(value: &str, label: &str, required: bool) -> Result<()> {
     text_cps(&cps(value), label, required)
 }
 
-pub fn text_json(value: &Json, label: &str) -> Result<()> {
+fn text_json<'a>(value: &'a Json, label: &str) -> Result<&'a PyStr> {
     match value {
-        Json::Str(text) => text_cps(&text.0, label, true),
+        Json::Str(text) => {
+            text_cps(&text.0, label, true)?;
+            Ok(text)
+        }
         _ => fail(format!("{label} must be text")),
     }
 }
@@ -244,12 +247,13 @@ pub fn review(source: &str, cwd: &Path) -> Result<Json> {
     } else {
         Vec::new()
     };
-    let has_agreements = matches!(agreements.at("agreements"), Json::Array(items) if !items.is_empty());
-    if ledger.is_empty() || !has_agreements {
-        return fail("Supply ledger evidence and at least one reviewed agreement");
-    }
+    let agreement_rows = match agreements.at("agreements") {
+        Json::Array(items) if !ledger.is_empty() && !items.is_empty() => items,
+        _ => return fail("Supply ledger evidence and at least one reviewed agreement"),
+    };
     calculate(&Sources {
         header: &agreements,
+        agreements: agreement_rows,
         ledger: &ledger,
         allocations: &allocations,
         receipts: &receipts,
@@ -324,13 +328,6 @@ fn finding(code: &str, reference: &str) -> Json {
     Json::object([("code", Json::str(code)), ("reference", Json::str(reference))])
 }
 
-fn text(value: &Json) -> String {
-    match value {
-        Json::Str(s) => s.lossy(),
-        _ => unreachable!("validated as text"),
-    }
-}
-
 fn record_json(record: &Record) -> Vec<(PyStr, Json)> {
     record
         .iter()
@@ -356,6 +353,7 @@ impl Totals {
 /// The ledger period and the files the workpaper is calculated from.
 struct Sources<'a> {
     header: &'a Json,
+    agreements: &'a [Json],
     ledger: &'a [Record],
     allocations: &'a [Record],
     receipts: &'a [Record],
@@ -374,10 +372,18 @@ struct LedgerSource<'a> {
     cash_allocated: Amount,
 }
 
+#[derive(Clone, Copy)]
+struct Agreement<'a> {
+    source: &'a Json,
+    start: Date,
+    end: Date,
+    budget: &'a [(PyStr, Json)],
+}
+
 /// What `calculate` accumulates. Each stage runs in the script's order, so the
 /// first refusal and the order of findings are unchanged.
 struct Workings<'a> {
-    grants: Vec<(String, &'a Json)>,
+    grants: &'a [(String, Agreement<'a>)],
     findings: Vec<Json>,
     sources: HashMap<&'a str, LedgerSource<'a>>,
     totals: Totals,
@@ -390,8 +396,9 @@ struct Workings<'a> {
 }
 
 fn calculate(input: &Sources) -> Result<Json> {
+    let grants = agreements(input.agreements)?;
     let mut work = Workings {
-        grants: agreements(input.header)?,
+        grants: &grants,
         findings: Vec::new(),
         sources: HashMap::with_capacity(input.ledger.len()),
         totals: Totals::default(),
@@ -415,11 +422,9 @@ fn calculate(input: &Sources) -> Result<Json> {
 }
 
 /// The agreements block: complete, unique and with a reviewed budget.
-fn agreements(header: &Json) -> Result<Vec<(String, &Json)>> {
-    let mut grants: Vec<(String, &Json)> = Vec::new();
-    let Json::Array(agreements) = header.at("agreements") else {
-        unreachable!("checked by review")
-    };
+fn agreements(agreements: &[Json]) -> Result<Vec<(String, Agreement<'_>)>> {
+    let mut grants = Vec::with_capacity(agreements.len());
+    let mut identifiers = HashSet::with_capacity(agreements.len());
     let fields = [
         "grant_id",
         "start",
@@ -433,13 +438,14 @@ fn agreements(header: &Json) -> Result<Vec<(String, &Json)>> {
         if !grant.has_exact_keys(&fields) {
             return fail("Agreement IDs must be unique with complete fields");
         }
-        text_json(grant.at("grant_id"), "Grant ID")?;
-        let identifier = text(grant.at("grant_id"));
-        if grants.iter().any(|(id, _)| *id == identifier) {
+        let identifier = text_json(grant.at("grant_id"), "Grant ID")?;
+        if !identifiers.insert(identifier) {
             return fail("Agreement IDs must be unique with complete fields");
         }
         text_json(grant.at("agreement_evidence"), "Agreement evidence")?;
-        if iso_json(grant.at("start"))? > iso_json(grant.at("end"))? {
+        let start = iso_json(grant.at("start"))?;
+        let end = iso_json(grant.at("end"))?;
+        if start > end {
             return fail("Agreement dates and reviewed summary evidence are required");
         }
         money_json(grant.at("opening_cash"))?;
@@ -452,16 +458,17 @@ fn agreements(header: &Json) -> Result<Vec<(String, &Json)>> {
             text_cps(&key.0, "Budget line", true)?;
             money_json(value)?;
         }
-        grants.push((identifier, grant));
+        grants.push((
+            identifier.lossy(),
+            Agreement {
+                source: grant,
+                start,
+                end,
+                budget,
+            },
+        ));
     }
     Ok(grants)
-}
-
-fn budget_of(agreement: &Json) -> &[(PyStr, Json)] {
-    let Json::Object(budget) = agreement.at("budget") else {
-        unreachable!("checked by agreements")
-    };
-    budget
 }
 
 /// `start <= date(text) <= end`.
@@ -475,7 +482,7 @@ fn blank(text: &str) -> bool {
 }
 
 impl<'a> Workings<'a> {
-    fn grant(&self, id: &str) -> Option<&'a Json> {
+    fn grant(&self, id: &str) -> Option<Agreement<'a>> {
         self.grants.iter().find(|(g, _)| g == id).map(|(_, g)| *g)
     }
 
@@ -516,7 +523,7 @@ impl<'a> Workings<'a> {
             return fail("Allocation references an unknown ledger row or grant");
         };
         let line = field(row, "budget_line");
-        if !budget_of(agreement).iter().any(|(k, _)| k.is(line)) || !["yes", "no"].contains(&field(row, "approved")) {
+        if !agreement.budget.iter().any(|(k, _)| k.is(line)) || !["yes", "no"].contains(&field(row, "approved")) {
             return fail("Use a reviewed budget line and approved yes/no");
         }
         let expense = money(field(row, "amount"))?;
@@ -534,9 +541,10 @@ impl<'a> Workings<'a> {
         let key = (field(row, "grant_id").to_string(), line.to_string());
         self.totals.add(key.clone(), expense);
         self.paid_totals.add(key.clone(), paid);
-        let in_period = iso_json(agreement.at("start"))? <= item_date && item_date <= iso_json(agreement.at("end"))?;
+        let in_period = agreement.start <= item_date && item_date <= agreement.end;
         self.review_allocation(row, item, in_period, key, expense);
-        self.details.push(allocation_detail(row, item, agreement, in_period));
+        self.details
+            .push(allocation_detail(row, item, agreement.source, in_period));
         Ok(())
     }
 
@@ -659,17 +667,22 @@ impl<'a> Workings<'a> {
     fn budgets(&mut self) -> Result<(Vec<Json>, Vec<Json>)> {
         let mut budget_rows: Vec<Json> = Vec::new();
         let mut movements: Vec<Json> = Vec::new();
-        for (identifier, agreement) in self.grants.clone() {
-            let (spent, paid) = self.budget_lines(&identifier, agreement, &mut budget_rows)?;
-            movements.push(self.movement(&identifier, agreement, spent, paid)?);
+        for (identifier, agreement) in self.grants {
+            let (spent, paid) = self.budget_lines(identifier, agreement.budget, &mut budget_rows)?;
+            movements.push(self.movement(identifier, agreement.source, spent, paid)?);
         }
         Ok((budget_rows, movements))
     }
 
     /// One grant's budget lines; returns its expenditure and cash allocated.
-    fn budget_lines(&mut self, identifier: &str, agreement: &Json, rows: &mut Vec<Json>) -> Result<(Amount, Amount)> {
+    fn budget_lines(
+        &mut self,
+        identifier: &str,
+        budget: &[(PyStr, Json)],
+        rows: &mut Vec<Json>,
+    ) -> Result<(Amount, Amount)> {
         let (mut spent, mut paid) = (Amount::ZERO, Amount::ZERO);
-        for (line, value) in budget_of(agreement) {
+        for (line, value) in budget {
             let line_text = line.lossy();
             let key = (identifier.to_string(), line_text.clone());
             spent = spent.add(self.totals.get(&key));
