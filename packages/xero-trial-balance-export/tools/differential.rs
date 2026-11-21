@@ -99,12 +99,21 @@ for line in sys.stdin:
 
 struct Process {
     child: Child,
+    transport: OracleTransport,
+}
+
+struct Request {
+    line: String,
+    reply: mpsc::Sender<io::Result<String>>,
+}
+
+struct OracleTransport {
     label: &'static str,
     sequence: usize,
-    requests: Option<mpsc::Sender<String>>,
-    responses: mpsc::Receiver<io::Result<String>>,
+    requests: Option<mpsc::Sender<Request>>,
     worker: Option<thread::JoinHandle<()>>,
 }
+
 impl Process {
     fn start(command: &mut Command, label: &'static str) -> io::Result<Self> {
         let mut child = command
@@ -112,34 +121,45 @@ impl Process {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()?;
-        let mut input = child.stdin.take().unwrap();
-        let mut output = BufReader::new(child.stdout.take().unwrap());
-        let (send_request, requests) = mpsc::channel::<String>();
-        let (send_response, responses) = mpsc::channel();
+        let input = child.stdin.take().unwrap();
+        let output = BufReader::new(child.stdout.take().unwrap());
+        let transport = OracleTransport::start(input, output, label);
+        Ok(Self { child, transport })
+    }
+
+    fn query(&mut self, value: &Json) -> io::Result<Json> {
+        self.transport.query(value, Duration::from_secs(5))
+    }
+}
+
+impl OracleTransport {
+    fn start(
+        mut input: impl Write + Send + 'static,
+        mut output: impl BufRead + Send + 'static,
+        label: &'static str,
+    ) -> Self {
+        let (send_request, requests) = mpsc::channel::<Request>();
         // Put both pipe operations under the caller's response deadline.
         let worker = thread::spawn(move || {
             for request in requests {
-                let result = exchange(&mut input, &mut output, &request);
+                let result = exchange(&mut input, &mut output, &request.line);
                 let failed = result.is_err();
-                if send_response.send(result).is_err() || failed {
+                // A response after the caller's deadline belongs only to this request.
+                let _ = request.reply.send(result);
+                if failed {
                     break;
                 }
             }
         });
-        Ok(Self {
-            child,
+        Self {
             label,
             sequence: 0,
             requests: Some(send_request),
-            responses,
             worker: Some(worker),
-        })
-    }
-    fn query(&mut self, value: &Json) -> io::Result<Json> {
-        self.query_within(value, Duration::from_secs(5))
+        }
     }
 
-    fn query_within(&mut self, value: &Json, deadline: Duration) -> io::Result<Json> {
+    fn query(&mut self, value: &Json, deadline: Duration) -> io::Result<Json> {
         self.sequence += 1;
         let context = |error: io::Error| {
             io::Error::new(
@@ -147,18 +167,21 @@ impl Process {
                 format!("{} request {}: {error}", self.label, self.sequence),
             )
         };
+        let (reply, response) = mpsc::channel();
         self.requests
             .as_ref()
             .unwrap()
-            .send(pyjson::canonical(value))
+            .send(Request {
+                line: pyjson::canonical(value),
+                reply,
+            })
             .map_err(|_| {
                 context(io::Error::new(
                     io::ErrorKind::BrokenPipe,
                     "request pipe closed",
                 ))
             })?;
-        let response = self
-            .responses
+        let response = response
             .recv_timeout(deadline)
             .map_err(|error| {
                 let error = match error {
@@ -201,7 +224,7 @@ fn exchange(
 
 impl Drop for Process {
     fn drop(&mut self) {
-        self.requests.take();
+        self.transport.requests.take();
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             match self.child.try_wait() {
@@ -214,7 +237,7 @@ impl Drop for Process {
                 }
             }
         }
-        if let Some(worker) = self.worker.take() {
+        if let Some(worker) = self.transport.worker.take() {
             let _ = worker.join();
         }
     }
@@ -782,7 +805,9 @@ mod tests {
         let mut process = Process::start(&mut command, "stalled oracle").unwrap();
         let ready = wait_for_fixture(&directory);
         let request = Json::str(&"x".repeat(1024 * 1024));
-        let result = process.query_within(&request, Duration::from_millis(100));
+        let result = process
+            .transport
+            .query(&request, Duration::from_millis(100));
         let release = fs::write(directory.join("release"), b"release");
         drop(process);
         fs::remove_dir_all(directory).unwrap();
@@ -793,6 +818,81 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "stalled oracle request 1: no response within 100ms"
+        );
+    }
+
+    #[test]
+    fn oracle_reports_invalid_json_output_eof_and_closed_input() {
+        let output = io::Cursor::new(b"true\nmalformed\n");
+        let mut transport = OracleTransport::start(io::sink(), output, "fixture oracle");
+        let probe = Json::Null;
+        let deadline = Duration::from_secs(5);
+        assert!(matches!(
+            transport.query(&probe, deadline),
+            Ok(Json::Bool(true))
+        ));
+
+        let error = transport.query(&probe, deadline).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            error.to_string(),
+            "fixture oracle request 2: invalid JSON response"
+        );
+
+        let error = transport.query(&probe, deadline).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
+        assert_eq!(
+            error.to_string(),
+            "fixture oracle request 3: oracle output ended"
+        );
+        transport.worker.take().unwrap().join().unwrap();
+
+        let error = transport.query(&probe, deadline).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(
+            error.to_string(),
+            "fixture oracle request 4: request pipe closed"
+        );
+    }
+
+    #[test]
+    fn oracle_worker_keeps_late_replies_separate() {
+        let (output, mut writer) = io::pipe().unwrap();
+        let mut transport =
+            OracleTransport::start(io::sink(), BufReader::new(output), "fixture oracle");
+        let error = transport.query(&Json::Null, Duration::ZERO).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+
+        writer.write_all(b"false\ntrue\n").unwrap();
+        assert!(matches!(
+            transport.query(&Json::Null, Duration::from_secs(5)),
+            Ok(Json::Bool(true))
+        ));
+        transport.requests.take();
+        transport.worker.take().unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn oracle_reports_a_lost_reply() {
+        let (send_request, requests) = mpsc::channel::<Request>();
+        let worker = thread::spawn(move || {
+            // The transport can accept a request and then close without replying.
+            drop(requests.recv().unwrap());
+        });
+        let mut transport = OracleTransport {
+            label: "fixture oracle",
+            sequence: 0,
+            requests: Some(send_request),
+            worker: Some(worker),
+        };
+        let error = transport
+            .query(&Json::Null, Duration::from_secs(5))
+            .unwrap_err();
+        transport.worker.take().unwrap().join().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(
+            error.to_string(),
+            "fixture oracle request 1: response pipe closed"
         );
     }
 
