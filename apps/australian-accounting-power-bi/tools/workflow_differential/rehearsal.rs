@@ -185,7 +185,14 @@ fn argument_statuses(commands: &Commands<'_>, run: &Path) -> Result<()> {
 }
 
 fn archive_refusals(commands: &Commands<'_>, root: &Path) -> Result<()> {
-    let original = bytes(&root.join("python-9.zip"))?;
+    let frozen = root.join("python-9.zip");
+    let mismatch =
+        same_export(&frozen, &frozen).expect_err("the native ZIP must include the review HTML licence notice");
+    assert!(
+        mismatch.starts_with("Export ZIP differs beyond the licence notice:"),
+        "{mismatch}"
+    );
+    let original = bytes(&frozen)?;
     for (index, offset) in [0, 8, 100, original.len() - 1].into_iter().enumerate() {
         let mut changed = original.clone();
         changed[offset] ^= 1;
