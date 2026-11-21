@@ -92,6 +92,7 @@ fn period_findings_keep_tenants_and_account_order_across_both_balances() {
         "2026-09-30",
         &[
             ("B", "A", "Bank", "1"),
+            ("D", "A", "Bank", "6"),
             ("A", "C", "Bank", "2"),
             ("A", "B", "Renamed", "10"),
         ],
@@ -127,9 +128,14 @@ fn period_findings_keep_tenants_and_account_order_across_both_balances() {
             ("A", "C", "period_comparison", true, false),
             ("B", "A", "period_comparison", true, false),
             ("C", "A", "period_comparison", false, true),
+            ("D", "A", "period_comparison", true, false),
         ]
     );
     assert_eq!(findings[1].difference, Some(Decimal::parse("7").unwrap()));
+    assert_eq!(
+        findings.last().unwrap().current_value,
+        Some(Decimal::parse("6").unwrap())
+    );
 }
 
 #[test]
