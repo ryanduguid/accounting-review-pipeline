@@ -4,7 +4,7 @@
 
 use super::{
     BOUNDARY, CLOSE_FILES, MAX_EXPORT_BYTES, MAX_EXPORT_MEMBER, READY_FILES, Result, archive, digest, files, html,
-    json, projection, run, schema,
+    json, run, schema,
 };
 use archive::Members;
 use serde_json::{Value, json};
@@ -201,12 +201,9 @@ fn capture_display(members: &mut Members, bin_dir: &Path) -> Result<()> {
         fs::create_dir_all(target.parent().unwrap()).map_err(|error| error.to_string())?;
         files::write_new(&target, data)?;
     }
-    members.insert(
-        "review.html".into(),
-        html::render(&temporary.0, bin_dir, None)?.into_bytes(),
-    );
-    let projected = projection::projection(&temporary.0)?;
-    if projected.keys().map(String::as_str).collect::<BTreeSet<_>>() != PROJECTIONS.into_iter().collect() {
+    let (html, projected) = html::render_projected(&temporary.0, bin_dir, None)?;
+    members.insert("review.html".into(), html.into_bytes());
+    if projected.len() != PROJECTIONS.len() || !PROJECTIONS.iter().all(|name| projected.contains_key(*name)) {
         return Err("Export projection inventory differs.".into());
     }
     members.extend(
