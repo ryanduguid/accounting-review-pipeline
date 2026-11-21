@@ -1459,6 +1459,29 @@ fn formatter_retains_non_finite_decimal_spelling() {
 }
 
 #[test]
+fn decimal_traits_order_infinities_and_leave_nans_unordered() {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+
+    for (left, right, order) in [
+        ("NaN", "NaN", None),
+        ("-sNaN3", "7", None),
+        ("7", "NaN42", None),
+        ("-Infinity", "-100", Some(Less)),
+        ("Infinity", "1E+999", Some(Greater)),
+        ("1E+999", "Infinity", Some(Less)),
+        ("-100", "-Infinity", Some(Greater)),
+        ("Infinity", "Infinity", Some(Equal)),
+        ("-Infinity", "Infinity", Some(Less)),
+        ("0", "-0", Some(Equal)),
+    ] {
+        let (lhs, rhs) = (d(left), d(right));
+        assert_eq!(lhs.partial_cmp(&rhs), order, "{left} vs {right}");
+        assert_eq!(rhs.partial_cmp(&lhs), order.map(std::cmp::Ordering::reverse));
+        assert_eq!(lhs == rhs, order == Some(Equal));
+    }
+}
+
+#[test]
 fn decimal_format_and_comparison_preserve_scale_and_sign() {
     use std::cmp::Ordering::{Equal, Greater, Less};
 

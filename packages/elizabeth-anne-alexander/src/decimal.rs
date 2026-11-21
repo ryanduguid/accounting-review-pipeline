@@ -278,6 +278,7 @@ impl Decimal {
         Some(output)
     }
 
+    /// Compare finite values. Use `partial_cmp` for values that may be nonfinite.
     pub fn cmp_value(&self, other: &Decimal) -> Ordering {
         debug_assert!(self.is_finite() && other.is_finite());
         let sign = |d: &Decimal| if d.negative { Ordering::Less } else { Ordering::Greater };
@@ -315,13 +316,27 @@ impl Decimal {
 
 impl PartialEq for Decimal {
     fn eq(&self, other: &Decimal) -> bool {
-        self.cmp_value(other) == Ordering::Equal
+        self.partial_cmp(other) == Some(Ordering::Equal)
     }
 }
 
 impl PartialOrd for Decimal {
     fn partial_cmp(&self, other: &Decimal) -> Option<Ordering> {
-        Some(self.cmp_value(other))
+        match (&self.kind, &other.kind) {
+            (Kind::NaN { .. }, _) | (_, Kind::NaN { .. }) => None,
+            (Kind::Finite, Kind::Finite) => Some(self.cmp_value(other)),
+            (Kind::Infinite, Kind::Infinite) => Some(other.negative.cmp(&self.negative)),
+            (Kind::Infinite, Kind::Finite) => Some(if self.negative {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }),
+            (Kind::Finite, Kind::Infinite) => Some(if other.negative {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            }),
+        }
     }
 }
 
