@@ -477,10 +477,10 @@ pub fn load_request_snapshot(env: &Env, location: &Location, policy: &Json) -> R
 /// At least 2 decimal places, padded and never rounded.
 pub fn decimal_string(value: &Decimal) -> Result<String> {
     let value = if value.exponent() > -2 {
-        // Quantizing up to 2 places is exact for the bounded amounts that reach here.
+        // The padding is exact, but can exceed the decimal context's precision.
         value
             .quantize(-2, Rounding::HalfEven)
-            .expect("padding a bounded amount stays within precision")
+            .map_err(|_| Failure::Crash("[<class 'decimal.InvalidOperation'>]".into()))?
     } else {
         value.clone()
     };
