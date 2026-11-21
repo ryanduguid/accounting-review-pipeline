@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 #[path = "../../../tests/support/child_profile.rs"]
 mod child_profile;
@@ -1858,6 +1859,10 @@ fn command_help_usage_missing_files_and_replay_selection_use_the_right_streams()
     for tool in [VERIFIER, EVIDENCE, REPLAY] {
         let help = child_profile::command(tool).arg("--help").output().unwrap();
         assert_eq!(help.status.code(), Some(0));
+        assert!(
+            String::from_utf8_lossy(&help.stdout)
+                .contains("AGPL-3.0-or-later with additional terms (see NOTICE).")
+        );
         assert!(help.stderr.is_empty());
         assert!(help.stdout.starts_with(b"usage:"));
         let usage = child_profile::command(tool).output().unwrap();

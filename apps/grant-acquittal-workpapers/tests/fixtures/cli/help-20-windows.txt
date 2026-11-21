@@ -16,3 +16,7 @@ options:
     exit
   --input INPUT
   --output OUTPUT
+
+Copyright 2026 Ryan Duguid. No warranty.
+AGPL-3.0-or-later with additional terms (see NOTICE).
+Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/grant-acquittal-workpapers/LICENSE

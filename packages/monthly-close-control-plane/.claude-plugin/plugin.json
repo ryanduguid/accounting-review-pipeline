@@ -8,7 +8,7 @@
   },
   "homepage": "https://duguid.com.au/tools/monthly-close-controls/",
   "repository": "https://github.com/ryanduguid/accounting-review-pipeline",
-  "license": "LicenseRef-Duguid-Public-Attribution-1.0",
+  "license": "AGPL-3.0-or-later",
   "keywords": [
     "accounting",
     "month-end close",

@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 #[path = "../../../tests/support/child_profile.rs"]
 mod child_profile;
@@ -617,6 +618,10 @@ fn cli_distinguishes_help_usage_and_file_errors() {
             .output()
             .unwrap();
         assert_eq!(help.status.code(), Some(0), "{argument}");
+        assert!(
+            String::from_utf8_lossy(&help.stdout)
+                .contains("AGPL-3.0-or-later with additional terms (see NOTICE).")
+        );
         assert!(help.stderr.is_empty());
         assert!(String::from_utf8_lossy(&help.stdout).starts_with("usage:"));
     }

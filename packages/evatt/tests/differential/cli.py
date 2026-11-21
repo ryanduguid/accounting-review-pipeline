@@ -1,5 +1,6 @@
 # Copyright 2026 Ryan Duguid
-# SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 """End-to-end parity in fabricated git worktrees at identical paths.
 
@@ -328,6 +329,9 @@ def run(root, spec, implementation, args):
         program + [os.fsencode(v) for v in argv], cwd=root, env=env, capture_output=True, timeout=40
     )
     stdout = completed.stdout
+    if implementation == "rust":
+        suffix = b'\nCopyright 2026 Ryan Duguid. No warranty.\nAGPL-3.0-or-later with additional terms (see NOTICE).\nLicence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/evatt/LICENSE\n'
+        stdout = stdout.removesuffix(suffix).removesuffix(suffix.replace(b"\n", b"\r\n"))
     if argv in (["--version"], ["--v"]):
         stdout = stdout.replace(b"0.2.0", b"1.0.0")
     answer = (completed.returncode, stdout.hex(), completed.stderr.hex(), snapshot(root))

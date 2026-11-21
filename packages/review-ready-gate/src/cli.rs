@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use crate::{
     comparison, decimal::Decimal, documents, engine, publication, pypath, pytext, queue, report,
@@ -435,6 +436,11 @@ fn gate(args: &Arguments) -> i32 {
     }
     if pack.status == "READY" { 0 } else { 2 }
 }
+const LICENCE_NOTICE: &str = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/LICENSE\n";
+
 #[expect(
     clippy::too_many_lines,
     reason = "handles --version, help and dispatch"
@@ -466,7 +472,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
                     ),
                 );
             }
-            crate::out!("{}", help(""));
+            crate::out!("{}{LICENCE_NOTICE}", help(""));
             return 0;
         }
         unknown.push(arg.as_str());
@@ -666,6 +672,7 @@ mod tests {
     #[test]
     fn help_and_usage_errors_leave_no_outputs() {
         let (code, out, err) = crate::stdio::capture(|| main(vec!["--help".into()]));
+        assert!(out.contains("AGPL-3.0-or-later with additional terms (see NOTICE)."));
         assert_eq!(code, 0);
         assert!(out.contains("manager review"));
         assert!(err.is_empty());

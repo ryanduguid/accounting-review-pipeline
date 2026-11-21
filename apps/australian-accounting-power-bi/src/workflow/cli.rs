@@ -231,13 +231,18 @@ fn fixture_output(run: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
+const LICENCE_NOTICE: &str = "\n\
+    Copyright 2026 Ryan Duguid. No warranty.\n\
+    AGPL-3.0-or-later with additional terms (see NOTICE).\n\
+    Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/LICENSE\n";
+
 pub fn entry(args: Vec<OsString>, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8 {
     let result = if args
         .iter()
         .take_while(|arg| *arg != "--")
         .any(|arg| arg == "--help" || arg == "-h")
     {
-        Ok(format!("{USAGE}\n\n{HELP}"))
+        Ok(format!("{USAGE}\n\n{HELP}{LICENCE_NOTICE}"))
     } else if args == [OsString::from("--version")] {
         Ok(format!("review-workflow {}\n", env!("CARGO_PKG_VERSION")))
     } else {
@@ -327,6 +332,10 @@ mod tests {
 
     #[test]
     fn failed_output_is_observable() {
+        let mut help = Vec::new();
+        assert_eq!(entry(vec!["--help".into()], &mut help, &mut Vec::new()), 0);
+        assert!(String::from_utf8_lossy(&help).contains("AGPL-3.0-or-later with additional terms (see NOTICE)."));
+
         // An empty slice accepts no bytes.
         let mut closed: &mut [u8] = &mut [];
         assert_eq!(entry(vec!["--help".into()], &mut closed, &mut Vec::new()), 1);

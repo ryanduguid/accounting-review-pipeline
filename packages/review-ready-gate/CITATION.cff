@@ -8,4 +8,4 @@ authors:
     given-names: "Ryan"
 repository-code: "https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate"
 url: "https://duguid.com.au/tools/workpaper-review-gate/"
-license-url: "https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/review-ready-gate/LICENSE"
+license: AGPL-3.0-or-later

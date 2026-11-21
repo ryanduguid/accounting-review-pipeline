@@ -5,7 +5,7 @@
     "x": 20,
     "y": 52,
     "width": 1240,
-    "height": 52,
+    "height": 60,
     "z": 0,
     "tabOrder": 7
   },
@@ -19,7 +19,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Fabricated case: September 2024. Select a finding row, then View journal evidence. The optional Finding filter keeps an account choice after Back. Review and readiness statuses remain separate; verification does not approve accounting.",
+                    "value": "Fabricated September 2024 case. Select a finding, then View journal evidence. The Finding filter keeps your selection on return. Review and readiness are separate. Verification does not approve accounting. Copyright 2026 Ryan Duguid. No warranty. AGPL-3.0-or-later with additional terms (see NOTICE). See LICENSE in ryanduguid/accounting-review-pipeline.",
                     "textStyle": {
                       "fontFamily": "Segoe UI Semibold",
                       "fontSize": "11pt",
@@ -42,7 +42,7 @@
             "altText": {
               "expr": {
                 "Literal": {
-                  "Value": "'Fabricated case: September 2024. Select a finding row, then View journal evidence. The optional Finding filter keeps an account choice after Back. Review and readiness statuses remain separate; verification does not approve accounting. Fabricated data for review; validation is not approval.'"
+                  "Value": "'Fabricated September 2024 case. Select a finding, then View journal evidence. The Finding filter keeps your selection on return. Review and readiness are separate. Verification does not approve accounting. Copyright 2026 Ryan Duguid. No warranty. AGPL-3.0-or-later with additional terms (see NOTICE). See LICENSE in ryanduguid/accounting-review-pipeline.'"
                 }
               }
             }

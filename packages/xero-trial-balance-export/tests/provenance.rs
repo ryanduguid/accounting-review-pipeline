@@ -1,5 +1,6 @@
 // Copyright 2026 Ryan Duguid
-// SPDX-License-Identifier: LicenseRef-Duguid-Public-Attribution-1.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! Keep the documented read-only OAuth boundary tied to the inspected native source.
 use sha2::{Digest, Sha256};
@@ -32,7 +33,7 @@ fn oauth_source_and_claims_require_review_before_their_pins_change() {
         (
             "README.md",
             include_bytes!("../README.md").as_slice(),
-            "0E0EFE20A17D460C96C9D39792DD06DADDDB53A256346E0FA6B72D69CCE328E4",
+            "FE7291DFE5D7AD304D8C5CDB1DC18799A180C3A4D3272B16AABC29B8C5382D9E",
         ),
     ] {
         assert_eq!(
