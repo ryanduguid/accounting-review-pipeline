@@ -820,12 +820,12 @@ fn receipt(run_id: &str, run_seed: &Json, model: &Json, evidence: &Json) -> Json
     ])
 }
 
-fn leaf_strings<'a>(value: &'a Json, out: &mut Vec<&'a PyStr>) {
+fn contains_source_text(value: &Json, forbidden: &BTreeSet<&str>) -> bool {
     match value {
-        Json::Str(s) => out.push(s),
-        Json::Object(pairs) => pairs.iter().for_each(|(_, v)| leaf_strings(v, out)),
-        Json::Array(items) => items.iter().for_each(|v| leaf_strings(v, out)),
-        _ => {}
+        Json::Str(text) => text.to_utf8().is_some_and(|text| forbidden.contains(text.as_str())),
+        Json::Object(pairs) => pairs.iter().any(|(_, value)| contains_source_text(value, forbidden)),
+        Json::Array(items) => items.iter().any(|value| contains_source_text(value, forbidden)),
+        _ => false,
     }
 }
 
@@ -848,9 +848,9 @@ fn percent_shape(text: &str) -> bool {
     })
 }
 
-/// One finding: numeric fields must have their numeric shape (false if one does
-/// not); other text except the section joins the strings scanned for source data.
-fn scan_finding<'a>(finding: &'a Json, scanned: &mut Vec<&'a PyStr>) -> bool {
+/// Numeric fields must keep their numeric shape. Other text except the section
+/// must be free of source display values.
+fn finding_is_redacted(finding: &Json, forbidden: &BTreeSet<&str>) -> bool {
     let Json::Object(items) = finding else { return true };
     for (key, value) in items {
         let shape: Option<fn(&str) -> bool> = match key.to_utf8().as_deref() {
@@ -860,7 +860,11 @@ fn scan_finding<'a>(finding: &'a Json, scanned: &mut Vec<&'a PyStr>) -> bool {
         };
         match shape {
             None if key.is("section") => {}
-            None => leaf_strings(value, scanned),
+            None => {
+                if contains_source_text(value, forbidden) {
+                    return false;
+                }
+            }
             Some(check) => {
                 let fits = match value {
                     Json::Null => true,
@@ -888,22 +892,16 @@ pub(crate) fn assert_model_is_redacted(model: &Json, rows: &[&BalanceRow]) -> Re
         forbidden.insert(&row.account_id);
     }
     let Json::Object(pairs) = model else {
-        unreachable!("the model is an object")
+        return refuse("Internal disclosure assertion failed: model result must be an object.");
     };
-    let mut scanned = Vec::new();
-    for (key, value) in pairs {
-        if !key.is("findings") {
-            leaf_strings(value, &mut scanned);
-        }
-    }
-    if let Some(Json::Array(findings)) = model.get("findings")
-        && !findings.iter().all(|finding| scan_finding(finding, &mut scanned))
+    if pairs
+        .iter()
+        .any(|(key, value)| !key.is("findings") && contains_source_text(value, &forbidden))
     {
         return refuse(disclosure);
     }
-    if scanned
-        .iter()
-        .any(|leaf| leaf.to_utf8().is_some_and(|t| forbidden.contains(t.as_str())))
+    if let Some(Json::Array(findings)) = model.get("findings")
+        && !findings.iter().all(|finding| finding_is_redacted(finding, &forbidden))
     {
         return refuse(disclosure);
     }

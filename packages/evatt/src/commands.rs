@@ -166,13 +166,19 @@ fn ambiguous_locations(text: &str) -> Result<HashMap<String, VecDeque<usize>>> {
     Ok(found)
 }
 
+fn line_feeds(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&byte| byte == b'\n').count()
+}
+
 fn verify_command(text: &str, entries: &[Entity], stdout: &mut dyn Write) -> Result<i32> {
+    const BLOCK_BYTES: usize = 4096;
     let found = verify::findings(text, entries)?;
     if found.is_empty() {
         let _ = writeln!(stdout, "no findings");
         return Ok(0);
     }
     let mut ambiguous = ambiguous_locations(text)?;
+    let mut block_lines = None;
     for finding in &found {
         let locations = if finding.kind == "number" {
             ambiguous.get_mut(&finding.value)
@@ -187,7 +193,21 @@ fn verify_command(text: &str, entries: &[Entity], stdout: &mut dyn Write) -> Res
             let matched = pattern.find(text).map_err(patterns::runtime)?;
             matched.map_or_else(
                 || "detected in input".into(),
-                |m| format!("line {}", text[..m.start()].bytes().filter(|&b| b == b'\n').count() + 1),
+                |m| {
+                    let lines = block_lines.get_or_insert_with(|| {
+                        text.as_bytes()
+                            .chunks(BLOCK_BYTES)
+                            .scan(1, |line, block| {
+                                let first_line = *line;
+                                *line += line_feeds(block);
+                                Some(first_line)
+                            })
+                            .collect::<Vec<_>>()
+                    });
+                    let block = m.start() / BLOCK_BYTES;
+                    let prefix = &text.as_bytes()[block * BLOCK_BYTES..m.start()];
+                    format!("line {}", lines[block] + line_feeds(prefix))
+                },
             )
         };
         let _ = writeln!(stdout, "{}: {location}", finding.kind);
@@ -350,5 +370,38 @@ pub fn run(args: &Parsed, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32
     match normal(args, stdout) {
         Ok(code) => code,
         Err(error) => fail(stderr, &error),
+    }
+}
+
+#[cfg(test)]
+mod verify_tests {
+    use super::*;
+
+    #[test]
+    fn verify_reports_original_lines_across_blocks_and_unmatched_normalised_values() {
+        let entries = ["Harbour Workshop", "River Studio", "Café Office"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, value)| Entity {
+                value: value.into(),
+                placeholder: format!("CLIENT_{:02}", i + 1),
+                kind: "client".into(),
+                added: "2026-09-09".into(),
+            })
+            .collect::<Vec<_>>();
+        let first_line = "Fabricated notice\r\n";
+        let boundary_line = "Harbour Workshop\r\n";
+        let text = format!(
+            "{first_line}{} \u{2028}{boundary_line}{} \u{2028}River Studio\nCafe\u{301} Office",
+            "x".repeat(4096 - first_line.len() - 4),
+            "x".repeat(4096 - boundary_line.len() - 3)
+        );
+        let mut stdout = Vec::new();
+
+        assert_eq!(verify_command(&text, &entries, &mut stdout).unwrap(), 2);
+        assert_eq!(
+            String::from_utf8(stdout).unwrap(),
+            "client: line 2\nclient: line 3\nclient: detected in input\n3 finding(s); this file is not ready to send\n"
+        );
     }
 }

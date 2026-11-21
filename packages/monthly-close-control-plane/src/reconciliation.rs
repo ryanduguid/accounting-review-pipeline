@@ -288,7 +288,7 @@ impl Allocation {
 )]
 fn decisions(
     source: Option<&SourceSnapshot>,
-    items: &BTreeMap<String, Json>,
+    items: &BTreeMap<String, &Json>,
     escaped: bool,
 ) -> Result<Vec<Allocation>> {
     let Some(source) = source else {
@@ -338,8 +338,8 @@ fn decisions(
             return Err("Accepted and rejected groups need a review note.".into());
         }
         let mut ids: Vec<_> = records.into_iter().map(|r| r[1].clone()).collect();
-        ids.sort_by_key(|key| (field(&items[key], "Date"), key.clone()));
-        if decision == "accept" && !total(ids.iter().map(|key| &items[key])).is_zero() {
+        ids.sort_by_cached_key(|key| (field(items[key], "Date"), key.clone()));
+        if decision == "accept" && !total(ids.iter().map(|key| items[key])).is_zero() {
             return Err(format!(
                 "Accepted group {} does not sum to zero.",
                 pytext::repr(&group)
@@ -483,7 +483,7 @@ pub fn reconcile_with(
             current.push(value);
         }
         let mut ordered: Vec<_> = old.iter().chain(&current).cloned().collect();
-        ordered.sort_by_key(|row| (field(row, "Date"), field(row, "TransactionID")));
+        ordered.sort_by_cached_key(|row| (field(row, "Date"), field(row, "TransactionID")));
         if ordered.len() > 100000 {
             return Err(
                 "A reconciliation supports at most 100,000 outstanding and current items.".into(),
@@ -491,7 +491,7 @@ pub fn reconcile_with(
         }
         let items: BTreeMap<_, _> = ordered
             .iter()
-            .map(|row| (field(row, "TransactionID"), row.clone()))
+            .map(|row| (field(row, "TransactionID"), row))
             .collect();
         if items.len() != ordered.len() {
             return Err(
@@ -751,6 +751,45 @@ mod tests {
         );
         assert!(settled.get("carried_over").is_none());
     }
+    #[test]
+    fn tied_dates_sort_allocations_by_id_and_blank_notes_preserve_carry_evidence() {
+        let rows = concat!(
+            "Synthetic,CLEAR,AUD,T2,2026-07-20,Shared,Synthetic credit,0,100\n",
+            "Synthetic,CLEAR,AUD,T1,2026-07-20,Shared,Synthetic debit,100,0\n",
+        );
+        let july = month(
+            ("2026-07-01", "2026-07-31"),
+            ("0", "0"),
+            rows,
+            None,
+            "Group,TransactionID,Decision,Note\nG,T2,,Reviewed July\nG,T1,,Reviewed July\n",
+        );
+        let august = month(
+            ("2026-08-01", "2026-08-31"),
+            ("0", "0"),
+            "",
+            Some(&carried_forward(&july)),
+            "Group,TransactionID,Decision,Note\nG,T2,,\nG,T1,,\n",
+        );
+
+        for pack in [july, august] {
+            assert!(pack.at("status").is_str("REVIEW"));
+            let [first, second] = pack.at("outstanding").as_array().unwrap() else {
+                panic!("expected both unsettled transactions");
+            };
+            assert!(first.at("TransactionID").is_str("T1"));
+            assert!(second.at("TransactionID").is_str("T2"));
+            let allocation = &pack.at("decisions").as_array().unwrap()[0];
+            let [first_id, second_id] = allocation.at("ids").as_array().unwrap() else {
+                panic!("expected both allocation IDs");
+            };
+            assert!(first_id.is_str("T1"));
+            assert!(second_id.is_str("T2"));
+            assert!(pack.at("notes").at("T1").is_str("Reviewed July"));
+            assert!(pack.at("notes").at("T2").is_str("Reviewed July"));
+        }
+    }
+
     #[test]
     fn suggestions_leave_items_outstanding_until_an_explicit_accepted_allocation() {
         let mut config = config();
