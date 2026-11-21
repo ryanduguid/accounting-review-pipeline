@@ -530,30 +530,20 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
-    struct OwnedDirectory(PathBuf);
-
-    impl Drop for OwnedDirectory {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
     #[test]
     fn an_open_directory_is_not_a_regular_disclosure_record() {
-        let path = std::env::temp_dir().join(format!("evatt-directory-handle-{}", std::process::id()));
-        std::fs::create_dir(&path).unwrap();
-        let owned = OwnedDirectory(path);
-        let sentinel = owned.0.join("sentinel.txt");
+        let owned = tempfile::tempdir().unwrap();
+        let sentinel = owned.path().join("sentinel.txt");
         std::fs::write(&sentinel, b"fabricated directory contents\n").unwrap();
         #[cfg(unix)]
-        let file = std::fs::File::open(&owned.0).unwrap();
+        let file = std::fs::File::open(owned.path()).unwrap();
         #[cfg(windows)]
         let file = {
             use std::os::windows::fs::OpenOptionsExt;
             std::fs::OpenOptions::new()
                 .access_mode(0)
                 .custom_flags(0x0200_0000)
-                .open(&owned.0)
+                .open(owned.path())
                 .unwrap()
         };
         assert!(file.metadata().unwrap().is_dir());
@@ -565,21 +555,19 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn the_disclosure_record_handle_refuses_a_file_link() {
-        let path = std::env::temp_dir().join(format!("evatt-record-handle-{}", std::process::id()));
-        std::fs::create_dir(&path).unwrap();
-        let directory = OwnedDirectory(path);
-        let target = directory.0.join("record.json");
-        let link = directory.0.join("link.json");
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("record.json");
+        let link = directory.path().join("link.json");
         let contents = b"fabricated disclosure record";
         std::fs::write(&target, contents).unwrap();
-        std::os::windows::fs::symlink_file(&target, &link).unwrap();
+        std::os::windows::fs::symlink_file(target.canonicalize().unwrap(), &link).unwrap();
 
         assert!(open_record(&target).is_ok());
         assert_eq!(
             open_record(&link).unwrap_err(),
             "disclosure record must be a regular file with one link"
         );
-        let hard_link = directory.0.join("hard-link.json");
+        let hard_link = directory.path().join("hard-link.json");
         std::fs::hard_link(&target, &hard_link).unwrap();
         assert_eq!(
             open_record(&target).unwrap_err(),
