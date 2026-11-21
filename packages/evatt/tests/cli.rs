@@ -438,6 +438,10 @@ fn malformed_entity_map_json_preserves_every_existing_artifact() {
             "cannot read entity map entities.json: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
         ),
         (
+            "{\r\n\r?".to_owned(),
+            "cannot read entity map entities.json: Expecting property name enclosed in double quotes: line 3 column 1 (char 3)",
+        ),
+        (
             "1".repeat(4301),
             "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit",
         ),

@@ -110,7 +110,11 @@ pub fn utf8_error(bytes: &[u8], error: std::str::Utf8Error) -> String {
 pub fn load(path: &Path) -> Result<Vec<entities::Entity>> {
     let raw = bytes(path).map_err(|error| format!("cannot read entity map {}: {error}", self::text(path)))?;
     let text = String::from_utf8(raw).map_err(|e| utf8_error(e.as_bytes(), e.utf8_error()))?;
-    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let text = if text.contains('\r') {
+        text.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        text
+    };
     let document = pyjson::loads_plain(&text).map_err(|e| match e {
         pyjson::LoadError::Crash(message) => message,
         pyjson::LoadError::Decode(message) => format!("cannot read entity map {}: {message}", self::text(path)),
