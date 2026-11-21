@@ -95,22 +95,33 @@ impl Json {
         }
     }
 
-    pub fn keys(&self) -> Option<Vec<&PyStr>> {
+    pub fn as_array(&self) -> Option<&[Json]> {
         match self {
-            Json::Object(pairs) => Some(pairs.iter().map(|(k, _)| k).collect()),
+            Json::Array(items) => Some(items),
             _ => None,
         }
     }
 
+    pub fn as_object(&self) -> Option<&[(PyStr, Json)]> {
+        match self {
+            Json::Object(pairs) => Some(pairs),
+            _ => None,
+        }
+    }
+
+    pub fn keys(&self) -> Option<Vec<&PyStr>> {
+        self.as_object()
+            .map(|pairs| pairs.iter().map(|(key, _)| key).collect())
+    }
+
     /// `set(obj) == required` for a dict; false for anything else.
     pub fn has_exact_keys(&self, required: &[&str]) -> bool {
-        match self.keys() {
-            Some(keys) => {
-                keys.len() == required.len()
-                    && required.iter().all(|r| keys.iter().any(|k| k.is(r)))
-            }
-            None => false,
-        }
+        self.as_object().is_some_and(|pairs| {
+            pairs.len() == required.len()
+                && required
+                    .iter()
+                    .all(|name| pairs.iter().any(|(key, _)| key.is(name)))
+        })
     }
 
     pub fn is_str(&self, text: &str) -> bool {
@@ -707,6 +718,25 @@ pub fn int_cmp(value: &BigInt, bound: i64) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+    use super::Json;
+
+    #[test]
+    fn shape_checks_borrow_entries_and_require_the_exact_keys() {
+        let record = Json::object([("phase", Json::str("review")), ("count", Json::int(1))]);
+        assert!(record.has_exact_keys(&["count", "phase"]));
+        assert!(!record.has_exact_keys(&["phase"]));
+        assert!(!record.has_exact_keys(&["phase", "missing"]));
+        assert!(record.as_array().is_none());
+
+        let array = Json::Array(vec![record]);
+        let entries = array.as_array().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].at("phase").is_str("review"));
+        assert!(!array.has_exact_keys(&[]));
+        assert!(array.keys().is_none());
+        assert!(Json::object([]).has_exact_keys(&[]));
+    }
+
     #[test]
     fn bounded_recursion_refuses_deep_documents_without_exhausting_the_stack() {
         std::thread::Builder::new()
