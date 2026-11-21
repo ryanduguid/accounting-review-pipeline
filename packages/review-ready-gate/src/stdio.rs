@@ -79,12 +79,12 @@ pub fn out_literal(text: &str) {
     if captured(text, false) {
         return;
     }
-    let text = if cfg!(windows) {
-        text.replace('\n', "\r\n")
+    let stdout = std::io::stdout().lock();
+    if cfg!(windows) {
+        write(stdout, text.replace('\n', "\r\n").as_bytes());
     } else {
-        text.to_owned()
-    };
-    write(std::io::stdout().lock(), text.as_bytes());
+        write(stdout, text.as_bytes());
+    }
 }
 pub fn err(text: &str) {
     #[cfg(any(test, feature = "probe"))]

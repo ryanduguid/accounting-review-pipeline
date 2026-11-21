@@ -112,8 +112,34 @@ fn response_count(python: &Path, baseline: &Path, suite: &TempDir) {
     fs::set_permissions(&sibling, fs::Permissions::from_mode(0o700)).unwrap();
     check_refusal(
         run(python, baseline, suite, "response-count"),
-        "Error: \"oracle returned 7024 lines for 1 requests\"\n",
+        "Error: \"comparison expected 7024 responses per process, received 7024 from the oracle and 1 from the native probe\"\n",
         "response-count",
+    );
+}
+
+#[cfg(unix)]
+fn extra_response(python: &Path, baseline: &Path, suite: &TempDir, binaries: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let sibling = suite.join("review-ready-probe");
+    fs::copy(
+        binary(binaries, "review-ready-probe"),
+        suite.join("review-ready-probe-original"),
+    )
+    .unwrap();
+    fs::write(
+        &sibling,
+        r#"#!/bin/sh
+"${0%/*}/review-ready-probe-original" || exit "$?"
+printf '%s\n' '{}'
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&sibling, fs::Permissions::from_mode(0o700)).unwrap();
+    check_refusal(
+        run(python, baseline, suite, "extra-response"),
+        "Error: \"comparison expected 7024 responses per process, received 7024 from the oracle and 7025 from the native probe\"\n",
+        "extra-response",
     );
 }
 
@@ -259,6 +285,8 @@ fn main() {
     );
     #[cfg(unix)]
     response_count(python, baseline, &suite);
+    #[cfg(unix)]
+    extra_response(python, baseline, &suite, binaries);
     #[cfg(unix)]
     echoing_probe(python, baseline, &suite);
     oracle_timeout(python, baseline, &suite, binaries);

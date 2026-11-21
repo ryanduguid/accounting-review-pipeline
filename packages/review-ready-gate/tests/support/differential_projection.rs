@@ -26,8 +26,10 @@ fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Res
     let failure = git().output()?;
     assert!(!failure.status.success());
     assert!(!failure.stderr.is_empty());
+    // Git exits before reading stdin. The corpus exceeds the pipe buffer.
+    let corpus = "x".repeat(2 * 1024 * 1024);
     assert_eq!(
-        exchange(git(), "").unwrap_err().to_string(),
+        exchange(git(), &corpus).unwrap_err().to_string(),
         format!(
             "comparison process failed: {}",
             String::from_utf8_lossy(&failure.stderr)

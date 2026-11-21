@@ -521,7 +521,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
         "gate" => gate(&args),
         "view" => match viewer::render_review_sheet(&args.path("--pack-dir"), &args.documents) {
             Ok(sheet) => {
-                crate::stdio::out_literal(&format!("{sheet}\n"));
+                crate::stdio::out_literal(&(sheet + "\n"));
                 crate::outln!(
                     "review-ready view: display is a review aid; it does not approve a file or change any computed status."
                 );
@@ -539,7 +539,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
             };
             match queue::render_queue(&args.pack_dirs, &options) {
                 Ok(text) => {
-                    crate::stdio::out_literal(&format!("{text}\n"));
+                    crate::stdio::out_literal(&(text + "\n"));
                     crate::outln!(
                         "review-ready queue: display is a review aid; it does not approve a file or change any computed status."
                     );

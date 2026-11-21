@@ -235,15 +235,20 @@ fn write_new_with(
         Ok(())
     })();
     if let Err(error) = result {
+        let mut cleanup = Ok(());
         for path in created.iter().rev() {
-            match fs::remove_file(path) {
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.to_string()),
-                Ok(()) => {}
+            if let Err(error) = fs::remove_file(path)
+                && error.kind() != io::ErrorKind::NotFound
+            {
+                cleanup = cleanup.and(Err(error));
             }
         }
-        fs::remove_dir(&output).map_err(|e| e.to_string())?;
-        return Err(error.to_string());
+        return Err(match cleanup.and(fs::remove_dir(&output)) {
+            Ok(()) => error.to_string(),
+            Err(cleanup_error) => format!(
+                "Output write failed ({error}) and its incomplete output could not be removed ({cleanup_error})."
+            ),
+        });
     }
     Ok(output)
 }
@@ -569,6 +574,11 @@ mod tests {
         );
         assert!(result.unwrap_err().contains("injected write failure"));
         assert!(!output.exists());
+    }
+
+    #[test]
+    fn new_directory_collision_preserves_the_other_file_and_both_errors() {
+        let temp = TempDir::new();
         let output = temp.0.join("pack-with-unowned-file");
         let result = write_new_with(
             &output,
@@ -584,9 +594,20 @@ mod tests {
                 Ok(())
             },
         );
-        assert!(result.is_err());
         assert!(!output.join("first").exists());
         assert_eq!(fs::read(output.join("second")).unwrap(), b"unowned");
+        let collision = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join("second"))
+            .unwrap_err();
+        let cleanup = fs::remove_dir(&output).unwrap_err();
+        assert_eq!(
+            result.unwrap_err(),
+            format!(
+                "Output write failed ({collision}) and its incomplete output could not be removed ({cleanup})."
+            )
+        );
     }
     #[test]
     fn partial_reservation_reports_a_missing_parent_without_creating_it() {
