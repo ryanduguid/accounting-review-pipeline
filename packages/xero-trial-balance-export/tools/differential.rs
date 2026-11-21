@@ -709,7 +709,7 @@ mod tests {
         let nonce: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
         let directory = env::temp_dir().join(format!("xero-differential-eof-{nonce}"));
         fs::create_dir(&directory).unwrap();
-        let mut command = Command::new(env::current_exe().unwrap());
+        let mut command = child_profile::command(env::current_exe().unwrap());
         command
             .args([
                 "--exact",
