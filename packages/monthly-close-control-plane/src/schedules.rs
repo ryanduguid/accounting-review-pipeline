@@ -142,11 +142,11 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
         .and_then(Json::as_pystr)
         .filter(|s| s.0.len() == 3 && s.0.iter().all(|&cp| (65..=90).contains(&cp)))
         .ok_or("currency must be an explicit 3-letter code.")?;
-    date(data.get("cutoff").unwrap_or(&Json::Null), "cutoff")?;
+    let cutoff = date(data.get("cutoff").unwrap_or(&Json::Null), "cutoff")?;
     let result = decimal::with_precision(80, || match kind {
-        "expenses" => expenses(&data),
+        "expenses" => expenses(&data, cutoff),
         "migration" => migration(&data),
-        _ => interentity(&data),
+        _ => interentity(&data, cutoff),
     })?;
     let mut output = Json::object([
         ("schema_version", Json::int(1)),
@@ -180,7 +180,7 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
     clippy::too_many_lines,
     reason = "validates the expenses schedule in order"
 )]
-fn expenses(data: &Json) -> Result<Json> {
+fn expenses(data: &Json, cutoff: Date) -> Result<Json> {
     object(
         data,
         "schema_version tenant currency cutoff invoices claims payments ledger_balance",
@@ -251,6 +251,7 @@ fn expenses(data: &Json) -> Result<Json> {
             ));
         }
     }
+    let mut claim_amounts = Vec::with_capacity(claims.len());
     for row in claims {
         text(row.at("employee"), "employee")?;
         let invoice = text(row.at("invoice_id"), "invoice_id")?;
@@ -259,6 +260,7 @@ fn expenses(data: &Json) -> Result<Json> {
             return Err("Claims require a positive amount and boolean approved.".into());
         }
         add(&mut allocated, invoice.clone(), &amount)?;
+        claim_amounts.push(amount);
         if !amounts.contains_key(&invoice) {
             findings.push(finding("UNKNOWN_INVOICE", &id(row, "claim_id")));
         }
@@ -290,9 +292,7 @@ fn expenses(data: &Json) -> Result<Json> {
         let claim = text(row.at("claim_id"), "payment claim_id")?;
         text(row.at("reference"), "payment reference")?;
         let amount = money(row.at("amount"), "payment amount")?;
-        if amount <= Decimal::zero()
-            || date(row.at("date"), "payment date")? > date(data.at("cutoff"), "cutoff")?
-        {
+        if amount <= Decimal::zero() || date(row.at("date"), "payment date")? > cutoff {
             return Err("Payments require a positive amount and date on or before cutoff.".into());
         }
         add(&mut paid, claim.clone(), &amount)?;
@@ -302,11 +302,11 @@ fn expenses(data: &Json) -> Result<Json> {
             findings.push(item);
         }
     }
-    let mut workpaper = Vec::new();
-    for row in claims {
+    let mut workpaper = Vec::with_capacity(claims.len());
+    for (row, amount) in claims.iter().zip(&claim_amounts) {
         let identifier = id(row, "claim_id");
         let payment = paid.entry(identifier.clone()).or_insert_with(Decimal::zero);
-        let remaining = exact(money(row.at("amount"), "claim amount")?.sub(payment))?;
+        let remaining = exact(amount.sub(payment))?;
         let mut item = row.clone();
         item.set("paid", number(payment));
         item.set("remaining", number(&remaining));
@@ -326,13 +326,7 @@ fn expenses(data: &Json) -> Result<Json> {
             findings.push(item);
         }
     }
-    let expected = exact(
-        sum(claims
-            .iter()
-            .map(|r| money(r.at("amount"), "claim amount"))
-            .collect::<Result<Vec<_>>>()?)?
-        .sub(&sum(paid.values().cloned())?),
-    )?;
+    let expected = exact(sum(claim_amounts)?.sub(&sum(paid.values().cloned())?))?;
     let difference = exact(money(data.at("ledger_balance"), "ledger_balance")?.sub(&expected))?;
     if !difference.is_zero() {
         let mut item = finding("CLEARING_DIFFERENCE", &tenant);
@@ -519,7 +513,7 @@ fn migration(data: &Json) -> Result<Json> {
     clippy::too_many_lines,
     reason = "validates the interentity schedule in order"
 )]
-fn interentity(data: &Json) -> Result<Json> {
+fn interentity(data: &Json, cutoff: Date) -> Result<Json> {
     object(
         data,
         "schema_version currency cutoff entities records",
@@ -550,7 +544,6 @@ fn interentity(data: &Json) -> Result<Json> {
     type Group = (Vec<Json>, Vec<Json>);
     let mut groups: BTreeMap<(PyStr, PyStr, PyStr), Group> = BTreeMap::new();
     let mut findings = Vec::new();
-    let cutoff = date(data.at("cutoff"), "cutoff")?;
     for row in records {
         for key in ["entity", "counterparty", "account", "reference", "evidence"] {
             text(row.at(key), key)?;
@@ -698,6 +691,39 @@ mod tests {
         ] {
             assert_eq!(review_snapshot(&source, kind).unwrap_err(), expected);
         }
+    }
+
+    #[test]
+    fn expenses_keep_claim_totals_when_a_payment_lands_on_the_cutoff() {
+        let mut schedule =
+            pyjson::loads(include_str!("../examples/schedules/expenses.json")).unwrap();
+        let mut payments = schedule.at("payments").as_array().unwrap().to_vec();
+        payments[1].set("date", Json::str("2026-09-30"));
+        schedule.set("payments", Json::Array(payments.clone()));
+        let run = |schedule: &Json| {
+            let source = SourceSnapshot::new(
+                Path::new("schedule.json"),
+                pyjson::canonical(schedule).into_bytes(),
+            );
+            review_snapshot(&source, "expenses")
+        };
+        let report = run(&schedule).unwrap();
+        let claim = &report.at("claims").as_array().unwrap()[0];
+        let findings = report.at("findings").as_array().unwrap();
+        assert!(report.at("status").is_str("REVIEW"));
+        assert!(claim.at("paid").is_str("120.00"));
+        assert!(claim.at("remaining").is_str("-20.00"));
+        assert!(report.at("expected_ledger_balance").is_str("-20.00"));
+        assert!(report.at("ledger_difference").is_str("0.00"));
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].at("code").is_str("OVERPAID"));
+        assert!(findings[0].at("id").is_str("C1"));
+        payments[1].set("date", Json::str("2026-10-01"));
+        schedule.set("payments", Json::Array(payments));
+        assert_eq!(
+            run(&schedule).unwrap_err(),
+            "Payments require a positive amount and date on or before cutoff."
+        );
     }
 
     #[test]
