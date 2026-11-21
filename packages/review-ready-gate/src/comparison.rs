@@ -4,7 +4,7 @@
 use crate::{
     Result,
     decimal::Decimal,
-    pyjson::{self, Json},
+    pyjson::{self, Json, PyStr},
     pytext, viewer,
 };
 use num_bigint::BigUint;
@@ -19,13 +19,13 @@ const DETAILS: [&str; 4] = ["status", "repeat", "reason", "reviewer_action"];
 fn text(value: &Json) -> String {
     value.as_pystr().unwrap().to_utf8().unwrap()
 }
-fn object(value: &Json) -> BTreeMap<String, Json> {
+fn object(value: &Json) -> BTreeMap<String, &Json> {
     let Json::Object(pairs) = value else {
         unreachable!()
     };
     pairs
         .iter()
-        .map(|(k, v)| (k.to_utf8().unwrap(), v.clone()))
+        .map(|(k, v)| (k.to_utf8().unwrap(), v))
         .collect()
 }
 fn findings(document: &Json) -> &[Json] {
@@ -34,23 +34,32 @@ fn findings(document: &Json) -> &[Json] {
     };
     items
 }
-fn groups(document: &Json) -> BTreeMap<(String, String), Vec<Json>> {
+fn groups(document: &Json) -> BTreeMap<(String, String), Vec<&Json>> {
     let mut groups: BTreeMap<_, Vec<_>> = BTreeMap::new();
     for item in findings(document) {
         groups
             .entry((text(item.at("code")), text(item.at("slot"))))
             .or_default()
-            .push(Json::object(DETAILS.map(|key| (key, item.at(key).clone()))));
+            .push(item);
     }
     groups
 }
-fn canonical(group: &[Json]) -> Vec<Vec<String>> {
+fn canonical<'a>(group: &[&'a Json]) -> Vec<[&'a PyStr; DETAILS.len()]> {
     let mut result: Vec<_> = group
         .iter()
-        .map(|item| DETAILS.iter().map(|key| text(item.at(key))).collect())
+        .map(|item| DETAILS.map(|key| item.at(key).as_pystr().unwrap()))
         .collect();
-    result.sort();
+    result.sort_unstable();
     result
+}
+fn rendered_findings(group: Option<&[&Json]>) -> Json {
+    Json::Array(
+        group
+            .into_iter()
+            .flatten()
+            .map(|item| Json::object(DETAILS.map(|key| (key, item.at(key).clone()))))
+            .collect(),
+    )
 }
 fn thresholds_differ(previous: &Json, current: &Json) -> bool {
     Decimal::parse(&text(previous.at("thresholds").at("tieout_tolerance"))).unwrap()
@@ -237,8 +246,8 @@ fn source_changes(previous: &Json, current: &Json) -> Vec<Json> {
     slots
         .into_iter()
         .map(|slot| {
-            let old = before.get(slot);
-            let new = after.get(slot);
+            let old = before.get(slot).copied();
+            let new = after.get(slot).copied();
             let change = match (old, new) {
                 (None, _) => "ADDED",
                 (_, None) => "REMOVED",
@@ -267,9 +276,9 @@ fn finding_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
     let keys: BTreeSet<_> = before.keys().chain(after.keys()).collect();
     Ok(keys
         .into_iter()
-        .map(|(code, slot)| {
-            let old = before.get(&(code.clone(), slot.clone()));
-            let new = after.get(&(code.clone(), slot.clone()));
+        .map(|key @ (code, slot)| {
+            let old = before.get(key).map(Vec::as_slice);
+            let new = after.get(key).map(Vec::as_slice);
             let change = match (old, new) {
                 (None, _) => "NEW",
                 (_, None)
@@ -288,8 +297,8 @@ fn finding_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
                 ("code", Json::str(code)),
                 ("slot", Json::str(slot)),
                 ("change", Json::str(change)),
-                ("previous", Json::Array(old.cloned().unwrap_or_default())),
-                ("current", Json::Array(new.cloned().unwrap_or_default())),
+                ("previous", rendered_findings(old)),
+                ("current", rendered_findings(new)),
             ])
         })
         .collect())
@@ -393,5 +402,59 @@ mod tests {
             );
             assert_eq!(document_sources(&previous).unwrap()[0].0, "document_001");
         }
+    }
+
+    #[test]
+    fn repeated_findings_keep_each_packs_order_and_compare_by_detail() {
+        fn finding(reason: &str) -> Json {
+            Json::object([
+                ("code", Json::str("BANK_REC_BREAK")),
+                ("slot", Json::str("bank_rec")),
+                ("status", Json::str("NOT_READY")),
+                ("repeat", Json::str("")),
+                ("reason", Json::str(reason)),
+                ("reviewer_action", Json::str("Review the reconciliation")),
+            ])
+        }
+        let make_pack = |reasons: &[&str]| {
+            Json::object([
+                (
+                    "thresholds",
+                    Json::object([("tieout_tolerance", Json::str("0.01"))]),
+                ),
+                (
+                    "findings",
+                    Json::Array(reasons.iter().copied().map(finding).collect()),
+                ),
+                ("source_sha256", Json::object([])),
+            ])
+        };
+        let before_reasons = ["Écriture", "Écriture", "🔎 Review"];
+        let after_reasons = ["🔎 Review", "Écriture", "Écriture"];
+        let before = make_pack(&before_reasons);
+        let unchanged = make_pack(&after_reasons);
+        let changed = make_pack(&["🔎 Review", "Écriture", "🔎 Review"]);
+        let recurring = finding_changes(&before, &unchanged).unwrap();
+        assert_eq!(recurring.len(), 1);
+        assert!(recurring[0].at("change").is_str("RECURRING"));
+        for (version, reasons) in [("previous", before_reasons), ("current", after_reasons)] {
+            let expected = Json::Array(
+                reasons
+                    .into_iter()
+                    .map(|reason| {
+                        Json::object([
+                            ("status", Json::str("NOT_READY")),
+                            ("repeat", Json::str("")),
+                            ("reason", Json::str(reason)),
+                            ("reviewer_action", Json::str("Review the reconciliation")),
+                        ])
+                    })
+                    .collect(),
+            );
+            assert!(pyjson::py_eq(recurring[0].at(version), &expected, true));
+        }
+        let changed = finding_changes(&before, &changed).unwrap();
+        assert_eq!(changed.len(), 1);
+        assert!(changed[0].at("change").is_str("CHANGED"));
     }
 }
