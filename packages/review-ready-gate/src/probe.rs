@@ -228,10 +228,13 @@ fn operation(request: &Json) -> Result<Json> {
         )),
         "csv" => csv(request),
         "parse_pack_json" => crate::viewer::parse_json(&unhex(&text(request.at("hex"))?)?),
-        "output_guard" => Ok(Json::str(
-            &crate::report::require_output_outside_repository(&path(request.at("path"))?)?
-                .to_string_lossy(),
-        )),
+        "output_guard" => {
+            let output =
+                crate::report::require_output_outside_repository(&path(request.at("path"))?)?;
+            Ok(Json::Str(PyStr::from_os_text(&pypath::decode_os(
+                output.as_os_str(),
+            ))))
+        }
         "format_money" => {
             let value = Decimal::parse(&text(request.at("value"))?)
                 .map_err(|_| "invalid probe decimal".to_owned())?;
@@ -428,6 +431,24 @@ mod tests {
                 value.as_pystr().unwrap().os_text(),
             );
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn guarded_output_reply_preserves_non_utf8_path_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let scratch = crate::test_support::TempDir::new();
+        let output = std::fs::canonicalize(&scratch.0)
+            .unwrap()
+            .join(std::ffi::OsStr::from_bytes(b"fabricated-\xff"));
+        let encoded = Json::Str(PyStr::from_os_text(&pypath::decode_os(output.as_os_str())));
+        let request = Json::object([("op", Json::str("output_guard")), ("path", encoded.clone())]);
+        assert_eq!(
+            evaluate(&pyjson::canonical(&request)).unwrap(),
+            pyjson::canonical(&Json::object([("ok", encoded)])),
+        );
+        assert!(!output.exists());
     }
 
     #[test]
