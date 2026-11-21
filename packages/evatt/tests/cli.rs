@@ -586,11 +586,16 @@ fn recursive_output_directory_conflicts_preserve_existing_artifacts() {
 #[test]
 fn record_path_propagates_real_filesystem_errors_without_changing_artifacts() {
     let repo = Repo::new();
+    repo.put("in.md", b"Plain workpaper.\n");
     let before = repo.seed_outputs_and_snapshot();
     repo.put("occupied", b"fabricated record-path sentinel\n");
     #[cfg(unix)]
+    let name = "occupied/child";
+    #[cfg(windows)]
+    let name = "bad|record.disclosure.json";
+    let path = repo.path(name);
+    #[cfg(unix)]
     {
-        let path = repo.path("occupied/child");
         assert_eq!(
             evatt::files::record_path(&path).unwrap_err(),
             format!("[Errno 20] Not a directory: '{}'", path.display())
@@ -598,10 +603,29 @@ fn record_path_propagates_real_filesystem_errors_without_changing_artifacts() {
     }
     #[cfg(windows)]
     {
-        let error = evatt::files::record_path(&repo.path("bad|record.disclosure.json")).unwrap_err();
+        let error = evatt::files::record_path(&path).unwrap_err();
         assert!(error.starts_with("[WinError 123]"), "{error}");
-        assert!(error.contains("bad|record.disclosure.json"), "{error}");
+        assert!(error.contains(name), "{error}");
     }
+    let refused = repo.run(&[
+        "disclosure-record",
+        "--in",
+        "in.md",
+        "--map",
+        "entities.json",
+        "--destination",
+        "model:sample",
+        "--decision-ref",
+        "sample:42",
+        "--out",
+        name,
+    ]);
+    assert_eq!(code(&refused), 1);
+    assert!(refused.stdout.is_empty());
+    assert_eq!(
+        stderr(&refused),
+        native_output("error: cannot read or create disclosure files; existing files are never overwritten\n")
+    );
     assert_eq!(repo.get("occupied"), b"fabricated record-path sentinel\n");
     for (name, bytes) in before {
         assert_eq!(repo.get(name), bytes, "{name}");
@@ -949,10 +973,11 @@ fn wide_triage_shares_one_context_and_quotes_it_once() {
         .map(|i| i.to_string())
         .collect::<Vec<_>>()
         .join(";");
-    repo.put("in.md", text.as_bytes());
+    repo.put("in.md", format!("{text}\nJohn Smith\n").as_bytes());
     assert_eq!(code(&repo.run(&repo.normal("redact"))), 2);
     let triage = String::from_utf8(repo.get("out.md.triage.md")).unwrap();
-    assert_eq!(triage.matches("  > ").count(), 1);
+    let quoted: Vec<_> = triage.lines().filter_map(|line| line.strip_prefix("  > ")).collect();
+    assert_eq!(quoted, [text.as_str(), "John Smith"]);
     let found = evatt::redact::residual(&text).unwrap();
     assert!(
         found
