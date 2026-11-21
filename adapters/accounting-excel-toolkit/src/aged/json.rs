@@ -715,81 +715,55 @@ fn write_scalar(out: &mut String, value: &Json) -> bool {
 
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
 pub fn canonical(value: &Json) -> String {
-    fn go(out: &mut String, value: &Json) {
-        if write_scalar(out, value) {
-            return;
-        }
-        match value {
-            Json::Array(items) => {
-                out.push('[');
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    go(out, item);
-                }
-                out.push(']');
-            }
-            Json::Object(pairs) => {
-                out.push('{');
-                for (i, (key, item)) in sorted_pairs(pairs).into_iter().enumerate() {
-                    if i > 0 {
-                        out.push(',');
-                    }
-                    write_str(out, key);
-                    out.push(':');
-                    go(out, item);
-                }
-                out.push('}');
-            }
-            _ => unreachable!("scalars are written above"),
-        }
-    }
     let mut out = String::new();
-    go(&mut out, value);
+    write_inline(&mut out, value, true, (",", ":"));
     out
 }
 
-/// `json.dumps(value, indent=2, sort_keys=True)`.
+/// `json.dumps(value, sort_keys=sort_keys)` with Python's default separators.
 pub fn dumps(value: &Json, sort_keys: bool) -> String {
-    fn go(out: &mut String, value: &Json, sort: bool) {
-        if write_scalar(out, value) {
-            return;
+    let mut out = String::new();
+    write_inline(&mut out, value, sort_keys, (", ", ": "));
+    out
+}
+
+fn write_inline(out: &mut String, value: &Json, sort: bool, separators: (&str, &str)) {
+    let (item_separator, value_separator) = separators;
+    match value {
+        Json::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(item_separator);
+                }
+                write_inline(out, item, sort, separators);
+            }
+            out.push(']');
         }
-        match value {
-            Json::Array(items) => {
-                out.push('[');
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        out.push_str(", ");
-                    }
-                    go(out, item, sort);
+        Json::Object(pairs) => {
+            out.push('{');
+            let write_pair = |(i, (key, item)): (usize, &(PyStr, Json))| {
+                if i > 0 {
+                    out.push_str(item_separator);
                 }
-                out.push(']');
+                write_str(out, key);
+                out.push_str(value_separator);
+                write_inline(out, item, sort, separators);
+            };
+            if sort {
+                sorted_pairs(pairs)
+                    .into_iter()
+                    .enumerate()
+                    .for_each(write_pair);
+            } else {
+                pairs.iter().enumerate().for_each(write_pair);
             }
-            Json::Object(pairs) => {
-                out.push('{');
-                let pairs = if sort {
-                    sorted_pairs(pairs)
-                } else {
-                    pairs.iter().collect()
-                };
-                for (i, (key, item)) in pairs.into_iter().enumerate() {
-                    if i > 0 {
-                        out.push_str(", ");
-                    }
-                    write_str(out, key);
-                    out.push_str(": ");
-                    go(out, item, sort);
-                }
-                out.push('}');
-            }
-            _ => unreachable!("scalars already written"),
+            out.push('}');
+        }
+        Json::Null | Json::Bool(_) | Json::Int(_) | Json::Float(_) | Json::Str(_) => {
+            write_scalar(out, value);
         }
     }
-    let mut out = String::new();
-    go(&mut out, value, sort_keys);
-    out
 }
 
 /// `json.dumps(value, indent=2, sort_keys=True)`.
@@ -1004,6 +978,14 @@ mod tests {
         assert_eq!(
             canonical(&value),
             "{\"a\":{},\"b\":[1,2.5,\"\\u00e9\\ud800\\ud83d\\ude00\\u007f\"],\"c\":[]}"
+        );
+        assert_eq!(
+            dumps(&value, true),
+            r#"{"a": {}, "b": [1, 2.5, "\u00e9\ud800\ud83d\ude00\u007f"], "c": []}"#
+        );
+        assert_eq!(
+            dumps(&value, false),
+            r#"{"b": [1, 2.5, "\u00e9\ud800\ud83d\ude00\u007f"], "a": {}, "c": []}"#
         );
         assert_eq!(
             pretty(&value),

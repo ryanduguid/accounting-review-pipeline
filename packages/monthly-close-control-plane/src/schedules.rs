@@ -118,6 +118,8 @@ fn joined(values: &[PyStr], separator: &str) -> PyStr {
 pub fn review_schedule(path: &Path, kind: &str) -> Result<Json> {
     review_snapshot(&SourceSnapshot::capture(path, "schedule")?, kind)
 }
+type ScheduleFields = Vec<(&'static str, Json)>;
+
 #[expect(
     clippy::too_many_lines,
     reason = "parses and reviews one schedule snapshot"
@@ -149,7 +151,12 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
         "migration" => migration(&data),
         _ => interentity(&data, cutoff),
     })?;
-    let mut output = Json::object([
+    let findings = result
+        .iter()
+        .find(|(key, _)| *key == "findings")
+        .and_then(|(_, value)| value.as_array())
+        .expect("schedule returns a findings array");
+    let header = [
         ("schema_version", Json::int(1)),
         ("kind", Json::str(kind)),
         ("currency", Json::Str(currency.clone())),
@@ -157,7 +164,7 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
         ("source_sha256", Json::str(&snapshot.sha256)),
         (
             "status",
-            Json::str(if result.at("findings").as_array().unwrap().is_empty() {
+            Json::str(if findings.is_empty() {
                 "PASS"
             } else {
                 "REVIEW"
@@ -167,21 +174,21 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
             "scope",
             Json::str("Supplied records and explicit mappings only; no posting or approval."),
         ),
-    ]);
-    let Json::Object(pairs) = result else {
-        unreachable!()
-    };
-    for (key, value) in pairs {
-        output.set(&key.to_utf8().unwrap(), value);
-    }
-    Ok(output)
+    ];
+    Ok(Json::Object(
+        header
+            .into_iter()
+            .chain(result)
+            .map(|(key, value)| (PyStr::from(key), value))
+            .collect(),
+    ))
 }
 
 #[expect(
     clippy::too_many_lines,
     reason = "validates the expenses schedule in order"
 )]
-fn expenses(data: &Json, cutoff: Date) -> Result<Json> {
+fn expenses(data: &Json, cutoff: Date) -> Result<ScheduleFields> {
     object(
         data,
         "schema_version tenant currency cutoff invoices claims payments ledger_balance",
@@ -334,7 +341,7 @@ fn expenses(data: &Json, cutoff: Date) -> Result<Json> {
         item.set("difference", number(&difference));
         findings.push(item);
     }
-    Ok(Json::object([
+    Ok(vec![
         ("tenant", Json::Str(tenant)),
         ("claims", Json::Array(workpaper)),
         ("payments", Json::Array(payments.to_vec())),
@@ -343,7 +350,7 @@ fn expenses(data: &Json, cutoff: Date) -> Result<Json> {
         ("ledger_balance", data.at("ledger_balance").clone()),
         ("ledger_difference", number(&difference)),
         ("findings", Json::Array(findings)),
-    ]))
+    ])
 }
 
 type MigrationKey = (PyStr, PyStr, PyStr, PyStr);
@@ -351,7 +358,7 @@ type MigrationKey = (PyStr, PyStr, PyStr, PyStr);
     clippy::too_many_lines,
     reason = "validates the migration schedule in order"
 )]
-fn migration(data: &Json) -> Result<Json> {
+fn migration(data: &Json) -> Result<ScheduleFields> {
     object(
         data,
         "schema_version tenant currency cutoff mapping before after",
@@ -491,7 +498,7 @@ fn migration(data: &Json) -> Result<Json> {
             &PyStr::from(differences.len().to_string().as_str()),
         ));
     }
-    Ok(Json::object([
+    Ok(vec![
         ("tenant", Json::Str(tenant)),
         ("mapping", Json::Array(mappings.to_vec())),
         ("differences", Json::Array(differences)),
@@ -510,14 +517,14 @@ fn migration(data: &Json) -> Result<Json> {
                 "Item IDs, references and tax codes must be preserved exactly. Weights allocate amounts without rounding.",
             ),
         ),
-    ]))
+    ])
 }
 
 #[expect(
     clippy::too_many_lines,
     reason = "validates the interentity schedule in order"
 )]
-fn interentity(data: &Json, cutoff: Date) -> Result<Json> {
+fn interentity(data: &Json, cutoff: Date) -> Result<ScheduleFields> {
     object(
         data,
         "schema_version currency cutoff entities records",
@@ -624,7 +631,7 @@ fn interentity(data: &Json, cutoff: Date) -> Result<Json> {
             ),
         ]));
     }
-    Ok(Json::object([
+    Ok(vec![
         (
             "entities",
             Json::Array(entities.into_iter().map(Json::Str).collect()),
@@ -637,12 +644,24 @@ fn interentity(data: &Json, cutoff: Date) -> Result<Json> {
                 "Debit-positive balances; exact reference matching only. No inferred identities or elimination entries.",
             ),
         ),
-    ]))
+    ])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exact_schedule_arithmetic_refuses_non_finite_results() {
+        let invalid = Outcome {
+            value: Decimal::parse("Infinity").unwrap(),
+            inexact: false,
+        };
+        assert_eq!(
+            exact(invalid).unwrap_err(),
+            "[<class 'decimal.InvalidOperation'>]"
+        );
+    }
+
     #[test]
     fn money_accepts_unicode_digits_and_refuses_unbounded_or_fractional_inputs() {
         assert_eq!(
@@ -728,6 +747,20 @@ mod tests {
             run(&schedule).unwrap_err(),
             "Payments require a positive amount and date on or before cutoff."
         );
+    }
+
+    #[test]
+    fn schedule_totals_keep_the_exact_amount_when_the_next_addition_rounds() {
+        decimal::with_precision(28, || {
+            let original = "9999999999999999999999999999";
+            let mut totals = BTreeMap::new();
+            add(&mut totals, "account", &Decimal::parse(original).unwrap()).unwrap();
+            assert_eq!(
+                add(&mut totals, "account", &Decimal::parse("0.1").unwrap()).unwrap_err(),
+                "[<class 'decimal.Inexact'>]"
+            );
+            assert_eq!(totals["account"].to_sci_string(), original);
+        });
     }
 
     #[test]

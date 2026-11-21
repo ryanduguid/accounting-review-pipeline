@@ -443,8 +443,11 @@ mod tests {
         for (title, expected, wrong) in [
             ("false", "5", "0"),
             ("{}", "5", "0"),
+            ("0", "5", "0"),
             ("true", "0", "5"),
             (r#"{"label":"Empty"}"#, "0", "5"),
+            ("-1", "0", "5"),
+            ("18446744073709551617", "0", "5"),
         ] {
             let report = |summary| {
                 crate::pyjson::loads(&format!(
