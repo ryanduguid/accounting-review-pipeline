@@ -20,38 +20,6 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     }
 }
 
-/// Proleptic Gregorian ordinal with 0001-01-01 as day 1, as `date.toordinal`.
-fn ordinal(year: i32, month: u32, day: u32) -> i64 {
-    let y = (year - 1) as i64;
-    let before_year = y * 365 + y / 4 - y / 100 + y / 400;
-    let before_month: u32 = (1..month).map(|m| days_in_month(year, m)).sum();
-    before_year + before_month as i64 + day as i64
-}
-
-fn from_ordinal(mut n: i64) -> Result<Date, ParseError> {
-    if n < 1 {
-        return Err(None);
-    }
-    let mut year = 1;
-    // Step by 400-year cycles (146097 days), then single years.
-    year += ((n - 1) / 146_097 * 400) as i32;
-    n = (n - 1) % 146_097 + 1;
-    loop {
-        let len = if is_leap(year) { 366 } else { 365 };
-        if n <= len {
-            break;
-        }
-        n -= len;
-        year += 1;
-    }
-    let mut month = 1;
-    while n > days_in_month(year, month) as i64 {
-        n -= days_in_month(year, month) as i64;
-        month += 1;
-    }
-    Date::new(year, month, n as u32)
-}
-
 /// A failed parse: `None` for a malformed string, or the range message
 /// `date()` raises for fields that parse but name no real date.
 pub type ParseError = Option<String>;
@@ -133,14 +101,32 @@ fn iso_week_date(year: i32, week: u32, weekday: u32) -> Result<Date, ParseError>
     if !(1..=9999).contains(&year) {
         return Err(None);
     }
-    let first_weekday = (ordinal(year, 1, 1) + 6) % 7;
-    let long_year = first_weekday == 3 || (first_weekday == 2 && is_leap(year));
+    let previous_year = year - 1;
+    // 0001-01-01 was Monday. ISO week 1 contains 4 January.
+    let jan1_weekday = (previous_year * 365 + previous_year / 4 - previous_year / 100 + previous_year / 400) % 7;
+    let leap = is_leap(year);
+    let long_year = jan1_weekday == 3 || (jan1_weekday == 2 && leap);
     if week == 0 || week > 53 || (week == 53 && !long_year) || !(1..=7).contains(&weekday) {
         return Err(None);
     }
-    let jan4 = ordinal(year, 1, 4);
-    let week1_monday = jan4 - (jan4 + 6) % 7;
-    from_ordinal(week1_monday + (week as i64 - 1) * 7 + weekday as i64 - 1)
+    let week1_monday = 4 - (jan1_weekday + 3) % 7;
+    let day = week1_monday + (week as i32 - 1) * 7 + weekday as i32 - 1;
+    let length = if leap { 366 } else { 365 };
+    if day < 1 {
+        return Date::new(year - 1, 12, (31 + day) as u32);
+    }
+    if day > length {
+        return Date::new(year + 1, 1, (day - length) as u32);
+    }
+    let mut day = day as u32;
+    for month in 1..12 {
+        let length = days_in_month(year, month);
+        if day <= length {
+            return Date::new(year, month, day);
+        }
+        day -= length;
+    }
+    Date::new(year, 12, day)
 }
 
 #[cfg(test)]
@@ -158,6 +144,10 @@ mod tests {
         assert_eq!(ok("2026W262").as_deref(), Some("2026-06-23"));
         assert_eq!(ok("2026-W53-1").as_deref(), Some("2026-12-28"));
         assert_eq!(ok("2020-W53-7").as_deref(), Some("2021-01-03"));
+        assert_eq!(ok("0001-W01-1").as_deref(), Some("0001-01-01"));
+        assert_eq!(ok("2019-W01-1").as_deref(), Some("2018-12-31"));
+        assert_eq!(ok("9999-W52-5").as_deref(), Some("9999-12-31"));
+        assert_eq!(ok("2026W26299").as_deref(), Some("2026-06-23"));
         assert_eq!(ok("0001-01-01").as_deref(), Some("0001-01-01"));
         for bad in [
             "2026-06",
@@ -171,6 +161,10 @@ mod tests {
             assert_eq!(ok(bad), None, "{bad}");
         }
         let error = |s: &str| date_fromisoformat(s).expect_err(s);
+        assert_eq!(
+            error("9999-W52-6").as_deref(),
+            Some("year must be in 1..9999, not 10000")
+        );
         assert_eq!(error("2026-13-01").as_deref(), Some("month must be in 1..12, not 13"));
         assert_eq!(
             error("2026-02-29").as_deref(),
