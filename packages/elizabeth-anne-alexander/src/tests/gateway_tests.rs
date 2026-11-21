@@ -700,6 +700,11 @@ fn test_every_source_display_value_the_readme_names_is_forbidden_as_a_leaf() {
 }
 
 #[test]
+fn test_a_non_object_model_result_is_refused() {
+    assert_refused(redact(&Json::Null, &[]), "model result must be an object");
+}
+
+#[test]
 fn test_a_source_display_value_nested_in_model_metadata_is_refused() {
     let rows = [row("acct-1", "Revenue", "0.00")];
     let safe = parse(r#"{"metadata": {"details": ["Fabricated variance"]}, "findings": []}"#);
