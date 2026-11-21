@@ -813,8 +813,11 @@ pub struct VerifiedPack {
     pub summary: String,
     pub artefact_sha256: BTreeMap<String, String>,
 }
-fn read_pack_payloads(directory: &Path) -> Result<[Vec<u8>; PACK_NAMES.len()]> {
-    let revision = publication::snapshot_revision(directory).map_err(|e| e.to_string())?;
+fn read_pack_payloads(
+    directory: &Path,
+    mut snapshot_revision: impl FnMut(&Path) -> std::io::Result<Option<String>>,
+) -> Result<[Vec<u8>; PACK_NAMES.len()]> {
+    let revision = snapshot_revision(directory).map_err(|e| e.to_string())?;
     let mut payloads = [const { Vec::new() }; PACK_NAMES.len()];
     for (name, payload) in PACK_NAMES.into_iter().zip(&mut payloads) {
         let path = directory.join(name);
@@ -828,14 +831,15 @@ fn read_pack_payloads(directory: &Path) -> Result<[Vec<u8>; PACK_NAMES.len()]> {
             })?
             .ok_or_else(|| format!("{name}: expected a regular, single-link artefact"))?;
     }
-    if publication::snapshot_revision(directory).map_err(|e| e.to_string())? != revision {
+    if snapshot_revision(directory).map_err(|e| e.to_string())? != revision {
         return Err("pack publication changed during acquisition; retry".into());
     }
     Ok(payloads)
 }
 
 pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
-    let [json_bytes, summary_bytes, csv_bytes] = read_pack_payloads(directory)?;
+    let [json_bytes, summary_bytes, csv_bytes] =
+        read_pack_payloads(directory, publication::snapshot_revision)?;
     let document = parse_json(&json_bytes)?;
     verify_schema(&document)?;
     let summary =
@@ -919,4 +923,36 @@ pub fn render_review_sheet(directory: &Path, documents: &[PathBuf]) -> Result<St
     }
     lines.push(String::new());
     Ok(lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{TempDir, ready_pack};
+
+    #[test]
+    fn changed_publication_is_refused_then_a_stable_retry_succeeds() {
+        let temp = TempDir::new();
+        let directory = temp.join("pack");
+        std::fs::create_dir(&directory).unwrap();
+        let mut pack = ready_pack();
+        publication::publish(&directory, &report::rendered(&pack).unwrap()).unwrap();
+        pack.preparer_initials = "ZX".into();
+        let replacement = report::rendered(&pack).unwrap();
+
+        let mut observations = 0;
+        let error = read_pack_payloads(&directory, |path| {
+            observations += 1;
+            if observations == 2 {
+                publication::publish(path, &replacement)?;
+            }
+            publication::snapshot_revision(path)
+        })
+        .unwrap_err();
+        assert_eq!(error, "pack publication changed during acquisition; retry");
+        assert_eq!(observations, 2);
+
+        let verified = verify_pack(&directory).unwrap();
+        assert!(verified.document.at("preparer_initials").is_str("ZX"));
+    }
 }
