@@ -6,11 +6,31 @@ use crate::{
     Result,
     decimal::{self, Decimal},
     isodate, publication, pycsv,
-    pyjson::{self, Json, PyStr},
+    pyjson::{self, Json},
     reconciliation::{self, COLUMNS, DECISION_COLUMNS},
     report,
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+type NoteIndex<'a> = HashMap<&'a [u32], &'a Json>;
+
+fn index_notes(notes: &Json) -> NoteIndex<'_> {
+    let Json::Object(pairs) = notes else {
+        return HashMap::new();
+    };
+    let mut index = HashMap::with_capacity(pairs.len());
+    for (key, value) in pairs {
+        // Match Json::get if a Rust caller supplies duplicate members.
+        index.entry(key.0.as_slice()).or_insert(value);
+    }
+    index
+}
+
+fn transaction_note<'a>(notes: &NoteIndex<'a>, row: &Json) -> Option<&'a Json> {
+    let id = row.at("TransactionID").as_pystr().unwrap();
+    notes.get(id.0.as_slice()).copied()
+}
 
 fn text(value: &Json) -> String {
     value.as_pystr().unwrap().to_utf8().unwrap()
@@ -42,14 +62,17 @@ fn decision_csv_safe(value: &str) -> String {
         report::csv_safe(value)
     }
 }
+pub fn render_html(pack: &Json) -> Result<String> {
+    let end = isodate::ordinal(reconciliation::date(&field(pack, "period_end"))?);
+    render_html_with_notes(pack, end, &index_notes(pack.at("notes")))
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "writes the HTML report sections in order"
 )]
-pub fn render_html(pack: &Json) -> Result<String> {
+fn render_html_with_notes(pack: &Json, end: i32, notes: &NoteIndex<'_>) -> Result<String> {
     decimal::with_precision(40, || {
-        let end = reconciliation::date(&field(pack, "period_end"))?;
-        let notes = pack.at("notes");
         let rows = pack.at("outstanding").as_array().unwrap();
         let mut outstanding = String::new();
         for row in rows {
@@ -57,8 +80,7 @@ pub fn render_html(pack: &Json) -> Result<String> {
                 .unwrap()
                 .sub(&Decimal::parse(&field(row, "Credit")).unwrap())
                 .value;
-            let age = isodate::ordinal(end)
-                - isodate::ordinal(reconciliation::date(&field(row, "Date"))?);
+            let age = end - isodate::ordinal(reconciliation::date(&field(row, "Date"))?);
             let values = [
                 field(row, "TransactionID"),
                 field(row, "Date"),
@@ -66,10 +88,7 @@ pub fn render_html(pack: &Json) -> Result<String> {
                 field(row, "Reference"),
                 field(row, "Description"),
                 reconciliation::fixed(&amount),
-                notes
-                    .get(&field(row, "TransactionID"))
-                    .map(text)
-                    .unwrap_or_default(),
+                transaction_note(notes, row).map(text).unwrap_or_default(),
             ];
             outstanding.push_str("<tr>");
             for value in values {
@@ -185,8 +204,8 @@ pub fn render_html(pack: &Json) -> Result<String> {
     reason = "renders each report file from one pack"
 )]
 pub fn rendered(pack: &Json) -> Result<Vec<(String, Vec<u8>)>> {
-    let end = reconciliation::date(&field(pack, "period_end"))?;
-    let notes = pack.at("notes");
+    let end = isodate::ordinal(reconciliation::date(&field(pack, "period_end"))?);
+    let notes = index_notes(pack.at("notes"));
     let mut outstanding_rows = Vec::new();
     for row in pack.at("outstanding").as_array().unwrap() {
         let mut values: Vec<_> = COLUMNS
@@ -200,15 +219,10 @@ pub fn rendered(pack: &Json) -> Result<Vec<(String, Vec<u8>)>> {
                 }
             })
             .collect();
-        values.push(
-            (isodate::ordinal(end) - isodate::ordinal(reconciliation::date(&field(row, "Date"))?))
-                .to_string(),
-        );
+        values
+            .push((end - isodate::ordinal(reconciliation::date(&field(row, "Date"))?)).to_string());
         values.push(report::csv_safe(
-            &notes
-                .get(&field(row, "TransactionID"))
-                .map(text)
-                .unwrap_or_default(),
+            &transaction_note(&notes, row).map(text).unwrap_or_default(),
         ));
         outstanding_rows.push(values);
     }
@@ -247,7 +261,10 @@ pub fn rendered(pack: &Json) -> Result<Vec<(String, Vec<u8>)>> {
             "reconciliation.json".into(),
             (pyjson::pretty_utf8(pack)? + "\n").into_bytes(),
         ),
-        ("review.html".into(), render_html(pack)?.into_bytes()),
+        (
+            "review.html".into(),
+            render_html_with_notes(pack, end, &notes)?.into_bytes(),
+        ),
         (
             "outstanding.csv".into(),
             bom(csv(&columns, &outstanding_rows)),
@@ -263,10 +280,10 @@ pub fn rendered(pack: &Json) -> Result<Vec<(String, Vec<u8>)>> {
             outstanding
                 .iter()
                 .filter_map(|row| {
-                    let key = field(row, "TransactionID");
-                    notes
-                        .get(&key)
-                        .map(|value| (PyStr::from(key.as_str()), value.clone()))
+                    transaction_note(&notes, row).map(|value| {
+                        let id = row.at("TransactionID").as_pystr().unwrap();
+                        (id.clone(), value.clone())
+                    })
                 })
                 .collect(),
         );
@@ -292,6 +309,30 @@ pub fn write_reconciliation(pack: &Json, output: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pyjson::PyStr;
+
+    #[test]
+    fn note_index_preserves_exact_keys_and_first_values() {
+        let notes = Json::Object(vec![
+            (PyStr::from("TX-é"), Json::str("Original")),
+            (PyStr::from("TX-é"), Json::str("Duplicate")),
+            (PyStr::from("TX-e\u{301}"), Json::str("Decomposed")),
+        ]);
+        let index = index_notes(&notes);
+        for (id, expected) in [
+            ("TX-é", Some("Original")),
+            ("TX-e\u{301}", Some("Decomposed")),
+            ("TX-E", None),
+        ] {
+            let row = Json::object([("TransactionID", Json::str(id))]);
+            assert_eq!(
+                transaction_note(&index, &row).map(text).as_deref(),
+                expected
+            );
+        }
+        assert!(index_notes(&Json::Null).is_empty());
+    }
+
     #[test]
     fn decision_export_reversibly_guards_literal_apostrophes_and_formulas() {
         assert_eq!(decision_csv_safe("'literal"), "''literal");
