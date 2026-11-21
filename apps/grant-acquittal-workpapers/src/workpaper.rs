@@ -4,7 +4,7 @@
 //! Local grant allocation and funding workpapers from explicitly reviewed
 //! inputs: a line-by-line port of `grant_workpaper.py`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::ops::{Add, Sub};
 use std::path::{Path, PathBuf};
@@ -180,7 +180,7 @@ pub fn rows(content: &[u8], fields: &str, key: &str) -> Result<Vec<Record>> {
     }
     let headings = headings.expect("checked above");
     let mut result = Vec::new();
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen = HashSet::new();
     for row in reader {
         let row = row.map_err(csv_error)?;
         if row.has_extra || row.values.iter().any(Option::is_none) {
@@ -192,13 +192,12 @@ pub fn rows(content: &[u8], fields: &str, key: &str) -> Result<Vec<Record>> {
             .zip(row.values.into_iter().map(Option::unwrap))
             .collect();
         let identifier = field(&record, key);
-        if pytext::strip(identifier).is_empty() || seen.iter().any(|s| s == identifier) {
+        if pytext::strip(identifier).is_empty() || !seen.insert(identifier.to_owned()) {
             return fail(format!("Missing or duplicate {key}: {}", pytext::repr(identifier)));
         }
         for (name, value) in &record {
             text_field(value, name, !pytext::strip(value).is_empty())?;
         }
-        seen.push(identifier.to_string());
         result.push(record);
     }
     Ok(result)
@@ -371,7 +370,7 @@ struct Sources<'a> {
 struct Workings<'a> {
     grants: Vec<(String, &'a Json)>,
     findings: Vec<Json>,
-    sources: Vec<(String, &'a Record)>,
+    sources: HashMap<&'a str, &'a Record>,
     allocated: BTreeMap<String, Amount>,
     cash_allocated: BTreeMap<String, Amount>,
     totals: Totals,
@@ -387,7 +386,7 @@ fn calculate(input: &Sources) -> Result<Json> {
     let mut work = Workings {
         grants: agreements(input.header)?,
         findings: Vec::new(),
-        sources: Vec::new(),
+        sources: HashMap::with_capacity(input.ledger.len()),
         allocated: BTreeMap::new(),
         cash_allocated: BTreeMap::new(),
         totals: Totals::default(),
@@ -405,7 +404,7 @@ fn calculate(input: &Sources) -> Result<Json> {
     work.receipts(input.receipts, input.start, input.end)?;
     work.contributions(input.contributions, input.start, input.end)?;
     let contribution_rows = work.contribution_rows();
-    let tieout = work.tieout()?;
+    let tieout = work.tieout(input.ledger)?;
     let (budget_rows, movements) = work.budgets()?;
     work.result(input, budget_rows, movements, contribution_rows, tieout)
 }
@@ -475,10 +474,6 @@ impl<'a> Workings<'a> {
         self.grants.iter().find(|(g, _)| g == id).map(|(_, g)| *g)
     }
 
-    fn source(&self, id: &str) -> Option<&'a Record> {
-        self.sources.iter().find(|(s, _)| s == id).map(|(_, r)| *r)
-    }
-
     fn ledger(&mut self, ledger: &'a [Record], start: Date, end: Date) -> Result<()> {
         for row in ledger {
             if !within(field(row, "date"), start, end)? {
@@ -489,7 +484,7 @@ impl<'a> Workings<'a> {
             if expense <= Amount::ZERO || paid > expense {
                 return fail("Source expenses must be positive; cash paid cannot exceed the expense");
             }
-            self.sources.push((field(row, "ledger_id").to_string(), row));
+            self.sources.insert(field(row, "ledger_id"), row);
             if blank(field(row, "evidence")) {
                 self.findings
                     .push(finding("MISSING_SOURCE_EVIDENCE", field(row, "ledger_id")));
@@ -499,8 +494,8 @@ impl<'a> Workings<'a> {
     }
 
     fn allocation(&mut self, row: &Record) -> Result<()> {
-        let (Some(item), Some(agreement)) = (self.source(field(row, "ledger_id")), self.grant(field(row, "grant_id")))
-        else {
+        let source = self.sources.get(field(row, "ledger_id")).copied();
+        let (Some(item), Some(agreement)) = (source, self.grant(field(row, "grant_id"))) else {
             return fail("Allocation references an unknown ledger row or grant");
         };
         let line = field(row, "budget_line");
@@ -632,9 +627,10 @@ impl<'a> Workings<'a> {
             .collect()
     }
 
-    fn tieout(&mut self) -> Result<Vec<Json>> {
-        let mut tieout: Vec<Json> = Vec::new();
-        for (key, row) in &self.sources {
+    fn tieout(&mut self, ledger: &[Record]) -> Result<Vec<Json>> {
+        let mut tieout = Vec::with_capacity(ledger.len());
+        for row in ledger {
+            let key = field(row, "ledger_id");
             let allocated_here = self.allocated.get(key).copied().unwrap_or(Amount::ZERO);
             let cash_here = self.cash_allocated.get(key).copied().unwrap_or(Amount::ZERO);
             let unallocated = money(field(row, "amount"))?.sub(allocated_here);

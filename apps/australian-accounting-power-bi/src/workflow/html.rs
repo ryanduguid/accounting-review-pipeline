@@ -38,11 +38,11 @@ pub fn render(run: &Path, bin_dir: &Path, previous: Option<&Path>) -> Result<Str
             &manifests[command],
         )?;
     }
-    let projected = projection::projection(run)?;
+    let projected = projection::project_verified(&verified)?;
     let comparison = previous
         .map(|previous| changes(run, previous, bin_dir, &verified))
         .transpose()?;
-    if run::verify(run)?.snapshot != verified.snapshot {
+    if run::verify(run)? != verified {
         return Err("Current run changed during display.".into());
     }
     document(&projected, &verified.receipt, comparison.as_ref())
@@ -91,7 +91,7 @@ fn changes(run: &Path, previous: &Path, bin_dir: &Path, verified: &run::Verified
         )
     };
     let change = json!({"changed_inputs":changed,"findings":comparison["findings"],"queries":comparison["queries"],"scope_changes":comparison["scope_changes"],"acknowledgement_changed":!json::equal(&close(&old.snapshot)?["acknowledgement"], &close(&verified.snapshot)?["acknowledgement"]),"meaning":comparison["review_boundary"]});
-    if run::verify(previous)?.snapshot != old.snapshot {
+    if run::verify(previous)? != old {
         return Err("Previous run changed during display.".into());
     }
     Ok((old.receipt["period"].as_str().unwrap().to_owned(), change))

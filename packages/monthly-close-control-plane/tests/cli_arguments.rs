@@ -6,7 +6,7 @@ mod child_profile;
 #[path = "support/temp.rs"]
 mod temp;
 
-use monthly_close_control_plane::{reconciliation, viewer};
+use monthly_close_control_plane::{decimal::Decimal, engine, reconciliation, viewer};
 use std::{
     collections::BTreeMap,
     fs,
@@ -414,6 +414,48 @@ fn separate_negative_thresholds_reach_the_decimal_validator() {
         );
         assert!(std::fs::read_dir(&directory.0).unwrap().next().is_none());
     }
+}
+
+#[test]
+fn equity_currency_declarations_require_a_schedule_before_opening_trial_balances() {
+    let temp = temp::TempDir::new();
+    let output = temp.join("pack");
+    for args in [
+        ["--equity-currency", "AUD"],
+        ["--equity-currency-evidence", "Fabricated ledger export"],
+    ] {
+        let result = review_command(&temp, &output).args(args).output().unwrap();
+        assert_eq!(result.status.code(), Some(1), "{args:?}");
+        assert!(result.stdout.is_empty(), "{args:?}");
+        let stderr = String::from_utf8(result.stderr)
+            .unwrap()
+            .replace("\r\n", "\n");
+        assert_eq!(
+            stderr,
+            "close-control: input error: Equity currency declarations require an equity schedule.\n"
+        );
+        assert!(fs::read_dir(&temp.0).unwrap().next().is_none());
+    }
+}
+
+#[test]
+fn review_engine_rejects_fractions_over_one_before_input_capture() {
+    let mut config = engine::ReviewConfig::new("current.csv".into(), "prior.csv".into());
+    let mut capture =
+        |_: &Path, _: &str| panic!("invalid configuration must precede input capture");
+
+    config.percentage_threshold = Decimal::parse("1.001").unwrap();
+    config.gst_percentage_tolerance = Decimal::parse("1.001").unwrap();
+    assert_eq!(
+        engine::review_with(&config, &mut capture).unwrap_err(),
+        "percentage_threshold is a fraction from 0 to 1: 0.10 means 10%."
+    );
+
+    config.percentage_threshold = Decimal::parse("1").unwrap();
+    assert_eq!(
+        engine::review_with(&config, &mut capture).unwrap_err(),
+        "gst_percentage_tolerance is a fraction from 0 to 1: 0.01 means 1%."
+    );
 }
 
 #[test]

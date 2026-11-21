@@ -632,7 +632,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--python-pkg", required=True)
     parser.add_argument("--binary", required=True)
-    parser.add_argument("--python", default=sys.executable)
+    # The Windows venv launcher replaces lone UTF-16 surrogates in child arguments.
+    oracle_python = sys._base_executable if os.name == "nt" else sys.executable
+    parser.add_argument("--python", default=oracle_python)
     parser.add_argument("--cases", type=int, default=500)
     parser.add_argument("--seed", type=int, default=20261011)
     parser.add_argument("--keep-failures")
@@ -690,4 +692,5 @@ def main():
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(errors="backslashreplace")
     raise SystemExit(main())

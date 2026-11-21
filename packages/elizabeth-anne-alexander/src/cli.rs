@@ -29,13 +29,18 @@ struct Command {
     options: &'static [Opt],
 }
 
-const fn opt(flag: &'static str, dest: &'static str, required: bool, help: Option<&'static str>) -> Opt {
-    Opt {
-        flag,
-        dest,
-        required,
-        help,
-    }
+macro_rules! opt {
+    ($flag:literal, $dest:literal) => {
+        opt!($flag, $dest, true, None)
+    };
+    ($flag:literal, $dest:literal, $required:literal, $help:expr) => {
+        Opt {
+            flag: concat!("--", $flag),
+            dest: $dest,
+            required: $required,
+            help: $help,
+        }
+    };
 }
 
 static COMMANDS: [Command; 2] = [
@@ -43,29 +48,29 @@ static COMMANDS: [Command; 2] = [
         name: "evaluate",
         help: "evaluate the one allowlisted variance review",
         options: &[
-            opt("--context", "CONTEXT", true, None),
-            opt("--request", "REQUEST", true, None),
-            opt("--policy", "POLICY", true, None),
-            opt("--out", "OUT", true, None),
+            opt!("context", "CONTEXT"),
+            opt!("request", "REQUEST"),
+            opt!("policy", "POLICY"),
+            opt!("out", "OUT"),
         ],
     },
     Command {
         name: "validate-review",
         help: "validate a human acknowledgement/escalation record",
         options: &[
-            opt("--evidence", "EVIDENCE", true, None),
-            opt("--receipt", "RECEIPT", true, None),
-            opt(
-                "--decision",
+            opt!("evidence", "EVIDENCE"),
+            opt!("receipt", "RECEIPT"),
+            opt!(
+                "decision",
                 "DECISION",
                 true,
-                Some("decision JSON under the bundled samples/ data or the working directory's build/"),
+                Some("decision JSON under the bundled samples/ data or the working directory's build/")
             ),
-            opt(
-                "--out",
+            opt!(
+                "out",
                 "OUT",
                 false,
-                Some("optional JSON validation output below build/"),
+                Some("optional JSON validation output below build/")
             ),
         ],
     },
