@@ -29,6 +29,7 @@ pub const COLUMNS: [&str; 9] = [
 ];
 pub const DECISION_COLUMNS: [&str; 4] = ["Group", "TransactionID", "Decision", "Note"];
 pub const IDENTITY_COLUMNS: [&str; 3] = ["Tenant", "AccountID", "Currency"];
+const MAX_RECONCILIATION_ITEMS: usize = 100_000;
 pub const BOUNDARY: &str =
     "Review evidence only. Matching records an allocation; it does not approve a close.";
 fn field(value: &Json, key: &str) -> String {
@@ -451,7 +452,8 @@ pub fn reconcile_with(
             .map(|s| opening(s, &identity, start))
             .transpose()?
             .unwrap_or_default();
-        let mut current = Vec::new();
+        let remaining = MAX_RECONCILIATION_ITEMS.saturating_sub(old.len());
+        let mut current = (old.len() <= MAX_RECONCILIATION_ITEMS).then(Vec::new);
         for row in loader::csv_rows(&transactions, &COLUMNS, "Transactions")? {
             let row = row?;
             if row.values.values().any(Option::is_none) {
@@ -481,13 +483,20 @@ pub fn reconcile_with(
                     row.number
                 ));
             }
-            current.push(value);
+            if let Some(rows) = &mut current {
+                if rows.len() < remaining {
+                    rows.push(value);
+                } else {
+                    // Keep validating later CSV rows without retaining data we cannot use.
+                    current = None;
+                }
+            }
         }
-        if old.len() + current.len() > 100_000 {
+        let Some(current) = current else {
             return Err(
                 "A reconciliation supports at most 100,000 outstanding and current items.".into(),
             );
-        }
+        };
         let movement = total(&current);
         let opening_difference = total(&old).sub(&opening_balance).value;
         let opening_ids = old
@@ -875,6 +884,16 @@ mod tests {
         assert_eq!(
             error,
             "A reconciliation supports at most 100,000 outstanding and current items."
+        );
+
+        csv.push_str("Synthetic,CLEAR,AUD,late,2026-08-31,R,Outside the period,1,0\n");
+        let error = reconcile_with(&config(), &mut |path, _| {
+            Ok(SourceSnapshot::new(path, csv.as_bytes().to_vec()))
+        })
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "transactions.csv: row 100003 falls outside the reporting period."
         );
     }
     #[test]
