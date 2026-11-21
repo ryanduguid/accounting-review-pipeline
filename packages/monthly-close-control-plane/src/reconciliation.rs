@@ -483,13 +483,20 @@ pub fn reconcile_with(
             }
             current.push(value);
         }
-        let mut ordered: Vec<_> = old.iter().chain(&current).cloned().collect();
-        ordered.sort_by_cached_key(|row| (field(row, "Date"), field(row, "TransactionID")));
-        if ordered.len() > 100000 {
+        if old.len() + current.len() > 100_000 {
             return Err(
                 "A reconciliation supports at most 100,000 outstanding and current items.".into(),
             );
         }
+        let movement = total(&current);
+        let opening_difference = total(&old).sub(&opening_balance).value;
+        let opening_ids = old
+            .iter()
+            .map(|row| row.at("TransactionID").clone())
+            .collect();
+        let mut ordered = old;
+        ordered.extend(current);
+        ordered.sort_by_cached_key(|row| (field(row, "Date"), field(row, "TransactionID")));
         let items: BTreeMap<_, _> = ordered
             .iter()
             .map(|row| (field(row, "TransactionID"), row))
@@ -557,8 +564,6 @@ pub fn reconcile_with(
                 ]));
             }
         }
-        let movement = total(&current);
-        let opening_difference = total(&old).sub(&opening_balance).value;
         let closing_difference = opening_balance
             .add(&movement)
             .value
@@ -617,10 +622,7 @@ pub fn reconcile_with(
             ("closing_difference", Json::str(&fixed(&closing_difference))),
             ("outstanding_total", Json::str(&fixed(&total(&outstanding)))),
             ("transactions", Json::Array(ordered)),
-            (
-                "opening_ids",
-                Json::Array(old.iter().map(|r| r.at("TransactionID").clone()).collect()),
-            ),
+            ("opening_ids", Json::Array(opening_ids)),
             ("outstanding", Json::Array(outstanding)),
             ("suggestions", Json::Array(suggestions)),
             (
@@ -855,9 +857,9 @@ mod tests {
         });
     }
     #[test]
-    fn more_than_one_hundred_thousand_items_refuses_before_allocation() {
+    fn oversized_reconciliation_refuses_before_checking_duplicate_ids() {
         let mut csv = COLUMNS.join(",") + "\n";
-        for index in 0..100001 {
+        for index in 0..100_000 {
             use std::fmt::Write;
             writeln!(
                 csv,
@@ -865,6 +867,7 @@ mod tests {
             )
             .unwrap();
         }
+        csv.push_str("Synthetic,CLEAR,AUD,T0,2026-09-01,R,Synthetic,1,0\n");
         let error = reconcile_with(&config(), &mut |path, _| {
             Ok(SourceSnapshot::new(path, csv.as_bytes().to_vec()))
         })
