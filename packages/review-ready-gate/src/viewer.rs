@@ -296,7 +296,7 @@ fn required_control_findings(required: &Json) -> Result<Vec<RaisedControl>> {
     if required.is_empty() {
         return Err(invalid());
     }
-    let known = profiles::control_names();
+    let known = &*profiles::CONTROL_NAMES;
     let mut expected = Vec::new();
     let mut previous = String::new();
     for entry in required {
