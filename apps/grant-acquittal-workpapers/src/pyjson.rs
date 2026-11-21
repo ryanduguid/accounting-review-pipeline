@@ -908,8 +908,8 @@ mod tests {
 
     #[test]
     fn float_repr_matches_cpython_corpus() {
-        // CPython 3.15's repr for doubles chosen to exercise ties between two
-        // equally short spellings: bits in hex, then the repr.
+        // CPython 3.15's repr for rounding ties and for powers of two whose
+        // nearest decimal at the shortest precision rounds to a neighbour.
         assert_eq!(float_repr(1.0 + 2f64.powi(-17)), "1.0000076293945312");
         let wrong: Vec<String> = include_str!("../tests/data/float_repr.txt")
             .lines()

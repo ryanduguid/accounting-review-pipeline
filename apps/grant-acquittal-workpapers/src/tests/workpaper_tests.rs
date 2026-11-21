@@ -953,6 +953,34 @@ fn assert_review_example_json(output: &Path, result: &Json) {
 }
 
 #[test]
+fn malformed_result_leaves_no_partial_workpaper() {
+    let fixture = Fixture::new();
+    let sources = source_byte_snapshot(&fixture);
+    let output = fixture.root().join("files");
+    std::fs::create_dir(&output).unwrap();
+
+    let missing = Json::object([]);
+    let mut malformed = fixture.review().unwrap();
+    let Json::Object(fields) = &mut malformed else {
+        panic!("fixture must produce a workpaper object");
+    };
+    fields.iter_mut().find(|(key, _)| key.is("findings")).unwrap().1 = Json::Null;
+
+    for (result, name) in [(missing, "budget_lines"), (malformed, "findings")] {
+        let expected = format!("Invalid workpaper: {name} must be a list");
+        assert_eq!(refused(workpaper::write_files(&result, &output)), expected);
+        assert!(directory_names(&output).is_empty());
+        assert_eq!(
+            refused(workpaper::write(&result, "published", fixture.root())),
+            expected
+        );
+        assert!(!fixture.root().join("published").exists());
+        assert!(fixture.temporary_directories().is_empty());
+    }
+    assert_eq!(source_byte_snapshot(&fixture), sources);
+}
+
+#[test]
 fn write_files_preserves_existing_blockers_and_prior_sequential_output() {
     for blocked in ["workpaper.json", "budget_lines.csv"] {
         let fixture = Fixture::new();
