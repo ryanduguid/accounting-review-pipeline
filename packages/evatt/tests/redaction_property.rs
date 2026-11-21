@@ -569,6 +569,21 @@ fn the_documented_limits_still_pass() {
     }
 }
 
+#[test]
+fn line_context_keeps_python_boundaries_and_empty_input() {
+    let text = "  first\r\n\tsecond\u{2028}third\r";
+    let lines = redact::Lines::new(text);
+    for (expected, context) in [(1, "first"), (2, "second"), (3, "third")] {
+        let (number, actual) = lines.locate(text.find(context).unwrap());
+        assert_eq!(number, expected);
+        assert_eq!(actual.as_ref(), context);
+    }
+    assert_eq!(lines.lines.len(), 3);
+    let (number, context) = redact::Lines::new("").locate(0);
+    assert_eq!(number, 1);
+    assert!(context.is_empty());
+}
+
 /// The name pattern is frozen with the Python contract, and it crosses blank lines.
 #[test]
 fn a_name_candidate_can_cross_a_blank_line() {
