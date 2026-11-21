@@ -168,7 +168,12 @@ fn publish_with(
     let mut replaced = Vec::new();
     let swaps = (|| -> io::Result<()> {
         for (staged, destination) in staged.iter().zip(&destinations) {
-            let parked = if destination.is_file() {
+            let preserve_prior = match fs::symlink_metadata(destination) {
+                Ok(metadata) => !metadata.is_dir(),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error),
+            };
+            let parked = if preserve_prior {
                 let parked = partial(destination)?;
                 if let Err(e) = replace(destination, &parked) {
                     remove_quietly(&parked);
@@ -614,6 +619,39 @@ mod tests {
         );
         assert!(message.contains(&*paths[0].to_string_lossy()), "{message}");
         assert_eq!(fs::read(keep).unwrap(), b"keep");
+        assert_eq!(inventory(&temp.0), [names[0]]);
+    }
+
+    #[test]
+    fn failed_pack_install_restores_a_dangling_member_link() {
+        let temp = TempDir::new();
+        let names = crate::report::PACK_FILE_NAMES;
+        let [first, second, ..] = names.map(|name| temp.0.join(name));
+        let missing = Path::new("unavailable-evidence.csv");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(missing, &first).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(missing, &first).unwrap();
+
+        let error = publish_with(
+            &temp.0,
+            &data("new"),
+            &mut write,
+            &mut |source, destination| {
+                if destination == second.as_path() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "injected installation failure",
+                    ));
+                }
+                replace(source, destination)
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+        let restored = fs::read_link(&first).expect("the previous link must survive rollback");
+        assert_eq!(restored, missing);
         assert_eq!(inventory(&temp.0), [names[0]]);
     }
 
