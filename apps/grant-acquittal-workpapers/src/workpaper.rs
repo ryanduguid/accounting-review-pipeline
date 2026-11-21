@@ -931,10 +931,12 @@ fn validated_tables(result: &Json) -> Result<[&[Json]; TABLES.len()]> {
 
 /// `write_files(result, output)`.
 pub fn write_files(result: &Json, output: &Path) -> Result<()> {
-    write_validated_files(result, output, validated_tables(result)?)
+    let tables = validated_tables(result)?;
+    let report = markdown_report(result)?;
+    write_validated_files(result, output, tables, &report)
 }
 
-fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.len()]) -> Result<()> {
+fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.len()], report: &[u8]) -> Result<()> {
     write_new(
         &output.join("workpaper.json"),
         &text_mode(&(pyjson::dumps_indent2(result) + "\n")),
@@ -942,10 +944,7 @@ fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.
     for (name, rows) in TABLES.into_iter().zip(tables) {
         write_new(&output.join(format!("{name}.csv")), csv_table(rows).as_bytes())?;
     }
-    write_new(
-        &output.join("workpaper.md"),
-        &text_mode(&markdown_report(result)?.join("\n")),
-    )
+    write_new(&output.join("workpaper.md"), report)
 }
 
 /// `csv.DictWriter` over the union of the rows' keys, with formula-like cells escaped.
@@ -972,24 +971,38 @@ fn csv_table(table: &[Json]) -> String {
     csv
 }
 
-/// workpaper.md's lines.
-fn markdown_report(result: &Json) -> Result<Vec<String>> {
+fn required_report_text(value: &Json, key: &str) -> Result<String> {
+    match value.get(key) {
+        Some(Json::Str(text)) => text
+            .to_utf8()
+            .ok_or_else(|| Failure::Error(format!("Invalid workpaper: report field {key} must be valid Unicode"))),
+        Some(other) if key != "scope" => Ok(pyjson::repr(other)),
+        Some(_) => fail("Invalid workpaper: report field scope must be text"),
+        None => fail(format!("Invalid workpaper: report field {key} is missing")),
+    }
+}
+
+/// Render the complete report before creating any output.
+fn markdown_report(result: &Json) -> Result<Vec<u8>> {
     let mut lines = vec![
         "# Grant acquittal workpaper".to_string(),
         String::new(),
-        format!("Entity: {}. Currency: AUD. Basis: GST-inclusive.", markdown(&get_text(result, "entity"))),
+        format!(
+            "Entity: {}. Currency: AUD. Basis: GST-inclusive.",
+            markdown(&required_report_text(result, "entity")?)
+        ),
         format!(
             "Ledger period: {} to {}. Result: {}.",
-            get_text(result, "ledger_start"),
-            get_text(result, "ledger_end"),
-            get_text(result, "status")
+            required_report_text(result, "ledger_start")?,
+            required_report_text(result, "ledger_end")?,
+            required_report_text(result, "status")?
         ),
         String::new(),
         format!(
             "Ledger expenditure {} = allocated {} + unallocated {}.",
-            get_text(result, "ledger_total"),
-            get_text(result, "allocated_total"),
-            get_text(result, "unallocated_total")
+            required_report_text(result, "ledger_total")?,
+            required_report_text(result, "allocated_total")?,
+            required_report_text(result, "unallocated_total")?
         ),
         String::new(),
         "See allocation_evidence.csv for each agreement, source expense and review decision; funding_movements.csv separates cash from expenditure.".into(),
@@ -1001,9 +1014,9 @@ fn markdown_report(result: &Json) -> Result<Vec<String>> {
     for row in array(result, "funding_movements")? {
         lines.push(format!(
             "| {} | {} | {} |",
-            markdown(&get_text(row, "grant_id")),
-            get_text(row, "closing_cash_allocation"),
-            get_text(row, "unspent_funding_workpaper")
+            markdown(&required_report_text(row, "grant_id")?),
+            required_report_text(row, "closing_cash_allocation")?,
+            required_report_text(row, "unspent_funding_workpaper")?
         ));
     }
     lines.extend([String::new(), "## Items requiring review".to_string(), String::new()]);
@@ -1011,15 +1024,15 @@ fn markdown_report(result: &Json) -> Result<Vec<String>> {
     for row in found {
         lines.push(format!(
             "- {}: {}",
-            markdown(&get_text(row, "code")),
-            markdown(&get_text(row, "reference"))
+            markdown(&required_report_text(row, "code")?),
+            markdown(&required_report_text(row, "reference")?)
         ));
     }
     if found.is_empty() {
         lines.push("No differences found in the supplied evidence.".into());
     }
-    lines.extend([String::new(), get_text(result, "scope"), String::new()]);
-    Ok(lines)
+    lines.extend([String::new(), required_report_text(result, "scope")?, String::new()]);
+    Ok(text_mode(&lines.join("\n")))
 }
 
 /// Atomically publish a complete directory without replacing any destination.
@@ -1157,6 +1170,7 @@ pub fn write(result: &Json, output_raw: &str, cwd: &Path) -> Result<()> {
         return fail(output_shown);
     }
     let tables = validated_tables(result)?;
+    let report = markdown_report(result)?;
     let parent = output
         .parent()
         .map(Path::to_path_buf)
@@ -1173,7 +1187,7 @@ pub fn write(result: &Json, output_raw: &str, cwd: &Path) -> Result<()> {
     let outcome = (|| -> Result<()> {
         let staged = temporary.join("complete");
         std::fs::create_dir(&staged).map_err(|e| Failure::Error(os_error(&e, &oserror::path_text(&staged), None)))?;
-        write_validated_files(result, &staged, tables)?;
+        write_validated_files(result, &staged, tables, &report)?;
         #[cfg(test)]
         faults::check("publish", &output).map_err(|e| Failure::Error(os_error(&e, &output_shown, None)))?;
         publish_directory(&staged, &output, &output_shown)
