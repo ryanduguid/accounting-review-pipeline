@@ -1003,6 +1003,24 @@ mod tests {
     }
 
     #[test]
+    fn object_keys_preserve_order_and_reject_other_values() {
+        let object = loads(r#"{"second":null,"first":false}"#).unwrap();
+        assert_eq!(
+            object.keys().unwrap(),
+            vec![&PyStr::from("second"), &PyStr::from("first")]
+        );
+        assert!(Json::Null.keys().is_none());
+        assert!(loads("[]").unwrap().keys().is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "set requires an object")]
+    fn setting_a_field_requires_an_object() {
+        let mut value = Json::Null;
+        value.set("field", Json::Null);
+    }
+
+    #[test]
     fn loads_follows_cpython() {
         assert!(loads("{\"a\": NaN}").is_ok());
         assert_eq!(loads("\u{feff}{}").unwrap_err(), LoadError::Invalid);
@@ -1181,11 +1199,8 @@ mod tests {
                 (actual != expected).then(|| format!("{bits}: python {expected}, rust {actual}"))
             })
             .collect();
-        assert!(
-            wrong.is_empty(),
-            "{} wrong: {:?}",
-            wrong.len(),
-            &wrong[..wrong.len().min(10)]
-        );
+        let mismatch_count = wrong.len();
+        let examples = &wrong[..mismatch_count.min(10)];
+        assert!(examples.is_empty(), "{mismatch_count} wrong: {examples:?}");
     }
 }

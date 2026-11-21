@@ -927,11 +927,8 @@ mod tests {
                 (actual != expected).then(|| format!("{bits}: python {expected}, rust {actual}"))
             })
             .collect();
-        assert!(
-            wrong.is_empty(),
-            "{} wrong: {:?}",
-            wrong.len(),
-            &wrong[..wrong.len().min(10)]
-        );
+        let mismatch_count = wrong.len();
+        let examples = &wrong[..mismatch_count.min(10)];
+        assert!(examples.is_empty(), "{mismatch_count} wrong: {examples:?}");
     }
 }
