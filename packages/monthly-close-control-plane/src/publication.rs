@@ -800,6 +800,44 @@ mod tests {
         assert!(!output.exists());
     }
 
+    #[test]
+    fn new_directory_cleanup_reports_member_removal_failure_and_continues() {
+        let temp = TempDir::new();
+        let output = temp.0.join("pack");
+        let replaced = output.join("second");
+        let marker = replaced.join("unowned");
+        let result = write_new_with(
+            &output,
+            || {
+                Ok(vec![
+                    ("first".into(), b"first".to_vec()),
+                    ("second".into(), b"second".to_vec()),
+                    ("third".into(), b"third".to_vec()),
+                ])
+            },
+            &mut |file, bytes| {
+                file.write_all(bytes)?;
+                if bytes == b"third" {
+                    fs::remove_file(&replaced)?;
+                    fs::create_dir(&replaced)?;
+                    fs::write(&marker, b"preserve")?;
+                    return Err(io::Error::other("injected write failure"));
+                }
+                Ok(())
+            },
+        );
+        assert!(!output.join("first").exists());
+        assert!(!output.join("third").exists());
+        assert_eq!(fs::read(&marker).unwrap(), b"preserve");
+        let cleanup = fs::remove_file(&replaced).unwrap_err();
+        assert_eq!(
+            result.unwrap_err(),
+            format!(
+                "Output write failed (injected write failure) and its incomplete output could not be removed ({cleanup})."
+            )
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn dangling_checkout_markers_and_symlinked_outputs_are_refused() {
