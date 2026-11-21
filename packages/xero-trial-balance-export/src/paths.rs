@@ -6,7 +6,7 @@ use crate::{Failure, Result, pypath, pytext};
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
 
@@ -151,6 +151,10 @@ fn ignored(checkout: &Path, target: &Path) -> Result<bool> {
     let mut child = Command::new("git").args(["check-ignore", "--quiet", "--"]).arg(relative).current_dir(checkout).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
         .map_err(|e| Failure::message(format!("git could not be run to ask whether {} ignores the output ({e}), so this run cannot show the export would stay out of a commit.", pypath::text(checkout))))?;
     let deadline = Instant::now() + Duration::from_secs(30);
+    wait_for_ignore(checkout, &mut child, deadline)
+}
+
+fn wait_for_ignore(checkout: &Path, child: &mut Child, deadline: Instant) -> Result<bool> {
     loop {
         if let Some(status) = child
             .try_wait()
@@ -400,6 +404,29 @@ mod tests {
             3,
             "the preflight wrote output or staging files"
         );
+    }
+
+    #[test]
+    fn git_guard_reaps_a_timed_out_child_and_refuses_the_export() {
+        let scratch = crate::testing::Scratch::new();
+        // Git waits for EOF on the pipe, which the child handle keeps open.
+        let mut child = Command::new("git")
+            .args(["hash-object", "--stdin"])
+            .current_dir(&scratch.0)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+
+        assert_eq!(
+            wait_for_ignore(&scratch.0, &mut child, Instant::now()),
+            Err(Failure::message(
+                "git could not be run to ask whether the checkout ignores the output (30-second timeout), so this run cannot show the export would stay out of a commit."
+            ))
+        );
+        assert!(!child.try_wait().unwrap().unwrap().success());
+        assert_eq!(std::fs::read_dir(&scratch.0).unwrap().count(), 0);
     }
 
     #[test]

@@ -447,6 +447,49 @@ fn display_commands_preserve_payload_and_publication_bytes_and_mtimes() {
     assert!(result.stdout.is_empty());
     assert!(fs::read_dir(&empty).unwrap().next().is_none());
 }
+#[cfg(any(unix, windows))]
+#[test]
+fn viewing_refuses_an_unreadable_regular_payload_and_recovers() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    let gate = gate_command("bas-ready", &output).output().unwrap();
+    assert!(gate.status.success(), "{gate:?}");
+    let before = snapshot(&output);
+    let payload = output.join("readiness-pack.json");
+    let mut view = child_profile::command(env!("CARGO_BIN_EXE_review-ready"));
+    view.args(["view", "--pack-dir"]).arg(&output);
+
+    #[cfg(unix)]
+    let denied = {
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = fs::metadata(&payload).unwrap().permissions();
+        fs::set_permissions(&payload, fs::Permissions::from_mode(0o0)).unwrap();
+        let access = fs::File::open(&payload);
+        let attempt = view.output();
+        fs::set_permissions(&payload, permissions).unwrap();
+        // A privileged test user can still read a file with no permission bits.
+        let Err(access) = access else { return };
+        assert_eq!(access.kind(), std::io::ErrorKind::PermissionDenied);
+        attempt.unwrap()
+    };
+    #[cfg(windows)]
+    let denied = {
+        use std::os::windows::fs::OpenOptionsExt;
+        let _exclusive = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&payload)
+            .unwrap();
+        view.output().unwrap()
+    };
+
+    assert_eq!(denied.status.code(), Some(1), "{denied:?}");
+    assert!(denied.stdout.is_empty());
+    assert_view_says(&denied, "readiness-pack.json: cannot read artefact:");
+    assert_eq!(snapshot(&output), before);
+    assert!(view_read_only(&output).status.success());
+}
+
 fn refused_view(path: &std::path::Path) {
     use std::{
         process::Stdio,

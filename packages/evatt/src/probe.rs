@@ -44,7 +44,8 @@ fn patterns_json(text: &str) -> patterns::Result<Json> {
 fn detector(request: &Json) -> patterns::Result<Json> {
     let text = request.at("text").as_pystr().unwrap().to_utf8().unwrap();
     let mut result = vec![("patterns".into(), patterns_json(&text)?)];
-    let structured = patterns::structured_spans(&text)?
+    let (structured, ambiguous) = patterns::structured_and_ambiguous(&text)?;
+    let structured = structured
         .iter()
         .map(|s| {
             Json::Array(vec![
@@ -67,7 +68,7 @@ fn detector(request: &Json) -> patterns::Result<Json> {
         .map(|s| span(&text, s.start, s.end, &s.value))
         .collect();
     result.push(("email_scanner".into(), Json::Array(email)));
-    let ambiguous = patterns::ambiguous(&text)?
+    let ambiguous = ambiguous
         .iter()
         .map(|a| {
             Json::Array(vec![
