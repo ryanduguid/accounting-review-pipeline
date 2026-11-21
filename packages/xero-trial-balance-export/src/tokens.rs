@@ -632,6 +632,8 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), malformed);
     }
 
+    const ROTATED_FIXTURE_BEARER: &str = "synthetic-rotated-access";
+
     struct Rotation {
         posts: std::cell::Cell<usize>,
         gets: std::cell::Cell<usize>,
@@ -645,11 +647,7 @@ mod tests {
         ) -> Result<crate::http::Response> {
             self.posts.set(self.posts.get() + 1);
             let mut next = synthetic(1800);
-            set(
-                &mut next,
-                "access_token",
-                Json::str("synthetic-rotated-access"),
-            );
+            set(&mut next, "access_token", Json::str(ROTATED_FIXTURE_BEARER));
             set(
                 &mut next,
                 "refresh_token",
@@ -664,11 +662,11 @@ mod tests {
         fn get(
             &self,
             _: &str,
-            access_token: &str,
+            bearer: &str,
             _: Option<&str>,
             _: &[(&str, &str)],
         ) -> Result<crate::http::Response> {
-            assert_eq!(access_token, "synthetic-rotated-access");
+            assert_eq!(bearer, ROTATED_FIXTURE_BEARER);
             self.gets.set(self.gets.get() + 1);
             Ok(crate::http::Response {
                 status: 200,
@@ -733,7 +731,7 @@ mod tests {
                 assert!(saved.at("access_token").is_str(if migration {
                     "synthetic-access"
                 } else {
-                    "synthetic-rotated-access"
+                    ROTATED_FIXTURE_BEARER
                 }));
                 if migration {
                     assert_eq!(number(saved.at("obtained_at")), Some(1.0));
