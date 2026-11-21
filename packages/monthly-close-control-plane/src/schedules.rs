@@ -409,6 +409,7 @@ fn migration(data: &Json) -> Result<Json> {
             return Err("Each source account's mapping weights must sum to 1.".into());
         }
     }
+    let unit_weight = Decimal::parse("1").unwrap();
     let mut expected: BTreeMap<MigrationKey, Decimal> = BTreeMap::new();
     let mut actual = BTreeMap::new();
     let mut findings = Vec::new();
@@ -429,35 +430,39 @@ fn migration(data: &Json) -> Result<Json> {
                 );
                 findings.push(item);
             }
-            let destinations = if source_side {
-                weights.get(&account).cloned().unwrap_or_default()
+            let mappings = if source_side {
+                weights.get(&account).map(Vec::as_slice).unwrap_or_default()
             } else {
-                vec![(account.clone(), Decimal::parse("1").unwrap())]
+                &[]
             };
-            if destinations.is_empty() {
+            if source_side && mappings.is_empty() {
                 findings.push(finding("UNMAPPED_ACCOUNT", &account));
             }
+            let destinations = mappings
+                .iter()
+                .map(|(target, weight)| (target, weight))
+                .chain((!source_side).then_some((&account, &unit_weight)));
             for (account, weight) in destinations {
                 add(
                     values,
                     (
                         id(row, "item_id"),
-                        account,
+                        account.clone(),
                         id(row, "reference"),
                         id(row, "tax_code"),
                     ),
-                    &exact(amount.mul_outcome(&weight))?,
+                    &exact(amount.mul_outcome(weight))?,
                 )?;
             }
         }
     }
-    let keys: BTreeSet<_> = expected.keys().chain(actual.keys()).cloned().collect();
+    let keys: BTreeSet<_> = expected.keys().chain(actual.keys()).collect();
     let mut differences = Vec::new();
     for key in keys {
-        let old = expected.get(&key).cloned().unwrap_or_else(Decimal::zero);
-        let new = actual.get(&key).cloned().unwrap_or_else(Decimal::zero);
+        let old = expected.get(key).cloned().unwrap_or_else(Decimal::zero);
+        let new = actual.get(key).cloned().unwrap_or_else(Decimal::zero);
         let difference = exact(new.sub(&old))?;
-        if !expected.contains_key(&key) || !actual.contains_key(&key) || !difference.is_zero() {
+        if !expected.contains_key(key) || !actual.contains_key(key) || !difference.is_zero() {
             differences.push(Json::object([
                 ("item_id", Json::Str(key.0.clone())),
                 ("account", Json::Str(key.1.clone())),
@@ -468,15 +473,13 @@ fn migration(data: &Json) -> Result<Json> {
                 ("difference", number(&difference)),
                 (
                     "presence",
-                    Json::str(
-                        if expected.contains_key(&key) && actual.contains_key(&key) {
-                            "both"
-                        } else if expected.contains_key(&key) {
-                            "before"
-                        } else {
-                            "after"
-                        },
-                    ),
+                    Json::str(if expected.contains_key(key) && actual.contains_key(key) {
+                        "both"
+                    } else if expected.contains_key(key) {
+                        "before"
+                    } else {
+                        "after"
+                    }),
                 ),
             ]));
         }
@@ -724,6 +727,41 @@ mod tests {
             run(&schedule).unwrap_err(),
             "Payments require a positive amount and date on or before cutoff."
         );
+    }
+
+    #[test]
+    fn migration_keeps_weighted_amount_scale_and_missing_item_presence() {
+        let raw = br#"{
+            "schema_version":1,"tenant":"Fabricated Workshop","currency":"AUD","cutoff":"2026-09-30",
+            "mapping":[
+                {"mapping_id":"map-1","source_account":"100","target_account":"200","weight":"0.375"},
+                {"mapping_id":"map-2","source_account":"100","target_account":"300","weight":"0.625"}
+            ],
+            "before":[
+                {"row_id":"before-1","item_id":"item-1","account":"100",
+                 "amount":"20.00","reference":"ref-1","tax_code":"NONE"}
+            ],
+            "after":[
+                {"row_id":"after-1","item_id":"item-1","account":"200",
+                 "amount":"7.50","reference":"ref-1","tax_code":"NONE"},
+                {"row_id":"after-2","item_id":"item-1","account":"400",
+                 "amount":"0.00","reference":"ref-1","tax_code":"NONE"}
+            ]
+        }"#;
+        let source = SourceSnapshot::new(Path::new("schedule.json"), raw.to_vec());
+        let result = review_snapshot(&source, "migration").unwrap();
+
+        assert!(result.at("before_total").is_str("20.00"));
+        assert!(result.at("after_total").is_str("7.50"));
+        let [missing, added] = result.at("differences").as_array().unwrap() else {
+            panic!("expected the missing and added mappings");
+        };
+        assert!(missing.at("account").is_str("300"));
+        assert!(missing.at("expected").is_str("12.50000"));
+        assert!(missing.at("difference").is_str("-12.50000"));
+        assert!(missing.at("presence").is_str("before"));
+        assert!(added.at("account").is_str("400"));
+        assert!(added.at("presence").is_str("after"));
     }
 
     #[test]
