@@ -1549,13 +1549,11 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         .arg(&root)
         .env("PYTHONIOENCODING", "utf-8");
     let expected = exchange(oracle, &corpus)?;
-    let actual: Vec<_> = names
-        .into_iter()
-        .zip(exchange(Command::new(executable), &corpus)?)
-        .collect();
-    if expected.len() != actual.len() || actual.len() != corpus.lines().count() {
+    let actual = exchange(Command::new(executable), &corpus)?;
+    let requests = names.len();
+    if expected.len() != requests || actual.len() != requests {
         return Err(format!(
-            "oracle returned {} lines for {} requests",
+            "comparison expected {requests} responses per process, received {} from the oracle and {} from the native probe",
             expected.len(),
             actual.len()
         )
@@ -1564,7 +1562,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     let mut mismatches = 0;
     let mut presentation = 0;
     let mut recorded = 0;
-    for ((name, actual), expected) in actual.iter().zip(expected) {
+    for ((name, actual), expected) in names.iter().zip(&actual).zip(expected) {
         if !probe::equivalent(actual, &expected)? {
             if let Some(slot) = slot_the_baseline_lacks(name)
                 && let Some(native) = without_absent_control(actual, slot)?
