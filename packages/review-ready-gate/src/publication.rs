@@ -8,6 +8,7 @@ use crate::{
     pypath,
     report::PACK_NAMES,
 };
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     fs::{self, File, OpenOptions},
@@ -514,6 +515,19 @@ fn copy_new(source: &Path, destination: &Path) -> io::Result<()> {
     io::copy(&mut source, &mut sink)?;
     Ok(())
 }
+fn backup_digest(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0; 16 * 1024];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) => return Ok(crate::sha256_hex(&digest.finalize())),
+            Ok(bytes) => digest.update(&buffer[..bytes]),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
 fn checkpoint(observer: Observer<'_>, name: &str) -> io::Result<()> {
     observer(name)?;
     cancellation()
@@ -529,7 +543,7 @@ fn backup_slots(
         if regular(&destination, true)? {
             let backup = tx.join(format!("backup-{i}"));
             copy_new(&destination, &backup)?;
-            previous[i] = Some(crate::sha256(&fs::read(backup)?));
+            previous[i] = Some(backup_digest(&backup)?);
         }
         checkpoint(observer, &format!("backup-{i}"))?;
     }
@@ -557,7 +571,7 @@ fn restore_slots(
         if let Some(hash) = &state.previous[i] {
             let backup = tx.join(format!("backup-{i}"));
             regular(&backup, false)?;
-            if &crate::sha256(&fs::read(&backup)?) != hash {
+            if &backup_digest(&backup)? != hash {
                 return Err(error("recovery backup differs; retain recovery evidence"));
             }
             if regular(&destination, true)? && &crate::sha256(&fs::read(&destination)?) == hash {
@@ -1071,6 +1085,31 @@ mod tests {
         drop(held);
         publish(&tmp.0, &rendered("retry")).unwrap();
         assert_eq!(payloads(&tmp.0), rendered("retry").map(Some));
+    }
+    #[test]
+    fn rollback_hashes_and_restores_the_entire_earlier_payload() {
+        let tmp = TempDir::new();
+        let mut old = rendered("old");
+        old[0] = [b'a'; 16 * 1024].repeat(2);
+        old[0].extend_from_slice(b"the tail must survive rollback");
+        publish(&tmp.0, &old).unwrap();
+        let expected = crate::sha256(&old[0]);
+        let result = publish_observed(&tmp.0, &rendered("new"), &mut |point| {
+            if point == "prepared" {
+                let state = read_state(&tmp.join(CONTROL_NAME))?;
+                assert_eq!(state.previous[0].as_deref(), Some(expected.as_str()));
+            }
+            if point == "install-1" {
+                return Err(error("publication stopped after installing 2 files"));
+            }
+            Ok(())
+        });
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "publication stopped after installing 2 files"
+        );
+        assert_eq!(payloads(&tmp.0), old.map(Some));
+        assert_settled(&tmp.0);
     }
     #[test]
     fn corrupt_backup_keeps_unresolved_recovery_evidence() {
