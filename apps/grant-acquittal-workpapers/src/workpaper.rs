@@ -924,7 +924,7 @@ fn csv_table(table: &[Json]) -> String {
     let mut csv = pycsv::write_row(&fields);
     for row in table {
         let cells: Vec<String> = fields.iter().map(|key| safe_cell(&get_text(row, key))).collect();
-        csv.push_str(&pycsv::write_row(&cells));
+        pycsv::append_row(&mut csv, &cells);
     }
     csv
 }
@@ -1194,6 +1194,20 @@ mod tests {
         assert_eq!(
             csv_table(&rows),
             "reference,amount,reviewed\r\nfirst,42,\r\nsecond,,True\r\n"
+        );
+    }
+
+    #[test]
+    fn csv_table_appends_blank_and_quoted_records() {
+        assert_eq!(csv_table(&[]), "code,reference\r\n");
+        let rows = [
+            Json::object([("reference", Json::str("first, \"A\"\r\nsecond"))]),
+            Json::object([("reference", Json::str(""))]),
+            Json::object([("reference", Json::str("\"\""))]),
+        ];
+        assert_eq!(
+            csv_table(&rows),
+            "reference\r\n\"first, \"\"A\"\"\r\nsecond\"\r\n\"\"\r\n\"\"\"\"\"\"\r\n"
         );
     }
 
