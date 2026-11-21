@@ -664,10 +664,11 @@ mod tests {
         fn get(
             &self,
             _: &str,
-            _: &str,
+            access_token: &str,
             _: Option<&str>,
             _: &[(&str, &str)],
         ) -> Result<crate::http::Response> {
+            assert_eq!(access_token, "synthetic-rotated-access");
             self.gets.set(self.gets.get() + 1);
             Ok(crate::http::Response {
                 status: 200,
@@ -758,6 +759,53 @@ mod tests {
     #[test]
     fn rotation_save_failures_prevent_api_use_and_retain_only_complete_recovery() {
         check_save_failure(false);
+    }
+
+    #[test]
+    fn recovered_rotation_is_used_without_replaying_the_refresh() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("token.json");
+        let session = TokenSession::new(&path).unwrap();
+        session.save(&synthetic(1)).unwrap();
+        let http = Rotation {
+            posts: std::cell::Cell::new(0),
+            gets: std::cell::Cell::new(0),
+        };
+        let credentials = crate::http::Credentials {
+            id: "synthetic-id".into(),
+            secret: "synthetic-secret".into(),
+        };
+        let read_report = |session: &TokenSession| {
+            crate::http::api_get(
+                &http,
+                session,
+                &credentials,
+                crate::http::REPORT_URL,
+                None,
+                &[],
+            )
+        };
+        let failure = publication::with_failure(Stage::Replace, || read_report(&session));
+        assert!(
+            failure
+                .unwrap_err()
+                .stderr
+                .contains("could not move it onto")
+        );
+        assert_eq!(http.posts.get(), 1);
+        assert_eq!(http.gets.get(), 0);
+
+        let recovery = fs::read_dir(&scratch.0)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|file| file.extension().is_some_and(|extension| extension == "tmp"))
+            .unwrap();
+        fs::copy(recovery, &path).unwrap();
+        let recovered = TokenSession::new(&path).unwrap();
+        let report = read_report(&recovered).unwrap();
+        assert!(matches!(report, Json::Object(pairs) if pairs.is_empty()));
+        assert_eq!(http.posts.get(), 1);
+        assert_eq!(http.gets.get(), 1);
     }
 
     #[cfg(windows)]
