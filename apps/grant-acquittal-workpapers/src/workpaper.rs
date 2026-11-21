@@ -799,23 +799,23 @@ fn digests(content: &[(&'static str, Vec<u8>)]) -> Json {
 
 /// `safe_cell(value)`: escape text a spreadsheet would read as a formula, but leave numbers alone.
 pub fn safe_cell(text: &str) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    let digit = |c: &char| pytext::decimal_value(*c as u32).is_some();
-    let body = chars.strip_prefix(&['-']).unwrap_or(&chars);
-    let (int, frac) = match body.iter().position(|&c| c == '.') {
-        Some(at) => (&body[..at], Some(&body[at + 1..])),
-        None => (body, None),
-    };
-    let int_ok = int == ['0'] || (int.first().is_some_and(|c| ('1'..='9').contains(c)) && int[1..].iter().all(digit));
-    let frac_ok = frac.is_none_or(|f| !f.is_empty() && f.iter().all(digit));
-    if int_ok && frac_ok {
+    if !pytext::strip_start(text).starts_with(['=', '+', '-', '@']) {
         return text.to_string();
     }
-    if pytext::strip_start(text).starts_with(['=', '+', '-', '@']) {
-        format!("'{text}")
-    } else {
-        text.to_string()
+    if let Some(body) = text.strip_prefix('-') {
+        let digit = |ch: char| pytext::decimal_value(ch as u32).is_some();
+        let (int, frac) = match body.split_once('.') {
+            Some((int, frac)) => (int, Some(frac)),
+            None => (body, None),
+        };
+        let int_ok = int == "0"
+            || (int.as_bytes().first().is_some_and(|byte| (b'1'..=b'9').contains(byte)) && int[1..].chars().all(digit));
+        let frac_ok = frac.is_none_or(|f| !f.is_empty() && f.chars().all(digit));
+        if int_ok && frac_ok {
+            return text.to_string();
+        }
     }
+    format!("'{text}")
 }
 
 /// `markdown(value)`: HTML-escape, then backslash-escape Markdown punctuation.
@@ -1177,7 +1177,7 @@ mod tests {
         for text in ["@SUM(A1)", "-1+1", "=1+1", "+1", "-001", "-01.5", " =1"] {
             assert_eq!(safe_cell(text), format!("'{text}"), "{text}");
         }
-        for number in ["-1320", "0", "12.50", "plain"] {
+        for number in ["-1320", "-0", "-0.00", "-1٢.٣", "0", "12.50", "plain"] {
             assert_eq!(safe_cell(number), number);
         }
     }
