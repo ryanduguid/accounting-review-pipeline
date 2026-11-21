@@ -454,16 +454,13 @@ fn cleanup(control: &Path, state: &State, observer: Observer<'_>) -> io::Result<
         return Ok(());
     };
     let transaction = control.join(format!("tx-{id}"));
-    match fs::symlink_metadata(&transaction) {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(error(
-                "referenced publication transaction is missing; retain control for review",
-            ));
+    directory(&transaction).map_err(|e| {
+        if e.kind() == io::ErrorKind::NotFound {
+            error("referenced publication transaction is missing; retain control for review")
+        } else {
+            e
         }
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-    directory(&transaction)?;
+    })?;
     let paths = entries(&transaction)?;
     let owned: BTreeSet<_> = ["stage", "backup", "restore"]
         .iter()
@@ -1001,6 +998,17 @@ mod tests {
                 .to_string()
                 .contains("transaction is missing")
         );
+        let control = tmp.join(CONTROL_NAME);
+        let id = read_state(&control).unwrap().transaction.unwrap();
+        let transaction = control.join(format!("tx-{id}"));
+        fs::write(&transaction, "retain me").unwrap();
+        assert!(
+            publish(&tmp.0, &rendered("retry"))
+                .unwrap_err()
+                .to_string()
+                .contains("publication refuses a non-directory or link")
+        );
+        assert_eq!(fs::read(transaction).unwrap(), b"retain me");
         assert_eq!(payloads(&tmp.0), rendered("new").map(Some));
     }
     #[test]
