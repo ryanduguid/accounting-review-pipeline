@@ -413,6 +413,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn separator_only_values_cannot_compile_into_entity_matchers() {
+        for value in ["", " \t\r\n", "<br>", " \n<br/>\t"] {
+            assert_eq!(value_pattern(value).unwrap_err(), "entity value has no token to match");
+        }
+    }
+
+    #[test]
     fn backtrack_exhaustion_propagates_instead_of_becoming_no_match() {
         let regex = fancy_regex::RegexBuilder::new(r"(?=a)(a+)+$")
             .backtrack_limit(10)
