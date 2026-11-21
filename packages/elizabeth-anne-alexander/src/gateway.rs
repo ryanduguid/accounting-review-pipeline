@@ -952,9 +952,13 @@ pub fn review_input_paths(env: &Env, evidence: &Path, receipt: &Path, decision: 
 
 pub fn validate_review(env: &Env, evidence_path: &Path, receipt_path: &Path, decision_path: &Path) -> Result<Json> {
     let inputs = review_input_paths(env, evidence_path, receipt_path, decision_path)?;
-    let (evidence, receipt, decision) = load_review_documents(env, &inputs)?;
+    validate_review_inputs(env, &inputs)
+}
+
+pub(crate) fn validate_review_inputs(env: &Env, inputs: &ReviewInputs) -> Result<Json> {
+    let (evidence, receipt, decision) = load_review_documents(env, inputs)?;
     check_review_headers(&evidence, &receipt, &decision)?;
-    check_seals(env, &inputs, &evidence, &receipt)?;
+    check_seals(env, inputs, &evidence, &receipt)?;
     let items = check_evidence_items(&evidence)?;
     let mut finding_ids = Vec::new();
     for item in items {
