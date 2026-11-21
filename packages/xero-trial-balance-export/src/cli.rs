@@ -11,7 +11,9 @@ use crate::{
 };
 use std::{
     ffi::OsString,
+    io,
     path::{Path, PathBuf},
+    thread,
 };
 
 pub struct Options {
@@ -445,22 +447,24 @@ pub fn run(args: &[OsString], auth: bool) -> Result<()> {
     )
 }
 
+fn finish_worker(worker: io::Result<thread::JoinHandle<Result<()>>>) -> Result<()> {
+    let worker = worker.map_err(|error| {
+        Failure::message(format!("error: cannot start the Xero command ({error})"))
+    })?;
+    worker.join().unwrap_or_else(|_| {
+        Err(Failure::message(
+            "error: the Xero command failed unexpectedly.",
+        ))
+    })
+}
+
 pub fn entry(auth: bool) {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let result = std::thread::Builder::new()
+    let worker = thread::Builder::new()
         .name("xero-command".into())
         .stack_size(32 * 1024 * 1024)
-        .spawn(move || run(&args, auth))
-        .map_err(|error| {
-            Failure::message(format!("error: cannot start the Xero command ({error})"))
-        })
-        .and_then(|thread| {
-            thread.join().unwrap_or_else(|_| {
-                Err(Failure::message(
-                    "error: the Xero command failed unexpectedly.",
-                ))
-            })
-        });
+        .spawn(move || run(&args, auth));
+    let result = finish_worker(worker);
     if let Err(error) = result {
         crate::stdio::out(&error.stdout);
         crate::stdio::err(&error.stderr);
@@ -471,6 +475,29 @@ pub fn entry(auth: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_failure_and_worker_panic_return_distinct_command_errors() {
+        let start = finish_worker(Err(io::Error::other("synthetic startup failure")))
+            .err()
+            .unwrap();
+        assert_eq!(start.code, 1);
+        assert!(start.stdout.is_empty());
+        assert_eq!(
+            start.stderr,
+            "error: cannot start the Xero command (synthetic startup failure)\n"
+        );
+
+        let worker = thread::spawn(|| panic!("synthetic worker panic"));
+        let joined = finish_worker(Ok(worker)).err().unwrap();
+        assert_eq!(joined.code, 1);
+        assert!(joined.stdout.is_empty());
+        assert_eq!(
+            joined.stderr,
+            "error: the Xero command failed unexpectedly.\n"
+        );
+    }
+
     #[test]
     fn options_preflight_and_iso_forms() {
         for (value, date) in [
