@@ -1531,6 +1531,23 @@ fn decimal_quantize_and_percentage_preserve_nan_or_refuse_invalid_operands() {
 }
 
 #[test]
+fn percentage_conversion_reports_context_overflow_without_panicking() {
+    for value in ["1E+999998", "1E+1000000", "9.9999999999999999999999999995E+999997"] {
+        assert_eq!(
+            percent_string(&d(value)),
+            Err(Failure::Crash("[<class 'decimal.Overflow'>]".into())),
+            "{value}"
+        );
+    }
+    for value in ["1E+999997", "9.9999999999999999999999999994E+999997"] {
+        assert_refused(percent_string(&d(value)), "supported magnitude range");
+    }
+    for value in ["0E+999999999999999999", "1E-1000000"] {
+        assert_eq!(percent_string(&d(value)).unwrap(), "0.0000", "{value}");
+    }
+}
+
+#[test]
 fn test_an_absurd_percentage_is_refused_not_raised_out_of_the_projection() {
     assert_refused(percent_string(&d("1E+30")), "supported magnitude range");
     assert_eq!(percent_string(&d("0.183333")).unwrap(), "18.3333");

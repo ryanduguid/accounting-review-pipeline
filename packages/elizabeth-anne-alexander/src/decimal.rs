@@ -142,14 +142,21 @@ impl Decimal {
         add(self, &other.negate())
     }
 
+    /// Multiply finite values whose product fits the decimal context.
     pub fn mul(&self, other: &Decimal) -> Decimal {
+        self.checked_mul(other)
+            .expect("overflow is unreachable for the bounded amounts the gateway accepts")
+    }
+
+    pub(crate) fn checked_mul(&self, other: &Decimal) -> Option<Decimal> {
         let negative = self.negative ^ other.negative;
         let exp = self.exp + other.exp;
-        if self.is_zero() || other.is_zero() {
-            return fix(finite(negative, "0".into(), exp), Rounding::HalfEven).value;
-        }
-        let product = big(&self.digits) * big(&other.digits);
-        fix(finite(negative, product.to_string(), exp), Rounding::HalfEven).value
+        let digits = if self.is_zero() || other.is_zero() {
+            "0".into()
+        } else {
+            (big(&self.digits) * big(&other.digits)).to_string()
+        };
+        Some(try_fix(finite(negative, digits, exp), Rounding::HalfEven)?.value)
     }
 
     /// `self / other`; the caller guarantees a non-zero divisor.
@@ -525,21 +532,24 @@ fn rescale(value: &Decimal, exp: i128, rounding: Rounding) -> Decimal {
 
 /// `_pydecimal.Decimal._fix`: round to the context and clamp zero exponents.
 fn fix(value: Decimal, rounding: Rounding) -> Outcome {
+    try_fix(value, rounding).expect("overflow is unreachable for the bounded amounts the gateway accepts")
+}
+
+fn try_fix(value: Decimal, rounding: Rounding) -> Option<Outcome> {
     if value.is_zero() {
         let new_exp = value.exp.clamp(ETINY, EMAX);
-        return Outcome {
+        return Some(Outcome {
             value: finite(value.negative, "0".into(), new_exp),
             inexact: false,
-        };
+        });
     }
     let mut exp_min = value.digits.len() as i128 + value.exp - PREC;
-    assert!(
-        exp_min <= ETOP,
-        "overflow is unreachable for the bounded amounts the gateway accepts"
-    );
+    if exp_min > ETOP {
+        return None;
+    }
     exp_min = exp_min.max(ETINY);
     if value.exp >= exp_min {
-        return Outcome { value, inexact: false };
+        return Some(Outcome { value, inexact: false });
     }
     let mut source = value.clone();
     let mut keep = value.digits.len() as i128 + value.exp - exp_min;
@@ -560,14 +570,13 @@ fn fix(value: Decimal, rounding: Rounding) -> Outcome {
             exp_min += 1;
         }
     }
-    assert!(
-        exp_min <= ETOP,
-        "overflow is unreachable for the bounded amounts the gateway accepts"
-    );
-    Outcome {
+    if exp_min > ETOP {
+        return None;
+    }
+    Some(Outcome {
         value: finite(value.negative, coeff, exp_min),
         inexact: changed != 0,
-    }
+    })
 }
 
 fn add(a: &Decimal, b: &Decimal) -> Outcome {

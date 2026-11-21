@@ -495,7 +495,9 @@ pub fn decimal_string(value: &Decimal) -> Result<String> {
 pub fn percent_string(ratio: &Decimal) -> Result<String> {
     let scaled;
     let ratio = if ratio.is_finite() {
-        scaled = ratio.mul(&Decimal::parse("100").unwrap());
+        scaled = ratio
+            .checked_mul(&Decimal::parse("100").unwrap())
+            .ok_or_else(|| Failure::Crash("[<class 'decimal.Overflow'>]".into()))?;
         &scaled
     } else {
         ratio
