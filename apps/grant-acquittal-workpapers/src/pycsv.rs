@@ -219,24 +219,33 @@ impl Iterator for DictReader<'_> {
 /// One `csv.writer` row with QUOTE_MINIMAL and the `\r\n` line terminator.
 pub fn write_row(fields: &[String]) -> String {
     let mut line = String::new();
+    append_row(&mut line, fields);
+    line
+}
+
+pub(crate) fn append_row(line: &mut String, fields: &[String]) {
     for (i, field) in fields.iter().enumerate() {
         if i > 0 {
             line.push(',');
         }
         if field.contains([',', '"', '\r', '\n']) {
             line.push('"');
-            line.push_str(&field.replace('"', "\"\""));
+            for part in field.split_inclusive('"') {
+                line.push_str(part);
+                if part.ends_with('"') {
+                    line.push('"');
+                }
+            }
             line.push('"');
         } else {
             line.push_str(field);
         }
     }
-    if line.is_empty() && !fields.is_empty() {
+    if matches!(fields, [field] if field.is_empty()) {
         // A record of one empty field is written quoted, so it is not a blank line.
         line.push_str("\"\"");
     }
     line.push_str("\r\n");
-    line
 }
 
 #[cfg(test)]

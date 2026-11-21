@@ -10,51 +10,41 @@ enum State {
     InField,
     InQuotedField,
     QuoteInQuotedField,
-    EatCrnl,
 }
 
 /// `_csv.Error`; the gateway reports every one the same way.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CsvError;
 
-/// Splits like `StringIO(newline="")` iteration: after `\n`, a lone `\r`, or `\r\n`.
-fn lines(text: &str) -> Vec<&str> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::new();
-    let mut start = 0;
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\n' => {
-                out.push(&text[start..=i]);
-                start = i + 1;
-            }
-            b'\r' => {
-                let end = if bytes.get(i + 1) == Some(&b'\n') { i + 2 } else { i + 1 };
-                out.push(&text[start..end]);
-                start = end;
-                i = end - 1;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    if start < text.len() {
-        out.push(&text[start..]);
-    }
-    out
-}
-
 /// The `csv.reader` record iterator.
 pub struct Reader<'a> {
-    lines: std::vec::IntoIter<&'a str>,
+    remaining: &'a str,
 }
 
 impl<'a> Reader<'a> {
     pub fn new(text: &'a str) -> Reader<'a> {
-        Reader {
-            lines: lines(text).into_iter(),
+        Reader { remaining: text }
+    }
+
+    /// Read a physical line and its terminator as `StringIO(newline="")` does.
+    fn next_line(&mut self) -> Option<(&'a str, &'a str)> {
+        if self.remaining.is_empty() {
+            return None;
         }
+        let bytes = self.remaining.as_bytes();
+        let line_end = bytes
+            .iter()
+            .position(|&byte| matches!(byte, b'\r' | b'\n'))
+            .unwrap_or(bytes.len());
+        let (body, rest) = self.remaining.split_at(line_end);
+        let width = if rest.starts_with("\r\n") {
+            2
+        } else {
+            usize::from(!rest.is_empty())
+        };
+        let (ending, remaining) = rest.split_at(width);
+        self.remaining = remaining;
+        Some((body, ending))
     }
 }
 
@@ -81,68 +71,37 @@ impl Record {
         Ok(())
     }
 
-    /// End the field at a line end (`None` is the end of the line's text).
-    fn end_line(&mut self, c: Option<char>) {
-        self.save_field();
-        self.state = if c.is_none() {
-            State::StartRecord
-        } else {
-            State::EatCrnl
-        };
-    }
-
-    /// `parse_process_char` for one character, or `None` for the end-of-line
-    /// marker _csv.c feeds after each line.
-    fn step(&mut self, c: Option<char>) -> Result<(), CsvError> {
+    /// Process one character within a physical line.
+    fn step(&mut self, c: char) -> Result<(), CsvError> {
         match self.state {
-            State::StartRecord => match c {
-                None => Ok(()),
-                Some('\n' | '\r') => {
-                    self.state = State::EatCrnl;
-                    Ok(())
-                }
-                Some(ch) => {
-                    self.state = State::StartField;
-                    self.unquoted(Some(ch))
-                }
-            },
+            State::StartRecord => {
+                self.state = State::StartField;
+                self.unquoted(c)
+            }
             State::StartField | State::InField => self.unquoted(c),
             State::InQuotedField => match c {
-                None => Ok(()),
-                Some('"') => {
+                '"' => {
                     self.state = State::QuoteInQuotedField;
                     Ok(())
                 }
-                Some(ch) => self.add_char(ch),
+                ch => self.add_char(ch),
             },
             State::QuoteInQuotedField => self.after_quote(c),
-            State::EatCrnl => match c {
-                Some('\n' | '\r') => Ok(()),
-                None => {
-                    self.state = State::StartRecord;
-                    Ok(())
-                }
-                Some(_) => Err(CsvError),
-            },
         }
     }
 
-    fn unquoted(&mut self, c: Option<char>) -> Result<(), CsvError> {
+    fn unquoted(&mut self, c: char) -> Result<(), CsvError> {
         match c {
-            None | Some('\n' | '\r') => {
-                self.end_line(c);
-                Ok(())
-            }
-            Some('"') if self.state == State::StartField => {
+            '"' if self.state == State::StartField => {
                 self.state = State::InQuotedField;
                 Ok(())
             }
-            Some(',') => {
+            ',' => {
                 self.save_field();
                 self.state = State::StartField;
                 Ok(())
             }
-            Some(ch) => {
+            ch => {
                 self.state = State::InField;
                 self.add_char(ch)
             }
@@ -150,22 +109,18 @@ impl Record {
     }
 
     /// After a quote inside a quoted field; strict off keeps any other character.
-    fn after_quote(&mut self, c: Option<char>) -> Result<(), CsvError> {
+    fn after_quote(&mut self, c: char) -> Result<(), CsvError> {
         match c {
-            Some('"') => {
+            '"' => {
                 self.state = State::InQuotedField;
                 self.add_char('"')
             }
-            Some(',') => {
+            ',' => {
                 self.save_field();
                 self.state = State::StartField;
                 Ok(())
             }
-            None | Some('\n' | '\r') => {
-                self.end_line(c);
-                Ok(())
-            }
-            Some(ch) => {
+            ch => {
                 self.state = State::InField;
                 self.add_char(ch)
             }
@@ -183,23 +138,29 @@ impl Iterator for Reader<'_> {
             field_len: 0,
             state: State::StartRecord,
         };
-        loop {
-            let Some(line) = self.lines.next() else {
-                if record.field_len != 0 || record.state == State::InQuotedField {
-                    record.save_field();
-                    return Some(Ok(record.fields));
-                }
-                return None;
-            };
-            for c in line.chars().map(Some).chain(std::iter::once(None)) {
+        while let Some((body, ending)) = self.next_line() {
+            for c in body.chars() {
                 if record.step(c).is_err() {
                     return Some(Err(CsvError));
                 }
             }
-            if record.state == State::StartRecord {
+            if record.state != State::InQuotedField {
+                if record.state != State::StartRecord {
+                    record.save_field();
+                }
                 return Some(Ok(record.fields));
             }
+            for c in ending.chars() {
+                if record.add_char(c).is_err() {
+                    return Some(Err(CsvError));
+                }
+            }
         }
+        if record.state == State::InQuotedField {
+            record.save_field();
+            return Some(Ok(record.fields));
+        }
+        None
     }
 }
 
@@ -272,6 +233,34 @@ mod tests {
         let long = "x".repeat(FIELD_LIMIT + 1);
         assert_eq!(records(&long), vec![Err(CsvError)]);
         assert_eq!(records(&"x".repeat(FIELD_LIMIT)).len(), 1);
+    }
+
+    #[test]
+    fn mixed_line_endings_keep_the_exact_quoted_text() {
+        let input = "header,code\r\n\"first\r\nsecond\rthird\n💙\",one\rplain,two\n";
+        assert_eq!(
+            records(input),
+            ok(&[
+                &["header", "code"],
+                &["first\r\nsecond\rthird\n💙", "one"],
+                &["plain", "two"]
+            ])
+        );
+    }
+
+    #[test]
+    fn quoted_line_endings_count_towards_the_field_limit() {
+        let valid = format!("\"{}\r\n\",ok", "x".repeat(FIELD_LIMIT - 2));
+        let record = Reader::new(&valid).next().unwrap().unwrap();
+        assert_eq!(record[0].len(), FIELD_LIMIT);
+        assert!(record[0].ends_with("\r\n"));
+        assert_eq!(record[1], "ok");
+
+        let invalid = format!("\"{}\r\nnext,ok\n", "x".repeat(FIELD_LIMIT - 1));
+        let mut reader = Reader::new(&invalid);
+        assert_eq!(reader.next(), Some(Err(CsvError)));
+        assert_eq!(reader.next(), Some(Ok(vec!["next".into(), "ok".into()])));
+        assert!(reader.next().is_none());
     }
 
     #[test]
