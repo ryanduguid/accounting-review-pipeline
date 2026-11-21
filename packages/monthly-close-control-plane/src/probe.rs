@@ -5,7 +5,7 @@
 pub use crate::pyjson::{Json, PyStr};
 use crate::{
     Result, calculation_evidence,
-    decimal::{self, Decimal},
+    decimal::{self, Decimal, ProbeArithmetic},
     engine, equity,
     loader::{self, SourceSnapshot},
     models::*,
@@ -534,6 +534,51 @@ fn csv(request: &Json) -> Result<Json> {
         _ => return Err("unsupported probe CSV kind".into()),
     })
 }
+fn arithmetic(request: &Json) -> Result<Json> {
+    use ProbeArithmetic::{Add, Divide, Multiply, Subtract};
+
+    let precision = text(request.at("precision"))?
+        .parse::<i128>()
+        .map_err(|_| "invalid probe precision")?;
+    if ![28, 40, 80].contains(&precision) {
+        return Err("invalid probe precision".into());
+    }
+    let a = number(request.at("a"))?;
+    let b = number(request.at("b"))?;
+    let operation = match text(request.at("kind"))?.as_str() {
+        "add" => Add,
+        "sub" => Subtract,
+        "mul" => Multiply,
+        "div" => Divide,
+        _ => return Err("invalid probe arithmetic".into()),
+    };
+    let render = |value: Decimal, inexact| {
+        let value = Json::str(&value.to_sci_string());
+        match operation {
+            Add | Subtract => Json::object([("value", value), ("inexact", Json::Bool(inexact))]),
+            Multiply | Divide => value,
+        }
+    };
+    decimal::with_precision(precision, || {
+        if let Some(result) = a.probe_special_arithmetic(&b, operation) {
+            return Ok(render(result?, false));
+        }
+        match operation {
+            Add | Subtract => {
+                let result = if operation == Add {
+                    a.add(&b)
+                } else {
+                    a.sub(&b)
+                };
+                Ok(render(result.value, result.inexact))
+            }
+            Multiply => Ok(render(a.mul(&b), false)),
+            Divide if !b.is_zero() => Ok(render(a.div(&b), false)),
+            Divide => Err("invalid probe arithmetic".into()),
+        }
+    })
+}
+
 #[expect(clippy::too_many_lines, reason = "one branch per probe operation")]
 fn operation(request: &Json) -> Result<Json> {
     if request.at("op").is_str("cli") {
@@ -953,29 +998,7 @@ fn operation(request: &Json) -> Result<Json> {
         "canonical_utf8" => Ok(Json::str(
             &pyjson::canonical_utf8(request.at("value")).map_err(str::to_owned)?,
         )),
-        "arithmetic" => {
-            let precision = text(request.at("precision"))?
-                .parse::<i128>()
-                .map_err(|_| "invalid probe precision")?;
-            if ![28, 40, 80].contains(&precision) {
-                return Err("invalid probe precision".into());
-            }
-            let a = number(request.at("a"))?;
-            let b = number(request.at("b"))?;
-            let kind = text(request.at("kind"))?;
-            decimal::with_precision(precision, || match kind.as_str() {
-                "add" | "sub" => {
-                    let result = if kind == "add" { a.add(&b) } else { a.sub(&b) };
-                    Ok(Json::object([
-                        ("value", Json::str(&result.value.to_sci_string())),
-                        ("inexact", Json::Bool(result.inexact)),
-                    ]))
-                }
-                "mul" => Ok(Json::str(&a.mul(&b).to_sci_string())),
-                "div" if !b.is_zero() => Ok(Json::str(&a.div(&b).to_sci_string())),
-                _ => Err("invalid probe arithmetic".into()),
-            })
-        }
+        "arithmetic" => arithmetic(request),
         _ => Err("unsupported probe operation".into()),
     }
 }
@@ -1090,6 +1113,59 @@ mod tests {
         assert!(
             without_native_options(&usage).starts_with(FROZEN_QUEUE_USAGE),
             "{usage}"
+        );
+    }
+}
+#[test]
+fn arithmetic_probe_matches_python_for_non_finite_values() {
+    let invalid = "[<class 'decimal.InvalidOperation'>]";
+    for (precision, kind, a, b, expected) in [
+        ("28", "add", "Infinity", "Infinity", "Infinity"),
+        ("28", "add", "Infinity", "-Infinity", invalid),
+        ("28", "add", "1", "-Infinity", "-Infinity"),
+        ("28", "sub", "0", "Infinity", "-Infinity"),
+        ("28", "sub", "Infinity", "Infinity", invalid),
+        ("28", "sub", "Infinity", "-Infinity", "Infinity"),
+        ("28", "mul", "0", "Infinity", invalid),
+        ("28", "mul", "Infinity", "-0", invalid),
+        ("28", "mul", "-1", "Infinity", "-Infinity"),
+        ("28", "div", "-Infinity", "0", "-Infinity"),
+        ("28", "div", "Infinity", "Infinity", invalid),
+        ("28", "div", "-1", "Infinity", "-0E-1000026"),
+        ("40", "div", "1", "Infinity", "0E-1000038"),
+        ("28", "add", "NaN71", "NaN92", "NaN71"),
+        ("28", "div", "NaN71", "sNaN92", invalid),
+        ("28", "sub", "1", "-NaN00064", "-NaN64"),
+        (
+            "28",
+            "mul",
+            "NaN123456789012345678901234567890123456789",
+            "2",
+            "NaN2345678901234567890123456789",
+        ),
+    ] {
+        let request = Json::object([
+            ("op", Json::str("arithmetic")),
+            ("precision", Json::str(precision)),
+            ("kind", Json::str(kind)),
+            ("a", Json::str(a)),
+            ("b", Json::str(b)),
+        ]);
+        let expected = if expected == invalid {
+            Json::object([("error", Json::str(invalid))])
+        } else {
+            let value = Json::str(expected);
+            let value = if matches!(kind, "add" | "sub") {
+                Json::object([("value", value), ("inexact", Json::Bool(false))])
+            } else {
+                value
+            };
+            Json::object([("ok", value)])
+        };
+        assert_eq!(
+            encode(&evaluate(&request)),
+            encode(&expected),
+            "{kind} {a} {b}"
         );
     }
 }

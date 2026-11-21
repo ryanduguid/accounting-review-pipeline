@@ -63,13 +63,23 @@ enum Kind {
     Finite,
     Infinite,
     NaN,
+    SignallingNaN,
+}
+
+#[cfg(feature = "probe")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProbeArithmetic {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
 }
 
 /// A decimal value: `(-1)**negative * coefficient * 10**exp` for finite values.
 #[derive(Clone, Debug)]
 pub struct Decimal {
     negative: bool,
-    /// Coefficient digits without leading zeros ("0" for zero), as `_pydecimal._int`.
+    /// Coefficient digits without leading zeros ("0" for zero), or a NaN payload.
     digits: String,
     exp: i128,
     kind: Kind,
@@ -155,6 +165,9 @@ impl Decimal {
         if !(0..=1 << 30).contains(&places) {
             return None;
         }
+        if !self.is_finite() {
+            return Some(self.to_sci_string());
+        }
         let integral = if self.is_zero() {
             1
         } else {
@@ -208,6 +221,58 @@ impl Decimal {
             finite(negative, product.to_string(), exp),
             Rounding::HalfEven,
         )
+    }
+
+    #[cfg(feature = "probe")]
+    pub(crate) fn probe_special_arithmetic(
+        &self,
+        other: &Decimal,
+        operation: ProbeArithmetic,
+    ) -> Option<Result<Decimal, &'static str>> {
+        use ProbeArithmetic::{Add, Divide, Multiply, Subtract};
+
+        if self.is_finite() && other.is_finite() {
+            return None;
+        }
+        let invalid = Err("[<class 'decimal.InvalidOperation'>]");
+        let operands = [self, other];
+        if operands
+            .iter()
+            .any(|value| value.kind == Kind::SignallingNaN)
+        {
+            return Some(invalid);
+        }
+        if let Some(nan) = operands.into_iter().find(|value| value.kind == Kind::NaN) {
+            let start = nan.digits.len().saturating_sub(precision() as usize);
+            let mut result = nan.clone();
+            result.digits = nan.digits[start..].trim_start_matches('0').to_owned();
+            return Some(Ok(result));
+        }
+
+        let left_infinite = self.kind == Kind::Infinite;
+        let right_infinite = other.kind == Kind::Infinite;
+        let negative = self.negative ^ other.negative;
+        let infinity = |negative| Decimal {
+            negative,
+            digits: "0".into(),
+            exp: 0,
+            kind: Kind::Infinite,
+        };
+        Some(match operation {
+            Add | Subtract => {
+                let right_negative = other.negative ^ (operation == Subtract);
+                match (left_infinite, right_infinite) {
+                    (true, true) if self.negative != right_negative => invalid,
+                    (true, _) => Ok(infinity(self.negative)),
+                    _ => Ok(infinity(right_negative)),
+                }
+            }
+            Multiply if self.is_zero() || other.is_zero() => invalid,
+            Multiply => Ok(infinity(negative)),
+            Divide if left_infinite && right_infinite => invalid,
+            Divide if left_infinite => Ok(infinity(negative)),
+            Divide => Ok(finite(negative, "0".into(), etiny())),
+        })
     }
 
     /// `self / other`; the caller guarantees a non-zero divisor.
@@ -278,7 +343,8 @@ impl Decimal {
         let sign = if self.negative { "-" } else { "" };
         match self.kind {
             Kind::Infinite => return format!("{sign}Infinity"),
-            Kind::NaN => return format!("{sign}NaN"),
+            Kind::NaN => return format!("{sign}NaN{}", self.digits),
+            Kind::SignallingNaN => return format!("{sign}sNaN{}", self.digits),
             Kind::Finite => {}
         }
         let len = self.digits.len() as i128;
@@ -431,24 +497,26 @@ fn parse_ascii(text: &str) -> Option<Decimal> {
 /// Infinity and the NaNs: `Some(None)` for a NaN with a malformed payload,
 /// `None` when the text is not a special value at all.
 fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
-    let special = |kind| Decimal {
+    let special = |kind, digits| Decimal {
         negative,
-        digits: "0".into(),
+        digits,
         exp: 0,
         kind,
     };
     if lower == "inf" || lower == "infinity" {
-        return Some(Some(special(Kind::Infinite)));
+        return Some(Some(special(Kind::Infinite, "0".into())));
     }
-    ["snan", "nan"].iter().find_map(|prefix| {
-        let payload = lower.strip_prefix(prefix)?;
-        Some(
-            payload
-                .bytes()
-                .all(|b| b.is_ascii_digit())
-                .then(|| special(Kind::NaN)),
-        )
-    })
+    [("snan", Kind::SignallingNaN), ("nan", Kind::NaN)]
+        .into_iter()
+        .find_map(|(prefix, kind)| {
+            let payload = lower.strip_prefix(prefix)?;
+            Some(
+                payload
+                    .bytes()
+                    .all(|b| b.is_ascii_digit())
+                    .then(|| special(kind, payload.trim_start_matches('0').to_owned())),
+            )
+        })
 }
 
 /// The exponent after `e`, saturated like libmpdec's strtoexp; anything this
@@ -683,12 +751,14 @@ mod tests {
         assert_eq!(d("1.").to_sci_string(), "1");
         assert!(!d("nan123").is_finite());
         assert!(!d("-Infinity").is_finite());
+        assert_eq!(d("-sNaN0005").to_sci_string(), "-sNaN5");
         for bad in [
             "1 0",
             ".",
             "-",
             "1e",
             "infinit",
+            "sNaNvalue",
             "1,5",
             "1\u{0}",
             "1e9223372036854775807",
@@ -764,5 +834,12 @@ mod tests {
             Some("-0.00".into())
         );
         assert_eq!(d("1.235").format_places(2), Some("1.24".into()));
+        for (source, expected) in [
+            ("NaN00123", "NaN123"),
+            ("-sNaN05", "-sNaN5"),
+            ("-Infinity", "-Infinity"),
+        ] {
+            assert_eq!(d(source).format_places(2).as_deref(), Some(expected));
+        }
     }
 }
