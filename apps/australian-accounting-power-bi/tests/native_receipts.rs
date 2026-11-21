@@ -149,6 +149,8 @@ fn run(host: &str, case: Case) -> Run {
     fs::write(work.join("driver.ps1"), RUN_DRIVER).unwrap();
     let mut command = Command::new(host);
     command
+        // Each host needs its own module defaults when launched from the other edition.
+        .env_remove("PSModulePath")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(work.join("driver.ps1"))
         .arg("-Work")
@@ -402,6 +404,7 @@ fn the_settings_copy_is_the_one_holding_desktops_own_trace() {
     for host in ["powershell", "pwsh"] {
         let out = work.join(format!("found-{host}.json"));
         let status = Command::new(host)
+            .env_remove("PSModulePath")
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(work.join("driver.ps1"))
             .arg("-Tools")
