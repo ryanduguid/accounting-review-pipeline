@@ -226,3 +226,29 @@ fn narrow_help_and_diagnostics_respect_colour_precedence() {
         assert_eq!(plain(stream), expected, "positive COLUMNS with missing LINES");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_deleted_working_directory_is_an_internal_error() {
+    let gone = std::env::temp_dir().join(format!("eaa-gone-cwd-{}", std::process::id()));
+    std::fs::create_dir(&gone).unwrap();
+    // The shell removes its own working directory, then becomes the command.
+    let output = child_profile::command("sh")
+        .args([
+            "-c",
+            "rmdir \"$PWD\" && exec \"$0\" --help",
+            env!("CARGO_BIN_EXE_elizabeth-anne-alexander"),
+        ])
+        .current_dir(&gone)
+        .output()
+        .unwrap();
+    assert!(!gone.exists());
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.starts_with("elizabeth-anne-alexander: internal error: "),
+        "{stderr}"
+    );
+    assert!(stderr.contains("the working directory must exist"), "{stderr}");
+}
