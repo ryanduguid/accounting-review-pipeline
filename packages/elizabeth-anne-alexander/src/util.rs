@@ -139,21 +139,20 @@ impl Bundle {
     }
 
     /// The stored key for a normalised path, case-insensitively on Windows as the filesystem would.
-    fn lookup(&self, rel: &str) -> Option<String> {
+    fn lookup(&self, rel: &str) -> Option<&str> {
+        let mut keys = self.files.keys().flat_map(|key| prefixes(key));
         if cfg!(windows) {
             let folded = rel.to_lowercase();
-            let mut keys = self.files.keys().flat_map(|k| prefixes(k));
             keys.find(|k| k.to_lowercase() == folded)
         } else {
-            self.files.keys().flat_map(|k| prefixes(k)).find(|k| k == rel)
+            keys.find(|k| *k == rel)
         }
     }
 }
 
 /// A file path and every directory above it: "a/b/c" gives "a/b/c", "a/b", "a".
-fn prefixes(key: &str) -> Vec<String> {
-    let parts: Vec<&str> = key.split('/').collect();
-    (1..=parts.len()).rev().map(|n| parts[..n].join("/")).collect()
+fn prefixes(key: &str) -> impl Iterator<Item = &str> {
+    std::iter::successors(Some(key), |prefix| prefix.rsplit_once('/').map(|(parent, _)| parent))
 }
 
 /// Where a resolved input lives.
@@ -228,7 +227,7 @@ impl Env {
         if found != subdir && !found.starts_with(&format!("{subdir}/")) {
             return refuse(format!("{label} must stay within {}.", bundled(subdir)));
         }
-        Ok(Location::Bundled(found))
+        Ok(Location::Bundled(found.to_owned()))
     }
 
     /// The bundled key `text` names, walking its parts as `Path.resolve(strict=True)`
@@ -238,25 +237,29 @@ impl Env {
     fn walk(&self, text: &str, label: &str) -> Result<String> {
         let separators: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
         let missing = || refuse(format!("{label} does not exist: {}.", bundled(&pypath::display(text))));
-        let steps: Vec<&str> = text
+        let mut steps = text
             .split(separators)
             .filter(|part| !matches!(*part, "" | "."))
-            .collect();
-        let mut parts: Vec<&str> = Vec::new();
-        for (index, step) in steps.iter().enumerate() {
-            if *step == ".." {
+            .peekable();
+        let mut rel = String::new();
+        while let Some(step) = steps.next() {
+            if step == ".." {
                 // Above the package directory CPython found nothing to resolve.
-                if parts.pop().is_none() {
+                if rel.is_empty() {
                     return missing();
                 }
+                rel.truncate(rel.rfind('/').unwrap_or(0));
                 continue;
             }
-            parts.push(step);
+            if !rel.is_empty() {
+                rel.push('/');
+            }
+            rel.push_str(step);
             if cfg!(not(windows)) {
-                let Some(found) = self.bundle.lookup(&parts.join("/")) else {
+                let Some(found) = self.bundle.lookup(&rel) else {
                     return missing();
                 };
-                if index + 1 < steps.len() && self.bundle.files.contains_key(&found) {
+                if steps.peek().is_some() && self.bundle.files.contains_key(found) {
                     return refuse(format!(
                         "{label} is not a usable path: {}.",
                         bundled(&pypath::display(text))
@@ -264,7 +267,7 @@ impl Env {
                 }
             }
         }
-        Ok(parts.join("/"))
+        Ok(rel)
     }
 
     fn bundle_display(&self, raw: &PyStr) -> String {

@@ -591,19 +591,18 @@ fn verify_agreement(
                 "{SUMMARY_NAME}: the findings table has no delimiter row"
             ));
         }
-        let rows: Vec<_> = lines[divider + 1..]
+        let rows = lines[divider + 1..]
             .iter()
-            .take_while(|line| line.starts_with('|'))
-            .map(|line| md_cells(line))
-            .collect();
-        if rows.len() != findings.len() {
+            .take_while(|line| line.starts_with('|'));
+        let row_count = rows.clone().count();
+        if row_count != findings.len() {
             return Err(format!(
-                "finding counts disagree: {JSON_NAME} holds {}, {SUMMARY_NAME} tabulates {}",
-                findings.len(),
-                rows.len()
+                "finding counts disagree: {JSON_NAME} holds {}, {SUMMARY_NAME} tabulates {row_count}",
+                findings.len()
             ));
         }
-        for (i, (item, row)) in findings.iter().zip(rows).enumerate() {
+        for (i, (item, line)) in findings.iter().zip(rows).enumerate() {
+            let row = md_cells(line);
             if row.len() != 5 {
                 return Err(format!(
                     "{SUMMARY_NAME}: finding {} has {} cells, expected 5",

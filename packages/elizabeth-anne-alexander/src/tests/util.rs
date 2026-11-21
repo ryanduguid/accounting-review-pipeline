@@ -4,7 +4,7 @@
 //! Port of tests/test_util.py.
 
 use super::*;
-use crate::util::{Location, load_json_exact, load_json_object};
+use crate::util::{Location, load_json_exact, load_json_object, snapshot_file};
 
 fn artefact(dir: &TempDir, content: &[u8]) -> Location {
     let path = dir.path().join("artefact.json");
@@ -103,6 +103,38 @@ fn test_unreadable_path_is_blocked_not_a_traceback() {
     let env = env(dir.path());
     let result = load_json_exact(&env, &Location::Disk(dir.path().to_path_buf()), &[], "test artefact");
     assert_refused(result, "cannot be read");
+}
+
+#[test]
+fn test_missing_disk_snapshot_keeps_each_caller_diagnostic() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let location = Location::Disk(dir.path().join("absent.json"));
+    assert_refused(load_json_object(&env, &location, "test artefact"), "does not exist");
+    assert_refused(
+        snapshot_file(&env, &location, "test artefact").map(|_| ()),
+        "cannot be read",
+    );
+}
+
+#[test]
+fn test_bundled_lookup_returns_the_stored_key_and_refuses_the_package_root() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let key = "samples/contexts/sample-monthly-variance.context.json";
+    let input = if cfg!(windows) {
+        "SAMPLES\\contexts\\..\\.\\CONTEXTS\\SAMPLE-MONTHLY-VARIANCE.CONTEXT.JSON"
+    } else {
+        "samples/contexts/.././contexts//sample-monthly-variance.context.json"
+    };
+    assert_eq!(
+        env.within_bundle(&PyStr::from(input), "samples", "context").unwrap(),
+        Location::Bundled(key.into())
+    );
+    assert_refused(
+        env.within_bundle(&PyStr::from("samples/contexts/../.."), "samples", "context"),
+        "context must stay within",
+    );
 }
 
 #[cfg(unix)]
