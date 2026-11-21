@@ -2677,6 +2677,7 @@ fn probe_requests(tmp: &TempDir, requests: &str) -> std::process::Output {
     use std::{io::Write, process::Stdio};
     let mut child = child_profile::command(env!("CARGO_BIN_EXE_review-ready-probe"))
         .current_dir(&tmp.0)
+        .env_remove("GIT_WORK_TREE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -2724,6 +2725,56 @@ fn probe_profile_refusal_preserves_inputs_and_keeps_the_session_usable() {
     );
     assert!(!absent.exists());
     assert!(fs::read_dir(&tmp.0).unwrap().next().is_none());
+}
+
+#[cfg(feature = "probe")]
+#[test]
+fn invalid_probe_output_files_does_not_run_the_command() {
+    use review_ready_gate::probe;
+
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    let command = gate_command("bas-ready", &output);
+    let args = Json::Array(
+        command
+            .get_args()
+            .map(|arg| Json::str(&arg.to_string_lossy()))
+            .collect(),
+    );
+    let request = |output_files| {
+        Json::object([
+            ("op", Json::str("cli")),
+            ("args", args.clone()),
+            ("output_files", output_files),
+        ])
+    };
+    let requests = format!(
+        "{}\n{{\"op\":\"money\",\"value\":\"1\"}}\n",
+        probe::encode(&request(Json::Bool(false)))
+    );
+    let result = probe_requests(&tmp, &requests);
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(result.stdout)
+            .unwrap()
+            .replace("\r\n", "\n"),
+        "{\"error\":\"probe requires a string\"}\n{\"ok\":\"1\"}\n"
+    );
+    assert!(!output.exists());
+    assert!(fs::read_dir(&tmp.0).unwrap().next().is_none());
+
+    let result = probe_requests(
+        &tmp,
+        &format!("{}\n", probe::encode(&request(Json::str("pack")))),
+    );
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let response = probe::decode(std::str::from_utf8(&result.stdout).unwrap().trim_end()).unwrap();
+    let files = response.at("ok").at("files").as_array().unwrap();
+    assert_eq!(files.len(), 3);
+    assert!(files.iter().all(|file| file.as_pystr().is_some()));
+    assert!(output.join("readiness-pack.json").is_file());
 }
 
 #[cfg(feature = "probe")]
