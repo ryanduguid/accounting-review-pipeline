@@ -33,51 +33,21 @@ impl std::fmt::Display for CsvError {
     }
 }
 
-/// Splits like `StringIO(newline="")` iteration: after `\n`, a lone `\r`, or `\r\n`.
-fn lines(text: &str) -> Vec<&str> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::new();
-    let mut start = 0;
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\n' => {
-                out.push(&text[start..=i]);
-                start = i + 1;
-            }
-            b'\r' => {
-                let end = if bytes.get(i + 1) == Some(&b'\n') {
-                    i + 2
-                } else {
-                    i + 1
-                };
-                out.push(&text[start..end]);
-                start = end;
-                i = end - 1;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    if start < text.len() {
-        out.push(&text[start..]);
-    }
-    out
-}
-
 /// The `csv.reader` record iterator.
 pub struct Reader<'a> {
-    lines: std::vec::IntoIter<&'a str>,
+    remaining: &'a str,
     line_num: usize,
     strict: bool,
+    lf_only: bool,
 }
 
 impl<'a> Reader<'a> {
     pub fn new(text: &'a str) -> Reader<'a> {
         Reader {
-            lines: lines(text).into_iter(),
+            remaining: text,
             line_num: 0,
             strict: false,
+            lf_only: false,
         }
     }
 
@@ -89,10 +59,36 @@ impl<'a> Reader<'a> {
     }
     pub fn strict_lf(text: &'a str) -> Self {
         Self {
-            lines: text.split_inclusive('\n').collect::<Vec<_>>().into_iter(),
-            line_num: 0,
             strict: true,
+            lf_only: true,
+            ..Self::new(text)
         }
+    }
+
+    /// Read a physical line, retaining its terminator as `StringIO` does.
+    fn next_line(&mut self) -> Option<&'a str> {
+        if self.remaining.is_empty() {
+            return None;
+        }
+        let ending = if self.lf_only {
+            self.remaining.find('\n')
+        } else {
+            self.remaining
+                .as_bytes()
+                .iter()
+                .position(|&byte| matches!(byte, b'\r' | b'\n'))
+        };
+        let end = ending.map_or(self.remaining.len(), |index| {
+            let width = if self.remaining.as_bytes()[index..].starts_with(b"\r\n") {
+                2
+            } else {
+                1
+            };
+            index + width
+        });
+        let (line, remaining) = self.remaining.split_at(end);
+        self.remaining = remaining;
+        Some(line)
     }
 }
 
@@ -225,7 +221,7 @@ impl Iterator for Reader<'_> {
             strict: self.strict,
         };
         loop {
-            let Some(line) = self.lines.next() else {
+            let Some(line) = self.next_line() else {
                 if self.strict && record.state == State::InQuotedField {
                     return Some(Err(CsvError::UnexpectedEnd));
                 }
@@ -345,6 +341,30 @@ mod tests {
         let long = "x".repeat(FIELD_LIMIT + 1);
         assert_eq!(records(&long), vec![Err(CsvError::FieldLimit)]);
         assert_eq!(records(&"x".repeat(FIELD_LIMIT)).len(), 1);
+    }
+
+    #[test]
+    fn physical_line_endings_preserve_multiline_fields_and_record_numbers() {
+        let mut reader = DictReader::new("Name,Value\r\n\"First\r\nSecond\",1\rÉ,2\n").unwrap();
+        assert_eq!(reader.line_num(), 1);
+        let first = reader.next().unwrap().unwrap();
+        assert_eq!(
+            first.values,
+            [Some("First\r\nSecond".into()), Some("1".into())]
+        );
+        assert_eq!(reader.line_num(), 3);
+        let last = reader.next().unwrap().unwrap();
+        assert_eq!(last.values, [Some("É".into()), Some("2".into())]);
+        assert_eq!(reader.line_num(), 4);
+        assert!(reader.next().is_none());
+
+        let mut saved = Reader::strict_lf("\"First\rSecond\",1\nA\rB,2\n");
+        assert_eq!(
+            saved.next(),
+            Some(Ok(vec!["First\rSecond".into(), "1".into()]))
+        );
+        assert_eq!(saved.next(), Some(Err(CsvError::Newline)));
+        assert!(saved.next().is_none());
     }
 
     #[test]
