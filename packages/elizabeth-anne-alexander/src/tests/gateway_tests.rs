@@ -54,6 +54,15 @@ fn findings(current: &[BalanceRow], prior: &[BalanceRow], operation: &Json) -> c
     )
 }
 
+#[test]
+fn variance_without_current_rows_reports_a_refusal() {
+    let prior = [row("existing", "Revenue", "1000.00")];
+    assert!(matches!(
+        findings(&[], &prior, &operation()),
+        Err(Failure::Gateway(message)) if message == "Current trial balance must contain at least one account row."
+    ));
+}
+
 fn redact(model: &Json, rows: &[BalanceRow]) -> crate::util::Result<()> {
     let refs: Vec<&BalanceRow> = rows.iter().collect();
     assert_model_is_redacted(model, &refs)
@@ -1527,6 +1536,23 @@ fn decimal_quantize_and_percentage_preserve_nan_or_refuse_invalid_operands() {
     for value in ["-sNaN3", "Infinity", "-Infinity"] {
         assert_eq!(d(value).quantize(-4, Rounding::HalfUp), Err(Signal::InvalidOperation));
         assert_refused(percent_string(&d(value)), "supported magnitude range");
+    }
+}
+
+#[test]
+fn percentage_conversion_reports_context_overflow_without_panicking() {
+    for value in ["1E+999998", "1E+1000000", "9.9999999999999999999999999995E+999997"] {
+        assert_eq!(
+            percent_string(&d(value)),
+            Err(Failure::Crash("[<class 'decimal.Overflow'>]".into())),
+            "{value}"
+        );
+    }
+    for value in ["1E+999997", "9.9999999999999999999999999994E+999997"] {
+        assert_refused(percent_string(&d(value)), "supported magnitude range");
+    }
+    for value in ["0E+999999999999999999", "1E-1000000"] {
+        assert_eq!(percent_string(&d(value)).unwrap(), "0.0000", "{value}");
     }
 }
 
