@@ -53,16 +53,19 @@ fn string(value: &Json, label: &str, empty: bool) -> Result<String> {
     }
     Ok(text)
 }
+fn invalid_input_size(path: &Path, limit: usize) -> String {
+    format!(
+        "{} must contain between 1 and {limit} bytes.",
+        pypath::decode_os(path.file_name().unwrap_or_default())
+    )
+}
 fn capture(path: &Path, limit: usize) -> Result<SourceSnapshot> {
     let mut content = Vec::new();
     fs::File::open(path)
         .and_then(|f| f.take(limit as u64 + 1).read_to_end(&mut content))
         .map_err(|e| format!("Cannot read document input {}: {e}.", pypath::text(path)))?;
     if content.is_empty() || content.len() > limit {
-        return Err(format!(
-            "{} must contain between 1 and {limit} bytes.",
-            pypath::decode_os(path.file_name().unwrap_or_default())
-        ));
+        return Err(invalid_input_size(path, limit));
     }
     Ok(SourceSnapshot::new(path, content))
 }
@@ -261,10 +264,19 @@ fn create_intake_with(
         );
     }
     let source = capture(options.source, 20 * MIB)?;
-    let text = capture(options.text, MIB)?;
+    let separate_text;
+    let text = if options.source.as_os_str() == options.text.as_os_str() {
+        if source.content.len() > MIB {
+            return Err(invalid_input_size(options.text, MIB));
+        }
+        &source
+    } else {
+        separate_text = capture(options.text, MIB)?;
+        &separate_text
+    };
     let manifest = manifest(
         &source,
-        &text,
+        text,
         options.entity,
         options.period,
         options.origin,
@@ -316,20 +328,21 @@ fn create_intake_with(
         ("source_text_checked", Json::Bool(false)),
         ("fields", Json::Object(review_fields)),
     ]);
+    let review_bytes = encoded(&review);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::create_dir(&output).map_err(|e| e.to_string())?;
     let filename = loader::json_text(manifest.at("source").at("filename")).unwrap();
     let files = [
-        (filename.as_str(), source.content),
-        (TEXT_NAME, text.content),
-        (INTAKE_NAME, bytes),
-        ("document-review.example.json", encoded(&review)),
+        (filename.as_str(), source.content.as_slice()),
+        (TEXT_NAME, text.content.as_slice()),
+        (INTAKE_NAME, bytes.as_slice()),
+        ("document-review.example.json", review_bytes.as_slice()),
     ];
     let mut opened = 0;
     let result = (|| -> io::Result<()> {
-        for (name, content) in &files {
+        for &(name, content) in &files {
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -1120,6 +1133,49 @@ mod tests {
     }
 
     #[test]
+    fn intake_reports_member_cleanup_failure_and_removes_other_members() {
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let output = tmp.join("intake");
+        let replaced = output.join(TEXT_NAME);
+        let marker = replaced.join("unowned");
+        fs::write(&source, source_text()).unwrap();
+        let mut writes = 0;
+        let error = create_intake_with(
+            IntakeOptions {
+                source: &source,
+                text: &source,
+                output: &output,
+                entity: "Demo",
+                period: "2026-03-31",
+                origin: "manual",
+                version: "",
+            },
+            |file, content| {
+                writes += 1;
+                if writes == 3 {
+                    fs::remove_file(&replaced)?;
+                    fs::create_dir(&replaced)?;
+                    fs::write(&marker, b"preserve")?;
+                    return Err(io::Error::other("test write interrupted"));
+                }
+                file.write_all(content)
+            },
+        )
+        .unwrap_err();
+        assert!(!output.join("original.txt").exists());
+        assert!(!output.join(INTAKE_NAME).exists());
+        assert_eq!(fs::read(&marker).unwrap(), b"preserve");
+        let cleanup_error = fs::remove_file(&replaced).unwrap_err();
+        assert_eq!(
+            error,
+            format!(
+                "Document intake write failed (test write interrupted) and its incomplete output could not be removed ({cleanup_error})."
+            )
+        );
+    }
+
+    #[test]
     fn intake_preserves_a_file_created_by_another_writer() {
         let tmp = TempDir::new();
         let source = tmp.join("source.txt");
@@ -1230,6 +1286,29 @@ mod tests {
             );
             assert!(!output.exists());
         }
+    }
+
+    #[test]
+    fn intake_keeps_the_text_size_limit_when_both_roles_use_one_path() {
+        let tmp = TempDir::new();
+        let source = tmp.join("source.txt");
+        let output = tmp.join("intake");
+        fs::write(&source, vec![b'x'; MIB + 1]).unwrap();
+        let error = create_intake(IntakeOptions {
+            source: &source,
+            text: &source,
+            output: &output,
+            entity: "Demo",
+            period: "2026-03-31",
+            origin: "manual",
+            version: "",
+        })
+        .unwrap_err();
+        assert_eq!(
+            error,
+            format!("source.txt must contain between 1 and {MIB} bytes.")
+        );
+        assert!(!output.exists());
     }
 
     #[test]

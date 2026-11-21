@@ -110,7 +110,11 @@ pub fn utf8_error(bytes: &[u8], error: std::str::Utf8Error) -> String {
 pub fn load(path: &Path) -> Result<Vec<entities::Entity>> {
     let raw = bytes(path).map_err(|error| format!("cannot read entity map {}: {error}", self::text(path)))?;
     let text = String::from_utf8(raw).map_err(|e| utf8_error(e.as_bytes(), e.utf8_error()))?;
-    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let text = if text.contains('\r') {
+        text.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        text
+    };
     let document = pyjson::loads_plain(&text).map_err(|e| match e {
         pyjson::LoadError::Crash(message) => message,
         pyjson::LoadError::Decode(message) => format!("cannot read entity map {}: {message}", self::text(path)),
@@ -296,9 +300,9 @@ fn exit_code(status: std::process::ExitStatus) -> i64 {
 fn git(subcommand: &[&str], target: &Path) -> Result<i64> {
     let parent = target.parent().unwrap_or(target);
     let name = target.file_name().unwrap_or(std::ffi::OsStr::new(""));
-    let preface = format!("cannot ask git about {} in {}: ", text(Path::new(name)), text(parent));
+    let preface = || format!("cannot ask git about {} in {}: ", text(Path::new(name)), text(parent));
     let ending = "; put git on PATH and re-run once the repository is idle";
-    let executable = git_executable().ok_or_else(|| format!("{preface}git is not on PATH{ending}"))?;
+    let executable = git_executable().ok_or_else(|| format!("{}git is not on PATH{ending}", preface()))?;
     let mut command = Command::new(&executable);
     command
         .args(subcommand)
@@ -319,17 +323,18 @@ fn git(subcommand: &[&str], target: &Path) -> Result<i64> {
     }
     let mut child = command
         .spawn()
-        .map_err(|e| format!("{preface}{}{ending}", oserror::file_error(&e, &text(&executable))))?;
+        .map_err(|e| format!("{}{}{ending}", preface(), oserror::file_error(&e, &text(&executable))))?;
     let started = Instant::now();
     loop {
-        if let Some(status) = child.try_wait().map_err(|e| format!("{preface}{e}{ending}"))? {
+        if let Some(status) = child.try_wait().map_err(|e| format!("{}{e}{ending}", preface()))? {
             return Ok(exit_code(status));
         }
         if started.elapsed() >= Duration::from_secs(30) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(format!(
-                "{preface}Command '{}' timed out after 30 seconds{ending}",
+                "{}Command '{}' timed out after 30 seconds{ending}",
+                preface(),
                 git_argv(&executable, subcommand, name)
             ));
         }
@@ -449,9 +454,10 @@ fn one_link_before(path: &Path, metadata: &std::fs::Metadata) -> Result<bool> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT};
         let file = std::fs::OpenOptions::new()
             .access_mode(0)
-            .custom_flags(0x0200_0000)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
             .open(path)
             .map_err(|e| oserror::os_error(&e, &text(path), None))?;
         one_link_open(&file)
@@ -471,15 +477,39 @@ fn one_link_open(file: &std::fs::File) -> Result<bool> {
     #[cfg(windows)]
     {
         use std::os::windows::io::AsRawHandle;
-        use windows_sys::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
-        let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+        use windows_sys::Win32::Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, GetFileInformationByHandle,
+        };
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
         // SAFETY: the file owns this handle and info is writable, correctly sized storage.
-        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
             return Err(io::Error::last_os_error().to_string());
         }
-        // SAFETY: the call succeeded and initialised the structure.
-        Ok(unsafe { info.assume_init() }.nNumberOfLinks == 1)
+        Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
     }
+}
+
+fn open_record(path: &Path) -> Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    // Validate the same handle that will supply the record data.
+    let file = options.open(path).map_err(|e| oserror::file_error(&e, &text(path)))?;
+    if !one_link_open(&file)? {
+        return Err("disclosure record must be a regular file with one link".into());
+    }
+    Ok(file)
 }
 
 pub fn record_read(path: &Path) -> Result<Vec<u8>> {
@@ -488,17 +518,7 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
     if !one_link_before(path, &before)? {
         return Err("disclosure record must be a regular file with one link".into());
     }
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(path).map_err(|e| oserror::file_error(&e, &text(path)))?;
-    if !one_link_open(&file)? {
-        return Err("disclosure record must be a regular file with one link".into());
-    }
+    let file = open_record(path)?;
     let mut bytes = Vec::new();
     file.take((crate::disclosure::MAX_RECORD_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
@@ -509,34 +529,51 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn an_open_directory_is_not_a_regular_disclosure_record() {
-        struct OwnedDirectory(PathBuf);
-        impl Drop for OwnedDirectory {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir_all(&self.0);
-            }
-        }
-        let path = std::env::temp_dir().join(format!("evatt-directory-handle-{}", std::process::id()));
-        std::fs::create_dir(&path).unwrap();
-        let owned = OwnedDirectory(path);
-        let sentinel = owned.0.join("sentinel.txt");
+        let owned = tempfile::tempdir().unwrap();
+        let sentinel = owned.path().join("sentinel.txt");
         std::fs::write(&sentinel, b"fabricated directory contents\n").unwrap();
         #[cfg(unix)]
-        let file = std::fs::File::open(&owned.0).unwrap();
+        let file = std::fs::File::open(owned.path()).unwrap();
         #[cfg(windows)]
         let file = {
             use std::os::windows::fs::OpenOptionsExt;
             std::fs::OpenOptions::new()
                 .access_mode(0)
                 .custom_flags(0x0200_0000)
-                .open(&owned.0)
+                .open(owned.path())
                 .unwrap()
         };
         assert!(file.metadata().unwrap().is_dir());
         assert!(!one_link_open(&file).unwrap());
         assert_eq!(std::fs::read(&sentinel).unwrap(), b"fabricated directory contents\n");
         drop(file);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_disclosure_record_handle_refuses_a_file_link() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("record.json");
+        let link = directory.path().join("link.json");
+        let contents = b"fabricated disclosure record";
+        std::fs::write(&target, contents).unwrap();
+        std::os::windows::fs::symlink_file(target.canonicalize().unwrap(), &link).unwrap();
+
+        assert!(open_record(&target).is_ok());
+        assert_eq!(
+            open_record(&link).unwrap_err(),
+            "disclosure record must be a regular file with one link"
+        );
+        let hard_link = directory.path().join("hard-link.json");
+        std::fs::hard_link(&target, &hard_link).unwrap();
+        assert_eq!(
+            open_record(&target).unwrap_err(),
+            "disclosure record must be a regular file with one link"
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), contents);
     }
 
     #[test]

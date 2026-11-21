@@ -1389,7 +1389,13 @@ pub struct VerifiedPack {
     pub artefact_sha256: BTreeMap<String, String>,
 }
 pub fn verify_payloads(payloads: &BTreeMap<String, Vec<u8>>) -> Result<VerifiedPack> {
-    let document = parse_json(&payloads[J])?;
+    let required = |name: &str| {
+        payloads
+            .get(name)
+            .map(Vec::as_slice)
+            .ok_or_else(|| format!("{name}: required artefact is missing"))
+    };
+    let document = parse_json(required(J)?)?;
     verify_schema(&document)?;
     verify_required_controls(&document)?;
     let has_file = payloads.contains_key(Q);
@@ -1405,8 +1411,8 @@ pub fn verify_payloads(payloads: &BTreeMap<String, Vec<u8>>) -> Result<VerifiedP
             "client-query register is half present: {present} exists but {absent} does not"
         ));
     }
-    let summary = std::str::from_utf8(&payloads[S]).map_err(|_| format!("{S}: not valid UTF-8"))?;
-    let rows = read_csv(&payloads[C], C, &EXCEPTION_FIELDS)?;
+    let summary = std::str::from_utf8(required(S)?).map_err(|_| format!("{S}: not valid UTF-8"))?;
+    let rows = read_csv(required(C)?, C, &EXCEPTION_FIELDS)?;
     let queries = payloads
         .get(Q)
         .map(|bytes| read_csv(bytes, Q, &QUERY_FIELDS))
@@ -1712,6 +1718,18 @@ mod tests {
                 .contains("before the client-query register existed")
         );
     }
+    #[test]
+    fn refuses_missing_mandatory_payloads() {
+        for name in [J, S, C] {
+            let mut payloads = fixture("Synthetic", None);
+            assert!(payloads.remove(name).is_some());
+            assert_eq!(
+                verify_payloads(&payloads).unwrap_err(),
+                format!("{name}: required artefact is missing")
+            );
+        }
+    }
+
     #[test]
     fn refuses_extra_csv_cells_blank_rows_and_hidden_markdown_sections() {
         for suffix in [b"\r\n".as_slice(), b"=unwitnessed\r\n"] {

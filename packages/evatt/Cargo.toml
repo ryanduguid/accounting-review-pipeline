@@ -24,6 +24,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage
 
 [dev-dependencies]
 proptest = { version = "1", default-features = false, features = ["std"] }
+tempfile = "3.27.0"
 
 [features]
 # Comparison tools only; never enabled in the distributed binary.
