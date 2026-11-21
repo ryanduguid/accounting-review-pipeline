@@ -85,8 +85,7 @@ pub fn money(value: &str, field: &str, path: &Path, row: usize) -> Result<Decima
 pub fn fixed(value: &Decimal) -> String {
     value.format_places(2).expect("bounded transaction amount")
 }
-#[expect(clippy::too_many_lines, reason = "validates every column of one row")]
-fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> {
+fn opening_item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<(Json, Date)> {
     if !value.has_exact_keys(&COLUMNS)
         || COLUMNS.iter().any(|key| value.at(key).as_pystr().is_none())
     {
@@ -95,18 +94,23 @@ fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> 
             pypath::text(path)
         ));
     }
+    item(identity, path, row, |key, empty| {
+        loader::json_input_text(value.at(key), key, row, path, empty)
+    })
+}
+
+fn item(
+    identity: &Json,
+    path: &Path,
+    row: usize,
+    read_text: impl Fn(&str, bool) -> Result<String>,
+) -> Result<(Json, Date)> {
     let mut result = Json::Object(
         COLUMNS
             .iter()
             .map(|key| {
-                loader::json_input_text(
-                    value.at(key),
-                    key,
-                    row,
-                    path,
-                    ["Reference", "Description"].contains(key),
-                )
-                .map(|v| (PyStr::from(*key), Json::str(&v)))
+                read_text(key, ["Reference", "Description"].contains(key))
+                    .map(|value| (PyStr::from(*key), Json::str(&value)))
             })
             .collect::<Result<_>>()?,
     );
@@ -133,7 +137,7 @@ fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> 
             pypath::text(path)
         ));
     }
-    date(&field(&result, "Date"))?;
+    let when = date(&field(&result, "Date"))?;
     let debit = money(&field(&result, "Debit"), "Debit", path, row)?;
     let credit = money(&field(&result, "Credit"), "Credit", path, row)?;
     if debit < Decimal::zero()
@@ -147,7 +151,7 @@ fn item(value: &Json, identity: &Json, path: &Path, row: usize) -> Result<Json> 
     }
     result.set("Debit", Json::str(&fixed(&debit)));
     result.set("Credit", Json::str(&fixed(&credit)));
-    Ok(result)
+    Ok((result, when))
 }
 fn total<'a>(items: impl IntoIterator<Item = &'a Json>) -> Decimal {
     items.into_iter().fold(Decimal::zero(), |sum, item| {
@@ -231,8 +235,8 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
         if !matches!(value, Json::Object(_)) {
             return Err("Opening items must be transaction objects.".into());
         }
-        let row = item(value, identity, &source.path, index + 1)?;
-        if date(&field(&row, "Date"))? > previous {
+        let (row, when) = opening_item(value, identity, &source.path, index + 1)?;
+        if when > previous {
             return Err("Opening item dates cannot be later than their period end.".into());
         }
         *value = row;
@@ -474,19 +478,15 @@ pub fn reconcile_with(
                     row.number
                 ));
             }
-            let values = Json::Object(
-                COLUMNS
-                    .iter()
-                    .map(|key| {
-                        (
-                            PyStr::from(*key),
-                            Json::str(row.values[*key].as_deref().unwrap()),
-                        )
-                    })
-                    .collect(),
-            );
-            let value = item(&values, &identity, &config.transactions, row.number)?;
-            let when = date(&field(&value, "Date"))?;
+            let (value, when) = item(&identity, &config.transactions, row.number, |key, empty| {
+                loader::input_text(
+                    row.values[key].as_deref(),
+                    key,
+                    row.number,
+                    &config.transactions,
+                    empty,
+                )
+            })?;
             if !(start <= when && when <= end) {
                 return Err(format!(
                     "{}: row {} falls outside the reporting period.",
