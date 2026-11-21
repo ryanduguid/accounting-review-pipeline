@@ -1619,6 +1619,10 @@ fn viewing_refuses_disagreeing_finding_rows_and_delimiters() {
             original.replacen(row, &format!("|{after_status}"), 1),
             "cells, expected 5",
         ),
+        (
+            original.replacen(row, &format!("|{after_status}{newline}|{after_status}"), 1),
+            "finding counts disagree",
+        ),
     ] {
         fs::write(&path, &original).unwrap();
         assert!(view_read_only(&output).status.success());
