@@ -12,7 +12,7 @@ use crate::{
     pypath, pytext,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -29,6 +29,7 @@ pub const COLUMNS: [&str; 9] = [
 ];
 pub const DECISION_COLUMNS: [&str; 4] = ["Group", "TransactionID", "Decision", "Note"];
 pub const IDENTITY_COLUMNS: [&str; 3] = ["Tenant", "AccountID", "Currency"];
+const MAX_RECONCILIATION_ITEMS: usize = 100_000;
 pub const BOUNDARY: &str =
     "Review evidence only. Matching records an allocation; it does not approve a close.";
 fn field(value: &Json, key: &str) -> String {
@@ -202,28 +203,31 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
             }
         )
     })?;
-    if !payload.has_exact_keys(&[
-        "schema",
-        "identity",
-        "period_end",
-        "balance",
-        "items",
-        "notes",
-    ]) || !payload.at("schema").is_str("clearing-carry-v1")
+    let invalid_schema = "Opening items have an invalid schema or a different account identity.";
+    let Json::Object(mut fields) = payload else {
+        return Err(invalid_schema.into());
+    };
+    let Some(index) = fields.iter().position(|(key, _)| key.is("items")) else {
+        return Err(invalid_schema.into());
+    };
+    let (_, Json::Array(mut items)) = fields.remove(index) else {
+        return Err(invalid_schema.into());
+    };
+    let payload = Json::Object(fields);
+    if !payload.has_exact_keys(&["schema", "identity", "period_end", "balance", "notes"])
+        || !payload.at("schema").is_str("clearing-carry-v1")
         || !pyjson::py_eq(payload.at("identity"), identity, true)
         || payload.at("period_end").as_pystr().is_none()
         || payload.at("balance").as_pystr().is_none()
-        || payload.at("items").as_array().is_none()
         || !matches!(payload.at("notes"), Json::Object(_))
     {
-        return Err("Opening items have an invalid schema or a different account identity.".into());
+        return Err(invalid_schema.into());
     }
     let previous = date(&field(&payload, "period_end"))?;
     if isodate::ordinal(start) - isodate::ordinal(previous) != 1 {
         return Err("Opening items must come from the immediately preceding period.".into());
     }
-    let mut items = Vec::new();
-    for (index, value) in payload.at("items").as_array().unwrap().iter().enumerate() {
+    for (index, value) in items.iter_mut().enumerate() {
         if !matches!(value, Json::Object(_)) {
             return Err("Opening items must be transaction objects.".into());
         }
@@ -231,7 +235,7 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
         if date(&field(&row, "Date"))? > previous {
             return Err("Opening item dates cannot be later than their period end.".into());
         }
-        items.push(row);
+        *value = row;
     }
     let balance = payload
         .at("balance")
@@ -247,14 +251,22 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
     if total(&items) != money(&balance, "amount", Path::new("configuration"), 0)? {
         return Err("Opening items do not equal their recorded balance.".into());
     }
-    let identifiers: BTreeSet<_> = items.iter().map(|r| field(r, "TransactionID")).collect();
     let Json::Object(notes) = payload.at("notes") else {
         unreachable!()
     };
-    if notes.iter().any(|(key, value)| {
-        !key.to_utf8().is_some_and(|s| identifiers.contains(&s)) || value.as_pystr().is_none()
-    }) {
-        return Err("Opening review notes must name outstanding transaction IDs.".into());
+    let invalid_notes = "Opening review notes must name outstanding transaction IDs.";
+    if notes.len() > items.len() {
+        return Err(invalid_notes.into());
+    }
+    let mut unmatched_notes: HashSet<_> = notes.iter().map(|(key, _)| key).collect();
+    for row in &items {
+        if unmatched_notes.is_empty() {
+            break;
+        }
+        unmatched_notes.remove(row.at("TransactionID").as_pystr().unwrap());
+    }
+    if !unmatched_notes.is_empty() || notes.iter().any(|(_, value)| value.as_pystr().is_none()) {
+        return Err(invalid_notes.into());
     }
     let mut result = Notes::default();
     for (key, value) in notes {
@@ -451,7 +463,8 @@ pub fn reconcile_with(
             .map(|s| opening(s, &identity, start))
             .transpose()?
             .unwrap_or_default();
-        let mut current = Vec::new();
+        let remaining = MAX_RECONCILIATION_ITEMS.saturating_sub(old.len());
+        let mut current = (old.len() <= MAX_RECONCILIATION_ITEMS).then(Vec::new);
         for row in loader::csv_rows(&transactions, &COLUMNS, "Transactions")? {
             let row = row?;
             if row.values.values().any(Option::is_none) {
@@ -481,13 +494,20 @@ pub fn reconcile_with(
                     row.number
                 ));
             }
-            current.push(value);
+            if let Some(rows) = &mut current {
+                if rows.len() < remaining {
+                    rows.push(value);
+                } else {
+                    // Keep validating later CSV rows without retaining data we cannot use.
+                    current = None;
+                }
+            }
         }
-        if old.len() + current.len() > 100_000 {
+        let Some(current) = current else {
             return Err(
                 "A reconciliation supports at most 100,000 outstanding and current items.".into(),
             );
-        }
+        };
         let movement = total(&current);
         let opening_difference = total(&old).sub(&opening_balance).value;
         let opening_ids = old
@@ -713,6 +733,50 @@ mod tests {
             .unwrap()
             .1
     }
+
+    #[test]
+    fn opening_notes_must_refer_to_a_carried_transaction() {
+        let previous = month(
+            ("2026-09-01", "2026-09-30"),
+            ("0", "0"),
+            TRANSACTIONS.split_once('\n').unwrap().1,
+            None,
+            "",
+        );
+        let mut carry =
+            pyjson::loads(std::str::from_utf8(&carried_forward(&previous)).unwrap()).unwrap();
+        let identity = carry.at("identity").clone();
+        let next = date("2026-10-01").unwrap();
+        let read = |carry: &Json| {
+            let source = SourceSnapshot::new(
+                Path::new("opening.json"),
+                pyjson::pretty(carry).into_bytes(),
+            );
+            opening(&source, &identity, next).map(|(_, notes)| notes.into_json())
+        };
+
+        carry.set("notes", Json::object([("T2", Json::str("Révisé"))]));
+        assert!(read(&carry).unwrap().at("T2").is_str("Révisé"));
+        for notes in [
+            Json::object([
+                ("T1", Json::str("Valid")),
+                ("missing", Json::str("Unknown")),
+            ]),
+            Json::object([("T1", Json::Null)]),
+            Json::object([
+                ("T1", Json::str("Valid")),
+                ("T2", Json::str("Also valid")),
+                ("missing", Json::str("Unknown")),
+            ]),
+        ] {
+            carry.set("notes", notes);
+            assert_eq!(
+                read(&carry).unwrap_err(),
+                "Opening review notes must name outstanding transaction IDs."
+            );
+        }
+    }
+
     #[test]
     fn three_months_flag_only_an_item_carried_over_more_than_one_period() {
         let june = month(
@@ -875,6 +939,16 @@ mod tests {
         assert_eq!(
             error,
             "A reconciliation supports at most 100,000 outstanding and current items."
+        );
+
+        csv.push_str("Synthetic,CLEAR,AUD,late,2026-08-31,R,Outside the period,1,0\n");
+        let error = reconcile_with(&config(), &mut |path, _| {
+            Ok(SourceSnapshot::new(path, csv.as_bytes().to_vec()))
+        })
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "transactions.csv: row 100003 falls outside the reporting period."
         );
     }
     #[test]
