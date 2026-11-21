@@ -127,6 +127,9 @@ fn pack_date(value: &Json) -> Result<Date> {
     if let Some(date) = isodate::python_date_fromisoformat(&raw_text) {
         return Ok(date);
     }
+    if let Some([year, month, day]) = isodate::basic_calendar_parts(&raw_text) {
+        return reconciliation::date(&format!("{year}-{month}-{day}"));
+    }
     if raw_text.len() == 10
         && raw_text.as_bytes()[4] == b'-'
         && raw_text.as_bytes()[7] == b'-'
@@ -136,6 +139,9 @@ fn pack_date(value: &Json) -> Result<Date> {
             .all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit())
     {
         return reconciliation::date(&raw_text);
+    }
+    if isodate::python_week_ordinal(&raw_text).is_some_and(|value| value > isodate::MAX_ORDINAL) {
+        return Err("year must be in 1..9999, not 10000".into());
     }
     Err(format!("Invalid isoformat string: {}", pyjson::repr(value)))
 }
@@ -331,6 +337,23 @@ pub fn write_drivers(result: &Json, output: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pack_dates_match_cpython_basic_formats_and_errors() {
+        assert_eq!(
+            pack_date(&Json::str("20260101é")).unwrap(),
+            Date::new(2026, 1, 1).unwrap()
+        );
+        assert_eq!(
+            pack_date(&Json::str("20240001xx")).unwrap_err(),
+            "month must be in 1..12, not 0"
+        );
+        assert_eq!(
+            pack_date(&Json::str("9999-W52-6")).unwrap_err(),
+            "year must be in 1..9999, not 10000"
+        );
+    }
+
     #[test]
     #[expect(
         clippy::too_many_lines,

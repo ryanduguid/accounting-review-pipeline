@@ -11,16 +11,21 @@ pub struct Date {
     pub day: u32,
 }
 
+pub(crate) const MAX_ORDINAL: i32 = 3_652_059;
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
 impl Date {
     pub fn new(year: i32, month: u32, day: u32) -> Option<Self> {
-        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-        let days = match month {
-            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-            4 | 6 | 9 | 11 => 30,
-            2 if leap => 29,
-            2 => 28,
-            _ => 0,
-        };
+        let days = days_in_month(year, month);
         ((1..=9999).contains(&year) && day >= 1 && day <= days).then_some(Self { year, month, day })
     }
     pub fn iso(&self) -> String {
@@ -46,26 +51,36 @@ pub fn date_fromisoformat(text: &str) -> Option<Date> {
     )
 }
 
+pub(crate) fn basic_calendar_parts(text: &str) -> Option<[&str; 3]> {
+    let bytes = text.as_bytes();
+    // CPython accepts a 10-byte basic date after reading the first 8 digits.
+    if matches!(bytes.len(), 8 | 10) && bytes[..8].iter().all(u8::is_ascii_digit) {
+        Some([&text[..4], &text[4..6], &text[6..8]])
+    } else {
+        None
+    }
+}
+
 /// CPython's accepted basic and week-date forms. Schema loaders can then
 /// distinguish a valid non-canonical date from an invalid calendar date.
-#[expect(
-    clippy::too_many_lines,
-    reason = "mirrors CPython's accepted date forms"
-)]
 pub fn python_date_fromisoformat(text: &str) -> Option<Date> {
     if let Some(date) = date_fromisoformat(text) {
         return Some(date);
     }
+    if let Some([year, month, day]) = basic_calendar_parts(text) {
+        return Date::new(year.parse().ok()?, month.parse().ok()?, day.parse().ok()?);
+    }
+    python_week_ordinal(text).and_then(from_ordinal)
+}
+
+pub(crate) fn python_week_ordinal(text: &str) -> Option<i32> {
     let bytes = text.as_bytes();
-    if !matches!(bytes.len(), 7 | 8 | 10) || !bytes.is_ascii() {
+    if !matches!(bytes.len(), 7 | 8 | 10) {
         return None;
     }
     let year: i32 = text.get(..4)?.parse().ok()?;
     if !(1..=9999).contains(&year) || !bytes[..4].iter().all(u8::is_ascii_digit) {
         return None;
-    }
-    if bytes.len() == 8 && bytes.iter().all(u8::is_ascii_digit) {
-        return Date::new(year, text[4..6].parse().ok()?, text[6..].parse().ok()?);
     }
     let separated = bytes[4] == b'-';
     let start = if separated { 5 } else { 4 };
@@ -92,7 +107,7 @@ pub fn python_date_fromisoformat(text: &str) -> Option<Date> {
         (digit - b'0') as i32
     };
     let jan1 = ordinal(Date::new(year, 1, 1)?);
-    let leap = Date::new(year, 2, 29).is_some();
+    let leap = days_in_month(year, 2) == 29;
     let max_week = if (jan1 - 1) % 7 == 3 || (leap && (jan1 - 1) % 7 == 2) {
         53
     } else {
@@ -102,31 +117,20 @@ pub fn python_date_fromisoformat(text: &str) -> Option<Date> {
         return None;
     }
     let jan4 = jan1 + 3;
-    let target = jan4 - (jan4 - 1) % 7 + (week - 1) * 7 + day - 1;
-    from_ordinal(target)
+    Some(jan4 - (jan4 - 1) % 7 + (week - 1) * 7 + day - 1)
 }
 
 pub fn ordinal(date: Date) -> i32 {
     let y = date.year - 1;
     let mut days = y * 365 + y / 4 - y / 100 + y / 400 + date.day as i32;
     for month in 1..date.month {
-        days += if month == 2 {
-            if Date::new(date.year, 2, 29).is_some() {
-                29
-            } else {
-                28
-            }
-        } else if matches!(month, 4 | 6 | 9 | 11) {
-            30
-        } else {
-            31
-        };
+        days += days_in_month(date.year, month) as i32;
     }
     days
 }
 
 pub fn from_ordinal(value: i32) -> Option<Date> {
-    if !(1..=3_652_059).contains(&value) {
+    if !(1..=MAX_ORDINAL).contains(&value) {
         return None;
     }
     let mut low = 1;
@@ -140,20 +144,35 @@ pub fn from_ordinal(value: i32) -> Option<Date> {
         }
     }
     let mut remaining = value - ordinal(Date::new(low, 1, 1)?) + 1;
-    for month in 1..=12 {
-        let length = (28..=31)
-            .rev()
-            .find(|&day| Date::new(low, month, day).is_some())?;
-        if remaining <= length as i32 {
+    for month in 1..12 {
+        let length = days_in_month(low, month) as i32;
+        if remaining <= length {
             return Date::new(low, month, remaining as u32);
         }
-        remaining -= length as i32;
+        remaining -= length;
     }
-    None
+    Date::new(low, 12, remaining as u32)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn basic_iso_dates_match_cpython_byte_boundaries() {
+        for (input, expected) in [
+            ("20260101é", Some("2026-01-01")),
+            ("2024W011é", Some("2024-01-01")),
+            ("20240101xx", Some("2024-01-01")),
+            ("2024022977", Some("2024-02-29")),
+            ("20240101éé", None),
+            ("2024W011𐍈", None),
+            ("20240101a", None),
+            ("2024-W0é-1", None),
+        ] {
+            let actual = python_date_fromisoformat(input).map(|date| date.iso());
+            assert_eq!(actual.as_deref(), expected, "{input}");
+        }
+    }
+
     #[test]
     fn week_dates_match_cpython_at_year_boundaries() {
         for (input, expected) in [
