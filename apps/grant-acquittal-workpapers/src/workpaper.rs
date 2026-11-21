@@ -813,8 +813,12 @@ fn digests(content: &[(&'static str, Vec<u8>)]) -> Json {
 
 /// `safe_cell(value)`: escape text a spreadsheet would read as a formula, but leave numbers alone.
 pub fn safe_cell(text: &str) -> String {
-    if !pytext::strip_start(text).starts_with(['=', '+', '-', '@']) {
-        return text.to_string();
+    escape_cell(text.to_owned())
+}
+
+fn escape_cell(mut text: String) -> String {
+    if !pytext::strip_start(&text).starts_with(['=', '+', '-', '@']) {
+        return text;
     }
     if let Some(body) = text.strip_prefix('-') {
         let digit = |ch: char| pytext::decimal_value(ch as u32).is_some();
@@ -826,10 +830,11 @@ pub fn safe_cell(text: &str) -> String {
             || (int.as_bytes().first().is_some_and(|byte| (b'1'..=b'9').contains(byte)) && int[1..].chars().all(digit));
         let frac_ok = frac.is_none_or(|f| !f.is_empty() && f.chars().all(digit));
         if int_ok && frac_ok {
-            return text.to_string();
+            return text;
         }
     }
-    format!("'{text}")
+    text.insert(0, '\'');
+    text
 }
 
 /// `markdown(value)`: HTML-escape, then backslash-escape Markdown punctuation.
@@ -875,14 +880,6 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
         .map_err(|e| Failure::Error(file_error(&e, &shown)))?;
     file.write_all(bytes)
         .map_err(|e| Failure::Error(file_error(&e, &shown)))
-}
-
-fn get_text(row: &Json, key: &str) -> String {
-    match row.get(key) {
-        Some(Json::Str(s)) => s.lossy(),
-        Some(other) => pyjson::repr(other),
-        None => String::new(),
-    }
 }
 
 const TABLES: [&str; 6] = [
@@ -949,24 +946,43 @@ fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.
 
 /// `csv.DictWriter` over the union of the rows' keys, with formula-like cells escaped.
 fn csv_table(table: &[Json]) -> String {
-    let mut fields = Vec::new();
-    let mut seen = HashSet::new();
+    let mut keys = Vec::new();
+    let mut columns = HashMap::new();
     for row in table {
         if let Json::Object(pairs) = row {
             for (key, _) in pairs {
-                if seen.insert(key.0.as_slice()) {
-                    fields.push(key.lossy());
+                if let std::collections::hash_map::Entry::Vacant(column) = columns.entry(key.0.as_slice()) {
+                    column.insert(keys.len());
+                    keys.push(key);
                 }
             }
         }
     }
-    if fields.is_empty() {
-        fields = vec!["code".into(), "reference".into()];
-    }
+    let fields: Vec<String> = if keys.is_empty() {
+        vec!["code".into(), "reference".into()]
+    } else {
+        keys.iter().map(|key| key.lossy()).collect()
+    };
     let mut csv = pycsv::write_row(&fields);
+    let mut cells = vec![String::new(); fields.len()];
     for row in table {
-        let cells: Vec<String> = fields.iter().map(|key| safe_cell(&get_text(row, key))).collect();
+        if let Json::Object(pairs) = row {
+            // Match Json::get's first value if a Rust caller supplies duplicate keys.
+            for (position, (key, value)) in pairs.iter().enumerate().rev() {
+                let column = if keys.get(position) == Some(&key) {
+                    position
+                } else {
+                    columns[key.0.as_slice()]
+                };
+                let text = match value {
+                    Json::Str(text) => text.lossy(),
+                    other => pyjson::repr(other),
+                };
+                cells[column] = escape_cell(text);
+            }
+        }
         pycsv::append_row(&mut csv, &cells);
+        cells.fill_with(String::new);
     }
     csv
 }
@@ -1246,12 +1262,16 @@ mod tests {
     #[test]
     fn csv_tables_keep_first_seen_fields_and_render_non_string_values() {
         let rows = [
-            Json::object([("reference", Json::str("first")), ("amount", Json::Int("42".into()))]),
-            Json::object([("reference", Json::str("second")), ("reviewed", Json::Bool(true))]),
+            Json::object([
+                ("reference", Json::str("first")),
+                ("amount", Json::Int("42".into())),
+                ("reference", Json::str("duplicate")),
+            ]),
+            Json::object([("reference", Json::str("second")), ("révisé", Json::Bool(true))]),
         ];
         assert_eq!(
             csv_table(&rows),
-            "reference,amount,reviewed\r\nfirst,42,\r\nsecond,,True\r\n"
+            "reference,amount,révisé\r\nfirst,42,\r\nsecond,,True\r\n"
         );
     }
 
