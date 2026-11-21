@@ -4,7 +4,7 @@
 //! Local grant allocation and funding workpapers from explicitly reviewed
 //! inputs: a line-by-line port of `grant_workpaper.py`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
 use std::ops::{Add, Sub};
 use std::path::{Path, PathBuf};
@@ -180,7 +180,7 @@ pub fn rows(content: &[u8], fields: &str, key: &str) -> Result<Vec<Record>> {
     }
     let headings = headings.expect("checked above");
     let mut result = Vec::new();
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen = HashSet::new();
     for row in reader {
         let row = row.map_err(csv_error)?;
         if row.has_extra || row.values.iter().any(Option::is_none) {
@@ -192,13 +192,12 @@ pub fn rows(content: &[u8], fields: &str, key: &str) -> Result<Vec<Record>> {
             .zip(row.values.into_iter().map(Option::unwrap))
             .collect();
         let identifier = field(&record, key);
-        if pytext::strip(identifier).is_empty() || seen.iter().any(|s| s == identifier) {
+        if pytext::strip(identifier).is_empty() || !seen.insert(identifier.to_owned()) {
             return fail(format!("Missing or duplicate {key}: {}", pytext::repr(identifier)));
         }
         for (name, value) in &record {
             text_field(value, name, !pytext::strip(value).is_empty())?;
         }
-        seen.push(identifier.to_string());
         result.push(record);
     }
     Ok(result)
