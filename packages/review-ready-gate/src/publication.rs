@@ -131,13 +131,12 @@ fn single_link_handle(file: &File) -> io::Result<bool> {
     use windows_sys::Win32::Storage::FileSystem::{
         BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, GetFileInformationByHandle,
     };
-    let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
-    // SAFETY: file owns the handle and info is correctly sized writable storage.
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: file owns the handle and info is writable storage of the required type.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    // SAFETY: the successful call initialised info.
-    let info = unsafe { info.assume_init() };
     Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
 }
 
