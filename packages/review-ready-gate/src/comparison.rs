@@ -87,7 +87,13 @@ fn document_slot(slot: &str) -> bool {
     reason = "collects each finding's sources in one pass"
 )]
 fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
-    let mut originals: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    #[derive(Default)]
+    struct Original<'a> {
+        digest: Option<&'a Json>,
+        repeated: bool,
+    }
+
+    let mut originals = BTreeMap::<String, Original<'_>>::new();
     let mut order = Vec::new();
     for slot in findings(document)
         .iter()
@@ -96,7 +102,7 @@ fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
     {
         if let std::collections::btree_map::Entry::Vacant(entry) = originals.entry(slot) {
             order.push(entry.key().clone());
-            entry.insert(Vec::new());
+            entry.insert(Original::default());
         }
     }
     let Json::Object(sources) = document.at("source_sha256") else {
@@ -124,24 +130,26 @@ fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
             ));
         }
         if let Some((slot, name)) = filename {
-            if !originals.contains_key(slot) {
+            let original = if let Some(original) = originals.get_mut(slot) {
+                original
+            } else {
                 order.push(slot.into());
-            }
-            let digests = originals.entry(slot.into()).or_default();
+                originals.entry(slot.into()).or_default()
+            };
             if ["original.txt", "original.pdf"].contains(&name) {
-                digests.push(text(source.at("sha256")));
+                original.repeated |= original.digest.replace(source.at("sha256")).is_some();
             }
         }
     }
     let mut result = Vec::new();
     for slot in order {
-        let digests = originals.remove(&slot).unwrap();
-        if digests.len() != 1 {
+        let original = originals.remove(&slot).unwrap();
+        let Some(digest) = original.digest.filter(|_| !original.repeated) else {
             return Err(format!(
                 "compare needs {slot} to record exactly one original file"
             ));
-        }
-        result.push((slot, digests[0].clone()));
+        };
+        result.push((slot, text(digest)));
     }
     Ok(result)
 }
@@ -222,7 +230,7 @@ fn scope_changes(
     }
     fn sorted_digests(sources: &[(String, String)]) -> Vec<&str> {
         let mut sources: Vec<_> = sources.iter().map(|(_, digest)| digest.as_str()).collect();
-        sources.sort();
+        sources.sort_unstable();
         sources
     }
     let before = sorted_digests(previous_sources);
@@ -397,6 +405,18 @@ mod tests {
             ),
         ])
     }
+
+    #[test]
+    fn document_sources_require_one_original_per_discovered_slot() {
+        for sources in [&[][..], &["document_001", "document_001"][..]] {
+            let pack = document(&["document_001"], sources);
+            assert_eq!(
+                document_sources(&pack).unwrap_err(),
+                "compare needs document_001 to record exactly one original file"
+            );
+        }
+    }
+
     #[test]
     fn equal_numeric_document_indices_keep_discovery_order() {
         for previous in [
