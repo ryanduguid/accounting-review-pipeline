@@ -54,6 +54,15 @@ fn findings(current: &[BalanceRow], prior: &[BalanceRow], operation: &Json) -> c
     )
 }
 
+#[test]
+fn variance_without_current_rows_reports_a_refusal() {
+    let prior = [row("existing", "Revenue", "1000.00")];
+    assert!(matches!(
+        findings(&[], &prior, &operation()),
+        Err(Failure::Gateway(message)) if message == "Current trial balance must contain at least one account row."
+    ));
+}
+
 fn redact(model: &Json, rows: &[BalanceRow]) -> crate::util::Result<()> {
     let refs: Vec<&BalanceRow> = rows.iter().collect();
     assert_model_is_redacted(model, &refs)

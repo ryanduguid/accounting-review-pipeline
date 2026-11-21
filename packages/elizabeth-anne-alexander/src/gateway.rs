@@ -528,13 +528,16 @@ pub fn variance_findings(
     section: &Json,
     operation: &Json,
 ) -> Result<Vec<(Json, Json)>> {
+    let Some(first_current) = current_rows.first() else {
+        return refuse("Current trial balance must contain at least one account row.");
+    };
+    let report_date = first_current.report_date;
     let absolute = decimal(operation.at("minimum_absolute_delta"), "minimum_absolute_delta")?;
     let minimum_percent =
         decimal(operation.at("minimum_percent_delta"), "minimum_percent_delta")?.div(&Decimal::parse("100").unwrap());
     let current_by_id: BTreeMap<&str, &BalanceRow> = current_rows.iter().map(|r| (r.account_id.as_str(), r)).collect();
     let prior_by_id: BTreeMap<&str, &BalanceRow> = prior_rows.iter().map(|r| (r.account_id.as_str(), r)).collect();
     refuse_section_drift(&current_by_id, &prior_by_id, section)?;
-    let report_date = current_rows[0].report_date;
     let ids: BTreeSet<&str> = current_by_id.keys().chain(prior_by_id.keys()).copied().collect();
     let entity = render(entity_ref);
     let mut findings = Vec::new();
