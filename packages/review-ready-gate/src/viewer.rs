@@ -496,9 +496,10 @@ fn verify_agreement(
         ));
     }
     let evidence = summary_evidence(summary);
-    let Json::Object(sources) = document.at("source_sha256") else {
-        unreachable!()
-    };
+    let sources = document
+        .at("source_sha256")
+        .as_object()
+        .expect("validated pack sources must be an object");
     if sources.is_empty() {
         if !evidence.is_empty() {
             return Err(format!(
@@ -509,7 +510,7 @@ fn verify_agreement(
         let mut hashes = BTreeMap::new();
         for e in &evidence {
             if hashes
-                .insert(e.slot.clone(), (e.filename.clone(), e.sha256.clone()))
+                .insert(e.slot.as_str(), (e.filename.as_str(), e.sha256.as_str()))
                 .is_some()
             {
                 return Err(format!(
@@ -523,27 +524,23 @@ fn verify_agreement(
                 "{SUMMARY_NAME}: no source-evidence digest lines found"
             ));
         }
-        let expected: BTreeMap<_, _> = sources
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.to_utf8().unwrap(),
-                    (
-                        string(v.at("filename")).unwrap(),
-                        string(v.at("sha256")).unwrap(),
-                    ),
-                )
-            })
-            .collect();
-        if hashes != expected {
+        let matches = hashes.len() == sources.len()
+            && sources.iter().all(|(key, value)| {
+                let slot = key.to_utf8().unwrap();
+                hashes.get(slot.as_str()).is_some_and(|(filename, sha256)| {
+                    value.at("filename").is_str(filename) && value.at("sha256").is_str(sha256)
+                })
+            });
+        if !matches {
             return Err(format!(
                 "source evidence disagrees: {SUMMARY_NAME} and {JSON_NAME} list different source digests"
             ));
         }
     }
-    let Json::Array(findings) = document.at("findings") else {
-        unreachable!()
-    };
+    let findings = document
+        .at("findings")
+        .as_array()
+        .expect("validated pack findings must be an array");
     if csv.len() != findings.len() {
         return Err(format!(
             "finding counts disagree: {JSON_NAME} holds {}, {CSV_NAME} holds {} data rows",
@@ -757,9 +754,10 @@ pub(crate) fn canonical_pack(
             comment: string(ack.at("comment")).unwrap(),
         })
     };
-    let Json::Array(findings) = document.at("findings") else {
-        unreachable!()
-    };
+    let findings = document
+        .at("findings")
+        .as_array()
+        .expect("validated pack findings must be an array");
     let findings = findings
         .iter()
         .map(|f| Finding {
@@ -772,10 +770,9 @@ pub(crate) fn canonical_pack(
         })
         .collect();
     let controls_not_run = document.get("controls_not_run").map(|controls| {
-        let Json::Array(controls) = controls else {
-            unreachable!()
-        };
         controls
+            .as_array()
+            .expect("validated controls not run must be an array")
             .iter()
             .map(|c| ControlNotRun {
                 slot: string(c.at("slot")).unwrap(),
@@ -900,20 +897,23 @@ pub fn render_review_sheet(directory: &Path, documents: &[PathBuf]) -> Result<St
             .flat_map(|(i, b)| b.evidence(i + 1))
             .map(|e| (e.slot, (e.filename, e.sha256)))
             .collect();
-        let Json::Object(sources) = pack.document.at("source_sha256") else {
-            unreachable!()
-        };
-        let recorded: BTreeMap<_, _> = sources
+        let recorded: BTreeMap<_, _> = pack
+            .document
+            .at("source_sha256")
+            .as_object()
+            .expect("validated pack sources must be an object")
             .iter()
-            .filter(|(k, _)| k.to_utf8().unwrap().starts_with("document_"))
-            .map(|(k, v)| {
-                (
-                    k.to_utf8().unwrap(),
+            .filter_map(|(key, value)| {
+                let slot = key.to_utf8().unwrap();
+                slot.starts_with("document_").then(|| {
                     (
-                        string(v.at("filename")).unwrap(),
-                        string(v.at("sha256")).unwrap(),
-                    ),
-                )
+                        slot,
+                        (
+                            string(value.at("filename")).unwrap(),
+                            string(value.at("sha256")).unwrap(),
+                        ),
+                    )
+                })
             })
             .collect();
         if supplied != recorded {
@@ -929,6 +929,55 @@ pub fn render_review_sheet(directory: &Path, documents: &[PathBuf]) -> Result<St
 mod tests {
     use super::*;
     use crate::test_support::{TempDir, ready_pack};
+
+    #[test]
+    fn source_evidence_checks_slot_filename_digest_and_uniqueness() {
+        let [json, summary, csv] = report::rendered(&ready_pack()).unwrap();
+        let document = parse_json(&json).unwrap();
+        verify_schema(&document).unwrap();
+        let summary = String::from_utf8(summary).unwrap();
+        let csv = read_csv(&csv).unwrap();
+        let evidence = verify_agreement(&document, &summary, &csv).unwrap();
+        let first = &evidence[0];
+        let line = format!(
+            "- `{}` (`{}`): `{}`",
+            first.slot, first.filename, first.sha256
+        );
+        let other_digest = if first.sha256.starts_with('0') {
+            "1"
+        } else {
+            "0"
+        }
+        .repeat(64);
+        let altered = [
+            format!(
+                "- `other_fixture` (`{}`): `{}`",
+                first.filename, first.sha256
+            ),
+            format!("- `{}` (`different.csv`): `{}`", first.slot, first.sha256),
+            format!(
+                "- `{}` (`{}`): `{other_digest}`",
+                first.slot, first.filename
+            ),
+        ];
+        for replacement in altered {
+            let changed = summary.replacen(&line, &replacement, 1);
+            assert_eq!(
+                verify_agreement(&document, &changed, &csv).unwrap_err(),
+                format!(
+                    "source evidence disagrees: {SUMMARY_NAME} and {JSON_NAME} list different source digests"
+                )
+            );
+        }
+        let duplicate = format!("{summary}\n{line}\n");
+        assert_eq!(
+            verify_agreement(&document, &duplicate, &csv).unwrap_err(),
+            format!(
+                "{SUMMARY_NAME}: source slot {} carries more than one evidence line",
+                pytext::repr(&first.slot)
+            )
+        );
+    }
 
     #[test]
     fn changed_publication_is_refused_then_a_stable_retry_succeeds() {
