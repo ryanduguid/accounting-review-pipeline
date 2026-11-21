@@ -84,7 +84,7 @@ fn triage(result: &Redaction) -> String {
     ];
     let mut unknowns: Vec<_> = result.unknowns.iter().collect();
     unknowns.sort_by_key(|u| (u.line, &u.kind, &u.value));
-    let mut quoted = HashSet::new();
+    let mut quoted_line = None;
     for u in unknowns {
         let value = u
             .value
@@ -93,8 +93,9 @@ fn triage(result: &Redaction) -> String {
             .collect::<Vec<_>>()
             .join(" ");
         lines.push(format!("- **{value}** ({}, line {})", u.kind, u.line));
-        if quoted.insert(u.line) {
+        if quoted_line != Some(u.line) {
             lines.push(format!("  > {}", u.context));
+            quoted_line = Some(u.line);
         }
     }
     lines.join("\n") + "\n"

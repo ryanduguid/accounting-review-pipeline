@@ -179,14 +179,14 @@ fn operation(request: &Json) -> Result<Json> {
                 .iter()
                 .map(|value| text(value).map(std::ffi::OsString::from))
                 .collect::<Result<Vec<_>>>()?;
+            let output = request.get("output_files").map(path).transpose()?;
             let (code, out, err) = crate::stdio::capture(|| crate::cli::main(args));
             let mut result = vec![
                 ("code", Json::int(code.into())),
                 ("stdout", Json::str(&without_queue_command(&out))),
                 ("stderr", Json::str(&without_queue_command(&err))),
             ];
-            if let Some(output) = request.get("output_files") {
-                let output = path(output)?;
+            if let Some(output) = output {
                 result.push((
                     "files",
                     Json::Array(
