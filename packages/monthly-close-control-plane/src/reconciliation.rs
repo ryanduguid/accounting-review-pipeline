@@ -223,10 +223,12 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
         || !pyjson::py_eq(payload.at("identity"), identity, true)
         || payload.at("period_end").as_pystr().is_none()
         || payload.at("balance").as_pystr().is_none()
-        || !matches!(payload.at("notes"), Json::Object(_))
     {
         return Err(invalid_schema.into());
     }
+    let Json::Object(notes) = payload.at("notes") else {
+        return Err(invalid_schema.into());
+    };
     let previous = date(&field(&payload, "period_end"))?;
     if isodate::ordinal(start) - isodate::ordinal(previous) != 1 {
         return Err("Opening items must come from the immediately preceding period.".into());
@@ -255,9 +257,6 @@ fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec
     if total(&items) != money(&balance, "amount", Path::new("configuration"), 0)? {
         return Err("Opening items do not equal their recorded balance.".into());
     }
-    let Json::Object(notes) = payload.at("notes") else {
-        unreachable!()
-    };
     let invalid_notes = "Opening review notes must name outstanding transaction IDs.";
     if notes.len() > items.len() {
         return Err(invalid_notes.into());

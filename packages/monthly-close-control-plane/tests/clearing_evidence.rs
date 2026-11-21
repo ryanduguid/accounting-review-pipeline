@@ -157,6 +157,10 @@ fn malformed_opening_json_is_refused_without_changing_inputs() {
         ("[]", invalid_schema),
         ("{}", invalid_schema),
         ("{\"items\":null}", invalid_schema),
+        (
+            r#"{"schema":"clearing-carry-v1","identity":{"Tenant":"Synthetic","AccountID":"CLEAR","Currency":"AUD"},"period_end":"bad-date","balance":"0","notes":[],"items":[]}"#,
+            invalid_schema,
+        ),
     ] {
         fs::write(&path, content).unwrap();
         let before = inventory(&temp.0);
