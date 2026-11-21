@@ -431,16 +431,20 @@ fn open_browser(url: &str) -> bool {
 }
 
 #[cfg(not(windows))]
+fn browser_launcher(platform: &str) -> &'static str {
+    if platform == "macos" {
+        "open"
+    } else {
+        "xdg-open"
+    }
+}
+
+#[cfg(not(windows))]
 fn open_browser(url: &str) -> bool {
     use std::process::{Command, Stdio};
     use std::sync::mpsc::{self, RecvTimeoutError};
 
-    let command = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let mut launcher = Command::new(command);
+    let mut launcher = Command::new(browser_launcher(std::env::consts::OS));
     launcher
         .arg(url)
         .stdout(Stdio::null())
@@ -466,6 +470,13 @@ fn open_browser(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn browser_launcher_selects_the_command_for_each_platform() {
+        assert_eq!(browser_launcher("macos"), "open");
+        assert_eq!(browser_launcher("linux"), "xdg-open");
+    }
 
     #[cfg(windows)]
     #[test]
