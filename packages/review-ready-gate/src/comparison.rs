@@ -143,7 +143,11 @@ fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
     }
     Ok(result)
 }
-fn unmatched_documents(previous: &Json, current: &Json) -> Result<BTreeSet<String>> {
+fn unmatched_documents(
+    previous: &Json,
+    before: &mut [(String, String)],
+    after: &[(String, String)],
+) -> BTreeSet<String> {
     fn index_key(slot: &str) -> (usize, &str) {
         // Source slots have ASCII decimal indices. Compare their significant digits.
         let digits = slot.trim_start_matches("document_").trim_start_matches('0');
@@ -156,25 +160,28 @@ fn unmatched_documents(previous: &Json, current: &Json) -> Result<BTreeSet<Strin
         .filter(|s| s.starts_with("document_"))
         .collect();
     let mut available: BTreeMap<_, usize> = BTreeMap::new();
-    for (_, digest) in document_sources(current)? {
+    for (_, digest) in after {
         *available.entry(digest).or_default() += 1;
     }
-    let mut before = document_sources(previous)?;
     before.sort_by(|(left, _), (right, _)| index_key(left).cmp(&index_key(right)));
-    for (slot, digest) in before {
-        let count = available.entry(digest).or_default();
-        if *count > 0 {
+    for (slot, digest) in before.iter() {
+        if let Some(count) = available.get_mut(digest).filter(|count| **count > 0) {
             *count -= 1;
-            unmatched.remove(&slot);
+            unmatched.remove(slot);
         }
     }
-    Ok(unmatched)
+    unmatched
 }
 #[expect(
     clippy::too_many_lines,
     reason = "checks each scope field of the 2 packs"
 )]
-fn scope_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
+fn scope_changes(
+    previous: &Json,
+    current: &Json,
+    previous_sources: &[(String, String)],
+    current_sources: &[(String, String)],
+) -> Vec<Json> {
     let mut changes = Vec::new();
     if thresholds_differ(previous, current) {
         changes.push(Json::object([
@@ -202,29 +209,22 @@ fn scope_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
             ),
         ]));
     }
-    let required = |document: &Json| {
-        document
-            .get("required_controls")
-            .unwrap_or(&Json::Null)
-            .clone()
-    };
-    if !pyjson::py_eq(&required(previous), &required(current), true) {
+    let previous_required = previous.get("required_controls").unwrap_or(&Json::Null);
+    let current_required = current.get("required_controls").unwrap_or(&Json::Null);
+    if !pyjson::py_eq(previous_required, current_required, true) {
         changes.push(Json::object([
             ("member", Json::str("required_controls")),
-            ("previous", required(previous)),
-            ("current", required(current)),
+            ("previous", previous_required.clone()),
+            ("current", current_required.clone()),
         ]));
     }
-    let sorted = |document| -> Result<Vec<String>> {
-        let mut sources: Vec<_> = document_sources(document)?
-            .into_iter()
-            .map(|(_, digest)| digest)
-            .collect();
+    fn sorted_digests(sources: &[(String, String)]) -> Vec<&str> {
+        let mut sources: Vec<_> = sources.iter().map(|(_, digest)| digest.as_str()).collect();
         sources.sort();
-        Ok(sources)
-    };
-    let before = sorted(previous)?;
-    let after = sorted(current)?;
+        sources
+    }
+    let before = sorted_digests(previous_sources);
+    let after = sorted_digests(current_sources);
     if before != after {
         changes.push(Json::object([
             ("member", Json::str("document_coverage")),
@@ -238,7 +238,7 @@ fn scope_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
             ),
         ]));
     }
-    Ok(changes)
+    changes
 }
 fn source_changes(previous: &Json, current: &Json) -> Vec<Json> {
     let before = object(previous.at("source_sha256"));
@@ -264,7 +264,7 @@ fn source_changes(previous: &Json, current: &Json) -> Vec<Json> {
         })
         .collect()
 }
-fn finding_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
+fn finding_changes(previous: &Json, current: &Json, unmatched: &BTreeSet<String>) -> Vec<Json> {
     let before = groups(previous);
     let after = groups(current);
     let thresholds_changed = thresholds_differ(previous, current);
@@ -273,10 +273,8 @@ fn finding_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
         Some(Json::Array(items)) => items.iter().map(|c| text(c.at("slot"))).collect(),
         _ => BTreeSet::new(),
     };
-    let unmatched = unmatched_documents(previous, current)?;
     let keys: BTreeSet<_> = before.keys().chain(after.keys()).collect();
-    Ok(keys
-        .into_iter()
+    keys.into_iter()
         .map(|key @ (code, slot)| {
             let old = before.get(key).map(Vec::as_slice);
             let new = after.get(key).map(Vec::as_slice);
@@ -302,7 +300,7 @@ fn finding_changes(previous: &Json, current: &Json) -> Result<Vec<Json>> {
                 ("current", rendered_findings(new)),
             ])
         })
-        .collect())
+        .collect()
 }
 pub fn compare_packs(previous_directory: &Path, current_directory: &Path) -> Result<Json> {
     let previous = viewer::verify_pack(previous_directory)?;
@@ -319,6 +317,10 @@ pub fn compare_packs(previous_directory: &Path, current_directory: &Path) -> Res
             ));
         }
     }
+    let mut previous_sources = document_sources(before)?;
+    let current_sources = document_sources(after)?;
+    let scope = scope_changes(before, after, &previous_sources, &current_sources);
+    let unmatched = unmatched_documents(before, &mut previous_sources, &current_sources);
     let run = |document: &Json, hashes: BTreeMap<String, String>| {
         Json::object([
             ("overall_status", document.at("overall_status").clone()),
@@ -342,9 +344,12 @@ pub fn compare_packs(previous_directory: &Path, current_directory: &Path) -> Res
         ("period_end", after.at("period_end").clone()),
         ("previous", run(before, previous.artefact_sha256)),
         ("current", run(after, current.artefact_sha256)),
-        ("scope_changes", Json::Array(scope_changes(before, after)?)),
+        ("scope_changes", Json::Array(scope)),
         ("sources", Json::Array(source_changes(before, after))),
-        ("findings", Json::Array(finding_changes(before, after)?)),
+        (
+            "findings",
+            Json::Array(finding_changes(before, after, &unmatched)),
+        ),
         ("comparison_boundary", Json::str(BOUNDARY)),
     ]))
 }
@@ -397,11 +402,13 @@ mod tests {
             } else {
                 BTreeSet::from(["document_0001".into()])
             };
+            let mut previous_sources = document_sources(&previous).unwrap();
+            let current_sources = document_sources(&document(&[], &["document_001"])).unwrap();
+            assert_eq!(previous_sources[0].0, "document_001");
             assert_eq!(
-                unmatched_documents(&previous, &document(&[], &["document_001"])).unwrap(),
+                unmatched_documents(&previous, &mut previous_sources, &current_sources),
                 expected
             );
-            assert_eq!(document_sources(&previous).unwrap()[0].0, "document_001");
         }
     }
 
@@ -420,7 +427,11 @@ mod tests {
         let current = document(&[], &["document_001", "document_002", "document_003"]);
 
         assert_eq!(
-            unmatched_documents(&previous, &current).unwrap(),
+            unmatched_documents(
+                &previous,
+                &mut document_sources(&previous).unwrap(),
+                &document_sources(&current).unwrap()
+            ),
             BTreeSet::from([highest])
         );
     }
@@ -455,7 +466,7 @@ mod tests {
         let before = make_pack(&before_reasons);
         let unchanged = make_pack(&after_reasons);
         let changed = make_pack(&["🔎 Review", "Écriture", "🔎 Review"]);
-        let recurring = finding_changes(&before, &unchanged).unwrap();
+        let recurring = finding_changes(&before, &unchanged, &BTreeSet::new());
         assert_eq!(recurring.len(), 1);
         assert!(recurring[0].at("change").is_str("RECURRING"));
         for (version, reasons) in [("previous", before_reasons), ("current", after_reasons)] {
@@ -474,7 +485,7 @@ mod tests {
             );
             assert!(pyjson::py_eq(recurring[0].at(version), &expected, true));
         }
-        let changed = finding_changes(&before, &changed).unwrap();
+        let changed = finding_changes(&before, &changed, &BTreeSet::new());
         assert_eq!(changed.len(), 1);
         assert!(changed[0].at("change").is_str("CHANGED"));
     }
