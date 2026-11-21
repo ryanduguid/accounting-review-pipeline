@@ -19,14 +19,11 @@ const DETAILS: [&str; 4] = ["status", "repeat", "reason", "reviewer_action"];
 fn text(value: &Json) -> String {
     value.as_pystr().unwrap().to_utf8().unwrap()
 }
-fn object(value: &Json) -> BTreeMap<String, &Json> {
+fn object(value: &Json) -> BTreeMap<&PyStr, &Json> {
     let Json::Object(pairs) = value else {
         unreachable!()
     };
-    pairs
-        .iter()
-        .map(|(k, v)| (k.to_utf8().unwrap(), v))
-        .collect()
+    pairs.iter().map(|(key, value)| (key, value)).collect()
 }
 fn findings(document: &Json) -> &[Json] {
     let Json::Array(items) = document.at("findings") else {
@@ -244,7 +241,7 @@ fn scope_changes(
 fn source_changes(previous: &Json, current: &Json) -> Vec<Json> {
     let before = object(previous.at("source_sha256"));
     let after = object(current.at("source_sha256"));
-    let slots: BTreeSet<_> = before.keys().chain(after.keys()).collect();
+    let slots: BTreeSet<_> = before.keys().chain(after.keys()).copied().collect();
     slots
         .into_iter()
         .map(|slot| {
@@ -257,7 +254,7 @@ fn source_changes(previous: &Json, current: &Json) -> Vec<Json> {
                 _ => "CHANGED",
             };
             Json::object([
-                ("slot", Json::str(slot)),
+                ("slot", Json::Str(slot.clone())),
                 ("change", Json::str(change)),
                 ("previous", old.unwrap_or(&Json::Null).clone()),
                 ("current", new.unwrap_or(&Json::Null).clone()),
@@ -435,6 +432,45 @@ mod tests {
             ),
             BTreeSet::from([highest])
         );
+    }
+
+    #[test]
+    fn source_changes_keep_unicode_slot_order_and_unchanged_entries() {
+        let before = Json::object([(
+            "source_sha256",
+            Json::object([
+                ("🔎", Json::str("old")),
+                ("é", Json::str("same")),
+                ("z", Json::str("removed")),
+            ]),
+        )]);
+        let after = Json::object([(
+            "source_sha256",
+            Json::object([
+                ("𐍈", Json::str("new")),
+                ("🔎", Json::str("new")),
+                ("é", Json::str("same")),
+            ]),
+        )]);
+        let rows = source_changes(&before, &after);
+        let changes: Vec<_> = rows
+            .iter()
+            .map(|row| (text(row.at("slot")), text(row.at("change"))))
+            .collect();
+        assert_eq!(
+            changes,
+            [
+                ("z", "REMOVED"),
+                ("é", "UNCHANGED"),
+                ("𐍈", "ADDED"),
+                ("🔎", "CHANGED")
+            ]
+            .map(|(slot, change)| (slot.to_owned(), change.to_owned()))
+        );
+        assert!(matches!(rows[0].at("current"), Json::Null));
+        assert!(matches!(rows[2].at("previous"), Json::Null));
+        assert!(rows[3].at("previous").is_str("old"));
+        assert!(rows[3].at("current").is_str("new"));
     }
 
     #[test]
