@@ -466,6 +466,40 @@ mod tests {
     }
 
     #[test]
+    fn directory_at_manifest_path_preserves_content_and_clears_reservation() {
+        for quiet in [false, true] {
+            let scratch = Scratch::new();
+            let csv = scratch.0.join("tb.csv");
+            let manifest = manifest_path(&csv);
+            let aside = append(&manifest, ".previous");
+            fs::write(&csv, b"earlier CSV").unwrap();
+            fs::create_dir(&manifest).unwrap();
+            let content = manifest.join("keep");
+            fs::write(&content, b"keep directory content").unwrap();
+
+            let failure = set_aside_manifest(&csv, quiet).unwrap_err();
+            assert_eq!(failure.code, 1);
+            assert!(failure.stdout.is_empty());
+            let shown = if quiet {
+                scratch.0.join("<filename withheld under --quiet>")
+            } else {
+                manifest
+            };
+            assert!(failure.stderr.starts_with(&format!(
+                "error: a manifest from an earlier export, {}, could not be set aside (",
+                pypath::text(&shown)
+            )));
+            assert!(failure.stderr.ends_with(
+                "), so the CSV and current manifest are unchanged and the fetched report is not kept.\n"
+            ));
+            assert_eq!(failure.stderr.contains("tb.csv"), !quiet);
+            assert_eq!(fs::read(&csv).unwrap(), b"earlier CSV");
+            assert_eq!(fs::read(&content).unwrap(), b"keep directory content");
+            assert!(!aside.exists());
+        }
+    }
+
+    #[test]
     fn temporary_refusals_preserve_missing_and_non_directory_parents() {
         let scratch = Scratch::new();
         let missing = scratch.0.join("missing");
