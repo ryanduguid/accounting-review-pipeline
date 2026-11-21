@@ -813,12 +813,12 @@ pub struct VerifiedPack {
     pub summary: String,
     pub artefact_sha256: BTreeMap<String, String>,
 }
-pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
+fn read_pack_payloads(directory: &Path) -> Result<[Vec<u8>; PACK_NAMES.len()]> {
     let revision = publication::snapshot_revision(directory).map_err(|e| e.to_string())?;
-    let mut payloads = Vec::new();
-    for name in PACK_NAMES {
+    let mut payloads = [const { Vec::new() }; PACK_NAMES.len()];
+    for (name, payload) in PACK_NAMES.into_iter().zip(&mut payloads) {
         let path = directory.join(name);
-        let bytes = publication::read_single_link(&path)
+        *payload = publication::read_single_link(&path)
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     format!("{name}: not found in {}", pypath::text(directory))
@@ -827,17 +827,20 @@ pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
                 }
             })?
             .ok_or_else(|| format!("{name}: expected a regular, single-link artefact"))?;
-        payloads.push(bytes);
     }
     if publication::snapshot_revision(directory).map_err(|e| e.to_string())? != revision {
         return Err("pack publication changed during acquisition; retry".into());
     }
-    let document = parse_json(&payloads[0])?;
+    Ok(payloads)
+}
+
+pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
+    let [json_bytes, summary_bytes, csv_bytes] = read_pack_payloads(directory)?;
+    let document = parse_json(&json_bytes)?;
     verify_schema(&document)?;
-    let summary = std::str::from_utf8(&payloads[1])
-        .map_err(|_| format!("{SUMMARY_NAME}: not valid UTF-8"))?
-        .to_owned();
-    let csv = read_csv(&payloads[2])?;
+    let summary =
+        String::from_utf8(summary_bytes).map_err(|_| format!("{SUMMARY_NAME}: not valid UTF-8"))?;
+    let csv = read_csv(&csv_bytes)?;
     let evidence = verify_agreement(&document, &summary, &csv)?;
     let pack = canonical_pack(&document, evidence)?;
     if pack.status != engine::overall(&pack.findings) {
@@ -845,15 +848,23 @@ pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
             "{JSON_NAME}: overall_status disagrees with the findings"
         ));
     }
-    if summary.replace("\r\n", "\n") != report::as_markdown(&pack)? {
+    let canonical = report::as_markdown(&pack)?;
+    let matches = summary == canonical
+        || (summary.contains("\r\n") && summary.replace("\r\n", "\n") == canonical);
+    if !matches {
         return Err(format!(
             "{SUMMARY_NAME}: document does not match its canonical rendering"
         ));
     }
+    let payloads = [
+        json_bytes.as_slice(),
+        summary.as_bytes(),
+        csv_bytes.as_slice(),
+    ];
     let artefact_sha256 = PACK_NAMES
         .iter()
         .zip(payloads)
-        .map(|(name, bytes)| ((*name).into(), crate::sha256(&bytes)))
+        .map(|(name, bytes)| ((*name).into(), crate::sha256(bytes)))
         .collect();
     Ok(VerifiedPack {
         document,

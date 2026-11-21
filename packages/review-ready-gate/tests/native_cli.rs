@@ -1460,6 +1460,36 @@ fn viewing_refuses_edited_acknowledgement_types_effect_and_dates() {
 }
 
 #[test]
+fn viewing_preserves_summary_bytes_and_rejects_invalid_utf8() {
+    let tmp = TempDir::new();
+    let output = tmp.join("pack");
+    let generated = gate_command("bas-ready", &output).output().unwrap();
+    assert_eq!(generated.status.code(), Some(0), "{generated:?}");
+    let name = "readiness-summary.md";
+    let path = output.join(name);
+    let lf = fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+    let crlf = lf.replace('\n', "\r\n");
+    assert_ne!(lf, crlf);
+    for content in [lf, crlf] {
+        fs::write(&path, content.as_bytes()).unwrap();
+        let pack = review_ready_gate::viewer::verify_pack(&output).unwrap();
+        assert_eq!(pack.summary, content);
+        assert_eq!(
+            pack.artefact_sha256[name],
+            review_ready_gate::sha256(content.as_bytes())
+        );
+        assert_eq!(fs::read(&path).unwrap(), content.as_bytes());
+    }
+
+    fs::write(&path, [0xff]).unwrap();
+    let failure = view_read_only(&output);
+    assert_eq!(failure.status.code(), Some(1), "{failure:?}");
+    assert!(failure.stdout.is_empty());
+    assert_view_says(&failure, "readiness-summary.md: not valid UTF-8");
+    assert_eq!(fs::read(&path).unwrap(), [0xff]);
+}
+
+#[test]
 fn viewing_refuses_duplicate_missing_or_disagreeing_source_witnesses() {
     let tmp = TempDir::new();
     let output = tmp.join("pack");
