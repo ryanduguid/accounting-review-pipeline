@@ -898,30 +898,38 @@ fn array<'a>(value: &'a Json, key: &str) -> Result<&'a [Json]> {
     }
 }
 
-fn validated_tables(result: &Json) -> Result<[&[Json]; TABLES.len()]> {
-    let mut tables = [&[][..]; TABLES.len()];
+type TableRow = [(PyStr, Json)];
+
+fn validated_rows<'a>(name: &str, rows: &'a [Json]) -> Result<Vec<&'a TableRow>> {
     let is_unicode = |points: &[u32]| points.iter().copied().all(|point| char::from_u32(point).is_some());
-    for (name, rows) in TABLES.into_iter().zip(&mut tables) {
-        *rows = array(result, name)?;
-        for (index, row) in rows.iter().enumerate() {
-            let Json::Object(fields) = row else {
-                return fail(format!("Invalid workpaper: {name}[{index}] must be an object"));
-            };
-            for (key, value) in fields {
-                if !is_unicode(&key.0) {
-                    return fail(format!(
-                        "Invalid workpaper: {name}[{index}] field names must be valid Unicode"
-                    ));
-                }
-                if let Json::Str(text) = value
-                    && !is_unicode(&text.0)
-                {
-                    return fail(format!(
-                        "Invalid workpaper: {name}[{index}] field values must be valid Unicode"
-                    ));
-                }
+    let mut validated = Vec::with_capacity(rows.len());
+    for (index, row) in rows.iter().enumerate() {
+        let Json::Object(fields) = row else {
+            return fail(format!("Invalid workpaper: {name}[{index}] must be an object"));
+        };
+        for (key, value) in fields {
+            if !is_unicode(&key.0) {
+                return fail(format!(
+                    "Invalid workpaper: {name}[{index}] field names must be valid Unicode"
+                ));
+            }
+            if let Json::Str(text) = value
+                && !is_unicode(&text.0)
+            {
+                return fail(format!(
+                    "Invalid workpaper: {name}[{index}] field values must be valid Unicode"
+                ));
             }
         }
+        validated.push(fields.as_slice());
+    }
+    Ok(validated)
+}
+
+fn validated_tables(result: &Json) -> Result<[Vec<&TableRow>; TABLES.len()]> {
+    let mut tables = std::array::from_fn(|_| Vec::new());
+    for (name, rows) in TABLES.into_iter().zip(&mut tables) {
+        *rows = validated_rows(name, array(result, name)?)?;
     }
     Ok(tables)
 }
@@ -933,28 +941,31 @@ pub fn write_files(result: &Json, output: &Path) -> Result<()> {
     write_validated_files(result, output, tables, &report)
 }
 
-fn write_validated_files(result: &Json, output: &Path, tables: [&[Json]; TABLES.len()], report: &[u8]) -> Result<()> {
+fn write_validated_files(
+    result: &Json,
+    output: &Path,
+    tables: [Vec<&TableRow>; TABLES.len()],
+    report: &[u8],
+) -> Result<()> {
     write_new(
         &output.join("workpaper.json"),
         &text_mode(&(pyjson::dumps_indent2(result) + "\n")),
     )?;
     for (name, rows) in TABLES.into_iter().zip(tables) {
-        write_new(&output.join(format!("{name}.csv")), csv_table(rows).as_bytes())?;
+        write_new(&output.join(format!("{name}.csv")), csv_table(&rows).as_bytes())?;
     }
     write_new(&output.join("workpaper.md"), report)
 }
 
 /// `csv.DictWriter` over the union of the rows' keys, with formula-like cells escaped.
-fn csv_table(table: &[Json]) -> String {
+fn csv_table(table: &[&TableRow]) -> String {
     let mut keys = Vec::new();
     let mut columns = HashMap::new();
-    for row in table {
-        if let Json::Object(pairs) = row {
-            for (key, _) in pairs {
-                if let std::collections::hash_map::Entry::Vacant(column) = columns.entry(key.0.as_slice()) {
-                    column.insert(keys.len());
-                    keys.push(key);
-                }
+    for &row in table {
+        for (key, _) in row {
+            if let std::collections::hash_map::Entry::Vacant(column) = columns.entry(key.0.as_slice()) {
+                column.insert(keys.len());
+                keys.push(key);
             }
         }
     }
@@ -966,20 +977,18 @@ fn csv_table(table: &[Json]) -> String {
     let mut csv = pycsv::write_row(&fields);
     let mut cells = vec![String::new(); fields.len()];
     for row in table {
-        if let Json::Object(pairs) = row {
-            // Match Json::get's first value if a Rust caller supplies duplicate keys.
-            for (position, (key, value)) in pairs.iter().enumerate().rev() {
-                let column = if keys.get(position) == Some(&key) {
-                    position
-                } else {
-                    columns[key.0.as_slice()]
-                };
-                let text = match value {
-                    Json::Str(text) => text.lossy(),
-                    other => pyjson::repr(other),
-                };
-                cells[column] = escape_cell(text);
-            }
+        // Match Json::get's first value if a Rust caller supplies duplicate keys.
+        for (position, (key, value)) in row.iter().enumerate().rev() {
+            let column = if keys.get(position) == Some(&key) {
+                position
+            } else {
+                columns[key.0.as_slice()]
+            };
+            let text = match value {
+                Json::Str(text) => text.lossy(),
+                other => pyjson::repr(other),
+            };
+            cells[column] = escape_cell(text);
         }
         pycsv::append_row(&mut csv, &cells);
         cells.fill_with(String::new);
@@ -1270,7 +1279,7 @@ mod tests {
             Json::object([("reference", Json::str("second")), ("révisé", Json::Bool(true))]),
         ];
         assert_eq!(
-            csv_table(&rows),
+            csv_table(&validated_rows("findings", &rows).unwrap()),
             "reference,amount,révisé\r\nfirst,42,\r\nsecond,,True\r\n"
         );
     }
@@ -1284,7 +1293,7 @@ mod tests {
             Json::object([("reference", Json::str("\"\""))]),
         ];
         assert_eq!(
-            csv_table(&rows),
+            csv_table(&validated_rows("findings", &rows).unwrap()),
             "reference\r\n\"first, \"\"A\"\"\r\nsecond\"\r\n\"\"\r\n\"\"\"\"\"\"\r\n"
         );
     }

@@ -1442,6 +1442,95 @@ fn test_decimal_padding_reports_context_overflow_without_panicking() {
 }
 
 #[test]
+fn formatter_retains_non_finite_decimal_spelling() {
+    for (input, expected) in [
+        ("inf", "Infinity"),
+        ("-Infinity", "-Infinity"),
+        ("NaN0007", "NaN7"),
+        ("-sNaN12", "-sNaN12"),
+        ("NaN000", "NaN"),
+        ("+sNaN000", "sNaN"),
+        ("-NaN", "-NaN"),
+    ] {
+        let value = d(input);
+        assert_eq!(decimal_string(&value).unwrap(), expected, "{input}");
+        assert_eq!(value.to_sci_string(), expected, "{input}");
+    }
+}
+
+#[test]
+fn decimal_traits_order_infinities_and_leave_nans_unordered() {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+
+    for (left, right, order) in [
+        ("NaN", "NaN", None),
+        ("-sNaN3", "7", None),
+        ("7", "NaN42", None),
+        ("-Infinity", "-100", Some(Less)),
+        ("Infinity", "1E+999", Some(Greater)),
+        ("1E+999", "Infinity", Some(Less)),
+        ("-100", "-Infinity", Some(Greater)),
+        ("Infinity", "Infinity", Some(Equal)),
+        ("-Infinity", "Infinity", Some(Less)),
+        ("0", "-0", Some(Equal)),
+    ] {
+        let (lhs, rhs) = (d(left), d(right));
+        assert_eq!(lhs.partial_cmp(&rhs), order, "{left} vs {right}");
+        assert_eq!(rhs.partial_cmp(&lhs), order.map(std::cmp::Ordering::reverse));
+        assert_eq!(lhs == rhs, order == Some(Equal));
+    }
+}
+
+#[test]
+fn decimal_format_and_comparison_preserve_scale_and_sign() {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+
+    for (input, expected) in [
+        ("-0e2", "-0"),
+        ("-0.000", "-0.000"),
+        ("1e3", "1000"),
+        ("12.3400", "12.3400"),
+        ("0.12", "0.12"),
+        ("-0.0012", "-0.0012"),
+    ] {
+        assert_eq!(d(input).to_fixed_string().as_deref(), Some(expected), "{input}");
+    }
+    for (left, right, expected) in [
+        ("12", "12.000", Equal),
+        ("12", "12.001", Less),
+        ("-12", "-12.001", Greater),
+        ("12.01", "12.0200", Less),
+        ("12.001", "12", Greater),
+    ] {
+        assert_eq!(d(left).cmp_value(&d(right)), expected, "{left} vs {right}");
+    }
+    assert_eq!(
+        d("2.5").quantize(0, crate::decimal::Rounding::HalfEven).unwrap(),
+        d("2")
+    );
+}
+
+#[test]
+fn decimal_quantize_and_percentage_preserve_nan_or_refuse_invalid_operands() {
+    use crate::decimal::{Rounding, Signal};
+
+    for (value, expected) in [
+        ("NaN", "NaN"),
+        ("-NaN9000123456789012345678901234567", "-NaN123456789012345678901234567"),
+    ] {
+        assert_eq!(
+            d(value).quantize(-4, Rounding::HalfUp).unwrap().to_sci_string(),
+            expected
+        );
+        assert_eq!(percent_string(&d(value)).unwrap(), expected);
+    }
+    for value in ["-sNaN3", "Infinity", "-Infinity"] {
+        assert_eq!(d(value).quantize(-4, Rounding::HalfUp), Err(Signal::InvalidOperation));
+        assert_refused(percent_string(&d(value)), "supported magnitude range");
+    }
+}
+
+#[test]
 fn test_an_absurd_percentage_is_refused_not_raised_out_of_the_projection() {
     assert_refused(percent_string(&d("1E+30")), "supported magnitude range");
     assert_eq!(percent_string(&d("0.183333")).unwrap(), "18.3333");

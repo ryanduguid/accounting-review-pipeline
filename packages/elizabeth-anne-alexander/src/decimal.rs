@@ -35,7 +35,7 @@ pub enum Rounding {
 enum Kind {
     Finite,
     Infinite,
-    NaN,
+    NaN { signaling: bool, payload: String },
 }
 
 /// A decimal value: `(-1)**negative * coefficient * 10**exp` for finite values.
@@ -192,6 +192,23 @@ impl Decimal {
 
     /// `self.quantize(Decimal(f"1E{exp}"), rounding=rounding)`.
     pub fn quantize(&self, exp: i128, rounding: Rounding) -> Result<Decimal, Signal> {
+        match &self.kind {
+            Kind::Infinite | Kind::NaN { signaling: true, .. } => return Err(Signal::InvalidOperation),
+            Kind::NaN {
+                signaling: false,
+                payload,
+            } => {
+                let payload = payload[payload.len().saturating_sub(PREC as usize)..].trim_start_matches('0');
+                return Ok(special(
+                    self.negative,
+                    Kind::NaN {
+                        signaling: false,
+                        payload: payload.into(),
+                    },
+                ));
+            }
+            Kind::Finite => {}
+        }
         if !(ETINY..=EMAX).contains(&exp) {
             return Err(Signal::InvalidOperation);
         }
@@ -211,9 +228,12 @@ impl Decimal {
     /// `str(self)`, Python's to-sci-string with a capital `E`.
     pub fn to_sci_string(&self) -> String {
         let sign = if self.negative { "-" } else { "" };
-        match self.kind {
+        match &self.kind {
             Kind::Infinite => return format!("{sign}Infinity"),
-            Kind::NaN => return format!("{sign}NaN"),
+            Kind::NaN { signaling, payload } => {
+                let name = if *signaling { "sNaN" } else { "NaN" };
+                return format!("{sign}{name}{payload}");
+            }
             Kind::Finite => {}
         }
         let len = self.digits.len() as i128;
@@ -236,24 +256,46 @@ impl Decimal {
     /// the gateway admits can carry an exponent near -10**18, whose fixed-point
     /// form has that many digits.
     pub fn to_fixed_string(&self) -> Option<String> {
+        if !self.is_finite() {
+            return Some(self.to_sci_string());
+        }
         let sign = if self.negative { "-" } else { "" };
-        let value = if self.is_zero() && self.exp > 0 {
-            finite(self.negative, "0".into(), 0)
+        let exponent = if self.is_zero() && self.exp > 0 { 0 } else { self.exp };
+        let digits = &self.digits;
+        let dotplace = exponent + digits.len() as i128;
+        let length = if dotplace <= 0 {
+            digits.len() as i128 - dotplace + 2
+        } else if dotplace < digits.len() as i128 {
+            digits.len() as i128 + 1
         } else {
-            self.clone()
-        };
-        let dotplace = value.exp + value.digits.len() as i128;
-        let length = value.digits.len() as i128 + dotplace.unsigned_abs() as i128;
+            dotplace
+        } + sign.len() as i128;
         // shortcut: the cut-off where CPython raises MemoryError depends on the
         // machine; 1 GiB of digits is treated as out of memory here.
         // Set a measured memory budget if a legitimate input needs more digits.
         if length > 1 << 30 {
             return None;
         }
-        let (intpart, fracpart) = place_point(&value.digits, dotplace, false);
-        Some(format!("{sign}{intpart}{fracpart}"))
+        let mut output = String::new();
+        output.try_reserve_exact(length as usize).ok()?;
+        output.push_str(sign);
+        if dotplace <= 0 {
+            output.push_str("0.");
+            output.extend(std::iter::repeat_n('0', (-dotplace) as usize));
+            output.push_str(digits);
+        } else if dotplace < digits.len() as i128 {
+            let (integer, fraction) = digits.split_at(dotplace as usize);
+            output.push_str(integer);
+            output.push('.');
+            output.push_str(fraction);
+        } else {
+            output.push_str(digits);
+            output.extend(std::iter::repeat_n('0', dotplace as usize - digits.len()));
+        }
+        Some(output)
     }
 
+    /// Compare finite values. Use `partial_cmp` for values that may be nonfinite.
     pub fn cmp_value(&self, other: &Decimal) -> Ordering {
         debug_assert!(self.is_finite() && other.is_finite());
         let sign = |d: &Decimal| if d.negative { Ordering::Less } else { Ordering::Greater };
@@ -272,9 +314,16 @@ impl Decimal {
         }
         let magnitude = match self.adjusted().cmp(&other.adjusted()) {
             Ordering::Equal => {
-                let pad = |d: &Decimal, e: i128| d.digits.clone() + &"0".repeat((d.exp - e).max(0) as usize);
-                let low = self.exp.min(other.exp);
-                pad(self, low).cmp(&pad(other, low))
+                let left = self.digits.as_bytes();
+                let right = other.digits.as_bytes();
+                let shared = left.len().min(right.len());
+                left[..shared].cmp(&right[..shared]).then_with(|| {
+                    let tail = &left[shared..];
+                    let other_tail = &right[shared..];
+                    tail.iter()
+                        .any(|&digit| digit != b'0')
+                        .cmp(&other_tail.iter().any(|&digit| digit != b'0'))
+                })
             }
             ordering => ordering,
         };
@@ -284,13 +333,27 @@ impl Decimal {
 
 impl PartialEq for Decimal {
     fn eq(&self, other: &Decimal) -> bool {
-        self.cmp_value(other) == Ordering::Equal
+        self.partial_cmp(other) == Some(Ordering::Equal)
     }
 }
 
 impl PartialOrd for Decimal {
     fn partial_cmp(&self, other: &Decimal) -> Option<Ordering> {
-        Some(self.cmp_value(other))
+        match (&self.kind, &other.kind) {
+            (Kind::NaN { .. }, _) | (_, Kind::NaN { .. }) => None,
+            (Kind::Finite, Kind::Finite) => Some(self.cmp_value(other)),
+            (Kind::Infinite, Kind::Infinite) => Some(other.negative.cmp(&self.negative)),
+            (Kind::Infinite, Kind::Finite) => Some(if self.negative {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }),
+            (Kind::Finite, Kind::Infinite) => Some(if other.negative {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            }),
+        }
     }
 }
 
@@ -348,22 +411,35 @@ fn parse_ascii(text: &str) -> Option<Decimal> {
     Some(value)
 }
 
-/// Infinity and the NaNs: `Some(None)` for a NaN with a malformed payload,
-/// `None` when the text is not a special value at all.
-fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
-    let special = |kind| Decimal {
+fn special(negative: bool, kind: Kind) -> Decimal {
+    Decimal {
         negative,
         digits: "0".into(),
         exp: 0,
         kind,
-    };
-    if lower == "inf" || lower == "infinity" {
-        return Some(Some(special(Kind::Infinite)));
     }
-    ["snan", "nan"].iter().find_map(|prefix| {
-        let payload = lower.strip_prefix(prefix)?;
-        Some(payload.bytes().all(|b| b.is_ascii_digit()).then(|| special(Kind::NaN)))
-    })
+}
+
+/// Infinity and the NaNs: `Some(None)` for a NaN with a malformed payload,
+/// `None` when the text is not a special value at all.
+fn special_value(negative: bool, lower: &str) -> Option<Option<Decimal>> {
+    if lower == "inf" || lower == "infinity" {
+        return Some(Some(special(negative, Kind::Infinite)));
+    }
+    [("snan", true), ("nan", false)]
+        .into_iter()
+        .find_map(|(prefix, signaling)| {
+            let payload = lower.strip_prefix(prefix)?;
+            Some(payload.bytes().all(|b| b.is_ascii_digit()).then(|| {
+                special(
+                    negative,
+                    Kind::NaN {
+                        signaling,
+                        payload: payload.trim_start_matches('0').to_owned(),
+                    },
+                )
+            }))
+        })
 }
 
 /// The exponent after `e`, saturated like libmpdec's strtoexp; anything this
