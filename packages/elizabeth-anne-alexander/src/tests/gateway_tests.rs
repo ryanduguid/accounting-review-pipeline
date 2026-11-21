@@ -534,6 +534,33 @@ fn test_empty_report_date_is_reported_as_empty_not_bad_iso() {
     assert_refused(load_tb_text(&dir, &source), "ReportDate must be a non-empty string");
 }
 
+#[test]
+fn csv_amounts_preserve_decimal_scale_and_exact_diagnostics() {
+    let dir = TempDir::new();
+    let header = gateway::CANONICAL_COLUMNS.join(",");
+    let row = "2026-06-30,Fabricated Entity,Assets,acct-1,Example Account,1000";
+    let source = format!("{header}\n{row},٠.٠٠,0,0,0\n");
+    let balances = load_tb_text(&dir, &source).unwrap();
+    assert_eq!(balances[0].debit.to_sci_string(), "0.00");
+
+    for (amount, message) in [
+        ("", "is not a valid decimal."),
+        ("NaN", "must be finite."),
+        ("1E+19", "is outside the supported magnitude range."),
+    ] {
+        let source = format!("{header}\n{row},{amount},0,0,0\n");
+        assert_eq!(
+            refusal(load_tb_text(&dir, &source)),
+            format!("CSV row 2 Debit {message}")
+        );
+    }
+    let source = format!("{header}\n{row},0,0,0\n");
+    assert_eq!(
+        refusal(load_tb_text(&dir, &source)),
+        "CSV row 2 YTDCredit must be a decimal string."
+    );
+}
+
 const EVIDENCE_ITEM: &str = r#"{"finding_id": "x", "account_id": "acct-1", "account_code": "9999", "account_name": "Name acct-1", "current_values": null, "prior_values": null, "source_refs": ["source:current"]}"#;
 
 #[test]

@@ -906,7 +906,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
     run(command, &parsed)
 }
 pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
-    match std::thread::Builder::new()
+    let worker = std::thread::Builder::new()
         .name("close-command".into())
         .stack_size(32 * 1024 * 1024)
         .spawn(move || {
@@ -917,7 +917,12 @@ pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
             } else {
                 code
             }
-        }) {
+        });
+    finish_command_worker(worker)
+}
+
+fn finish_command_worker(worker: std::io::Result<std::thread::JoinHandle<i32>>) -> i32 {
+    match worker {
         Ok(thread) => thread.join().unwrap_or_else(|_| {
             crate::errln!("close-control: command failed unexpectedly");
             1
@@ -932,6 +937,20 @@ pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_worker_start_failure_reports_the_error() {
+        let (code, stdout, stderr) = stdio::capture(|| {
+            finish_command_worker(Err(std::io::Error::other("fabricated startup failure")))
+        });
+        assert_eq!(code, 1);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            stderr,
+            "close-control: cannot start command (fabricated startup failure)\n"
+        );
+    }
+
     /// A link put at `OUTPUT/inputs` after the emptiness check is refused, and
     /// the file it leads to keeps its contents.
     #[cfg(unix)]

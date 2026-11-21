@@ -122,27 +122,25 @@ pub(crate) fn iso_timestamp(value: &Json, field: &str) -> Result<String> {
 
 /// `_decimal`: a finite decimal string within adjusted exponent [-18, 18].
 pub fn decimal(value: &Json, field: &str) -> Result<Decimal> {
-    let Some(text) = value.as_pystr() else {
-        return refuse(format!("{field} must be a decimal string."));
-    };
-    let parsed = text.to_utf8().and_then(|t| Decimal::parse(&t).ok());
-    let Some(result) = parsed else {
-        return refuse(format!("{field} is not a valid decimal."));
-    };
-    if !result.is_finite() {
-        return refuse(format!("{field} must be finite."));
-    }
-    if !result.is_zero() && !(-18..=18).contains(&result.adjusted()) {
-        return refuse(format!("{field} is outside the supported magnitude range."));
-    }
-    Ok(result)
+    json_decimal(value).map_err(|message| Failure::Gateway(format!("{field} {message}")))
 }
 
-fn decimal_text(value: Option<&str>, field: &str) -> Result<Decimal> {
-    match value {
-        Some(text) => decimal(&Json::str(text), field),
-        None => refuse(format!("{field} must be a decimal string.")),
+fn json_decimal(value: &Json) -> std::result::Result<Decimal, &'static str> {
+    let text = value.as_pystr().ok_or("must be a decimal string.")?;
+    validate_decimal(text.to_utf8().and_then(|t| Decimal::parse(&t).ok()))
+}
+
+fn validate_decimal(parsed: Option<Decimal>) -> std::result::Result<Decimal, &'static str> {
+    let Some(result) = parsed else {
+        return Err("is not a valid decimal.");
+    };
+    if !result.is_finite() {
+        return Err("must be finite.");
     }
+    if !result.is_zero() && !(-18..=18).contains(&result.adjusted()) {
+        return Err("is outside the supported magnitude range.");
+    }
+    Ok(result)
 }
 
 fn csv_text(value: Option<&str>) -> Json {
@@ -202,7 +200,12 @@ fn balance_row(raw: &crate::pycsv::Row, line: usize, seen: &mut BTreeSet<String>
     let section = text_field("Section")?;
     let account_name = text_field("AccountName")?;
     let account_code = optional_text(&csv_text(field("AccountCode")), &format!("CSV row {line} AccountCode"))?;
-    let amount = |name: &str| decimal_text(field(name), &format!("CSV row {line} {name}"));
+    let amount = |name: &str| {
+        field(name)
+            .ok_or("must be a decimal string.")
+            .and_then(|text| validate_decimal(Decimal::parse(text).ok()))
+            .map_err(|message| Failure::Gateway(format!("CSV row {line} {name} {message}")))
+    };
     Ok(BalanceRow {
         report_date,
         tenant,
@@ -1117,7 +1120,8 @@ fn check_evidence_values(item: &Json) -> Result<()> {
         }
         let Json::Object(pairs) = values else { unreachable!() };
         for (field, value) in pairs {
-            decimal(value, &format!("evidence {period}_values.{}", render(field)))?;
+            json_decimal(value)
+                .map_err(|message| Failure::Gateway(format!("evidence {period}_values.{} {message}", render(field))))?;
         }
         expected_refs.push(Json::str(&format!("source:{period}")));
     }

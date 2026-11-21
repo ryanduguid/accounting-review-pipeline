@@ -617,7 +617,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
 
 /// The bounded JSON decoder needs a consistent stack on both operating systems.
 pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
-    match std::thread::Builder::new()
+    let worker = std::thread::Builder::new()
         .name("readiness-command".into())
         .stack_size(32 * 1024 * 1024)
         .spawn(move || {
@@ -628,7 +628,12 @@ pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
             } else {
                 code
             }
-        }) {
+        });
+    finish_command_worker(worker)
+}
+
+fn finish_command_worker(worker: std::io::Result<std::thread::JoinHandle<i32>>) -> i32 {
+    match worker {
         Ok(thread) => thread.join().unwrap_or_else(|_| {
             crate::errln!("review-ready: command failed unexpectedly");
             1
@@ -644,6 +649,19 @@ pub fn command_thread(action: impl FnOnce() -> i32 + Send + 'static) -> i32 {
 mod tests {
     use super::*;
     use crate::test_support::{self, TempDir};
+
+    #[test]
+    fn a_worker_start_failure_reports_the_error() {
+        let (code, stdout, stderr) = crate::stdio::capture(|| {
+            finish_command_worker(Err(std::io::Error::other("fabricated startup failure")))
+        });
+        assert_eq!(code, 1);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            stderr,
+            "review-ready: cannot start command (fabricated startup failure)\n"
+        );
+    }
 
     #[test]
     fn help_and_usage_errors_leave_no_outputs() {
