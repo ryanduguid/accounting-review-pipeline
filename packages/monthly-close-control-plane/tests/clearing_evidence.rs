@@ -144,6 +144,7 @@ fn malformed_opening_json_is_refused_without_changing_inputs() {
     let mut config = config(&temp, "");
     let path = temp.join("opening.json");
     config.opening_items = Some(path.clone());
+    let invalid_schema = "Opening items have an invalid schema or a different account identity.";
     for (content, diagnostic) in [
         (
             "{} x",
@@ -153,6 +154,9 @@ fn malformed_opening_json_is_refused_without_changing_inputs() {
             "{\"schema\":0,\"schema\":1}",
             "Opening items are not readable JSON: JSON member 'schema' appears more than once.",
         ),
+        ("[]", invalid_schema),
+        ("{}", invalid_schema),
+        ("{\"items\":null}", invalid_schema),
     ] {
         fs::write(&path, content).unwrap();
         let before = inventory(&temp.0);
