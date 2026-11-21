@@ -355,6 +355,22 @@ pub fn classify_with(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classification_rejects_an_invalid_path_before_capturing_inputs() {
+        let paths = ["original\0.csv", "current.csv", "evidence.json"].map(PathBuf::from);
+        let mut captures = 0;
+        let result = classify_with(&paths, "AUD", &mut |_, _| {
+            captures += 1;
+            Err("unexpected capture".into())
+        });
+        assert_eq!(
+            result.unwrap_err(),
+            "Cannot resolve classification source: original\0.csv."
+        );
+        assert_eq!(captures, 0);
+    }
+
     #[test]
     fn classification_posting_keeps_credit_amounts_on_the_credit_side() {
         let source = SourceSnapshot::new(
