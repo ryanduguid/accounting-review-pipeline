@@ -438,6 +438,40 @@ mod tests {
     }
 
     #[test]
+    fn empty_section_summaries_use_title_truth_to_choose_their_scope() {
+        for (title, expected, wrong) in [
+            ("false", "5", "0"),
+            ("{}", "5", "0"),
+            ("true", "0", "5"),
+            (r#"{"label":"Empty"}"#, "0", "5"),
+        ] {
+            let report = |summary| {
+                crate::pyjson::loads(&format!(
+                    r#"{{"Rows":[
+                        {{"RowType":"Header","Cells":[{{"Value":"Debit"}}]}},
+                        {{"RowType":"Section","Title":"Assets","Rows":[
+                            {{"RowType":"Row","Cells":[{{"Value":"5"}}]}}
+                        ]}},
+                        {{"RowType":"Section","Title":{title},"Rows":[
+                            {{"RowType":"SummaryRow","Cells":[{{"Value":"{summary}"}}]}}
+                        ]}}
+                    ]}}"#
+                ))
+                .unwrap()
+            };
+            let (_, rows) = flatten(&report(expected)).unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(text(get(&rows[0], "Debit").unwrap()), "5");
+            assert_eq!(
+                flatten(&report(wrong)).unwrap_err(),
+                Failure::message(
+                    "error: Trial Balance summary contradicts the account rows. Nothing written."
+                )
+            );
+        }
+    }
+
+    #[test]
     fn repeated_header_titles_are_reported_once_in_sorted_order() {
         let report = crate::pyjson::loads(
             r#"{"Rows":[{"RowType":"Header","Cells":[
