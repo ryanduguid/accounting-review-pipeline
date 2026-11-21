@@ -3926,6 +3926,73 @@ fn assert_legacy_equity_verification(corpus: &Corpus, responses: &[Json]) -> Res
     Ok(())
 }
 
+fn expected_reconciliation_html(value: &Json) -> Result<Json> {
+    const NOTICE: &str = concat!(
+        "<footer><p>Copyright 2026 Ryan Duguid. No warranty. Licensed under ",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/monthly-close-control-plane/LICENSE\">AGPL-3.0-or-later</a> with ",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/monthly-close-control-plane/NOTICE\">additional attribution terms</a>.</p></footer>\n",
+    );
+    let html = value
+        .as_pystr()
+        .and_then(PyStr::to_utf8)
+        .ok_or("Invalid oracle review HTML.")?;
+    let end = hex(b"</main></body></html>");
+    let body = html
+        .strip_suffix(&end)
+        .ok_or("Unexpected end of frozen review HTML.")?;
+    Ok(Json::str(&format!(
+        "{body}{}{end}0a",
+        hex(NOTICE.as_bytes())
+    )))
+}
+
+fn with_licence_notices(request: &Json, expected: &Json) -> Result<Option<Json>> {
+    const CLI_NOTICE: &str = concat!(
+        "\nCopyright 2026 Ryan Duguid. No warranty.\n",
+        "AGPL-3.0-or-later with additional terms (see NOTICE).\n",
+        "Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/monthly-close-control-plane/LICENSE\n",
+    );
+    let operation = request.at("op");
+    let Some(result) = expected
+        .get("ok")
+        .filter(|_| operation.is_str("cli") || operation.is_str("reconcile_render"))
+    else {
+        return Ok(None);
+    };
+    let mut result = result.clone();
+    if operation.is_str("reconcile_render") {
+        result.set(
+            "review.html",
+            expected_reconciliation_html(result.at("review.html"))?,
+        );
+    } else {
+        if let Some(out) = result
+            .get("stdout")
+            .and_then(Json::as_pystr)
+            .and_then(PyStr::to_utf8)
+            && out.starts_with("usage: close-control [-h]")
+        {
+            result.set("stdout", Json::str(&format!("{out}{CLI_NOTICE}")));
+        }
+        if request
+            .at("args")
+            .as_array()
+            .unwrap()
+            .first()
+            .is_some_and(|arg| arg.is_str("reconcile"))
+        {
+            let mut files = result.at("files").clone();
+            if let Some(html) = files.get("output/review.html") {
+                files.set("output/review.html", expected_reconciliation_html(html)?);
+                result.set("files", files);
+            }
+        }
+    }
+    let mut expected = expected.clone();
+    expected.set("ok", result);
+    Ok(Some(expected))
+}
+
 fn run_batch(corpus: &Corpus, python: &Path, root: &Path, executable: &Path) -> Result<Vec<Json>> {
     let names: Vec<_> = corpus
         .0
@@ -3946,9 +4013,13 @@ fn run_batch(corpus: &Corpus, python: &Path, root: &Path, executable: &Path) -> 
     }
     let mut mismatches = 0;
     let mut parsed = Vec::new();
-    for ((name, actual), expected) in names.iter().zip(&actual).zip(&expected) {
+    for (index, ((name, actual), expected)) in names.iter().zip(&actual).zip(&expected).enumerate()
+    {
         let value = probe::decode(expected)?;
-        if probe::encode(&probe::decode(actual)?) != probe::encode(&value) {
+        let amended = with_licence_notices(&corpus.0[index], &value)?;
+        if probe::encode(&probe::decode(actual)?)
+            != probe::encode(amended.as_ref().unwrap_or(&value))
+        {
             mismatches += 1;
             if mismatches <= 12 {
                 eprintln!("difference {name}:\n  Python: {expected}\n  Rust: {actual}");

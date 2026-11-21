@@ -158,7 +158,7 @@ pub fn run(settings: &Settings, root: &Path) -> Result<[PathBuf; 2]> {
         commands.call(native, &args, 0)?;
         outputs.push(path);
     }
-    same_file(&outputs[0], &outputs[1])?;
+    same_review_html(&outputs[0], &outputs[1])?;
     semantic_refusals(&commands, root, &runs[1])?;
     unsealed_refusals(&commands, root, &runs[1])?;
     export_refusal(&commands, root, &runs[1])?;
@@ -256,12 +256,13 @@ fn artifacts(commands: &Commands<'_>, root: &Path, run: &Path, month: &str) -> R
             ] {
                 same_file(&paths[0].join(name), &paths[1].join(name))?;
             }
+        } else if command == "html" {
+            same_review_html(&paths[0], &paths[1])?;
         } else {
-            same_file(&paths[0], &paths[1])?;
-        }
-        if command == "export" {
+            same_export(&paths[0], &paths[1])?;
             let month = ["--month".as_ref(), "99999999999999999999".as_ref()];
             commands.pair("verify-export", &paths[0], &month, 0)?;
+            commands.pair("verify-export", &paths[1], &month, 0)?;
         }
     }
     Ok(())
@@ -280,6 +281,41 @@ fn digest(data: &[u8]) -> String {
 fn same_file(left: &Path, right: &Path) -> Result<()> {
     if bytes(left)? != bytes(right)? {
         return Err(format!("File bytes differ: {left:?} / {right:?}"));
+    }
+    Ok(())
+}
+
+// The frozen Python renderer predates this legal notice. Require the exact addition
+// and final LF; compare every other byte, including the rebuilt canonical ZIP.
+fn expected_review_html(python: &[u8]) -> Result<Vec<u8>> {
+    const END: &[u8] = b"</main></body></html>";
+    const NOTICE: &str = concat!(
+        "<footer><p>Copyright 2026 Ryan Duguid. No warranty. Licensed under ",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/LICENSE\">AGPL-3.0-or-later</a> with ",
+        "<a href=\"https://github.com/ryanduguid/accounting-review-pipeline/blob/main/apps/australian-accounting-power-bi/NOTICE\">additional attribution terms</a>.</p></footer>\n",
+    );
+    let body = python
+        .strip_suffix(END)
+        .ok_or("Unexpected end of frozen review HTML.")?;
+    Ok([body, NOTICE.as_bytes(), END, b"\n"].concat())
+}
+
+fn same_review_html(python: &Path, native: &Path) -> Result<()> {
+    if expected_review_html(&bytes(python)?)? != bytes(native)? {
+        return Err(format!(
+            "Review HTML differs beyond the licence notice: {python:?} / {native:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn same_export(python: &Path, native: &Path) -> Result<()> {
+    let archive = bytes(python)?;
+    let expected = super::probe::export_with_review_html(&archive, expected_review_html)?;
+    if expected != bytes(native)? {
+        return Err(format!(
+            "Export ZIP differs beyond the licence notice: {python:?} / {native:?}"
+        ));
     }
     Ok(())
 }

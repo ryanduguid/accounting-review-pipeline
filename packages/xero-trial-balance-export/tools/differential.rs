@@ -276,6 +276,12 @@ fn request(op: &str, args: Vec<Json>) -> Json {
     Json::object([("op", Json::str(op)), ("args", Json::Array(args))])
 }
 
+const CLI_LICENCE_NOTICE: &str = concat!(
+    "\nCopyright 2026 Ryan Duguid. No warranty.\n",
+    "AGPL-3.0-or-later with additional terms (see NOTICE).\n",
+    "Licence: https://github.com/ryanduguid/accounting-review-pipeline/blob/main/packages/xero-trial-balance-export/LICENSE\n",
+);
+
 type CapturedOutput = (i32, Vec<u8>, Vec<u8>);
 fn command_output(command: &mut Command) -> Result<CapturedOutput, Box<dyn std::error::Error>> {
     let mut child = command
@@ -394,7 +400,10 @@ fn compare_cli(
                         .env("NO_COLOR", "1")
                         .env("PYTHONIOENCODING", "utf-8");
                 }
-                let expected = command_output(&mut source)?;
+                let mut expected = command_output(&mut source)?;
+                if expected.0 == 0 && expected.1.starts_with(b"usage: ") {
+                    expected.1.extend_from_slice(CLI_LICENCE_NOTICE.as_bytes());
+                }
                 let actual = command_output(&mut rust)?;
                 if expected != actual {
                     differences += 1;

@@ -18,6 +18,24 @@ pub fn bundled_fixture_files() -> Result<std::collections::BTreeMap<String, Vec<
     Ok(sources)
 }
 
+/// Rebuild the frozen oracle ZIP after the authorised change to its review HTML.
+pub fn export_with_review_html(payload: &[u8], revise: impl FnOnce(&[u8]) -> Result<Vec<u8>>) -> Result<Vec<u8>> {
+    let mut members = archive::decode(payload)?;
+    let html = members.get_mut("review.html").ok_or("Missing review HTML.")?;
+    *html = revise(html)?;
+    let (size, sha256) = (html.len(), digest(html));
+    let manifest = members
+        .get_mut("export-manifest.json")
+        .ok_or("Missing export manifest.")?;
+    let mut document = json::parse(manifest, "Export manifest")?;
+    let record = document["members"]
+        .get_mut("review.html")
+        .ok_or("Missing review HTML record.")?;
+    *record = json!({"size": size, "sha256": sha256});
+    *manifest = json::bytes(&document);
+    archive::encode(&members)
+}
+
 pub fn evaluate(request: &Value) -> Value {
     match value(request) {
         Ok(value) => json!({"ok":true,"value":value}),

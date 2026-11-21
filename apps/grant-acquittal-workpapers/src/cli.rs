@@ -419,7 +419,9 @@ mod tests {
             "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT"
         );
         assert_eq!(
-            help("grant_workpaper.py", &argtheme::PLAIN),
+            help("grant_workpaper.py", &argtheme::PLAIN)
+                .strip_suffix(LICENCE_NOTICE)
+                .expect("help ends with the licence notice"),
             "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT\n\nLocal grant allocation and funding workpapers from explicitly reviewed inputs.\n\noptions:\n  -h, --help       show this help message and exit\n  --input INPUT\n  --output OUTPUT\n"
         );
     }
