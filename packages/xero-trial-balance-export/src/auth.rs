@@ -412,21 +412,22 @@ pub fn authorise(
 
 #[cfg(windows)]
 fn open_browser(url: &str) -> bool {
-    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+    use windows_sys::Win32::UI::{
+        Shell::{SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW},
+        WindowsAndMessaging::SW_SHOWNORMAL,
+    };
     let url: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
-    let verb: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
-    // SAFETY: both strings are NUL-terminated and remain alive through the call.
-    unsafe {
-        ShellExecuteW(
-            std::ptr::null_mut(),
-            verb.as_ptr(),
-            url.as_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
-            SW_SHOWNORMAL,
-        ) as usize
-            > 32
-    }
+    let mut launch = SHELLEXECUTEINFOW {
+        cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
+        // The CLI reports launch failures itself and has no message loop.
+        fMask: SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC,
+        lpVerb: windows_sys::w!("open"),
+        lpFile: url.as_ptr(),
+        nShow: SW_SHOWNORMAL,
+        ..Default::default()
+    };
+    // SAFETY: launch is writable and its UTF-16 strings remain alive through the call.
+    unsafe { ShellExecuteExW(&raw mut launch) != 0 }
 }
 
 #[cfg(not(windows))]
@@ -465,6 +466,15 @@ fn open_browser(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_browser_launcher_reports_a_missing_target() {
+        let scratch = crate::testing::Scratch::new();
+        let missing = scratch.0.join("missing-target.exe");
+        assert!(!missing.exists());
+        assert!(!open_browser(missing.to_str().unwrap()));
+    }
 
     #[test]
     fn permission_denied_callback_bind_explains_the_registration_fix() {

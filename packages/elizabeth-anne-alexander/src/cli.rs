@@ -692,26 +692,33 @@ pub fn stream_error(error: &std::io::Error) -> String {
 }
 
 /// Refuse a validation output that names one of the files validate_review just read.
-fn refuse_input_collision(out: &Path, inputs: &gateway::ReviewInputs) -> Result<(), Failure> {
+fn refuse_input_collision(
+    out: &Path,
+    inputs: &gateway::ReviewInputs,
+    mut file_id: impl FnMut(&Path) -> std::io::Result<(u64, u64)>,
+) -> Result<(), Failure> {
     let protected = [&inputs.evidence, &inputs.receipt, &inputs.model];
     let decision = match &inputs.decision {
         Location::Disk(path) => Some(path),
         Location::Bundled(_) => None,
     };
+    let output_exists = out.exists();
+    let mut output_id = None;
     for path in protected.into_iter().chain(decision) {
         let same = crate::pypath::same_path(out, path)
-            || (out.exists() && path.exists() && {
-                let ids = crate::pypath::file_id(out).and_then(|a| crate::pypath::file_id(path).map(|b| a == b));
-                match ids {
-                    Ok(same) => same,
-                    Err(error) => {
-                        return Err(Failure::Gateway(format!(
-                            "validation output cannot be checked against {}: {}.",
-                            crate::pypath::text(path),
-                            persist::os_error(&error, Some(path), None)
-                        )));
-                    }
-                }
+            || (output_exists && path.exists() && {
+                let blocked = |error: &std::io::Error| {
+                    Failure::Gateway(format!(
+                        "validation output cannot be checked against {}: {}.",
+                        crate::pypath::text(path),
+                        persist::os_error(error, Some(path), None)
+                    ))
+                };
+                let output = output_id
+                    .get_or_insert_with(|| file_id(out))
+                    .as_ref()
+                    .map_err(blocked)?;
+                *output == file_id(path).map_err(|error| blocked(&error))?
             });
         if same {
             return Err(Failure::Gateway(format!(
@@ -798,7 +805,7 @@ fn run_validate(
     // The output guard must use the same resolved paths as validation.
     let inputs = gateway::review_input_paths(env, evidence, receipt, decision)?;
     if let Some(target) = &target {
-        refuse_input_collision(target, &inputs)?;
+        refuse_input_collision(target, &inputs, crate::pypath::file_id)?;
     }
     let validation = gateway::validate_review_inputs(env, &inputs)?;
     if let Some(target) = target {
@@ -862,6 +869,51 @@ pub fn main(args: &[String], env: &Env, stdout: &mut dyn Write, stderr: &mut dyn
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validation_preflight_reuses_the_output_identity_and_reports_unreadable_inputs() {
+        let temp = crate::tests::TempDir::new();
+        let make = |name| {
+            let path = temp.path().join(name);
+            std::fs::write(&path, b"fabricated review data\n").unwrap();
+            path
+        };
+        let out = make("summary.json");
+        let inputs = gateway::ReviewInputs {
+            evidence: make("evidence.json"),
+            receipt: make("receipt.json"),
+            decision: Location::Disk(make("decision.json")),
+            model: make("model.json"),
+        };
+        let mut output_reads = 0;
+        refuse_input_collision(&out, &inputs, |path| {
+            if path == out {
+                output_reads += 1;
+                Ok((1, 1))
+            } else {
+                Ok((1, 2))
+            }
+        })
+        .unwrap();
+        assert_eq!(output_reads, 1);
+
+        let failure = refuse_input_collision(&out, &inputs, |path| {
+            if path == inputs.receipt {
+                Err(std::io::Error::other("synthetic metadata failure"))
+            } else if path == out {
+                Ok((1, 1))
+            } else {
+                Ok((1, 2))
+            }
+        })
+        .unwrap_err();
+        let Failure::Gateway(message) = failure else {
+            panic!("expected a validation refusal")
+        };
+        assert!(message.contains("validation output cannot be checked against"));
+        assert!(message.contains("receipt.json"));
+        assert!(message.contains("synthetic metadata failure"));
+    }
 
     #[test]
     fn usage_wraps_like_argparse_at_80_columns() {

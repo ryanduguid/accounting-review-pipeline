@@ -365,14 +365,21 @@ struct Sources<'a> {
     content: &'a [(&'static str, Vec<u8>)],
 }
 
+struct LedgerSource<'a> {
+    record: &'a Record,
+    date: Date,
+    expense: Amount,
+    paid: Amount,
+    allocated: Amount,
+    cash_allocated: Amount,
+}
+
 /// What `calculate` accumulates. Each stage runs in the script's order, so the
 /// first refusal and the order of findings are unchanged.
 struct Workings<'a> {
     grants: Vec<(String, &'a Json)>,
     findings: Vec<Json>,
-    sources: HashMap<&'a str, &'a Record>,
-    allocated: BTreeMap<String, Amount>,
-    cash_allocated: BTreeMap<String, Amount>,
+    sources: HashMap<&'a str, LedgerSource<'a>>,
     totals: Totals,
     period_totals: Totals,
     approved_totals: Totals,
@@ -387,8 +394,6 @@ fn calculate(input: &Sources) -> Result<Json> {
         grants: agreements(input.header)?,
         findings: Vec::new(),
         sources: HashMap::with_capacity(input.ledger.len()),
-        allocated: BTreeMap::new(),
-        cash_allocated: BTreeMap::new(),
         totals: Totals::default(),
         period_totals: Totals::default(),
         approved_totals: Totals::default(),
@@ -404,9 +409,9 @@ fn calculate(input: &Sources) -> Result<Json> {
     work.receipts(input.receipts, input.start, input.end)?;
     work.contributions(input.contributions, input.start, input.end)?;
     let contribution_rows = work.contribution_rows();
-    let tieout = work.tieout(input.ledger)?;
+    let tieout = work.tieout(input.ledger);
     let (budget_rows, movements) = work.budgets()?;
-    work.result(input, budget_rows, movements, contribution_rows, tieout)
+    Ok(work.result(input, budget_rows, movements, contribution_rows, tieout))
 }
 
 /// The agreements block: complete, unique and with a reviewed budget.
@@ -476,7 +481,8 @@ impl<'a> Workings<'a> {
 
     fn ledger(&mut self, ledger: &'a [Record], start: Date, end: Date) -> Result<()> {
         for row in ledger {
-            if !within(field(row, "date"), start, end)? {
+            let date = iso(field(row, "date"))?;
+            if date < start || date > end {
                 return fail("Ledger rows must fall inside the declared ledger period");
             }
             let expense = money(field(row, "amount"))?;
@@ -484,18 +490,29 @@ impl<'a> Workings<'a> {
             if expense <= Amount::ZERO || paid > expense {
                 return fail("Source expenses must be positive; cash paid cannot exceed the expense");
             }
-            self.sources.insert(field(row, "ledger_id"), row);
+            let id = field(row, "ledger_id");
+            self.sources.insert(
+                id,
+                LedgerSource {
+                    record: row,
+                    date,
+                    expense,
+                    paid,
+                    allocated: Amount::ZERO,
+                    cash_allocated: Amount::ZERO,
+                },
+            );
             if blank(field(row, "evidence")) {
-                self.findings
-                    .push(finding("MISSING_SOURCE_EVIDENCE", field(row, "ledger_id")));
+                self.findings.push(finding("MISSING_SOURCE_EVIDENCE", id));
             }
         }
         Ok(())
     }
 
     fn allocation(&mut self, row: &Record) -> Result<()> {
-        let source = self.sources.get(field(row, "ledger_id")).copied();
-        let (Some(item), Some(agreement)) = (source, self.grant(field(row, "grant_id"))) else {
+        let grant = self.grant(field(row, "grant_id"));
+        let source = self.sources.get_mut(field(row, "ledger_id"));
+        let (Some(source), Some(agreement)) = (source, grant) else {
             return fail("Allocation references an unknown ledger row or grant");
         };
         let line = field(row, "budget_line");
@@ -507,28 +524,16 @@ impl<'a> Workings<'a> {
         if expense <= Amount::ZERO || paid > expense {
             return fail("Allocation expense must be positive and cover its cash allocation");
         }
-        let ledger_id = field(row, "ledger_id").to_string();
-        let total = self
-            .allocated
-            .get(&ledger_id)
-            .copied()
-            .unwrap_or(Amount::ZERO)
-            .add(expense);
-        self.allocated.insert(ledger_id.clone(), total);
-        let cash = self
-            .cash_allocated
-            .get(&ledger_id)
-            .copied()
-            .unwrap_or(Amount::ZERO)
-            .add(paid);
-        self.cash_allocated.insert(ledger_id, cash);
-        if total > money(field(item, "amount"))? || cash > money(field(item, "cash_paid"))? {
+        source.allocated = source.allocated.add(expense);
+        source.cash_allocated = source.cash_allocated.add(paid);
+        if source.allocated > source.expense || source.cash_allocated > source.paid {
             return fail("Allocations exceed a source expense or its cash paid");
         }
+        let item = source.record;
+        let item_date = source.date;
         let key = (field(row, "grant_id").to_string(), line.to_string());
         self.totals.add(key.clone(), expense);
         self.paid_totals.add(key.clone(), paid);
-        let item_date = iso(field(item, "date"))?;
         let in_period = iso_json(agreement.at("start"))? <= item_date && item_date <= iso_json(agreement.at("end"))?;
         self.review_allocation(row, item, in_period, key, expense);
         self.details.push(allocation_detail(row, item, agreement, in_period));
@@ -627,28 +632,27 @@ impl<'a> Workings<'a> {
             .collect()
     }
 
-    fn tieout(&mut self, ledger: &[Record]) -> Result<Vec<Json>> {
+    fn tieout(&mut self, ledger: &[Record]) -> Vec<Json> {
         let mut tieout = Vec::with_capacity(ledger.len());
         for row in ledger {
             let key = field(row, "ledger_id");
-            let allocated_here = self.allocated.get(key).copied().unwrap_or(Amount::ZERO);
-            let cash_here = self.cash_allocated.get(key).copied().unwrap_or(Amount::ZERO);
-            let unallocated = money(field(row, "amount"))?.sub(allocated_here);
-            let unpaid = money(field(row, "cash_paid"))?.sub(cash_here);
+            let source = &self.sources[key];
+            let unallocated = source.expense.sub(source.allocated);
+            let unpaid = source.paid.sub(source.cash_allocated);
             tieout.push(Json::object([
                 ("ledger_id", Json::str(key)),
                 ("source_amount", Json::str(field(row, "amount"))),
-                ("allocated", Json::str(&allocated_here.to_string())),
+                ("allocated", Json::str(&source.allocated.to_string())),
                 ("unallocated", Json::str(&unallocated.to_string())),
                 ("source_cash_paid", Json::str(field(row, "cash_paid"))),
-                ("cash_allocated", Json::str(&cash_here.to_string())),
+                ("cash_allocated", Json::str(&source.cash_allocated.to_string())),
                 ("cash_unallocated", Json::str(&unpaid.to_string())),
             ]));
             if !unallocated.is_zero() || !unpaid.is_zero() {
                 self.findings.push(finding("UNALLOCATED_SOURCE", key));
             }
         }
-        Ok(tieout)
+        tieout
     }
 
     /// Budget lines and funding movements, grant by grant.
@@ -725,19 +729,19 @@ impl<'a> Workings<'a> {
         movements: Vec<Json>,
         contribution_rows: Vec<Json>,
         tieout: Vec<Json>,
-    ) -> Result<Json> {
-        let mut ledger_total = Amount::ZERO;
-        for row in input.ledger {
-            ledger_total = ledger_total.add(money(field(row, "amount"))?);
+    ) -> Json {
+        let (mut ledger_total, mut allocated_total) = (Amount::ZERO, Amount::ZERO);
+        for source in self.sources.values() {
+            ledger_total = ledger_total.add(source.expense);
+            allocated_total = allocated_total.add(source.allocated);
         }
-        let allocated_total = self.allocated.values().fold(Amount::ZERO, |acc, v| acc.add(*v));
         let status = if self.findings.is_empty() {
             "RECONCILED"
         } else {
             "REVIEW"
         };
         let header = input.header;
-        Ok(Json::Object(vec![
+        Json::Object(vec![
             (PyStr::from("schema_version"), Json::Int("1".into())),
             (PyStr::from("entity"), header.at("entity").clone()),
             (PyStr::from("currency"), header.at("currency").clone()),
@@ -759,7 +763,7 @@ impl<'a> Workings<'a> {
             (PyStr::from("ledger_tieout"), Json::Array(tieout)),
             (PyStr::from("findings"), Json::Array(self.findings)),
             (PyStr::from("scope"), Json::str(SCOPE)),
-        ]))
+        ])
     }
 }
 

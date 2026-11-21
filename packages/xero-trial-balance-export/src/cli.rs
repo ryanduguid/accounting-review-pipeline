@@ -11,7 +11,9 @@ use crate::{
 };
 use std::{
     ffi::OsString,
+    io,
     path::{Path, PathBuf},
+    thread,
 };
 
 pub struct Options {
@@ -59,7 +61,7 @@ fn width() -> usize {
     usize::try_from(crate::termsize::columns() - 2).unwrap_or(0)
 }
 
-fn usage(prog: &str, auth: bool) -> String {
+fn usage(prog: &str, auth: bool, width: usize) -> String {
     let parts: Vec<_> = if auth {
         vec!["[-h]".to_string()]
     } else {
@@ -73,10 +75,10 @@ fn usage(prog: &str, auth: bool) -> String {
             .collect()
     };
     let full = format!("usage: {prog} {}", parts.join(" "));
-    if pytext::py_len(&full) <= width() {
+    if pytext::py_len(&full) <= width {
         return format!("{full}\n");
     }
-    let long = (7 + pytext::py_len(prog)) * 4 > width() * 3;
+    let long = (7 + pytext::py_len(prog)) * 4 > width * 3;
     let indent = " ".repeat(if long {
         7
     } else {
@@ -92,7 +94,7 @@ fn usage(prog: &str, auth: bool) -> String {
         lines.push(format!("usage: {prog}"));
     }
     for part in parts {
-        if pytext::py_len(&line) + 1 + part.len() > width() && line != indent {
+        if pytext::py_len(&line) + 1 + part.len() > width && line != indent {
             lines.push(line);
             line = indent.clone();
         }
@@ -106,6 +108,7 @@ fn usage(prog: &str, auth: bool) -> String {
 }
 
 pub fn help(prog: &str, auth: bool) -> String {
+    let width = width();
     let description = if auth {
         "Authorise this exporter against Xero once, in a browser, and cache the token."
     } else {
@@ -113,11 +116,11 @@ pub fn help(prog: &str, auth: bool) -> String {
     };
     let mut out = format!(
         "{}\n{}\n\noptions:\n",
-        usage(prog, auth),
-        crate::textwrap::wrap(description, width().max(11)).join("\n")
+        usage(prog, auth, width),
+        crate::textwrap::wrap(description, width.max(11)).join("\n")
     );
     let options = if auth { &OPTIONS[..1] } else { &OPTIONS[..] };
-    let position = if auth { 14 } else { 24 }.min(width().saturating_sub(20).max(4));
+    let position = if auth { 14 } else { 24 }.min(width.saturating_sub(20).max(4));
     for (flag, argument, text) in options {
         let header = if *flag == "--help" {
             "-h, --help".into()
@@ -126,7 +129,7 @@ pub fn help(prog: &str, auth: bool) -> String {
                 .map(|a| format!("{flag} {a}"))
                 .unwrap_or_else(|| flag.to_string())
         };
-        let lines = crate::textwrap::wrap(text, width().saturating_sub(position).max(11));
+        let lines = crate::textwrap::wrap(text, width.saturating_sub(position).max(11));
         if header.len() <= position.saturating_sub(4) {
             out.push_str(&format!(
                 "  {:width$}  {}\n",
@@ -152,7 +155,7 @@ fn error(prog: &str, auth: bool, message: String) -> Failure {
     Failure {
         code: 2,
         stdout: String::new(),
-        stderr: format!("{}{prog}: error: {message}\n", usage(prog, auth)),
+        stderr: format!("{}{prog}: error: {message}\n", usage(prog, auth, width())),
     }
 }
 
@@ -219,31 +222,26 @@ pub fn parse(args: &[OsString], prog: &str, auth: bool) -> Result<Option<Options
             .split_once('=')
             .map(|(a, b)| (a, Some(b)))
             .unwrap_or((value, None));
-        let found: Vec<_> = OPTIONS
-            .iter()
-            .filter(|(name, _, _)| {
-                *name == flag || (flag.starts_with("--") && name.starts_with(flag))
-            })
-            .filter(|(name, _, _)| !auth || *name == "--help")
-            .collect();
-        if found.len() > 1 {
-            return Err(error(
-                prog,
-                auth,
-                format!(
-                    "ambiguous option: {flag} could match {}",
-                    found
-                        .iter()
-                        .map(|(name, _, _)| *name)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            ));
-        }
-        let Some((name, argument, _)) = found.first().copied() else {
+        let available = if auth { &OPTIONS[..1] } else { &OPTIONS[..] };
+        let mut found = available.iter().filter(|(name, _, _)| {
+            *name == flag || (flag.starts_with("--") && name.starts_with(flag))
+        });
+        let Some((name, argument, _)) = found.next() else {
             unknown.push(value.clone());
             continue;
         };
+        if let Some((second, _, _)) = found.next() {
+            let names = [*name, *second]
+                .into_iter()
+                .chain(found.map(|(other, _, _)| *other))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(error(
+                prog,
+                auth,
+                format!("ambiguous option: {flag} could match {names}"),
+            ));
+        }
         if *name == "--help" {
             if let Some(value) = explicit {
                 return Err(error(
@@ -449,22 +447,24 @@ pub fn run(args: &[OsString], auth: bool) -> Result<()> {
     )
 }
 
+fn finish_worker(worker: io::Result<thread::JoinHandle<Result<()>>>) -> Result<()> {
+    let worker = worker.map_err(|error| {
+        Failure::message(format!("error: cannot start the Xero command ({error})"))
+    })?;
+    worker.join().unwrap_or_else(|_| {
+        Err(Failure::message(
+            "error: the Xero command failed unexpectedly.",
+        ))
+    })
+}
+
 pub fn entry(auth: bool) {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let result = std::thread::Builder::new()
+    let worker = thread::Builder::new()
         .name("xero-command".into())
         .stack_size(32 * 1024 * 1024)
-        .spawn(move || run(&args, auth))
-        .map_err(|error| {
-            Failure::message(format!("error: cannot start the Xero command ({error})"))
-        })
-        .and_then(|thread| {
-            thread.join().unwrap_or_else(|_| {
-                Err(Failure::message(
-                    "error: the Xero command failed unexpectedly.",
-                ))
-            })
-        });
+        .spawn(move || run(&args, auth));
+    let result = finish_worker(worker);
     if let Err(error) = result {
         crate::stdio::out(&error.stdout);
         crate::stdio::err(&error.stderr);
@@ -475,6 +475,29 @@ pub fn entry(auth: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_failure_and_worker_panic_return_distinct_command_errors() {
+        let start = finish_worker(Err(io::Error::other("synthetic startup failure")))
+            .err()
+            .unwrap();
+        assert_eq!(start.code, 1);
+        assert!(start.stdout.is_empty());
+        assert_eq!(
+            start.stderr,
+            "error: cannot start the Xero command (synthetic startup failure)\n"
+        );
+
+        let worker = thread::spawn(|| panic!("synthetic worker panic"));
+        let joined = finish_worker(Ok(worker)).err().unwrap();
+        assert_eq!(joined.code, 1);
+        assert!(joined.stdout.is_empty());
+        assert_eq!(
+            joined.stderr,
+            "error: the Xero command failed unexpectedly.\n"
+        );
+    }
+
     #[test]
     fn options_preflight_and_iso_forms() {
         for (value, date) in [
@@ -496,6 +519,32 @@ mod tests {
         assert!(parse(&["--out".into(), "--quiet".into()], "export-tb", false).is_err());
         assert!(
             parse(&["unknown".into(), "--help".into()], "export-tb", false)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn option_prefixes_keep_diagnostics_and_command_scope() {
+        for flag in ["--t", "--t=Demo"] {
+            let failure = parse(&[flag.into()], "export-tb", false).err().unwrap();
+            assert_eq!(failure.code, 2);
+            assert!(
+                failure
+                    .stderr
+                    .ends_with("ambiguous option: --t could match --tenant, --token-file\n")
+            );
+        }
+        let options = parse(&["--te=Demo".into(), "--qu".into()], "export-tb", false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(options.tenant.as_deref(), Some("Demo"));
+        assert!(options.quiet);
+        let failure = parse(&["--t".into()], "xero-auth", true).err().unwrap();
+        assert_eq!(failure.code, 2);
+        assert!(failure.stderr.ends_with("unrecognized arguments: --t\n"));
+        assert!(
+            parse(&["--he".into()], "xero-auth", true)
                 .unwrap()
                 .is_none()
         );

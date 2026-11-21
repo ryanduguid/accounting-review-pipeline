@@ -25,33 +25,41 @@ pub fn control_or_format(text: &str, allow_line_breaks: bool) -> bool {
 }
 
 pub fn split_lines(text: &str) -> Vec<&str> {
-    let mut result = Vec::new();
+    lines(text).collect()
+}
+
+pub(crate) fn lines(text: &str) -> impl Iterator<Item = &str> {
     let mut start = 0;
     let mut chars = text.char_indices().peekable();
-    while let Some((at, c)) = chars.next() {
-        if matches!(
-            c,
-            '\n' | '\r'
-                | '\u{b}'
-                | '\u{c}'
-                | '\u{1c}'
-                | '\u{1d}'
-                | '\u{1e}'
-                | '\u{85}'
-                | '\u{2028}'
-                | '\u{2029}'
-        ) {
-            result.push(&text[start..at]);
-            start = at + c.len_utf8();
-            if c == '\r' && chars.peek().is_some_and(|&(_, next)| next == '\n') {
-                start = chars.next().unwrap().0 + 1;
+    std::iter::from_fn(move || {
+        while let Some((at, c)) = chars.next() {
+            if matches!(
+                c,
+                '\n' | '\r'
+                    | '\u{b}'
+                    | '\u{c}'
+                    | '\u{1c}'
+                    | '\u{1d}'
+                    | '\u{1e}'
+                    | '\u{85}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+            ) {
+                let line = &text[start..at];
+                start = at + c.len_utf8();
+                if c == '\r' && chars.next_if(|&(_, next)| next == '\n').is_some() {
+                    start += 1;
+                }
+                return Some(line);
             }
         }
-    }
-    if start < text.len() {
-        result.push(&text[start..]);
-    }
-    result
+        if start == text.len() {
+            return None;
+        }
+        let line = &text[start..];
+        start = text.len();
+        Some(line)
+    })
 }
 
 fn map_case(text: &str, table: &[(u32, &str)]) -> String {

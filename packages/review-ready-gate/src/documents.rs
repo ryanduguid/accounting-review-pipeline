@@ -144,10 +144,12 @@ pub(crate) fn field_value(field: &str, value: &Json) -> Result<String> {
     }
     Ok(raw.into())
 }
-pub(crate) fn extract(text: &str) -> Json {
-    let mut fields: [Vec<Json>; FIELDS.len()] = Default::default();
+type Observations = [Vec<Json>; FIELDS.len()];
+
+fn observations(text: &str) -> Observations {
+    let mut fields: Observations = Default::default();
     for (page, content) in text.split('\u{c}').enumerate() {
-        for (line, mut raw_line) in pytext::split_lines(content).into_iter().enumerate() {
+        for (line, mut raw_line) in pytext::lines(content).enumerate() {
             let hashes = raw_line.bytes().take_while(|&b| b == b'#').count();
             if (1..=6).contains(&hashes) && raw_line.as_bytes().get(hashes) == Some(&b' ') {
                 raw_line = raw_line[hashes..].trim_start_matches(' ');
@@ -172,6 +174,15 @@ pub(crate) fn extract(text: &str) -> Json {
             ]));
         }
     }
+    fields
+}
+
+#[cfg(any(feature = "probe", test))]
+pub(crate) fn extract(text: &str) -> Json {
+    fields_json(observations(text))
+}
+
+fn fields_json(fields: Observations) -> Json {
     Json::Object(
         FIELDS
             .into_iter()
@@ -180,14 +191,73 @@ pub(crate) fn extract(text: &str) -> Json {
             .collect(),
     )
 }
-fn manifest(
-    source: &SourceSnapshot,
-    text: &SourceSnapshot,
+
+struct Intake<'a> {
+    entity: Json,
+    period: &'a str,
+    origin: &'a str,
+    version: Json,
+    filename: String,
+    source_sha256: &'a str,
+    text_sha256: &'a str,
+    fields: Observations,
+}
+
+impl Intake<'_> {
+    fn into_json(self) -> Json {
+        Json::object([
+            ("schema_version", Json::str("document-intake.v1")),
+            ("mode", Json::str("synthetic")),
+            ("entity_ref", self.entity),
+            ("period_end", Json::str(self.period)),
+            ("extractor", Json::str("labelled-invoice.v1")),
+            ("text_origin", Json::str(self.origin)),
+            ("text_version", self.version),
+            (
+                "source",
+                Json::object([
+                    ("filename", Json::str(&self.filename)),
+                    ("sha256", Json::str(self.source_sha256)),
+                ]),
+            ),
+            (
+                "text",
+                Json::object([
+                    ("filename", Json::str(TEXT_NAME)),
+                    ("sha256", Json::str(self.text_sha256)),
+                ]),
+            ),
+            ("fields", fields_json(self.fields)),
+        ])
+    }
+
+    fn review_fields(&self) -> Json {
+        Json::Object(
+            FIELDS
+                .iter()
+                .zip(&self.fields)
+                .map(|((name, _), rows)| {
+                    let (value, page) = match rows.as_slice() {
+                        [row] => (row.at("value").clone(), row.at("page").clone()),
+                        _ => (Json::Null, Json::Null),
+                    };
+                    (
+                        PyStr::from(*name),
+                        Json::object([("value", value), ("page", page), ("note", Json::str(""))]),
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+fn manifest<'a>(
+    source: &'a SourceSnapshot,
+    text: &'a SourceSnapshot,
     entity: &str,
-    period: &str,
-    origin: &str,
+    period: &'a str,
+    origin: &'a str,
     version: &str,
-) -> Result<Json> {
+) -> Result<Intake<'a>> {
     let entity = Json::str(entity);
     string(&entity, "entity", false)?;
     loader::parse_iso_date(period, "period_end", Path::new(INTAKE_NAME), None)?;
@@ -209,30 +279,16 @@ fn manifest(
         return Err("A text original and its extracted text must have identical bytes.".into());
     }
     let extracted = text.text("Extracted text", false)?;
-    Ok(Json::object([
-        ("schema_version", Json::str("document-intake.v1")),
-        ("mode", Json::str("synthetic")),
-        ("entity_ref", entity),
-        ("period_end", Json::str(period)),
-        ("extractor", Json::str("labelled-invoice.v1")),
-        ("text_origin", Json::str(origin)),
-        ("text_version", version),
-        (
-            "source",
-            Json::object([
-                ("filename", Json::str(&format!("original.{extension}"))),
-                ("sha256", Json::str(&source.sha256)),
-            ]),
-        ),
-        (
-            "text",
-            Json::object([
-                ("filename", Json::str(TEXT_NAME)),
-                ("sha256", Json::str(&text.sha256)),
-            ]),
-        ),
-        ("fields", extract(extracted)),
-    ]))
+    Ok(Intake {
+        entity,
+        period,
+        origin,
+        version,
+        filename: format!("original.{extension}"),
+        source_sha256: &source.sha256,
+        text_sha256: &text.sha256,
+        fields: observations(extracted),
+    })
 }
 
 pub struct IntakeOptions<'a> {
@@ -282,58 +338,25 @@ fn create_intake_with(
         options.origin,
         options.version,
     )?;
-    let bytes = encoded(&manifest);
+    let filename = manifest.filename.clone();
+    let review_fields = manifest.review_fields();
+    let bytes = encoded(&manifest.into_json());
     if bytes.len() > MIB {
         return Err("Extracted observations exceed the 1 MiB intake limit.".into());
     }
-    let Json::Object(fields) = manifest.at("fields") else {
-        unreachable!()
-    };
-    let review_fields = fields
-        .iter()
-        .map(|(key, rows)| {
-            let Json::Array(rows) = rows else {
-                unreachable!()
-            };
-            let one = rows.len() == 1;
-            (
-                key.clone(),
-                Json::object([
-                    (
-                        "value",
-                        if one {
-                            rows[0].at("value").clone()
-                        } else {
-                            Json::Null
-                        },
-                    ),
-                    (
-                        "page",
-                        if one {
-                            rows[0].at("page").clone()
-                        } else {
-                            Json::Null
-                        },
-                    ),
-                    ("note", Json::str("")),
-                ]),
-            )
-        })
-        .collect();
     let review = Json::object([
         ("schema_version", Json::str("document-review.v1")),
         ("intake_sha256", Json::str(&crate::sha256(&bytes))),
         ("reviewer_initials", Json::str("")),
         ("reviewed_on", Json::str("")),
         ("source_text_checked", Json::Bool(false)),
-        ("fields", Json::Object(review_fields)),
+        ("fields", review_fields),
     ]);
     let review_bytes = encoded(&review);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::create_dir(&output).map_err(|e| e.to_string())?;
-    let filename = loader::json_text(manifest.at("source").at("filename")).unwrap();
     let files = [
         (filename.as_str(), source.content.as_slice()),
         (TEXT_NAME, text.content.as_slice()),
@@ -415,7 +438,7 @@ pub fn load_document(root: &Path) -> Result<DocumentBundle> {
         origin == "manual",
     )?;
     let expected = manifest(&source, &text, &entity, &period, &origin, &version)?;
-    if encoded(&manifest_value) != encoded(&expected) {
+    if encoded(&manifest_value) != encoded(&expected.into_json()) {
         return Err("Document intake does not match its sources or supported schema.".into());
     }
     let mut snapshots = vec![intake, source, text];
@@ -685,6 +708,56 @@ mod tests {
             ("error", Json::str("")),
         ])]);
         assert!(pyjson::py_eq(fields.at("supplier"), &expected, false));
+    }
+
+    #[test]
+    fn intake_preserves_observation_positions_and_only_prefills_single_fields() {
+        let tmp = TempDir::new();
+        let path = bundle(
+            &tmp,
+            "\r\nSupplier: Demo\r\nTotal: 125.5\u{2028}GST: 10\u{c}\nSupplier: Fabricated",
+            "Demo",
+            "txt",
+        );
+        let intake = load_document(&path).unwrap();
+        let expected = Json::Array(vec![
+            Json::object([
+                ("page", Json::int(1)),
+                ("line", Json::int(2)),
+                ("raw", Json::str("Demo")),
+                ("value", Json::str("Demo")),
+                ("error", Json::str("")),
+            ]),
+            Json::object([
+                ("page", Json::int(2)),
+                ("line", Json::int(2)),
+                ("raw", Json::str("Fabricated")),
+                ("value", Json::str("Fabricated")),
+                ("error", Json::str("")),
+            ]),
+        ]);
+        assert!(pyjson::py_eq(
+            intake.manifest.at("fields").at("supplier"),
+            &expected,
+            false
+        ));
+        let review = json(&member(&path, "document-review.example.json", MIB).unwrap()).unwrap();
+        let fields = review.at("fields");
+        assert!(matches!(fields.at("supplier").at("value"), Json::Null));
+        assert!(matches!(fields.at("supplier").at("page"), Json::Null));
+        assert!(matches!(
+            fields.at("invoice_number").at("value"),
+            Json::Null
+        ));
+        assert!(fields.at("total").at("value").is_str("125.50"));
+        assert_eq!(
+            fields
+                .at("gst_observed")
+                .at("page")
+                .as_plain_int()
+                .and_then(ToPrimitive::to_usize),
+            Some(1)
+        );
     }
 
     fn bundle(tmp: &TempDir, text: &str, entity: &str, suffix: &str) -> std::path::PathBuf {

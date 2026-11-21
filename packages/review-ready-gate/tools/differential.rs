@@ -382,10 +382,7 @@ fn self_reviews(c: &mut Corpus) {
         .enumerate()
         {
             let mut value_json = valid.clone();
-            let Json::Object(fields) = &mut value_json else {
-                unreachable!()
-            };
-            fields.iter_mut().find(|(k, _)| k.is(field)).unwrap().1 = value.clone();
+            *fixture_field(&mut value_json, field) = value.clone();
             add(
                 format!("self-review-{field}-{i}"),
                 probe::encode(&value_json).into_bytes(),
@@ -633,29 +630,38 @@ fn runtime_cli(c: &mut Corpus, root: &Path, scratch: &Path) {
     }
 }
 
-fn set(document: &mut Json, keys: &[&str], value: Json) {
-    let Json::Object(pairs) = document else {
+fn fixture_field<'a>(document: &'a mut Json, key: &str) -> &'a mut Json {
+    field_mut(document, key).unwrap_or_else(|| panic!("fixture field {key} is missing"))
+}
+
+fn fixture_object(document: &mut Json) -> &mut Vec<(PyStr, Json)> {
+    let Json::Object(fields) = document else {
         panic!("fixture must be an object")
     };
+    fields
+}
+
+fn fixture_findings(document: &mut Json) -> &mut [Json] {
+    let Json::Array(findings) = fixture_field(document, "findings") else {
+        panic!("fixture findings must be an array")
+    };
+    findings
+}
+
+fn set(document: &mut Json, keys: &[&str], value: Json) {
     if keys.len() == 1 {
+        let pairs = fixture_object(document);
         if let Some((_, old)) = pairs.iter_mut().find(|(key, _)| key.is(keys[0])) {
             *old = value;
         } else {
             pairs.push((PyStr::from(keys[0]), value));
         }
     } else {
-        set(
-            &mut pairs.iter_mut().find(|(key, _)| key.is(keys[0])).unwrap().1,
-            &keys[1..],
-            value,
-        );
+        set(fixture_field(document, keys[0]), &keys[1..], value);
     }
 }
 fn remove(document: &mut Json, key: &str) {
-    let Json::Object(pairs) = document else {
-        panic!("fixture must be an object")
-    };
-    pairs.retain(|(name, _)| !name.is(key));
+    fixture_object(document).retain(|(name, _)| !name.is(key));
 }
 fn save_pack(scratch: &Path, name: &str, files: &[Vec<u8>; 3]) -> Result<PathBuf> {
     let path = scratch.join(name);
@@ -673,19 +679,8 @@ fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     let ready_dir = save_pack(scratch, "ready", &probe::render_pack(&ready)?)?;
     let not_dir = save_pack(scratch, "not-ready", &base)?;
     let mut private_finding = not_ready.clone();
-    let Json::Object(fields) = &mut private_finding else {
-        unreachable!()
-    };
-    let Json::Array(findings) = &mut fields
-        .iter_mut()
-        .find(|(key, _)| key.is("findings"))
-        .unwrap()
-        .1
-    else {
-        unreachable!()
-    };
     set(
-        &mut findings[0],
+        &mut fixture_findings(&mut private_finding)[0],
         &["reason"],
         Json::str("Reason-\u{10f7ff}\u{10f800}"),
     );
@@ -884,20 +879,7 @@ fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
                 &["thresholds", "tieout_tolerance"],
                 Json::str("5.00"),
             ),
-            "reordered" => {
-                let Json::Object(pairs) = &mut document else {
-                    unreachable!()
-                };
-                let Json::Array(items) = &mut pairs
-                    .iter_mut()
-                    .find(|(key, _)| key.is("findings"))
-                    .unwrap()
-                    .1
-                else {
-                    unreachable!()
-                };
-                items.reverse();
-            }
+            "reordered" => fixture_findings(&mut document).reverse(),
             "private-unicode" => {
                 set(
                     &mut document,
@@ -1119,26 +1101,12 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
         "0.01",
         &[bundles[0].clone(), bundles[0].clone()],
     )?;
-    let Json::Object(fields) = &mut equal_indices else {
-        unreachable!()
-    };
-    let Json::Array(findings) = &mut fields.iter_mut().find(|(k, _)| k.is("findings")).unwrap().1
-    else {
-        unreachable!()
-    };
-    for finding in findings {
+    for finding in fixture_findings(&mut equal_indices) {
         if finding.at("slot").is_str("document_002") {
             set(finding, &["slot"], Json::str("document_0001"));
         }
     }
-    let Json::Object(sources) = &mut fields
-        .iter_mut()
-        .find(|(k, _)| k.is("source_sha256"))
-        .unwrap()
-        .1
-    else {
-        unreachable!()
-    };
+    let sources = fixture_object(fixture_field(&mut equal_indices, "source_sha256"));
     for (key, value) in sources {
         let name = key.to_utf8().unwrap();
         if name.starts_with("document_002_") {
@@ -1179,26 +1147,17 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
         "contradictory",
         "reviewed-missing",
     ] {
-        let mut document = document.clone();
-        if mutation == "reviewed-missing" {
-            document = probe::example_document_with_documents(
+        let mut document = if mutation == "reviewed-missing" {
+            probe::example_document_with_documents(
                 "bas",
                 &root.join("examples/bas-ready"),
                 "0.01",
                 &[bundles[1].clone()],
-            )?;
-        }
-        let Json::Object(fields) = &mut document else {
-            unreachable!()
+            )?
+        } else {
+            document.clone()
         };
-        let Json::Object(sources) = &mut fields
-            .iter_mut()
-            .find(|(k, _)| k.is("source_sha256"))
-            .unwrap()
-            .1
-        else {
-            unreachable!()
-        };
+        let sources = fixture_object(fixture_field(&mut document, "source_sha256"));
         let index = sources
             .iter()
             .position(|(_, v)| v.at("filename").is_str("document_001/original.txt"))

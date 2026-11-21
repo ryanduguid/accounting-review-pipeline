@@ -361,6 +361,52 @@ fn native_export_fetches_and_publishes_a_balanced_accrual_report_over_real_tls()
     native_export(false, false);
 }
 
+#[test]
+fn native_export_preserves_an_existing_pack_when_the_report_is_empty() {
+    let scratch = Scratch::new();
+    let cache = scratch.0.join("token.json");
+    TokenSession::new(&cache)
+        .unwrap()
+        .save(&token_pair("fabricated-access", "fabricated-refresh", 1800))
+        .unwrap();
+    let cache_before = fs::read(&cache).unwrap();
+    let server_cache = cache.clone();
+    let proxy = Proxy::new(2, move |request| {
+        let is_report = request.target != "/connections";
+        let balanced_reply = service_reply(request, &server_cache, false, false);
+        if is_report {
+            r#"{"Reports":[]}"#.into()
+        } else {
+            balanced_reply
+        }
+    });
+    let path = scratch.0.join("tb.csv");
+    let manifest = publication::manifest_path(&path);
+    fs::write(&path, b"previous fabricated export\n").unwrap();
+    fs::write(&manifest, b"previous fabricated manifest\n").unwrap();
+
+    let output = run(export_command(&scratch.0, &cache, &path, &proxy, false));
+    proxy.finish();
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let stderr = String::from_utf8(output.stderr)
+        .unwrap()
+        .replace("\r\n", "\n");
+    assert_eq!(stdout, "Tenant: Fabricated Organisation\n");
+    assert_eq!(
+        stderr,
+        "Empty Reports payload - check the date parameter and API scopes.\n"
+    );
+    assert_eq!(fs::read(&path).unwrap(), b"previous fabricated export\n");
+    assert_eq!(
+        fs::read(&manifest).unwrap(),
+        b"previous fabricated manifest\n"
+    );
+    assert_eq!(fs::read(&cache).unwrap(), cache_before);
+}
+
 fn dangling_link_target(scratch: &Path, name: &Path, spelling: &str) -> PathBuf {
     match spelling {
         // Windows TEMP can use an 8.3 spelling that the working directory expands.
