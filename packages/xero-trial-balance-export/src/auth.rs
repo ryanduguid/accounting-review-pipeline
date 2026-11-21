@@ -431,17 +431,35 @@ fn open_browser(url: &str) -> bool {
 
 #[cfg(not(windows))]
 fn open_browser(url: &str) -> bool {
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc::{self, RecvTimeoutError};
+
     let command = if cfg!(target_os = "macos") {
         "open"
     } else {
         "xdg-open"
     };
-    std::process::Command::new(command)
+    let mut launcher = Command::new(command);
+    launcher
         .arg(url)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let (finished, status) = mpsc::channel();
+    // Some launchers run for the browser's lifetime. Reap the launcher off the
+    // callback thread, whilst still reporting an immediate launch failure.
+    if std::thread::Builder::new()
+        .spawn(move || {
+            let opened = launcher.status().is_ok_and(|exit| exit.success());
+            let _ = finished.send(opened);
+        })
+        .is_err()
+    {
+        return false;
+    }
+    matches!(
+        status.recv_timeout(Duration::from_millis(500)),
+        Ok(true) | Err(RecvTimeoutError::Timeout)
+    )
 }
 
 #[cfg(test)]

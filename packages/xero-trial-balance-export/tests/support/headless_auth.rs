@@ -168,6 +168,7 @@ fn recording_browser_command(
     layout: &TokenLayout,
     redirect: &str,
     proxy: &Proxy,
+    launcher_tail: &str,
 ) -> (Command, PathBuf) {
     use std::os::unix::fs::PermissionsExt;
     let mut cmd = auth_command(layout, redirect, proxy);
@@ -176,7 +177,9 @@ fn recording_browser_command(
     fs::write(&arguments, b"").unwrap();
     fs::write(
         &browser,
-        "#!/bin/sh\nprintf '%s\\n' \"$#\" \"$@\" > \"$FABRICATED_BROWSER_ARGUMENTS\"\n",
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$#\" \"$@\" > \"$FABRICATED_BROWSER_ARGUMENTS\"\n{launcher_tail}"
+        ),
     )
     .unwrap();
     fs::set_permissions(&browser, fs::Permissions::from_mode(0o700)).unwrap();
@@ -395,7 +398,7 @@ fn native_browser_launch_ignores_a_codeless_callback_before_denial() {
     let modified = fs::metadata(&cache).unwrap().modified().unwrap();
     let redirect = redirect();
     let proxy = Proxy::new(0, |_| panic!("refused callbacks must not exchange tokens"));
-    let (cmd, arguments) = recording_browser_command(&layout, &redirect, &proxy);
+    let (cmd, arguments) = recording_browser_command(&layout, &redirect, &proxy, "");
     let inventory = owned_inventory(&layout.root.0);
     let child = ConsentChild::start(cmd);
     let opening = "Opening browser for Xero consent...\n";
@@ -424,6 +427,44 @@ fn native_browser_launch_ignores_a_codeless_callback_before_denial() {
     assert_eq!(fs::read(&cache).unwrap(), before);
     assert_eq!(fs::metadata(cache).unwrap().modified().unwrap(), modified);
     assert_eq!(owned_inventory(&layout.root.0), inventory);
+}
+
+#[test]
+fn native_consent_continues_whilst_the_browser_launcher_is_running() {
+    let layout = TokenLayout::new();
+    let redirect = redirect();
+    let proxy = Proxy::new(0, |_| panic!("refused callbacks must not exchange tokens"));
+    let (mut cmd, arguments) =
+        recording_browser_command(&layout, &redirect, &proxy, "read -r release\n");
+    cmd.stdin(Stdio::piped());
+    let mut child = ConsentChild::start(cmd);
+    let launcher_stdin = child.child.stdin.take().unwrap();
+    assert_eq!(child.line(), "Opening browser for Xero consent...\n");
+    assert_eq!(
+        child.line(),
+        "If the browser did not open, paste this URL into one:\n"
+    );
+    let printed = child.line();
+    let state = consent_url_state(&printed, &redirect);
+    while fs::metadata(&arguments).unwrap().len() == 0 {
+        assert!(Instant::now() < child.deadline, "browser launcher deadline");
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        fs::read_to_string(arguments).unwrap(),
+        format!("1\n{}\n", printed.trim())
+    );
+    callback(&redirect, &state, "error", "access_denied");
+    let output = child.finish();
+    drop(launcher_stdin);
+    proxy.finish();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        output.stderr,
+        b"Xero returned 'access_denied' - consent was denied or cancelled. Run again.\n"
+    );
+    assert!(!layout.work.join("token.json").exists());
 }
 
 #[test]
