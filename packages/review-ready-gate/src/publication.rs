@@ -11,7 +11,7 @@ use crate::{
 use std::{
     collections::BTreeSet,
     fs::{self, File, OpenOptions},
-    io::{self, Seek, SeekFrom, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -119,20 +119,67 @@ pub fn single_link(_path: &Path, metadata: &fs::Metadata) -> io::Result<bool> {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
-        use windows_sys::Win32::Storage::FileSystem::{
-            BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
-        };
+        use std::os::windows::fs::OpenOptionsExt;
         let file = OpenOptions::new().access_mode(0).open(_path)?;
-        let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
-        // SAFETY: file owns the handle and info is correctly sized writable storage.
-        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: the successful call initialised info.
-        Ok(unsafe { info.assume_init() }.nNumberOfLinks == 1)
+        single_link_handle(&file)
     }
 }
+
+#[cfg(windows)]
+fn single_link_handle(file: &File) -> io::Result<bool> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, GetFileInformationByHandle,
+    };
+    let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+    // SAFETY: file owns the handle and info is correctly sized writable storage.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the successful call initialised info.
+    let info = unsafe { info.assume_init() };
+    Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
+}
+
+pub(crate) fn read_single_link(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    if !fs::symlink_metadata(path)?.is_file() {
+        return Ok(None);
+    }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    // Validate the same file we read, even if the directory entry has changed.
+    let mut file = options.open(path)?;
+    let metadata = file.metadata()?;
+    #[cfg(unix)]
+    let allowed = single_link(path, &metadata)?;
+    #[cfg(windows)]
+    let allowed = metadata.is_file() && single_link_handle(&file)?;
+    if !allowed {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(Some(bytes))
+}
+
+fn non_regular_file(path: &Path) -> io::Error {
+    error(&format!(
+        "publication refuses a non-regular or linked file: {}",
+        pypath::decode_os(path.file_name().unwrap_or_default())
+    ))
+}
+
 fn regular(path: &Path, absent: bool) -> io::Result<bool> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(m) => m,
@@ -140,10 +187,7 @@ fn regular(path: &Path, absent: bool) -> io::Result<bool> {
         Err(e) => return Err(e),
     };
     if !single_link(path, &metadata)? {
-        return Err(error(&format!(
-            "publication refuses a non-regular or linked file: {}",
-            pypath::decode_os(path.file_name().unwrap_or_default())
-        )));
+        return Err(non_regular_file(path));
     }
     Ok(true)
 }
@@ -214,8 +258,8 @@ impl State {
 )]
 fn read_state(control: &Path) -> io::Result<State> {
     directory(control)?;
-    regular(&control.join("state.json"), false)?;
-    let bytes = fs::read(control.join("state.json"))?;
+    let path = control.join("state.json");
+    let bytes = read_single_link(&path)?.ok_or_else(|| non_regular_file(&path))?;
     let malformed = || error("publication state is malformed; retain recovery evidence");
     let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
     let text = std::str::from_utf8(bytes).map_err(|_| malformed())?;

@@ -15,7 +15,6 @@ use crate::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::{Path, PathBuf},
 };
 
@@ -814,28 +813,21 @@ pub struct VerifiedPack {
     pub summary: String,
     pub artefact_sha256: BTreeMap<String, String>,
 }
-#[expect(clippy::too_many_lines, reason = "reads and verifies each pack file")]
 pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
     let revision = publication::snapshot_revision(directory).map_err(|e| e.to_string())?;
     let mut payloads = Vec::new();
     for name in PACK_NAMES {
         let path = directory.join(name);
-        let read = || -> Result<Vec<u8>> {
-            let m = fs::symlink_metadata(&path).map_err(|e| {
+        let bytes = publication::read_single_link(&path)
+            .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     format!("{name}: not found in {}", pypath::text(directory))
                 } else {
                     format!("{name}: cannot read artefact: {e}")
                 }
-            })?;
-            if !publication::single_link(&path, &m)
-                .map_err(|e| format!("{name}: cannot read artefact: {e}"))?
-            {
-                return Err(format!("{name}: expected a regular, single-link artefact"));
-            }
-            fs::read(&path).map_err(|e| format!("{name}: cannot read artefact: {e}"))
-        };
-        payloads.push(read()?);
+            })?
+            .ok_or_else(|| format!("{name}: expected a regular, single-link artefact"))?;
+        payloads.push(bytes);
     }
     if publication::snapshot_revision(directory).map_err(|e| e.to_string())? != revision {
         return Err("pack publication changed during acquisition; retry".into());
