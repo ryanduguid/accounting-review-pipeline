@@ -387,6 +387,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn empty_path_arguments_treat_the_working_directory_as_dot() {
+        let fixture = crate::tests::Fixture::new();
+        let cwd = fixture.source();
+        let run = |input, output| {
+            let args = ["--input", input, "--output", output].map(String::from);
+            let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+            let code = main("grant-workpaper", &args, &cwd, &mut stdout, &mut stderr);
+            (code, stdout, stderr)
+        };
+
+        let explicit = run(".", "explicit");
+        let implicit = run("", "implicit");
+        assert_eq!(implicit, explicit);
+        assert!(matches!(implicit.0, 0 | 2));
+        assert_eq!(
+            std::fs::read(cwd.join("explicit/workpaper.json")).unwrap(),
+            std::fs::read(cwd.join("implicit/workpaper.json")).unwrap()
+        );
+
+        let marker = cwd.join("agreements.json");
+        let original = std::fs::read(&marker).unwrap();
+        let refused = run(".", "");
+        assert_eq!(refused, run(".", "."));
+        assert_eq!(refused.0, 1);
+        assert_eq!(std::fs::read(marker).unwrap(), original);
+        assert!(!cwd.join("workpaper.json").exists());
+    }
+
+    #[test]
     fn a_failed_status_write_keeps_the_published_workpaper() {
         struct FailedStatus;
         impl Write for FailedStatus {
