@@ -300,9 +300,9 @@ fn exit_code(status: std::process::ExitStatus) -> i64 {
 fn git(subcommand: &[&str], target: &Path) -> Result<i64> {
     let parent = target.parent().unwrap_or(target);
     let name = target.file_name().unwrap_or(std::ffi::OsStr::new(""));
-    let preface = format!("cannot ask git about {} in {}: ", text(Path::new(name)), text(parent));
+    let preface = || format!("cannot ask git about {} in {}: ", text(Path::new(name)), text(parent));
     let ending = "; put git on PATH and re-run once the repository is idle";
-    let executable = git_executable().ok_or_else(|| format!("{preface}git is not on PATH{ending}"))?;
+    let executable = git_executable().ok_or_else(|| format!("{}git is not on PATH{ending}", preface()))?;
     let mut command = Command::new(&executable);
     command
         .args(subcommand)
@@ -323,17 +323,18 @@ fn git(subcommand: &[&str], target: &Path) -> Result<i64> {
     }
     let mut child = command
         .spawn()
-        .map_err(|e| format!("{preface}{}{ending}", oserror::file_error(&e, &text(&executable))))?;
+        .map_err(|e| format!("{}{}{ending}", preface(), oserror::file_error(&e, &text(&executable))))?;
     let started = Instant::now();
     loop {
-        if let Some(status) = child.try_wait().map_err(|e| format!("{preface}{e}{ending}"))? {
+        if let Some(status) = child.try_wait().map_err(|e| format!("{}{e}{ending}", preface()))? {
             return Ok(exit_code(status));
         }
         if started.elapsed() >= Duration::from_secs(30) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(format!(
-                "{preface}Command '{}' timed out after 30 seconds{ending}",
+                "{}Command '{}' timed out after 30 seconds{ending}",
+                preface(),
                 git_argv(&executable, subcommand, name)
             ));
         }
