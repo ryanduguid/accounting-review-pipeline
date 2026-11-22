@@ -807,18 +807,10 @@ fn pretty_quote(out: &mut Vec<u32>, text: &PyStr, ascii: bool) {
     out.push(34);
 }
 fn pretty_write(out: &mut Vec<u32>, value: &Json, level: usize, sort: bool, ascii: bool) {
-    if let Json::Str(text) = value {
-        pretty_quote(out, text, ascii);
-        return;
-    }
-    let mut scalar = String::new();
-    if write_scalar(&mut scalar, value) {
-        pretty_append(out, &scalar);
-        return;
-    }
     let inner = format!("\n{}", "  ".repeat(level + 1));
     let outer = format!("\n{}", "  ".repeat(level));
     match value {
+        Json::Str(text) => pretty_quote(out, text, ascii),
         Json::Array(items) if items.is_empty() => pretty_append(out, "[]"),
         Json::Object(pairs) if pairs.is_empty() => pretty_append(out, "{}"),
         Json::Array(items) => {
@@ -848,7 +840,11 @@ fn pretty_write(out: &mut Vec<u32>, value: &Json, level: usize, sort: bool, asci
             pretty_append(out, &outer);
             out.push(125);
         }
-        _ => unreachable!("scalars are written above"),
+        _ => {
+            let mut scalar = String::new();
+            write_scalar(&mut scalar, value);
+            pretty_append(out, &scalar);
+        }
     }
 }
 fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {
