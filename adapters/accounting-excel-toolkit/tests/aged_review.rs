@@ -2058,3 +2058,22 @@ fn dangling_links_to_new_external_outputs_remain_allowed() {
             .unwrap();
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn outputs_at_the_root_of_a_missing_drive_are_refused_without_writing() {
+    // Neither the root nor any prefix resolves, so the output keeps its own
+    // name and has no parent to create.
+    let root = (b'A'..=b'Z')
+        .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
+        .find(|root| !root.exists())
+        .expect("a drive letter with no volume");
+    let temp = Temp::new();
+    let source = temp.write("source.csv", SOURCE);
+    for tool in [EVIDENCE, REPLAY] {
+        let output = output_cli(tool, &source, &root);
+        refused(&output, 1, "INVALID_INPUT");
+        assert!(!root.exists());
+        assert_eq!(fs::read(&source).unwrap(), SOURCE);
+    }
+}
