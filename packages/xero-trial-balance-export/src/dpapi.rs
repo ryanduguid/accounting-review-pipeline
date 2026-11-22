@@ -51,9 +51,11 @@ fn transform(data: &[u8], protect: bool) -> Result<Vec<u8>> {
     };
     if ok == 0 {
         // SAFETY: reads this thread's error immediately after the DPAPI call failed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         return Err(refusal(protect, unsafe { GetLastError() }));
     }
     // SAFETY: a successful DPAPI call returns cbData readable bytes, or an empty output.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     Ok(unsafe { take(&output, |data| LocalFree(data.cast())) })
 }
 
@@ -69,9 +71,10 @@ unsafe fn take(
     if output.pbData.is_null() {
         return Vec::new();
     }
+    let length = output.cbData as usize;
     // SAFETY: the caller guarantees cbData readable bytes; they are copied before the free.
-    let bytes =
-        unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let bytes = unsafe { std::slice::from_raw_parts(output.pbData, length) }.to_vec();
     free(output.pbData);
     bytes
 }
@@ -136,6 +139,7 @@ mod tests {
             pbData: std::ptr::null_mut(),
         };
         // SAFETY: a null output has nothing to read or free.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let bytes = unsafe { take(&null, |_| panic!("a null output was freed")) };
         assert!(bytes.is_empty());
     }

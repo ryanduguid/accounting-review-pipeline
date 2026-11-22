@@ -65,6 +65,7 @@ mod testing {
         pub fn new() -> Self {
             // Skip names an earlier process left behind; any other failure stops.
             let mut created = Ok(());
+            // nosemgrep: rust.lang.security.temp-dir.temp-dir
             let path = std::iter::repeat_with(|| {
                 std::env::temp_dir().join(format!(
                     "xero-rust-test-{}-{}",

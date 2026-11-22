@@ -337,7 +337,7 @@ mod tests {
         gets: RefCell<Vec<String>>,
         session: TokenSession,
         /// A single-use reply for the next token POST, and the form it carried.
-        token: RefCell<Option<Response>>,
+        next_reply: RefCell<Option<Response>>,
         form: RefCell<Vec<(String, String)>>,
     }
     fn pair(access: &str, refresh: &str) -> Json {
@@ -376,7 +376,7 @@ mod tests {
             ] {
                 let scratch = Scratch::new();
                 let endpoint = Scripted::new(&scratch.0.join("token.json"), Vec::new());
-                *endpoint.token.borrow_mut() = Some(response(status, body, None));
+                *endpoint.next_reply.borrow_mut() = Some(response(status, body, None));
                 let result = if authorization {
                     exchange(
                         &endpoint,
@@ -389,7 +389,7 @@ mod tests {
                 };
                 let failure = result.unwrap_err();
                 assert!(failure.stderr.contains(message));
-                assert!(endpoint.token.borrow().is_none());
+                assert!(endpoint.next_reply.borrow().is_none());
                 assert!(endpoint.gets.borrow().is_empty());
                 let form = endpoint.form.borrow();
                 assert!(
@@ -439,7 +439,7 @@ mod tests {
                 posts: RefCell::new(Vec::new()),
                 gets: RefCell::new(Vec::new()),
                 session,
-                token: RefCell::new(None),
+                next_reply: RefCell::new(None),
                 form: RefCell::new(Vec::new()),
             }
         }
@@ -455,7 +455,7 @@ mod tests {
                 .collect();
             // A scripted token reply is used once; a replayed POST falls through
             // to the refresh below, which the refusal tests would notice.
-            if let Some(reply) = self.token.borrow_mut().take() {
+            if let Some(reply) = self.next_reply.borrow_mut().take() {
                 return Ok(reply);
             }
             assert!(form.contains(&("grant_type", "refresh_token")));

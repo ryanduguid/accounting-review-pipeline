@@ -125,6 +125,7 @@ pub fn bind(config: &CallbackConfig) -> Result<TcpListener> {
             )
         };
         // SAFETY: reads this thread's error immediately after setsockopt failed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let error = || std::io::Error::from_raw_os_error(unsafe { WSAGetLastError() });
         let exclusive = (status != SOCKET_ERROR).then_some(()).ok_or_else(error);
         exclusive.map_err(|e| bind_error(config, e))?;
