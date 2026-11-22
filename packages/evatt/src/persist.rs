@@ -39,6 +39,7 @@ fn close_file(file: std::fs::File) -> io::Result<()> {
         use std::os::windows::io::IntoRawHandle;
         let handle = file.into_raw_handle();
         // SAFETY: we own this handle, and relinquished File's destructor.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let closed = unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) } != 0;
         closed.then_some(()).ok_or_else(io::Error::last_os_error)
     }

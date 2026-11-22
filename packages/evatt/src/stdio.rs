@@ -198,6 +198,7 @@ pub fn encoding(stderr: bool) -> Result<Encoding, &'static str> {
             fn GetACP() -> u32;
         }
         // SAFETY: GetACP has no arguments and only reports a code page.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         ansi_encoding(unsafe { GetACP() })
     }
 }
