@@ -461,6 +461,45 @@ mod tests {
         assert!(!parent.exists());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_output_directory_refuses_the_validation_write() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = crate::tests::TempDir::new();
+        let locked = temp.path().join("locked");
+        std::fs::create_dir(&locked).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o300)).unwrap();
+        // A privileged user reads any directory, so the refusal cannot be staged.
+        let privileged = std::fs::read_dir(&locked).is_ok();
+        let outcome = write_validation(&Json::Null, &locked.join("validation.json"), &[]);
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(std::fs::read_dir(&locked).unwrap().count(), 0);
+        assert!(
+            privileged
+                || matches!(&outcome, Err(Failure::Gateway(message))
+                    if message.starts_with("validation output cannot be written to ")
+                        && message.contains("[Errno 13] Permission denied: ")),
+            "{outcome:?}"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_output_on_a_missing_drive_reports_the_drive_root() {
+        let drive = (b'A'..=b'Z')
+            .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
+            .find(|root| !root.exists())
+            .expect("a drive letter with no volume");
+        let output = drive.join("missing").join("validation.json");
+        let outcome = write_validation(&Json::Null, &output, &[]);
+        let root = format!("{}.", pytext::repr_os(&pypath::text(&drive)));
+        assert!(
+            matches!(&outcome, Err(Failure::Gateway(message))
+                if message.contains("[WinError 3] ") && message.ends_with(&root)),
+            "{outcome:?}"
+        );
+    }
+
     #[test]
     fn custom_io_diagnostics_keep_the_full_message() {
         let message = "write stopped (os error detail). ";
