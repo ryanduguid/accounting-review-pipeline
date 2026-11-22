@@ -638,7 +638,9 @@ fn runtime_cli(c: &mut Corpus, root: &Path, scratch: &Path) {
 }
 
 fn fixture_field<'a>(document: &'a mut Json, key: &str) -> &'a mut Json {
-    field_mut(document, key).unwrap_or_else(|| panic!("fixture field {key} is missing"))
+    document
+        .get_mut(key)
+        .unwrap_or_else(|| panic!("fixture field {key} is missing"))
 }
 
 fn fixture_object(document: &mut Json) -> &mut Vec<(PyStr, Json)> {
@@ -649,10 +651,9 @@ fn fixture_object(document: &mut Json) -> &mut Vec<(PyStr, Json)> {
 }
 
 fn fixture_findings(document: &mut Json) -> &mut [Json] {
-    let Json::Array(findings) = fixture_field(document, "findings") else {
-        panic!("fixture findings must be an array")
-    };
-    findings
+    fixture_field(document, "findings")
+        .as_array_mut()
+        .expect("fixture findings must be an array")
 }
 
 fn set(document: &mut Json, keys: &[&str], value: Json) {
@@ -1260,12 +1261,6 @@ fn exchange(mut command: Command, corpus: &str) -> Result<String> {
     written??;
     Ok(String::from_utf8(bytes)?)
 }
-fn field_mut<'a>(value: &'a mut Json, key: &str) -> Option<&'a mut Json> {
-    let Json::Object(fields) = value else {
-        return None;
-    };
-    fields.iter_mut().find(|(k, _)| k.is(key)).map(|(_, v)| v)
-}
 fn text(value: &Json) -> Option<String> {
     value.as_pystr().and_then(PyStr::to_utf8)
 }
@@ -1283,7 +1278,7 @@ fn unhex(hex: &str) -> Result<Vec<u8>> {
 /// exactly one.
 fn without_control_entry(document: &Json, slot: &str) -> Option<(Json, Json, usize)> {
     let mut document = document.clone();
-    let Some(Json::Array(controls)) = field_mut(&mut document, "controls_not_run") else {
+    let Some(Json::Array(controls)) = document.get_mut("controls_not_run") else {
         return None;
     };
     let named = |control: &Json| control.at("slot").is_str(slot);
@@ -1399,7 +1394,7 @@ fn without_control_line(stdout: &str, slot: &str) -> Option<String> {
 /// renderer puts it.
 fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
     let mut result = probe::decode(native)?;
-    let Some(ok) = field_mut(&mut result, "ok") else {
+    let Some(ok) = result.get_mut("ok") else {
         return Ok(None);
     };
     let Some(Json::Array(files)) = ok.get("files") else {
@@ -1420,11 +1415,11 @@ fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
     let Some(files) = without_control_files(files, &entry, left, slot)? else {
         return Ok(None);
     };
-    *field_mut(ok, "files").expect("checked above") = files;
-    if let Some(pack) = field_mut(ok, "pack") {
+    *ok.get_mut("files").expect("checked above") = files;
+    if let Some(pack) = ok.get_mut("pack") {
         *pack = projected;
     }
-    if let Some(stdout) = field_mut(ok, "stdout") {
+    if let Some(stdout) = ok.get_mut("stdout") {
         let Some(line) = text(stdout).and_then(|s| without_control_line(&s, slot)) else {
             return Ok(None);
         };

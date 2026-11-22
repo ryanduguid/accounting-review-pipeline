@@ -35,6 +35,19 @@ fn fixture_command(profile: &str, pack: &std::path::Path, output: &std::path::Pa
 }
 
 #[test]
+fn version_reports_the_compiled_package_version() {
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let version = concat!("review-ready ", env!("CARGO_PKG_VERSION"));
+    let newline = if cfg!(windows) { "\r\n" } else { "\n" };
+    assert_eq!(result.stdout, format!("{version}{newline}").as_bytes());
+}
+
+#[test]
 fn the_probe_resolves_external_outputs_and_refuses_checkout_outputs() {
     use std::io::Write;
     use std::process::Stdio;

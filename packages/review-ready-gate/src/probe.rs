@@ -491,23 +491,11 @@ mod tests {
         let mut document = example_document("bas", &fixtures, "0.01").unwrap();
         assert!(render_pack(&document).is_ok());
 
-        let Json::Object(fields) = &mut document else {
-            panic!("expected the example readiness document");
-        };
-        let (_, findings) = fields
-            .iter_mut()
-            .find(|(key, _)| key.is("findings"))
-            .unwrap();
-        let Json::Array(findings) = findings else {
-            panic!("expected a list of findings");
-        };
-        let Json::Object(finding) = &mut findings[0] else {
-            panic!("expected a finding object");
-        };
-        let (_, reason) = finding
-            .iter_mut()
-            .find(|(key, _)| key.is("reason"))
-            .unwrap();
+        let findings = document
+            .get_mut("findings")
+            .and_then(Json::as_array_mut)
+            .expect("expected a list of findings");
+        let reason = findings[0].get_mut("reason").expect("expected a reason");
         *reason = decode(r#""fabricated \uD800""#).unwrap();
 
         crate::viewer::verify_schema(&document).unwrap();

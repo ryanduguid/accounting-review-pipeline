@@ -771,6 +771,8 @@ mod tests {
     fn managed_publication_keeps_the_process_existing_signal_handler() {
         const CHILD: &str = "ARP_TEST_MANAGED_PUBLICATION_SIGNAL_CHILD";
         if std::env::var_os(CHILD).is_none() {
+            // This test runs its own test binary with fixed arguments.
+            // nosemgrep: rust.lang.security.current-exe.current-exe
             let output = crate::child_profile::command(std::env::current_exe().unwrap())
                 .args([
                     "--exact",

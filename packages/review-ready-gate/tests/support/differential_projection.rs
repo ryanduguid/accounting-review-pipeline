@@ -241,7 +241,7 @@ fn rendered_without(document: &Json, slot: &str) -> Result<Json> {
     let mut expected = document_without(document, slot);
     let profile = text(document.at("engagement_type")).unwrap();
     let slots = review_ready_gate::profiles::slots_for(&profile)?;
-    let Json::Object(sources) = field_mut(&mut expected, "source_sha256").unwrap() else {
+    let Json::Object(sources) = expected.get_mut("source_sha256").unwrap() else {
         panic!("fixture must carry source evidence")
     };
     // The probe's canonical JSON sorts keys; the renderer lists evidence in
@@ -271,12 +271,12 @@ fn mutable_fields_require_an_object_and_preserve_siblings() -> Result<()> {
         Json::str("object"),
     ] {
         let before = probe::encode(&value);
-        assert!(field_mut(&mut value, "slot").is_none());
+        assert!(value.get_mut("slot").is_none());
         assert_eq!(probe::encode(&value), before);
     }
     let mut value = probe::decode(r#"{"target":1,"sibling":{"value":2}}"#)?;
-    assert!(field_mut(&mut value, "missing").is_none());
-    *field_mut(&mut value, "target").unwrap() = Json::str("changed");
+    assert!(value.get_mut("missing").is_none());
+    *value.get_mut("target").unwrap() = Json::str("changed");
     assert_eq!(
         probe::encode(&value),
         r#"{"sibling":{"value":2},"target":"changed"}"#
@@ -500,7 +500,7 @@ fn result_projection_requires_its_native_envelope_and_readable_first_file() -> R
         assert_refused(&malformed, "fs_mapping")?;
     }
     let mut missing = source.clone();
-    remove(field_mut(&mut missing, "ok").unwrap(), "files");
+    remove(missing.get_mut("ok").unwrap(), "files");
     assert_refused(&missing, "fs_mapping")?;
     for malformed_files in [
         Json::Null,
@@ -555,8 +555,8 @@ fn complete_result_projection_preserves_the_envelope_and_rendered_bytes() -> Res
     let actual = without_absent_control(&probe::encode(&source), "fs_mapping")?.unwrap();
     assert_eq!(actual, probe::encode(&expected));
     let mut files_only = source.clone();
-    remove(field_mut(&mut files_only, "ok").unwrap(), "pack");
-    remove(field_mut(&mut expected, "ok").unwrap(), "pack");
+    remove(files_only.get_mut("ok").unwrap(), "pack");
+    remove(expected.get_mut("ok").unwrap(), "pack");
     assert_eq!(
         without_absent_control(&probe::encode(&files_only), "fs_mapping")?.unwrap(),
         probe::encode(&expected)
