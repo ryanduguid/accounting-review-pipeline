@@ -1168,6 +1168,32 @@ mod tests {
         assert_eq!(fs::read(tmp.join("source.txt")).unwrap(), original);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn intake_at_the_root_of_a_missing_drive_is_refused() {
+        // No prefix of the root resolves, so it is kept as given and has no parent.
+        let root = (b'A'..=b'Z')
+            .map(|letter| std::path::PathBuf::from(format!("{}:\\", letter as char)))
+            .find(|root| !root.exists())
+            .expect("a drive letter with no volume");
+        let tmp = TempDir::new();
+        let text = source_text();
+        fs::write(tmp.join("source.txt"), &text).unwrap();
+        fs::write(tmp.join("text.txt"), &text).unwrap();
+        let error = create_intake(IntakeOptions {
+            source: &tmp.join("source.txt"),
+            text: &tmp.join("text.txt"),
+            output: &root,
+            entity: "Demo",
+            period: "2026-03-31",
+            origin: "manual",
+            version: "",
+        })
+        .unwrap_err();
+        assert!(error.contains("(os error 3)"), "{error}");
+        assert!(!root.exists());
+    }
+
     #[test]
     fn intake_can_retry_after_a_partial_write() {
         let tmp = TempDir::new();

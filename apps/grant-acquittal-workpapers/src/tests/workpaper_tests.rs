@@ -1202,3 +1202,18 @@ fn parent_navigation_preserves_a_regular_file_blocker() {
     assert!(fixture.temporary_directories().is_empty());
     assert_eq!(source_byte_snapshot(&fixture), sources);
 }
+
+#[cfg(windows)]
+#[test]
+fn an_output_on_a_missing_drive_reports_the_drive_root() {
+    let drive = (b'A'..=b'Z')
+        .map(|letter| format!("{}:\\", letter as char))
+        .find(|root| !Path::new(root).exists())
+        .expect("a drive letter with no volume");
+    let fixture = Fixture::new();
+    let result = fixture.review().unwrap();
+    let message = refused(fixture.write(&result, &format!("{drive}missing\\pack")));
+    assert!(message.starts_with("[WinError 3] "), "{message:?}");
+    assert!(message.contains(&format!("{}:", &drive[..1])), "{message:?}");
+    assert!(!Path::new(&drive).exists());
+}
