@@ -363,23 +363,6 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-        // Refusing only the work tree's identity still leaves the inspection incomplete.
-        let error = enclosing_repository(
-            &temp.join("outside/july"),
-            Some(tree.as_os_str()),
-            &mut |path| {
-                if path.ends_with("client-files") {
-                    Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "injected work-tree refusal",
-                    ))
-                } else {
-                    Ok((1, 2))
-                }
-            },
-        )
-        .unwrap_err();
-        assert_eq!(error.to_string(), "injected work-tree refusal");
         let alias = temp.join("CLIENT-FILES");
         if cfg!(windows) {
             assert!(
@@ -400,6 +383,28 @@ mod tests {
         .unwrap()
         .unwrap();
         assert!(aliased.1.contains("GIT_WORK_TREE"));
+    }
+    #[test]
+    fn refusing_only_the_work_trees_identity_leaves_the_inspection_incomplete() {
+        let temp = TempDir::new();
+        let tree = temp.join("client-files");
+        fs::create_dir(&tree).unwrap();
+        let error = enclosing_repository(
+            &temp.join("outside/july"),
+            Some(tree.as_os_str()),
+            &mut |path| {
+                if path.ends_with("client-files") {
+                    Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "injected work-tree refusal",
+                    ))
+                } else {
+                    Ok((1, 2))
+                }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "injected work-tree refusal");
     }
     #[test]
     fn redirecting_the_supplied_symlink_after_validation_keeps_writes_at_the_approved_directory() {
