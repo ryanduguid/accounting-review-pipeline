@@ -961,12 +961,8 @@ mod tests {
             );
             reviewed(&path);
             let loaded = load_document(&path).unwrap();
-            assert_eq!(
-                loaded.issues.is_empty(),
-                unresolved.is_empty(),
-                "{}",
-                pyjson::canonical(case.at("id"))
-            );
+            let id = pyjson::canonical(case.at("id"));
+            assert_eq!(loaded.issues.is_empty(), unresolved.is_empty(), "{id}");
         }
     }
     #[test]

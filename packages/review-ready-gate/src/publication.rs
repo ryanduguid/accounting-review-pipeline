@@ -44,16 +44,18 @@ impl ManagedPublication {
         #[cfg(unix)]
         let previous = {
             let mut action = std::mem::MaybeUninit::<libc::sigaction>::zeroed();
+            let target = action.as_mut_ptr();
             // SAFETY: sigaction fills the supplied structure; no handler is changed here.
-            let queried =
-                unsafe { libc::sigaction(libc::SIGTERM, std::ptr::null(), action.as_mut_ptr()) }
-                    == 0;
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+            let queried = unsafe { libc::sigaction(libc::SIGTERM, std::ptr::null(), target) } == 0;
             // SAFETY: a successful query initialised action; a failed one is not read.
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             let default = queried && unsafe { action.assume_init() }.sa_sigaction == libc::SIG_DFL;
             if default {
+                let handler = request_cancel as *const () as usize;
                 // SAFETY: the handler only stores an atomic flag and has static lifetime.
-                let old =
-                    unsafe { libc::signal(libc::SIGTERM, request_cancel as *const () as usize) };
+                // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+                let old = unsafe { libc::signal(libc::SIGTERM, handler) };
                 (old != libc::SIG_ERR).then_some(old)
             } else {
                 None
@@ -69,6 +71,7 @@ impl ManagedPublication {
             } else {
                 if old != usize::MAX {
                     // SAFETY: puts back the handler signal() just returned.
+                    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
                     unsafe { win_signal(15, old) };
                 }
                 None
