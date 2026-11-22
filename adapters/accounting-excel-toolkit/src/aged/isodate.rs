@@ -143,7 +143,9 @@ pub fn from_ordinal(value: i32) -> Option<Date> {
         }
     }
     let mut remaining = value - ordinal(Date::new(low, 1, 1)?) + 1;
-    for month in 1..=12 {
+    // A month past December has no length, so the search ends there.
+    let mut month = 1;
+    loop {
         let length = (28..=31)
             .rev()
             .find(|&day| Date::new(low, month, day).is_some())?;
@@ -151,8 +153,8 @@ pub fn from_ordinal(value: i32) -> Option<Date> {
             return Date::new(low, month, remaining as u32);
         }
         remaining -= length as i32;
+        month += 1;
     }
-    None
 }
 #[cfg(test)]
 mod tests {

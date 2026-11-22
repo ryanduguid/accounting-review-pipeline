@@ -63,9 +63,8 @@ fn inventory(receipt: &Value) -> Result<BTreeSet<String>> {
         .keys()
         .map(String::as_str)
         .collect();
-    if names != SOURCES.into_iter().collect() {
-        return Err("Export source inventory differs from the fixed case.".into());
-    }
+    let fixed = names == SOURCES.into_iter().collect();
+    super::ensure(fixed, "Export source inventory differs from the fixed case.")?;
     Ok(fixed_inventory())
 }
 
@@ -203,9 +202,8 @@ fn capture_display(members: &mut Members, bin_dir: &Path) -> Result<()> {
     }
     let (html, projected) = html::render_projected(&temporary.0, bin_dir, None)?;
     members.insert("review.html".into(), html.into_bytes());
-    if projected.len() != PROJECTIONS.len() || !PROJECTIONS.iter().all(|name| projected.contains_key(*name)) {
-        return Err("Export projection inventory differs.".into());
-    }
+    let complete = projected.len() == PROJECTIONS.len() && PROJECTIONS.iter().all(|name| projected.contains_key(*name));
+    super::ensure(complete, "Export projection inventory differs.")?;
     members.extend(
         projected
             .into_iter()

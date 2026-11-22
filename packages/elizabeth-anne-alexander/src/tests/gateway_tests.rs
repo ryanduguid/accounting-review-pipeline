@@ -199,12 +199,14 @@ fn test_policy_bound_evaluation_returns_one_redacted_revenue_finding() {
         model,
         evidence,
         receipt,
+        shown,
     } = evaluate(&env(dir.path()));
     assert_eq!(text(model.at("status")), "REVIEW_READY");
     let Json::Array(found) = model.at("findings") else {
         panic!()
     };
     assert_eq!(found.len(), 1);
+    assert_eq!(shown, 1);
     assert_eq!(text(get(&model, &["findings", "0", "section"])), "Revenue");
     // 11000 / 60000, expressed in per cent and quantized to 4 decimal places.
     assert_eq!(text(get(&model, &["findings", "0", "percent_change"])), "18.3333");
