@@ -547,13 +547,8 @@ fn split_identifiers(text: &str, kept: Option<&[bool]>, stats: &mut ScanStats) -
         while last < gaps.len() && gaps[last] != Gap::Break {
             last += 1;
         }
-        found.extend(chain_identifiers(
-            &text,
-            &runs[first..=last],
-            &gaps[first..last],
-            kept,
-            stats,
-        )?);
+        let chain = chain_identifiers(&text, &runs[first..=last], &gaps[first..last], kept, stats)?;
+        found.extend(chain);
         first = last + 1;
     }
     Ok(found)
@@ -791,10 +786,9 @@ fn residual_with_lines(text: &str, lines: &Lines) -> Result<Vec<Unknown>> {
     let masked = Mask::new(text).blank("ADDRESS")?.blank("DOB")?;
     let mut names = Vec::new();
     for s in patterns::person_names(&masked.text)? {
-        if patterns::has("PLACEHOLDER", &s.value)? {
-            continue;
+        if !patterns::has("PLACEHOLDER", &s.value)? {
+            names.push(lines.unknown("name", &s.value, (masked.original[s.start], masked.original[s.end])));
         }
-        names.push(lines.unknown("name", &s.value, (masked.original[s.start], masked.original[s.end])));
     }
     names.sort_by(|a, b| (a.line, &a.value).cmp(&(b.line, &b.value)));
     let numeric = masked.blank("CARRIED_PLACEHOLDER")?;
@@ -928,11 +922,11 @@ pub fn redact(text: &str, entries: &[Entity]) -> Result<Redaction> {
     }
     unknowns.extend(cut_numbers(&text, &lines, &kept)?);
     for (kind, n) in entities {
-        if let Some((_, old)) = counts.iter_mut().find(|(k, _)| k == &kind) {
-            *old += n;
-        } else {
-            counts.push((kind, n));
+        let at = counts.iter().position(|(k, _)| k == &kind).unwrap_or(counts.len());
+        if at == counts.len() {
+            counts.push((kind, 0));
         }
+        counts[at].1 += n;
     }
     Ok(Redaction {
         source: text,

@@ -31,22 +31,17 @@ fn close_file(file: std::fs::File) -> io::Result<()> {
         use std::os::fd::IntoRawFd;
         let descriptor = file.into_raw_fd();
         // SAFETY: we own this descriptor, and relinquished File's destructor.
-        if unsafe { libc::close(descriptor) } == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        let closed = unsafe { libc::close(descriptor) } == 0;
+        closed.then_some(()).ok_or_else(io::Error::last_os_error)
     }
     #[cfg(windows)]
     {
         use std::os::windows::io::IntoRawHandle;
         let handle = file.into_raw_handle();
         // SAFETY: we own this handle, and relinquished File's destructor.
-        if unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) } != 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let closed = unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) } != 0;
+        closed.then_some(()).ok_or_else(io::Error::last_os_error)
     }
 }
 

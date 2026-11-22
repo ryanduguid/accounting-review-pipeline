@@ -231,12 +231,12 @@ fn normal(args: &Parsed, stdout: &mut dyn Write) -> Result<i32> {
             let out = args.path("--out");
             let restored = match verify::restore(&text, &entries) {
                 Ok(text) => text,
-                Err(error) if error.contains("lone surrogate") => {
+                Err(error) => {
                     // Python opens/truncates the file before UTF-8 encoding fails.
-                    files::write(&out, "", ending)?;
+                    let truncate = error.contains("lone surrogate");
+                    truncate.then(|| files::write(&out, "", ending)).transpose()?;
                     return Err(error);
                 }
-                Err(error) => return Err(error),
             };
             files::write(&out, &restored, ending)?;
             let _ = writeln!(stdout, "wrote {}", files::text(&out));
