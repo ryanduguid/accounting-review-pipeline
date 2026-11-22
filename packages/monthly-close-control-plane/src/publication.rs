@@ -385,6 +385,28 @@ mod tests {
         assert!(aliased.1.contains("GIT_WORK_TREE"));
     }
     #[test]
+    fn refusing_only_the_work_trees_identity_leaves_the_inspection_incomplete() {
+        let temp = TempDir::new();
+        let tree = temp.join("client-files");
+        fs::create_dir(&tree).unwrap();
+        let error = enclosing_repository(
+            &temp.join("outside/july"),
+            Some(tree.as_os_str()),
+            &mut |path| {
+                if path.ends_with("client-files") {
+                    Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "injected work-tree refusal",
+                    ))
+                } else {
+                    Ok((1, 2))
+                }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "injected work-tree refusal");
+    }
+    #[test]
     fn redirecting_the_supplied_symlink_after_validation_keeps_writes_at_the_approved_directory() {
         let temp = TempDir::new();
         let safe = temp.join("safe");
@@ -834,6 +856,53 @@ mod tests {
         );
         assert!(result.unwrap_err().contains("injected write failure"));
         assert!(!output.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_new_directory_the_parent_refuses_is_reported_without_writing() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = TempDir::new();
+        let sealed = temp.0.join("sealed");
+        fs::create_dir(&sealed).unwrap();
+        fs::set_permissions(&sealed, fs::Permissions::from_mode(0o500)).unwrap();
+        // A privileged user creates directories anywhere, so nothing is refused.
+        let privileged = fs::create_dir(sealed.join("probe")).is_ok();
+        let mut write = |file: &mut fs::File, bytes: &[u8]| file.write_all(bytes);
+        let result = write_new_with(
+            &sealed.join("pack"),
+            || Ok(vec![("report.txt".into(), b"report".to_vec())]),
+            &mut write,
+        );
+        fs::set_permissions(&sealed, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            privileged
+                || (result
+                    .as_ref()
+                    .is_err_and(|e| e.contains("Permission denied"))
+                    && !sealed.join("pack").exists()),
+            "{result:?}"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_new_directory_at_the_root_of_a_missing_drive_is_refused() {
+        let root = (b'A'..=b'Z')
+            .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
+            .find(|root| !root.exists())
+            .expect("a drive letter with no volume");
+        let mut write = |file: &mut fs::File, bytes: &[u8]| file.write_all(bytes);
+        let result = write_new_with(
+            &root,
+            || Ok(vec![("report.txt".into(), b"report".to_vec())]),
+            &mut write,
+        );
+        assert!(
+            result.as_ref().is_err_and(|e| e.contains("(os error 3)")),
+            "{result:?}"
+        );
+        assert!(!root.exists());
     }
 
     #[test]
