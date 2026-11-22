@@ -58,20 +58,15 @@ fn python_stdout(unbuffered: bool) -> Box<dyn std::io::Write + Send> {
     if stdout.is_terminal() {
         return Box::new(std::io::LineWriter::new(stdout));
     }
-    if unbuffered {
-        #[cfg(unix)]
-        let handle = std::os::fd::AsFd::as_fd(&stdout)
-            .try_clone_to_owned()
-            .map(std::fs::File::from);
-        #[cfg(windows)]
-        let handle = std::os::windows::io::AsHandle::as_handle(&stdout)
-            .try_clone_to_owned()
-            .map(std::fs::File::from);
-        if let Ok(file) = handle {
-            return Box::new(file);
-        }
+    #[cfg(unix)]
+    let duplicate = || std::os::fd::AsFd::as_fd(&stdout).try_clone_to_owned();
+    #[cfg(windows)]
+    let duplicate = || std::os::windows::io::AsHandle::as_handle(&stdout).try_clone_to_owned();
+    // A handle that cannot be duplicated keeps the buffer.
+    match unbuffered.then(duplicate).and_then(Result::ok) {
+        Some(handle) => Box::new(std::fs::File::from(handle)),
+        None => Box::new(std::io::BufWriter::with_capacity(128 * 1024, stdout)),
     }
-    Box::new(std::io::BufWriter::with_capacity(128 * 1024, stdout))
 }
 
 fn main() -> std::process::ExitCode {

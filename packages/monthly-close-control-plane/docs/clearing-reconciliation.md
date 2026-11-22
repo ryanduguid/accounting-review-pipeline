@@ -155,10 +155,10 @@ controls as the source ledger.
 Research on 10 September 2026 found a long-running
 [Xero customer request for clearing and non-bank-account reconciliation](https://productideas.xero.com/forums/967136-banking-chart-of-accounts/suggestions/44960296-reconciliation-ability-to-reconcile-clearing-co).
 Users describe matching transactions across months and maintaining outstanding
-items in Excel. [RecHound](https://apps.xero.com/au/app/rechound) already provides
-connected reconciliation and review workflows. This experiment tests a smaller,
-local alternative using mapped files. Demand for that specific alternative,
-reviewer time savings and willingness to pay have not been established.
+items in Excel. A rival Xero app already provides connected reconciliation
+and review workflows. This experiment tests a smaller, local alternative
+using mapped files. Demand for that specific alternative, reviewer time
+savings and willingness to pay have not been established.
 
 ## Before a practice pilot
 

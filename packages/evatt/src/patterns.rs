@@ -94,21 +94,18 @@ pub fn valid(kind: &str, digits: &str) -> Result<bool> {
                 .ok_or_else(|| "invalid literal for int() in identifier checksum".to_string())
         })
         .collect::<Result<_>>()?;
-    let weights: &[i32] = match kind {
-        "tfn" => &[1, 4, 3, 7, 5, 8, 6, 9, 10],
-        "abn" => &[10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19],
-        "acn" => &[8, 7, 6, 5, 4, 3, 2, 1],
-        "medicare" => &[1, 3, 7, 9, 1, 3, 7, 9],
+    type Check = fn(i32, &[i32]) -> bool;
+    let (weights, check): (&[i32], Check) = match kind {
+        "tfn" => (&[1, 4, 3, 7, 5, 8, 6, 9, 10], |sum, _| sum % 11 == 0),
+        "abn" => (&[10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19], |sum, _| (sum - 10) % 89 == 0),
+        "acn" => (&[8, 7, 6, 5, 4, 3, 2, 1], |sum, values| {
+            (10 - sum % 10) % 10 == values[8]
+        }),
+        "medicare" => (&[1, 3, 7, 9, 1, 3, 7, 9], |sum, values| sum % 10 == values[8]),
         _ => return Ok(true),
     };
     let sum: i32 = values.iter().zip(weights).map(|(v, w)| v * w).sum();
-    Ok(match kind {
-        "tfn" => sum % 11 == 0,
-        "abn" => (sum - 10) % 89 == 0,
-        "acn" => (10 - sum % 10) % 10 == values[8],
-        "medicare" => sum % 10 == values[8],
-        _ => true,
-    })
+    Ok(check(sum, &values))
 }
 
 pub const STRUCTURED: &[(&str, &str)] = &[

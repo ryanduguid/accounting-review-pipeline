@@ -780,10 +780,7 @@ fn run_evaluate(
     } else {
         String::new()
     };
-    let shown = match evaluation.model.at("findings") {
-        Json::Array(items) => items.len(),
-        _ => 0,
-    };
+    let shown = evaluation.shown;
     emit(
         stdout,
         &format!("elizabeth-anne-alexander: REVIEW_READY; {shown} bounded finding(s){truncation}"),

@@ -674,9 +674,8 @@ pub fn gst_reasonableness_exceptions(
             let net = gst_difference(sales, purchases, &recorded, &settled, absolute, percentage)?;
             let mut found = Vec::from_iter(net);
             if sided {
-                found.extend(gst_side_differences(
-                    &sides, declared, absolute, percentage,
-                )?);
+                let side = gst_side_differences(&sides, declared, absolute, percentage)?;
+                found.extend(side);
             }
             found
         }
@@ -1210,13 +1209,14 @@ pub fn review_with(
             &config.reconciliation_tolerance,
         ));
         if let Some(mapping) = &gst_mapping {
-            let (found, ran) = gst_reasonableness_exceptions(
+            let checked = gst_reasonableness_exceptions(
                 &current_rows,
                 mapping,
                 gst_settlements.as_ref().map_err(String::as_str),
                 &config.gst_absolute_tolerance,
                 &config.gst_percentage_tolerance,
-            )?;
+            );
+            let (found, ran) = checked?;
             exceptions.extend(found);
             gst_ran = ran;
         }

@@ -65,18 +65,15 @@ impl SourceSnapshot {
         })?;
         Ok(Self::new(path, content))
     }
-    pub fn text(&self, label: &str, bom: bool) -> Result<&str> {
+    /// The content as UTF-8 without a leading byte order mark.
+    pub fn text(&self, label: &str) -> Result<&str> {
         let text = std::str::from_utf8(&self.content).map_err(|_| {
             format!(
                 "{label} could not be read as UTF-8: {}.",
                 pypath::text(&self.path)
             )
         })?;
-        Ok(if bom {
-            text.strip_prefix('\u{feff}').unwrap_or(text)
-        } else {
-            text
-        })
+        Ok(text.strip_prefix('\u{feff}').unwrap_or(text))
     }
 }
 
@@ -259,7 +256,7 @@ pub(crate) fn csv_rows<'a>(
     label: &str,
 ) -> Result<CsvRows<'a>> {
     let path = pypath::text(&snapshot.path);
-    let reader = DictReader::new(snapshot.text(label, true)?)
+    let reader = DictReader::new(snapshot.text(label)?)
         .map_err(|error| format!("{path}: {label} is not valid CSV: {error}."))?;
     let headers = reader
         .fieldnames
@@ -398,7 +395,7 @@ pub fn load_mapping_policy(
 
 pub fn load_balance_policy(snapshot: &SourceSnapshot) -> Result<BTreeMap<String, (String, bool)>> {
     let path = pypath::text(&snapshot.path);
-    let text = snapshot.text("Balance policy", true)?;
+    let text = snapshot.text("Balance policy")?;
     let rows = crate::pycsv::Reader::strict(text)
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|error| format!("{path}: balance policy is not valid CSV: {error}."))?;
@@ -602,7 +599,7 @@ pub fn load_reviewer_acknowledgement(
     };
     let path = pypath::text(&snapshot.path);
     let payload =
-        pyjson::loads(snapshot.text("Review-note file", true)?).map_err(|error| match error {
+        pyjson::loads(snapshot.text("Review-note file")?).map_err(|error| match error {
             LoadError::Invalid => format!("{path}: review note is not valid JSON."),
             LoadError::DuplicateKey(key) => format!(
                 "{path}: review note could not be read (JSON member {} appears more than once.).",

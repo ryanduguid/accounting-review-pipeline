@@ -5,10 +5,6 @@
 use crate::{Failure, Result};
 
 #[cfg(windows)]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one DPAPI call with its buffer handling"
-)]
 fn transform(data: &[u8], protect: bool) -> Result<Vec<u8>> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, LocalFree},
@@ -54,30 +50,47 @@ fn transform(data: &[u8], protect: bool) -> Result<Vec<u8>> {
         }
     };
     if ok == 0 {
-        return Err(if protect {
-            Failure::message(format!(
-                "error: Windows DPAPI could not protect token.json (Windows error {}); no token was saved.",
-                unsafe { GetLastError() }
-            ))
-        } else {
-            Failure::message(
-                "error: token.json's DPAPI payload is corrupt or cannot be opened by this Windows user; the file was left unchanged. Run: xero-tb-auth",
-            )
-        });
+        // SAFETY: reads this thread's error immediately after the DPAPI call failed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        return Err(refusal(protect, unsafe { GetLastError() }));
     }
-    // SAFETY: a successful DPAPI call returns cbData readable bytes, or an empty
-    // output. Copy them before freeing the allocation exactly once.
-    let bytes = if output.pbData.is_null() {
-        Vec::new()
+    // SAFETY: a successful DPAPI call returns cbData readable bytes, or an empty output.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    Ok(unsafe { take(&output, |data| LocalFree(data.cast())) })
+}
+
+/// Copy DPAPI's output, then free a non-null allocation exactly once.
+///
+/// # Safety
+/// `output` is null or holds `cbData` readable bytes that `free` releases.
+#[cfg(windows)]
+unsafe fn take(
+    output: &windows_sys::Win32::Security::Cryptography::CRYPT_INTEGER_BLOB,
+    free: impl FnOnce(*mut u8) -> *mut std::ffi::c_void,
+) -> Vec<u8> {
+    if output.pbData.is_null() {
+        return Vec::new();
+    }
+    let length = output.cbData as usize;
+    // SAFETY: the caller guarantees cbData readable bytes; they are copied before the free.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let bytes = unsafe { std::slice::from_raw_parts(output.pbData, length) }.to_vec();
+    free(output.pbData);
+    bytes
+}
+
+/// Why DPAPI refused: protection reports the Windows error, unprotection the remedy.
+#[cfg(windows)]
+fn refusal(protect: bool, code: u32) -> Failure {
+    if protect {
+        Failure::message(format!(
+            "error: Windows DPAPI could not protect token.json (Windows error {code}); no token was saved."
+        ))
     } else {
-        unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() }
-    };
-    if !output.pbData.is_null() {
-        unsafe {
-            LocalFree(output.pbData.cast());
-        }
+        Failure::message(
+            "error: token.json's DPAPI payload is corrupt or cannot be opened by this Windows user; the file was left unchanged. Run: xero-tb-auth",
+        )
     }
-    Ok(bytes)
 }
 
 #[cfg(not(windows))]
@@ -110,6 +123,25 @@ mod tests {
                 "error: Windows DPAPI is unavailable on this platform; token.json was not changed.\n"
             );
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_protection_refusal_names_the_windows_error_and_a_null_output_is_empty() {
+        let failure = refusal(true, 5);
+        assert!(
+            failure
+                .stderr
+                .contains("(Windows error 5); no token was saved.")
+        );
+        let null = windows_sys::Win32::Security::Cryptography::CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
+        // SAFETY: a null output has nothing to read or free.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let bytes = unsafe { take(&null, |_| panic!("a null output was freed")) };
+        assert!(bytes.is_empty());
     }
 
     #[cfg(windows)]

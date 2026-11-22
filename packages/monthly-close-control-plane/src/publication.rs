@@ -170,9 +170,8 @@ fn publish_with(
     let swaps = (|| -> io::Result<()> {
         for (staged, destination) in staged.iter().zip(&destinations) {
             let preserve_prior = match fs::symlink_metadata(destination) {
-                Ok(metadata) => !metadata.is_dir(),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => false,
-                Err(error) => return Err(error),
+                metadata => !metadata?.is_dir(),
             };
             let parked = if preserve_prior {
                 let parked = partial(destination)?;

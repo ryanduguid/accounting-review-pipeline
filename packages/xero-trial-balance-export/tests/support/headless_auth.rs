@@ -10,7 +10,10 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{Ipv4Addr, TcpListener, TcpStream},
     process::Child,
-    sync::mpsc::{self, Receiver},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        mpsc::{self, Receiver},
+    },
     thread::JoinHandle,
 };
 use xero_trial_balance_export::auth;
@@ -108,12 +111,24 @@ fn contain(command: &mut Command, layout: &TokenLayout) {
         .env("TEMP", &layout.temp);
 }
 
+/// A loopback callback port for the consent child. A port from `bind(0)` is
+/// free only until its listener closes, and the proxies these tests start also
+/// bind port 0, so one could take it before the child binds it. The child then
+/// refuses the port and exits before printing its URL. `bind(0)` never hands out
+/// ports below the ephemeral range, and a counter keeps parallel tests apart.
 fn redirect() -> String {
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-    format!(
-        "http://localhost:{}/callback",
-        listener.local_addr().unwrap().port()
-    )
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let range = fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range").unwrap();
+    let low: u32 = range.split_whitespace().next().unwrap().parse().unwrap();
+    let span = low - 1024;
+    let start = std::process::id() % span;
+    let port = loop {
+        let port = 1024 + (start + NEXT.fetch_add(1, Ordering::Relaxed)) % span;
+        if TcpListener::bind((Ipv4Addr::LOCALHOST, port as u16)).is_ok() {
+            break port;
+        }
+    };
+    format!("http://localhost:{port}/callback")
 }
 
 fn auth_command(layout: &TokenLayout, redirect: &str, proxy: &Proxy) -> Command {

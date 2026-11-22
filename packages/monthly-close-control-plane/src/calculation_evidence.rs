@@ -153,8 +153,8 @@ pub fn load(snapshot: &SourceSnapshot) -> Result<CalculationEvidence> {
         return Err(format!("{path}: evidence file exceeds {MAX_BYTES} bytes."));
     }
     let record =
-        pyjson::loads(snapshot.text("Calculation-evidence file", true)?).map_err(|error| {
-            match error {
+        pyjson::loads(snapshot.text("Calculation-evidence file")?).map_err(
+            |error| match error {
                 LoadError::Invalid => format!("{path}: evidence is not valid JSON."),
                 LoadError::DuplicateKey(key) => format!(
                     "{path}: evidence could not be read (JSON member {} appears more than once.).",
@@ -168,8 +168,8 @@ pub fn load(snapshot: &SourceSnapshot) -> Result<CalculationEvidence> {
                 LoadError::Crash(reason) => {
                     format!("{path}: evidence could not be read ({reason}).")
                 }
-            }
-        })?;
+            },
+        )?;
     if !matches!(record, Json::Object(_)) {
         return Err(format!("{path}: evidence must be a JSON object."));
     }
