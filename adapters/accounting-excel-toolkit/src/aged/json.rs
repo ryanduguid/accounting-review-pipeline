@@ -697,22 +697,6 @@ fn sorted_pairs(pairs: &[(PyStr, Json)]) -> Vec<&(PyStr, Json)> {
     sorted
 }
 
-fn write_scalar(out: &mut String, value: &Json) -> bool {
-    match value {
-        Json::Null => out.push_str("null"),
-        Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Json::Int(i) => out.push_str(&i.to_string()),
-        Json::Float(f) if f.is_nan() => out.push_str("NaN"),
-        Json::Float(f) if f.is_infinite() => {
-            out.push_str(if *f > 0.0 { "Infinity" } else { "-Infinity" })
-        }
-        Json::Float(f) => out.push_str(&float_repr(*f)),
-        Json::Str(s) => write_str(out, s),
-        _ => return false,
-    }
-    true
-}
-
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
 pub fn canonical(value: &Json) -> String {
     let mut out = String::new();
@@ -760,9 +744,15 @@ fn write_inline(out: &mut String, value: &Json, sort: bool, separators: (&str, &
             }
             out.push('}');
         }
-        Json::Null | Json::Bool(_) | Json::Int(_) | Json::Float(_) | Json::Str(_) => {
-            write_scalar(out, value);
+        Json::Null => out.push_str("null"),
+        Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Json::Int(i) => out.push_str(&i.to_string()),
+        Json::Float(f) if f.is_nan() => out.push_str("NaN"),
+        Json::Float(f) if f.is_infinite() => {
+            out.push_str(if *f > 0.0 { "Infinity" } else { "-Infinity" })
         }
+        Json::Float(f) => out.push_str(&float_repr(*f)),
+        Json::Str(s) => write_str(out, s),
     }
 }
 
@@ -842,7 +832,7 @@ fn pretty_write(out: &mut Vec<u32>, value: &Json, level: usize, sort: bool, asci
         }
         _ => {
             let mut scalar = String::new();
-            write_scalar(&mut scalar, value);
+            write_inline(&mut scalar, value, sort, (", ", ": "));
             pretty_append(out, &scalar);
         }
     }
