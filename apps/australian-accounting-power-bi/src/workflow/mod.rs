@@ -28,6 +28,11 @@ mod schema;
 
 type Result<T> = std::result::Result<T, String>;
 
+/// Refuse with `message` unless `holds`.
+fn ensure(holds: bool, message: &str) -> Result<()> {
+    if holds { Ok(()) } else { Err(message.into()) }
+}
+
 const MAX_EXPORT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_EXPORT_MEMBER: usize = 512 * 1024;
 const MAX_EXPORT_FILES: usize = 64;
