@@ -64,13 +64,10 @@ pub(super) fn render_projected(run: &Path, bin_dir: &Path, previous: Option<&Pat
 fn changes(run: &Path, previous: &Path, bin_dir: &Path, verified: &run::Verified) -> Result<(String, Value)> {
     let old = run::verify(previous)?;
     let receipt = &verified.receipt;
-    if old.receipt["case"] != receipt["case"] {
-        return Err("Comparison context differs.".into());
-    }
+    super::ensure(old.receipt["case"] == receipt["case"], "Comparison context differs.")?;
     let manifest = &receipt["producer_manifests"]["close-control"];
-    if old.receipt["producer_manifests"]["close-control"] != *manifest {
-        return Err("Comparison producer installed identities differ.".into());
-    }
+    let same = old.receipt["producer_manifests"]["close-control"] == *manifest;
+    super::ensure(same, "Comparison producer installed identities differ.")?;
     let args = [
         "compare".into(),
         "--previous-pack".into(),
