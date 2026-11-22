@@ -430,4 +430,10 @@ mod tests {
         assert!(error.starts_with("detector refused input:"));
         assert!(error.contains("backtrack"));
     }
+
+    #[test]
+    fn kinds_without_a_checksum_accept_any_digits_of_the_default_length() {
+        assert_eq!(valid("passport", "000000000"), Ok(true));
+        assert_eq!(valid("passport", "00000000"), Ok(false));
+    }
 }

@@ -633,6 +633,22 @@ pub fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> O
 mod tests {
     use super::*;
 
+    #[test]
+    fn wrapped_usage_without_options_matches_argparse() {
+        // argparse 3.15, prog "evatt", three positionals, add_help=False, COLUMNS=22.
+        let parts: Vec<Part> = ["aaaa", "bbbb", "cccc"]
+            .map(|name| Part {
+                plain: name.into(),
+                coloured: name.into(),
+            })
+            .into();
+        let indent = " ".repeat(13);
+        assert_eq!(
+            format!("usage: evatt{}", wrapped_usage("evatt", &[], &parts, 20)),
+            format!("usage: evatt aaaa\n{indent}bbbb\n{indent}cccc")
+        );
+    }
+
     fn diagnostics(args: &[&str]) -> String {
         let args = args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         let mut stdout = Vec::new();

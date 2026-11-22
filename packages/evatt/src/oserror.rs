@@ -365,6 +365,27 @@ mod error_contract_tests {
 
     #[cfg(windows)]
     #[test]
+    fn a_full_disk_and_unmapped_system_errors_use_cpython_file_errnos() {
+        // ERROR_DISK_FULL, then ERROR_INVALID_FUNCTION, which the C runtime maps to EINVAL.
+        for (code, expected) in [
+            (112, "[Errno 28] No space left on device: 'out.md'"),
+            (1, "[Errno 22] Invalid argument: 'out.md'"),
+        ] {
+            assert_eq!(file_error(&io::Error::from_raw_os_error(code), "out.md"), expected);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_lone_high_surrogate_encodes_as_the_replacement_character() {
+        use std::os::unix::ffi::OsStrExt;
+        let mut text = String::from("in");
+        pytext::push_code_point(&mut text, 0xD800);
+        assert_eq!(encode_os(&text), std::ffi::OsStr::from_bytes("in\u{FFFD}".as_bytes()));
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn real_filesystem_errors_use_cpython_file_errnos() {
         let scratch = Scratch::new();
         let existing = scratch.0.join("existing");
