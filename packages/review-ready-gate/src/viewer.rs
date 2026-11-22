@@ -73,10 +73,23 @@ pub(crate) fn parse_json(payload: &[u8]) -> Result<Json> {
         }
         LoadError::Crash(msg) => format!("{JSON_NAME}: not readable ({msg})"),
     })?;
-    let Json::Object(pairs) = &document else {
+    verify_top_level(&document)?;
+    Ok(document)
+}
+
+pub(crate) fn verify_top_level(document: &Json) -> Result<()> {
+    let Json::Object(pairs) = document else {
         return Err(format!("{JSON_NAME}: top level must be a JSON object"));
     };
-    let members: BTreeSet<_> = pairs.iter().map(|(k, _)| k.os_text()).collect();
+    let mut members = BTreeSet::new();
+    for (key, _) in pairs {
+        if !members.insert(key.os_text()) {
+            return Err(format!(
+                "{JSON_NAME}: member {} appears more than once",
+                pytext::repr_code_points(&key.0)
+            ));
+        }
+    }
     let unknown: Vec<_> = members
         .iter()
         .filter(|s| !JSON_MEMBERS.contains(&s.as_str()) && !OPTIONAL_MEMBERS.contains(&s.as_str()))
@@ -100,7 +113,7 @@ pub(crate) fn parse_json(payload: &[u8]) -> Result<Json> {
             missing.join(", ")
         ));
     }
-    Ok(document)
+    Ok(())
 }
 fn threshold(value: &Json) -> Result<Decimal> {
     let text = string(value)

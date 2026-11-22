@@ -1,6 +1,106 @@
 use super::*;
 
 #[test]
+#[should_panic(expected = "fixture must be an object")]
+fn changing_a_scalar_as_a_fixture_reports_the_shape() {
+    set(&mut Json::Null, &["synthetic"], Json::Bool(true));
+}
+
+#[test]
+#[should_panic(expected = "fixture findings must be an array")]
+fn mutating_non_array_findings_reports_the_shape() {
+    fixture_findings(&mut Json::object([("findings", Json::Null)]));
+}
+
+#[test]
+fn missing_or_malformed_review_fixtures_identify_the_affected_file() -> Result<()> {
+    let scratch = Scratch::new()?;
+    let example = scratch.0.join("document-review.example.json");
+    let missing = review_fixture(&scratch.0).unwrap_err().to_string();
+    assert!(missing.starts_with(&format!(
+        "cannot read review fixture {}: ",
+        example.display()
+    )));
+
+    fs::write(&example, b"{")?;
+    let malformed = review_fixture(&scratch.0).unwrap_err().to_string();
+    assert!(malformed.starts_with(&format!("invalid review fixture {}: ", example.display())));
+    assert_eq!(fs::read(&example)?, b"{");
+    assert_eq!(fs::read_dir(&scratch.0)?.count(), 1);
+    Ok(())
+}
+
+#[test]
+fn malformed_pack_documents_do_not_leave_a_saved_fixture() -> Result<()> {
+    let scratch = Scratch::new()?;
+    for (document, expected) in [
+        (Json::Null, "top level must be a JSON object"),
+        (Json::object([]), "missing top-level member(s)"),
+        (
+            Json::object([("other", Json::Null)]),
+            "unknown top-level member(s): other",
+        ),
+        (
+            Json::object([
+                ("overall_status", Json::Null),
+                ("overall_status", Json::Null),
+            ]),
+            "member 'overall_status' appears more than once",
+        ),
+    ] {
+        let failure = save_pack_document(&scratch.0, "malformed", &document).unwrap_err();
+        assert!(failure.to_string().contains(expected), "{failure}");
+    }
+    assert_eq!(fs::read_dir(&scratch.0)?.count(), 0);
+    Ok(())
+}
+
+#[test]
+fn a_read_only_prior_findings_fixture_never_queues_a_failed_comparison() -> Result<()> {
+    let root = Scratch::new()?;
+    let inputs = root.0.join("examples/month-end-ready");
+    fs::create_dir_all(&inputs)?;
+    let fixture = inputs.join("prior_findings.csv");
+    let prior = b"synthetic prior findings";
+    fs::write(&fixture, prior)?;
+    let writable = fs::metadata(&fixture)?.permissions();
+    let mut readonly = writable.clone();
+    readonly.set_readonly(true);
+    fs::set_permissions(&fixture, readonly)?;
+
+    let scratch = Scratch::new()?;
+    let mut corpus = Corpus(Vec::new());
+    let result = complete_pack(&mut corpus, &root.0, &scratch.0);
+    let staged = scratch
+        .0
+        .join("month-end-complete")
+        .join("prior_findings.csv");
+    fs::set_permissions(&fixture, writable.clone())?;
+    fs::set_permissions(&staged, writable)?;
+    assert_eq!(fs::read(&fixture)?, prior);
+    match result {
+        Err(error) => {
+            assert!(
+                error.to_string().starts_with(&format!(
+                    "cannot write prior findings fixture {}: ",
+                    staged.display()
+                )),
+                "{error}"
+            );
+            assert!(corpus.0.is_empty());
+            assert_eq!(fs::read(&staged)?, prior);
+        }
+        Ok(()) => {
+            // The test can run with privileges that bypass the copied file mode.
+            assert_eq!(corpus.0.len(), 1);
+            assert!(corpus.0[0].at("name").is_str("pack-month-end-complete"));
+            assert!(fs::read_to_string(&staged)?.contains("BANK_REC_BREAK,bank_rec,CLEARED"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Result<()> {
     let version = Command::new("git").arg("--version").output()?;
     assert!(version.status.success());

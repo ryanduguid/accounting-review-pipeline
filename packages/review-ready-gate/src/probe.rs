@@ -384,6 +384,7 @@ pub fn example_document_with_documents(
 }
 
 pub fn render_pack(document: &Json) -> Result<[Vec<u8>; 3]> {
+    crate::viewer::verify_top_level(document)?;
     crate::viewer::verify_schema(document)?;
     let findings = document.at("findings").as_array().expect("verified list");
     for item in findings {
