@@ -385,9 +385,7 @@ pub fn example_document_with_documents(
 
 pub fn render_pack(document: &Json) -> Result<[Vec<u8>; 3]> {
     crate::viewer::verify_schema(document)?;
-    let Json::Array(findings) = document.at("findings") else {
-        unreachable!()
-    };
+    let findings = document.at("findings").as_array().expect("verified list");
     for item in findings {
         for field in crate::report::CSV_FIELDS {
             if item
@@ -400,9 +398,10 @@ pub fn render_pack(document: &Json) -> Result<[Vec<u8>; 3]> {
             }
         }
     }
-    let Json::Object(sources) = document.at("source_sha256") else {
-        unreachable!()
-    };
+    let sources = document
+        .at("source_sha256")
+        .as_object()
+        .expect("verified object");
     let evidence = sources
         .iter()
         .map(|(slot, value)| SourceEvidence {
@@ -491,23 +490,16 @@ mod tests {
         let mut document = example_document("bas", &fixtures, "0.01").unwrap();
         assert!(render_pack(&document).is_ok());
 
-        let Json::Object(fields) = &mut document else {
-            panic!("expected the example readiness document");
-        };
-        let (_, findings) = fields
+        let doc = &mut document;
+        let Json::Object(fields) = doc else { panic!() };
+        let (_, found) = fields
             .iter_mut()
             .find(|(key, _)| key.is("findings"))
             .unwrap();
-        let Json::Array(findings) = findings else {
-            panic!("expected a list of findings");
-        };
-        let Json::Object(finding) = &mut findings[0] else {
-            panic!("expected a finding object");
-        };
-        let (_, reason) = finding
-            .iter_mut()
-            .find(|(key, _)| key.is("reason"))
-            .unwrap();
+        let Json::Array(items) = found else { panic!() };
+        let first = &mut items[0];
+        let Json::Object(row) = first else { panic!() };
+        let (_, reason) = row.iter_mut().find(|(key, _)| key.is("reason")).unwrap();
         *reason = decode(r#""fabricated \uD800""#).unwrap();
 
         crate::viewer::verify_schema(&document).unwrap();

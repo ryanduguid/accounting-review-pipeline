@@ -943,12 +943,7 @@ mod tests {
             "- `{}` (`{}`): `{}`",
             first.slot, first.filename, first.sha256
         );
-        let other_digest = if first.sha256.starts_with('0') {
-            "1"
-        } else {
-            "0"
-        }
-        .repeat(64);
+        let other_digest = ["0", "1"][usize::from(first.sha256.starts_with('0'))].repeat(64);
         let altered = [
             format!(
                 "- `other_fixture` (`{}`): `{}`",

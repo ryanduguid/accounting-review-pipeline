@@ -45,19 +45,16 @@ impl ManagedPublication {
         let previous = {
             let mut action = std::mem::MaybeUninit::<libc::sigaction>::zeroed();
             // SAFETY: sigaction fills the supplied structure; no handler is changed here.
-            if unsafe { libc::sigaction(libc::SIGTERM, std::ptr::null(), action.as_mut_ptr()) } == 0
-            {
-                // SAFETY: the successful call initialised action.
-                let action = unsafe { action.assume_init() };
-                if action.sa_sigaction == libc::SIG_DFL {
-                    // SAFETY: the handler only stores an atomic flag and has static lifetime.
-                    let old = unsafe {
-                        libc::signal(libc::SIGTERM, request_cancel as *const () as usize)
-                    };
-                    (old != libc::SIG_ERR).then_some(old)
-                } else {
-                    None
-                }
+            let queried =
+                unsafe { libc::sigaction(libc::SIGTERM, std::ptr::null(), action.as_mut_ptr()) }
+                    == 0;
+            // SAFETY: a successful query initialised action; a failed one is not read.
+            let default = queried && unsafe { action.assume_init() }.sa_sigaction == libc::SIG_DFL;
+            if default {
+                // SAFETY: the handler only stores an atomic flag and has static lifetime.
+                let old =
+                    unsafe { libc::signal(libc::SIGTERM, request_cancel as *const () as usize) };
+                (old != libc::SIG_ERR).then_some(old)
             } else {
                 None
             }
@@ -71,9 +68,8 @@ impl ManagedPublication {
                 Some(old)
             } else {
                 if old != usize::MAX {
-                    unsafe {
-                        win_signal(15, old);
-                    }
+                    // SAFETY: puts back the handler signal() just returned.
+                    unsafe { win_signal(15, old) };
                 }
                 None
             }
@@ -136,9 +132,9 @@ fn single_link_handle(file: &File) -> io::Result<bool> {
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     // SAFETY: file owns the handle and info is writable storage of the required type.
     // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
+    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } != 0;
+    // A failed call leaves its reason for GetLastError.
+    ok.then_some(()).ok_or_else(io::Error::last_os_error)?;
     Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
 }
 
@@ -1077,13 +1073,10 @@ mod tests {
             if point == "committed" {
                 let control = tmp.join(CONTROL_NAME);
                 let state = read_state(&control)?;
-                held = Some(
-                    OpenOptions::new().read(true).share_mode(0).open(
-                        control
-                            .join(format!("tx-{}", state.transaction.unwrap()))
-                            .join("backup-0"),
-                    )?,
-                );
+                let backup = control
+                    .join(format!("tx-{}", state.transaction.unwrap()))
+                    .join("backup-0");
+                held = Some(OpenOptions::new().read(true).share_mode(0).open(backup)?);
             }
             Ok(())
         });
@@ -1154,12 +1147,10 @@ mod tests {
             if point == "install-0" {
                 let control = tmp.join(CONTROL_NAME);
                 let state = read_state(&control)?;
-                fs::write(
-                    control
-                        .join(format!("tx-{}", state.transaction.unwrap()))
-                        .join("backup-0"),
-                    "corrupt",
-                )?;
+                let backup = control
+                    .join(format!("tx-{}", state.transaction.unwrap()))
+                    .join("backup-0");
+                fs::write(backup, "corrupt")?;
                 Err(error("failure"))
             } else {
                 Ok(())

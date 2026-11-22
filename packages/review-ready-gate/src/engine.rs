@@ -912,6 +912,18 @@ mod tests {
     use super::*;
     use crate::test_support::{self, TempDir};
     use std::fs;
+    #[test]
+    fn a_slot_of_an_unknown_kind_is_refused() {
+        let slot = crate::profiles::Slot {
+            name: "ledger",
+            filename: "ledger.csv",
+            required: false,
+            kind: "ledger",
+        };
+        let source = SourceSnapshot::new(Path::new("ledger.csv"), Vec::new());
+        let refusal = Loaded::default().load(&slot, &source, "bas").unwrap_err();
+        assert_eq!(refusal, "unknown slot kind 'ledger'.");
+    }
     fn review(profile: &str, dir: &Path) -> Result<ReadinessPack> {
         review_pack(profile, dir, None, Decimal::parse("0.01").unwrap(), &[])
     }
@@ -1167,11 +1179,8 @@ mod tests {
         let pack = require(&test_support::examples().join("bas-ready"));
         assert_eq!(pack.status, "NOT_READY");
         assert_eq!(codes(&pack.findings), ["REQUIRED_CONTROL_SKIPPED"]);
-        assert!(
-            pack.findings[0].reason.contains("no file was supplied"),
-            "{}",
-            pack.findings[0].reason
-        );
+        let reason = &pack.findings[0].reason;
+        assert!(reason.contains("no file was supplied"), "{reason}");
         for (statement, status, expected) in [
             ("127500.00", "READY", vec![]),
             ("120000.00", "NOT_READY", vec!["BANK_REC_BREAK"]),
@@ -1889,10 +1898,10 @@ Retained earnings,900,CREDIT
             let pack = review("bas", &bas_gst(&tmp, Some(("0.00", closing)), None, None)).unwrap();
             let reasons = gst_breaks(&pack);
             assert_eq!(reasons.len(), 1, "{closing}");
+            let reason = &reasons[0];
             assert!(
-                reasons[0].ends_with(&format!("which GST_OPENING declares.{hint}")),
-                "{closing}: {}",
-                reasons[0]
+                reason.ends_with(&format!("which GST_OPENING declares.{hint}")),
+                "{closing}: {reason}"
             );
         }
         // The 1A less 1B tie-out carries one too: a purchase posted twice.

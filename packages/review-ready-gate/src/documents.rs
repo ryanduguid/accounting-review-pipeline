@@ -790,9 +790,7 @@ mod tests {
         .unwrap()
     }
     fn set(value: &mut Json, keys: &[&str], replacement: Json) {
-        let Json::Object(pairs) = value else {
-            panic!("test fixture object")
-        };
+        let Json::Object(pairs) = value else { panic!() };
         if keys.len() == 1 {
             if let Some((_, value)) = pairs.iter_mut().find(|(key, _)| key.is(keys[0])) {
                 *value = replacement;
@@ -922,6 +920,7 @@ mod tests {
             )
             .unwrap();
             let expected = case.at("expected").as_object().expect("expected object");
+            let id = pyjson::canonical(case.at("id"));
             for (field, value) in expected {
                 assert!(
                     pyjson::py_eq(
@@ -933,8 +932,7 @@ mod tests {
                         value,
                         false
                     ),
-                    "{}:{field:?}",
-                    pyjson::canonical(case.at("id"))
+                    "{id}:{field:?}"
                 );
             }
             let mut unresolved: Vec<_> = FIELDS
@@ -1329,27 +1327,22 @@ mod tests {
         let permissions = fs::metadata(&locked).unwrap().permissions();
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
 
+        // A process that can bypass the mode cannot exercise the refusal.
         let probe = fs::create_dir(locked.join("probe"));
-        let result = if probe.is_err() {
-            Some(create_intake(IntakeOptions {
-                source: &source,
-                text: &extracted,
-                output: &output,
-                entity: "Demo",
-                period: "2026-03-31",
-                origin: "manual",
-                version: "",
-            }))
-        } else {
-            None
-        };
+        let Err(error) = probe else { return };
+        let result = create_intake(IntakeOptions {
+            source: &source,
+            text: &extracted,
+            output: &output,
+            entity: "Demo",
+            period: "2026-03-31",
+            origin: "manual",
+            version: "",
+        });
         fs::set_permissions(&locked, permissions).unwrap();
-        if let Some(result) = result {
-            let error = probe.unwrap_err();
-            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
-            assert_eq!(result.unwrap_err(), error.to_string());
-            assert!(!parent.exists());
-        }
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(result.unwrap_err(), error.to_string());
+        assert!(!parent.exists());
         assert_eq!(fs::read_to_string(&source).unwrap(), text);
         assert_eq!(fs::read_to_string(&extracted).unwrap(), text);
         assert!(!output.exists());

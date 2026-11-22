@@ -52,10 +52,7 @@ fn text(value: &Json) -> PyStr {
     value.as_pystr().expect("verified string").clone()
 }
 fn list(value: &Json) -> &[Json] {
-    let Json::Array(items) = value else {
-        unreachable!("verified list")
-    };
-    items
+    value.as_array().expect("verified list")
 }
 fn listed<'a>(values: impl IntoIterator<Item = &'a PyStr>, empty: &str) -> String {
     let cells: Vec<_> = values.into_iter().map(cell).collect();
