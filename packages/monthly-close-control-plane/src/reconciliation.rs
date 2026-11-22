@@ -193,7 +193,7 @@ impl Notes {
     reason = "loads and validates the opening items file"
 )]
 fn opening(source: &SourceSnapshot, identity: &Json, start: Date) -> Result<(Vec<Json>, Notes)> {
-    let raw = source.text("Opening items", true)?;
+    let raw = source.text("Opening items")?;
     let payload = pyjson::loads_detailed(raw).map_err(|(e, diagnostic)| {
         format!(
             "Opening items are not readable JSON: {}",
@@ -886,16 +886,11 @@ mod tests {
         .unwrap();
         assert!(result.at("status").is_str("BLOCKED"));
         config.decisions_escaped = true;
-        let mut reads = 0;
+        // A read would replace the refusal below with its own error.
         assert_eq!(
-            reconcile_with(&config, &mut |_, _| {
-                reads += 1;
-                Err("unexpected read".into())
-            })
-            .unwrap_err(),
+            reconcile_with(&config, &mut |_, _| Err("unexpected read".into())).unwrap_err(),
             "--decisions-escaped requires --decisions."
         );
-        assert_eq!(reads, 0);
     }
     #[test]
     fn money_limits_preserve_cent_equivalence_and_private_precision() {

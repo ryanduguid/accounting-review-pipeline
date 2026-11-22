@@ -136,9 +136,7 @@ fn render_html_with_notes(pack: &Json, end: i32, notes: &NoteIndex<'_>) -> Resul
                 escaped(&field(group, "note"))
             ));
         }
-        let Json::Object(identity_fields) = pack.at("identity") else {
-            unreachable!()
-        };
+        let identity_fields = pack.at("identity").as_object().expect("verified identity");
         let identity = identity_fields
             .iter()
             .map(|(_, v)| text(v))
