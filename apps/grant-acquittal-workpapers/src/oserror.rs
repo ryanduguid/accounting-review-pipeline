@@ -293,6 +293,15 @@ mod tests {
         assert_eq!(pytext::repr_os(&genuine_text), "'in\\U0010fcff\\U0010f7ff'");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_lone_high_surrogate_encodes_as_the_replacement_character() {
+        use std::os::unix::ffi::OsStrExt;
+        let mut text = String::from("in");
+        pytext::push_code_point(&mut text, 0xD800);
+        assert_eq!(encode_os(&text), OsStr::from_bytes("in\u{FFFD}".as_bytes()));
+    }
+
     #[test]
     fn os_errors_print_like_cpython() {
         let missing = io::Error::from_raw_os_error(2);
