@@ -229,3 +229,18 @@ pub fn run(arguments: &[OsString]) -> (u8, String, String) {
         ),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::negative;
+
+    #[test]
+    fn only_a_signed_number_reads_as_a_negative_value() {
+        for text in ["-5", "-0.25", "-.5", "-١٢"] {
+            assert!(negative(text), "{text}");
+        }
+        for text in ["5", "", "-", "-5.", "-5a", "--5"] {
+            assert!(!negative(text), "{text}");
+        }
+    }
+}
