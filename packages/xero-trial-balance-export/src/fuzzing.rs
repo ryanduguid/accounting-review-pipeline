@@ -42,4 +42,11 @@ mod tests {
         }
         assert!(count > 0);
     }
+
+    #[test]
+    fn a_body_that_is_not_json_is_refused_without_panicking() {
+        for body in [&b"{"[..], b"not json", b"\xff\xfe"] {
+            super::exercise(body);
+        }
+    }
 }

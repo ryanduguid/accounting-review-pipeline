@@ -787,9 +787,9 @@ mod tests {
 
         assert!(result.at("before_total").is_str("20.00"));
         assert!(result.at("after_total").is_str("7.50"));
-        let [missing, added] = result.at("differences").as_array().unwrap() else {
-            panic!("expected the missing and added mappings");
-        };
+        let differences = result.at("differences").as_array().unwrap();
+        let [missing, added] =
+            <&[_; 2]>::try_from(differences).expect("the missing and added mappings");
         assert!(missing.at("account").is_str("300"));
         assert!(missing.at("expected").is_str("12.50000"));
         assert!(missing.at("difference").is_str("-12.50000"));

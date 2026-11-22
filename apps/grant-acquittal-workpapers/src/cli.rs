@@ -417,25 +417,18 @@ mod tests {
 
     #[test]
     fn a_failed_status_write_keeps_the_published_workpaper() {
-        struct FailedStatus;
-        impl Write for FailedStatus {
-            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-                Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
-            }
-
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
+        // A full buffer refuses the status line, as a closed stream would.
+        let mut full: &mut [u8] = &mut [];
+        let refusal = full.write_all(b"status").unwrap_err();
 
         let fixture = crate::tests::Fixture::new();
         let args = ["--input", crate::tests::SOURCE, "--output", "published"].map(String::from);
         let mut stderr = Vec::new();
         assert_eq!(
-            main("grant-workpaper", &args, fixture.root(), &mut FailedStatus, &mut stderr),
+            main("grant-workpaper", &args, fixture.root(), &mut full, &mut stderr),
             1
         );
-        let diagnostic = oserror::stream_error(&std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+        let diagnostic = oserror::stream_error(&refusal);
         assert_eq!(
             stderr,
             format!("grant-workpaper: internal error: {diagnostic}\n").as_bytes()
@@ -446,6 +439,18 @@ mod tests {
             crate::pyjson::dumps_indent2(&crate::pyjson::loads_bytes(&saved).unwrap()),
             crate::pyjson::dumps_indent2(&fixture.review().unwrap())
         );
+    }
+
+    #[test]
+    fn a_result_without_a_status_or_findings_reports_an_empty_status_and_no_items() {
+        let (mut out, mut error) = (Vec::new(), Vec::new());
+        let result = crate::pyjson::Json::object([
+            ("status", crate::pyjson::Json::Null),
+            ("findings", crate::pyjson::Json::object([])),
+        ]);
+        assert_eq!(report(&result, &mut out, &mut error), 0);
+        assert_eq!(out, b"grant-workpaper: ; 0 review items\n");
+        assert!(error.is_empty());
     }
 
     #[test]
