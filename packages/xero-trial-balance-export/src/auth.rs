@@ -130,6 +130,7 @@ fn set_exclusive_address(socket: usize, config: &CallbackConfig) -> Result<()> {
     };
     let enabled = 1i32;
     // SAFETY: enabled points to the four-byte option value. Winsock rejects invalid sockets.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let status = unsafe {
         setsockopt(
             socket,

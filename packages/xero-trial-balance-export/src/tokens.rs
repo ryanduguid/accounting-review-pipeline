@@ -499,7 +499,8 @@ mod tests {
         session.save(&synthetic(1800)).unwrap();
         let cache = fs::read(&path).unwrap();
         let modified = fs::metadata(&path).unwrap().modified().unwrap();
-        let lock = publication::append(&path, ".lock");
+        // Windows may supply the scratch directory under its DOS short name.
+        let lock = publication::append(&crate::pypath::resolve(&path, true).unwrap(), ".lock");
         let saved_lock = fs::read(&lock).unwrap();
         let mut attempts = 0;
         let failure = session
