@@ -1267,3 +1267,69 @@ fn unbuffered_verify_write_failure_overrides_the_command_outcome() {
         assert_eq!(repo.get(name), expected, "{name}");
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn utf8_mode_writes_redirected_windows_stdout_as_utf8() {
+    let repo = Repo::new();
+    repo.put("in.md", b"PERSON_01\n");
+    let output = repo
+        .command(&["restore", "--in", "in.md", "--map", "entities.json", "--out", "outé.md"])
+        .env("PYTHONUTF8", "1")
+        .env_remove("PYTHONIOENCODING")
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(output.stdout, "wrote outé.md\r\n".as_bytes());
+    assert_eq!(repo.get("outé.md"), b"Jane Roe\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_uncreatable_output_directory_stops_the_triage_and_the_disclosure_record() {
+    use std::os::unix::fs::PermissionsExt;
+    let repo = Repo::new();
+    std::fs::create_dir(repo.path("sealed")).unwrap();
+    std::fs::set_permissions(repo.path("sealed"), std::fs::Permissions::from_mode(0o500)).unwrap();
+    // A privileged user creates directories anywhere, so nothing is refused.
+    let privileged = std::fs::create_dir(repo.path("sealed/probe")).is_ok();
+    repo.put("in.md", b"John Smith\n");
+    let triage = repo.run(&[
+        "redact",
+        "--in",
+        "in.md",
+        "--map",
+        "entities.json",
+        "--out",
+        "sealed/new/out.md",
+    ]);
+    repo.put("in.md", b"PERSON_01\n");
+    let record = repo.run(&[
+        "disclosure-record",
+        "--in",
+        "in.md",
+        "--map",
+        "entities.json",
+        "--destination",
+        "model:sample",
+        "--decision-ref",
+        "sample:42",
+        "--out",
+        "sealed/new/out.disclosure.json",
+    ]);
+    std::fs::set_permissions(repo.path("sealed"), std::fs::Permissions::from_mode(0o700)).unwrap();
+    // The disclosure record states its refusal without the system detail.
+    for (output, expected) in [
+        (triage, "[Errno 13] Permission denied: 'sealed/new'"),
+        (
+            record,
+            "cannot read or create disclosure files; existing files are never overwritten",
+        ),
+    ] {
+        assert!(
+            privileged || (code(&output) == 1 && output.stdout.is_empty() && stderr(&output).contains(expected)),
+            "{output:?}"
+        );
+    }
+    assert!(privileged || !repo.path("sealed/new").exists());
+}
