@@ -198,12 +198,18 @@ pub fn encoding(stderr: bool) -> Result<Encoding, &'static str> {
             fn GetACP() -> u32;
         }
         // SAFETY: GetACP has no arguments and only reports a code page.
-        // Other code pages would need CPython's own codec tables, so they are refused.
-        match unsafe { GetACP() } {
-            65001 => Ok(Encoding::Utf8),
-            1252 => Ok(Encoding::Windows1252),
-            _ => Err(UNSUPPORTED),
-        }
+        ansi_encoding(unsafe { GetACP() })
+    }
+}
+
+/// The ANSI code page's encoding. Other code pages would need CPython's own
+/// codec tables, so they are refused.
+#[cfg(windows)]
+fn ansi_encoding(code_page: u32) -> Result<Encoding, &'static str> {
+    match code_page {
+        65001 => Ok(Encoding::Utf8),
+        1252 => Ok(Encoding::Windows1252),
+        _ => Err(UNSUPPORTED),
     }
 }
 
@@ -371,6 +377,13 @@ pub fn encode_with(text: &str, encoding: &Encoding, policy: ErrorPolicy) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn only_utf8_and_western_ansi_code_pages_are_supported() {
+        assert!(matches!(ansi_encoding(65001), Ok(Encoding::Utf8)));
+        assert!(matches!(ansi_encoding(1252), Ok(Encoding::Windows1252)));
+        assert_eq!(ansi_encoding(932).err(), Some(UNSUPPORTED));
+    }
     #[test]
     fn flag_values_parse_like_cpython_py_str_to_int() {
         for zero in ["0", "00", "+0", "-0", " 0", "\t\n0", "0000000000000000000000"] {
