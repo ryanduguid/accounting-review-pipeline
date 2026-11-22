@@ -58,10 +58,12 @@ fn bytes(text: &str) -> Vec<u8> {
 }
 pub fn out(text: &str) {
     #[cfg(test)]
-    if captured(text, false) {
-        return;
+    let shown = captured(text, false);
+    #[cfg(not(test))]
+    let shown = false;
+    if !shown {
+        let _ = std::io::stdout().lock().write_all(&bytes(text));
     }
-    let _ = std::io::stdout().lock().write_all(&bytes(text));
 }
 pub fn err(text: &str) {
     #[cfg(test)]

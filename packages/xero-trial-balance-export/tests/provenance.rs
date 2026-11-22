@@ -28,7 +28,7 @@ fn oauth_source_and_claims_require_review_before_their_pins_change() {
         (
             "src/auth.rs",
             include_bytes!("../src/auth.rs").as_slice(),
-            "0BC5BACFCF8A77526BBC8E705D2242BF627B051A3C603349B979FC579528790F",
+            "086C419F4FEB0A6251764C508436CB59B392A49355B0A95836C141B62DC989BF",
         ),
         (
             "README.md",

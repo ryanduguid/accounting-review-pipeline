@@ -63,18 +63,25 @@ mod testing {
     pub struct Scratch(pub PathBuf);
     impl Scratch {
         pub fn new() -> Self {
-            loop {
-                let path = std::env::temp_dir().join(format!(
+            // Skip names an earlier process left behind; any other failure stops.
+            let mut created = Ok(());
+            let path = std::iter::repeat_with(|| {
+                // nosemgrep: rust.lang.security.temp-dir.temp-dir
+                std::env::temp_dir().join(format!(
                     "xero-rust-test-{}-{}",
                     std::process::id(),
                     NEXT.fetch_add(1, Ordering::Relaxed)
-                ));
-                match fs::create_dir(&path) {
-                    Ok(()) => return Self(path),
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                    Err(e) => panic!("scratch directory: {e}"),
-                }
-            }
+                ))
+            })
+            .find(|path| {
+                created = fs::create_dir(path);
+                !created
+                    .as_ref()
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists)
+            })
+            .expect("names never run out");
+            created.expect("scratch directory");
+            Self(path)
         }
     }
     impl Drop for Scratch {

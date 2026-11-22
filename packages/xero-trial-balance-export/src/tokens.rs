@@ -231,6 +231,14 @@ impl TokenSession {
     }
 
     fn lock_with_budget(&self, budget: Duration) -> Result<File> {
+        self.lock_with(budget, File::try_lock)
+    }
+
+    fn lock_with(
+        &self,
+        budget: Duration,
+        mut attempt: impl FnMut(&File) -> std::result::Result<(), std::fs::TryLockError>,
+    ) -> Result<File> {
         let path = self.revalidate()?;
         let lock = publication::append(&path, ".lock");
         fs::create_dir_all(path.parent().unwrap()).map_err(|e| lock_error(&lock, &e))?;
@@ -248,10 +256,10 @@ impl TokenSession {
         }
         let deadline = Instant::now() + budget;
         loop {
-            match file.try_lock() {
+            match attempt(&file) {
                 Ok(()) => return Ok(file),
                 Err(std::fs::TryLockError::WouldBlock) => {}
-                Err(std::fs::TryLockError::Error(e)) => return Err(lock_error(&lock, &e)),
+                Err(error) => return Err(lock_error(&lock, &error.into())),
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -289,11 +297,7 @@ impl TokenSession {
         let path = self.revalidate()?;
         let bytes = encode_cache(tokens)?;
         let (temporary, file) = publication::temporary(path.parent().unwrap(), ".tmp")?;
-        if let Err(e) = enforce_owner_only(&temporary) {
-            drop(file);
-            let _ = fs::remove_file(&temporary);
-            return Err(e);
-        }
+        let file = publication::keep_or_discard(file, &temporary, enforce_owner_only(&temporary))?;
         let error = |stage: Stage, e: &std::io::Error| {
             let temp = crate::pypath::text(&temporary);
             let dest = crate::pypath::text(&path);
@@ -319,6 +323,7 @@ impl TokenSession {
     }
 
     pub fn save(&self, tokens: &Json) -> Result<()> {
+        require_pair(tokens, "Xero token response")?;
         let _lock = self.lock()?;
         let mut saved = tokens.clone();
         set(&mut saved, "obtained_at", Json::Float(now()));
@@ -358,6 +363,29 @@ fn lock_error(path: &Path, error: &std::io::Error) -> Failure {
 mod tests {
     use super::*;
     use crate::testing::Scratch;
+    #[test]
+    #[should_panic(expected = "object checked by caller")]
+    fn setting_a_field_on_a_non_object_is_a_caller_bug() {
+        set(&mut Json::Null, "obtained_at", Json::int(1));
+    }
+
+    #[test]
+    fn saving_invalid_input_preserves_the_existing_token_pair() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("token.json");
+        let session = TokenSession::new(&path).unwrap();
+        session.save(&synthetic(1800)).unwrap();
+        let saved = fs::read(&path).unwrap();
+        for invalid in [
+            Json::Null,
+            Json::object([("access_token", Json::str("synthetic"))]),
+        ] {
+            let failure = session.save(&invalid).unwrap_err();
+            assert_eq!(failure.code, 1);
+            assert!(failure.stderr.ends_with("; no token was saved.\n"));
+            assert_eq!(fs::read(&path).unwrap(), saved);
+        }
+    }
     fn synthetic(expires: i64) -> Json {
         Json::object([
             ("access_token", Json::str("synthetic-access")),
@@ -461,6 +489,40 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"synthetic unreadable cache");
         drop(held);
         assert!(session.lock_with_budget(Duration::from_millis(1)).is_ok());
+    }
+
+    #[test]
+    fn actual_lock_attempt_error_is_reported_without_retrying_or_touching_the_cache() {
+        let scratch = Scratch::new();
+        let path = scratch.0.join("token.json");
+        let session = TokenSession::new(&path).unwrap();
+        session.save(&synthetic(1800)).unwrap();
+        let cache = fs::read(&path).unwrap();
+        let modified = fs::metadata(&path).unwrap().modified().unwrap();
+        // Windows may supply the scratch directory under its DOS short name.
+        let lock = publication::append(&crate::pypath::resolve(&path, true).unwrap(), ".lock");
+        let saved_lock = fs::read(&lock).unwrap();
+        let mut attempts = 0;
+        let failure = session
+            .lock_with(Duration::from_secs(1), |_| {
+                attempts += 1;
+                Err(std::fs::TryLockError::Error(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "synthetic lock denial",
+                )))
+            })
+            .unwrap_err();
+        assert_eq!(attempts, 1);
+        assert_eq!(
+            failure,
+            Failure::message(format!(
+                "error: could not open the token cache lock {} (synthetic lock denial); token.json was not read or changed.",
+                crate::pypath::text(&lock)
+            ))
+        );
+        assert_eq!(fs::read(&path).unwrap(), cache);
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
+        assert_eq!(fs::read(lock).unwrap(), saved_lock);
     }
     #[test]
     fn failed_refresh_preserves_the_cache_and_releases_the_transaction_lock() {

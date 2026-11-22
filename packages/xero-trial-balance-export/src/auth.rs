@@ -110,27 +110,7 @@ pub fn bind(config: &CallbackConfig) -> Result<TcpListener> {
     #[cfg(windows)]
     {
         use std::os::windows::io::AsRawSocket;
-        use windows_sys::Win32::Networking::WinSock::{
-            SO_EXCLUSIVEADDRUSE, SOCKET_ERROR, SOL_SOCKET, WSAGetLastError, setsockopt,
-        };
-        let enabled = 1i32;
-        // SAFETY: socket is live, and enabled points to the four-byte option value.
-        if unsafe {
-            setsockopt(
-                socket.as_raw_socket() as usize,
-                SOL_SOCKET,
-                SO_EXCLUSIVEADDRUSE,
-                (&enabled as *const i32).cast(),
-                4,
-            )
-        } == SOCKET_ERROR
-        {
-            // SAFETY: reads this thread's error immediately after setsockopt failed.
-            return Err(bind_error(
-                config,
-                std::io::Error::from_raw_os_error(unsafe { WSAGetLastError() }),
-            ));
-        }
+        set_exclusive_address(socket.as_raw_socket() as usize, config)?;
     }
     socket
         .bind(&SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.port).into())
@@ -141,6 +121,32 @@ pub fn bind(config: &CallbackConfig) -> Result<TcpListener> {
         .set_nonblocking(true)
         .map_err(|e| bind_error(config, e))?;
     Ok(listener)
+}
+
+#[cfg(windows)]
+fn set_exclusive_address(socket: usize, config: &CallbackConfig) -> Result<()> {
+    use windows_sys::Win32::Networking::WinSock::{
+        SO_EXCLUSIVEADDRUSE, SOCKET_ERROR, SOL_SOCKET, WSAGetLastError, setsockopt,
+    };
+    let enabled = 1i32;
+    // SAFETY: enabled points to the four-byte option value. Winsock rejects invalid sockets.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let status = unsafe {
+        setsockopt(
+            socket,
+            SOL_SOCKET,
+            SO_EXCLUSIVEADDRUSE,
+            (&enabled as *const i32).cast(),
+            4,
+        )
+    };
+    if status == SOCKET_ERROR {
+        // SAFETY: reads this thread's error immediately after setsockopt failed.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let error = unsafe { WSAGetLastError() };
+        return Err(bind_error(config, std::io::Error::from_raw_os_error(error)));
+    }
+    Ok(())
 }
 
 fn bind_error(config: &CallbackConfig, error: std::io::Error) -> Failure {
@@ -452,15 +458,12 @@ fn open_browser(url: &str) -> bool {
     let (finished, status) = mpsc::channel();
     // Some launchers run for the browser's lifetime. Reap the launcher off the
     // callback thread, whilst still reporting an immediate launch failure.
-    if std::thread::Builder::new()
-        .spawn(move || {
-            let opened = launcher.status().is_ok_and(|exit| exit.success());
-            let _ = finished.send(opened);
-        })
-        .is_err()
-    {
-        return false;
-    }
+    // A thread that cannot start drops the sender with its closure, so the
+    // receiver below sees a disconnection and reports the launch as failed.
+    let _ = std::thread::Builder::new().spawn(move || {
+        let opened = launcher.status().is_ok_and(|exit| exit.success());
+        let _ = finished.send(opened);
+    });
     matches!(
         status.recv_timeout(Duration::from_millis(500)),
         Ok(true) | Err(RecvTimeoutError::Timeout)
@@ -470,6 +473,21 @@ fn open_browser(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_exclusive_address_reports_the_native_socket_error() {
+        use windows_sys::Win32::Networking::WinSock::{INVALID_SOCKET, WSAENOTSOCK};
+
+        // Initialise Winsock through socket2 before calling the native wrapper.
+        let _socket =
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None).unwrap();
+        let config = callback_config("http://localhost:8400/callback").unwrap();
+        let failure = set_exclusive_address(INVALID_SOCKET, &config).unwrap_err();
+        let expected = bind_error(&config, std::io::Error::from_raw_os_error(WSAENOTSOCK));
+        assert_eq!(failure.code, expected.code);
+        assert_eq!(failure.stderr, expected.stderr);
+    }
 
     #[cfg(not(windows))]
     #[test]
