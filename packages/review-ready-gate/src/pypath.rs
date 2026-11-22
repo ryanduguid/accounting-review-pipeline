@@ -436,48 +436,35 @@ fn identity(_path: &Path, meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 
 #[cfg(windows)]
 fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
-    use std::os::windows::io::AsRawHandle;
-    // os.stat on Windows fills st_dev and st_ino from the volume serial number
-    // and file index of an opened handle, following links.
-    #[repr(C)]
-    struct ByHandleFileInformation {
-        attributes: u32,
-        creation: [u32; 2],
-        access: [u32; 2],
-        write: [u32; 2],
-        volume_serial: u32,
-        size_high: u32,
-        size_low: u32,
-        links: u32,
-        index_high: u32,
-        index_low: u32,
-    }
-    unsafe extern "system" {
-        fn GetFileInformationByHandle(
-            handle: *mut std::ffi::c_void,
-            info: *mut ByHandleFileInformation,
-        ) -> i32;
-    }
-    use std::os::windows::fs::OpenOptionsExt;
-    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+
     let file = std::fs::OpenOptions::new()
         .access_mode(0)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
         .open(path)?;
-    let mut info = std::mem::MaybeUninit::<ByHandleFileInformation>::zeroed();
-    // SAFETY: the handle is open for the duration of the call and info is a
-    // correctly sized, writable BY_HANDLE_FILE_INFORMATION.
-    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } != 0;
-    // A failed call leaves its reason for GetLastError.
-    ok.then_some(()).ok_or_else(io::Error::last_os_error)?;
-    // SAFETY: the call succeeded and filled the structure.
-    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    let info = unsafe { info.assume_init() };
+    let info = file_information_by_handle(file.as_raw_handle())?;
     Ok((
-        info.volume_serial as u64,
-        ((info.index_high as u64) << 32) | info.index_low as u64,
+        u64::from(info.dwVolumeSerialNumber),
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
     ))
+}
+
+#[cfg(windows)]
+pub(crate) fn file_information_by_handle(
+    handle: std::os::windows::io::RawHandle,
+) -> io::Result<windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: info is writable storage. Windows reports invalid handles as errors.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    if unsafe { GetFileInformationByHandle(handle, &raw mut info) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(info)
 }
 
 #[cfg(test)]

@@ -209,6 +209,34 @@ fn checkout_aliases_and_symlink_loops_are_refused_before_input_reads() {
     assert_eq!(result.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot be examined"));
 }
+
+#[test]
+fn a_linked_pack_destination_leaves_its_target_and_other_slots_alone() {
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    fs::create_dir(&output).unwrap();
+    let target = tmp.join("external-source.txt");
+    fs::write(&target, b"synthetic source").unwrap();
+    let linked = output.join(review_ready_gate::report::PACK_NAMES[0]);
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &linked).unwrap();
+    #[cfg(windows)]
+    fs::hard_link(&target, &linked).unwrap();
+
+    let result = gate_command("bas-ready", &output).output().unwrap();
+    assert_eq!(result.status.code(), Some(1));
+    assert!(result.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("publication refuses a non-regular or linked file"),
+        "{stderr}"
+    );
+    #[cfg(unix)]
+    assert_eq!(fs::read_link(&linked).unwrap(), target);
+    assert_eq!(fs::read(&linked).unwrap(), b"synthetic source");
+    assert_eq!(fs::read(&target).unwrap(), b"synthetic source");
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 1);
+}
 #[cfg(unix)]
 #[test]
 fn unreadable_checkout_metadata_is_refused_before_input_reads() {

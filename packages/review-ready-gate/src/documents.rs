@@ -1325,19 +1325,22 @@ mod tests {
 
         // A process that can bypass the mode cannot exercise the refusal.
         let probe = fs::create_dir(locked.join("probe"));
-        let Err(error) = probe else { return };
-        let result = create_intake(IntakeOptions {
-            source: &source,
-            text: &extracted,
-            output: &output,
-            entity: "Demo",
-            period: "2026-03-31",
-            origin: "manual",
-            version: "",
+        let result = probe.as_ref().err().map(|_| {
+            create_intake(IntakeOptions {
+                source: &source,
+                text: &extracted,
+                output: &output,
+                entity: "Demo",
+                period: "2026-03-31",
+                origin: "manual",
+                version: "",
+            })
         });
         fs::set_permissions(&locked, permissions).unwrap();
-        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
-        assert_eq!(result.unwrap_err(), error.to_string());
+        if let Err(error) = probe {
+            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            assert_eq!(result.unwrap().unwrap_err(), error.to_string());
+        }
         assert!(!parent.exists());
         assert_eq!(fs::read_to_string(&source).unwrap(), text);
         assert_eq!(fs::read_to_string(&extracted).unwrap(), text);

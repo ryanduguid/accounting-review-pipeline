@@ -341,21 +341,16 @@ fn source_safe(
     reason = "runs the gate and reports its failures"
 )]
 fn gate(args: &Arguments) -> i32 {
-    let output = args.path("--output");
-    let destinations = report::require_output_outside_repository(&output).and_then(|_| {
-        report::PACK_NAMES
-            .iter()
-            .map(|name| pypath::resolve(&output.join(name), false))
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|_| "cannot resolve output destinations".to_owned())
-    });
-    let destinations = match destinations {
-        Ok(destinations) => destinations,
+    let output = match report::require_output_outside_repository(&args.path("--output")) {
+        Ok(output) => output,
         Err(e) => {
             crate::errln!("review-ready: output error: {e}");
             return 1;
         }
     };
+    // Publication refuses linked leaves, so the three fixed names are relative to
+    // the checked output directory. Keep the same directory for checks and writes.
+    let destinations = report::PACK_NAMES.map(|name| output.join(name));
     let pack_dir = args.path("--pack");
     let note = args
         .values

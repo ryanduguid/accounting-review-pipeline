@@ -3,6 +3,9 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! Offline readiness controls and verified, transactional pack files.
+#[cfg(test)]
+#[path = "../../../tests/support/child_profile.rs"]
+mod child_profile;
 pub mod cli;
 pub mod comparison;
 #[cfg(test)]

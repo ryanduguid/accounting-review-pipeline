@@ -519,11 +519,10 @@ fn complete_pack(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
         let entry = entry?;
         fs::copy(entry.path(), pack.join(entry.file_name()))?;
     }
-    let written = fs::write(
+    fs::write(
         pack.join("prior_findings.csv"),
         "FindingCode,Slot,Status\nBANK_REC_BREAK,bank_rec,CLEARED\n",
-    );
-    written?;
+    )?;
     c.push(
         "pack-month-end-complete",
         "review_pack",
@@ -636,14 +635,17 @@ fn fixture_field<'a>(document: &'a mut Json, key: &str) -> &'a mut Json {
 }
 
 fn fixture_object(document: &mut Json) -> &mut Vec<(PyStr, Json)> {
-    let Json::Object(o) = document else { panic!() };
-    o
+    let Json::Object(fields) = document else {
+        panic!("fixture must be an object")
+    };
+    fields
 }
 
 fn fixture_findings(document: &mut Json) -> &mut [Json] {
-    let field = fixture_field(document, "findings");
-    let Json::Array(items) = field else { panic!() };
-    items
+    let Json::Array(findings) = fixture_field(document, "findings") else {
+        panic!("fixture findings must be an array")
+    };
+    findings
 }
 
 fn set(document: &mut Json, keys: &[&str], value: Json) {
@@ -878,8 +880,7 @@ fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
                 Json::str("5.00"),
             ),
             "reordered" => fixture_findings(&mut document).reverse(),
-            private => {
-                assert_eq!(private, "private-unicode");
+            "private-unicode" => {
                 set(
                     &mut document,
                     &["preparer_initials"],
@@ -894,6 +895,7 @@ fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
                     ]),
                 );
             }
+            _ => unreachable!(),
         }
         let path = save_pack(scratch, name, &probe::render_pack(&document)?)?;
         c.push(
@@ -1027,8 +1029,9 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             version: "",
         })?;
         if reviewed {
-            let review = fs::read_to_string(bundle.join("document-review.example.json"))?;
-            let mut review = probe::decode(&review)?;
+            let mut review = probe::decode(&fs::read_to_string(
+                bundle.join("document-review.example.json"),
+            )?)?;
             set(&mut review, &["reviewer_initials"], Json::str("XY"));
             set(&mut review, &["reviewed_on"], Json::str("2026-04-10"));
             set(&mut review, &["source_text_checked"], Json::Bool(true));
@@ -1092,13 +1095,12 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             );
         }
     }
-    let equal_indices = probe::example_document_with_documents(
+    let mut equal_indices = probe::example_document_with_documents(
         "bas",
         &root.join("examples/bas-ready"),
         "0.01",
         &[bundles[0].clone(), bundles[0].clone()],
-    );
-    let mut equal_indices = equal_indices?;
+    )?;
     for finding in fixture_findings(&mut equal_indices) {
         if finding.at("slot").is_str("document_002") {
             set(finding, &["slot"], Json::str("document_0001"));
@@ -1119,8 +1121,11 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             set(value, &["filename"], Json::str(&filename));
         }
     }
-    let rendered = probe::render_pack(&equal_indices)?;
-    let equal_indices = save_pack(scratch, "document-equal-indices", &rendered)?;
+    let equal_indices = save_pack(
+        scratch,
+        "document-equal-indices",
+        &probe::render_pack(&equal_indices)?,
+    )?;
     c.push(
         "document-compare-equal-numeric-indices",
         "compare",
@@ -1134,8 +1139,7 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
         &root.join("examples/bas-ready"),
         "0.01",
         &[bundles[0].clone()],
-    );
-    let document = document?;
+    )?;
     for mutation in [
         "missing",
         "duplicate",
@@ -1143,17 +1147,16 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
         "contradictory",
         "reviewed-missing",
     ] {
-        let document = if mutation == "reviewed-missing" {
+        let mut document = if mutation == "reviewed-missing" {
             probe::example_document_with_documents(
                 "bas",
                 &root.join("examples/bas-ready"),
                 "0.01",
                 &[bundles[1].clone()],
-            )
+            )?
         } else {
-            Ok(document.clone())
+            document.clone()
         };
-        let mut document = document?;
         let sources = fixture_object(fixture_field(&mut document, "source_sha256"));
         let index = sources
             .iter()
@@ -1169,13 +1172,16 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             "relabelled" => {
                 sources[index].0 = PyStr::from("original_evidence");
             }
-            contradictory => {
-                assert_eq!(contradictory, "contradictory");
+            "contradictory" => {
                 sources[index].0 = PyStr::from("document_002_1");
             }
+            _ => unreachable!(),
         }
-        let rendered = probe::render_pack(&document)?;
-        let path = save_pack(scratch, &format!("document-{mutation}"), &rendered)?;
+        let path = save_pack(
+            scratch,
+            &format!("document-{mutation}"),
+            &probe::render_pack(&document)?,
+        )?;
         c.push(
             format!("document-view-{mutation}"),
             "view",
