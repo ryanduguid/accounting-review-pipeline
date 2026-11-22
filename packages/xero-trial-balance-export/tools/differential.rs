@@ -613,24 +613,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     for _ in 0..count {
-        let mut value = (*seeds[random.next(seeds.len())]).clone();
-        let op = report::text(value.at("op"));
-        if let Json::Object(fields) = &mut value
-            && let Some((_, Json::Array(params))) = fields.iter_mut().find(|(k, _)| k.is("args"))
-            && !params.is_empty()
-        {
-            // Reports mutate one field below the top; other requests their first argument.
-            let report = matches!(op.as_str(), "flatten_report" | "validate_report_identity");
-            let (target, depth) = match &mut params[0] {
-                Json::Object(items) if report && !items.is_empty() => {
-                    let i = random.next(items.len());
-                    (Some(&mut items[i].1), 1)
-                }
-                first => ((!report).then_some(first), 0),
-            };
-            random.mutate_some(target, depth);
-        }
-        inputs.push(value);
+        let mut seed = (*seeds[random.next(seeds.len())]).clone();
+        let op = report::text(seed.at("op"));
+        // Every seed is a request object with a non-empty argument list.
+        let Json::Object(f) = &mut seed else { panic!() };
+        let args = &mut f
+            .iter_mut()
+            .find(|(k, _)| k.is("args"))
+            .expect("seed args")
+            .1;
+        let Json::Array(params) = args else { panic!() };
+        // Reports mutate one field below the top; other requests their first argument.
+        let report = matches!(op.as_str(), "flatten_report" | "validate_report_identity");
+        let (target, depth) = match params.first_mut().expect("seed argument") {
+            Json::Object(items) if report && !items.is_empty() => {
+                let i = random.next(items.len());
+                (Some(&mut items[i].1), 1)
+            }
+            first => ((!report).then_some(first), 0),
+        };
+        random.mutate_some(target, depth);
+        inputs.push(seed);
     }
     for exponent in -40..=40 {
         for coefficient in [
