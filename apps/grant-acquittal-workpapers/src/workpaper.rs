@@ -19,12 +19,11 @@ use crate::pycsv::{self, DictReader};
 use crate::pyjson::{self, Json, LoadError, PyStr};
 use crate::pytext;
 
-/// How a run stops early: an exception the script caught and printed (exit 1),
-/// or one it did not catch, which CPython printed as a traceback (also exit 1).
+/// How a run stops early: an exception the script caught and printed (exit 1).
+/// One it did not catch is a panic, which main's hook reports as an internal error.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
     Error(String),
-    Crash(String),
 }
 
 pub type Result<T> = std::result::Result<T, Failure>;
