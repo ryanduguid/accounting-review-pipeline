@@ -366,10 +366,8 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
 fn source(path: &str, bytes: &[u8]) -> Json {
     Json::object([("path", Json::str(path)), ("hex", Json::str(&hex(bytes)))])
 }
-fn put(object: &mut Json, key: &str, value: Json) {
-    let Json::Object(pairs) = object else {
-        panic!("fixture is an object")
-    };
+fn put(doc: &mut Json, key: &str, value: Json) {
+    let Json::Object(pairs) = doc else { panic!() };
     if let Some((_, old)) = pairs.iter_mut().find(|(name, _)| name.is(key)) {
         *old = value;
     } else {
@@ -2175,9 +2173,9 @@ fn schedules(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
         );
     }
     for kind in ["expenses", "migration", "interentity"] {
-        let base = probe::decode(&fs::read_to_string(
-            root.join("examples/schedules").join(format!("{kind}.json")),
-        )?)?;
+        let base =
+            fs::read_to_string(root.join("examples/schedules").join(format!("{kind}.json")))?;
+        let base = probe::decode(&base)?;
         push(c, &format!("schedule-{kind}-example"), kind, &base);
         match kind {
             "expenses" => {
@@ -2210,7 +2208,8 @@ fn schedules(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
                 document.set("after", Json::Array(vec![first_after, second_after]));
                 push(c, "schedule-legacy-migration-split", kind, &document);
             }
-            "interentity" => {
+            interentity => {
+                assert_eq!(interentity, "interentity");
                 for (label, reference, disputed) in [
                     ("agrees", "LOAN-1", false),
                     ("unmatched", "OTHER", false),
@@ -2230,7 +2229,6 @@ fn schedules(c: &mut Corpus, root: &Path, seed: u64) -> Result<()> {
                     );
                 }
             }
-            _ => unreachable!(),
         }
         for key in base.keys().unwrap() {
             let key = key.to_utf8().unwrap();
@@ -3151,9 +3149,7 @@ fn verification_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
         );
     }
     fn remove(value: &mut Json, key: &str) {
-        let Json::Object(pairs) = value else {
-            panic!("object fixture");
-        };
+        let Json::Object(pairs) = value else { panic!() };
         pairs.retain(|(name, _)| !name.is(key));
     }
     let mut c = Corpus(Vec::new());
@@ -3260,17 +3256,17 @@ fn verification_cases(corpus: &Corpus, expected: &[Json]) -> Result<Corpus> {
                 changed.set("calculation_evidence", evidence);
                 json_change(&format!("evidence-field-{key}"), changed);
             }
-            if let Some(supplied) = block.at("supplied").as_array().filter(|s| !s.is_empty()) {
-                for key in supplied[0].keys().unwrap() {
-                    let key = key.to_utf8().unwrap();
-                    let mut rows = supplied.to_vec();
-                    rows[0].set(&key, Json::Null);
-                    let mut evidence = block.clone();
-                    evidence.set("supplied", Json::Array(rows));
-                    let mut changed = document.clone();
-                    changed.set("calculation_evidence", evidence);
-                    json_change(&format!("evidence-entry-{key}"), changed);
-                }
+            let supplied = block.at("supplied").as_array().unwrap_or(&[]);
+            let first = supplied.first().map(|row| row.keys().unwrap());
+            for key in first.unwrap_or_default() {
+                let key = key.to_utf8().unwrap();
+                let mut rows = supplied.to_vec();
+                rows[0].set(&key, Json::Null);
+                let mut evidence = block.clone();
+                evidence.set("supplied", Json::Array(rows));
+                let mut changed = document.clone();
+                changed.set("calculation_evidence", evidence);
+                json_change(&format!("evidence-entry-{key}"), changed);
             }
         }
         for (index, raw) in [

@@ -468,10 +468,9 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
     // SAFETY: the handle is open for the duration of the call and info is a
     // correctly sized, writable BY_HANDLE_FILE_INFORMATION.
     // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) };
-    if ok == 0 {
-        return Err(io::Error::last_os_error());
-    }
+    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } != 0;
+    // A failed call leaves its reason for GetLastError.
+    ok.then_some(()).ok_or_else(io::Error::last_os_error)?;
     // SAFETY: the call succeeded and filled the structure.
     // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
     let info = unsafe { info.assume_init() };

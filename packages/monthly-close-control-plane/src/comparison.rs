@@ -196,7 +196,7 @@ fn responses(
     };
     let source = capture(path, "Response file")?;
     let text = source
-        .text("Response file", true)
+        .text("Response file")
         .map_err(|error| format!("Invalid response JSON: {error}"))?;
     let document = pyjson::loads_detailed(text).map_err(|(error, diagnostic)| {
         let message = match error {
@@ -228,9 +228,7 @@ fn responses(
         ]) {
             return Err("A response must contain exactly the documented response fields.".into());
         }
-        let Json::Object(fields) = row else {
-            unreachable!()
-        };
+        let fields = row.as_object().expect("checked response fields");
         if fields.iter().any(|(_, value)| {
             !value
                 .as_pystr()
