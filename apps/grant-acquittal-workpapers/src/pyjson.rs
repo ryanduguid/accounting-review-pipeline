@@ -787,6 +787,14 @@ mod tests {
             err(b"\xff{}"),
             "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte"
         );
+        // Past the decoder's limit, on a stack as large as the binary's.
+        let nested = std::thread::Builder::new()
+            .stack_size(256 << 20)
+            .spawn(|| err(&[b'['; MAX_DEPTH + 1]))
+            .unwrap()
+            .join()
+            .unwrap();
+        assert_eq!(nested, "recursion");
         assert!(loads_bytes(b"\xef\xbb\xbf{}").is_ok());
         assert!(matches!(loads_bytes(b"\"\xed\xa0\x80\""), Ok(Json::Str(s)) if s.0 == vec![0xD800]));
     }

@@ -257,6 +257,20 @@ mod tests {
     }
 
     #[test]
+    fn a_line_end_before_any_character_leaves_the_record_open_and_empty() {
+        // _csv.c's START_RECORD ignores the end-of-line marker of an empty line.
+        let mut record = Record {
+            fields: Vec::new(),
+            field: String::new(),
+            field_len: 0,
+            state: State::StartRecord,
+        };
+        assert_eq!(record.step(None), Ok(()));
+        assert!(record.state == State::StartRecord);
+        assert!(record.fields.is_empty() && record.field.is_empty());
+    }
+
+    #[test]
     fn strict_reader_matches_cpython() {
         let ok = |rows: &[&[&str]]| -> Vec<Result<Vec<String>, CsvError>> {
             rows.iter()
