@@ -230,3 +230,23 @@ pub fn write_record(values: &[&str]) -> String {
         .collect();
     fields.join(",") + "\n"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_line_end_before_any_character_leaves_the_record_open_and_empty() {
+        // _csv.c's START_RECORD ignores the end-of-line marker of an empty line.
+        let mut record = Record {
+            fields: Vec::new(),
+            field: String::new(),
+            field_len: 0,
+            state: State::StartRecord,
+            strict: false,
+        };
+        assert_eq!(record.step(None), Ok(()));
+        assert!(record.state == State::StartRecord);
+        assert!(record.fields.is_empty() && record.field.is_empty());
+    }
+}

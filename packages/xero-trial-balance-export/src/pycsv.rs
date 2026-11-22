@@ -257,6 +257,25 @@ mod tests {
         Reader::new(text).collect()
     }
 
+    fn record(state: State) -> Record {
+        Record {
+            fields: Vec::new(),
+            field: String::new(),
+            field_len: 0,
+            state,
+        }
+    }
+
+    #[test]
+    fn the_state_machine_matches_csv_c_at_line_ends() {
+        // START_RECORD ignores the end-of-line marker of an empty line.
+        let mut empty = record(State::StartRecord);
+        assert_eq!(empty.step(None), Ok(()));
+        assert!(empty.state == State::StartRecord && empty.fields.is_empty());
+        // EAT_CRNL refuses text after a line end: "new-line character seen in unquoted field".
+        assert_eq!(record(State::EatCrnl).step(Some('x')), Err(CsvError));
+    }
+
     fn ok(rows: &[&[&str]]) -> Vec<Result<Vec<String>, CsvError>> {
         rows.iter()
             .map(|r| Ok(r.iter().map(|s| s.to_string()).collect()))
