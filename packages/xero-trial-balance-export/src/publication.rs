@@ -436,6 +436,27 @@ mod tests {
         assert!(destination.is_dir());
     }
     #[test]
+    fn a_file_that_writes_and_flushes_replaces_the_destination() {
+        let scratch = Scratch::new();
+        let destination = scratch.0.join("tb.csv");
+        fs::write(&destination, b"earlier balanced export").unwrap();
+        let (temp, file) = temporary(&scratch.0, ".csv.tmp").unwrap();
+        let fault = Fault {
+            file,
+            stage: Stage::Replace,
+        };
+        replace_with(
+            fault,
+            &temp,
+            &destination,
+            b"new balanced export",
+            diagnostic,
+        )
+        .unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), b"new balanced export");
+        assert!(!temp.exists());
+    }
+    #[test]
     fn manifest_time_is_whole_seconds_with_a_numeric_utc_offset() {
         let scratch = Scratch::new();
         let csv = scratch.0.join("tb.csv");

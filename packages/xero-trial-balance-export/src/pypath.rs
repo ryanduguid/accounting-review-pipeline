@@ -503,6 +503,29 @@ fn identity(path: &Path, _meta: &std::fs::Metadata) -> io::Result<(u64, u64)> {
 mod tests {
     #[cfg(unix)]
     #[test]
+    fn a_lone_high_surrogate_encodes_as_the_replacement_character() {
+        use std::os::unix::ffi::OsStrExt;
+        let mut text = String::from("in");
+        crate::pytext::push_code_point(&mut text, 0xD800);
+        assert_eq!(
+            super::encode_os(&text),
+            std::ffi::OsStr::from_bytes("in\u{FFFD}".as_bytes())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_path_on_a_missing_drive_resolves_to_itself_when_not_strict() {
+        let missing = (b'A'..=b'Z')
+            .map(|letter| std::path::PathBuf::from(format!("{}:\\", letter as char)))
+            .find(|root| !root.exists())
+            .expect("a drive letter with no volume")
+            .join("missing");
+        assert_eq!(super::resolve(&missing, false).unwrap(), missing);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn strict_resolve_distinguishes_metadata_errors_from_missing_paths() {
         let overlong = std::path::Path::new("/").join("a".repeat(4_096));
         assert!(matches!(
