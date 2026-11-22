@@ -339,6 +339,11 @@ impl Random {
             _ => Json::str(texts[self.next(texts.len())]),
         }
     }
+    fn mutate_some(&mut self, value: Option<&mut Json>, depth: usize) {
+        if let Some(value) = value {
+            self.mutate(value, depth);
+        }
+    }
     fn mutate(&mut self, value: &mut Json, depth: usize) {
         if depth > 7 || self.next(4) == 0 {
             *value = self.leaf();
@@ -623,9 +628,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 first => ((!report).then_some(first), 0),
             };
-            target
-                .into_iter()
-                .for_each(|target| random.mutate(target, depth));
+            random.mutate_some(target, depth);
         }
         inputs.push(value);
     }
