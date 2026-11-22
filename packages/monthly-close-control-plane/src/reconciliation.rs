@@ -839,15 +839,14 @@ mod tests {
 
         for pack in [july, august] {
             assert!(pack.at("status").is_str("REVIEW"));
-            let [first, second] = pack.at("outstanding").as_array().unwrap() else {
-                panic!("expected both unsettled transactions");
-            };
+            let outstanding = pack.at("outstanding").as_array().unwrap();
+            let [first, second] =
+                <&[_; 2]>::try_from(outstanding).expect("both unsettled transactions");
             assert!(first.at("TransactionID").is_str("T1"));
             assert!(second.at("TransactionID").is_str("T2"));
             let allocation = &pack.at("decisions").as_array().unwrap()[0];
-            let [first_id, second_id] = allocation.at("ids").as_array().unwrap() else {
-                panic!("expected both allocation IDs");
-            };
+            let ids = allocation.at("ids").as_array().unwrap();
+            let [first_id, second_id] = <&[_; 2]>::try_from(ids).expect("both allocation IDs");
             assert!(first_id.is_str("T1"));
             assert!(second_id.is_str("T2"));
             assert!(pack.at("notes").at("T1").is_str("Reviewed July"));
@@ -930,6 +929,8 @@ mod tests {
             .unwrap();
         }
         csv.push_str("Synthetic,CLEAR,AUD,T0,2026-09-01,R,Synthetic,1,0\n");
+        // Rows past the limit are still validated, but no longer retained.
+        csv.push_str("Synthetic,CLEAR,AUD,T100000,2026-09-01,R,Synthetic,1,0\n");
         let error = reconcile_with(&config(), &mut |path, _| {
             Ok(SourceSnapshot::new(path, csv.as_bytes().to_vec()))
         })
@@ -946,7 +947,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             error,
-            "transactions.csv: row 100003 falls outside the reporting period."
+            "transactions.csv: row 100004 falls outside the reporting period."
         );
     }
     #[test]

@@ -352,6 +352,12 @@ mod tests {
             pack_date(&Json::str("9999-W52-6")).unwrap_err(),
             "year must be in 1..9999, not 10000"
         );
+        // A lone surrogate has no UTF-8 form, so fromisoformat never sees it.
+        let surrogate = pack_date(&Json::Str(pyjson::PyStr(vec![0x32, 0xD800]))).unwrap_err();
+        assert!(
+            surrogate.starts_with("Invalid isoformat string: ") && surrogate.contains("ud800"),
+            "{surrogate}"
+        );
     }
 
     #[test]
