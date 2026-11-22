@@ -251,6 +251,11 @@ fn check_lock_contention(result: Result<(), fs::TryLockError>) -> io::Result<()>
     }
 }
 
+/// Fail with `message` unless `holds`.
+fn ensure(holds: bool, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if holds { Ok(()) } else { Err(message.into()) }
+}
+
 fn compare_locks(python: &Path, baseline: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let directory = env::temp_dir().join(format!("xero-differential-lock-{}", std::process::id()));
     fs::create_dir(&directory)?;
@@ -274,30 +279,25 @@ fn compare_locks(python: &Path, baseline: &Path) -> Result<(), Box<dyn std::erro
         .env_remove("XERO_CLIENT_SECRET")
         .env("XERO_TOKEN_FILE", &path);
     let mut oracle = Process::start(&mut command, "Python token lock oracle")?;
-    if !matches!(oracle.query(&Json::str("try"))?, Json::Bool(false)) {
-        return Err("Python acquired the native-held token lock".into());
-    }
+    let refused = matches!(oracle.query(&Json::str("try"))?, Json::Bool(false));
+    ensure(refused, "Python acquired the native-held token lock")?;
     drop(held);
-    if !matches!(oracle.query(&Json::str("try"))?, Json::Bool(true)) {
-        return Err("Python could not acquire the released native lock".into());
-    }
-    if !matches!(oracle.query(&Json::str("hold"))?, Json::Bool(true)) {
-        return Err("Python could not hold the token lock".into());
-    }
+    let reacquired = matches!(oracle.query(&Json::str("try"))?, Json::Bool(true));
+    ensure(reacquired, "Python could not take the released native lock")?;
+    let held = matches!(oracle.query(&Json::str("hold"))?, Json::Bool(true));
+    ensure(held, "Python could not hold the token lock")?;
     let native = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open(&lock_path)?;
     check_lock_contention(native.try_lock())?;
-    if !matches!(oracle.query(&Json::str("release"))?, Json::Bool(true)) {
-        return Err("Python did not release the token lock".into());
-    }
+    let released = matches!(oracle.query(&Json::str("release"))?, Json::Bool(true));
+    ensure(released, "Python did not release the token lock")?;
     native.try_lock()?;
     drop(native);
     drop(oracle);
-    if path.exists() {
-        return Err("lock interoperability created a token cache".into());
-    }
+    let created = path.exists();
+    ensure(!created, "lock interoperability created a token cache")?;
     println!("Token lock: Python and Rust exclude each other and release successfully");
     Ok(())
 }
@@ -337,6 +337,36 @@ impl Random {
             1 => Json::Bool(self.next(2) == 1),
             2 => Json::int(self.next(2000) as i64 - 1000),
             _ => Json::str(texts[self.next(texts.len())]),
+        }
+    }
+    fn mutate_request(&mut self, request: &mut Json) {
+        let Json::Object(fields) = request else {
+            return;
+        };
+        let Some((_, op)) = fields.iter().find(|(key, _)| key.is("op")) else {
+            return;
+        };
+        let is_report = matches!(
+            report::text(op).as_str(),
+            "flatten_report" | "validate_report_identity"
+        );
+        let Some((_, Json::Array(params))) = fields.iter_mut().find(|(key, _)| key.is("args"))
+        else {
+            return;
+        };
+        let Some(first) = params.first_mut() else {
+            return;
+        };
+        // Reports mutate one field below the top; other requests their first argument.
+        if is_report {
+            if let Json::Object(items) = first
+                && !items.is_empty()
+            {
+                let index = self.next(items.len());
+                self.mutate(&mut items[index].1, 1);
+            }
+        } else {
+            self.mutate(first, 0);
         }
     }
     fn mutate(&mut self, value: &mut Json, depth: usize) {
@@ -552,15 +582,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             env::temp_dir().join("xero-differential-synthetic/token.json"),
         );
     let mut python = Process::start(&mut python_cmd, "frozen Python oracle")?;
-    let mut native = Process::start(
-        &mut child_profile::command(&probe_path),
-        "native Xero probe",
-    )?;
+    let mut probe = child_profile::command(&probe_path);
+    let mut native = Process::start(&mut probe, "native Xero probe")?;
     let fixture = pyjson::loads(include_str!("../tests/fixtures/python-value-cases.json"))
         .map_err(|_| "invalid fixture")?;
-    let Json::Array(cases) = fixture.at("cases") else {
-        return Err("missing cases".into());
-    };
+    let field = fixture.at("cases");
+    let cases: &[Json] = if let Json::Array(c) = field { c } else { &[] };
+    ensure(!cases.is_empty(), "missing cases")?;
     let seeds: Vec<_> = cases
         .iter()
         .filter_map(|case| {
@@ -610,24 +638,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     for _ in 0..count {
-        let mut value = (*seeds[random.next(seeds.len())]).clone();
-        let op = report::text(value.at("op"));
-        if let Json::Object(fields) = &mut value
-            && let Some((_, Json::Array(params))) = fields.iter_mut().find(|(k, _)| k.is("args"))
-            && !params.is_empty()
-        {
-            if matches!(op.as_str(), "flatten_report" | "validate_report_identity") {
-                if let Json::Object(items) = &mut params[0]
-                    && !items.is_empty()
-                {
-                    let i = random.next(items.len());
-                    random.mutate(&mut items[i].1, 1);
-                }
-            } else {
-                random.mutate(&mut params[0], 0);
-            }
-        }
-        inputs.push(value);
+        let mut seed = (*seeds[random.next(seeds.len())]).clone();
+        random.mutate_request(&mut seed);
+        inputs.push(seed);
     }
     for exponent in -40..=40 {
         for coefficient in [
@@ -746,6 +759,32 @@ mod tests {
     const EOF_FIXTURE: &str = "XERO_DIFFERENTIAL_EOF_FIXTURE";
     const NO_READ_FIXTURE: &str = "XERO_DIFFERENTIAL_NO_READ_FIXTURE";
     static FIXTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn failed_differential_requirement_keeps_its_diagnostic() {
+        assert!(ensure(true, "fixture commands diverged").is_ok());
+        let error = ensure(false, "fixture commands diverged").unwrap_err();
+        assert_eq!(error.to_string(), "fixture commands diverged");
+    }
+
+    #[test]
+    fn mutation_preserves_seeds_without_an_eligible_argument() {
+        let mut random = Random(1);
+        for mut seed in [
+            Json::Null,
+            Json::object([("op", Json::str("excel_safe"))]),
+            Json::object([("args", Json::Array(vec![Json::int(9)]))]),
+            Json::object([("op", Json::str("excel_safe")), ("args", Json::Null)]),
+            request("excel_safe", vec![]),
+            request("flatten_report", vec![Json::Array(vec![Json::int(9)])]),
+            request("validate_report_identity", vec![Json::object([])]),
+        ] {
+            let before = pyjson::canonical(&seed);
+            random.mutate_request(&mut seed);
+            assert_eq!(pyjson::canonical(&seed), before);
+        }
+        assert_eq!(random.0, 1);
+    }
 
     #[test]
     fn expected_lock_contention_is_distinct_from_an_io_error_or_acquisition() {

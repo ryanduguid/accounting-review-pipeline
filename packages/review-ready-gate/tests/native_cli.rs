@@ -35,6 +35,19 @@ fn fixture_command(profile: &str, pack: &std::path::Path, output: &std::path::Pa
 }
 
 #[test]
+fn version_reports_the_compiled_package_version() {
+    let result = child_profile::command(env!("CARGO_BIN_EXE_review-ready"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let version = concat!("review-ready ", env!("CARGO_PKG_VERSION"));
+    let newline = if cfg!(windows) { "\r\n" } else { "\n" };
+    assert_eq!(result.stdout, format!("{version}{newline}").as_bytes());
+}
+
+#[test]
 fn the_probe_resolves_external_outputs_and_refuses_checkout_outputs() {
     use std::io::Write;
     use std::process::Stdio;
@@ -208,6 +221,34 @@ fn checkout_aliases_and_symlink_loops_are_refused_before_input_reads() {
         .unwrap();
     assert_eq!(result.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot be examined"));
+}
+
+#[test]
+fn a_linked_pack_destination_leaves_its_target_and_other_slots_alone() {
+    let tmp = TempDir::new();
+    let output = tmp.join("output");
+    fs::create_dir(&output).unwrap();
+    let target = tmp.join("external-source.txt");
+    fs::write(&target, b"synthetic source").unwrap();
+    let linked = output.join(review_ready_gate::report::PACK_NAMES[0]);
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &linked).unwrap();
+    #[cfg(windows)]
+    fs::hard_link(&target, &linked).unwrap();
+
+    let result = gate_command("bas-ready", &output).output().unwrap();
+    assert_eq!(result.status.code(), Some(1));
+    assert!(result.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("publication refuses a non-regular or linked file"),
+        "{stderr}"
+    );
+    #[cfg(unix)]
+    assert_eq!(fs::read_link(&linked).unwrap(), target);
+    assert_eq!(fs::read(&linked).unwrap(), b"synthetic source");
+    assert_eq!(fs::read(&target).unwrap(), b"synthetic source");
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 1);
 }
 #[cfg(unix)]
 #[test]

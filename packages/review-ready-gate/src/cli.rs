@@ -70,8 +70,9 @@ fn usage_error(command: &str, message: &str) -> i32 {
     );
     1
 }
-fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) {
-    match command {
+/// The options a command accepts and requires; None for an unknown command.
+fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static str])> {
+    Some(match command {
         "gate" => (
             &[
                 "--profile",
@@ -112,8 +113,8 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
             ],
         ),
         "view-document" => (&["--bundle"], &["--bundle"]),
-        _ => (&[], &[]),
-    }
+        _ => return None,
+    })
 }
 struct Arguments {
     values: BTreeMap<String, String>,
@@ -160,7 +161,7 @@ fn option_operand(value: &str) -> bool {
     reason = "parses every option of a command in one loop"
 )]
 fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments>, String> {
-    let (flags, required) = options(command);
+    let (flags, required) = options(command).expect("command checked");
     let mut result = Arguments {
         values: BTreeMap::new(),
         documents: Vec::new(),
@@ -340,19 +341,16 @@ fn source_safe(
     reason = "runs the gate and reports its failures"
 )]
 fn gate(args: &Arguments) -> i32 {
-    let output = args.path("--output");
-    if let Err(e) = report::require_output_outside_repository(&output) {
-        crate::errln!("review-ready: output error: {e}");
-        return 1;
-    }
-    let destinations = report::PACK_NAMES
-        .iter()
-        .map(|name| pypath::resolve(&output.join(name), false))
-        .collect::<std::result::Result<Vec<_>, _>>();
-    let Ok(destinations) = destinations else {
-        crate::errln!("review-ready: output error: cannot resolve output destinations");
-        return 1;
+    let output = match report::require_output_outside_repository(&args.path("--output")) {
+        Ok(output) => output,
+        Err(e) => {
+            crate::errln!("review-ready: output error: {e}");
+            return 1;
+        }
     };
+    // Publication refuses linked leaves, so the three fixed names are relative to
+    // the checked output directory. Keep the same directory for checks and writes.
+    let destinations = report::PACK_NAMES.map(|name| output.join(name));
     let pack_dir = args.path("--pack");
     let note = args
         .values
@@ -481,16 +479,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
     let Some(command) = args.get(command_index) else {
         return usage_error("", "the following arguments are required: command");
     };
-    if ![
-        "gate",
-        "view",
-        "queue",
-        "compare",
-        "intake",
-        "view-document",
-    ]
-    .contains(&command.as_str())
-    {
+    if options(command).is_none() {
         return usage_error(
             "",
             &format!(
@@ -580,7 +569,8 @@ pub fn main(args: Vec<OsString>) -> i32 {
                 1
             }
         },
-        "intake" => {
+        command => {
+            assert_eq!(command, "intake", "command checked");
             let source = args.path("--source");
             let text = args.path("--text");
             let output = args.path("--output");
@@ -617,7 +607,6 @@ pub fn main(args: Vec<OsString>) -> i32 {
                 }
             }
         }
-        _ => unreachable!("command checked"),
     }
 }
 

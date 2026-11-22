@@ -106,6 +106,17 @@ fn test_failure(stage: Stage) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Keep `file` when `ready`; otherwise close it, remove its temporary path and
+/// return the failure.
+pub fn keep_or_discard<W>(file: W, temporary: &Path, ready: Result<()>) -> Result<W> {
+    if let Err(failure) = ready {
+        drop(file);
+        let _ = fs::remove_file(temporary);
+        return Err(failure);
+    }
+    Ok(file)
+}
+
 pub fn durable_replace<F>(
     file: File,
     temporary: &Path,
@@ -141,11 +152,8 @@ where
     let written = file.write_all(payload).and_then(|()| file.flush());
     #[cfg(test)]
     let written = written.and_then(|()| test_failure(Stage::Write));
-    if let Err(e) = written {
-        drop(file);
-        let _ = fs::remove_file(temporary);
-        return Err(error(Stage::Write, &e));
-    }
+    let written = written.map_err(|e| error(Stage::Write, &e));
+    let file = keep_or_discard(file, temporary, written)?;
     let synced = file.sync();
     #[cfg(test)]
     let synced = synced.and_then(|()| test_failure(Stage::Flush));
@@ -213,6 +221,14 @@ pub fn write_csv(rows: &[report::OutputRow], path: &Path, quiet: bool) -> Result
 }
 
 pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
+    set_aside_manifest_with(path, quiet, |from, to| fs::rename(from, to))
+}
+
+fn set_aside_manifest_with(
+    path: &Path,
+    quiet: bool,
+    rename: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<Option<PathBuf>> {
     let manifest = manifest_path(path);
     let Some(metadata) = paths::entry_metadata(&manifest)? else {
         return Ok(None);
@@ -244,13 +260,15 @@ pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
         options.open(&aside)
     };
     drop(reserve.map_err(|e| Failure::message(format!("error: cannot reserve the recovery path {} ({e}); the CSV and current manifest are unchanged. Inspect any existing recovery file before moving or removing it, then run again.", shown_path(&aside, quiet))))?);
-    if let Err(e) = fs::rename(&manifest, &aside) {
-        if let Err(cleanup) = fs::remove_file(&aside) {
-            crate::errln!(
-                "warning: the empty recovery reservation at {} could not be removed ({cleanup}); inspect it before running again.",
+    if let Err(e) = rename(&manifest, &aside) {
+        remove_or_warn(
+            &aside,
+            &format!(
+                "the empty recovery reservation at {}",
                 shown_path(&aside, quiet)
-            );
-        }
+            ),
+            "inspect it before running again.",
+        );
         return Err(move_error(e));
     }
     Ok(Some(aside))
@@ -268,11 +286,20 @@ pub fn restore_manifest(aside: &Path, path: &Path, quiet: bool) {
 }
 
 pub fn discard_manifest(aside: &Path, quiet: bool) {
-    if let Err(e) = fs::remove_file(aside) {
-        crate::errln!(
-            "warning: the earlier manifest set aside at {} could not be removed ({e}); delete it by hand. It describes a previous export.",
+    remove_or_warn(
+        aside,
+        &format!(
+            "the earlier manifest set aside at {}",
             shown_path(aside, quiet)
-        );
+        ),
+        "delete it by hand. It describes a previous export.",
+    );
+}
+
+/// Remove `path`, warning that `what` could not be removed when that fails.
+fn remove_or_warn(path: &Path, what: &str, advice: &str) {
+    if let Err(e) = fs::remove_file(path) {
+        crate::errln!("warning: {what} could not be removed ({e}); {advice}");
     }
 }
 
@@ -528,6 +555,45 @@ mod tests {
     }
 
     #[test]
+    fn failed_manifest_move_warns_when_the_reservation_cannot_be_removed() {
+        for quiet in [false, true] {
+            let scratch = Scratch::new();
+            let csv = scratch.0.join("tb.csv");
+            let manifest = manifest_path(&csv);
+            let aside = append(&manifest, ".previous");
+            fs::write(&csv, b"earlier CSV").unwrap();
+            fs::write(&manifest, b"earlier manifest").unwrap();
+            let (result, stdout, stderr) = crate::stdio::capture(|| {
+                set_aside_manifest_with(&csv, quiet, |from, to| {
+                    assert_eq!(from, manifest);
+                    assert_eq!(to, aside);
+                    assert_eq!(fs::metadata(to).unwrap().len(), 0);
+                    fs::remove_file(to).unwrap();
+                    fs::create_dir(to).unwrap();
+                    fs::rename(from, to)
+                })
+            });
+            let failure = result.unwrap_err();
+            assert!(stdout.is_empty() && failure.stdout.is_empty());
+            assert!(
+                failure
+                    .stderr
+                    .contains("the CSV and current manifest are unchanged")
+            );
+            assert!(stderr.starts_with(&format!(
+                "warning: the empty recovery reservation at {} could not be removed (",
+                shown_path(&aside, quiet)
+            )));
+            assert!(stderr.ends_with("); inspect it before running again.\n"));
+            assert_eq!(stderr.contains("tb.csv"), !quiet);
+            assert_eq!(failure.stderr.contains("tb.csv"), !quiet);
+            assert_eq!(fs::read(&csv).unwrap(), b"earlier CSV");
+            assert_eq!(fs::read(&manifest).unwrap(), b"earlier manifest");
+            assert!(aside.is_dir());
+        }
+    }
+
+    #[test]
     fn temporary_refusals_preserve_missing_and_non_directory_parents() {
         let scratch = Scratch::new();
         let missing = scratch.0.join("missing");
@@ -578,10 +644,9 @@ mod tests {
             RestorePermissions(&scratch.0, fs::metadata(&scratch.0).unwrap().permissions());
         fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o500)).unwrap();
         // A process that can bypass this mode cannot exercise the refusal.
-        match File::create_new(scratch.0.join("permission-probe")) {
-            Ok(_) => return,
-            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied),
-        }
+        let probe = File::create_new(scratch.0.join("permission-probe"));
+        let Err(error) = probe else { return };
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         let result = write_csv(&[], &csv, false);
         drop(restore);
 
