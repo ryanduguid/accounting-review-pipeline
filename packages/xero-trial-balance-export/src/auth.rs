@@ -115,7 +115,7 @@ pub fn bind(config: &CallbackConfig) -> Result<TcpListener> {
         };
         let enabled = 1i32;
         // SAFETY: socket is live, and enabled points to the four-byte option value.
-        if unsafe {
+        let status = unsafe {
             setsockopt(
                 socket.as_raw_socket() as usize,
                 SOL_SOCKET,
@@ -123,14 +123,11 @@ pub fn bind(config: &CallbackConfig) -> Result<TcpListener> {
                 (&enabled as *const i32).cast(),
                 4,
             )
-        } == SOCKET_ERROR
-        {
-            // SAFETY: reads this thread's error immediately after setsockopt failed.
-            return Err(bind_error(
-                config,
-                std::io::Error::from_raw_os_error(unsafe { WSAGetLastError() }),
-            ));
-        }
+        };
+        // SAFETY: reads this thread's error immediately after setsockopt failed.
+        let error = || std::io::Error::from_raw_os_error(unsafe { WSAGetLastError() });
+        let exclusive = (status != SOCKET_ERROR).then_some(()).ok_or_else(error);
+        exclusive.map_err(|e| bind_error(config, e))?;
     }
     socket
         .bind(&SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.port).into())
@@ -452,15 +449,12 @@ fn open_browser(url: &str) -> bool {
     let (finished, status) = mpsc::channel();
     // Some launchers run for the browser's lifetime. Reap the launcher off the
     // callback thread, whilst still reporting an immediate launch failure.
-    if std::thread::Builder::new()
-        .spawn(move || {
-            let opened = launcher.status().is_ok_and(|exit| exit.success());
-            let _ = finished.send(opened);
-        })
-        .is_err()
-    {
-        return false;
-    }
+    // A thread that cannot start drops the sender with its closure, so the
+    // receiver below sees a disconnection and reports the launch as failed.
+    let _ = std::thread::Builder::new().spawn(move || {
+        let opened = launcher.status().is_ok_and(|exit| exit.success());
+        let _ = finished.send(opened);
+    });
     matches!(
         status.recv_timeout(Duration::from_millis(500)),
         Ok(true) | Err(RecvTimeoutError::Timeout)

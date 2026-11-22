@@ -106,6 +106,17 @@ fn test_failure(stage: Stage) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Keep `file` when `ready`; otherwise close it, remove its temporary path and
+/// return the failure.
+pub fn keep_or_discard<W>(file: W, temporary: &Path, ready: Result<()>) -> Result<W> {
+    if let Err(failure) = ready {
+        drop(file);
+        let _ = fs::remove_file(temporary);
+        return Err(failure);
+    }
+    Ok(file)
+}
+
 pub fn durable_replace<F>(
     file: File,
     temporary: &Path,
@@ -141,11 +152,8 @@ where
     let written = file.write_all(payload).and_then(|()| file.flush());
     #[cfg(test)]
     let written = written.and_then(|()| test_failure(Stage::Write));
-    if let Err(e) = written {
-        drop(file);
-        let _ = fs::remove_file(temporary);
-        return Err(error(Stage::Write, &e));
-    }
+    let written = written.map_err(|e| error(Stage::Write, &e));
+    let file = keep_or_discard(file, temporary, written)?;
     let synced = file.sync();
     #[cfg(test)]
     let synced = synced.and_then(|()| test_failure(Stage::Flush));
@@ -245,12 +253,14 @@ pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
     };
     drop(reserve.map_err(|e| Failure::message(format!("error: cannot reserve the recovery path {} ({e}); the CSV and current manifest are unchanged. Inspect any existing recovery file before moving or removing it, then run again.", shown_path(&aside, quiet))))?);
     if let Err(e) = fs::rename(&manifest, &aside) {
-        if let Err(cleanup) = fs::remove_file(&aside) {
-            crate::errln!(
-                "warning: the empty recovery reservation at {} could not be removed ({cleanup}); inspect it before running again.",
+        remove_or_warn(
+            &aside,
+            &format!(
+                "the empty recovery reservation at {}",
                 shown_path(&aside, quiet)
-            );
-        }
+            ),
+            "inspect it before running again.",
+        );
         return Err(move_error(e));
     }
     Ok(Some(aside))
@@ -268,11 +278,20 @@ pub fn restore_manifest(aside: &Path, path: &Path, quiet: bool) {
 }
 
 pub fn discard_manifest(aside: &Path, quiet: bool) {
-    if let Err(e) = fs::remove_file(aside) {
-        crate::errln!(
-            "warning: the earlier manifest set aside at {} could not be removed ({e}); delete it by hand. It describes a previous export.",
+    remove_or_warn(
+        aside,
+        &format!(
+            "the earlier manifest set aside at {}",
             shown_path(aside, quiet)
-        );
+        ),
+        "delete it by hand. It describes a previous export.",
+    );
+}
+
+/// Remove `path`, warning that `what` could not be removed when that fails.
+fn remove_or_warn(path: &Path, what: &str, advice: &str) {
+    if let Err(e) = fs::remove_file(path) {
+        crate::errln!("warning: {what} could not be removed ({e}); {advice}");
     }
 }
 
@@ -578,10 +597,9 @@ mod tests {
             RestorePermissions(&scratch.0, fs::metadata(&scratch.0).unwrap().permissions());
         fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o500)).unwrap();
         // A process that can bypass this mode cannot exercise the refusal.
-        match File::create_new(scratch.0.join("permission-probe")) {
-            Ok(_) => return,
-            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied),
-        }
+        let probe = File::create_new(scratch.0.join("permission-probe"));
+        let Err(error) = probe else { return };
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         let result = write_csv(&[], &csv, false);
         drop(restore);
 

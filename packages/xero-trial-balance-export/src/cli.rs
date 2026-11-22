@@ -273,12 +273,9 @@ pub fn parse(args: &[OsString], prog: &str, auth: bool) -> Result<Option<Options
                     ),
                 ));
             }
-            match *name {
-                "--payments-only" => options.cash = true,
-                "--quiet" => options.quiet = true,
-                "--no-manifest" => options.no_manifest = true,
-                _ => {}
-            }
+            options.cash |= *name == "--payments-only";
+            options.quiet |= *name == "--quiet";
+            options.no_manifest |= *name == "--no-manifest";
             continue;
         }
         let value = if let Some(value) = explicit {

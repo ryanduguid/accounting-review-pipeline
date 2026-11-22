@@ -77,11 +77,7 @@ fn client_with_roots(
         .tls_certs_only(certificates(custom)?)
         .build()
         .map_err(|e| {
-            let context = if custom.is_some() {
-                " using the configured TLS CA bundle"
-            } else {
-                ""
-            };
+            let context = custom.map_or("", |_| " using the configured TLS CA bundle");
             Failure::message(format!(
                 "error: could not initialise the Xero HTTP client{context} ({e})"
             ))
@@ -340,6 +336,9 @@ mod tests {
         posts: RefCell<Vec<String>>,
         gets: RefCell<Vec<String>>,
         session: TokenSession,
+        /// A single-use reply for the next token POST, and the form it carried.
+        token: RefCell<Option<Response>>,
+        form: RefCell<Vec<(String, String)>>,
     }
     fn pair(access: &str, refresh: &str) -> Json {
         Json::object([
@@ -362,30 +361,6 @@ mod tests {
         }
     }
 
-    struct TokenEndpoint {
-        response: RefCell<Option<Response>>,
-        form: RefCell<Vec<(String, String)>>,
-    }
-    impl Http for TokenEndpoint {
-        fn post(&self, url: &str, creds: &Credentials, form: &[(&str, &str)]) -> Result<Response> {
-            assert_eq!(url, TOKEN_URL);
-            assert_eq!(creds.id, "synthetic-id");
-            assert_eq!(creds.secret, "synthetic-secret");
-            *self.form.borrow_mut() = form
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect();
-            Ok(self
-                .response
-                .borrow_mut()
-                .take()
-                .expect("the token POST was replayed"))
-        }
-        fn get(&self, _: &str, _: &str, _: Option<&str>, _: &[(&str, &str)]) -> Result<Response> {
-            panic!("a token exchange made a GET")
-        }
-    }
-
     #[test]
     #[expect(
         clippy::too_many_lines,
@@ -399,10 +374,9 @@ mod tests {
                 (503, "{}", "HTTP 503"),
                 (200, "not JSON", "non-JSON token response"),
             ] {
-                let endpoint = TokenEndpoint {
-                    response: RefCell::new(Some(response(status, body, None))),
-                    form: RefCell::new(Vec::new()),
-                };
+                let scratch = Scratch::new();
+                let endpoint = Scripted::new(&scratch.0.join("token.json"), Vec::new());
+                *endpoint.token.borrow_mut() = Some(response(status, body, None));
                 let result = if authorization {
                     exchange(
                         &endpoint,
@@ -415,7 +389,8 @@ mod tests {
                 };
                 let failure = result.unwrap_err();
                 assert!(failure.stderr.contains(message));
-                assert!(endpoint.response.borrow().is_none());
+                assert!(endpoint.token.borrow().is_none());
+                assert!(endpoint.gets.borrow().is_empty());
                 let form = endpoint.form.borrow();
                 assert!(
                     form.contains(&(
@@ -464,6 +439,8 @@ mod tests {
                 posts: RefCell::new(Vec::new()),
                 gets: RefCell::new(Vec::new()),
                 session,
+                token: RefCell::new(None),
+                form: RefCell::new(Vec::new()),
             }
         }
     }
@@ -472,6 +449,15 @@ mod tests {
             assert_eq!(url, TOKEN_URL);
             assert_eq!(creds.id, "synthetic-id");
             assert_eq!(creds.secret, "synthetic-secret");
+            *self.form.borrow_mut() = form
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            // A scripted token reply is used once; a replayed POST falls through
+            // to the refresh below, which the refusal tests would notice.
+            if let Some(reply) = self.token.borrow_mut().take() {
+                return Ok(reply);
+            }
             assert!(form.contains(&("grant_type", "refresh_token")));
             let refresh = form.iter().find(|(k, _)| *k == "refresh_token").unwrap().1;
             self.posts.borrow_mut().push(refresh.into());
@@ -740,21 +726,21 @@ mod tests {
                     "http::tests::working_directory_dotenv_cannot_choose_tls_roots_or_a_proxy",
                 ])
                 .env(CHILD, "1");
-            for (key, _) in std::env::vars_os() {
-                let name = key.to_string_lossy().to_ascii_uppercase();
-                if name.ends_with("_PROXY")
-                    || name.ends_with("_CA_BUNDLE")
-                    || name == "REQUEST_METHOD"
-                {
-                    child.env_remove(&key);
-                }
-            }
+            std::env::vars_os()
+                .map(|(key, _)| key)
+                .filter(|key| {
+                    let name = key.to_string_lossy().to_ascii_uppercase();
+                    name.ends_with("_PROXY")
+                        || name.ends_with("_CA_BUNDLE")
+                        || name == "REQUEST_METHOD"
+                })
+                .fold(&mut child, |child, key| child.env_remove(key));
             let output = child.output().unwrap();
             let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 output.status.success() && stdout.contains("1 passed"),
-                "{stdout}{}",
-                String::from_utf8_lossy(&output.stderr)
+                "{stdout}{stderr}"
             );
             return;
         }
@@ -784,18 +770,16 @@ mod tests {
             // The target accepts and drops the connection, so the request fails fast.
             let reached = std::thread::spawn(move || {
                 let deadline = Instant::now() + Duration::from_secs(5);
-                loop {
-                    match target.accept() {
-                        Ok(_) => return true,
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            if Instant::now() >= deadline {
-                                return false;
-                            }
-                            std::thread::sleep(Duration::from_millis(5));
-                        }
-                        Err(e) => panic!("synthetic target accept: {e}"),
-                    }
+                let mut accepted = target.accept();
+                while accepted
+                    .as_ref()
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::WouldBlock)
+                    && Instant::now() < deadline
+                {
+                    std::thread::sleep(Duration::from_millis(5));
+                    accepted = target.accept();
                 }
+                accepted.is_ok()
             });
             let _ = http.get(
                 &format!("{scheme}://{address}/trial"),
@@ -833,18 +817,16 @@ mod tests {
             let mut requests = Vec::new();
             for _ in 0..2 {
                 let deadline = std::time::Instant::now() + Duration::from_secs(5);
-                let (mut socket, _) = loop {
-                    match listener.accept() {
-                        Ok(socket) => break socket,
-                        Err(e)
-                            if e.kind() == std::io::ErrorKind::WouldBlock
-                                && std::time::Instant::now() < deadline =>
-                        {
-                            std::thread::sleep(Duration::from_millis(5))
-                        }
-                        Err(e) => panic!("synthetic HTTP accept: {e}"),
-                    }
-                };
+                let mut accepted = listener.accept();
+                while accepted
+                    .as_ref()
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::WouldBlock)
+                    && std::time::Instant::now() < deadline
+                {
+                    std::thread::sleep(Duration::from_millis(5));
+                    accepted = listener.accept();
+                }
+                let (mut socket, _) = accepted.expect("synthetic HTTP accept");
                 // Winsock inherits the listener's nonblocking mode on accept.
                 socket.set_nonblocking(false).unwrap();
                 socket

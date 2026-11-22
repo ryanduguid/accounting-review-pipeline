@@ -247,11 +247,10 @@ impl TokenSession {
                 .map_err(|e| lock_error(&lock, &e))?;
         }
         let deadline = Instant::now() + budget;
-        loop {
+        let locked = loop {
             match file.try_lock() {
-                Ok(()) => return Ok(file),
                 Err(std::fs::TryLockError::WouldBlock) => {}
-                Err(std::fs::TryLockError::Error(e)) => return Err(lock_error(&lock, &e)),
+                locked => break locked,
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -260,7 +259,10 @@ impl TokenSession {
                 ));
             }
             thread::sleep(remaining.min(Duration::from_millis(100)));
-        }
+        };
+        // Any other lock error is reported as an open failure is.
+        locked.map_err(|e| lock_error(&lock, &e.into()))?;
+        Ok(file)
     }
 
     fn load_unlocked(&self) -> Result<Json> {
@@ -289,11 +291,7 @@ impl TokenSession {
         let path = self.revalidate()?;
         let bytes = encode_cache(tokens)?;
         let (temporary, file) = publication::temporary(path.parent().unwrap(), ".tmp")?;
-        if let Err(e) = enforce_owner_only(&temporary) {
-            drop(file);
-            let _ = fs::remove_file(&temporary);
-            return Err(e);
-        }
+        let file = publication::keep_or_discard(file, &temporary, enforce_owner_only(&temporary))?;
         let error = |stage: Stage, e: &std::io::Error| {
             let temp = crate::pypath::text(&temporary);
             let dest = crate::pypath::text(&path);
@@ -358,6 +356,11 @@ fn lock_error(path: &Path, error: &std::io::Error) -> Failure {
 mod tests {
     use super::*;
     use crate::testing::Scratch;
+    #[test]
+    #[should_panic(expected = "object checked by caller")]
+    fn setting_a_field_on_a_non_object_is_a_caller_bug() {
+        set(&mut Json::Null, "obtained_at", Json::int(1));
+    }
     fn synthetic(expires: i64) -> Json {
         Json::object([
             ("access_token", Json::str("synthetic-access")),
