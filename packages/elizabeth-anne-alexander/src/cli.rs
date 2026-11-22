@@ -913,12 +913,13 @@ mod tests {
             }
         })
         .unwrap_err();
-        let Failure::Gateway(message) = failure else {
-            panic!("expected a validation refusal")
-        };
-        assert!(message.contains("validation output cannot be checked against"));
-        assert!(message.contains("receipt.json"));
-        assert!(message.contains("synthetic metadata failure"));
+        assert!(
+            matches!(&failure, Failure::Gateway(message)
+                if message.contains("validation output cannot be checked against")
+                    && message.contains("receipt.json")
+                    && message.contains("synthetic metadata failure")),
+            "{failure:?}"
+        );
     }
 
     #[test]

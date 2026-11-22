@@ -311,6 +311,15 @@ mod tests {
         }
     }
 
+    #[test]
+    fn strict_resolution_reports_an_overlong_name_as_unusable() {
+        let overlong = Path::new(env!("CARGO_MANIFEST_DIR")).join("n".repeat(300));
+        assert!(matches!(
+            resolve(&overlong, true),
+            Err(ResolveError::Unusable)
+        ));
+    }
+
     #[cfg(unix)]
     #[test]
     fn real_paths_follow_repeated_aliases_and_classify_cycles_and_non_directories() {

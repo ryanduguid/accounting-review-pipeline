@@ -357,6 +357,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ordinals_before_the_first_day_of_year_one_have_no_date() {
+        assert_eq!(from_ordinal(0), None);
+        assert_eq!(from_ordinal(-1), None);
+        assert_eq!(from_ordinal(1).map(|d| d.iso()).as_deref(), Some("0001-01-01"));
+    }
+
+    #[test]
     fn date_grammar_matches_cpython() {
         let ok = |s: &str| date_fromisoformat(s).map(|d| d.iso());
         assert_eq!(ok("2026-06-30").as_deref(), Some("2026-06-30"));
