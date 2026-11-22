@@ -1,6 +1,106 @@
 use super::*;
 
 #[test]
+#[should_panic(expected = "fixture must be an object")]
+fn changing_a_scalar_as_a_fixture_reports_the_shape() {
+    set(&mut Json::Null, &["synthetic"], Json::Bool(true));
+}
+
+#[test]
+#[should_panic(expected = "fixture findings must be an array")]
+fn mutating_non_array_findings_reports_the_shape() {
+    fixture_findings(&mut Json::object([("findings", Json::Null)]));
+}
+
+#[test]
+fn missing_or_malformed_review_fixtures_identify_the_affected_file() -> Result<()> {
+    let scratch = Scratch::new()?;
+    let example = scratch.0.join("document-review.example.json");
+    let missing = review_fixture(&scratch.0).unwrap_err().to_string();
+    assert!(missing.starts_with(&format!(
+        "cannot read review fixture {}: ",
+        example.display()
+    )));
+
+    fs::write(&example, b"{")?;
+    let malformed = review_fixture(&scratch.0).unwrap_err().to_string();
+    assert!(malformed.starts_with(&format!("invalid review fixture {}: ", example.display())));
+    assert_eq!(fs::read(&example)?, b"{");
+    assert_eq!(fs::read_dir(&scratch.0)?.count(), 1);
+    Ok(())
+}
+
+#[test]
+fn malformed_pack_documents_do_not_leave_a_saved_fixture() -> Result<()> {
+    let scratch = Scratch::new()?;
+    for (document, expected) in [
+        (Json::Null, "top level must be a JSON object"),
+        (Json::object([]), "missing top-level member(s)"),
+        (
+            Json::object([("other", Json::Null)]),
+            "unknown top-level member(s): other",
+        ),
+        (
+            Json::object([
+                ("overall_status", Json::Null),
+                ("overall_status", Json::Null),
+            ]),
+            "member 'overall_status' appears more than once",
+        ),
+    ] {
+        let failure = save_pack_document(&scratch.0, "malformed", &document).unwrap_err();
+        assert!(failure.to_string().contains(expected), "{failure}");
+    }
+    assert_eq!(fs::read_dir(&scratch.0)?.count(), 0);
+    Ok(())
+}
+
+#[test]
+fn a_read_only_prior_findings_fixture_never_queues_a_failed_comparison() -> Result<()> {
+    let root = Scratch::new()?;
+    let inputs = root.0.join("examples/month-end-ready");
+    fs::create_dir_all(&inputs)?;
+    let fixture = inputs.join("prior_findings.csv");
+    let prior = b"synthetic prior findings";
+    fs::write(&fixture, prior)?;
+    let writable = fs::metadata(&fixture)?.permissions();
+    let mut readonly = writable.clone();
+    readonly.set_readonly(true);
+    fs::set_permissions(&fixture, readonly)?;
+
+    let scratch = Scratch::new()?;
+    let mut corpus = Corpus(Vec::new());
+    let result = complete_pack(&mut corpus, &root.0, &scratch.0);
+    let staged = scratch
+        .0
+        .join("month-end-complete")
+        .join("prior_findings.csv");
+    fs::set_permissions(&fixture, writable.clone())?;
+    fs::set_permissions(&staged, writable)?;
+    assert_eq!(fs::read(&fixture)?, prior);
+    match result {
+        Err(error) => {
+            assert!(
+                error.to_string().starts_with(&format!(
+                    "cannot write prior findings fixture {}: ",
+                    staged.display()
+                )),
+                "{error}"
+            );
+            assert!(corpus.0.is_empty());
+            assert_eq!(fs::read(&staged)?, prior);
+        }
+        Ok(()) => {
+            // The test can run with privileges that bypass the copied file mode.
+            assert_eq!(corpus.0.len(), 1);
+            assert!(corpus.0[0].at("name").is_str("pack-month-end-complete"));
+            assert!(fs::read_to_string(&staged)?.contains("BANK_REC_BREAK,bank_rec,CLEARED"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Result<()> {
     let version = Command::new("git").arg("--version").output()?;
     assert!(version.status.success());
@@ -141,7 +241,7 @@ fn rendered_without(document: &Json, slot: &str) -> Result<Json> {
     let mut expected = document_without(document, slot);
     let profile = text(document.at("engagement_type")).unwrap();
     let slots = review_ready_gate::profiles::slots_for(&profile)?;
-    let Json::Object(sources) = field_mut(&mut expected, "source_sha256").unwrap() else {
+    let Json::Object(sources) = expected.get_mut("source_sha256").unwrap() else {
         panic!("fixture must carry source evidence")
     };
     // The probe's canonical JSON sorts keys; the renderer lists evidence in
@@ -171,12 +271,12 @@ fn mutable_fields_require_an_object_and_preserve_siblings() -> Result<()> {
         Json::str("object"),
     ] {
         let before = probe::encode(&value);
-        assert!(field_mut(&mut value, "slot").is_none());
+        assert!(value.get_mut("slot").is_none());
         assert_eq!(probe::encode(&value), before);
     }
     let mut value = probe::decode(r#"{"target":1,"sibling":{"value":2}}"#)?;
-    assert!(field_mut(&mut value, "missing").is_none());
-    *field_mut(&mut value, "target").unwrap() = Json::str("changed");
+    assert!(value.get_mut("missing").is_none());
+    *value.get_mut("target").unwrap() = Json::str("changed");
     assert_eq!(
         probe::encode(&value),
         r#"{"sibling":{"value":2},"target":"changed"}"#
@@ -400,7 +500,7 @@ fn result_projection_requires_its_native_envelope_and_readable_first_file() -> R
         assert_refused(&malformed, "fs_mapping")?;
     }
     let mut missing = source.clone();
-    remove(field_mut(&mut missing, "ok").unwrap(), "files");
+    remove(missing.get_mut("ok").unwrap(), "files");
     assert_refused(&missing, "fs_mapping")?;
     for malformed_files in [
         Json::Null,
@@ -455,8 +555,8 @@ fn complete_result_projection_preserves_the_envelope_and_rendered_bytes() -> Res
     let actual = without_absent_control(&probe::encode(&source), "fs_mapping")?.unwrap();
     assert_eq!(actual, probe::encode(&expected));
     let mut files_only = source.clone();
-    remove(field_mut(&mut files_only, "ok").unwrap(), "pack");
-    remove(field_mut(&mut expected, "ok").unwrap(), "pack");
+    remove(files_only.get_mut("ok").unwrap(), "pack");
+    remove(expected.get_mut("ok").unwrap(), "pack");
     assert_eq!(
         without_absent_control(&probe::encode(&files_only), "fs_mapping")?.unwrap(),
         probe::encode(&expected)

@@ -519,10 +519,17 @@ fn complete_pack(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
         let entry = entry?;
         fs::copy(entry.path(), pack.join(entry.file_name()))?;
     }
+    let prior_findings = pack.join("prior_findings.csv");
     fs::write(
-        pack.join("prior_findings.csv"),
+        &prior_findings,
         "FindingCode,Slot,Status\nBANK_REC_BREAK,bank_rec,CLEARED\n",
-    )?;
+    )
+    .map_err(|error| {
+        format!(
+            "cannot write prior findings fixture {}: {error}",
+            prior_findings.display()
+        )
+    })?;
     c.push(
         "pack-month-end-complete",
         "review_pack",
@@ -631,7 +638,9 @@ fn runtime_cli(c: &mut Corpus, root: &Path, scratch: &Path) {
 }
 
 fn fixture_field<'a>(document: &'a mut Json, key: &str) -> &'a mut Json {
-    field_mut(document, key).unwrap_or_else(|| panic!("fixture field {key} is missing"))
+    document
+        .get_mut(key)
+        .unwrap_or_else(|| panic!("fixture field {key} is missing"))
 }
 
 fn fixture_object(document: &mut Json) -> &mut Vec<(PyStr, Json)> {
@@ -642,10 +651,9 @@ fn fixture_object(document: &mut Json) -> &mut Vec<(PyStr, Json)> {
 }
 
 fn fixture_findings(document: &mut Json) -> &mut [Json] {
-    let Json::Array(findings) = fixture_field(document, "findings") else {
-        panic!("fixture findings must be an array")
-    };
-    findings
+    fixture_field(document, "findings")
+        .as_array_mut()
+        .expect("fixture findings must be an array")
 }
 
 fn set(document: &mut Json, keys: &[&str], value: Json) {
@@ -671,12 +679,17 @@ fn save_pack(scratch: &Path, name: &str, files: &[Vec<u8>; 3]) -> Result<PathBuf
     }
     Ok(path)
 }
+
+fn save_pack_document(scratch: &Path, name: &str, document: &Json) -> Result<PathBuf> {
+    save_pack(scratch, name, &probe::render_pack(document)?)
+}
+
 #[expect(clippy::too_many_lines, reason = "builds the saved pack corpus cases")]
 fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     let ready = probe::example_document("bas", &root.join("examples/bas-ready"), "0.01")?;
     let not_ready = probe::example_document("bas", &root.join("examples/bas-not-ready"), "0.01")?;
     let base = probe::render_pack(&not_ready)?;
-    let ready_dir = save_pack(scratch, "ready", &probe::render_pack(&ready)?)?;
+    let ready_dir = save_pack_document(scratch, "ready", &ready)?;
     let not_dir = save_pack(scratch, "not-ready", &base)?;
     let mut private_finding = not_ready.clone();
     set(
@@ -860,44 +873,41 @@ fn saved_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             vec![("pack", Json::str(&path.to_string_lossy()))],
         );
     }
-    for (name, mut document) in [
-        ("legacy", ready.clone()),
-        ("equivalent", ready.clone()),
-        ("changed-tolerance", ready.clone()),
-        ("reordered", not_ready.clone()),
-        ("private-unicode", ready.clone()),
+    let mut legacy = ready.clone();
+    remove(&mut legacy, "controls_not_run");
+    let mut equivalent = ready.clone();
+    let mut changed_tolerance = ready.clone();
+    for (document, tolerance) in [(&mut equivalent, "0.010"), (&mut changed_tolerance, "5.00")] {
+        set(
+            document,
+            &["thresholds", "tieout_tolerance"],
+            Json::str(tolerance),
+        );
+    }
+    let mut reordered = not_ready.clone();
+    fixture_findings(&mut reordered).reverse();
+    let mut private_unicode = ready;
+    set(
+        &mut private_unicode,
+        &["preparer_initials"],
+        Json::str("A\u{10f7ff}\u{10f800}"),
+    );
+    set(
+        &mut private_unicode,
+        &["source_sha256", "private_\u{10f7ff}\u{10f800}"],
+        Json::object([
+            ("filename", Json::str("private.txt")),
+            ("sha256", Json::str(&"d".repeat(64))),
+        ]),
+    );
+    for (name, document) in [
+        ("legacy", legacy),
+        ("equivalent", equivalent),
+        ("changed-tolerance", changed_tolerance),
+        ("reordered", reordered),
+        ("private-unicode", private_unicode),
     ] {
-        match name {
-            "legacy" => remove(&mut document, "controls_not_run"),
-            "equivalent" => set(
-                &mut document,
-                &["thresholds", "tieout_tolerance"],
-                Json::str("0.010"),
-            ),
-            "changed-tolerance" => set(
-                &mut document,
-                &["thresholds", "tieout_tolerance"],
-                Json::str("5.00"),
-            ),
-            "reordered" => fixture_findings(&mut document).reverse(),
-            "private-unicode" => {
-                set(
-                    &mut document,
-                    &["preparer_initials"],
-                    Json::str("A\u{10f7ff}\u{10f800}"),
-                );
-                set(
-                    &mut document,
-                    &["source_sha256", "private_\u{10f7ff}\u{10f800}"],
-                    Json::object([
-                        ("filename", Json::str("private.txt")),
-                        ("sha256", Json::str(&"d".repeat(64))),
-                    ]),
-                );
-            }
-            _ => unreachable!(),
-        }
-        let path = save_pack(scratch, name, &probe::render_pack(&document)?)?;
+        let path = save_pack_document(scratch, name, &document)?;
         c.push(
             format!("view-{name}"),
             "view",
@@ -991,6 +1001,14 @@ fn acknowledgements(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
     }
     Ok(())
 }
+fn review_fixture(bundle: &Path) -> Result<Json> {
+    let path = bundle.join("document-review.example.json");
+    let contents = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read review fixture {}: {error}", path.display()))?;
+    probe::decode(&contents)
+        .map_err(|error| format!("invalid review fixture {}: {error}", path.display()).into())
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "builds the document pack corpus cases"
@@ -1029,9 +1047,7 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             version: "",
         })?;
         if reviewed {
-            let mut review = probe::decode(&fs::read_to_string(
-                bundle.join("document-review.example.json"),
-            )?)?;
+            let mut review = review_fixture(&bundle)?;
             set(&mut review, &["reviewer_initials"], Json::str("XY"));
             set(&mut review, &["reviewed_on"], Json::str("2026-04-10"));
             set(&mut review, &["source_text_checked"], Json::Bool(true));
@@ -1074,17 +1090,11 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
                 ),
             ],
         );
-        saved.push((
-            name,
-            save_pack(
-                scratch,
-                &format!("document-pack-{name}"),
-                &probe::render_pack(&document)?,
-            )?,
-        ));
+        let pack = save_pack_document(scratch, &format!("document-pack-{name}"), &document)?;
+        saved.push((name, pack, document));
     }
-    for (before, previous) in &saved {
-        for (after, current) in &saved {
+    for (before, previous, _) in &saved {
+        for (after, current, _) in &saved {
             c.push(
                 format!("document-compare-{before}-{after}"),
                 "compare",
@@ -1095,12 +1105,13 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             );
         }
     }
-    let mut equal_indices = probe::example_document_with_documents(
-        "bas",
-        &root.join("examples/bas-ready"),
-        "0.01",
-        &[bundles[0].clone(), bundles[0].clone()],
-    )?;
+    let fixture = |name| {
+        saved
+            .iter()
+            .find(|(label, _, _)| *label == name)
+            .expect("named document fixture must be generated before editing")
+    };
+    let mut equal_indices = fixture("duplicates").2.clone();
     for finding in fixture_findings(&mut equal_indices) {
         if finding.at("slot").is_str("document_002") {
             set(finding, &["slot"], Json::str("document_0001"));
@@ -1121,67 +1132,56 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             set(value, &["filename"], Json::str(&filename));
         }
     }
-    let equal_indices = save_pack(
-        scratch,
-        "document-equal-indices",
-        &probe::render_pack(&equal_indices)?,
-    )?;
+    let equal_indices = save_pack_document(scratch, "document-equal-indices", &equal_indices)?;
     c.push(
         "document-compare-equal-numeric-indices",
         "compare",
         vec![
             ("previous", Json::str(&equal_indices.to_string_lossy())),
-            ("current", Json::str(&saved[2].1.to_string_lossy())),
+            (
+                "current",
+                Json::str(&fixture("reviewed").1.to_string_lossy()),
+            ),
         ],
     );
-    let document = probe::example_document_with_documents(
-        "bas",
-        &root.join("examples/bas-ready"),
-        "0.01",
-        &[bundles[0].clone()],
-    )?;
-    for mutation in [
-        "missing",
-        "duplicate",
-        "relabelled",
-        "contradictory",
-        "reviewed-missing",
+    enum EvidenceEdit {
+        Remove,
+        Duplicate,
+        Rename(&'static str),
+    }
+    for (mutation, variant, edit) in [
+        ("missing", "unreviewed", EvidenceEdit::Remove),
+        ("duplicate", "unreviewed", EvidenceEdit::Duplicate),
+        (
+            "relabelled",
+            "unreviewed",
+            EvidenceEdit::Rename("original_evidence"),
+        ),
+        (
+            "contradictory",
+            "unreviewed",
+            EvidenceEdit::Rename("document_002_1"),
+        ),
+        ("reviewed-missing", "reviewed", EvidenceEdit::Remove),
     ] {
-        let mut document = if mutation == "reviewed-missing" {
-            probe::example_document_with_documents(
-                "bas",
-                &root.join("examples/bas-ready"),
-                "0.01",
-                &[bundles[1].clone()],
-            )?
-        } else {
-            document.clone()
-        };
+        let mut document = fixture(variant).2.clone();
         let sources = fixture_object(fixture_field(&mut document, "source_sha256"));
         let index = sources
             .iter()
             .position(|(_, v)| v.at("filename").is_str("document_001/original.txt"))
             .unwrap();
-        match mutation {
-            "missing" | "reviewed-missing" => {
+        match edit {
+            EvidenceEdit::Remove => {
                 sources.remove(index);
             }
-            "duplicate" => {
+            EvidenceEdit::Duplicate => {
                 sources.push((PyStr::from("evidence_extra"), sources[index].1.clone()));
             }
-            "relabelled" => {
-                sources[index].0 = PyStr::from("original_evidence");
+            EvidenceEdit::Rename(label) => {
+                sources[index].0 = PyStr::from(label);
             }
-            "contradictory" => {
-                sources[index].0 = PyStr::from("document_002_1");
-            }
-            _ => unreachable!(),
         }
-        let path = save_pack(
-            scratch,
-            &format!("document-{mutation}"),
-            &probe::render_pack(&document)?,
-        )?;
+        let path = save_pack_document(scratch, &format!("document-{mutation}"), &document)?;
         c.push(
             format!("document-view-{mutation}"),
             "view",
@@ -1191,7 +1191,10 @@ fn document_packs(c: &mut Corpus, root: &Path, scratch: &Path) -> Result<()> {
             format!("document-compare-{mutation}"),
             "compare",
             vec![
-                ("previous", Json::str(&saved[1].1.to_string_lossy())),
+                (
+                    "previous",
+                    Json::str(&fixture("unreviewed").1.to_string_lossy()),
+                ),
                 ("current", Json::str(&path.to_string_lossy())),
             ],
         );
@@ -1258,12 +1261,6 @@ fn exchange(mut command: Command, corpus: &str) -> Result<String> {
     written??;
     Ok(String::from_utf8(bytes)?)
 }
-fn field_mut<'a>(value: &'a mut Json, key: &str) -> Option<&'a mut Json> {
-    let Json::Object(fields) = value else {
-        return None;
-    };
-    fields.iter_mut().find(|(k, _)| k.is(key)).map(|(_, v)| v)
-}
 fn text(value: &Json) -> Option<String> {
     value.as_pystr().and_then(PyStr::to_utf8)
 }
@@ -1281,7 +1278,7 @@ fn unhex(hex: &str) -> Result<Vec<u8>> {
 /// exactly one.
 fn without_control_entry(document: &Json, slot: &str) -> Option<(Json, Json, usize)> {
     let mut document = document.clone();
-    let Some(Json::Array(controls)) = field_mut(&mut document, "controls_not_run") else {
+    let Some(Json::Array(controls)) = document.get_mut("controls_not_run") else {
         return None;
     };
     let named = |control: &Json| control.at("slot").is_str(slot);
@@ -1397,7 +1394,7 @@ fn without_control_line(stdout: &str, slot: &str) -> Option<String> {
 /// renderer puts it.
 fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
     let mut result = probe::decode(native)?;
-    let Some(ok) = field_mut(&mut result, "ok") else {
+    let Some(ok) = result.get_mut("ok") else {
         return Ok(None);
     };
     let Some(Json::Array(files)) = ok.get("files") else {
@@ -1418,11 +1415,11 @@ fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
     let Some(files) = without_control_files(files, &entry, left, slot)? else {
         return Ok(None);
     };
-    *field_mut(ok, "files").expect("checked above") = files;
-    if let Some(pack) = field_mut(ok, "pack") {
+    *ok.get_mut("files").expect("checked above") = files;
+    if let Some(pack) = ok.get_mut("pack") {
         *pack = projected;
     }
-    if let Some(stdout) = field_mut(ok, "stdout") {
+    if let Some(stdout) = ok.get_mut("stdout") {
         let Some(line) = text(stdout).and_then(|s| without_control_line(&s, slot)) else {
             return Ok(None);
         };

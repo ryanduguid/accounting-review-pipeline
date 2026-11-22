@@ -790,9 +790,7 @@ mod tests {
         .unwrap()
     }
     fn set(value: &mut Json, keys: &[&str], replacement: Json) {
-        let Json::Object(pairs) = value else {
-            panic!("test fixture object")
-        };
+        let Json::Object(pairs) = value else { panic!() };
         if keys.len() == 1 {
             if let Some((_, value)) = pairs.iter_mut().find(|(key, _)| key.is(keys[0])) {
                 *value = replacement;
@@ -922,6 +920,7 @@ mod tests {
             )
             .unwrap();
             let expected = case.at("expected").as_object().expect("expected object");
+            let id = pyjson::canonical(case.at("id"));
             for (field, value) in expected {
                 assert!(
                     pyjson::py_eq(
@@ -933,8 +932,7 @@ mod tests {
                         value,
                         false
                     ),
-                    "{}:{field:?}",
-                    pyjson::canonical(case.at("id"))
+                    "{id}:{field:?}"
                 );
             }
             let mut unresolved: Vec<_> = FIELDS
@@ -963,12 +961,8 @@ mod tests {
             );
             reviewed(&path);
             let loaded = load_document(&path).unwrap();
-            assert_eq!(
-                loaded.issues.is_empty(),
-                unresolved.is_empty(),
-                "{}",
-                pyjson::canonical(case.at("id"))
-            );
+            let id = pyjson::canonical(case.at("id"));
+            assert_eq!(loaded.issues.is_empty(), unresolved.is_empty(), "{id}");
         }
     }
     #[test]
@@ -1313,25 +1307,25 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn intake_refuses_output_below_a_directory_where_it_cannot_create_a_parent() {
+    fn intake_only_creates_missing_parents_when_the_directory_is_writable() {
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = TempDir::new();
         let source = tmp.join("source.txt");
         let extracted = tmp.join("extracted.txt");
-        let locked = tmp.join("read-only");
-        let parent = locked.join("missing");
-        let output = parent.join("bundle");
         let text = source_text();
         fs::write(&source, &text).unwrap();
         fs::write(&extracted, &text).unwrap();
-        fs::create_dir(&locked).unwrap();
-        let permissions = fs::metadata(&locked).unwrap().permissions();
-        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
-
-        let probe = fs::create_dir(locked.join("probe"));
-        let result = if probe.is_err() {
-            Some(create_intake(IntakeOptions {
+        for (name, mode) in [("writable", 0o755), ("read-only", 0o555)] {
+            let directory = tmp.join(name);
+            let parent = directory.join("missing");
+            let output = parent.join("bundle");
+            fs::create_dir(&directory).unwrap();
+            let permissions = fs::metadata(&directory).unwrap().permissions();
+            fs::set_permissions(&directory, fs::Permissions::from_mode(mode)).unwrap();
+            // A privileged process may be able to write even under the read-only mode.
+            let probe = fs::create_dir(directory.join("probe"));
+            let result = create_intake(IntakeOptions {
                 source: &source,
                 text: &extracted,
                 output: &output,
@@ -1339,20 +1333,30 @@ mod tests {
                 period: "2026-03-31",
                 origin: "manual",
                 version: "",
-            }))
-        } else {
-            None
-        };
-        fs::set_permissions(&locked, permissions).unwrap();
-        if let Some(result) = result {
-            let error = probe.unwrap_err();
-            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
-            assert_eq!(result.unwrap_err(), error.to_string());
-            assert!(!parent.exists());
+            });
+            fs::set_permissions(&directory, permissions).unwrap();
+            match probe {
+                Ok(()) => {
+                    assert_eq!(
+                        fs::canonicalize(result.unwrap()).unwrap(),
+                        fs::canonicalize(&output).unwrap()
+                    );
+                    assert_eq!(
+                        fs::read_to_string(output.join("original.txt")).unwrap(),
+                        text
+                    );
+                }
+                Err(error) => {
+                    assert_eq!(mode, 0o555);
+                    assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+                    assert_eq!(result.unwrap_err(), error.to_string());
+                    assert!(!parent.exists());
+                    assert!(!output.exists());
+                }
+            }
+            assert_eq!(fs::read_to_string(&source).unwrap(), text);
+            assert_eq!(fs::read_to_string(&extracted).unwrap(), text);
         }
-        assert_eq!(fs::read_to_string(&source).unwrap(), text);
-        assert_eq!(fs::read_to_string(&extracted).unwrap(), text);
-        assert!(!output.exists());
     }
 
     #[test]

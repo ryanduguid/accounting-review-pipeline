@@ -82,6 +82,14 @@ impl Json {
         }
     }
 
+    #[cfg(feature = "probe")]
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Json> {
+        match self {
+            Json::Object(pairs) => pairs.iter_mut().find(|(k, _)| k.is(key)).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+
     /// `obj[key]` for a key the caller has already proved present.
     pub fn at(&self, key: &str) -> &Json {
         self.get(key)
@@ -96,6 +104,14 @@ impl Json {
     }
 
     pub fn as_array(&self) -> Option<&[Json]> {
+        match self {
+            Json::Array(items) => Some(items),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "probe")]
+    pub fn as_array_mut(&mut self) -> Option<&mut [Json]> {
         match self {
             Json::Array(items) => Some(items),
             _ => None,

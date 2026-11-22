@@ -35,6 +35,30 @@ extern "C" fn request_cancel(_: i32) {
     CANCELLED.store(true, Ordering::Relaxed);
 }
 
+#[cfg(unix)]
+fn install_unix_handler(signal: i32) -> Option<usize> {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::zeroed();
+    // SAFETY: initializes writable storage without changing a signal handler.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    if unsafe { libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: the successful query initialized action.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let action = unsafe { action.assume_init() };
+    if action.sa_sigaction != libc::SIG_DFL {
+        return None;
+    }
+    let handler = request_cancel as *const () as usize;
+    // SAFETY: the handler has static lifetime and only stores an atomic flag.
+    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+    let previous = unsafe { libc::signal(signal, handler) };
+    if previous == libc::SIG_ERR {
+        return None;
+    }
+    Some(previous)
+}
+
 pub struct ManagedPublication {
     previous: Option<usize>,
 }
@@ -42,26 +66,7 @@ impl ManagedPublication {
     pub fn new() -> Self {
         CANCELLED.store(false, Ordering::Relaxed);
         #[cfg(unix)]
-        let previous = {
-            let mut action = std::mem::MaybeUninit::<libc::sigaction>::zeroed();
-            // SAFETY: sigaction fills the supplied structure; no handler is changed here.
-            if unsafe { libc::sigaction(libc::SIGTERM, std::ptr::null(), action.as_mut_ptr()) } == 0
-            {
-                // SAFETY: the successful call initialised action.
-                let action = unsafe { action.assume_init() };
-                if action.sa_sigaction == libc::SIG_DFL {
-                    // SAFETY: the handler only stores an atomic flag and has static lifetime.
-                    let old = unsafe {
-                        libc::signal(libc::SIGTERM, request_cancel as *const () as usize)
-                    };
-                    (old != libc::SIG_ERR).then_some(old)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        };
+        let previous = install_unix_handler(libc::SIGTERM);
         #[cfg(windows)]
         let previous = {
             // Windows process termination remains abrupt; C signal delivery is managed.
@@ -71,9 +76,9 @@ impl ManagedPublication {
                 Some(old)
             } else {
                 if old != usize::MAX {
-                    unsafe {
-                        win_signal(15, old);
-                    }
+                    // SAFETY: puts back the handler signal() just returned.
+                    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+                    unsafe { win_signal(15, old) };
                 }
                 None
             }
@@ -130,15 +135,9 @@ pub fn single_link(_path: &Path, metadata: &fs::Metadata) -> io::Result<bool> {
 #[cfg(windows)]
 fn single_link_handle(file: &File) -> io::Result<bool> {
     use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, GetFileInformationByHandle,
-    };
-    let mut info = BY_HANDLE_FILE_INFORMATION::default();
-    // SAFETY: file owns the handle and info is writable storage of the required type.
-    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+
+    let info = pypath::file_information_by_handle(file.as_raw_handle())?;
     Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
 }
 
@@ -760,6 +759,65 @@ pub fn process_probe() -> i32 {
 mod tests {
     use super::*;
     use crate::test_support::TempDir;
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_signal_query_or_registration_keeps_no_handler() {
+        assert!(install_unix_handler(-1).is_none());
+        assert!(install_unix_handler(libc::SIGKILL).is_none());
+    }
+
+    #[test]
+    fn managed_publication_keeps_the_process_existing_signal_handler() {
+        const CHILD: &str = "ARP_TEST_MANAGED_PUBLICATION_SIGNAL_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            // This test runs its own test binary with fixed arguments.
+            // nosemgrep: rust.lang.security.current-exe.current-exe
+            let output = crate::child_profile::command(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "publication::tests::managed_publication_keeps_the_process_existing_signal_handler",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}{stderr}"
+            );
+            return;
+        }
+        #[cfg(unix)]
+        let (set_signal, term, ignored) = (libc::signal, libc::SIGTERM, libc::SIG_IGN);
+        #[cfg(windows)]
+        let (set_signal, term, ignored) = (win_signal, 15, 1);
+
+        // SAFETY: change SIGTERM in this one-test child without sending a signal.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let previous = unsafe { set_signal(term, ignored) };
+        assert_ne!(previous, usize::MAX);
+        {
+            let managed = ManagedPublication::new();
+            assert!(managed.previous.is_none());
+        }
+        // SAFETY: restore the handler returned by the successful initial call.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let restored = unsafe { set_signal(term, previous) };
+        assert_eq!(restored, ignored);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_file_information_preserves_the_kernel_error() {
+        use windows_sys::Win32::Foundation::ERROR_INVALID_HANDLE;
+
+        let error = pypath::file_information_by_handle(std::ptr::null_mut())
+            .err()
+            .expect("Windows must refuse an invalid file handle");
+        assert_eq!(error.raw_os_error(), Some(ERROR_INVALID_HANDLE as i32));
+    }
     fn rendered(prefix: &str) -> [Vec<u8>; 3] {
         std::array::from_fn(|i| format!("{prefix}-{i}").into_bytes())
     }
@@ -1077,13 +1135,10 @@ mod tests {
             if point == "committed" {
                 let control = tmp.join(CONTROL_NAME);
                 let state = read_state(&control)?;
-                held = Some(
-                    OpenOptions::new().read(true).share_mode(0).open(
-                        control
-                            .join(format!("tx-{}", state.transaction.unwrap()))
-                            .join("backup-0"),
-                    )?,
-                );
+                let backup = control
+                    .join(format!("tx-{}", state.transaction.unwrap()))
+                    .join("backup-0");
+                held = Some(OpenOptions::new().read(true).share_mode(0).open(backup)?);
             }
             Ok(())
         });
@@ -1154,12 +1209,10 @@ mod tests {
             if point == "install-0" {
                 let control = tmp.join(CONTROL_NAME);
                 let state = read_state(&control)?;
-                fs::write(
-                    control
-                        .join(format!("tx-{}", state.transaction.unwrap()))
-                        .join("backup-0"),
-                    "corrupt",
-                )?;
+                let backup = control
+                    .join(format!("tx-{}", state.transaction.unwrap()))
+                    .join("backup-0");
+                fs::write(backup, "corrupt")?;
                 Err(error("failure"))
             } else {
                 Ok(())

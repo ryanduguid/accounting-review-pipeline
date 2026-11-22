@@ -22,16 +22,11 @@ fn text(value: &Json) -> String {
     value.as_pystr().unwrap().to_utf8().unwrap()
 }
 fn object(value: &Json) -> BTreeMap<&PyStr, &Json> {
-    let Json::Object(pairs) = value else {
-        unreachable!()
-    };
+    let pairs = value.as_object().expect("verified object");
     pairs.iter().map(|(key, value)| (key, value)).collect()
 }
 fn findings(document: &Json) -> &[Json] {
-    let Json::Array(items) = document.at("findings") else {
-        unreachable!()
-    };
-    items
+    document.at("findings").as_array().expect("verified list")
 }
 fn groups(document: &Json) -> BTreeMap<(&PyStr, &PyStr), Vec<&Json>> {
     let mut groups: BTreeMap<_, Vec<_>> = BTreeMap::new();
@@ -65,9 +60,7 @@ fn thresholds_differ(previous: &Json, current: &Json) -> bool {
 }
 fn coverage(document: &Json) -> Option<Vec<[&PyStr; SKIPPED_CONTROL.len()]>> {
     document.get("controls_not_run").map(|c| {
-        let Json::Array(items) = c else {
-            unreachable!()
-        };
+        let items = c.as_array().expect("verified list");
         let mut rows: Vec<_> = items
             .iter()
             .map(|item| SKIPPED_CONTROL.map(|key| item.at(key).as_pystr().unwrap()))
@@ -105,9 +98,10 @@ fn document_sources(document: &Json) -> Result<Vec<(String, String)>> {
             entry.insert(Original::default());
         }
     }
-    let Json::Object(sources) = document.at("source_sha256") else {
-        unreachable!()
-    };
+    let sources = document
+        .at("source_sha256")
+        .as_object()
+        .expect("verified object");
     for (key, source) in sources {
         let key = key.to_utf8().unwrap();
         let label = key
