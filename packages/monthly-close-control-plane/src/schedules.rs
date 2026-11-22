@@ -126,7 +126,7 @@ type ScheduleFields = Vec<(&'static str, Json)>;
 )]
 pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
     let parse = || -> Result<Json> {
-        let raw = snapshot.text("schedule", true)?;
+        let raw = snapshot.text("schedule")?;
         pyjson::loads_detailed(raw).map_err(|(error, diagnostic)| match error {
             LoadError::Invalid => diagnostic.unwrap(),
             LoadError::DuplicateKey(key) => format!("Duplicate JSON field: {}.", key.os_text()),
@@ -451,7 +451,7 @@ fn migration(data: &Json) -> Result<ScheduleFields> {
                 .map(|(target, weight)| (target, weight))
                 .chain((!source_side).then_some((&account, &unit_weight)));
             for (account, weight) in destinations {
-                add(
+                let added = add(
                     values,
                     (
                         id(row, "item_id"),
@@ -460,7 +460,8 @@ fn migration(data: &Json) -> Result<ScheduleFields> {
                         id(row, "tax_code"),
                     ),
                     &exact(amount.mul_outcome(weight))?,
-                )?;
+                );
+                added?;
             }
         }
     }

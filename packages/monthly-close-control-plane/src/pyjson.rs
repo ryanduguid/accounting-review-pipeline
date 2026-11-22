@@ -144,24 +144,26 @@ impl Json {
         }
     }
 
-    pub fn keys(&self) -> Option<Vec<&PyStr>> {
+    pub fn as_object(&self) -> Option<&[(PyStr, Json)]> {
         match self {
-            Json::Object(pairs) => Some(pairs.iter().map(|(k, _)| k).collect()),
+            Json::Object(pairs) => Some(pairs),
             _ => None,
         }
     }
 
+    pub fn keys(&self) -> Option<Vec<&PyStr>> {
+        self.as_object()
+            .map(|pairs| pairs.iter().map(|(k, _)| k).collect())
+    }
+
     /// `set(obj) == required` for a dict; false for anything else.
     pub fn has_exact_keys(&self, required: &[&str]) -> bool {
-        match self {
-            Self::Object(members) => {
-                members.len() == required.len()
-                    && required
-                        .iter()
-                        .all(|required| members.iter().any(|(key, _)| key.is(required)))
-            }
-            _ => false,
-        }
+        self.as_object().is_some_and(|members| {
+            members.len() == required.len()
+                && required
+                    .iter()
+                    .all(|required| members.iter().any(|(key, _)| key.is(required)))
+        })
     }
 
     pub fn is_str(&self, text: &str) -> bool {
