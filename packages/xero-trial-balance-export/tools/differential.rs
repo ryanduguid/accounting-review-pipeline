@@ -339,9 +339,34 @@ impl Random {
             _ => Json::str(texts[self.next(texts.len())]),
         }
     }
-    fn mutate_some(&mut self, value: Option<&mut Json>, depth: usize) {
-        if let Some(value) = value {
-            self.mutate(value, depth);
+    fn mutate_request(&mut self, request: &mut Json) {
+        let Json::Object(fields) = request else {
+            return;
+        };
+        let Some((_, op)) = fields.iter().find(|(key, _)| key.is("op")) else {
+            return;
+        };
+        let is_report = matches!(
+            report::text(op).as_str(),
+            "flatten_report" | "validate_report_identity"
+        );
+        let Some((_, Json::Array(params))) = fields.iter_mut().find(|(key, _)| key.is("args"))
+        else {
+            return;
+        };
+        let Some(first) = params.first_mut() else {
+            return;
+        };
+        // Reports mutate one field below the top; other requests their first argument.
+        if is_report {
+            if let Json::Object(items) = first
+                && !items.is_empty()
+            {
+                let index = self.next(items.len());
+                self.mutate(&mut items[index].1, 1);
+            }
+        } else {
+            self.mutate(first, 0);
         }
     }
     fn mutate(&mut self, value: &mut Json, depth: usize) {
@@ -614,25 +639,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     for _ in 0..count {
         let mut seed = (*seeds[random.next(seeds.len())]).clone();
-        let op = report::text(seed.at("op"));
-        // Every seed is a request object with a non-empty argument list.
-        let Json::Object(f) = &mut seed else { panic!() };
-        let args = &mut f
-            .iter_mut()
-            .find(|(k, _)| k.is("args"))
-            .expect("seed args")
-            .1;
-        let Json::Array(params) = args else { panic!() };
-        // Reports mutate one field below the top; other requests their first argument.
-        let report = matches!(op.as_str(), "flatten_report" | "validate_report_identity");
-        let (target, depth) = match params.first_mut().expect("seed argument") {
-            Json::Object(items) if report && !items.is_empty() => {
-                let i = random.next(items.len());
-                (Some(&mut items[i].1), 1)
-            }
-            first => ((!report).then_some(first), 0),
-        };
-        random.mutate_some(target, depth);
+        random.mutate_request(&mut seed);
         inputs.push(seed);
     }
     for exponent in -40..=40 {
@@ -752,6 +759,32 @@ mod tests {
     const EOF_FIXTURE: &str = "XERO_DIFFERENTIAL_EOF_FIXTURE";
     const NO_READ_FIXTURE: &str = "XERO_DIFFERENTIAL_NO_READ_FIXTURE";
     static FIXTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn failed_differential_requirement_keeps_its_diagnostic() {
+        assert!(ensure(true, "fixture commands diverged").is_ok());
+        let error = ensure(false, "fixture commands diverged").unwrap_err();
+        assert_eq!(error.to_string(), "fixture commands diverged");
+    }
+
+    #[test]
+    fn mutation_preserves_seeds_without_an_eligible_argument() {
+        let mut random = Random(1);
+        for mut seed in [
+            Json::Null,
+            Json::object([("op", Json::str("excel_safe"))]),
+            Json::object([("args", Json::Array(vec![Json::int(9)]))]),
+            Json::object([("op", Json::str("excel_safe")), ("args", Json::Null)]),
+            request("excel_safe", vec![]),
+            request("flatten_report", vec![Json::Array(vec![Json::int(9)])]),
+            request("validate_report_identity", vec![Json::object([])]),
+        ] {
+            let before = pyjson::canonical(&seed);
+            random.mutate_request(&mut seed);
+            assert_eq!(pyjson::canonical(&seed), before);
+        }
+        assert_eq!(random.0, 1);
+    }
 
     #[test]
     fn expected_lock_contention_is_distinct_from_an_io_error_or_acquisition() {

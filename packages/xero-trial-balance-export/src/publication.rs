@@ -221,6 +221,14 @@ pub fn write_csv(rows: &[report::OutputRow], path: &Path, quiet: bool) -> Result
 }
 
 pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
+    set_aside_manifest_with(path, quiet, |from, to| fs::rename(from, to))
+}
+
+fn set_aside_manifest_with(
+    path: &Path,
+    quiet: bool,
+    rename: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<Option<PathBuf>> {
     let manifest = manifest_path(path);
     let Some(metadata) = paths::entry_metadata(&manifest)? else {
         return Ok(None);
@@ -252,7 +260,7 @@ pub fn set_aside_manifest(path: &Path, quiet: bool) -> Result<Option<PathBuf>> {
         options.open(&aside)
     };
     drop(reserve.map_err(|e| Failure::message(format!("error: cannot reserve the recovery path {} ({e}); the CSV and current manifest are unchanged. Inspect any existing recovery file before moving or removing it, then run again.", shown_path(&aside, quiet))))?);
-    if let Err(e) = fs::rename(&manifest, &aside) {
+    if let Err(e) = rename(&manifest, &aside) {
         remove_or_warn(
             &aside,
             &format!(
@@ -543,6 +551,45 @@ mod tests {
             assert_eq!(fs::read(&csv).unwrap(), b"earlier CSV");
             assert_eq!(fs::read(&content).unwrap(), b"keep directory content");
             assert!(!aside.exists());
+        }
+    }
+
+    #[test]
+    fn failed_manifest_move_warns_when_the_reservation_cannot_be_removed() {
+        for quiet in [false, true] {
+            let scratch = Scratch::new();
+            let csv = scratch.0.join("tb.csv");
+            let manifest = manifest_path(&csv);
+            let aside = append(&manifest, ".previous");
+            fs::write(&csv, b"earlier CSV").unwrap();
+            fs::write(&manifest, b"earlier manifest").unwrap();
+            let (result, stdout, stderr) = crate::stdio::capture(|| {
+                set_aside_manifest_with(&csv, quiet, |from, to| {
+                    assert_eq!(from, manifest);
+                    assert_eq!(to, aside);
+                    assert_eq!(fs::metadata(to).unwrap().len(), 0);
+                    fs::remove_file(to).unwrap();
+                    fs::create_dir(to).unwrap();
+                    fs::rename(from, to)
+                })
+            });
+            let failure = result.unwrap_err();
+            assert!(stdout.is_empty() && failure.stdout.is_empty());
+            assert!(
+                failure
+                    .stderr
+                    .contains("the CSV and current manifest are unchanged")
+            );
+            assert!(stderr.starts_with(&format!(
+                "warning: the empty recovery reservation at {} could not be removed (",
+                shown_path(&aside, quiet)
+            )));
+            assert!(stderr.ends_with("); inspect it before running again.\n"));
+            assert_eq!(stderr.contains("tb.csv"), !quiet);
+            assert_eq!(failure.stderr.contains("tb.csv"), !quiet);
+            assert_eq!(fs::read(&csv).unwrap(), b"earlier CSV");
+            assert_eq!(fs::read(&manifest).unwrap(), b"earlier manifest");
+            assert!(aside.is_dir());
         }
     }
 

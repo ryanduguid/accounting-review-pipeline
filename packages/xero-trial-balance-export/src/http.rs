@@ -77,7 +77,11 @@ fn client_with_roots(
         .tls_certs_only(certificates(custom)?)
         .build()
         .map_err(|e| {
-            let context = custom.map_or("", |_| " using the configured TLS CA bundle");
+            let context = if custom.is_some() {
+                " using the configured TLS CA bundle"
+            } else {
+                ""
+            };
             Failure::message(format!(
                 "error: could not initialise the Xero HTTP client{context} ({e})"
             ))
@@ -390,6 +394,10 @@ mod tests {
                 let failure = result.unwrap_err();
                 assert!(failure.stderr.contains(message));
                 assert!(endpoint.next_reply.borrow().is_none());
+                assert!(
+                    endpoint.posts.borrow().is_empty(),
+                    "the token POST was replayed"
+                );
                 assert!(endpoint.gets.borrow().is_empty());
                 let form = endpoint.form.borrow();
                 assert!(
@@ -709,6 +717,18 @@ mod tests {
     }
 
     #[test]
+    fn xero_client_build_failure_with_bundled_roots_has_its_own_diagnostic() {
+        let builder = reqwest::Client::builder()
+            .no_proxy()
+            .user_agent("invalid\nagent");
+        let error = client_with_roots(builder, None).unwrap_err();
+        assert_eq!(
+            error,
+            Failure::message("error: could not initialise the Xero HTTP client (builder error)")
+        );
+    }
+
+    #[test]
     #[expect(
         clippy::too_many_lines,
         reason = "one child process scenario with its checks"
@@ -779,7 +799,7 @@ mod tests {
                     std::thread::sleep(Duration::from_millis(5));
                     accepted = target.accept();
                 }
-                accepted.is_ok()
+                accepted.map(drop)
             });
             let _ = http.get(
                 &format!("{scheme}://{address}/trial"),
@@ -787,10 +807,8 @@ mod tests {
                 None,
                 &[],
             );
-            assert!(
-                reached.join().unwrap(),
-                "{key}: the request never reached the target"
-            );
+            let reached = reached.join().unwrap();
+            assert!(reached.is_ok(), "{key}: target accept failed: {reached:?}");
             assert_eq!(
                 proxy.accept().unwrap_err().kind(),
                 std::io::ErrorKind::WouldBlock,
