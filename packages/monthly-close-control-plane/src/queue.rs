@@ -336,6 +336,12 @@ pub fn render_with(
 mod tests {
     use super::*;
     #[test]
+    fn an_empty_list_shows_its_placeholder_and_others_join_with_commas() {
+        assert_eq!(joined(&[], "none"), PyStr::from("none"));
+        let controls = [Json::str("subledger"), Json::str("bank")];
+        assert_eq!(joined(&controls, "none"), PyStr::from("subledger, bank"));
+    }
+    #[test]
     fn bad_filters_read_nothing_and_valid_filters_cannot_hide_an_invalid_pack() {
         let paths = [PathBuf::from("bad-pack")];
         let mut reads = 0;
