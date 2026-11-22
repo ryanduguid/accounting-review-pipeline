@@ -74,8 +74,9 @@ fn usage_error(command: &str, message: &str) -> i32 {
     clippy::too_many_lines,
     reason = "one match arm per command's option lists"
 )]
-fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) {
-    match command {
+/// The options a command accepts and requires; None for an unknown command.
+fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static str])> {
+    Some(match command {
         "review" | "workbench" => (
             &[
                 "--current",
@@ -182,8 +183,8 @@ fn options(command: &str) -> (&'static [&'static str], &'static [&'static str]) 
         ),
         "schedule" => (&["--kind", "--input"], &["--kind", "--input"]),
         "demo" => (&["--output"], &["--output"]),
-        _ => unreachable!("command checked"),
-    }
+        _ => return None,
+    })
 }
 struct Arguments(BTreeMap<String, Vec<String>>);
 impl Arguments {
@@ -293,7 +294,7 @@ fn threshold(value: &str, fraction: bool) -> Result<Decimal> {
     reason = "parses every option of a command in one loop"
 )]
 fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
-    let (flags, required) = options(command);
+    let (flags, required) = options(command).expect("command checked");
     let mut result = Arguments(BTreeMap::new());
     let mut unknown = Vec::new();
     let mut i = 0;
@@ -469,12 +470,11 @@ fn review(command: &str, args: &Arguments) -> i32 {
                 .map(|path| ("--calculation-evidence", path)),
         );
         for (flag, source) in sources {
-            let resolved = pypath::resolve(&source, false).map_err(|_| {
-                format!(
-                    "cannot resolve {flag} {}: path is unusable",
-                    pypath::text(&source)
-                )
-            })?;
+            let unusable = format!(
+                "cannot resolve {flag} {}: path is unusable",
+                pypath::text(&source)
+            );
+            let resolved = pypath::resolve(&source, false).map_err(|_| unusable)?;
             if destinations
                 .iter()
                 .any(|path| pypath::same_path(path, &resolved))
@@ -771,7 +771,8 @@ fn run(command: &str, args: &Arguments) -> i32 {
                     2
                 })
             }
-            "drivers" => {
+            command => {
+                assert_eq!(command, "drivers", "command checked");
                 let top = if args.0.contains_key("--top") {
                     integer(args.raw("--top")).unwrap()
                 } else {
@@ -810,7 +811,6 @@ fn run(command: &str, args: &Arguments) -> i32 {
                     2
                 })
             }
-            _ => unreachable!("command checked"),
         }
     };
     match result() {
@@ -877,7 +877,7 @@ pub fn main(args: Vec<OsString>) -> i32 {
     let Some(command) = args.get(command_index) else {
         return usage_error("", "the following arguments are required: command");
     };
-    if !COMMANDS.contains(&command.as_str()) {
+    if options(command).is_none() {
         return usage_error(
             "",
             &format!(

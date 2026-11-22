@@ -151,7 +151,7 @@ fn sum(values: impl IntoIterator<Item = Decimal>) -> Result<Decimal> {
 
 #[expect(clippy::too_many_lines, reason = "validates the whole equity schedule")]
 pub fn load_schedule(snapshot: &SourceSnapshot) -> Result<Json> {
-    let raw = snapshot.text("Equity schedule", true)?;
+    let raw = snapshot.text("Equity schedule")?;
     let document = pyjson::loads_detailed(raw).map_err(|(error, diagnostic)| match error {
         LoadError::DuplicateKey(key) => format!(
             "Invalid equity schedule: Duplicate equity JSON field: {}.",

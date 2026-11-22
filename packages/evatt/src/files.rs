@@ -121,24 +121,28 @@ pub fn load(path: &Path) -> Result<Vec<entities::Entity>> {
     } else {
         text
     };
-    let document = pyjson::loads_plain(&text).map_err(|e| match e {
+    let document = pyjson::loads_plain(&text).map_err(|e| entity_map_error(e, path))?;
+    entities::load(&document)
+}
+
+/// How the script reported an entity map that `json.loads` refused.
+fn entity_map_error(error: pyjson::LoadError, path: &Path) -> String {
+    match error {
         pyjson::LoadError::Crash(message) => message,
         pyjson::LoadError::Decode(message) => format!("cannot read entity map {}: {message}", self::text(path)),
         _ => format!("cannot read entity map {}: invalid JSON", self::text(path)),
-    })?;
-    entities::load(&document)
+    }
 }
 
 /// os.path.abspath: lexical normalisation, without following links.
 pub fn absolute(path: &Path) -> Result<PathBuf> {
     let path = std::path::absolute(path).map_err(|e| oserror::os_error(&e, &text(path), None))?;
     let mut out = PathBuf::new();
-    for part in path.components() {
+    for part in path.components().filter(|part| *part != std::path::Component::CurDir) {
         match part {
             std::path::Component::ParentDir => {
                 out.pop();
             }
-            std::path::Component::CurDir => {}
             _ => out.push(part.as_os_str()),
         }
     }
@@ -164,11 +168,11 @@ fn executable(path: &Path) -> bool {
     {
         {
             use std::os::unix::ffi::OsStrExt;
-            let Ok(path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-                return false;
-            };
-            // SAFETY: path is a valid NUL-terminated pathname; access only checks it.
-            unsafe { libc::access(path.as_ptr(), libc::X_OK) == 0 }
+            // A path holding NUL cannot name a file.
+            std::ffi::CString::new(path.as_os_str().as_bytes()).is_ok_and(|path| {
+                // SAFETY: path is a valid NUL-terminated pathname; access only checks it.
+                unsafe { libc::access(path.as_ptr(), libc::X_OK) == 0 }
+            })
         }
     }
     #[cfg(not(unix))]
@@ -185,9 +189,7 @@ fn executable(path: &Path) -> bool {
 /// goes first only when `NeedCurrentDirectoryForExePathW("git")` is true, which
 /// for a name without a backslash means NoDefaultCurrentDirectoryInExePath is unset.
 fn which_dirs(path: Option<OsString>, no_default_curdir: bool) -> Vec<PathBuf> {
-    let Some(path) = path.or_else(default_search_path) else {
-        return Vec::new();
-    };
+    let path = path.unwrap_or_else(default_search_path);
     if path.is_empty() {
         return Vec::new();
     }
@@ -200,26 +202,24 @@ fn which_dirs(path: Option<OsString>, no_default_curdir: bool) -> Vec<PathBuf> {
     dirs
 }
 
-/// `os.confstr("CS_PATH")` on POSIX, or `os.defpath` on Windows. None when
-/// confstr has no value, which CPython then treats as an empty search path.
-fn default_search_path() -> Option<OsString> {
+/// `os.confstr("CS_PATH")` on POSIX, or `os.defpath` on Windows. Empty when
+/// confstr has no value, which CPython treats as an empty search path.
+fn default_search_path() -> OsString {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
         // SAFETY: a null buffer with length 0 asks only for the required size.
         let size = unsafe { libc::confstr(libc::_CS_PATH, std::ptr::null_mut(), 0) };
-        if size == 0 {
-            return None;
-        }
         let mut buffer = vec![0u8; size];
-        // SAFETY: buffer has exactly the size confstr reported, including its NUL.
+        // SAFETY: buffer has exactly the size confstr reported, including its NUL;
+        // a size of 0 (no value) lets confstr write nothing.
         unsafe { libc::confstr(libc::_CS_PATH, buffer.as_mut_ptr().cast(), size) };
-        buffer.truncate(size - 1);
-        Some(OsString::from_vec(buffer))
+        buffer.truncate(size.saturating_sub(1));
+        OsString::from_vec(buffer)
     }
     #[cfg(not(unix))]
     {
-        Some(OsString::from(".;C:\\bin"))
+        OsString::from(".;C:\\bin")
     }
 }
 
@@ -496,9 +496,8 @@ fn one_link_open(file: &std::fs::File) -> Result<bool> {
         let mut info = BY_HANDLE_FILE_INFORMATION::default();
         // SAFETY: the file owns this handle and info is writable, correctly sized storage.
         // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
-            return Err(io::Error::last_os_error().to_string());
-        }
+        let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } != 0;
+        ok.then_some(()).ok_or_else(|| io::Error::last_os_error().to_string())?;
         Ok(info.nNumberOfLinks == 1 && info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT == 0)
     }
 }
@@ -542,6 +541,27 @@ pub fn record_read(path: &Path) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entity_map_errors_name_the_map_unless_the_decoder_crashed() {
+        let path = Path::new("map.json");
+        let shown = text(path);
+        let cases = [
+            (pyjson::LoadError::Crash("boom".into()), "boom".to_string()),
+            (
+                pyjson::LoadError::Decode("Expecting value".into()),
+                format!("cannot read entity map {shown}: Expecting value"),
+            ),
+            // loads_plain reports neither, but a strict decoder would.
+            (
+                pyjson::LoadError::Invalid,
+                format!("cannot read entity map {shown}: invalid JSON"),
+            ),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(entity_map_error(error, path), expected);
+        }
+    }
 
     #[cfg(unix)]
     #[test]

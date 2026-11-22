@@ -1685,9 +1685,8 @@ mod tests {
         let mut payloads = fixture("Synthetic", None);
         assert!(verify_payloads(&payloads).unwrap().queries.is_some());
         let mut document = parse_json(&payloads[J]).unwrap();
-        let Json::Object(pairs) = &mut document else {
-            unreachable!()
-        };
+        let doc = &mut document;
+        let Json::Object(pairs) = doc else { panic!() };
         pairs.retain(|(key, _)| !key.is("client_queries") && !key.is("controls_not_run"));
         payloads.insert(J.into(), pyjson::pretty(&document).into_bytes());
         payloads.remove(Q);

@@ -697,22 +697,6 @@ fn sorted_pairs(pairs: &[(PyStr, Json)]) -> Vec<&(PyStr, Json)> {
     sorted
 }
 
-fn write_scalar(out: &mut String, value: &Json) -> bool {
-    match value {
-        Json::Null => out.push_str("null"),
-        Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Json::Int(i) => out.push_str(&i.to_string()),
-        Json::Float(f) if f.is_nan() => out.push_str("NaN"),
-        Json::Float(f) if f.is_infinite() => {
-            out.push_str(if *f > 0.0 { "Infinity" } else { "-Infinity" })
-        }
-        Json::Float(f) => out.push_str(&float_repr(*f)),
-        Json::Str(s) => write_str(out, s),
-        _ => return false,
-    }
-    true
-}
-
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
 pub fn canonical(value: &Json) -> String {
     let mut out = String::new();
@@ -760,9 +744,15 @@ fn write_inline(out: &mut String, value: &Json, sort: bool, separators: (&str, &
             }
             out.push('}');
         }
-        Json::Null | Json::Bool(_) | Json::Int(_) | Json::Float(_) | Json::Str(_) => {
-            write_scalar(out, value);
+        Json::Null => out.push_str("null"),
+        Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Json::Int(i) => out.push_str(&i.to_string()),
+        Json::Float(f) if f.is_nan() => out.push_str("NaN"),
+        Json::Float(f) if f.is_infinite() => {
+            out.push_str(if *f > 0.0 { "Infinity" } else { "-Infinity" })
         }
+        Json::Float(f) => out.push_str(&float_repr(*f)),
+        Json::Str(s) => write_str(out, s),
     }
 }
 
@@ -807,18 +797,10 @@ fn pretty_quote(out: &mut Vec<u32>, text: &PyStr, ascii: bool) {
     out.push(34);
 }
 fn pretty_write(out: &mut Vec<u32>, value: &Json, level: usize, sort: bool, ascii: bool) {
-    if let Json::Str(text) = value {
-        pretty_quote(out, text, ascii);
-        return;
-    }
-    let mut scalar = String::new();
-    if write_scalar(&mut scalar, value) {
-        pretty_append(out, &scalar);
-        return;
-    }
     let inner = format!("\n{}", "  ".repeat(level + 1));
     let outer = format!("\n{}", "  ".repeat(level));
     match value {
+        Json::Str(text) => pretty_quote(out, text, ascii),
         Json::Array(items) if items.is_empty() => pretty_append(out, "[]"),
         Json::Object(pairs) if pairs.is_empty() => pretty_append(out, "{}"),
         Json::Array(items) => {
@@ -848,7 +830,11 @@ fn pretty_write(out: &mut Vec<u32>, value: &Json, level: usize, sort: bool, asci
             pretty_append(out, &outer);
             out.push(125);
         }
-        _ => unreachable!("scalars are written above"),
+        _ => {
+            let mut scalar = String::new();
+            write_inline(&mut scalar, value, sort, (", ", ": "));
+            pretty_append(out, &scalar);
+        }
     }
 }
 fn pretty_points(value: &Json, sort: bool, ascii: bool) -> PyStr {

@@ -873,9 +873,8 @@ fn operation(request: &Json) -> Result<Json> {
                     .map(|(k, v)| (PyStr::from(k.as_str()), Json::str(v)))
                     .collect(),
             );
-            let sheet = Json::Str(PyStr::from_os_text(&crate::viewer::render_verified(
-                &verified,
-            )?));
+            let sheet = crate::viewer::render_verified(&verified)?;
+            let sheet = Json::Str(PyStr::from_os_text(&sheet));
             Ok(Json::object([
                 (
                     "verified",
