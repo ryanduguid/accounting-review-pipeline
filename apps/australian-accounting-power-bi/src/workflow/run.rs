@@ -152,13 +152,11 @@ pub fn verify(run: &Path) -> Result<Verified> {
         ("inputs/prior_trial_balance.csv", &prior),
         ("inputs/transactions.csv", &transactions),
     ] {
-        if snapshot_file(&snapshot, name)? != expected {
-            return Err("Ledger and review sources do not tie.".into());
-        }
+        let tied = snapshot_file(&snapshot, name)? == expected;
+        super::ensure(tied, "Ledger and review sources do not tie.")?;
     }
-    if receipt["period"] != first_date(&current)? {
-        return Err("Receipt period differs from the ledger case.".into());
-    }
+    let same_period = receipt["period"] == first_date(&current)?;
+    super::ensure(same_period, "Receipt period differs from the ledger case.")?;
     let doc = json::parse(snapshot_file(&snapshot, "close/close-review-pack.json")?, "Close pack")?;
     let drivers = json::parse(
         snapshot_file(&snapshot, "drivers/variance-drivers.json")?,

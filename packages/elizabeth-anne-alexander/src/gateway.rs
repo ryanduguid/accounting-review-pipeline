@@ -678,6 +678,8 @@ pub struct Evaluation {
     pub model: Json,
     pub evidence: Json,
     pub receipt: Json,
+    /// How many findings the model lists after truncation.
+    pub shown: usize,
 }
 
 /// Resolve the context, request and policy paths against the bundled data.
@@ -744,6 +746,7 @@ pub(crate) fn evaluate_with(
         model,
         evidence,
         receipt,
+        shown: findings.len(),
     })
 }
 
