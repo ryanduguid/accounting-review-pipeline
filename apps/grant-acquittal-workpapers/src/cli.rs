@@ -375,10 +375,6 @@ pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, std
             let _ = writeln!(stderr, "grant-workpaper: {message}");
             1
         }
-        Err(Failure::Crash(message)) => {
-            let _ = writeln!(stderr, "grant-workpaper: internal error: {message}");
-            1
-        }
     }
 }
 
