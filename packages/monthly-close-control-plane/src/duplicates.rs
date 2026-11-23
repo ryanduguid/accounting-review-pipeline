@@ -373,11 +373,7 @@ mod tests {
                 "5.00",
             ),
         ]);
-        assert!(
-            result.at("status").is_str("PASS"),
-            "{}",
-            pyjson::canonical(&result)
-        );
+        assert!(result.at("status").is_str("PASS"));
         assert_eq!(pyjson::canonical(result.at("documents_in_period")), "3");
         assert!(listed(&result).is_empty());
     }
