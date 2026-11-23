@@ -500,6 +500,19 @@ fn explicit_help_and_ambiguous_options_match_argparse() {
 }
 
 #[test]
+fn inline_option_values_and_double_dash_terminator_match_argparse() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let mut args = EVALUATE.to_vec();
+    args.extend(["--out=build/demo", "--", "--unknown"]);
+    let result = run(&env, &args);
+    assert_eq!(result.code, 2);
+    assert!(result.out.is_empty());
+    assert!(result.err.contains("unrecognized arguments:"), "{}", result.err);
+    assert!(result.err.contains("--unknown"), "{}", result.err);
+}
+
+#[test]
 fn invalid_validation_paths_preserve_the_existing_output_and_remove_staging() {
     let dir = TempDir::new();
     let output = dir.path().join("validation.json");

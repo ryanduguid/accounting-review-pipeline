@@ -648,6 +648,16 @@ mod tests {
         assert_eq!(display(""), ".");
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn lone_surrogates_round_trip_through_encode_os_and_fold() {
+        use std::os::windows::ffi::OsStringExt;
+        let wide = OsString::from_wide(&[b'a' as u16, 0xD800, b'b' as u16]);
+        let decoded = decode_os(&wide);
+        assert_eq!(encode_os(&decoded), wide);
+        assert!(is_within(Path::new(&wide), Path::new(&wide)));
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn resolve_follows_links_and_appends_missing_parts() {

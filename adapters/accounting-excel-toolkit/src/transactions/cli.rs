@@ -243,4 +243,13 @@ mod tests {
             assert!(!negative(text), "{text}");
         }
     }
+
+    #[test]
+    fn inline_value_extracts_the_text_after_the_first_equals() {
+        use std::ffi::{OsStr, OsString};
+        assert_eq!(
+            super::inline_value(OsStr::new("--input=a=b.csv")),
+            OsString::from("a=b.csv")
+        );
+    }
 }

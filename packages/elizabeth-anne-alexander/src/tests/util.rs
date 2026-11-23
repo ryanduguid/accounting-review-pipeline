@@ -164,6 +164,15 @@ fn test_a_name_that_cannot_be_encoded_for_the_filesystem_is_blocked_not_a_traceb
     assert_refused(env.within_bundle(&name, "samples", "x"), expected);
 }
 
+#[cfg(windows)]
+#[test]
+fn test_bare_root_bundled_path_uses_package_drive_and_is_refused() {
+    let dir = TempDir::new();
+    let env = env(dir.path());
+    let rooted = PyStr::from("/nonexistent-eaa-anchored-fixture");
+    assert_refused(env.within_bundle(&rooted, "samples", "context"), "does not exist");
+}
+
 #[cfg(not(windows))]
 #[test]
 fn test_bundled_paths_through_missing_or_file_parts_are_refused_as_posix_resolve_does() {
