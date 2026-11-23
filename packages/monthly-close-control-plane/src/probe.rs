@@ -255,11 +255,27 @@ const DEMO_COMMAND: &str = concat!(
     "    jet                 test a general-ledger listing's journals for entries\n",
     "                        worth review, with a Benford first-digit test\n",
 );
+/// The root help line for `schedule` once it took the `prepayments` kind, and
+/// the line the frozen baseline printed.
+const PREPAYMENTS_COMMAND: &str = concat!(
+    "    schedule            review a canonical expense, migration, inter-entity or\n",
+    "                        prepayment and accrual schedule\n",
+);
+const FROZEN_SCHEDULE_COMMAND: &str = concat!(
+    "    schedule            review a canonical expense, migration or inter-entity\n",
+    "                        schedule\n",
+);
 /// The frozen Python baseline predates the GST reasonableness, contacts,
 /// required control and queue summary options and the `demo` and `jet`
 /// commands, so CLI output compared with it drops their usage and help lines.
 fn without_native_options(text: &str) -> String {
     text.replace(",schedule,demo,jet}", ",schedule}")
+        .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
+        .replace(
+            "{expenses,migration,interentity,prepayments}",
+            "{expenses,migration,interentity}",
+        )
+        .replace("'interentity', 'prepayments')", "'interentity')")
         .replace(", 'schedule', 'demo', 'jet')", ", 'schedule')")
         .replace(DEMO_COMMAND, "")
         .replace(CONTACTS_USAGE, "")

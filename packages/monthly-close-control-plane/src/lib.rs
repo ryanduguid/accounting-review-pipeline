@@ -19,6 +19,7 @@ pub mod isodate;
 pub mod journal_entries;
 pub mod loader;
 pub mod models;
+pub mod prepayments;
 #[cfg(feature = "probe")]
 pub mod probe;
 pub mod publication;
