@@ -1,0 +1,8 @@
+usage: close-control mcp [-h] DIRECTORY [DIRECTORY ...]
+
+positional arguments:
+  DIRECTORY   directory the tools may read; every path a tool is given must be
+              absolute and inside one
+
+options:
+  -h, --help  show this help message and exit

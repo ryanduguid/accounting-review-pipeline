@@ -1,0 +1,76 @@
+{
+  "manifest_version": "0.3",
+  "name": "close-control",
+  "display_name": "Monthly Close Controls",
+  "version": "1.1.0",
+  "description": "Read-only close review tools over local files: view and queue verified review packs, compare packs, and run journal-entry, schedule and coding checks.",
+  "long_description": "Runs the read-only commands of the close-control executable on files inside the folders you choose. It writes no file, reaches no network and approves nothing; every result is review evidence for a person.",
+  "author": {
+    "name": "Ryan Duguid"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ryanduguid/accounting-review-pipeline"
+  },
+  "homepage": "https://duguid.com.au/tools/monthly-close-controls/",
+  "license": "AGPL-3.0-or-later",
+  "keywords": [
+    "accounting",
+    "month-end close",
+    "journal entries",
+    "australia"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/close-control",
+    "mcp_config": {
+      "command": "${__dirname}/server/close-control",
+      "args": [
+        "mcp",
+        "${user_config.allowed_directories}"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "view",
+      "description": "Verify a saved close review pack's 4 files agree and display it."
+    },
+    {
+      "name": "queue",
+      "description": "Verify several saved close packs and list them, optionally filtered or summarised."
+    },
+    {
+      "name": "compare",
+      "description": "Compare 2 verified close packs and their trial balances."
+    },
+    {
+      "name": "classify",
+      "description": "Compare postings before and after a recode with supplied coding evidence."
+    },
+    {
+      "name": "schedule",
+      "description": "Review a canonical expense, migration or inter-entity schedule."
+    },
+    {
+      "name": "jet",
+      "description": "Journal-entry tests and a Benford first-digit test over one tenant's general-ledger listing."
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "linux",
+      "win32"
+    ]
+  },
+  "user_config": {
+    "allowed_directories": {
+      "type": "directory",
+      "title": "Client folders",
+      "description": "Folders the tools may read. Every path a tool is given must be inside one.",
+      "multiple": true,
+      "required": true
+    }
+  }
+}

@@ -5,7 +5,7 @@
 use crate::{
     Result, classification, comparison,
     decimal::Decimal,
-    drivers, engine, journal_entries, loader,
+    drivers, engine, journal_entries, loader, mcp,
     models::Status,
     publication,
     pyjson::{self, Json, PyStr},
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 11] = [
+const COMMANDS: [&str; 12] = [
     "review",
     "workbench",
     "view",
@@ -30,6 +30,7 @@ const COMMANDS: [&str; 11] = [
     "schedule",
     "demo",
     "jet",
+    "mcp",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -52,6 +53,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "schedule" => saved!("schedule"),
         "demo" => saved!("demo"),
         "jet" => saved!("jet"),
+        "mcp" => saved!("mcp"),
         _ => saved!("root"),
     }
 }
@@ -189,6 +191,7 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
             &["--transactions", "--currency", "--period-end"],
             &["--transactions", "--currency", "--period-end"],
         ),
+        "mcp" => (&[], &["DIRECTORY"]),
         _ => return None,
     })
 }
@@ -314,6 +317,14 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
         }
         if ["-h", "--help"].contains(&raw.as_str()) {
             return Ok(None);
+        }
+        if command == "mcp" && !raw.starts_with('-') {
+            result
+                .0
+                .entry("DIRECTORY".into())
+                .or_default()
+                .push(raw.clone());
+            continue;
         }
         let (flag, assigned) = raw
             .split_once('=')
@@ -671,6 +682,24 @@ fn demo(args: &Arguments) -> i32 {
         }
     }
 }
+/// Serve the read-only commands over stdio until the client closes it.
+fn serve_mcp(args: &Arguments) -> i32 {
+    let result = mcp::allowed_directories(&args.paths("DIRECTORY")).and_then(|allowed| {
+        mcp::serve(
+            std::io::stdin().lock(),
+            &mut std::io::stdout().lock(),
+            &allowed,
+        )
+        .map_err(|error| format!("stdio failed: {error}"))
+    });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            crate::errln!("close-control mcp: {error}");
+            1
+        }
+    }
+}
 #[expect(clippy::too_many_lines, reason = "dispatches every other command")]
 fn run(command: &str, args: &Arguments) -> i32 {
     if ["review", "workbench"].contains(&command) {
@@ -678,6 +707,9 @@ fn run(command: &str, args: &Arguments) -> i32 {
     }
     if command == "demo" {
         return demo(args);
+    }
+    if command == "mcp" {
+        return serve_mcp(args);
     }
     let result = || -> Result<i32> {
         match command {

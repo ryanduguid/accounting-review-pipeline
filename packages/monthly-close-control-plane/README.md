@@ -93,6 +93,9 @@ original discrepancies after a recode. It first ships in 0.2.0.
 unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
 seldom-used-account journals in a general-ledger listing, with a Benford
 first-digit test. It is in development source only.
+[Assistant access over MCP](docs/mcp-server.md) (`close-control mcp`) serves the
+read-only commands to an assistant for the folders you name, with an MCP Bundle
+manifest. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.

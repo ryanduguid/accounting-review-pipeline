@@ -1,11 +1,11 @@
 usage: close-control [-h]
-                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet} ...
+                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,mcp} ...
 
 Create a review-first monthly close control pack from validated trial-balance
 exports.
 
 positional arguments:
-  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet}
+  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,mcp}
     review (workbench)  run integrity, variance, mapping, and optional
                         reconciliation controls (as `workbench`, with the
                         local close-review banner)
@@ -25,6 +25,8 @@ positional arguments:
                         with no checkout needed
     jet                 test a general-ledger listing's journals for entries
                         worth review, with a Benford first-digit test
+    mcp                 serve the read-only commands to an assistant over
+                        stdio (Model Context Protocol)
 
 options:
   -h, --help            show this help message and exit

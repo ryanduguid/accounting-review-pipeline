@@ -248,19 +248,22 @@ const SUMMARY_OPTION: &str = concat!(
     "  --summary             count the displayed packs by state, by control with\n",
     "                        exceptions and by control not run\n",
 );
-/// The root help lines for the native-only `demo` and `jet` commands.
+/// The root help lines for the native-only `demo`, `jet` and `mcp` commands.
 const DEMO_COMMAND: &str = concat!(
     "    demo                write the fabricated example inputs and review them,\n",
     "                        with no checkout needed\n",
     "    jet                 test a general-ledger listing's journals for entries\n",
     "                        worth review, with a Benford first-digit test\n",
+    "    mcp                 serve the read-only commands to an assistant over\n",
+    "                        stdio (Model Context Protocol)\n",
 );
 /// The frozen Python baseline predates the GST reasonableness, contacts,
-/// required control and queue summary options and the `demo` and `jet`
-/// commands, so CLI output compared with it drops their usage and help lines.
+/// required control and queue summary options and the `demo`, `jet` and
+/// `mcp` commands, so CLI output compared with it drops their usage and help
+/// lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet}", ",schedule}")
-        .replace(", 'schedule', 'demo', 'jet')", ", 'schedule')")
+    text.replace(",schedule,demo,jet,mcp}", ",schedule}")
+        .replace(", 'schedule', 'demo', 'jet', 'mcp')", ", 'schedule')")
         .replace(DEMO_COMMAND, "")
         .replace(CONTACTS_USAGE, "")
         .replace(CONTACTS_OPTION, "")
@@ -1072,20 +1075,23 @@ mod tests {
             "{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule}";
         let (code, help, _) = stdio::capture(|| cli::main(vec!["--help".into()]));
         assert_eq!(code, 0);
-        assert!(help.contains("    demo ") && help.contains("    jet "));
+        assert!(help.contains("    demo ") && help.contains("    mcp "));
         let frozen = without_native_options(&help);
         assert!(
-            !frozen.contains("demo") && !frozen.contains("jet"),
+            !frozen.contains("demo") && !frozen.contains("mcp"),
             "{frozen}"
         );
         assert_eq!(frozen.matches(FROZEN_CHOICES).count(), 2, "{frozen}");
         assert!(frozen.contains("                        schedule\n\noptions:\n"));
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
-        assert!(error.contains("'schedule', 'demo', 'jet')"), "{error}");
+        assert!(
+            error.contains("'schedule', 'demo', 'jet', 'mcp')"),
+            "{error}"
+        );
         let frozen = without_native_options(&error);
         assert!(
-            !frozen.contains("demo") && !frozen.contains("jet"),
+            !frozen.contains("demo") && !frozen.contains("mcp"),
             "{frozen}"
         );
         assert!(frozen.contains("'classify', 'schedule')"), "{frozen}");

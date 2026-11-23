@@ -15,7 +15,8 @@
 - `src/engine.rs`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
 - `src/loader.rs`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
 - `src/report.rs` and `src/publication.rs`: Render and publish JSON, Markdown and CSV review-pack files, including source evidence and any supplied human acknowledgement.
-- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify, schedule, demo and jet.
+- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify, schedule, demo, jet and mcp.
+- `src/mcp.rs`: Read-only Model Context Protocol server over stdio for the commands that only read files (`mcp`); `mcpb/manifest.json` describes it as an MCP Bundle.
 - `src/journal_entries.rs`: Journal-entry tests and a Benford first-digit test over a general-ledger listing (`jet`).
 
 ## Architectural boundaries

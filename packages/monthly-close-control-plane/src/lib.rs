@@ -18,6 +18,7 @@ pub mod fuzzing;
 pub mod isodate;
 pub mod journal_entries;
 pub mod loader;
+pub mod mcp;
 pub mod models;
 #[cfg(feature = "probe")]
 pub mod probe;
