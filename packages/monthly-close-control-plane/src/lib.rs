@@ -10,6 +10,7 @@ pub mod cli;
 pub mod comparison;
 pub mod decimal;
 pub mod drivers;
+pub mod duplicates;
 pub mod engine;
 pub mod equity;
 #[cfg(feature = "tools")]
@@ -19,6 +20,7 @@ pub mod isodate;
 pub mod journal_entries;
 pub mod loader;
 pub mod models;
+pub mod prepayments;
 #[cfg(feature = "probe")]
 pub mod probe;
 pub mod publication;

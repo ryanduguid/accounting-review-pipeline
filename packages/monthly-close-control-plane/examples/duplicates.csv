@@ -1,0 +1,14 @@
+Tenant,DocumentID,Kind,Supplier,Reference,Date,Amount,Currency
+Varrock Ventures Pty Ltd,B-101,BILL,Lumbridge Power,INV 0045,2026-06-12,210.40,AUD
+Varrock Ventures Pty Ltd,B-102,BILL,Lumbridge Power,INV-0051,2026-07-11,198.75,AUD
+Varrock Ventures Pty Ltd,B-103,BILL,Lumbridge Power,INV-0058,2026-08-12,205.10,AUD
+Varrock Ventures Pty Ltd,B-401,BILL,Varrock Rent,RENT-JUL,2026-07-01,2500.00,AUD
+Varrock Ventures Pty Ltd,B-402,BILL,Varrock Rent,RENT-AUG,2026-08-01,2500.00,AUD
+Varrock Ventures Pty Ltd,B-403,BILL,Varrock Rent,RENT-SEP,2026-09-01,2500.00,AUD
+Varrock Ventures Pty Ltd,B-201,BILL,Falador Freight,FF-7781,2026-09-03,1450.00,AUD
+Varrock Ventures Pty Ltd,B-202,BILL,falador  freight,ff7781,2026-09-17,1450.00,AUD
+Varrock Ventures Pty Ltd,B-301,BILL,Draynor Supplies,DS-1001,2026-09-08,386.20,AUD
+Varrock Ventures Pty Ltd,B-302,BILL,Draynor Supplies,DS-1002,2026-09-11,386.20,AUD
+Varrock Ventures Pty Ltd,P-501,PAYMENT,Draynor Supplies,DS-1001,2026-09-15,386.20,AUD
+Varrock Ventures Pty Ltd,P-502,PAYMENT,Draynor Supplies,DS-1001,2026-09-16,386.20,AUD
+Varrock Ventures Pty Ltd,P-503,PAYMENT,Varrock Rent,RENT-SEP,2026-09-01,2500.00,AUD
