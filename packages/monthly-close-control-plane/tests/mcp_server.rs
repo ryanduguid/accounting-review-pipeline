@@ -74,7 +74,7 @@ fn calls(root: &Path) -> Vec<(i64, String, String)> {
             format!(
                 r#"{{"previous_pack":{p},"current_pack":{p},"previous_tb":{prior},"current_tb":{current},"responses":{note}}}"#,
                 p = path("pack"),
-                prior = path("inputs/prior_trial_balance.csv"),
+                prior = path("inputs/current_trial_balance.csv"),
                 current = path("inputs/current_trial_balance.csv"),
                 note = path("inputs/review_note.json"),
             ),
@@ -165,8 +165,14 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
     assert!(view.ends_with("it does not approve a close or change any computed status."));
     let (queue, failed) = text(2);
     assert!(!failed && queue.contains("REVIEW"), "{queue}");
-    let (_, failed) = text(3);
-    let _ = failed;
+    // compare reads every file, then refuses the demo review note as
+    // responses for this comparison.
+    let (compare, failed) = text(3);
+    assert!(failed, "{compare}");
+    assert_eq!(
+        compare,
+        "Responses must use schema 1 and bind to the current pack JSON digest."
+    );
     for index in [4, 5, 6] {
         let (result, failed) = text(index);
         assert!(!failed, "{result}");

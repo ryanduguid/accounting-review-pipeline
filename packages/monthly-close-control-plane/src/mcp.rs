@@ -215,12 +215,15 @@ impl Arguments<'_> {
             .ok_or_else(|| format!("{key} is required."))
     }
     fn path(&self, key: &str) -> Result<PathBuf> {
-        confine(&self.text(key)?, self.allowed)
+        file(&self.text(key)?, self.allowed)
     }
     fn optional_path(&self, key: &str) -> Result<Option<PathBuf>> {
         self.optional_text(key)?
-            .map(|raw| confine(&raw, self.allowed))
+            .map(|raw| file(&raw, self.allowed))
             .transpose()
+    }
+    fn pack(&self, key: &str) -> Result<PathBuf> {
+        pack(&self.text(key)?, self.allowed)
     }
     fn paths(&self, key: &str) -> Result<Vec<PathBuf>> {
         let items = self
@@ -236,15 +239,28 @@ impl Arguments<'_> {
                     .as_pystr()
                     .and_then(PyStr::to_utf8)
                     .ok_or_else(|| format!("{key} must be a non-empty list of paths."))?;
-                confine(&raw, self.allowed)
+                pack(&raw, self.allowed)
             })
             .collect()
     }
 }
 
+/// Refuse network and device paths (`\\server\share`, `//server/share`,
+/// `\\?\` and `\\.\`) before anything resolves them.
+fn local(raw: &str) -> Result<()> {
+    let separator = |byte: Option<&u8>| matches!(byte, Some(b'/' | b'\\'));
+    if separator(raw.as_bytes().first()) && separator(raw.as_bytes().get(1)) {
+        return Err(format!(
+            "{raw} is a network or device path; give a local path."
+        ));
+    }
+    Ok(())
+}
+
 /// The existing file or directory `raw` names, resolved through any links,
 /// when it lies inside an allowed directory.
 fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
+    local(raw)?;
     if !Path::new(raw).is_absolute() {
         return Err(format!("{raw} is not an absolute path."));
     }
@@ -261,10 +277,40 @@ fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
     }
 }
 
+/// A confined regular file: not a directory, pipe or device.
+fn file(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
+    let resolved = confine(raw, allowed)?;
+    if resolved.is_file() {
+        Ok(resolved)
+    } else {
+        Err(format!("{raw} is not a regular file."))
+    }
+}
+
+/// A confined review-pack directory whose pack files, where present, are
+/// regular files rather than links, pipes or directories, so reading them
+/// by name stays inside the directory.
+fn pack(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
+    let resolved = confine(raw, allowed)?;
+    if !resolved.is_dir() {
+        return Err(format!("{raw} is not a directory."));
+    }
+    for name in viewer::PACK_NAMES {
+        let metadata = std::fs::symlink_metadata(resolved.join(name));
+        if metadata.is_ok_and(|metadata| !metadata.file_type().is_file()) {
+            return Err(format!(
+                "{raw}: {name} is not a regular file; links are not followed."
+            ));
+        }
+    }
+    Ok(resolved)
+}
+
 /// Resolve the directories the user allows; each must exist.
 pub fn allowed_directories(raw: &[PathBuf]) -> Result<Vec<PathBuf>> {
     raw.iter()
         .map(|path| {
+            local(&path.to_string_lossy())?;
             let resolved = std::fs::canonicalize(path)
                 .map_err(|error| format!("directory {}: {error}", path.display()))?;
             if resolved.is_dir() {
@@ -281,7 +327,7 @@ pub fn allowed_directories(raw: &[PathBuf]) -> Result<Vec<PathBuf>> {
 fn run_tool(name: &str, args: &Arguments) -> Option<Result<String>> {
     let pretty = |value: Result<Json>| value.map(|value| pyjson::pretty(&value));
     Some(match name {
-        "view" => args.path("pack_dir").and_then(|directory| {
+        "view" => args.pack("pack_dir").and_then(|directory| {
             let (sheet, _) = viewer::render_review_sheet(&directory)?;
             Ok(format!("{sheet}\n{VIEW_NOTE}"))
         }),
@@ -304,8 +350,8 @@ fn run_tool(name: &str, args: &Arguments) -> Option<Result<String>> {
         })(),
         "compare" => pretty((|| {
             comparison::compare_packs(&comparison::CompareConfig {
-                previous_pack: args.path("previous_pack")?,
-                current_pack: args.path("current_pack")?,
+                previous_pack: args.pack("previous_pack")?,
+                current_pack: args.pack("current_pack")?,
                 previous_tb: args.path("previous_tb")?,
                 current_tb: args.path("current_tb")?,
                 responses: args.optional_path("responses")?,
@@ -433,23 +479,9 @@ fn call(id: Json, params: Option<&Json>, allowed: &[PathBuf]) -> Json {
     )
 }
 
-/// The reply to one line, or `None` for a notification or a response.
-pub fn handle(line: &str, allowed: &[PathBuf]) -> Option<Json> {
-    let Ok(message) = pyjson::loads(line) else {
-        return Some(failure(Json::Null, -32700, "Parse error", None));
-    };
-    let id = message.get("id").cloned();
-    let method = message
-        .get("method")
-        .and_then(Json::as_pystr)
-        .and_then(PyStr::to_utf8);
-    let Some(method) = method else {
-        // A response to a request this server never sends needs no reply.
-        return (message.get("result").is_none() && message.get("error").is_none())
-            .then(|| failure(id.unwrap_or(Json::Null), -32600, "Invalid Request", None));
-    };
-    let id = id?;
-    let params = message.get("params");
+/// The error for a request whose `_meta` names a protocol version this
+/// server does not support.
+fn unsupported_version(id: &Json, params: Option<&Json>) -> Option<Json> {
     let version = params
         .and_then(|params| params.get("_meta"))
         .and_then(|meta| meta.get("io.modelcontextprotocol/protocolVersion"));
@@ -464,12 +496,46 @@ pub fn handle(line: &str, allowed: &[PathBuf]) -> Option<Json> {
                 ("requested", Json::str(&text)),
             ]);
             return Some(failure(
-                id,
+                id.clone(),
                 -32022,
                 "Unsupported protocol version",
                 Some(data),
             ));
         }
+    }
+    None
+}
+
+/// The reply to one line, or `None` for a notification or a response.
+pub fn handle(line: &str, allowed: &[PathBuf]) -> Option<Json> {
+    let Ok(message) = pyjson::loads(line) else {
+        return Some(failure(Json::Null, -32700, "Parse error", None));
+    };
+    let id = message.get("id").cloned();
+    let valid_id = |id: &Json| matches!(id, Json::Int(_)) || id.as_pystr().is_some();
+    if !message
+        .get("jsonrpc")
+        .is_some_and(|version| version.is_str("2.0"))
+        || id.as_ref().is_some_and(|id| !valid_id(id))
+    {
+        return Some(failure(Json::Null, -32600, "Invalid Request", None));
+    }
+    let method = message
+        .get("method")
+        .and_then(Json::as_pystr)
+        .and_then(PyStr::to_utf8);
+    let Some(method) = method else {
+        // A response to a request this server never sends needs no reply.
+        return (message.get("result").is_none() && message.get("error").is_none())
+            .then(|| failure(id.unwrap_or(Json::Null), -32600, "Invalid Request", None));
+    };
+    let id = id?;
+    let params = message.get("params");
+    if params.is_some_and(|params| params.as_object().is_none()) {
+        return Some(failure(id, -32602, "Invalid params", None));
+    }
+    if let Some(error) = unsupported_version(&id, params) {
+        return Some(error);
     }
     Some(match method.as_str() {
         "initialize" => success(id, initialize(params)),
@@ -660,6 +726,112 @@ mod tests {
         assert_eq!(text, "summary must be true or false.");
         let (text, _) = call_text(&[], "schedule", r#"{"kind":"budget","input":"x"}"#);
         assert_eq!(text, "kind must be expenses, migration or interentity.");
+    }
+
+    #[test]
+    fn envelopes_ids_and_params_are_checked_before_dispatch() {
+        let bad = reply(r#"{"jsonrpc":"1.0","id":[],"method":"ping"}"#, &[]);
+        assert_eq!(error_code(&bad), Some((-32600).into()));
+        assert!(matches!(bad.at("id"), Json::Null));
+        for line in [
+            r#"{"id":1,"method":"ping"}"#,
+            r#"{"jsonrpc":"2.0","id":1.5,"method":"ping"}"#,
+            r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#,
+        ] {
+            assert_eq!(
+                error_code(&reply(line, &[])),
+                Some((-32600).into()),
+                "{line}"
+            );
+        }
+        let scalar = reply(
+            r#"{"jsonrpc":"2.0","id":"p","method":"ping","params":3}"#,
+            &[],
+        );
+        assert_eq!(error_code(&scalar), Some((-32602).into()));
+        assert!(scalar.at("id").is_str("p"));
+        let notification = r#"{"jsonrpc":"2.0","method":"notifications/initialized","params":3}"#;
+        assert!(handle(notification, &[]).is_none());
+        let ping = reply(r#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#, &[]);
+        assert!(ping.get("result").is_some());
+    }
+
+    fn jet_arguments(path: &Path) -> String {
+        format!(
+            r#"{{"transactions":{},"currency":"AUD","period_end":"2026-07-31"}}"#,
+            quoted(path)
+        )
+    }
+
+    #[test]
+    fn tools_read_only_regular_files_on_local_paths() {
+        let temp = TempDir::new();
+        let inside = temp.join("inside");
+        let pack_dir = inside.join("pack");
+        std::fs::create_dir_all(pack_dir.join(viewer::PACK_NAMES[0])).unwrap();
+        let csv = inside.join("journals.csv");
+        std::fs::write(&csv, "x").unwrap();
+        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
+        let pack_argument = format!(r#"{{"pack_dir":{}}}"#, quoted(&pack_dir));
+        let (text, failed) = call_text(&allowed, "view", &pack_argument);
+        assert!(
+            failed && text.ends_with("links are not followed."),
+            "{text}"
+        );
+        let queue_argument = format!(r#"{{"pack_dirs":[{}]}}"#, quoted(&pack_dir));
+        let (text, _) = call_text(&allowed, "queue", &queue_argument);
+        assert!(text.ends_with("links are not followed."), "{text}");
+        let (text, _) = call_text(
+            &allowed,
+            "view",
+            &format!(r#"{{"pack_dir":{}}}"#, quoted(&csv)),
+        );
+        assert!(text.ends_with(" is not a directory."), "{text}");
+        let (text, _) = call_text(&allowed, "jet", &jet_arguments(&pack_dir));
+        assert!(text.ends_with(" is not a regular file."), "{text}");
+        for raw in [
+            r"\\server\share\journals.csv",
+            "//server/share/journals.csv",
+            r"\\?\UNC\server\share\journals.csv",
+        ] {
+            let (text, failed) = call_text(&allowed, "jet", &jet_arguments(Path::new(raw)));
+            assert!(failed && text.ends_with("give a local path."), "{text}");
+        }
+        let remote = allowed_directories(&[PathBuf::from("//server/share")]).unwrap_err();
+        assert!(remote.ends_with("give a local path."), "{remote}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn links_and_pipes_in_a_pack_are_refused_before_reading() {
+        let temp = TempDir::new();
+        let inside = temp.join("inside");
+        let (linked, piped) = (inside.join("linked"), inside.join("piped"));
+        std::fs::create_dir_all(&linked).unwrap();
+        std::fs::create_dir_all(&piped).unwrap();
+        let outside = temp.join("outside.json");
+        std::fs::write(&outside, "{}").unwrap();
+        std::os::unix::fs::symlink(&outside, linked.join(viewer::PACK_NAMES[0])).unwrap();
+        let fifo = piped.join(viewer::PACK_NAMES[0]);
+        let made = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
+        for directory in [&linked, &piped] {
+            let argument = format!(r#"{{"pack_dir":{}}}"#, quoted(directory));
+            let (text, failed) = call_text(&allowed, "view", &argument);
+            assert!(
+                failed && text.ends_with("links are not followed."),
+                "{text}"
+            );
+        }
+        let (text, failed) = call_text(&allowed, "jet", &jet_arguments(&fifo));
+        assert!(
+            failed && text.ends_with(" is not a regular file."),
+            "{text}"
+        );
     }
 
     #[test]
