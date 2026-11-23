@@ -89,6 +89,10 @@ from source; released executables are an alternative on Linux x86_64 and Windows
 The [classification evidence check](docs/classification-evidence.md) compares
 selected postings with supplied purpose and account assertions, preserving
 original discrepancies after a recode. It first ships in 0.2.0.
+[Journal-entry tests](docs/journal-entry-tests.md) (`close-control jet`) list
+unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
+seldom-used-account journals in a general-ledger listing, with a Benford
+first-digit test. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
