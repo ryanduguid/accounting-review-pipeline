@@ -72,23 +72,33 @@ fn evidence(row: &Json, identifier: &PyStr, findings: &mut Vec<Json>) -> Result<
     Ok(())
 }
 
+/// Each row of `list` with its item id and account, once its description is
+/// checked.
+fn items<'a>(data: &'a Json, list: &str, fields: &str) -> Result<Vec<(&'a Json, PyStr, PyStr)>> {
+    rows(data.at(list), fields, "item_id", list)?
+        .iter()
+        .map(|row| {
+            let identifier = row.at("item_id").as_pystr().unwrap().clone();
+            let account = text(row.at("account_id"), "account_id")?;
+            text(row.at("description"), "description")?;
+            Ok((row, identifier, account))
+        })
+        .collect()
+}
+
 fn prepayments(
     data: &Json,
     cutoff: Date,
     expected: &mut BTreeMap<PyStr, Decimal>,
     findings: &mut Vec<Json>,
 ) -> Result<Vec<Json>> {
-    let items = rows(
-        data.at("prepayments"),
-        "item_id account_id description amount start end basis evidence",
-        "item_id",
+    let entries = items(
+        data,
         "prepayments",
+        "item_id account_id description amount start end basis evidence",
     )?;
-    let mut workpaper = Vec::with_capacity(items.len());
-    for row in items {
-        let identifier = row.at("item_id").as_pystr().unwrap().clone();
-        let account = text(row.at("account_id"), "account_id")?;
-        text(row.at("description"), "description")?;
+    let mut workpaper = Vec::with_capacity(entries.len());
+    for (row, identifier, account) in entries {
         let amount = money(row.at("amount"), "prepayment amount")?;
         let start = date(row.at("start"), "prepayment start")?;
         let end = date(row.at("end"), "prepayment end")?;
@@ -118,17 +128,13 @@ fn accruals(
     expected: &mut BTreeMap<PyStr, Decimal>,
     findings: &mut Vec<Json>,
 ) -> Result<Vec<Json>> {
-    let items = rows(
-        data.at("accruals"),
-        "item_id account_id description amount accrued reversed evidence",
-        "item_id",
+    let entries = items(
+        data,
         "accruals",
+        "item_id account_id description amount accrued reversed evidence",
     )?;
-    let mut workpaper = Vec::with_capacity(items.len());
-    for row in items {
-        let identifier = row.at("item_id").as_pystr().unwrap().clone();
-        let account = text(row.at("account_id"), "account_id")?;
-        text(row.at("description"), "description")?;
+    let mut workpaper = Vec::with_capacity(entries.len());
+    for (row, identifier, account) in entries {
         let amount = money(row.at("amount"), "accrual amount")?;
         let accrued = date(row.at("accrued"), "accrued")?;
         let reversed = match row.at("reversed") {
