@@ -254,13 +254,18 @@ const DEMO_COMMAND: &str = concat!(
     "                        with no checkout needed\n",
     "    jet                 test a general-ledger listing's journals for entries\n",
     "                        worth review, with a Benford first-digit test\n",
+    "    duplicates          list possible duplicate bills and payments and missing\n",
+    "                        recurring bills in a supplier register\n",
 );
 /// The frozen Python baseline predates the GST reasonableness, contacts,
 /// required control and queue summary options and the `demo` and `jet`
 /// commands, so CLI output compared with it drops their usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet}", ",schedule}")
-        .replace(", 'schedule', 'demo', 'jet')", ", 'schedule')")
+    text.replace(",schedule,demo,jet,duplicates}", ",schedule}")
+        .replace(
+            ", 'schedule', 'demo', 'jet', 'duplicates')",
+            ", 'schedule')",
+        )
         .replace(DEMO_COMMAND, "")
         .replace(CONTACTS_USAGE, "")
         .replace(CONTACTS_OPTION, "")
@@ -1082,7 +1087,10 @@ mod tests {
         assert!(frozen.contains("                        schedule\n\noptions:\n"));
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
-        assert!(error.contains("'schedule', 'demo', 'jet')"), "{error}");
+        assert!(
+            error.contains("'schedule', 'demo', 'jet', 'duplicates')"),
+            "{error}"
+        );
         let frozen = without_native_options(&error);
         assert!(
             !frozen.contains("demo") && !frozen.contains("jet"),

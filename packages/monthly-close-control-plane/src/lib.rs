@@ -10,6 +10,7 @@ pub mod cli;
 pub mod comparison;
 pub mod decimal;
 pub mod drivers;
+pub mod duplicates;
 pub mod engine;
 pub mod equity;
 #[cfg(feature = "tools")]

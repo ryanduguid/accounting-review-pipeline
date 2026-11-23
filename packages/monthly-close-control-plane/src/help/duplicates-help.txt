@@ -1,0 +1,15 @@
+usage: close-control duplicates [-h] --documents DOCUMENTS --currency CURRENCY
+                                --period-start PERIOD_START --period-end
+                                PERIOD_END
+
+options:
+  -h, --help            show this help message and exit
+  --documents DOCUMENTS
+                        one tenant's Tenant,DocumentID,Kind,Supplier,Reference,
+                        Date,Amount,Currency CSV of bills and payments to the
+                        period end
+  --currency CURRENCY   three-letter currency every row carries, e.g. AUD
+  --period-start PERIOD_START
+                        first day of the period, YYYY-MM-DD
+  --period-end PERIOD_END
+                        last day of the period, YYYY-MM-DD
