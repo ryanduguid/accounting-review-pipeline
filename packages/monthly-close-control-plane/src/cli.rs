@@ -684,11 +684,15 @@ fn demo(args: &Arguments) -> i32 {
 }
 /// Serve the read-only commands over stdio until the client closes it.
 fn serve_mcp(args: &Arguments) -> i32 {
-    let result = mcp::allowed_directories(&args.paths("DIRECTORY")).and_then(|allowed| {
+    let result = match args.paths("DIRECTORY").as_slice() {
+        [directory] => crate::beneath::Root::open(directory),
+        _ => Err("give exactly one DIRECTORY.".into()),
+    }
+    .and_then(|root| {
         mcp::serve(
             std::io::stdin().lock(),
             &mut std::io::stdout().lock(),
-            &allowed,
+            &root,
         )
         .map_err(|error| format!("stdio failed: {error}"))
     });

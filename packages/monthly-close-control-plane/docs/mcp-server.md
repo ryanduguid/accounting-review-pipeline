@@ -1,6 +1,6 @@
 # Assistant access over MCP
 
-`close-control mcp DIRECTORY [DIRECTORY ...]` serves the commands that only
+`close-control mcp DIRECTORY` serves the commands that only
 read local files to an assistant, over standard input and output with the Model
 Context Protocol. It writes no file, opens no network connection and approves
 nothing. It runs until the assistant closes its input, then exits `0`; it exits
@@ -25,24 +25,22 @@ they are not tools: run them yourself, then let the assistant read the result.
 
 ## Which files a tool may read
 
-Every path a tool is given must be absolute and must name an existing file or
-directory inside one of the server's directories once links are resolved. The
-path is resolved one name at a time, and a link is followed only where it sits
-inside one of those directories, so a link elsewhere is never followed. When a
-server directory was given through a link, write paths in it in their resolved
-form. A
-file must be a regular file, not a pipe or device. In a pack directory, each
-pack file present must be a regular file itself, not a link, so reading it by
-name stays inside the directory. Network and device paths (`\\server\share`,
-`//server/share`) are refused before anything resolves them, both as tool
-arguments and as the server's directories. Any other path is refused before the
-command reads it.
+The server opens `DIRECTORY` once when it starts and reads every file through
+that open directory, never by a full path. A path a tool is given is relative
+to it, written as names separated by `/`, such as `acme/2026-10/pack`. A path
+that is absolute or empty, or has an empty name, `.`, `..`, `\` or `:` in it,
+is refused, so no spelling can name a drive, a share, a device or a parent
+folder. Each name is opened inside the folder opened before it, and a link,
+junction or other reparse point at any step is refused rather than followed.
+A file must be a regular file, not a pipe or device; this holds for the files
+a command reads inside a pack directory too.
 
-The checks run just before the command opens the files, so someone who can
-change the allowed folders at that moment, or who places a hard link to an
-outside file in them, can still have it read. Give the server only the folders
-the assistant needs, keep client folders outside any checkout, and do not
-share them with people or programs you would not let read the files directly.
+A link someone creates in the folder whilst a command runs can be followed, but
+only to a place inside the folder, never outside it. A hard link to an outside
+file placed in the folder can still have that file read. Give the server only
+the folder the assistant needs, keep client folders outside any checkout, and
+do not share it with people or programs you would not let read the files
+directly.
 
 ## Protocol
 
@@ -68,7 +66,7 @@ A client that starts local servers takes the executable and the directories:
 ```
 
 [`mcpb/manifest.json`](../mcpb/manifest.json) describes the same server as an
-MCP Bundle (`.mcpb`), which asks for the folders when it is installed. A bundle
+MCP Bundle (`.mcpb`), which asks for the folder when it is installed. A bundle
 holds the manifest and the release executable at `server/close-control`
 (`server/close-control.exe` on Windows) and is packed with
 `npx @anthropic-ai/mcpb pack`. Bundles are not yet attached to releases.

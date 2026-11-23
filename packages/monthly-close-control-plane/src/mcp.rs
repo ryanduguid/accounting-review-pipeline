@@ -3,23 +3,25 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! A read-only Model Context Protocol server over stdio. Its tools run the
-//! commands that only read local files, on paths inside the directories the
+//! commands that only read local files, on paths beneath the directory the
 //! user allowed when starting it; none writes a file or reaches a network.
 use crate::{
-    Result, classification, comparison, journal_entries,
+    Result,
+    beneath::Root,
+    classification, comparison, journal_entries,
     pyjson::{self, Json, PyStr},
     queue, schedules, viewer,
 };
 use std::{
     io::{BufRead, Write},
-    path::{Component, Path, PathBuf, Prefix},
+    path::PathBuf,
 };
 
 /// Newest first; `initialize` answers with the newest handshake version
 /// when the client's is not listed.
 pub const VERSIONS: [&str; 3] = ["2026-07-28", "2025-11-25", "2025-06-18"];
 const HANDSHAKE_VERSION: &str = "2025-11-25";
-const INSTRUCTIONS: &str = "Read-only close review tools over local files. Paths must be absolute and inside the directories the user allowed. Results are review evidence for a person; they approve nothing.";
+const INSTRUCTIONS: &str = "Read-only close review tools over local files. Paths are relative to the directory the user allowed, with names separated by /. Results are review evidence for a person; they approve nothing.";
 const VIEW_NOTE: &str = "close-control view: display is a review aid; it does not approve a close or change any computed status.";
 
 fn string_property(description: &str) -> Json {
@@ -71,7 +73,10 @@ fn tools() -> Json {
         tool(
             "view",
             "Verify a saved close review pack's 4 files agree and display it.",
-            vec![("pack_dir", path("absolute path of the pack directory"))],
+            vec![(
+                "pack_dir",
+                path("path, relative to the server's directory, of the pack directory"),
+            )],
             &["pack_dir"],
         ),
         tool(
@@ -84,7 +89,9 @@ fn tools() -> Json {
                         ("type", Json::str("array")),
                         (
                             "items",
-                            string_property("absolute path of a pack directory"),
+                            string_property(
+                                "path, relative to the server's directory, of a pack directory",
+                            ),
                         ),
                         ("minItems", Json::int(1)),
                     ]),
@@ -109,19 +116,29 @@ fn tools() -> Json {
             "compare",
             "Compare 2 verified close packs and their trial balances.",
             vec![
-                ("previous_pack", path("absolute path of the earlier pack")),
-                ("current_pack", path("absolute path of the later pack")),
+                (
+                    "previous_pack",
+                    path("path, relative to the server's directory, of the earlier pack"),
+                ),
+                (
+                    "current_pack",
+                    path("path, relative to the server's directory, of the later pack"),
+                ),
                 (
                     "previous_tb",
-                    path("absolute path of the earlier trial balance CSV"),
+                    path(
+                        "path, relative to the server's directory, of the earlier trial balance CSV",
+                    ),
                 ),
                 (
                     "current_tb",
-                    path("absolute path of the later trial balance CSV"),
+                    path(
+                        "path, relative to the server's directory, of the later trial balance CSV",
+                    ),
                 ),
                 (
                     "responses",
-                    path("optional absolute path of a responses file"),
+                    path("optional path, relative to the server's directory, of a responses file"),
                 ),
             ],
             &["previous_pack", "current_pack", "previous_tb", "current_tb"],
@@ -132,15 +149,15 @@ fn tools() -> Json {
             vec![
                 (
                     "original_transactions",
-                    path("absolute path of the original CSV"),
+                    path("path, relative to the server's directory, of the original CSV"),
                 ),
                 (
                     "current_transactions",
-                    path("absolute path of the current CSV"),
+                    path("path, relative to the server's directory, of the current CSV"),
                 ),
                 (
                     "coding_evidence",
-                    path("absolute path of the coding evidence JSON"),
+                    path("path, relative to the server's directory, of the coding evidence JSON"),
                 ),
                 ("currency", currency()),
             ],
@@ -169,7 +186,10 @@ fn tools() -> Json {
                         ),
                     ]),
                 ),
-                ("input", path("absolute path of the schedule JSON")),
+                (
+                    "input",
+                    path("path, relative to the server's directory, of the schedule JSON"),
+                ),
             ],
             &["kind", "input"],
         ),
@@ -179,7 +199,9 @@ fn tools() -> Json {
             vec![
                 (
                     "transactions",
-                    path("absolute path of the canonical transaction CSV"),
+                    path(
+                        "path, relative to the server's directory, of the canonical transaction CSV",
+                    ),
                 ),
                 ("currency", currency()),
                 (
@@ -192,11 +214,10 @@ fn tools() -> Json {
     ])
 }
 
-/// Arguments of one tool call, with every path confined to the allowed
-/// directories.
+/// Arguments of one tool call, with every path beneath the root.
 struct Arguments<'a> {
     values: &'a Json,
-    allowed: &'a [PathBuf],
+    root: &'a Root,
 }
 
 impl Arguments<'_> {
@@ -215,15 +236,15 @@ impl Arguments<'_> {
             .ok_or_else(|| format!("{key} is required."))
     }
     fn path(&self, key: &str) -> Result<PathBuf> {
-        file(&self.text(key)?, self.allowed)
+        file(&self.text(key)?, self.root)
     }
     fn optional_path(&self, key: &str) -> Result<Option<PathBuf>> {
         self.optional_text(key)?
-            .map(|raw| file(&raw, self.allowed))
+            .map(|raw| file(&raw, self.root))
             .transpose()
     }
     fn pack(&self, key: &str) -> Result<PathBuf> {
-        pack(&self.text(key)?, self.allowed)
+        pack(&self.text(key)?, self.root)
     }
     fn paths(&self, key: &str) -> Result<Vec<PathBuf>> {
         let items = self
@@ -239,159 +260,27 @@ impl Arguments<'_> {
                     .as_pystr()
                     .and_then(PyStr::to_utf8)
                     .ok_or_else(|| format!("{key} must be a non-empty list of paths."))?;
-                pack(&raw, self.allowed)
+                pack(&raw, self.root)
             })
             .collect()
     }
 }
 
-/// Refuse network and device paths (`\\server\share`, `//server/share`,
-/// `\\?\UNC\` and `\\.\`) before anything resolves them; a local drive
-/// in verbatim form (`\\?\C:\`) is allowed.
-fn local(raw: &str) -> Result<()> {
-    let bytes = raw.as_bytes();
-    let separator = |index: usize| matches!(bytes.get(index), Some(b'/' | b'\\'));
-    // `\\?\C:\` is a local drive in Windows' verbatim form.
-    let verbatim_disk = raw.starts_with("\\\\?\\")
-        && bytes.get(4).is_some_and(u8::is_ascii_alphabetic)
-        && bytes.get(5) == Some(&b':');
-    if separator(0) && separator(1) && !verbatim_disk {
-        return Err(format!(
-            "{raw} is a network or device path; give a local path."
-        ));
-    }
-    // A verbatim path treats `/` as part of a name, which a later push
-    // would split; such a path is refused rather than reinterpreted.
-    if verbatim_disk && raw.contains('/') {
-        return Err(format!(
-            "{raw} mixes / into a verbatim path; give a local path."
-        ));
-    }
-    Ok(())
+/// A regular file beneath the root.
+fn file(raw: &str, root: &Root) -> Result<PathBuf> {
+    let path = root.join(raw)?;
+    root.file(&path)
+        .map_err(|error| format!("{raw}: {error}"))?;
+    Ok(path)
 }
 
-/// Whether the link at `link` sits inside an allowed directory. Its parent
-/// holds no link the walk has not already followed, so resolving it follows
-/// nothing new.
-fn link_inside(link: &Path, allowed: &[PathBuf]) -> std::io::Result<bool> {
-    let parent = link.parent().expect("a link the walk named has a parent");
-    let name = link.file_name().expect("a link the walk named has a name");
-    let location = std::fs::canonicalize(parent)?.join(name);
-    Ok(allowed
-        .iter()
-        .any(|directory| location.starts_with(directory)))
-}
-
-/// `path` in Windows' verbatim form when it starts with a drive, so that
-/// each name is looked up as written, without the trimming of trailing dots
-/// and spaces the system applies to other paths. Other paths are unchanged.
-fn verbatim(path: PathBuf) -> PathBuf {
-    match path.components().next() {
-        Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::Disk(_)) => {
-            let mut text = std::ffi::OsString::from("\\\\?\\");
-            text.push(path.as_os_str());
-            PathBuf::from(text)
-        }
-        _ => path,
-    }
-}
-
-/// The existing file or directory `raw` names when it lies inside an
-/// allowed directory. The path is resolved one name at a time, the way the
-/// system would, and a link is followed only where it sits inside an allowed
-/// directory, so no link elsewhere can lead to another folder or a share.
-fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
-    local(raw)?;
-    if !Path::new(raw).is_absolute() {
-        return Err(format!("{raw} is not an absolute path."));
-    }
-    let failed = |error: std::io::Error| format!("{raw}: {error}");
-    let outside = || format!("{raw} is outside the directories this server may read.");
-    let mut current = PathBuf::new();
-    let absolute = verbatim(std::path::absolute(raw).map_err(failed)?);
-    for component in absolute.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                // As when the system resolves it, `..` must follow a directory.
-                if !current.is_dir() {
-                    return Err(format!("{raw}: a name before .. is not a directory."));
-                }
-                current.pop();
-            }
-            Component::Normal(name) => {
-                current.push(name);
-                let metadata = std::fs::symlink_metadata(&current).map_err(failed)?;
-                if metadata.file_type().is_symlink() {
-                    if !link_inside(&current, allowed).map_err(failed)? {
-                        return Err(outside());
-                    }
-                    current = std::fs::canonicalize(&current).map_err(failed)?;
-                }
-            }
-            other => current.push(other),
-        }
-    }
-    let resolved = std::fs::canonicalize(&current).map_err(failed)?;
-    // Only Windows reads a backslash as a separator.
-    let backslash = cfg!(windows) && (raw.ends_with('\\') || raw.ends_with("\\."));
-    let directory = backslash || raw.ends_with('/') || raw.ends_with("/.");
-    if directory && !resolved.is_dir() {
-        return Err(format!("{raw} is not a directory."));
-    }
-    if allowed
-        .iter()
-        .any(|directory| resolved.starts_with(directory))
-    {
-        Ok(resolved)
-    } else {
-        Err(outside())
-    }
-}
-
-/// A confined regular file: not a directory, pipe or device.
-fn file(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
-    let resolved = confine(raw, allowed)?;
-    if resolved.is_file() {
-        Ok(resolved)
-    } else {
-        Err(format!("{raw} is not a regular file."))
-    }
-}
-
-/// A confined review-pack directory whose pack files, where present, are
-/// regular files rather than links, pipes or directories, so reading them
-/// by name stays inside the directory.
-fn pack(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
-    let resolved = confine(raw, allowed)?;
-    if !resolved.is_dir() {
-        return Err(format!("{raw} is not a directory."));
-    }
-    for name in viewer::PACK_NAMES {
-        let metadata = std::fs::symlink_metadata(resolved.join(name));
-        if metadata.is_ok_and(|metadata| !metadata.file_type().is_file()) {
-            return Err(format!(
-                "{raw}: {name} is not a regular file; links are not followed."
-            ));
-        }
-    }
-    Ok(resolved)
-}
-
-/// Resolve the directories the user allows; each must exist.
-pub fn allowed_directories(raw: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    raw.iter()
-        .map(|path| {
-            local(&path.to_string_lossy())?;
-            let resolved = std::fs::canonicalize(path)
-                .map_err(|error| format!("directory {}: {error}", path.display()))?;
-            if resolved.is_dir() {
-                Ok(resolved)
-            } else {
-                Err(format!("{} is not a directory.", path.display()))
-            }
-        })
-        .collect()
+/// A review-pack directory beneath the root. Its pack files are read
+/// through the root's handle, which refuses a link, pipe or directory.
+fn pack(raw: &str, root: &Root) -> Result<PathBuf> {
+    let path = root.join(raw)?;
+    root.directory(&path)
+        .map_err(|error| format!("{raw}: {error}"))?;
+    Ok(path)
 }
 
 /// Run one tool; `None` for a tool this server does not have.
@@ -517,7 +406,7 @@ fn discover() -> Json {
     ])
 }
 
-fn call(id: Json, params: Option<&Json>, allowed: &[PathBuf]) -> Json {
+fn call(id: Json, params: Option<&Json>, root: &Root) -> Json {
     let name = params
         .and_then(|params| params.get("name"))
         .and_then(Json::as_pystr)
@@ -529,7 +418,7 @@ fn call(id: Json, params: Option<&Json>, allowed: &[PathBuf]) -> Json {
         Some(values @ Json::Object(_)) => values,
         Some(_) => return failure(id, -32602, "arguments must be an object.", None),
     };
-    let Some(outcome) = run_tool(&name, &Arguments { values, allowed }) else {
+    let Some(outcome) = root.within(|| run_tool(&name, &Arguments { values, root })) else {
         return failure(id, -32602, &format!("Unknown tool: {name}"), None);
     };
     let (text, is_error) = match outcome {
@@ -579,7 +468,7 @@ fn unsupported_version(id: &Json, params: Option<&Json>) -> Option<Json> {
 }
 
 /// The reply to one line, or `None` for a notification or a response.
-pub fn handle(line: &str, allowed: &[PathBuf]) -> Option<Json> {
+pub fn handle(line: &str, root: &Root) -> Option<Json> {
     let Ok(message) = pyjson::loads(line) else {
         return Some(failure(Json::Null, -32700, "Parse error", None));
     };
@@ -614,17 +503,13 @@ pub fn handle(line: &str, allowed: &[PathBuf]) -> Option<Json> {
         "server/discover" => success(id, discover()),
         "ping" => success(id, Json::object([])),
         "tools/list" => success(id, Json::object([("tools", tools())])),
-        "tools/call" => call(id, params, allowed),
+        "tools/call" => call(id, params, root),
         _ => failure(id, -32601, "Method not found", None),
     })
 }
 
 /// Answer each line of `input` on `output` until end of input.
-pub fn serve(
-    mut input: impl BufRead,
-    output: &mut impl Write,
-    allowed: &[PathBuf],
-) -> std::io::Result<()> {
+pub fn serve(mut input: impl BufRead, output: &mut impl Write, root: &Root) -> std::io::Result<()> {
     let mut line = Vec::new();
     loop {
         line.clear();
@@ -633,7 +518,7 @@ pub fn serve(
         }
         let reply = match std::str::from_utf8(&line) {
             Ok(text) if text.trim().is_empty() => continue,
-            Ok(text) => handle(text, allowed),
+            Ok(text) => handle(text, root),
             Err(_) => Some(failure(Json::Null, -32700, "Parse error", None)),
         };
         if let Some(reply) = reply {
@@ -647,20 +532,26 @@ pub fn serve(
 mod tests {
     use super::*;
     use crate::test_support::TempDir;
+    use std::path::Path;
 
-    fn reply(line: &str, allowed: &[PathBuf]) -> Json {
-        handle(line, allowed).unwrap()
+    fn reply(line: &str, root: &Root) -> Json {
+        handle(line, root).unwrap()
+    }
+
+    /// A root for messages that read no file.
+    fn nowhere() -> Root {
+        Root::open(&std::env::temp_dir()).unwrap()
     }
 
     fn error_code(reply: &Json) -> Option<num_bigint::BigInt> {
         reply.at("error").at("code").as_plain_int().cloned()
     }
 
-    fn call_text(allowed: &[PathBuf], tool: &str, arguments: &str) -> (String, bool) {
+    fn call_text(root: &Root, tool: &str, arguments: &str) -> (String, bool) {
         let line = format!(
             r#"{{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{{"name":"{tool}","arguments":{arguments}}}}}"#
         );
-        let result = reply(&line, allowed);
+        let result = reply(&line, root);
         let result = result.at("result");
         let text = result.at("content").as_array().unwrap()[0]
             .at("text")
@@ -678,24 +569,24 @@ mod tests {
 
     #[test]
     fn malformed_messages_get_json_rpc_errors_and_others_no_reply() {
-        assert_eq!(error_code(&reply("{", &[])), Some((-32700).into()));
+        assert_eq!(error_code(&reply("{", &nowhere())), Some((-32700).into()));
         assert_eq!(
-            error_code(&reply(r#"{"jsonrpc":"2.0","id":1}"#, &[])),
+            error_code(&reply(r#"{"jsonrpc":"2.0","id":1}"#, &nowhere())),
             Some((-32600).into())
         );
-        assert!(matches!(reply("[1]", &[]).at("id"), Json::Null));
-        assert!(handle(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, &[]).is_none());
-        assert!(handle(r#"{"jsonrpc":"2.0","id":1,"error":{}}"#, &[]).is_none());
+        assert!(matches!(reply("[1]", &nowhere()).at("id"), Json::Null));
+        assert!(handle(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, &nowhere()).is_none());
+        assert!(handle(r#"{"jsonrpc":"2.0","id":1,"error":{}}"#, &nowhere()).is_none());
         assert!(
             handle(
                 r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
-                &[]
+                &nowhere()
             )
             .is_none()
         );
         let unknown = reply(
             r#"{"jsonrpc":"2.0","id":"a","method":"resources/list"}"#,
-            &[],
+            &nowhere(),
         );
         assert_eq!(error_code(&unknown), Some((-32601).into()));
         assert!(unknown.at("id").is_str("a"));
@@ -708,7 +599,7 @@ mod tests {
                 &format!(
                     r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"{version}"}}}}"#
                 ),
-                &[],
+                &nowhere(),
             )
         };
         let result = init("2025-06-18");
@@ -724,11 +615,14 @@ mod tests {
                     .is_str("2025-11-25")
             );
         }
-        let bare = reply(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#, &[]);
+        let bare = reply(
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#,
+            &nowhere(),
+        );
         assert!(bare.at("result").at("protocolVersion").is_str("2025-11-25"));
         let discover = reply(
             r#"{"jsonrpc":"2.0","id":2,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}"#,
-            &[],
+            &nowhere(),
         );
         let result = discover.at("result");
         assert!(result.at("resultType").is_str("complete"));
@@ -738,17 +632,20 @@ mod tests {
                 &format!(
                     r#"{{"jsonrpc":"2.0","id":3,"method":"ping","params":{{"_meta":{{"io.modelcontextprotocol/protocolVersion":{version}}}}}}}"#
                 ),
-                &[],
+                &nowhere(),
             );
             assert_eq!(error_code(&refused), Some((-32022).into()));
         }
-        let ping = reply(r#"{"jsonrpc":"2.0","id":4,"method":"ping"}"#, &[]);
+        let ping = reply(r#"{"jsonrpc":"2.0","id":4,"method":"ping"}"#, &nowhere());
         assert!(ping.at("result").at("resultType").is_str("complete"));
     }
 
     #[test]
     fn every_tool_is_listed_read_only() {
-        let listed = reply(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#, &[]);
+        let listed = reply(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+            &nowhere(),
+        );
         let names: Vec<_> = listed
             .at("result")
             .at("tools")
@@ -773,36 +670,46 @@ mod tests {
     fn calls_refuse_unknown_tools_and_bad_arguments() {
         let unknown = reply(
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"review"}}"#,
-            &[],
+            &nowhere(),
         );
         assert_eq!(error_code(&unknown), Some((-32602).into()));
-        let nameless = reply(r#"{"jsonrpc":"2.0","id":1,"method":"tools/call"}"#, &[]);
+        let nameless = reply(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call"}"#,
+            &nowhere(),
+        );
         assert_eq!(error_code(&nameless), Some((-32602).into()));
         let listed = reply(
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"view","arguments":[]}}"#,
-            &[],
+            &nowhere(),
         );
         assert_eq!(error_code(&listed), Some((-32602).into()));
-        let (text, failed) = call_text(&[], "view", "{}");
+        let (text, failed) = call_text(&nowhere(), "view", "{}");
         assert!(failed);
         assert_eq!(text, "pack_dir is required.");
-        let (text, _) = call_text(&[], "view", r#"{"pack_dir":1}"#);
+        let (text, _) = call_text(&nowhere(), "view", r#"{"pack_dir":1}"#);
         assert_eq!(text, "pack_dir must be text.");
-        let (text, _) = call_text(&[], "view", r#"{"pack_dir":"relative/pack"}"#);
-        assert_eq!(text, "relative/pack is not an absolute path.");
+        let (text, _) = call_text(&nowhere(), "view", r#"{"pack_dir":"/pack"}"#);
+        assert_eq!(
+            text,
+            "/pack: give a path relative to the server's directory, with names separated by / and no ., .., \\ or :."
+        );
         for arguments in [r#"{}"#, r#"{"pack_dirs":[]}"#, r#"{"pack_dirs":[1]}"#] {
-            let (text, _) = call_text(&[], "queue", arguments);
+            let (text, _) = call_text(&nowhere(), "queue", arguments);
             assert_eq!(text, "pack_dirs must be a non-empty list of paths.");
         }
-        let (text, _) = call_text(&[], "queue", r#"{"pack_dirs":["x"],"summary":"yes"}"#);
+        let (text, _) = call_text(
+            &nowhere(),
+            "queue",
+            r#"{"pack_dirs":["x"],"summary":"yes"}"#,
+        );
         assert_eq!(text, "summary must be true or false.");
-        let (text, _) = call_text(&[], "schedule", r#"{"kind":"budget","input":"x"}"#);
+        let (text, _) = call_text(&nowhere(), "schedule", r#"{"kind":"budget","input":"x"}"#);
         assert_eq!(text, "kind must be expenses, migration or interentity.");
     }
 
     #[test]
     fn envelopes_ids_and_params_are_checked_before_dispatch() {
-        let bad = reply(r#"{"jsonrpc":"1.0","id":[],"method":"ping"}"#, &[]);
+        let bad = reply(r#"{"jsonrpc":"1.0","id":[],"method":"ping"}"#, &nowhere());
         assert_eq!(error_code(&bad), Some((-32600).into()));
         assert!(matches!(bad.at("id"), Json::Null));
         for line in [
@@ -811,263 +718,232 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#,
         ] {
             assert_eq!(
-                error_code(&reply(line, &[])),
+                error_code(&reply(line, &nowhere())),
                 Some((-32600).into()),
                 "{line}"
             );
         }
         let scalar = reply(
             r#"{"jsonrpc":"2.0","id":"p","method":"ping","params":3}"#,
-            &[],
+            &nowhere(),
         );
         assert_eq!(error_code(&scalar), Some((-32602).into()));
         assert!(scalar.at("id").is_str("p"));
         let notification = r#"{"jsonrpc":"2.0","method":"notifications/initialized","params":3}"#;
-        assert!(handle(notification, &[]).is_none());
-        let ping = reply(r#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#, &[]);
+        assert!(handle(notification, &nowhere()).is_none());
+        let ping = reply(r#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#, &nowhere());
         assert!(ping.get("result").is_some());
     }
 
-    fn jet_arguments(path: &Path) -> String {
+    fn jet_arguments(raw: &str) -> String {
         format!(
             r#"{{"transactions":{},"currency":"AUD","period_end":"2026-07-31"}}"#,
-            quoted(path)
+            quoted(Path::new(raw))
         )
     }
 
-    #[test]
-    fn tools_read_only_regular_files_on_local_paths() {
-        let temp = TempDir::new();
+    fn refused(root: &Root, raw: &str) -> String {
+        let (text, failed) = call_text(root, "jet", &jet_arguments(raw));
+        assert!(failed, "{raw}: {text}");
+        text
+    }
+
+    fn journals() -> PathBuf {
+        crate::test_support::examples().join("journal_entries.csv")
+    }
+
+    /// A folder `inside` holding `sub/f.csv`, with `outside.csv` beside it.
+    fn client(temp: &TempDir) -> (PathBuf, Root) {
         let inside = temp.join("inside");
-        let pack_dir = inside.join("pack");
-        std::fs::create_dir_all(pack_dir.join(viewer::PACK_NAMES[0])).unwrap();
-        let csv = inside.join("journals.csv");
-        std::fs::write(&csv, "x").unwrap();
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let pack_argument = format!(r#"{{"pack_dir":{}}}"#, quoted(&pack_dir));
-        let (text, failed) = call_text(&allowed, "view", &pack_argument);
-        assert!(
-            failed && text.ends_with("links are not followed."),
-            "{text}"
-        );
-        let queue_argument = format!(r#"{{"pack_dirs":[{}]}}"#, quoted(&pack_dir));
-        let (text, _) = call_text(&allowed, "queue", &queue_argument);
-        assert!(text.ends_with("links are not followed."), "{text}");
-        let (text, _) = call_text(
-            &allowed,
-            "view",
-            &format!(r#"{{"pack_dir":{}}}"#, quoted(&csv)),
-        );
-        assert!(text.ends_with(" is not a directory."), "{text}");
-        let (text, _) = call_text(&allowed, "jet", &jet_arguments(&pack_dir));
-        assert!(text.ends_with(" is not a regular file."), "{text}");
+        std::fs::create_dir_all(inside.join("sub")).unwrap();
+        for file in [inside.join("sub").join("f.csv"), temp.join("outside.csv")] {
+            std::fs::copy(journals(), file).unwrap();
+        }
+        let root = Root::open(&inside).unwrap();
+        (inside, root)
+    }
+
+    // S3, S5, S7, S9, S10 and S11 came from comparing or normalising
+    // spellings of absolute paths; a path is now plain names under the root.
+    #[test]
+    fn paths_are_plain_names_beneath_the_root() {
+        let temp = TempDir::new();
+        let (inside, root) = client(&temp);
+        let absolute = inside.join("sub").join("f.csv");
         for raw in [
-            r"\\server\share\journals.csv",
-            "//server/share/journals.csv",
-            r"\\?\UNC\server\share\journals.csv",
+            "",
+            "/sub/f.csv",
+            absolute.to_str().unwrap(),
+            r"\\server\share\f.csv",
+            "//server/share/f.csv",
+            r"\\?\UNC\server\share\f.csv",
+            r"\\?\C:\sub\f.csv",
+            r"\\.\pipe\name",
+            "C:/sub/f.csv",
+            "C:f.csv",
+            "../outside.csv",
+            "sub/../../outside.csv",
+            "sub/../sub/f.csv",
+            "./sub/f.csv",
+            "sub/",
+            "sub/.",
+            "sub//f.csv",
+            r"sub\f.csv",
+            r"sub\..\..\outside.csv",
+            "sub/f.csv:stream",
+            "sub/f.csv\0",
         ] {
-            let (text, failed) = call_text(&allowed, "jet", &jet_arguments(Path::new(raw)));
-            assert!(failed && text.ends_with("give a local path."), "{text}");
+            let text = refused(&root, raw);
+            assert!(text.ends_with("no ., .., \\ or :."), "{raw}: {text}");
         }
-        let remote = allowed_directories(&[PathBuf::from("//server/share")]).unwrap_err();
-        assert!(remote.ends_with("give a local path."), "{remote}");
+        let (_, failed) = call_text(&root, "jet", &jet_arguments("sub/f.csv"));
+        assert!(!failed);
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn links_and_pipes_in_a_pack_are_refused_before_reading() {
-        let temp = TempDir::new();
-        let inside = temp.join("inside");
-        let (linked, piped) = (inside.join("linked"), inside.join("piped"));
-        std::fs::create_dir_all(&linked).unwrap();
-        std::fs::create_dir_all(&piped).unwrap();
-        let outside = temp.join("outside.json");
-        std::fs::write(&outside, "{}").unwrap();
-        std::os::unix::fs::symlink(&outside, linked.join(viewer::PACK_NAMES[0])).unwrap();
-        let fifo = piped.join(viewer::PACK_NAMES[0]);
-        let made = std::process::Command::new("mkfifo")
-            .arg(&fifo)
-            .status()
-            .unwrap();
-        assert!(made.success());
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        for directory in [&linked, &piped] {
-            let argument = format!(r#"{{"pack_dir":{}}}"#, quoted(directory));
-            let (text, failed) = call_text(&allowed, "view", &argument);
-            assert!(
-                failed && text.ends_with("links are not followed."),
-                "{text}"
-            );
-        }
-        let (text, failed) = call_text(&allowed, "jet", &jet_arguments(&fifo));
-        assert!(
-            failed && text.ends_with(" is not a regular file."),
-            "{text}"
-        );
-    }
-
-    #[test]
-    fn written_paths_are_checked_before_any_link_is_followed() {
-        assert!(local(r"\\?\C:\client\pack").is_ok());
-        assert!(local(r"\\?\UNC\server\share").is_err());
-        assert!(local(r"\\.\pipe\name").is_err());
-        let mixed = local(r"\\?\C:\t\j/f").unwrap_err();
-        assert!(mixed.ends_with("mixes / into a verbatim path; give a local path."));
-        let temp = TempDir::new();
-        let inside = temp.join("inside");
-        std::fs::create_dir(&inside).unwrap();
-        let csv = inside.join("journals.csv");
-        std::fs::write(&csv, "x").unwrap();
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let resolved = std::fs::canonicalize(&csv).unwrap();
-        assert_eq!(file(resolved.to_str().unwrap(), &allowed), Ok(resolved));
-        let escape = inside.join("..").join("inside").join("journals.csv");
-        assert!(file(escape.to_str().unwrap(), &allowed).is_ok());
-        let around = inside.join("..").join("journals.csv");
-        std::fs::write(temp.join("journals.csv"), "x").unwrap();
-        assert!(
-            file(around.to_str().unwrap(), &allowed)
-                .unwrap_err()
-                .contains("outside")
-        );
-    }
-
+    // S7 and S8: Windows trims trailing dots and spaces from names in a
+    // full path; names opened through a handle are taken as written.
     #[test]
     fn names_are_looked_up_as_written() {
         let temp = TempDir::new();
-        let inside = std::fs::canonicalize(temp.join("."))
-            .unwrap()
-            .join("inside");
-        let spaced = inside.join("hop ");
-        std::fs::create_dir_all(&spaced).unwrap();
-        std::fs::write(spaced.join("f.csv"), "x").unwrap();
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let written = spaced.join("f.csv");
-        let written = written.to_str().unwrap();
-        let written = written.strip_prefix("\\\\?\\").unwrap_or(written);
-        let resolved = file(written, &allowed).unwrap();
-        assert!(resolved.ends_with(Path::new("hop ").join("f.csv")));
-        let pack = file(
-            &format!("{}{}", inside.display(), std::path::MAIN_SEPARATOR),
-            &allowed,
-        );
-        assert!(pack.unwrap_err().ends_with(" is not a regular file."));
+        let (inside, root) = client(&temp);
+        // Windows' verbatim form keeps the trailing space when creating it.
+        let spaced = std::fs::canonicalize(&inside).unwrap().join("hop ");
+        std::fs::create_dir(&spaced).unwrap();
+        std::fs::copy(journals(), spaced.join("f.csv")).unwrap();
+        let (_, failed) = call_text(&root, "jet", &jet_arguments("hop /f.csv"));
+        assert!(!failed);
+        for raw in ["hop/f.csv", "sub./f.csv", "sub /f.csv", "sub/f.csv."] {
+            refused(&root, raw);
+        }
     }
 
+    // S1, S3 and S6: a link is refused at every step, wherever it points.
     #[cfg(unix)]
     #[test]
-    fn a_link_outside_the_directories_is_not_followed() {
+    fn links_are_refused_at_every_step() {
+        use std::os::unix::fs::symlink;
         let temp = TempDir::new();
-        let inside = temp.join("inside");
-        std::fs::create_dir(&inside).unwrap();
-        std::fs::write(inside.join("journals.csv"), "x").unwrap();
-        let link = temp.join("elsewhere");
-        std::os::unix::fs::symlink(&inside, &link).unwrap();
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let refused = |path: PathBuf| {
-            let error = file(path.to_str().unwrap(), &allowed).unwrap_err();
-            assert!(
-                error.ends_with("outside the directories this server may read."),
-                "{error}"
-            );
-        };
-        refused(link.join("journals.csv"));
-        // The detour through the outside link and back by name.
-        refused(link.join("..").join("inside").join("journals.csv"));
-        // A server directory given through a link does not admit its
-        // neighbours.
-        let sub = temp.join("u").join("sub");
-        std::fs::create_dir_all(&sub).unwrap();
-        std::fs::write(sub.join("public.csv"), "x").unwrap();
-        std::fs::write(temp.join("private.csv"), "x").unwrap();
+        let (inside, root) = client(&temp);
+        symlink(temp.join("outside.csv"), inside.join("out.csv")).unwrap();
+        symlink(inside.join("sub").join("f.csv"), inside.join("in.csv")).unwrap();
+        symlink(&temp.0, inside.join("up")).unwrap();
+        symlink(inside.join("sub"), inside.join("alias")).unwrap();
+        let pack = inside.join("pack");
+        std::fs::create_dir(&pack).unwrap();
+        symlink(temp.join("outside.csv"), pack.join(viewer::PACK_NAMES[0])).unwrap();
+        for raw in ["out.csv", "in.csv", "up/outside.csv", "alias/f.csv"] {
+            let text = refused(&root, raw);
+            assert!(text.ends_with("links are not followed"), "{raw}: {text}");
+        }
+        let (text, failed) = call_text(&root, "view", r#"{"pack_dir":"pack"}"#);
+        assert!(failed && text.contains("links are not followed"), "{text}");
+        let (text, failed) = call_text(&root, "view", r#"{"pack_dir":"alias"}"#);
+        assert!(failed && text.ends_with("links are not followed"), "{text}");
+    }
+
+    // S8: a junction is a reparse point and is refused like a link.
+    #[cfg(windows)]
+    #[test]
+    fn junctions_are_refused() {
+        let temp = TempDir::new();
+        let (inside, root) = client(&temp);
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(inside.join("hop"))
+            .arg(&temp.0)
+            .output()
+            .unwrap();
+        assert!(made.status.success(), "{made:?}");
+        let text = refused(&root, "hop/outside.csv");
+        assert!(text.ends_with("links are not followed"), "{text}");
+        // The name is taken as written, so 'hop ' is not the junction.
+        let text = refused(&root, "hop /outside.csv");
+        assert!(!text.contains("links"), "{text}");
+    }
+
+    // S4: pipes are refused without waiting for a writer.
+    #[cfg(unix)]
+    #[test]
+    fn pipes_are_refused_without_waiting() {
+        let temp = TempDir::new();
+        let (inside, root) = client(&temp);
+        let pack = inside.join("pack");
+        std::fs::create_dir(&pack).unwrap();
+        for fifo in [inside.join("p.csv"), pack.join(viewer::PACK_NAMES[0])] {
+            let made = std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap();
+            assert!(made.success());
+        }
+        let text = refused(&root, "p.csv");
+        assert!(text.ends_with("is not a regular file"), "{text}");
+        let (text, failed) = call_text(&root, "view", r#"{"pack_dir":"pack"}"#);
+        assert!(failed && text.contains("is not a regular file"), "{text}");
+    }
+
+    // S6: the root is opened once, so renaming it or reaching it through an
+    // alias admits nothing else.
+    #[cfg(unix)]
+    #[test]
+    fn the_root_is_opened_once() {
+        let temp = TempDir::new();
+        let (inside, _) = client(&temp);
         let alias = temp.join("alias");
-        std::os::unix::fs::symlink(&sub, &alias).unwrap();
-        let allowed = allowed_directories(&[alias.join(".")]).unwrap();
-        let private = temp.join("private.csv");
-        assert!(file(private.to_str().unwrap(), &allowed).is_err());
-        let public = sub.join("public.csv");
-        assert!(file(public.to_str().unwrap(), &allowed).is_ok());
-        // A link inside a server directory is followed.
-        let inner = sub.join("inner");
-        std::os::unix::fs::symlink(sub.join("public.csv"), &inner).unwrap();
-        assert!(file(inner.to_str().unwrap(), &allowed).is_ok());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn dot_dot_follows_a_resolved_directory() {
-        let temp = TempDir::new();
-        let inside = temp.join("inside");
-        let deep = inside.join("sub").join("deep");
-        std::fs::create_dir_all(&deep).unwrap();
-        std::fs::write(inside.join("g"), "lexical").unwrap();
-        std::fs::write(inside.join("sub").join("g"), "physical").unwrap();
-        std::os::unix::fs::symlink(&deep, inside.join("l")).unwrap();
-        std::fs::write(inside.join("x"), "x").unwrap();
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let text = |path: &str| format!("{}/{path}", inside.display());
-        let physical = std::fs::canonicalize(inside.join("sub").join("g")).unwrap();
-        assert_eq!(file(&text("l/../g"), &allowed), Ok(physical));
-        let error = file(&text("x/../g"), &allowed).unwrap_err();
-        assert!(
-            error.ends_with("a name before .. is not a directory."),
-            "{error}"
-        );
-        for path in ["g/", "g/."] {
-            let error = file(&text(path), &allowed).unwrap_err();
-            assert!(error.ends_with(" is not a directory."), "{error}");
-        }
-        // A backslash is part of a file name on Unix.
-        for name in ["g\\", "g\\."] {
-            std::fs::write(inside.join(name), "x").unwrap();
-            assert!(file(&text(name), &allowed).is_ok(), "{name}");
-        }
+        std::os::unix::fs::symlink(inside.join("sub"), &alias).unwrap();
+        let root = Root::open(&alias).unwrap();
+        let (_, failed) = call_text(&root, "jet", &jet_arguments("f.csv"));
+        assert!(!failed);
+        refused(&root, "../f.csv");
+        let root = Root::open(&inside).unwrap();
+        std::fs::rename(&inside, temp.join("moved")).unwrap();
+        std::fs::create_dir_all(inside.join("sub")).unwrap();
+        std::fs::copy(journals(), inside.join("sub").join("g.csv")).unwrap();
+        let (_, failed) = call_text(&root, "jet", &jet_arguments("sub/f.csv"));
+        assert!(!failed);
+        refused(&root, "sub/g.csv");
     }
 
     #[test]
-    fn paths_must_exist_inside_an_allowed_directory() {
+    fn tools_read_only_regular_files() {
         let temp = TempDir::new();
-        let inside = temp.join("inside");
-        let outside = temp.join("outside");
-        std::fs::create_dir(&inside).unwrap();
-        std::fs::create_dir(&outside).unwrap();
-        std::fs::write(outside.join("journals.csv"), "x").unwrap();
-        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let file = outside.join("journals.csv");
-        let arguments = format!(
-            r#"{{"transactions":{},"currency":"AUD","period_end":"2026-07-31"}}"#,
-            quoted(&file)
-        );
-        let (text, failed) = call_text(&allowed, "jet", &arguments);
-        assert!(failed);
+        let (inside, root) = client(&temp);
+        std::fs::create_dir_all(inside.join("pack").join(viewer::PACK_NAMES[0])).unwrap();
+        let (text, failed) = call_text(&root, "view", r#"{"pack_dir":"pack"}"#);
+        assert!(failed && text.contains("found a directory"), "{text}");
+        let (text, _) = call_text(&root, "queue", r#"{"pack_dirs":["pack"]}"#);
+        assert!(text.contains("found a directory"), "{text}");
+        let (text, _) = call_text(&root, "view", r#"{"pack_dir":"sub/f.csv"}"#);
+        assert!(text.starts_with("sub/f.csv: "), "{text}");
+        let text = refused(&root, "sub");
+        assert!(text.ends_with("is not a regular file"), "{text}");
+        let text = refused(&root, "absent.csv");
+        assert!(text.starts_with("absent.csv: "), "{text}");
+        let (text, _) = call_text(&root, "view", r#"{"pack_dir":"absent"}"#);
+        assert!(text.starts_with("absent: "), "{text}");
         assert!(
-            text.ends_with(" is outside the directories this server may read."),
-            "{text}"
-        );
-        let missing = inside.join("absent.csv");
-        let (text, _) = call_text(
-            &allowed,
-            "view",
-            &format!(r#"{{"pack_dir":{}}}"#, quoted(&missing)),
-        );
-        assert!(text.starts_with(missing.to_str().unwrap()), "{text}");
-        assert!(
-            allowed_directories(&[temp.join("absent")])
+            Root::open(&temp.join("absent"))
                 .unwrap_err()
                 .starts_with("directory ")
         );
-        assert!(
-            allowed_directories(&[file])
-                .unwrap_err()
-                .ends_with(" is not a directory.")
-        );
+        assert!(Root::open(&temp.join("outside.csv")).is_err());
+    }
+
+    #[test]
+    fn reads_outside_a_tool_call_are_not_confined() {
+        let temp = TempDir::new();
+        let (_, root) = client(&temp);
+        let outside = temp.join("outside.csv");
+        assert!(crate::beneath::read(&outside).is_ok());
+        assert!(root.within(|| crate::beneath::read(&outside)).is_err());
+        assert!(crate::beneath::read(&outside).is_ok());
     }
 
     #[test]
     fn serve_answers_each_line_and_skips_blank_ones() {
         let input = b"\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\r\n\xff\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n".to_vec();
         let mut output = Vec::new();
-        serve(std::io::Cursor::new(input), &mut output, &[]).unwrap();
+        serve(std::io::Cursor::new(input), &mut output, &nowhere()).unwrap();
         let text = String::from_utf8(output).unwrap();
         let lines: Vec<_> = text.lines().collect();
         assert_eq!(lines.len(), 2, "{text}");

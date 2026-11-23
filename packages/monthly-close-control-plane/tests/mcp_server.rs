@@ -52,8 +52,8 @@ fn workspace(temp: &TempDir) -> PathBuf {
 }
 
 #[expect(clippy::too_many_lines, reason = "one request per tool")]
-fn calls(root: &Path) -> Vec<(i64, String, String)> {
-    let path = |name: &str| quoted(&root.join(name));
+fn calls() -> Vec<(i64, String, String)> {
+    let path = |name: &str| quoted(Path::new(name));
     vec![
         (
             1,
@@ -124,7 +124,7 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
         r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#,
     );
     input += "\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n";
-    for (id, tool, arguments) in calls(&root) {
+    for (id, tool, arguments) in calls() {
         input += &format!(
             "{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"tools/call\",\"params\":{{\"name\":\"{tool}\",\"arguments\":{arguments}}}}}\n"
         );
@@ -213,6 +213,19 @@ fn the_server_needs_an_existing_allowed_directory() {
         .unwrap();
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert!(output.stdout.is_empty());
+    let output = child_profile::command(BIN)
+        .arg("mcp")
+        .arg(&temp.0)
+        .arg(&temp.0)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(
+        error.trim_end(),
+        "close-control mcp: give exactly one DIRECTORY."
+    );
 }
 
 #[test]
@@ -231,10 +244,10 @@ fn the_bundle_manifest_matches_the_server() {
         .iter()
         .map(text)
         .collect();
-    assert_eq!(args, ["mcp", "${user_config.allowed_directories}"]);
+    assert_eq!(args, ["mcp", "${user_config.client_folder}"]);
     let listed = monthly_close_control_plane::mcp::handle(
         r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
-        &[],
+        &monthly_close_control_plane::beneath::Root::open(&root).unwrap(),
     )
     .unwrap();
     let names = |tools: &Json| -> Vec<(String, String)> {
@@ -252,7 +265,7 @@ fn the_bundle_manifest_matches_the_server() {
 }
 
 #[test]
-fn help_names_the_directories() {
+fn help_names_the_directory() {
     let output = child_profile::command(BIN)
         .args(["mcp", "--help"])
         .output()

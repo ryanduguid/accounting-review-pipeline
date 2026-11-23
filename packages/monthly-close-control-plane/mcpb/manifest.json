@@ -27,7 +27,7 @@
       "command": "${__dirname}/server/close-control",
       "args": [
         "mcp",
-        "${user_config.allowed_directories}"
+        "${user_config.client_folder}"
       ],
       "env": {}
     }
@@ -65,11 +65,11 @@
     ]
   },
   "user_config": {
-    "allowed_directories": {
+    "client_folder": {
       "type": "directory",
-      "title": "Client folders",
-      "description": "Folders the tools may read. Every path a tool is given must be inside one.",
-      "multiple": true,
+      "title": "Client folder",
+      "description": "Folder the tools may read. Every path a tool is given is relative to it.",
+      "multiple": false,
       "required": true
     }
   }

@@ -14,7 +14,6 @@ use crate::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::Path,
 };
 
@@ -1438,7 +1437,7 @@ pub fn verify_payloads(payloads: &BTreeMap<String, Vec<u8>>) -> Result<VerifiedP
 pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
     let mut payloads = BTreeMap::new();
     for name in PACK_NAMES {
-        match fs::read(directory.join(name)) {
+        match crate::beneath::read(&directory.join(name)) {
             Ok(bytes) => {
                 payloads.insert(name.into(), bytes);
             }
@@ -1631,6 +1630,7 @@ mod tests {
         report,
         test_support::TempDir,
     };
+    use std::fs;
 
     #[test]
     fn summary_section_borrows_rows_and_requires_a_unique_heading() {

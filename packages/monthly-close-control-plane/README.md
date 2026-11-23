@@ -94,7 +94,7 @@ unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
 seldom-used-account journals in a general-ledger listing, with a Benford
 first-digit test. It is in development source only.
 [Assistant access over MCP](docs/mcp-server.md) (`close-control mcp`) serves the
-read-only commands to an assistant for the folders you name, with an MCP Bundle
+read-only commands to an assistant for the folder you name, with an MCP Bundle
 manifest. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
