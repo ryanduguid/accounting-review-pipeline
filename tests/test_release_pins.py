@@ -72,6 +72,28 @@ class ReleasePinTests(unittest.TestCase):
                 self.assertIn('--signer-digest "$policy_sha"', text)
                 self.assertIn("?ref=$release_commit", text)
 
+    def test_releasing_recipes_name_the_current_version(self) -> None:
+        """A released component's recipe tag is the version its manifest declares.
+
+        Components without a release caller keep their last Python release in the recipe.
+        """
+        checked = 0
+        for recipe in sorted(ROOT.glob("*/*/RELEASING.md")):
+            if not (WORKFLOWS / f"release-{recipe.parent.name}.yml").exists():
+                continue
+            tag = re.search(r"^tag=([a-z-]+)/v(\S+)$", recipe.read_text(encoding="utf-8"), re.M)
+            manifest = (recipe.parent / "Cargo.toml").read_text(encoding="utf-8")
+            version = re.search(r'^version = "([^"]+)"$', manifest, re.M)
+            with self.subTest(recipe=str(recipe.relative_to(ROOT))):
+                self.assertIsNotNone(tag)
+                assert tag is not None
+                self.assertEqual(tag.group(1), recipe.parent.name)
+                self.assertIsNotNone(version)
+                assert version is not None
+                self.assertEqual(tag.group(2), version.group(1))
+            checked += 1
+        self.assertEqual(checked, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

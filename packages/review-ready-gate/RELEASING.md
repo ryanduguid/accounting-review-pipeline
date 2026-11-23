@@ -73,7 +73,7 @@ Download an explicit tag and target, never `latest`. The signer digest comes
 from the caller at the tagged commit, so the recipe stays right when the pin moves:
 
 ```bash
-tag=review-ready-gate/v1.0.0
+tag=review-ready-gate/v1.0.1
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#review-ready-gate/v}"
 asset="review-ready-gate-${version}-x86_64-unknown-linux-musl.tar.gz"  # or -x86_64-pc-windows-msvc.zip
