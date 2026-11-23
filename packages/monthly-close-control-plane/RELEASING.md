@@ -106,30 +106,12 @@ A PASS review pack does not approve accounting or authorise a software release.
 
 ## Historical Python release procedure
 
-The following procedure documents earlier Python releases and does not apply to
-version 1.0.0 or authorise a new publication.
+GitHub Actions built each Python release from an annotated tag on the exact
+`main` commit: a wheel, source distribution, SPDX 2.3 SBOM and `SHA256SUMS`, with
+GitHub provenance and an SBOM attestation. This section verifies those releases
+and authorises no new publication.
 
-The repository's [GitHub Releases](https://github.com/ryanduguid/accounting-review-pipeline/releases) page is the canonical release history. A separate changelog is intentionally not maintained.
-
-Releases are built by GitHub Actions from an annotated tag on the exact `main` commit. Do not build or upload package assets by hand.
-
-Before tagging:
-
-1. Merge the release pull request and require every `main` check to pass.
-2. Enable release immutability in the repository settings.
-3. From an operator session authenticated with repository Administration read access, run:
-
-    ```bash
-    gh api -H "X-GitHub-Api-Version: 2026-03-10" repos/ryanduguid/accounting-review-pipeline/immutable-releases --jq .enabled
-    ```
-
-    Do not push the tag unless the output is exactly `true`. The Actions `GITHUB_TOKEN` cannot be granted repository Administration read access, so the tag workflow cannot perform this preflight itself.
-4. Confirm the versions in `pyproject.toml` and `uv.lock` match the `RELEASE_NOTES.md` heading.
-5. Create the annotated component tag on current remote `main`, for example `git tag -a monthly-close-control-plane/v0.2.0 -m "monthly-close-control-plane/v0.2.0"` (or `-s` when signing is configured), then push only that tag.
-
-The workflow runs the locked tests, builds the wheel and source distribution once, generates an SPDX 2.3 SBOM for the wheel and `SHA256SUMS`, records GitHub provenance and an SBOM attestation, then publishes the completed draft. An existing release is never overwritten.
-
-Verify the downloaded release with:
+Verify `v0.1.2` with:
 
 ```bash
 tag=v0.1.2
@@ -174,9 +156,9 @@ attestations only. `gh release verify` and `gh release verify-asset` fail for
 this tag, because no attestation is bound to the current tag object; run them
 and record the failure rather than reading it as a passing check. Never move a
 published tag to make these agree. Releases cut after the rename and shared Python-policy
-migration use the current repository identity and hardened policy digest. For
-the next release, update `tag` if the intended version changes and run these
-checks after downloading the assets and checking `SHA256SUMS`:
+migration use the current repository identity and hardened policy digest. To
+verify one, set `tag` to its version and run these checks after downloading the
+assets and checking `SHA256SUMS`:
 
 ```bash
 tag=monthly-close-control-plane/v0.2.0
