@@ -12,7 +12,7 @@ use crate::{
 };
 use std::{
     io::{BufRead, Write},
-    path::{Component, Path, PathBuf},
+    path::{Component, Path, PathBuf, Prefix},
 };
 
 /// Newest first; `initialize` answers with the newest handshake version
@@ -275,6 +275,20 @@ fn link_inside(link: &Path, allowed: &[PathBuf]) -> std::io::Result<bool> {
         .any(|directory| location.starts_with(directory)))
 }
 
+/// `path` in Windows' verbatim form when it starts with a drive, so that
+/// each name is looked up as written, without the trimming of trailing dots
+/// and spaces the system applies to other paths. Other paths are unchanged.
+fn verbatim(path: PathBuf) -> PathBuf {
+    match path.components().next() {
+        Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::Disk(_)) => {
+            let mut text = std::ffi::OsString::from("\\\\?\\");
+            text.push(path.as_os_str());
+            PathBuf::from(text)
+        }
+        _ => path,
+    }
+}
+
 /// The existing file or directory `raw` names when it lies inside an
 /// allowed directory. The path is resolved one name at a time, the way the
 /// system would, and a link is followed only where it sits inside an allowed
@@ -287,10 +301,15 @@ fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
     let failed = |error: std::io::Error| format!("{raw}: {error}");
     let outside = || format!("{raw} is outside the directories this server may read.");
     let mut current = PathBuf::new();
-    for component in std::path::absolute(raw).map_err(failed)?.components() {
+    let absolute = verbatim(std::path::absolute(raw).map_err(failed)?);
+    for component in absolute.components() {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
+                // As when the system resolves it, `..` must follow a directory.
+                if !current.is_dir() {
+                    return Err(format!("{raw}: a name before .. is not a directory."));
+                }
                 current.pop();
             }
             Component::Normal(name) => {
@@ -307,6 +326,10 @@ fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
         }
     }
     let resolved = std::fs::canonicalize(&current).map_err(failed)?;
+    let directory = raw.ends_with(['/', '\\']) || raw.ends_with("/.") || raw.ends_with("\\.");
+    if directory && !resolved.is_dir() {
+        return Err(format!("{raw} is not a directory."));
+    }
     if allowed
         .iter()
         .any(|directory| resolved.starts_with(directory))
@@ -898,6 +921,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn names_are_looked_up_as_written() {
+        let temp = TempDir::new();
+        let inside = std::fs::canonicalize(temp.join("."))
+            .unwrap()
+            .join("inside");
+        let spaced = inside.join("hop ");
+        std::fs::create_dir_all(&spaced).unwrap();
+        std::fs::write(spaced.join("f.csv"), "x").unwrap();
+        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
+        let written = spaced.join("f.csv");
+        let written = written.to_str().unwrap();
+        let written = written.strip_prefix("\\\\?\\").unwrap_or(written);
+        let resolved = file(written, &allowed).unwrap();
+        assert!(resolved.ends_with(Path::new("hop ").join("f.csv")));
+        let pack = file(
+            &format!("{}{}", inside.display(), std::path::MAIN_SEPARATOR),
+            &allowed,
+        );
+        assert!(pack.unwrap_err().ends_with(" is not a regular file."));
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_link_outside_the_directories_is_not_followed() {
@@ -935,6 +980,32 @@ mod tests {
         let inner = sub.join("inner");
         std::os::unix::fs::symlink(sub.join("public.csv"), &inner).unwrap();
         assert!(file(inner.to_str().unwrap(), &allowed).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dot_dot_follows_a_resolved_directory() {
+        let temp = TempDir::new();
+        let inside = temp.join("inside");
+        let deep = inside.join("sub").join("deep");
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::write(inside.join("g"), "lexical").unwrap();
+        std::fs::write(inside.join("sub").join("g"), "physical").unwrap();
+        std::os::unix::fs::symlink(&deep, inside.join("l")).unwrap();
+        std::fs::write(inside.join("x"), "x").unwrap();
+        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
+        let text = |path: &str| format!("{}/{path}", inside.display());
+        let physical = std::fs::canonicalize(inside.join("sub").join("g")).unwrap();
+        assert_eq!(file(&text("l/../g"), &allowed), Ok(physical));
+        let error = file(&text("x/../g"), &allowed).unwrap_err();
+        assert!(
+            error.ends_with("a name before .. is not a directory."),
+            "{error}"
+        );
+        for path in ["g/", "g/."] {
+            let error = file(&text(path), &allowed).unwrap_err();
+            assert!(error.ends_with(" is not a directory."), "{error}");
+        }
     }
 
     #[test]
