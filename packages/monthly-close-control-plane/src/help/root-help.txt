@@ -19,8 +19,8 @@ positional arguments:
                         verified pack
     compare             compare verified close packs without changing them
     classify            compare postings with supplied bill-purpose evidence
-    schedule            review a canonical expense, migration or inter-entity
-                        schedule
+    schedule            review a canonical expense, migration, inter-entity or
+                        prepayment and accrual schedule
     demo                write the fabricated example inputs and review them,
                         with no checkout needed
     jet                 test a general-ledger listing's journals for entries

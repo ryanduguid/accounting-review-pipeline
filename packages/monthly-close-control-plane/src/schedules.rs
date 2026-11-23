@@ -16,13 +16,13 @@ use std::{
     path::Path,
 };
 
-fn object<'a>(value: &'a Json, fields: &str, label: &str) -> Result<&'a Json> {
+pub(crate) fn object<'a>(value: &'a Json, fields: &str, label: &str) -> Result<&'a Json> {
     if !value.has_exact_keys(&fields.split_whitespace().collect::<Vec<_>>()) {
         return Err(format!("{label}: expected exactly {fields}."));
     }
     Ok(value)
 }
-fn text(value: &Json, label: &str) -> Result<PyStr> {
+pub(crate) fn text(value: &Json, label: &str) -> Result<PyStr> {
     let error = || format!("{label}: expected non-blank text without outer spaces or controls.");
     let raw = value.as_pystr().ok_or_else(error)?;
     if raw.0.is_empty()
@@ -37,7 +37,7 @@ fn text(value: &Json, label: &str) -> Result<PyStr> {
 fn id(row: &Json, key: &str) -> PyStr {
     row.at(key).as_pystr().unwrap().clone()
 }
-fn money(value: &Json, label: &str) -> Result<Decimal> {
+pub(crate) fn money(value: &Json, label: &str) -> Result<Decimal> {
     let error = || format!("{label}: expected a signed decimal string with at most 2 places.");
     let raw = value.as_pystr().ok_or_else(error)?;
     let points = raw.0.strip_prefix(&[45]).unwrap_or(&raw.0);
@@ -55,14 +55,19 @@ fn money(value: &Json, label: &str) -> Result<Decimal> {
     }
     Decimal::parse(&raw.to_utf8().unwrap()).map_err(|_| error())
 }
-fn date(value: &Json, label: &str) -> Result<Date> {
+pub(crate) fn date(value: &Json, label: &str) -> Result<Date> {
     value
         .as_pystr()
         .and_then(PyStr::to_utf8)
         .and_then(|s| isodate::date_fromisoformat(&s))
         .ok_or_else(|| format!("{label}: expected YYYY-MM-DD."))
 }
-fn rows<'a>(value: &'a Json, fields: &str, key: &str, label: &str) -> Result<&'a [Json]> {
+pub(crate) fn rows<'a>(
+    value: &'a Json,
+    fields: &str,
+    key: &str,
+    label: &str,
+) -> Result<&'a [Json]> {
     let rows = value
         .as_array()
         .ok_or_else(|| format!("{label}: expected an array."))?;
@@ -79,7 +84,7 @@ fn rows<'a>(value: &'a Json, fields: &str, key: &str, label: &str) -> Result<&'a
     }
     Ok(rows)
 }
-fn exact(outcome: Outcome) -> Result<Decimal> {
+pub(crate) fn exact(outcome: Outcome) -> Result<Decimal> {
     if outcome.inexact {
         return Err("[<class 'decimal.Inexact'>]".into());
     }
@@ -93,15 +98,19 @@ fn sum(values: impl IntoIterator<Item = Decimal>) -> Result<Decimal> {
         .into_iter()
         .try_fold(Decimal::zero(), |a, b| exact(a.add(&b)))
 }
-fn add<K: Ord>(values: &mut BTreeMap<K, Decimal>, key: K, amount: &Decimal) -> Result<()> {
+pub(crate) fn add<K: Ord>(
+    values: &mut BTreeMap<K, Decimal>,
+    key: K,
+    amount: &Decimal,
+) -> Result<()> {
     let total = values.entry(key).or_insert_with(Decimal::zero);
     *total = exact(total.add(amount))?;
     Ok(())
 }
-fn number(value: &Decimal) -> Json {
+pub(crate) fn number(value: &Decimal) -> Json {
     Json::str(&value.to_sci_string())
 }
-fn finding(code: &str, key: &PyStr) -> Json {
+pub(crate) fn finding(code: &str, key: &PyStr) -> Json {
     Json::object([("code", Json::str(code)), ("id", Json::Str(key.clone()))])
 }
 fn joined(values: &[PyStr], separator: &str) -> PyStr {
@@ -115,10 +124,13 @@ fn joined(values: &[PyStr], separator: &str) -> PyStr {
     PyStr(points)
 }
 
+/// The schedule kinds, in the order the help lists them.
+pub const KINDS: [&str; 4] = ["expenses", "migration", "interentity", "prepayments"];
+
 pub fn review_schedule(path: &Path, kind: &str) -> Result<Json> {
     review_snapshot(&SourceSnapshot::capture(path, "schedule")?, kind)
 }
-type ScheduleFields = Vec<(&'static str, Json)>;
+pub(crate) type ScheduleFields = Vec<(&'static str, Json)>;
 
 #[expect(
     clippy::too_many_lines,
@@ -134,7 +146,7 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
         })
     };
     let data = parse().map_err(|e| format!("Invalid schedule JSON: {e}."))?;
-    if !["expenses", "migration", "interentity"].contains(&kind) {
+    if !KINDS.contains(&kind) {
         return Err("Unknown schedule kind.".into());
     }
     if data.get("schema_version").and_then(Json::as_plain_int) != Json::int(1).as_plain_int() {
@@ -149,6 +161,7 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
     let result = decimal::with_precision(80, || match kind {
         "expenses" => expenses(&data, cutoff),
         "migration" => migration(&data),
+        "prepayments" => crate::prepayments::review(&data, cutoff),
         _ => interentity(&data, cutoff),
     })?;
     let findings = result
