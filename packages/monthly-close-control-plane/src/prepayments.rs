@@ -288,6 +288,28 @@ mod tests {
     }
 
     #[test]
+    fn each_item_rounds_before_the_account_nets_its_accruals() {
+        let row = |id: &str| {
+            format!(
+                r#"{{"item_id":"{id}","account_id":"625","description":"Fabricated","amount":"0.05","start":"2026-09-30","end":"2026-10-01","basis":"daily","evidence":"e"}}"#
+            )
+        };
+        let data = pyjson::loads(&format!(
+            r#"{{"schema_version":1,"currency":"AUD","cutoff":"2026-09-30","tenant":"Fabricated","period_start":"2026-09-01","prepayments":[{},{}],"accruals":[{{"item_id":"A","account_id":"625","description":"Fabricated","amount":"0.01","accrued":"2026-09-30","reversed":null,"evidence":"e"}}],"ledger_balances":[{{"account_id":"625","balance":"0.05"}}]}}"#,
+            row("P1"),
+            row("P2")
+        ))
+        .unwrap();
+        let result = run(&data).unwrap();
+        assert!(
+            result.at("status").is_str("PASS"),
+            "{}",
+            pyjson::canonical(&result)
+        );
+        assert_eq!(field(&result, "prepayments", 0, "unexpired"), "0.03");
+    }
+
+    #[test]
     fn the_example_amortises_and_ties_out_each_account() {
         let result = run(&example()).unwrap();
         assert!(result.at("status").is_str("REVIEW"));
