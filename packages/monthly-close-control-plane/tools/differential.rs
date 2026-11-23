@@ -4087,11 +4087,8 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
         })
         .collect();
     corpus.0.extend(reconciled);
-    let executable = env::current_exe()?.with_file_name(if cfg!(windows) {
-        "close-control-probe.exe"
-    } else {
-        "close-control-probe"
-    });
+    let executable = env::current_exe()?
+        .with_file_name(format!("close-control-probe{}", env::consts::EXE_SUFFIX));
     if !executable.is_file() {
         return Err("build probe binaries before running the differential".into());
     }

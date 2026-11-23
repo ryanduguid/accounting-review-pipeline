@@ -7,6 +7,7 @@ description = "A fixed-policy, synthetic-data review boundary for AI-assisted Xe
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/ryanduguid/accounting-review-pipeline"
 readme = "README.md"
+publish = false
 keywords = ["xero", "accounting", "privacy", "controls"]
 include = ["src/**", "elizabeth_anne_alexander/policy/**", "elizabeth_anne_alexander/samples/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "NOTICE"]
 
@@ -31,3 +32,4 @@ too_many_lines = "warn"
 [profile.release]
 lto = true
 codegen-units = 1
+strip = "symbols"
