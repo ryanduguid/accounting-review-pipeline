@@ -118,6 +118,61 @@ class NativeAuditTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(audited, [])
 
+    def test_one_failed_deny_check_fails_job_and_keeps_checking_other_locks(self):
+        text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = re.search(r"(?ms)^  dependency-audit:\n(.*?)(?=^  \S|\Z)", text)
+        self.assertIsNotNone(job)
+        step = re.search(
+            r"(?m)^      - name: Check licences and sources for every native dependency lock\n"
+            r"        shell: bash\n"
+            r"        run: \|\n((?:          .*\n)*)",
+            job[1],
+        )
+        self.assertIsNotNone(step)
+        script = textwrap.dedent(step[1])
+        locks = ["packages/first/Cargo.lock", "packages/second/Cargo.lock"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "--quiet", directory], check=True)
+            (root / "deny.toml").write_text("# fabricated deny fixture\n", encoding="utf-8")
+            for name in locks:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# fabricated lock fixture\n", encoding="utf-8")
+                subprocess.run(["git", "-C", directory, "add", "--", name], check=True)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            cargo = bin_dir / "cargo"
+            cargo.write_text(
+                '#!/usr/bin/env bash\n'
+                'rel="$(git rev-parse --show-prefix)Cargo.lock"\n'
+                'printf "%s\\0" "$rel" >> "$DENY_LOG"\n'
+                '[[ -f "$GITHUB_WORKSPACE/deny.toml" && "$rel" != "$FAIL_LOCK" ]]\n',
+                encoding="utf-8",
+                newline="\n",
+            )
+            cargo.chmod(0o755)
+            log = root / "deny.log"
+            env = {
+                **os.environ,
+                "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                "RUNNER_TEMP": root.as_posix(),
+                "GITHUB_WORKSPACE": root.as_posix(),
+                "DENY_LOG": log.as_posix(),
+                "FAIL_LOCK": locks[0],
+            }
+            result = subprocess.run(
+                [shutil.which("bash"), "-eo", "pipefail", "-c", script],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            checked = log.read_bytes().decode().split("\0")[:-1] if log.exists() else []
+        self.assertNotEqual(result.returncode, 0)
+        self.assertCountEqual(checked, locks)
+
 
 class SelectionTests(unittest.TestCase):
     def test_cli_with_no_known_base_requires_the_checks(self) -> None:

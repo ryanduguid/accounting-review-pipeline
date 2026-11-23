@@ -277,13 +277,13 @@ jobs:
           fi
           case "$PACKAGE_DIR" in
             packages/xero-trial-balance-export)
-              CI_PATHS=$'packages/xero-trial-balance-export/tests/differential/**\npackages/xero-trial-balance-export/tools/differential.rs\npackages/xero-trial-balance-export/tests/support/differential*\npackages/xero-trial-balance-export/src/probe.rs\npackages/xero-trial-balance-export/src/compat_probe.rs\ncontracts/xero-trial-balance-v1/**'
+              CI_PATHS=$'packages/xero-trial-balance-export/tests/differential/**\npackages/xero-trial-balance-export/tools/differential.rs\npackages/xero-trial-balance-export/tests/support/differential*\npackages/xero-trial-balance-export/tests/support/scratch.rs\npackages/xero-trial-balance-export/src/probe.rs\npackages/xero-trial-balance-export/src/compat_probe.rs\ntests/support/child_profile.rs\ncontracts/xero-trial-balance-v1/**'
               ;;
             packages/monthly-close-control-plane)
-              CI_PATHS=$'packages/monthly-close-control-plane/tools/differential.rs\npackages/monthly-close-control-plane/tests/support/differential*\npackages/monthly-close-control-plane/src/probe*.rs\ncontracts/xero-trial-balance-v1/**'
+              CI_PATHS=$'packages/monthly-close-control-plane/tools/differential.rs\npackages/monthly-close-control-plane/tests/support/differential*\npackages/monthly-close-control-plane/tests/support/temp.rs\npackages/monthly-close-control-plane/src/probe*.rs\ncontracts/xero-trial-balance-v1/**'
               ;;
             packages/review-ready-gate)
-              CI_PATHS=$'packages/review-ready-gate/tools/differential.rs\npackages/review-ready-gate/tests/support/differential*\npackages/review-ready-gate/src/probe*.rs\npackages/review-ready-gate/src/publication_probe_main.rs\ncontracts/xero-trial-balance-v1/**'
+              CI_PATHS=$'packages/review-ready-gate/tools/differential.rs\npackages/review-ready-gate/tests/support/differential*\npackages/review-ready-gate/tests/support/temp.rs\npackages/review-ready-gate/src/probe*.rs\npackages/review-ready-gate/src/publication_probe_main.rs\ncontracts/xero-trial-balance-v1/**'
               ;;
             apps/grant-acquittal-workpapers)
               CI_PATHS=$'apps/grant-acquittal-workpapers/tests/differential/**'
