@@ -1,0 +1,39 @@
+name: Weekly dependency audit
+
+# The tests workflow's audit denies vulnerabilities, unsound and yanked crates on
+# every run. An unmaintained crate is a warning there and fails only this weekly
+# run, so a new notice cannot block every pull request. No gate requires it: a
+# red run here is the signal.
+on:
+  schedule:
+    - cron: "17 21 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: audit every native dependency lock, warnings denied
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned RustSec audit tool
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+        with:
+          tool: cargo-audit@0.22.2
+          fallback: none
+      - name: Audit every native dependency lock
+        shell: bash
+        run: |
+          status=0
+          while IFS= read -r -d '' lock; do
+            echo "Auditing $lock"
+            cargo audit --file "$lock" --deny warnings || status=1
+          done < <(git ls-files -z -- Cargo.lock '**/Cargo.lock')
+          exit "$status"
