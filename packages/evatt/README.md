@@ -248,7 +248,9 @@ an extra placeholder costs a triage decision whilst a miss leaks.
 - **A labelled identifier is admitted on the label alone**, with no check
   digit, because something wrote 'TFN' next to those digits and a typo in a
   real tax file number is still a real tax file number. Only a bare digit run
-  has to pass a check digit to be replaced.
+  has to pass a check digit to be replaced. A labelled TFN may have 8 digits,
+  as older ones do. The ATO gives its TFN algorithm only on request, so a bare
+  8-digit run is never checked as a TFN; it halts as an unclassified number.
 - **The triage file carries whole source lines** as context, taken from the
   redacted text rather than the input. It still names every candidate it wants
   classified, so it is gitignored as `*.triage.md` and is not a file to attach
