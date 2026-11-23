@@ -208,15 +208,19 @@ fn execute(args: &Arguments) -> Result<String> {
     Ok("Review workflow verification completed.".into())
 }
 
+fn html_line_endings(content: String) -> String {
+    if cfg!(windows) {
+        content.replace('\n', "\r\n")
+    } else {
+        content
+    }
+}
+
 fn html_output(run: &Path, bin_dir: &Path, previous: Option<&Path>, output: &Path) -> Result<()> {
     let output = files::new_output(output)?;
     let content = html::render(run, bin_dir, previous)?;
     fs::create_dir_all(output.parent().unwrap()).map_err(|error| error.to_string())?;
-    let content = if cfg!(windows) {
-        content.replace('\n', "\r\n")
-    } else {
-        content
-    };
+    let content = html_line_endings(content);
     files::write_new(&output, content.as_bytes())
 }
 
@@ -389,5 +393,11 @@ mod tests {
             ),
             2
         );
+    }
+
+    #[test]
+    fn html_line_endings_match_the_host_platform() {
+        let expected = if cfg!(windows) { "a\r\nb\r\n" } else { "a\nb\n" };
+        assert_eq!(html_line_endings("a\nb\n".into()), expected);
     }
 }

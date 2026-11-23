@@ -436,6 +436,21 @@ fn test_current_and_prior_report_settings_must_agree() {
 }
 
 #[test]
+fn test_malformed_report_tracking_or_draft_fields_are_refused() {
+    for (field, value) in [("tracking_filters", "{}"), ("include_drafts", r#""no""#)] {
+        let dir = TempDir::new();
+        let mut sandbox = env(dir.path());
+        edit(&mut sandbox, CURRENT_MANIFEST, |m| {
+            set(m, &["report", field], parse(value))
+        });
+        assert_refused(
+            load_context(&sandbox),
+            "source manifest report tracking/draft fields are invalid",
+        );
+    }
+}
+
+#[test]
 fn test_prior_report_must_predate_the_current_report() {
     for prior in [CURRENT_MANIFEST, PRIOR_MANIFEST] {
         let dir = TempDir::new();

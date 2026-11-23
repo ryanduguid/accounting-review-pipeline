@@ -185,8 +185,53 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.9.1
           fallback: none
+      # Linux always runs frozen Python baseline parity so every PR keeps 100%
+      # Codecov coverage and parity verification. Windows runs parity on main
+      # pushes and on pull requests touching that component's parity or contract files.
+      - name: Select Windows frozen Python baseline parity
+        id: windows-parity
+        if: matrix.package_dir != 'packages/evatt'
+        working-directory: .
+        env:
+          PACKAGE_DIR: ${{ matrix.package_dir }}
+          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          CI_HEAD: ${{ github.sha }}
+        run: |
+          if [ "$RUNNER_OS" != Windows ] || [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$PACKAGE_DIR" in
+            packages/elizabeth-anne-alexander)
+              CI_PATHS=$'packages/elizabeth-anne-alexander/tests/differential/**\npackages/elizabeth-anne-alexander/examples/decimal_oracle.rs\ncontracts/xero-trial-balance-v1/**'
+              ;;
+            packages/xero-trial-balance-export)
+              CI_PATHS=$'packages/xero-trial-balance-export/tests/differential/**\npackages/xero-trial-balance-export/tools/differential.rs\npackages/xero-trial-balance-export/tests/support/differential*\npackages/xero-trial-balance-export/tests/support/scratch.rs\npackages/xero-trial-balance-export/src/probe.rs\npackages/xero-trial-balance-export/src/compat_probe.rs\ntests/support/child_profile.rs\ncontracts/xero-trial-balance-v1/**'
+              ;;
+            packages/monthly-close-control-plane)
+              CI_PATHS=$'packages/monthly-close-control-plane/tools/differential.rs\npackages/monthly-close-control-plane/tests/support/differential*\npackages/monthly-close-control-plane/tests/support/temp.rs\npackages/monthly-close-control-plane/src/probe*.rs\ncontracts/xero-trial-balance-v1/**'
+              ;;
+            packages/review-ready-gate)
+              CI_PATHS=$'packages/review-ready-gate/tools/differential.rs\npackages/review-ready-gate/tests/support/differential*\npackages/review-ready-gate/tests/support/temp.rs\npackages/review-ready-gate/src/probe*.rs\npackages/review-ready-gate/src/publication_probe_main.rs\ncontracts/xero-trial-balance-v1/**'
+              ;;
+            adapters/accounting-excel-toolkit)
+              CI_PATHS=$'adapters/accounting-excel-toolkit/tests/differential/**\ntests/support/child_profile.rs\ncontracts/xero-trial-balance-v1/**'
+              ;;
+            apps/australian-accounting-power-bi)
+              CI_PATHS=$'apps/australian-accounting-power-bi/tests/differential/**\napps/australian-accounting-power-bi/tools/workflow_differential.rs\napps/australian-accounting-power-bi/tools/workflow_differential/**\napps/australian-accounting-power-bi/src/workflow/probe.rs\napps/australian-accounting-power-bi/tests/workflow_differential_cli.rs\ncontracts/xero-trial-balance-v1/**'
+              ;;
+            apps/grant-acquittal-workpapers)
+              CI_PATHS=$'apps/grant-acquittal-workpapers/tests/differential/**'
+              ;;
+            *)
+              echo "Unexpected package_dir: $PACKAGE_DIR" >&2
+              exit 1
+              ;;
+          esac
+          export CI_PATHS
+          python .github/ci/select_paths.py >> "$GITHUB_OUTPUT"
       - name: Build the independent Power BI producers before instrumentation
-        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi' && steps.windows-parity.outputs.run == 'true'
         run: |
           cargo build --locked --release --manifest-path ../../packages/review-ready-gate/Cargo.toml --bin review-ready --target-dir "$RUNNER_TEMP/pbi-producer-targets"
           cargo build --locked --release --manifest-path ../../packages/monthly-close-control-plane/Cargo.toml --bin close-control --target-dir "$RUNNER_TEMP/pbi-producer-targets"
@@ -255,54 +300,14 @@ jobs:
         if: matrix.package_dir == 'packages/xero-trial-balance-export' || matrix.package_dir == 'packages/review-ready-gate' || matrix.package_dir == 'adapters/accounting-excel-toolkit' || matrix.package_dir == 'apps/australian-accounting-power-bi' || matrix.package_dir == 'apps/grant-acquittal-workpapers'
         with:
           python-version: '3.15'
-      # Linux always runs frozen Python baseline parity so every PR keeps 100%
-      # Codecov coverage and parity verification. Windows runs parity on main
-      # pushes and on pull requests touching that component's parity or contract files.
-      - name: Select Windows frozen Python baseline parity
-        id: windows-parity
-        if: >-
-          matrix.package_dir == 'packages/xero-trial-balance-export'
-          || matrix.package_dir == 'packages/monthly-close-control-plane'
-          || matrix.package_dir == 'packages/review-ready-gate'
-          || matrix.package_dir == 'apps/grant-acquittal-workpapers'
-        working-directory: .
-        env:
-          PACKAGE_DIR: ${{ matrix.package_dir }}
-          CI_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-          CI_HEAD: ${{ github.sha }}
-        run: |
-          if [ "$RUNNER_OS" != Windows ] || [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          case "$PACKAGE_DIR" in
-            packages/xero-trial-balance-export)
-              CI_PATHS=$'packages/xero-trial-balance-export/tests/differential/**\npackages/xero-trial-balance-export/tools/differential.rs\npackages/xero-trial-balance-export/tests/support/differential*\npackages/xero-trial-balance-export/tests/support/scratch.rs\npackages/xero-trial-balance-export/src/probe.rs\npackages/xero-trial-balance-export/src/compat_probe.rs\ntests/support/child_profile.rs\ncontracts/xero-trial-balance-v1/**'
-              ;;
-            packages/monthly-close-control-plane)
-              CI_PATHS=$'packages/monthly-close-control-plane/tools/differential.rs\npackages/monthly-close-control-plane/tests/support/differential*\npackages/monthly-close-control-plane/tests/support/temp.rs\npackages/monthly-close-control-plane/src/probe*.rs\ncontracts/xero-trial-balance-v1/**'
-              ;;
-            packages/review-ready-gate)
-              CI_PATHS=$'packages/review-ready-gate/tools/differential.rs\npackages/review-ready-gate/tests/support/differential*\npackages/review-ready-gate/tests/support/temp.rs\npackages/review-ready-gate/src/probe*.rs\npackages/review-ready-gate/src/publication_probe_main.rs\ncontracts/xero-trial-balance-v1/**'
-              ;;
-            apps/grant-acquittal-workpapers)
-              CI_PATHS=$'apps/grant-acquittal-workpapers/tests/differential/**'
-              ;;
-            *)
-              echo "Unexpected package_dir: $PACKAGE_DIR" >&2
-              exit 1
-              ;;
-          esac
-          export CI_PATHS
-          python .github/ci/select_paths.py >> "$GITHUB_OUTPUT"
       - name: Install the managed C decimal oracle toolchain
-        if: matrix.package_dir == 'packages/elizabeth-anne-alexander' || (matrix.package_dir == 'packages/monthly-close-control-plane' && steps.windows-parity.outputs.run == 'true')
+        if: (matrix.package_dir == 'packages/elizabeth-anne-alexander' || matrix.package_dir == 'packages/monthly-close-control-plane') && steps.windows-parity.outputs.run == 'true'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.5"
           enable-cache: false
       - name: Compare the ledger gate with the released Python baseline
-        if: matrix.package_dir == 'packages/elizabeth-anne-alexander'
+        if: matrix.package_dir == 'packages/elizabeth-anne-alexander' && steps.windows-parity.outputs.run == 'true'
         run: |
           source "$RUNNER_TEMP/coverage-env.sh"
           # The frozen decimal contract requires C _decimal.
@@ -384,7 +389,7 @@ jobs:
           # Run genuine negative controls in an owned sibling directory.
           cargo run --locked --features probe --example differential-negative-controls -- "$oracle_python" "$baseline" "$PWD/target/debug"
       - name: Check out the frozen Python Excel tools
-        if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
+        if: matrix.package_dir == 'adapters/accounting-excel-toolkit' && steps.windows-parity.outputs.run == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: e06647062efaf4410f7d4a414a0559ca51147267
@@ -392,7 +397,7 @@ jobs:
           sparse-checkout: adapters/accounting-excel-toolkit
           persist-credentials: false
       - name: Compare native Excel tools with their frozen Python implementations
-        if: matrix.package_dir == 'adapters/accounting-excel-toolkit'
+        if: matrix.package_dir == 'adapters/accounting-excel-toolkit' && steps.windows-parity.outputs.run == 'true'
         run: |
           source "$RUNNER_TEMP/coverage-env.sh"
           baseline="$GITHUB_WORKSPACE/.encoding-oracle/adapters/accounting-excel-toolkit"
@@ -416,14 +421,14 @@ jobs:
           source "$RUNNER_TEMP/coverage-env.sh"
           cargo build --locked --release
       - name: Check out the frozen pre-port Power BI workflow
-        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi' && steps.windows-parity.outputs.run == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: d48b9fe681f3a3ae278a90c43cfdce9b863589d4
           path: .workflow-oracle
           persist-credentials: false
       - name: Compare Power BI with its frozen Python workflow
-        if: matrix.package_dir == 'apps/australian-accounting-power-bi'
+        if: matrix.package_dir == 'apps/australian-accounting-power-bi' && steps.windows-parity.outputs.run == 'true'
         run: |
           source "$RUNNER_TEMP/coverage-env.sh"
           cargo build --locked --all-features --bins

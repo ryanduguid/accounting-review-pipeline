@@ -380,4 +380,9 @@ mod tests {
             "2024-09-01T01:01:01.000001+00:00"
         );
     }
+
+    #[test]
+    fn code_extracts_zero_from_a_successful_exit_status() {
+        assert_eq!(code(ExitStatus::default()), 0);
+    }
 }
