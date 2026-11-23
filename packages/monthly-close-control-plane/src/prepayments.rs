@@ -312,11 +312,7 @@ mod tests {
         ))
         .unwrap();
         let result = run(&data).unwrap();
-        assert!(
-            result.at("status").is_str("PASS"),
-            "{}",
-            pyjson::canonical(&result)
-        );
+        assert!(result.at("status").is_str("PASS"));
         assert_eq!(field(&result, "prepayments", 0, "unexpired"), "0.03");
     }
 
@@ -593,6 +589,25 @@ mod tests {
         assert_eq!(
             run(&data).unwrap_err(),
             "Supply the prepayments and accruals; an empty schedule cannot establish a balance."
+        );
+    }
+
+    #[test]
+    fn a_schedule_with_the_wrong_shape_is_refused() {
+        for list in ["prepayments", "accruals", "ledger_balances"] {
+            let mut data = example();
+            data.set(list, Json::Null);
+            assert_eq!(
+                run(&data).unwrap_err(),
+                format!("{list}: expected an array.")
+            );
+        }
+        let mut data = example();
+        data.set("note", Json::Null);
+        assert!(
+            run(&data)
+                .unwrap_err()
+                .starts_with("prepayments: expected exactly")
         );
     }
 }
