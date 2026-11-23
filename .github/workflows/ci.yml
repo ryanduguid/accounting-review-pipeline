@@ -48,6 +48,8 @@ jobs:
         with:
           tool: cargo-audit@0.22.2
           fallback: none
+      # An unmaintained crate fails only dependency-audit-weekly.yml (Ryan, 18 November 2026);
+      # a vulnerability, an unsound or a yanked crate fails every run.
       - name: Audit every native dependency lock
         shell: bash
         run: |
@@ -60,7 +62,7 @@ jobs:
           status=0
           while IFS= read -r -d '' lock; do
             echo "Auditing $lock"
-            if ! cargo audit --file "$lock" --deny warnings; then
+            if ! cargo audit --file "$lock" --deny unsound --deny yanked; then
               status=1
             fi
           done < "$lock_list"
