@@ -44,9 +44,9 @@ const BENFORD_EXPECTED: [&str; 9] = [
 /// The fewest amounts for which every first digit expects at least 5
 /// (5 / 0.0457574906 is 109.3).
 pub const BENFORD_MINIMUM: usize = 110;
-/// Nigrini's first-digit mean absolute deviation bands, as Nigrini (2012) is
-/// quoted in arXiv 1311.4787 and, for 0.015, arXiv 2202.05237: the upper bound
-/// of each band and its name; above the last is nonconformity.
+/// Nigrini's empirical first-digit mean absolute deviation bands, as arXiv
+/// 1311.4787 states them: the upper bound of each band and its name; above
+/// the last is nonconformity.
 const BANDS: [(&str, &str); 3] = [
     ("0.006", "close conformity"),
     ("0.012", "acceptable conformity"),

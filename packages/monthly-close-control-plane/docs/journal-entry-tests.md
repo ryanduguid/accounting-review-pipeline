@@ -71,12 +71,11 @@ error, and an entry not listed is not shown to be appropriate.
 
 The test counts the first significant digit of every line amount and compares
 the proportions with Benford's expected `log10(1 + 1/d)`. The mean absolute
-deviation of the 9 proportions is named by Nigrini's first-digit bands, as
-published papers quote *Benford's Law* (2012): up to 0.006 close conformity,
-up to 0.012 acceptable conformity, up to 0.015 marginal conformity and above
-0.015 nonconformity, the threshold given for p. 160. Other papers quote lower
-cutoffs from earlier work, and the bands are empirical rules of thumb, not a
-statistical test. Only nonconformity affects the result, which it makes
+deviation of the 9 proportions is named by Nigrini's empirical first-digit
+bands, as published papers state them: up to 0.006 close conformity, up to
+0.012 acceptable conformity, up to 0.015 marginal conformity and above 0.015
+nonconformity. The bands are rules of thumb, not a statistical test, and other
+cutoffs are in use. Only nonconformity affects the result, which it makes
 `REVIEW`. The test runs only on 110 or more
 amounts, so that every digit expects at least 5; with fewer, `benford.ran` is
 `false` with the reason and the counts, and the test does not affect the status.
