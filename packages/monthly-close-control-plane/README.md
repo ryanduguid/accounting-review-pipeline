@@ -82,7 +82,8 @@ and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 [Variance drivers](docs/variance-drivers.md) rank the transactions behind each
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
-migration snapshots and inter-entity balances from supplied canonical records.
+migration snapshots, inter-entity balances, and prepayments and accruals from
+supplied canonical records.
 Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
 variance drivers and the balance policy. The quick start builds the native command
 from source; released executables are an alternative on Linux x86_64 and Windows x86_64.

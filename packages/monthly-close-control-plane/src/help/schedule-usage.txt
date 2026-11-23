@@ -1,2 +1,2 @@
-usage: close-control schedule [-h] --kind {expenses,migration,interentity}
+usage: close-control schedule [-h] --kind {expenses,migration,interentity,prepayments}
                               --input INPUT

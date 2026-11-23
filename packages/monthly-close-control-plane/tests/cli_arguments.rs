@@ -483,7 +483,7 @@ fn schedule_choices_escape_tabs_and_carriage_returns() {
         "{stderr}"
     );
     assert!(
-        stderr.ends_with("close-control schedule: error: argument --kind: invalid choice: 'tab\\tcarriage\\rreturn' (choose from 'expenses', 'migration', 'interentity')\n"),
+        stderr.ends_with("close-control schedule: error: argument --kind: invalid choice: 'tab\\tcarriage\\rreturn' (choose from 'expenses', 'migration', 'interentity', 'prepayments')\n"),
         "{stderr}"
     );
     assert!(fs::read_dir(&directory.0).unwrap().next().is_none());

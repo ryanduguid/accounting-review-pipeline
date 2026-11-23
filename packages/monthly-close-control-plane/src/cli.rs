@@ -389,7 +389,7 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
             value.clone()
         };
         let choices: &[&str] = match flag {
-            "--kind" => &["expenses", "migration", "interentity"],
+            "--kind" => &schedules::KINDS,
             "--status" => &["PASS", "REVIEW", "BLOCKED"],
             _ => &[],
         };

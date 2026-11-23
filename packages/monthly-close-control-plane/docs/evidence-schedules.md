@@ -6,6 +6,7 @@ Source-only additions for local preparation. Run from this component after insta
 cargo run --locked --release --bin close-control -- schedule --kind expenses --input examples/schedules/expenses.json
 cargo run --locked --release --bin close-control -- schedule --kind migration --input examples/schedules/migration.json
 cargo run --locked --release --bin close-control -- schedule --kind interentity --input examples/schedules/interentity.json
+cargo run --locked --release --bin close-control -- schedule --kind prepayments --input examples/schedules/prepayments.json
 ```
 
 Each fabricated example returns REVIEW (exit 2). JSON goes to standard output. PASS exits 0; malformed input exits 1. A PASS concerns only the supplied records, never approval, completeness of a ledger or a tax conclusion. Redirect output to a new file outside the checkout when retaining a workpaper. The result contains the SHA-256 of the exact input bytes.
@@ -31,3 +32,35 @@ Explicit weights support one source account split across target accounts. Positi
 Declare entity IDs and counterparties explicitly. Amounts are debit-positive; reciprocal balances should sum to zero for each entity pair and exact reference. The example's $50,000 receivable and $47,000 payable expose a $3,000 difference. Different references never cancel each other. Disputed items require review even when amounts agree. Dates beyond the cutoff fail rather than being silently dropped.
 
 Outputs retain the source records and supplied evidence references. Timing explanations and possible eliminations remain the reviewer's work. The tool does not infer counterparty identities, calculate Division 7A or produce consolidation entries.
+
+## Prepayments and accruals
+
+The schedule declares the reporting period with `period_start` and `cutoff`, and
+lists `prepayments`, `accruals` and the ledger's closing `ledger_balances`
+(debit-positive) for the accounts they sit in.
+
+A prepayment has an `amount` paid for the service period from `start` to `end`
+and a `basis`. On a `daily` basis its unexpired part at the cutoff is the
+amount times the days after the cutoff in that period, over the days in the
+period. On a `monthly` basis it is the amount times the whole months after the
+cutoff, over the months in the period; `start` must be the first of a month and
+`end` and the cutoff month ends. A prepayment whose period starts after the
+cutoff is wholly unexpired, and one that has ended is nil. Each unexpired part
+is rounded to the cent, half up.
+
+An accrual has an `amount` `accrued` on or before the cutoff and the date it
+was `reversed`, or `null`. It is outstanding at the cutoff, as a credit, until
+a reversal on or before the cutoff. An outstanding accrual raised before
+`period_start` is `UNREVERSED_ACCRUAL`: an earlier period's accrual still open,
+which double-counts the cost once its bill is posted.
+
+Each account's scheduled balance is the sum of its unexpired prepayments less
+its outstanding accruals. `BALANCE_DIFFERENCE` gives the ledger balance less
+that sum; `NO_LEDGER_BALANCE` names a scheduled account with no ledger balance;
+`UNSCHEDULED_BALANCE` names a ledger account with a balance and nothing
+scheduled; `MISSING_EVIDENCE` names an item with empty evidence. The example
+amortises a monthly insurance prepayment to $900 and a daily licence to $350,
+finds the licence account still at its $365 cost, and finds a June accrual
+never reversed and without evidence. The schedule does not post the
+amortisation or reversal, judge whether a cost should be prepaid or accrued, or
+find items missing from it.
