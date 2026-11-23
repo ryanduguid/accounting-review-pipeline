@@ -288,3 +288,17 @@ fn unicode_16_combining_sequences_and_contextual_casing_match_cpython() {
         }
     }
 }
+
+/// Older tax file numbers have 8 digits. A labelled one is replaced on its label
+/// alone; a bare one has no check digit evatt can source, so it halts for triage.
+#[test]
+fn legacy_eight_digit_tfns_are_replaced_when_labelled_and_halt_when_bare() {
+    let labelled = redact::redact("TFN: 1234 5678\n", &[]).unwrap();
+    assert_eq!(labelled.text, "TFN: TFN_01\n");
+    assert!(labelled.unknowns.is_empty());
+
+    let bare = redact::redact("Ref 12345678\n", &[]).unwrap();
+    assert_eq!(bare.text, "Ref 12345678\n");
+    assert_eq!(bare.unknowns.len(), 1);
+    assert_eq!(bare.unknowns[0].value, "12345678");
+}
