@@ -1464,11 +1464,8 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     if !root.join("reviewready/cli.py").is_file() {
         return Err("oracle component source is missing".into());
     }
-    let executable = env::current_exe()?.with_file_name(if cfg!(windows) {
-        "review-ready-probe.exe"
-    } else {
-        "review-ready-probe"
-    });
+    let executable = env::current_exe()?
+        .with_file_name(format!("review-ready-probe{}", env::consts::EXE_SUFFIX));
     if !executable.is_file() {
         return Err("build all probe binaries with cargo build --locked --features probe --bins before running the differential".into());
     }

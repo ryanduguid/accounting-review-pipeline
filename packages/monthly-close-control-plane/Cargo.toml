@@ -64,6 +64,7 @@ required-features = ["probe"]
 [profile.release]
 lto = true
 codegen-units = 1
+strip = "symbols"
 
 [lints.clippy]
 # The repository's 50-line function limit (clippy.toml), denied in CI.
