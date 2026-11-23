@@ -287,6 +287,8 @@ fn replay(arguments: &Arguments) -> Result<(u8, String), String> {
 }
 /// The binaries' `main`: runs `tool` on the process arguments and writes its output.
 pub fn exit(tool: Tool) -> std::process::ExitCode {
+    // argv is the user's own command line; it grants nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
     let (code, stdout, stderr) = run(tool, &args);
     if std::io::stdout()
