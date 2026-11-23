@@ -82,12 +82,11 @@ fn the_example_listing_lists_each_characteristic_and_exits_2() {
 }
 
 #[test]
-fn a_clean_listing_exits_0_and_bad_input_exits_1() {
+fn another_currency_exits_1() {
     let example = example();
-    let path = example.to_str().unwrap();
     let output = jet(&[
         "--transactions",
-        path,
+        example.to_str().unwrap(),
         "--currency",
         "USD",
         "--period-end",
@@ -100,7 +99,11 @@ fn a_clean_listing_exits_0_and_bad_input_exits_1() {
         error.contains("not the declared --currency 'USD'"),
         "{error}"
     );
+}
 
+#[test]
+fn a_clean_listing_exits_0() {
+    let example = example();
     let temp = std::env::temp_dir().join(format!("closecontrol-jet-{}", std::process::id()));
     std::fs::create_dir_all(&temp).unwrap();
     let clean = temp.join("clean.csv");
@@ -124,8 +127,17 @@ fn a_clean_listing_exits_0_and_bad_input_exits_1() {
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     let result = pyjson::loads(&String::from_utf8(output.stdout).unwrap()).unwrap();
     assert_eq!(text(&result, "status"), "PASS");
+}
 
-    let output = jet(&["--transactions", path, "--currency", "AUD"]);
+#[test]
+fn a_missing_option_exits_1_with_the_usage() {
+    let example = example();
+    let output = jet(&[
+        "--transactions",
+        example.to_str().unwrap(),
+        "--currency",
+        "AUD",
+    ]);
     assert_eq!(output.status.code(), Some(1));
     let error = String::from_utf8(output.stderr)
         .unwrap()
