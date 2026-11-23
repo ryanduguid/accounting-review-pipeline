@@ -1,5 +1,5 @@
 //! Copied from packages/elizabeth-anne-alexander/src/pypath.rs; adapted for evatt CPython 3.14.
-//! The `pathlib` behaviour the gateway's guards rely on: how a path prints,
+//! The `pathlib` behaviour this crate's guards rely on: how a path prints,
 //! `Path.resolve()` (which is `os.path.realpath`), and containment.
 
 use crate::pytext;

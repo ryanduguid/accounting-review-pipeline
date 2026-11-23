@@ -23,7 +23,7 @@
 
 Source-archive adapter `accounting-excel-toolkit` (Power Query and VBA); no Python distribution.
 
-The `accounting-excel-toolkit/v1.0.1` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
+The `accounting-excel-toolkit/v1.0.1` tag carries an immutable release with `.zip` and `.tar.gz` source archives, an SPDX SBOM and `SHA256SUMS`. Tagged releases call `ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA. Download the archive and copy the `.pq` and `.bas` files out of `powerquery/` and `vba/` by the steps below, or take them from a checkout.
 
 Maintain this adapter at [Accounting Review Pipeline](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/adapters/accounting-excel-toolkit). Run the commands below from `adapters/accounting-excel-toolkit/`. Use the root [Xero trial-balance contract](../../contracts/xero-trial-balance-v1/) for the canonical API CSV header, fixtures and expected results; the interactive-export parser fixtures under `samples/` cover a separate format.
 
@@ -283,7 +283,7 @@ To import a module into Excel:
 
 Three layers check this repository, and each covers different ground:
 
-- **CI (GitHub Actions, [`ci.yml`](../../.github/workflows/ci.yml))** runs the Rust test suite in `tests/` (`cargo test`, on Linux and Windows) on every push to `main` and on every pull request, with no Excel present. These are static source checks: they read the `.pq` and `.bas` files as text and pin the guards, constants and structures the docs promise. Covered: the M parsers' predicates, pair selection, header promotion and AEST conversion expressions; the VBA recon sheet-marker safety logic and protected-sheet guards; the accounting number format staying byte-identical across both modules; `.bas` files staying ASCII with CRLF endings; sample fixtures balancing and matching across both layouts; README sentences the tests quote; release archive determinism; and the PowerShell runner's own safety properties (portability, fabricated inputs only, COM cleanup). CI never executes M or VBA.
+- **CI (GitHub Actions, [`ci.yml`](../../.github/workflows/ci.yml))** runs the Rust test suite in `tests/` (`cargo test`, on Linux and Windows) on every push to `main` and on every pull request, with no Excel present. These are static source checks: they read the `.pq` and `.bas` files as text and pin the guards, constants and structures the docs promise. Covered: the M parsers' predicates, pair selection, header promotion and AEST conversion expressions; the VBA recon sheet-marker safety logic and protected-sheet guards; the accounting number format staying byte-identical across both modules; `.bas` files staying ASCII with CRLF endings; sample fixtures balancing and matching across both layouts; README sentences the tests quote; release archive determinism; and the PowerShell runner's own safety properties (portability, fabricated inputs only, COM cleanup). CI never executes M or VBA. [`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml) lints and tests the Python tooling.
 - **[`tools/native_excel_acceptance.ps1`](tools/native_excel_acceptance.ps1)** runs the Power Query functions for real. It evaluates 105 checks in Excel's actual Power Query engine: both fabricated trial-balance layouts, the fabricated Payday Super producer contract, financial-year boundaries, ABN validation, header promotion, and adverse and lazy-evaluation branches. The default run isolates the 78 core checks and 27 Payday Super checks in fresh child PowerShell and Excel processes; the Payday child uses 21 separate single-source queries across 20 fabricated files to avoid Excel's cross-source privacy/firewall composition boundary. The suite also preserves a quoted multiline field, materialises 500-, 5,000- and 10,000-contribution fabricated reports, and prints each measured refresh time. It needs Windows, Windows PowerShell 5.1+, desktop Excel with Power Query, and the `Microsoft.Mashup.OleDb.1` provider. It does not import or execute VBA. The aged-parser checks cover fixed decimal amounts, absent ageing buckets, invalid values, genuine `Total` contacts, explicit footer roles, missing contact labels and separate supplier and expense-claim sections.
 - **Manual Excel run** is the only check for VBA behaviour end to end: importing the modules, running `modWorkpaperFormat`, `modReconCompare` and the `modFormulaCompare` cases against real worksheets, and confirming Mac behaviour (the recon module's platform error message). Nothing automated executes the macros.
 
@@ -314,12 +314,3 @@ Versions released before this change keep the licences they were released with, 
 ## Author
 
 Ryan Duguid, accountant in Newcastle NSW, provisional member of Chartered Accountants ANZ.
-
-## CI coverage
-
-The root [`ci.yml`](../../.github/workflows/ci.yml) runs these static guards as Rust tests, and
-[`standard-library-components.yml`](../../.github/workflows/standard-library-components.yml)
-lints and tests the Python tooling. `tools/native_excel_acceptance.ps1`
-(105 checks) and VBA end-to-end remain local Windows work. Power Query
-behaviour is not executed on GitHub-hosted runners. Tagged releases call
-`ryanduguid/release-policy` `release-archive.yml` pinned by full commit SHA.
