@@ -1,0 +1,12 @@
+usage: close-control jet [-h] --transactions TRANSACTIONS --currency CURRENCY
+                         --period-end PERIOD_END
+
+options:
+  -h, --help            show this help message and exit
+  --transactions TRANSACTIONS
+                        one tenant's canonical transaction CSV with every line
+                        of each journal; TransactionID names the journal
+  --currency CURRENCY   three-letter currency every line carries, e.g. AUD
+  --period-end PERIOD_END
+                        last day of the period, YYYY-MM-DD; a journal dated
+                        later is post-closing

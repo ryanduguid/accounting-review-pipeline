@@ -16,6 +16,7 @@ pub mod equity;
 #[doc(hidden)]
 pub mod fuzzing;
 pub mod isodate;
+pub mod journal_entries;
 pub mod loader;
 pub mod models;
 #[cfg(feature = "probe")]

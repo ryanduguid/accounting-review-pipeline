@@ -1,0 +1,15 @@
+Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit
+Varrock Ventures Pty Ltd,610,AUD,J-1001,2026-07-06,RENT-07,Fabricated July rent,2450.75,0
+Varrock Ventures Pty Ltd,090,AUD,J-1001,2026-07-06,RENT-07,Fabricated July rent,0,2450.75
+Varrock Ventures Pty Ltd,110,AUD,J-1002,2026-07-14,INV-2041,Fabricated invoice to Lumbridge Traders,6280.40,0
+Varrock Ventures Pty Ltd,200,AUD,J-1002,2026-07-14,INV-2041,Fabricated invoice to Lumbridge Traders,0,6280.40
+Varrock Ventures Pty Ltd,610,AUD,J-1003,2026-07-20,CLN-07,Fabricated office cleaning,285.60,0
+Varrock Ventures Pty Ltd,090,AUD,J-1003,2026-07-20,CLN-07,Fabricated office cleaning,0,285.60
+Varrock Ventures Pty Ltd,110,AUD,J-1004,2026-07-25,INV-2042,Fabricated invoice to Falador Freight,3125.90,0
+Varrock Ventures Pty Ltd,200,AUD,J-1004,2026-07-25,INV-2042,Fabricated invoice to Falador Freight,0,3125.90
+Varrock Ventures Pty Ltd,090,AUD,J-1005,2026-07-28,RCPT-882,Fabricated receipt from Draynor Supplies,1310.20,0
+Varrock Ventures Pty Ltd,110,AUD,J-1005,2026-07-28,RCPT-882,Fabricated receipt from Draynor Supplies,0,1310.10
+Varrock Ventures Pty Ltd,680,AUD,J-1006,2026-07-31,,,15000.00,0
+Varrock Ventures Pty Ltd,880,AUD,J-1006,2026-07-31,,,0,15000.00
+Varrock Ventures Pty Ltd,110,AUD,J-1007,2026-08-03,INV-2049,Fabricated July invoice raised in August,940.35,0
+Varrock Ventures Pty Ltd,200,AUD,J-1007,2026-08-03,INV-2049,Fabricated July invoice raised in August,0,940.35

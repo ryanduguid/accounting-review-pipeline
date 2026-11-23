@@ -5,7 +5,7 @@
 use crate::{
     Result, classification, comparison,
     decimal::Decimal,
-    drivers, engine, loader,
+    drivers, engine, journal_entries, loader,
     models::Status,
     publication,
     pyjson::{self, Json, PyStr},
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 10] = [
+const COMMANDS: [&str; 11] = [
     "review",
     "workbench",
     "view",
@@ -29,6 +29,7 @@ const COMMANDS: [&str; 10] = [
     "classify",
     "schedule",
     "demo",
+    "jet",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -50,6 +51,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "classify" => saved!("classify"),
         "schedule" => saved!("schedule"),
         "demo" => saved!("demo"),
+        "jet" => saved!("jet"),
         _ => saved!("root"),
     }
 }
@@ -183,6 +185,10 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         ),
         "schedule" => (&["--kind", "--input"], &["--kind", "--input"]),
         "demo" => (&["--output"], &["--output"]),
+        "jet" => (
+            &["--transactions", "--currency", "--period-end"],
+            &["--transactions", "--currency", "--period-end"],
+        ),
         _ => return None,
     })
 }
@@ -711,16 +717,20 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" => {
-                let value = if command == "classify" {
-                    classification::classify(
+            "classify" | "schedule" | "jet" => {
+                let value = match command {
+                    "classify" => classification::classify(
                         &args.path("--original-transactions"),
                         &args.path("--current-transactions"),
                         &args.path("--coding-evidence"),
                         &args.literal("--currency")?,
-                    )?
-                } else {
-                    schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?
+                    )?,
+                    "jet" => journal_entries::journal_entry_tests(
+                        &args.path("--transactions"),
+                        &args.literal("--currency")?,
+                        &args.literal("--period-end")?,
+                    )?,
+                    _ => schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?,
                 };
                 stdio::out_literal(&(pyjson::pretty(&value) + "\n"));
                 Ok(if value.at("status").is_str("PASS") {
