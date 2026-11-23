@@ -94,6 +94,10 @@ original discrepancies after a recode. It first ships in 0.2.0.
 unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
 seldom-used-account journals in a general-ledger listing, with a Benford
 first-digit test. It is in development source only.
+[Duplicate bills and payments](docs/duplicate-documents.md)
+(`close-control duplicates`) lists repeated supplier references, same-amount
+bills or payments days apart, and monthly supplier bills missing from the
+period in a register of bills and payments. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
