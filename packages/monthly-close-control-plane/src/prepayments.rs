@@ -72,18 +72,21 @@ fn evidence(row: &Json, identifier: &PyStr, findings: &mut Vec<Json>) -> Result<
     Ok(())
 }
 
-/// Each row of `list` with its item id and account, once its description is
-/// checked.
-fn items<'a>(data: &'a Json, list: &str, fields: &str) -> Result<Vec<(&'a Json, PyStr, PyStr)>> {
-    rows(data.at(list), fields, "item_id", list)?
+/// Each row of `list` with its item id and account, its description checked
+/// as the row is reached, so a row's errors come before the next row's.
+fn items<'a>(
+    data: &'a Json,
+    list: &str,
+    fields: &str,
+) -> Result<impl ExactSizeIterator<Item = Result<(&'a Json, PyStr, PyStr)>>> {
+    Ok(rows(data.at(list), fields, "item_id", list)?
         .iter()
         .map(|row| {
             let identifier = row.at("item_id").as_pystr().unwrap().clone();
             let account = text(row.at("account_id"), "account_id")?;
             text(row.at("description"), "description")?;
             Ok((row, identifier, account))
-        })
-        .collect()
+        }))
 }
 
 fn prepayments(
@@ -98,7 +101,8 @@ fn prepayments(
         "item_id account_id description amount start end basis evidence",
     )?;
     let mut workpaper = Vec::with_capacity(entries.len());
-    for (row, identifier, account) in entries {
+    for entry in entries {
+        let (row, identifier, account) = entry?;
         let amount = money(row.at("amount"), "prepayment amount")?;
         let start = date(row.at("start"), "prepayment start")?;
         let end = date(row.at("end"), "prepayment end")?;
@@ -134,7 +138,8 @@ fn accruals(
         "item_id account_id description amount accrued reversed evidence",
     )?;
     let mut workpaper = Vec::with_capacity(entries.len());
-    for (row, identifier, account) in entries {
+    for entry in entries {
+        let (row, identifier, account) = entry?;
         let amount = money(row.at("amount"), "accrual amount")?;
         let accrued = date(row.at("accrued"), "accrued")?;
         let reversed = match row.at("reversed") {
@@ -313,6 +318,20 @@ mod tests {
             pyjson::canonical(&result)
         );
         assert_eq!(field(&result, "prepayments", 0, "unexpired"), "0.03");
+    }
+
+    #[test]
+    fn an_earlier_row_reports_its_error_before_a_later_row() {
+        for (list, message) in [
+            ("prepayments", "A prepayment needs a positive amount"),
+            ("accruals", "An accrual needs a positive amount"),
+        ] {
+            let mut data = example();
+            edit(&mut data, list, 0, "amount", Json::str("0.00"));
+            edit(&mut data, list, 1, "description", Json::str(""));
+            let error = run(&data).unwrap_err();
+            assert!(error.starts_with(message), "{error}");
+        }
     }
 
     #[test]
