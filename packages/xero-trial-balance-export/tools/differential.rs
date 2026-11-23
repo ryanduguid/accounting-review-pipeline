@@ -128,9 +128,14 @@ impl Process {
     }
 
     fn query(&mut self, value: &Json) -> io::Result<Json> {
-        self.transport.query(value, Duration::from_secs(5))
+        self.transport.ask(value)
     }
 }
+
+/// The first reply also waits for the child to start and import its baseline; a cold
+/// Windows runner once took more than 5 s for that alone (run 44949697827, attempt 1).
+const FIRST_REPLY_DEADLINE: Duration = Duration::from_secs(60);
+const REPLY_DEADLINE: Duration = Duration::from_secs(5);
 
 impl OracleTransport {
     fn start(
@@ -157,6 +162,15 @@ impl OracleTransport {
             requests: Some(send_request),
             worker: Some(worker),
         }
+    }
+
+    fn ask(&mut self, value: &Json) -> io::Result<Json> {
+        let deadline = if self.sequence == 0 {
+            FIRST_REPLY_DEADLINE
+        } else {
+            REPLY_DEADLINE
+        };
+        self.query(value, deadline)
     }
 
     fn query(&mut self, value: &Json, deadline: Duration) -> io::Result<Json> {
@@ -907,6 +921,22 @@ mod tests {
             transport.query(&Json::Null, Duration::from_secs(5)),
             Ok(Json::Bool(true))
         ));
+        transport.requests.take();
+        transport.worker.take().unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn oracle_first_reply_may_outlast_the_reply_deadline() {
+        let (output, mut writer) = io::pipe().unwrap();
+        let mut transport =
+            OracleTransport::start(io::sink(), BufReader::new(output), "slow oracle");
+        let writer = thread::spawn(move || {
+            thread::sleep(REPLY_DEADLINE + Duration::from_millis(500));
+            writer.write_all(b"true\nfalse\n").unwrap();
+        });
+        assert!(matches!(transport.ask(&Json::Null), Ok(Json::Bool(true))));
+        assert!(matches!(transport.ask(&Json::Null), Ok(Json::Bool(false))));
+        writer.join().unwrap();
         transport.requests.take();
         transport.worker.take().unwrap().join().unwrap();
     }
