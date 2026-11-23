@@ -263,37 +263,54 @@ fn local(raw: &str) -> Result<()> {
     Ok(())
 }
 
-/// `path` with `.` and `..` resolved by name, without reading the disk.
-fn lexical(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other),
-        }
-    }
-    out
+/// Whether the link at `link` sits inside an allowed directory. Its parent
+/// holds no link the walk has not already followed, so resolving it follows
+/// nothing new.
+fn link_inside(link: &Path, allowed: &[PathBuf]) -> std::io::Result<bool> {
+    let parent = link.parent().expect("a link the walk named has a parent");
+    let name = link.file_name().expect("a link the walk named has a name");
+    let location = std::fs::canonicalize(parent)?.join(name);
+    Ok(allowed
+        .iter()
+        .any(|directory| location.starts_with(directory)))
 }
 
-/// The existing file or directory `raw` names, resolved through any links,
-/// when it lies inside an allowed directory both as written and once
-/// resolved. Checking the written path first means no link outside the
-/// allowed directories is followed, so none can reach a network share.
+/// The existing file or directory `raw` names when it lies inside an
+/// allowed directory. The path is resolved one name at a time, the way the
+/// system would, and a link is followed only where it sits inside an allowed
+/// directory, so no link elsewhere can lead to another folder or a share.
 fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
     local(raw)?;
     if !Path::new(raw).is_absolute() {
         return Err(format!("{raw} is not an absolute path."));
     }
-    let inside = |path: &Path| allowed.iter().any(|directory| path.starts_with(directory));
+    let failed = |error: std::io::Error| format!("{raw}: {error}");
     let outside = || format!("{raw} is outside the directories this server may read.");
-    if !inside(&lexical(Path::new(raw))) {
-        return Err(outside());
+    let mut current = PathBuf::new();
+    for component in std::path::absolute(raw).map_err(failed)?.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                current.pop();
+            }
+            Component::Normal(name) => {
+                current.push(name);
+                let metadata = std::fs::symlink_metadata(&current).map_err(failed)?;
+                if metadata.file_type().is_symlink() {
+                    if !link_inside(&current, allowed).map_err(failed)? {
+                        return Err(outside());
+                    }
+                    current = std::fs::canonicalize(&current).map_err(failed)?;
+                }
+            }
+            other => current.push(other),
+        }
     }
-    let resolved = std::fs::canonicalize(raw).map_err(|error| format!("{raw}: {error}"))?;
-    if inside(&resolved) {
+    let resolved = std::fs::canonicalize(&current).map_err(failed)?;
+    if allowed
+        .iter()
+        .any(|directory| resolved.starts_with(directory))
+    {
         Ok(resolved)
     } else {
         Err(outside())
@@ -329,21 +346,20 @@ fn pack(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
     Ok(resolved)
 }
 
-/// Resolve the directories the user allows; each must exist. Each is kept
-/// both as written, made absolute, and resolved through any links.
+/// Resolve the directories the user allows; each must exist.
 pub fn allowed_directories(raw: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    let mut allowed = Vec::new();
-    for path in raw {
-        local(&path.to_string_lossy())?;
-        let resolved = std::fs::canonicalize(path)
-            .map_err(|error| format!("directory {}: {error}", path.display()))?;
-        if !resolved.is_dir() {
-            return Err(format!("{} is not a directory.", path.display()));
-        }
-        let written = std::path::absolute(path).expect("a path that resolved is not empty");
-        allowed.extend([lexical(&written), resolved]);
-    }
-    Ok(allowed)
+    raw.iter()
+        .map(|path| {
+            local(&path.to_string_lossy())?;
+            let resolved = std::fs::canonicalize(path)
+                .map_err(|error| format!("directory {}: {error}", path.display()))?;
+            if resolved.is_dir() {
+                Ok(resolved)
+            } else {
+                Err(format!("{} is not a directory.", path.display()))
+            }
+        })
+        .collect()
 }
 
 /// Run one tool; `None` for a tool this server does not have.
@@ -863,7 +879,6 @@ mod tests {
         assert!(local(r"\\?\C:\client\pack").is_ok());
         assert!(local(r"\\?\UNC\server\share").is_err());
         assert!(local(r"\\.\pipe\name").is_err());
-        assert_eq!(lexical(Path::new("/a/b/../c/./d")), PathBuf::from("/a/c/d"));
         let temp = TempDir::new();
         let inside = temp.join("inside");
         std::fs::create_dir(&inside).unwrap();
@@ -875,6 +890,7 @@ mod tests {
         let escape = inside.join("..").join("inside").join("journals.csv");
         assert!(file(escape.to_str().unwrap(), &allowed).is_ok());
         let around = inside.join("..").join("journals.csv");
+        std::fs::write(temp.join("journals.csv"), "x").unwrap();
         assert!(
             file(around.to_str().unwrap(), &allowed)
                 .unwrap_err()
@@ -892,12 +908,33 @@ mod tests {
         let link = temp.join("elsewhere");
         std::os::unix::fs::symlink(&inside, &link).unwrap();
         let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
-        let through = link.join("journals.csv");
-        let error = file(through.to_str().unwrap(), &allowed).unwrap_err();
-        assert!(
-            error.ends_with("outside the directories this server may read."),
-            "{error}"
-        );
+        let refused = |path: PathBuf| {
+            let error = file(path.to_str().unwrap(), &allowed).unwrap_err();
+            assert!(
+                error.ends_with("outside the directories this server may read."),
+                "{error}"
+            );
+        };
+        refused(link.join("journals.csv"));
+        // The detour through the outside link and back by name.
+        refused(link.join("..").join("inside").join("journals.csv"));
+        // A server directory given through a link does not admit its
+        // neighbours.
+        let sub = temp.join("u").join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("public.csv"), "x").unwrap();
+        std::fs::write(temp.join("private.csv"), "x").unwrap();
+        let alias = temp.join("alias");
+        std::os::unix::fs::symlink(&sub, &alias).unwrap();
+        let allowed = allowed_directories(&[alias.join(".")]).unwrap();
+        let private = temp.join("private.csv");
+        assert!(file(private.to_str().unwrap(), &allowed).is_err());
+        let public = sub.join("public.csv");
+        assert!(file(public.to_str().unwrap(), &allowed).is_ok());
+        // A link inside a server directory is followed.
+        let inner = sub.join("inner");
+        std::os::unix::fs::symlink(sub.join("public.csv"), &inner).unwrap();
+        assert!(file(inner.to_str().unwrap(), &allowed).is_ok());
     }
 
     #[test]
