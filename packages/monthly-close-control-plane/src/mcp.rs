@@ -260,6 +260,13 @@ fn local(raw: &str) -> Result<()> {
             "{raw} is a network or device path; give a local path."
         ));
     }
+    // A verbatim path treats `/` as part of a name, which a later push
+    // would split; such a path is refused rather than reinterpreted.
+    if verbatim_disk && raw.contains('/') {
+        return Err(format!(
+            "{raw} mixes / into a verbatim path; give a local path."
+        ));
+    }
     Ok(())
 }
 
@@ -326,7 +333,9 @@ fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
         }
     }
     let resolved = std::fs::canonicalize(&current).map_err(failed)?;
-    let directory = raw.ends_with(['/', '\\']) || raw.ends_with("/.") || raw.ends_with("\\.");
+    // Only Windows reads a backslash as a separator.
+    let backslash = cfg!(windows) && (raw.ends_with('\\') || raw.ends_with("\\."));
+    let directory = backslash || raw.ends_with('/') || raw.ends_with("/.");
     if directory && !resolved.is_dir() {
         return Err(format!("{raw} is not a directory."));
     }
@@ -902,6 +911,8 @@ mod tests {
         assert!(local(r"\\?\C:\client\pack").is_ok());
         assert!(local(r"\\?\UNC\server\share").is_err());
         assert!(local(r"\\.\pipe\name").is_err());
+        let mixed = local(r"\\?\C:\t\j/f").unwrap_err();
+        assert!(mixed.ends_with("mixes / into a verbatim path; give a local path."));
         let temp = TempDir::new();
         let inside = temp.join("inside");
         std::fs::create_dir(&inside).unwrap();
@@ -1005,6 +1016,11 @@ mod tests {
         for path in ["g/", "g/."] {
             let error = file(&text(path), &allowed).unwrap_err();
             assert!(error.ends_with(" is not a directory."), "{error}");
+        }
+        // A backslash is part of a file name on Unix.
+        for name in ["g\\", "g\\."] {
+            std::fs::write(inside.join(name), "x").unwrap();
+            assert!(file(&text(name), &allowed).is_ok(), "{name}");
         }
     }
 
