@@ -1,4 +1,4 @@
-//! CPython text rules the gateway depends on: `str.isspace`, `str.strip`,
+//! CPython text rules this crate depends on: `str.isspace`, `str.strip`,
 //! decimal digit values and `repr()` of a string.
 //! Copied from packages/elizabeth-anne-alexander/src/pytext.rs, then adapted
 //! for evatt's frozen CPython 3.14 / Unicode 16 boundary. No sibling import.
@@ -85,7 +85,7 @@ pub fn decimal_value(cp: u32) -> Option<u32> {
     (cp - zero < 10).then_some(cp - zero)
 }
 
-/// The gateway's control-character rule: any code point below 32, or 127.
+/// The control-character rule: any code point below 32, or 127.
 pub fn has_control(text: &str) -> bool {
     text.chars().any(|ch| (ch as u32) < 32 || ch as u32 == 127)
 }

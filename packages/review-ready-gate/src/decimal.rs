@@ -1,4 +1,4 @@
-//! The subset of Python's `decimal` module the gateway uses.
+//! The subset of Python's `decimal` module this crate uses.
 //!
 //! Parsing follows CPython's `Decimal(str)` (the C `_decimal` module): exact,
 //! with surrounding Python whitespace, underscores and any Unicode decimal
@@ -278,7 +278,7 @@ impl Decimal {
     }
 
     /// `format(self, "f")`, or `None` where CPython runs out of memory: a zero
-    /// the gateway admits can carry an exponent near -10**18, whose fixed-point
+    /// this crate admits can carry an exponent near -10**18, whose fixed-point
     /// form has that many digits.
     pub fn to_fixed_string(&self) -> Option<String> {
         let sign = if self.negative { "-" } else { "" };

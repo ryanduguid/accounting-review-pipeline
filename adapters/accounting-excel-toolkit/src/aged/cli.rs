@@ -285,6 +285,25 @@ fn replay(arguments: &Arguments) -> Result<(u8, String), String> {
     write_new(&output, &(json::pretty_ordered(&pack) + "\n"))?;
     Ok((0, "FAILURE REPLAY QUALIFIED\n".into()))
 }
+/// The binaries' `main`: runs `tool` on the process arguments and writes its output.
+pub fn exit(tool: Tool) -> std::process::ExitCode {
+    // argv is the user's own command line; it grants nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
+    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let (code, stdout, stderr) = run(tool, &args);
+    if std::io::stdout()
+        .lock()
+        .write_all(stdout.as_bytes())
+        .is_err()
+        || std::io::stderr()
+            .lock()
+            .write_all(stderr.as_bytes())
+            .is_err()
+    {
+        return std::process::ExitCode::FAILURE;
+    }
+    std::process::ExitCode::from(code)
+}
 pub fn run(tool: Tool, args: &[OsString]) -> (u8, String, String) {
     let arguments = match parse(tool, args) {
         Ok(value) => value,

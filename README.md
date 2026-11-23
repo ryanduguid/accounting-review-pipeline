@@ -120,9 +120,8 @@ A firm keeping an AI register can draw on the supplier information for evatt, th
 <details>
 <summary>Setup, component identities, releases and the exporter data contract</summary>
 
-This repository brings together Monthly Close Controls and its related tools. Its canonical GitHub repository
-is [`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
-It holds 8 independently versioned components joined only by local files and commands:
+The canonical GitHub repository is
+[`ryanduguid/accounting-review-pipeline`](https://github.com/ryanduguid/accounting-review-pipeline).
 
 | Component | Directory | Identity | Source version | Latest release |
 |---|---|---|---|---|
@@ -151,9 +150,7 @@ can release one component per namespaced tag. That is why Monthly Close Controls
 `packages/monthly-close-control-plane/` rather than the migration plan's
 `packages/monthly-close-controls/`; see `AGENTS.md` and `IMPORTS.md`.
 
-Each component keeps its own package identity, version, lockfile, licence, commands,
-documentation and release cadence. There is no root runtime package, shared library or
-unified version. The root `pyproject.toml`, `uv.lock` and `justfile` are a development
+The root `pyproject.toml`, `uv.lock` and `justfile` are a development
 entrypoint only: `uv sync` then `just test` sets up and verifies a fresh clone from the top
 (see `CONTRIBUTING.md`). Run a component's own checks from its directory with its documented
 commands. Only the root `.github/workflows/` are active. `IMPORTS.md` records source identities, tree digests

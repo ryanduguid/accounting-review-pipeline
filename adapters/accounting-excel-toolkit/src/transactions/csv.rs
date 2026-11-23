@@ -13,7 +13,7 @@ enum State {
     EatCrnl,
 }
 
-/// `_csv.Error`; the gateway reports every one the same way.
+/// `_csv.Error`; this crate reports every one the same way.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CsvError(pub String);
 
