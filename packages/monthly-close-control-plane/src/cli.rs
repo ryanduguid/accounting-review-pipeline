@@ -5,7 +5,7 @@
 use crate::{
     Result, classification, comparison,
     decimal::Decimal,
-    drivers, engine, journal_entries, loader, mcp,
+    drivers, duplicates, engine, journal_entries, loader, mcp,
     models::Status,
     publication,
     pyjson::{self, Json, PyStr},
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 12] = [
+const COMMANDS: [&str; 13] = [
     "review",
     "workbench",
     "view",
@@ -30,6 +30,7 @@ const COMMANDS: [&str; 12] = [
     "schedule",
     "demo",
     "jet",
+    "duplicates",
     "mcp",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
@@ -53,6 +54,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "schedule" => saved!("schedule"),
         "demo" => saved!("demo"),
         "jet" => saved!("jet"),
+        "duplicates" => saved!("duplicates"),
         "mcp" => saved!("mcp"),
         _ => saved!("root"),
     }
@@ -187,6 +189,20 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         ),
         "schedule" => (&["--kind", "--input"], &["--kind", "--input"]),
         "demo" => (&["--output"], &["--output"]),
+        "duplicates" => (
+            &[
+                "--documents",
+                "--currency",
+                "--period-start",
+                "--period-end",
+            ],
+            &[
+                "--documents",
+                "--currency",
+                "--period-start",
+                "--period-end",
+            ],
+        ),
         "jet" => (
             &["--transactions", "--currency", "--period-end"],
             &["--transactions", "--currency", "--period-end"],
@@ -384,7 +400,7 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
             value.clone()
         };
         let choices: &[&str] = match flag {
-            "--kind" => &["expenses", "migration", "interentity"],
+            "--kind" => &schedules::KINDS,
             "--status" => &["PASS", "REVIEW", "BLOCKED"],
             _ => &[],
         };
@@ -753,7 +769,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" | "jet" => {
+            "classify" | "schedule" | "jet" | "duplicates" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -764,6 +780,12 @@ fn run(command: &str, args: &Arguments) -> i32 {
                     "jet" => journal_entries::journal_entry_tests(
                         &args.path("--transactions"),
                         &args.literal("--currency")?,
+                        &args.literal("--period-end")?,
+                    )?,
+                    "duplicates" => duplicates::duplicate_documents(
+                        &args.path("--documents"),
+                        &args.literal("--currency")?,
+                        &args.literal("--period-start")?,
                         &args.literal("--period-end")?,
                     )?,
                     _ => schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?,

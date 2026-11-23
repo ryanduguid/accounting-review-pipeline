@@ -36,7 +36,7 @@ jobs:
       - name: Check out au-fpa-pack
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ryanduguid/au-fpa-pack
+          repository: ryanduguid/OzFPA
           ref: 52a9328b71c4f039ebc73ba719fae0ede11fbdc8
           path: sources/au-fpa-pack
           persist-credentials: false

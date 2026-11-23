@@ -483,7 +483,7 @@ fn schedule_choices_escape_tabs_and_carriage_returns() {
         "{stderr}"
     );
     assert!(
-        stderr.ends_with("close-control schedule: error: argument --kind: invalid choice: 'tab\\tcarriage\\rreturn' (choose from 'expenses', 'migration', 'interentity')\n"),
+        stderr.ends_with("close-control schedule: error: argument --kind: invalid choice: 'tab\\tcarriage\\rreturn' (choose from 'expenses', 'migration', 'interentity', 'prepayments')\n"),
         "{stderr}"
     );
     assert!(fs::read_dir(&directory.0).unwrap().next().is_none());
@@ -556,7 +556,7 @@ fn unknown_review_arguments_preserve_sources_and_existing_output() {
         assert_eq!(
             stderr,
             format!(
-                "usage: close-control [-h]\n                     {{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,mcp}} ...\nclose-control: error: unrecognized arguments: {diagnostic}\n"
+                "usage: close-control [-h]\n                     {{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,mcp}} ...\nclose-control: error: unrecognized arguments: {diagnostic}\n"
             )
         );
         assert_eq!(snapshot(&inputs.0), before, "{diagnostic}");

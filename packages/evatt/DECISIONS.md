@@ -143,47 +143,26 @@ reach either side caught prose such as `quoted on the running balance account`.
 Cost: a 6 or 7 digit general ledger code written after `Account` halts too, and an
 unlabelled account number still passes.
 
-## Deferred minors, shipped as they are (28)
+## Deferred minors, shipped as they are (18)
 
-- RED evidence was a single collection error, so the gitignore assertion was never observed failing on its own condition before implementation.
 - the Halt message ends 'nothing was written' and Task 8's CLI prints the same sentence separately; 2 copies that can drift. Pointer carried into the Task 8 dispatch.
-- no MANIFEST.in, unlike the sibling package, so samples reaching the sdist relies on implicit setuptools inclusion. Pointer carried into the Task 9 dispatch, which should inspect the sdist and not only the wheel.
-- once Unknown is real, mypy over tests/ would reject Halt(('Jane Roe',)). The binding config is packages = ['evatt'] and the documented command is mypy evatt, so this never fires today.
-- ignore_missing_imports = true makes the forward reference fail soft; if redact.py later names the class something else, mypy falls back to Any rather than erroring.
 - the gitignore test's .strip() is left-lenient, so "  entities.json" passes though git treats leading spaces as part of the pattern.
 - interior partial spans leave a residue, 'ref 70 669 074 391 end' reports only the ACN tail and leaves "70 " beside the placeholder.
 - NAME over-matches leading words, so triage values can read 'Dear Jane Roe' or 'Ms Jane Roe'. Ruled: leave the origin regex alone until real halt-rate data exists.
 - BSB fires on hyphenated GL account codes such as 410-100. Document in the Task 9 README.
 - non-ASCII decimal digits pass the gate. Over-detection, inherited from the origin.
-- a changed test asserts valid_acn("123456780") twice, and its docstring still names a vector replaced 2 rounds back.
 - no fsync of the containing directory before os.replace. File-level fsync is in place; the directory case is a portability rabbit hole.
-- the 3 old comment-handling guard tests have no named successor, because comment handling is now git's job. Behaviour confirmed still correct by probe.
-- the git-absent skip guard could mask the 9 real-repository guard tests on a runner without git. Task 10 puts evatt on ubuntu-latest, where git is always present.
 - load accepts "X" and " X " as distinct values, so one real name could take 2 placeholders.
-- redact(strict=False) discards the input-placeholder report. CARRIED INTO TASK 6, which builds verify on strict=False and would otherwise miss a placeholder already present in the input.
 - _replace_entities silently skips an empty or placeholder-shaped value rather than raising. Needs a hand-built Entity; load blocks the normal path.
 - residual returns all addresses, then dates, then names, rather than in line order. No consumer yet; the Task 8 triage file may want line order.
 - names dedupe per line while addresses report per occurrence, so the Halt count understates names.
 - "Schedule Two\n<Given>" reports the partial window "Two\nGiven" and still halts. Triage noise, pre-existing, not a leak.
 - both ABN_10 and ABN_100 can be minted in one document past 105 identifiers of a kind.
 - Unknown.context is an unbounded whole line, so a wide table row carries a lot of raw client text into the triage file.
-- verify imports the private _PREFIX from entities. Justified in a comment as drift-proofing.
 - an entity whose value is itself a structured identifier is reported twice by verify, once as the identifier kind and once as the entity kind. Over-detection.
 - Resolved 12 September 2026: verify prints finding kinds and locations without detected values. Task 9 README guidance now describes this behaviour.
-- the strict= source tripwire in test_cli.py is defeatable by spacing.
 - --out naming a directory raises rather than exiting 1.
 - Unknown.context is still an unbounded whole line in the triage file, now always post-redaction.
-
-## Carried forward and not verified
-
-- Task 3: carry into Task 8: nothing calls require_gitignored yet. The CLI must call it before the first save, and before redact reads the map.
-- Task 3: carry into Task 8: the Halt message ends 'nothing was written' and the planned CLI prints the same sentence separately.
-- Task 6: carry into Task 8: the CLI must NEVER expose a non-strict redact. The residual placeholder limit's mitigation depends on it, and the verify docstring now says so.
-- Task 6: carry into Task 8: the brief's step 4 test counts are stale throughout; treat them as indicative, not as a gate.
-- Task 7/8: not verified: wheel and sdist contents, and Python 3.10. The suite ran on 3.12 and the first build is Task 9.
-- Task 9/10: open for the final review: evatt's sdist carries only README.md and LICENSE, where the sibling's MANIFEST.in also ships SECURITY.md. Divergence from house form, not a defect.
-- Task 9/10: open for the final review: cli.py's _collision docstring claims "--out entities" beside a map at "entities.json" collides through the derived manifest path. It does not; _manifest_path yields "entities.manifest.json". The guard is real, the docstring overstates it. One-line correction.
-- FINAL: not verified: the GitHub workflow has never run; the 3.10 CI leg fetches a 3.12 interpreter for the build step via uv automatic downloads, which is untested. The clean-wheel demo was run locally by extracting the YAML run block, not by CI.
 
 ## Rust port decisions (13 October 2026)
 

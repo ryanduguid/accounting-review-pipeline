@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "currency": "AUD",
+  "cutoff": "2026-09-30",
+  "tenant": "Fabricated Services",
+  "period_start": "2026-09-01",
+  "prepayments": [
+    {
+      "item_id": "P1",
+      "account_id": "625",
+      "description": "Fabricated annual insurance",
+      "amount": "1200.00",
+      "start": "2026-07-01",
+      "end": "2027-06-30",
+      "basis": "monthly",
+      "evidence": "policy-P1"
+    },
+    {
+      "item_id": "P2",
+      "account_id": "626",
+      "description": "Fabricated software licence",
+      "amount": "365.00",
+      "start": "2026-09-16",
+      "end": "2027-09-15",
+      "basis": "daily",
+      "evidence": "invoice-P2"
+    }
+  ],
+  "accruals": [
+    {
+      "item_id": "A1",
+      "account_id": "826",
+      "description": "Fabricated September audit fee",
+      "amount": "3000.00",
+      "accrued": "2026-09-30",
+      "reversed": null,
+      "evidence": "engagement-A1"
+    },
+    {
+      "item_id": "A2",
+      "account_id": "826",
+      "description": "Fabricated June electricity",
+      "amount": "450.00",
+      "accrued": "2026-06-30",
+      "reversed": null,
+      "evidence": ""
+    },
+    {
+      "item_id": "A3",
+      "account_id": "826",
+      "description": "Fabricated August cleaning",
+      "amount": "200.00",
+      "accrued": "2026-08-31",
+      "reversed": "2026-09-01",
+      "evidence": "quote-A3"
+    }
+  ],
+  "ledger_balances": [
+    {
+      "account_id": "625",
+      "balance": "900.00"
+    },
+    {
+      "account_id": "626",
+      "balance": "365.00"
+    },
+    {
+      "account_id": "826",
+      "balance": "-3450.00"
+    }
+  ]
+}

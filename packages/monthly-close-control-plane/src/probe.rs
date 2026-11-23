@@ -254,16 +254,37 @@ const DEMO_COMMAND: &str = concat!(
     "                        with no checkout needed\n",
     "    jet                 test a general-ledger listing's journals for entries\n",
     "                        worth review, with a Benford first-digit test\n",
+    "    duplicates          list possible duplicate bills and payments and missing\n",
+    "                        recurring bills in a supplier register\n",
     "    mcp                 serve the read-only commands to an assistant over\n",
     "                        stdio (Model Context Protocol)\n",
 );
+/// The root help line for `schedule` once it took the `prepayments` kind, and
+/// the line the frozen baseline printed.
+const PREPAYMENTS_COMMAND: &str = concat!(
+    "    schedule            review a canonical expense, migration, inter-entity or\n",
+    "                        prepayment and accrual schedule\n",
+);
+const FROZEN_SCHEDULE_COMMAND: &str = concat!(
+    "    schedule            review a canonical expense, migration or inter-entity\n",
+    "                        schedule\n",
+);
 /// The frozen Python baseline predates the GST reasonableness, contacts,
-/// required control and queue summary options and the `demo`, `jet` and
-/// `mcp` commands, so CLI output compared with it drops their usage and help
-/// lines.
+/// required control and queue summary options and the `demo`, `jet`,
+/// `duplicates` and `mcp` commands, so CLI output compared with it drops their
+/// usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet,mcp}", ",schedule}")
-        .replace(", 'schedule', 'demo', 'jet', 'mcp')", ", 'schedule')")
+    text.replace(",schedule,demo,jet,duplicates,mcp}", ",schedule}")
+        .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
+        .replace(
+            "{expenses,migration,interentity,prepayments}",
+            "{expenses,migration,interentity}",
+        )
+        .replace("'interentity', 'prepayments')", "'interentity')")
+        .replace(
+            ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp')",
+            ", 'schedule')",
+        )
         .replace(DEMO_COMMAND, "")
         .replace(CONTACTS_USAGE, "")
         .replace(CONTACTS_OPTION, "")
@@ -1086,7 +1107,7 @@ mod tests {
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
         assert!(
-            error.contains("'schedule', 'demo', 'jet', 'mcp')"),
+            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'mcp')"),
             "{error}"
         );
         let frozen = without_native_options(&error);

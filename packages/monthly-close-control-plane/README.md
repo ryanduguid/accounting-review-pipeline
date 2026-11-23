@@ -82,7 +82,8 @@ and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 [Variance drivers](docs/variance-drivers.md) rank the transactions behind each
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
-migration snapshots and inter-entity balances from supplied canonical records.
+migration snapshots, inter-entity balances, and prepayments and accruals from
+supplied canonical records.
 Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
 variance drivers and the balance policy. The quick start builds the native command
 from source; released executables are an alternative on Linux x86_64 and Windows x86_64.
@@ -93,6 +94,10 @@ original discrepancies after a recode. It first ships in 0.2.0.
 unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
 seldom-used-account journals in a general-ledger listing, with a Benford
 first-digit test. It is in development source only.
+[Duplicate bills and payments](docs/duplicate-documents.md)
+(`close-control duplicates`) lists repeated supplier references, same-amount
+bills or payments days apart, and monthly supplier bills missing from the
+period in a register of bills and payments. It is in development source only.
 [Assistant access over MCP](docs/mcp-server.md) (`close-control mcp`) serves the
 read-only commands to an assistant for the folder you name, with an MCP Bundle
 manifest. It is in development source only.

@@ -44,11 +44,8 @@ The maintained source is under
 [`packages/review-ready-gate`](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/review-ready-gate)
 in the Accounting Review Pipeline. The `review-ready` command retains the 5
 commands, flags, readiness statuses and payload formats of the Python baseline.
-There is no supported `reviewready` Python import API.
 
-A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team or an AI agent. It tells you whether that folder is allowed to enter manager review.
-
-A public evaluation pack reproduces the v0.1.5 manager-review result on fabricated BAS fixtures. It is a local review aid, not an approval system.
+A local, **review-first readiness gate** for Australian public-practice packs. You point it at a folder of workpapers from a junior, an offshore team or an AI agent. It tells you whether that folder is allowed to enter manager review. It is a local review aid, not an approval system.
 
 ## Fabricated proof
 
@@ -57,7 +54,7 @@ A public evaluation pack reproduces the v0.1.5 manager-review result on fabricat
 | `examples/bas-ready` | `READY` | No configured findings. A human still decides whether the pack may proceed. |
 | `examples/bas-not-ready` | `NOT_READY` | Missing GST control export, incomplete self-review and a blocking open item. |
 
-Open the [manager-facing browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) or reproduce the [versioned evaluation pack](evaluation/manager_review_gate/README.md) from the fabricated fixtures.
+Open the [manager-facing browser evaluation](https://duguid.com.au/evaluate/manager-review-gate/) or reproduce the v0.1.5 manager-review result from the fabricated BAS fixtures with the [versioned evaluation pack](evaluation/manager_review_gate/README.md).
 
 It is the missing upstream step in this stack:
 
@@ -93,7 +90,6 @@ For optional supporting documents, the [synthetic document intake example](examp
 preserves original bytes, proposed fields and human corrections. It adds document checks to an
 existing pack without replacing its trial balance or changing the readiness output schema.
 
-For the manager-facing, reproducible BAS evaluation, see the [manager review gate evaluation pack](evaluation/manager_review_gate/README.md).
 The [missing evidence evaluation](evaluation/missing_evidence/README.md) shows what the gate
 does when a month-end source is absent, empty, for the wrong period or edited after the gate
 ran, including a balanced pack that is `NOT_READY` without its bank reconciliation.

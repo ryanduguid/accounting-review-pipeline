@@ -31,7 +31,7 @@ fixture assertion confirms these supplied examples; it does not resolve their
 | Are the close and forecast using the same source? | Lumbridge handoff, close pack and forecast review | Source hashes agree; every expected command ran |
 | What changed across the quarter? | Three close packs and two comparisons | Dates and opening balance are present; unresolved findings remain visible |
 | Which debtors need investigation? | [Xero debtor review recipe](https://github.com/ryanduguid/australian-accounting-skills/tree/main/.claude/skills/xero-exports/references/debtor-review.md) | Signed credits, bucket differences, control differences and missing evidence are retained |
-| What happens if receipts slip or payroll increases? | [Ridgeline decisions](https://github.com/ryanduguid/au-fpa-pack/tree/main/examples/ridgeline) | Baseline and changed assumptions use the same metric definitions and forecast horizon |
+| What happens if receipts slip or payroll increases? | [Ridgeline decisions](https://github.com/ryanduguid/OzFPA/tree/main/examples/ridgeline) | Baseline and changed assumptions use the same metric definitions and forecast horizon |
 
 ## Check the installed package separately
 
