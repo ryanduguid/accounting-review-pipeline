@@ -38,13 +38,15 @@ that it is complete.
 
 ## The tests
 
-The first 4 characteristics come from ASA 240 Appendix 4 (October 2025), which
-lists entries 'made to unrelated, unusual, or seldom-used accounts', entries
+`post_closing`, `period_end`, `no_description`, `round_amount` and
+`seldom_used_account` follow characteristics ASA 240 Appendix 4 (October 2025)
+lists: entries 'made to unrelated, unusual, or seldom-used accounts', entries
 'recorded at the end of the period or as post-closing entries that have little
 or no explanation or description' and entries 'containing round numbers'.
 Paragraph 49(c) requires the auditor to select journal entries made at the end
 of a reporting period. That standard is operative for financial reporting
-periods beginning on or after 15 December 2026.
+periods beginning on or after 15 December 2026. `unbalanced_journal` and
+`weekend` are common integrity and timing checks, not taken from it.
 
 | Test | Lists | Per |
 | --- | --- | --- |
@@ -69,10 +71,13 @@ error, and an entry not listed is not shown to be appropriate.
 
 The test counts the first significant digit of every line amount and compares
 the proportions with Benford's expected `log10(1 + 1/d)`. The mean absolute
-deviation of the 9 proportions is named by Nigrini's first-digit bands
-(*Benford's Law*, 2012, p. 160): up to 0.006 close conformity, up to 0.012
-acceptable, up to 0.015 marginally acceptable and above 0.015 nonconformity.
-Nonconformity makes the result `REVIEW`. The test runs only on 110 or more
+deviation of the 9 proportions is named by Nigrini's first-digit bands, as
+published papers quote *Benford's Law* (2012): up to 0.006 close conformity,
+up to 0.012 acceptable conformity, up to 0.015 marginal conformity and above
+0.015 nonconformity, the threshold given for p. 160. Other papers quote lower
+cutoffs from earlier work, and the bands are empirical rules of thumb, not a
+statistical test. Only nonconformity affects the result, which it makes
+`REVIEW`. The test runs only on 110 or more
 amounts, so that every digit expects at least 5; with fewer, `benford.ran` is
 `false` with the reason and the counts, and the test does not affect the status.
 

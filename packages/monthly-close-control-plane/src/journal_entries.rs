@@ -44,13 +44,13 @@ const BENFORD_EXPECTED: [&str; 9] = [
 /// The fewest amounts for which every first digit expects at least 5
 /// (5 / 0.0457574906 is 109.3).
 pub const BENFORD_MINIMUM: usize = 110;
-/// Nigrini's first-digit mean absolute deviation bands (Benford's Law, 2012,
-/// p. 160): the upper bound of each band and its name; above the last is
-/// nonconformity.
+/// Nigrini's first-digit mean absolute deviation bands, as Nigrini (2012) is
+/// quoted in arXiv 1311.4787 and, for 0.015, arXiv 2202.05237: the upper bound
+/// of each band and its name; above the last is nonconformity.
 const BANDS: [(&str, &str); 3] = [
     ("0.006", "close conformity"),
     ("0.012", "acceptable conformity"),
-    ("0.015", "marginally acceptable conformity"),
+    ("0.015", "marginal conformity"),
 ];
 
 struct Line {
@@ -179,17 +179,17 @@ fn review(source: &SourceSnapshot, currency: &str, period_end: Date) -> Result<J
             });
         }
     }
+    lines.sort_by(|a, b| (&a.item.identifier, &a.account).cmp(&(&b.item.identifier, &b.account)));
     let mut journals: BTreeMap<&str, Vec<&Line>> = BTreeMap::new();
-    let mut accounts: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    // The loader refuses a journal posting to one account twice, so an
+    // account's line count is its journal count.
+    let mut accounts: BTreeMap<&str, usize> = BTreeMap::new();
     for line in &lines {
         journals
             .entry(&line.item.identifier)
             .or_default()
             .push(line);
-        accounts
-            .entry(&line.account)
-            .or_default()
-            .insert(&line.item.identifier);
+        *accounts.entry(&line.account).or_default() += 1;
     }
     let mut findings: BTreeMap<&str, Vec<Json>> = BTreeMap::new();
     let zero = Decimal::zero();
@@ -270,7 +270,7 @@ fn review(source: &SourceSnapshot, currency: &str, period_end: Date) -> Result<J
         if magnitude >= thousand && reconciliation::fixed(&magnitude).ends_with("000.00") {
             add("round_amount", "A whole multiple of 1,000.".to_owned());
         }
-        if journals.len() > 1 && accounts[line.account.as_str()].len() == 1 {
+        if journals.len() > 1 && accounts[line.account.as_str()] == 1 {
             add(
                 "seldom_used_account",
                 "The only journal in the listing that posts to this account.".to_owned(),
@@ -420,8 +420,8 @@ mod tests {
             "Debits less credits is 0.10; every line of a journal must be supplied, and its debits must equal its credits."
         ));
         assert!(findings[1].at("date").is_str("2026-10-02"));
-        assert!(findings[5].at("account_id").is_str("610"));
-        assert!(findings[6].at("amount").is_str("-5000.00"));
+        assert!(findings[5].at("account_id").is_str("090"));
+        assert!(findings[6].at("amount").is_str("5000.00"));
         assert!(findings[7].at("account_id").is_str("999"));
     }
 
@@ -495,12 +495,84 @@ mod tests {
     }
 
     #[test]
+    fn findings_follow_journal_and_account_order_whatever_the_line_order() {
+        let lines = [
+            ("J9", "999", "2026-09-12", "Fabricated", "-3000.00"),
+            ("J9", "610", "2026-09-12", "Fabricated", "3000.00"),
+            ("J1", "610", "2026-09-07", "Fabricated", "1234.56"),
+            ("J1", "090", "2026-09-07", "Fabricated", "-1234.56"),
+        ];
+        let mut reversed = lines;
+        reversed.reverse();
+        let expected = [
+            "weekend:J9",
+            "round_amount:J9",
+            "round_amount:J9",
+            "seldom_used_account:J1",
+            "seldom_used_account:J9",
+        ];
+        for order in [&lines, &reversed] {
+            let result = run(order);
+            assert_eq!(listed(&result), expected);
+            let accounts: Vec<_> = result
+                .at("findings")
+                .as_array()
+                .unwrap()
+                .iter()
+                .skip(1)
+                .map(|item| field(item, "account_id"))
+                .collect();
+            assert_eq!(accounts, ["610", "999", "090", "999"]);
+        }
+    }
+
+    #[test]
+    fn benford_runs_from_110_amounts() {
+        let rows = |journals: usize| -> Vec<(String, String)> {
+            (0..journals)
+                .flat_map(|index| {
+                    let amount = format!("9{:02}.45", index % 100);
+                    [
+                        (format!("J{index}"), amount.clone()),
+                        (format!("J{index}"), format!("-{amount}")),
+                    ]
+                })
+                .collect()
+        };
+        for (journals, ran) in [(54, false), (55, true)] {
+            let owned = rows(journals);
+            let listing: Vec<Row> = owned
+                .iter()
+                .map(|(id, amount)| {
+                    let account = if amount.starts_with('-') {
+                        "090"
+                    } else {
+                        "610"
+                    };
+                    (
+                        id.as_str(),
+                        account,
+                        "2026-09-07",
+                        "Fabricated",
+                        amount.as_str(),
+                    )
+                })
+                .collect();
+            let result = run(&listing);
+            assert_eq!(result.at("benford").at("ran").as_bool(), Some(ran));
+            assert!(result.at("findings").as_array().unwrap().is_empty());
+            let status = if ran { "REVIEW" } else { "PASS" };
+            assert!(result.at("status").is_str(status), "{journals}");
+        }
+    }
+
+    #[test]
     fn conformity_bands_include_their_upper_bounds() {
         for (mad, band) in [
             ("0.006", "close conformity"),
             ("0.0061", "acceptable conformity"),
             ("0.012", "acceptable conformity"),
-            ("0.015", "marginally acceptable conformity"),
+            ("0.015", "marginal conformity"),
             ("0.0151", "nonconformity"),
         ] {
             assert_eq!(conformity(&Decimal::parse(mad).unwrap()), band);
