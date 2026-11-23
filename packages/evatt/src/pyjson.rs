@@ -1,4 +1,4 @@
-//! CPython's `json` module as the gateway uses it: `json.loads` with a
+//! CPython's `json` module as this crate uses it: `json.loads` with a
 //! duplicate-key hook, `json.dumps(sort_keys=True)` in its canonical and
 //! `indent=2` forms, and Python equality over the parsed values.
 //!
@@ -158,7 +158,7 @@ pub fn py_eq(a: &Json, b: &Json, nested: bool) -> bool {
     }
 }
 
-/// Why `json.loads` with the gateway's hook did not return a value.
+/// Why `json.loads` with this crate's hook did not return a value.
 #[derive(Debug, PartialEq)]
 pub enum LoadError {
     /// `json.JSONDecodeError`.
