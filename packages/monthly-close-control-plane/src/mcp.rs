@@ -12,7 +12,7 @@ use crate::{
 };
 use std::{
     io::{BufRead, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 /// Newest first; `initialize` answers with the newest handshake version
@@ -246,10 +246,16 @@ impl Arguments<'_> {
 }
 
 /// Refuse network and device paths (`\\server\share`, `//server/share`,
-/// `\\?\` and `\\.\`) before anything resolves them.
+/// `\\?\UNC\` and `\\.\`) before anything resolves them; a local drive
+/// in verbatim form (`\\?\C:\`) is allowed.
 fn local(raw: &str) -> Result<()> {
-    let separator = |byte: Option<&u8>| matches!(byte, Some(b'/' | b'\\'));
-    if separator(raw.as_bytes().first()) && separator(raw.as_bytes().get(1)) {
+    let bytes = raw.as_bytes();
+    let separator = |index: usize| matches!(bytes.get(index), Some(b'/' | b'\\'));
+    // `\\?\C:\` is a local drive in Windows' verbatim form.
+    let verbatim_disk = raw.starts_with("\\\\?\\")
+        && bytes.get(4).is_some_and(u8::is_ascii_alphabetic)
+        && bytes.get(5) == Some(&b':');
+    if separator(0) && separator(1) && !verbatim_disk {
         return Err(format!(
             "{raw} is a network or device path; give a local path."
         ));
@@ -257,23 +263,40 @@ fn local(raw: &str) -> Result<()> {
     Ok(())
 }
 
+/// `path` with `.` and `..` resolved by name, without reading the disk.
+fn lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// The existing file or directory `raw` names, resolved through any links,
-/// when it lies inside an allowed directory.
+/// when it lies inside an allowed directory both as written and once
+/// resolved. Checking the written path first means no link outside the
+/// allowed directories is followed, so none can reach a network share.
 fn confine(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
     local(raw)?;
     if !Path::new(raw).is_absolute() {
         return Err(format!("{raw} is not an absolute path."));
     }
+    let inside = |path: &Path| allowed.iter().any(|directory| path.starts_with(directory));
+    let outside = || format!("{raw} is outside the directories this server may read.");
+    if !inside(&lexical(Path::new(raw))) {
+        return Err(outside());
+    }
     let resolved = std::fs::canonicalize(raw).map_err(|error| format!("{raw}: {error}"))?;
-    if allowed
-        .iter()
-        .any(|directory| resolved.starts_with(directory))
-    {
+    if inside(&resolved) {
         Ok(resolved)
     } else {
-        Err(format!(
-            "{raw} is outside the directories this server may read."
-        ))
+        Err(outside())
     }
 }
 
@@ -306,20 +329,21 @@ fn pack(raw: &str, allowed: &[PathBuf]) -> Result<PathBuf> {
     Ok(resolved)
 }
 
-/// Resolve the directories the user allows; each must exist.
+/// Resolve the directories the user allows; each must exist. Each is kept
+/// both as written, made absolute, and resolved through any links.
 pub fn allowed_directories(raw: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    raw.iter()
-        .map(|path| {
-            local(&path.to_string_lossy())?;
-            let resolved = std::fs::canonicalize(path)
-                .map_err(|error| format!("directory {}: {error}", path.display()))?;
-            if resolved.is_dir() {
-                Ok(resolved)
-            } else {
-                Err(format!("{} is not a directory.", path.display()))
-            }
-        })
-        .collect()
+    let mut allowed = Vec::new();
+    for path in raw {
+        local(&path.to_string_lossy())?;
+        let resolved = std::fs::canonicalize(path)
+            .map_err(|error| format!("directory {}: {error}", path.display()))?;
+        if !resolved.is_dir() {
+            return Err(format!("{} is not a directory.", path.display()));
+        }
+        let written = std::path::absolute(path).expect("a path that resolved is not empty");
+        allowed.extend([lexical(&written), resolved]);
+    }
+    Ok(allowed)
 }
 
 /// Run one tool; `None` for a tool this server does not have.
@@ -831,6 +855,48 @@ mod tests {
         assert!(
             failed && text.ends_with(" is not a regular file."),
             "{text}"
+        );
+    }
+
+    #[test]
+    fn written_paths_are_checked_before_any_link_is_followed() {
+        assert!(local(r"\\?\C:\client\pack").is_ok());
+        assert!(local(r"\\?\UNC\server\share").is_err());
+        assert!(local(r"\\.\pipe\name").is_err());
+        assert_eq!(lexical(Path::new("/a/b/../c/./d")), PathBuf::from("/a/c/d"));
+        let temp = TempDir::new();
+        let inside = temp.join("inside");
+        std::fs::create_dir(&inside).unwrap();
+        let csv = inside.join("journals.csv");
+        std::fs::write(&csv, "x").unwrap();
+        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
+        let resolved = std::fs::canonicalize(&csv).unwrap();
+        assert_eq!(file(resolved.to_str().unwrap(), &allowed), Ok(resolved));
+        let escape = inside.join("..").join("inside").join("journals.csv");
+        assert!(file(escape.to_str().unwrap(), &allowed).is_ok());
+        let around = inside.join("..").join("journals.csv");
+        assert!(
+            file(around.to_str().unwrap(), &allowed)
+                .unwrap_err()
+                .contains("outside")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_outside_the_directories_is_not_followed() {
+        let temp = TempDir::new();
+        let inside = temp.join("inside");
+        std::fs::create_dir(&inside).unwrap();
+        std::fs::write(inside.join("journals.csv"), "x").unwrap();
+        let link = temp.join("elsewhere");
+        std::os::unix::fs::symlink(&inside, &link).unwrap();
+        let allowed = allowed_directories(std::slice::from_ref(&inside)).unwrap();
+        let through = link.join("journals.csv");
+        let error = file(through.to_str().unwrap(), &allowed).unwrap_err();
+        assert!(
+            error.ends_with("outside the directories this server may read."),
+            "{error}"
         );
     }
 

@@ -26,7 +26,10 @@ they are not tools: run them yourself, then let the assistant read the result.
 ## Which files a tool may read
 
 Every path a tool is given must be absolute and must name an existing file or
-directory inside one of the server's directories once links are resolved. A
+directory inside one of the server's directories both as written and once links
+are resolved, so a link outside those directories is never followed. Write the
+path with the same spelling as the directory given to the server, or as its
+resolved form. A
 file must be a regular file, not a pipe or device. In a pack directory, each
 pack file present must be a regular file itself, not a link, so reading it by
 name stays inside the directory. Network and device paths (`\\server\share`,
