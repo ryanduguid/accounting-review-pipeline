@@ -248,8 +248,7 @@ const SUMMARY_OPTION: &str = concat!(
     "  --summary             count the displayed packs by state, by control with\n",
     "                        exceptions and by control not run\n",
 );
-/// The root help lines for the native-only `demo`, `jet`, `duplicates`, `mcp`,
-/// `payroll` and `statement` commands.
+/// The root help lines for the native-only commands.
 const DEMO_COMMAND: &str = concat!(
     "    demo                write the fabricated example inputs and review them,\n",
     "                        with no checkout needed\n",
@@ -280,11 +279,8 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
     "    schedule            review a canonical expense, migration or inter-entity\n",
     "                        schedule\n",
 );
-/// The frozen Python baseline predates the GST reasonableness, contacts,
-/// required control and queue summary options and the `demo`, `jet`,
-/// `duplicates`, `mcp`, `payroll` and `statement` commands, so CLI output
-/// compared with it drops their
-/// usage and help lines.
+/// The frozen Python baseline predates the native-only options and commands,
+/// so CLI output compared with it drops their usage and help lines.
 fn without_native_options(text: &str) -> String {
     text.replace(
         ",schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement}",

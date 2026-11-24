@@ -62,12 +62,12 @@ fn parse(row: &loader::CsvRow, path: &str, source: &SourceSnapshot, currency: &s
     let refuse = |what: String| Err(format!("{path}: row {} {what}", row.number));
     // The shared bound check names the field but not the row; name the row here.
     let money = |raw: &str, field: &str| {
+        let prefix = format!("{path}: {field} ");
         reconciliation::money(raw, field, &source.path, row.number).map_err(|error| {
-            error.replacen(
-                &format!("{path}: {field} "),
-                &format!("{path}: row {} {field} ", row.number),
-                1,
-            )
+            match error.strip_prefix(&prefix) {
+                Some(rest) => format!("{path}: row {} {field} {rest}", row.number),
+                None => error,
+            }
         })
     };
     if text("Currency")? != currency {
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn malformed_rows_are_refused() {
-        let cases: [(Edit, &str); 8] = [
+        let cases: [(Edit, &str); 10] = [
             (
                 |rows| rows[0].3 = "1.00",
                 "row 2 has an Amount, but OPENING rows carry a Balance only.",
@@ -459,6 +459,14 @@ mod tests {
             (
                 |rows| rows[0].4 = "NaN",
                 "row 2 has invalid Balance: 'NaN'.",
+            ),
+            (
+                |rows| rows[1].3 = "statement.csv: Amount bad",
+                "row 3 has invalid Amount: 'statement.csv: Amount bad'.",
+            ),
+            (
+                |rows| rows[0].4 = "statement.csv: Balance bad",
+                "row 2 has invalid Balance: 'statement.csv: Balance bad'.",
             ),
         ];
         for (edit, error) in cases {

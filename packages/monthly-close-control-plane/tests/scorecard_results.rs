@@ -94,17 +94,91 @@ fn results_all_at_pass_exit_0() {
     assert_eq!(output.status.code(), Some(0), "{output:?}");
 }
 
-#[test]
-fn an_unusable_result_exits_1() {
-    let dir = TempDir::new();
-    let path = dir.join("bad.json");
-    std::fs::write(&path, "[]").unwrap();
-    let output = close_control(&["scorecard", "--result", path.to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
+const INVALID_RESULTS: [(&str, &str); 8] = [
+    ("arr.json", "[]"),
+    ("no_status.json", r#"{"tenant":"Varrock","findings":[]}"#),
+    ("no_tenant.json", r#"{"status":"PASS","findings":[]}"#),
+    (
+        "no_findings.json",
+        r#"{"status":"PASS","tenant":"Varrock"}"#,
+    ),
+    (
+        "bad_status.json",
+        r#"{"status":1,"tenant":"Varrock","findings":[]}"#,
+    ),
+    (
+        "bad_tenant.json",
+        r#"{"status":"PASS","tenant":1,"findings":[]}"#,
+    ),
+    (
+        "bad_findings.json",
+        r#"{"status":"PASS","tenant":"Varrock","findings":{}}"#,
+    ),
+    (
+        "done_status.json",
+        r#"{"status":"DONE","tenant":"Varrock","findings":[]}"#,
+    ),
+];
+
+fn write_result(dir: &TempDir, rel: &str, text: &str) -> String {
+    let path = dir.join(rel);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(&path, text).unwrap();
+    path.to_str().unwrap().to_owned()
+}
+
+fn assert_rejected(name: &str, paths: &[&str], message: &str) {
+    let mut args = vec!["scorecard"];
+    for path in paths {
+        args.extend(["--result", path]);
+    }
+    let output = close_control(&args);
+    assert_eq!(output.status.code(), Some(1), "{name}: {output:?}");
+    assert!(output.stdout.is_empty(), "{name}: {output:?}");
     assert!(
-        String::from_utf8(output.stderr)
-            .unwrap()
-            .contains("not a result of")
+        String::from_utf8(output.stderr).unwrap().contains(message),
+        "{name}"
+    );
+}
+
+#[test]
+fn unusable_results_exit_1_with_empty_stdout() {
+    let dir = TempDir::new();
+    for (rel, body) in INVALID_RESULTS {
+        let path = write_result(&dir, rel, body);
+        assert_rejected(rel, &[&path], "not a result of");
+    }
+    let valid = write_result(
+        &dir,
+        "varrock.json",
+        r#"{"status":"PASS","tenant":"Varrock","findings":[]}"#,
+    );
+    let falador = write_result(
+        &dir,
+        "falador.json",
+        r#"{"status":"PASS","tenant":"Falador","findings":[]}"#,
+    );
+    let dup = write_result(
+        &dir,
+        "other/varrock.json",
+        r#"{"status":"PASS","tenant":"Varrock","findings":[]}"#,
+    );
+    assert_rejected(
+        "mixed_tenants",
+        &[&valid, &falador],
+        "summarise each tenant",
+    );
+    assert_rejected(
+        "duplicate_stem",
+        &[&valid, &dup],
+        "a second result named 'varrock'",
+    );
+    assert_rejected(
+        "missing_file",
+        &[dir.join("absent.json").to_str().unwrap()],
+        "Result does not exist",
     );
 }
 
