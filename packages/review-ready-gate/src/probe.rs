@@ -163,9 +163,15 @@ fn csv(request: &Json) -> Result<Json> {
 }
 /// The frozen Python baseline predates the queue command, so CLI output
 /// compared with it drops `queue` from the command choices.
+/// The CLI text without the native additions the frozen baseline lacks: the
+/// queue command and the ias profile.
 fn without_queue_command(text: &str) -> String {
     text.replace("{gate,view,queue,compare,", "{gate,view,compare,")
         .replace("'view', 'queue', 'compare'", "'view', 'compare'")
+        .replace("{bas,ias,month_end,year_end}", "{bas,month_end,year_end}")
+        .replace("'bas', 'ias', 'month_end'", "'bas', 'month_end'")
+        .replace("one of bas, ias, month_end", "one of bas, month_end")
+        .replace("one of: bas, ias, month_end", "one of: bas, month_end")
 }
 #[expect(clippy::too_many_lines, reason = "one match arm per probe operation")]
 fn operation(request: &Json) -> Result<Json> {
@@ -324,7 +330,7 @@ pub fn evaluate(request: &str) -> Result<String> {
     let request = pyjson::loads(request).map_err(|e| format!("invalid probe request: {e:?}"))?;
     let result = match operation(&request) {
         Ok(value) => Json::object([("ok", value)]),
-        Err(e) => Json::object([("error", Json::str(&e))]),
+        Err(e) => Json::object([("error", Json::str(&without_queue_command(&e)))]),
     };
     Ok(pyjson::canonical(&result))
 }

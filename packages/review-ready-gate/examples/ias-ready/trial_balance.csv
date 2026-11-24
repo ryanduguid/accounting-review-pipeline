@@ -1,0 +1,5 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-01-31,Cedar and Pine Consulting Pty Ltd,Assets,100,Operating Bank,1000,0.00,18800.00,31200.00,0.00
+2026-01-31,Cedar and Pine Consulting Pty Ltd,Liabilities,830,PAYG Withholding Payable,8300,0.00,5200.00,0.00,5200.00
+2026-01-31,Cedar and Pine Consulting Pty Ltd,Expenses,510,Wages and Salaries,6100,24000.00,0.00,24000.00,0.00
+2026-01-31,Cedar and Pine Consulting Pty Ltd,Equity,900,Retained Earnings,3000,0.00,0.00,0.00,50000.00
