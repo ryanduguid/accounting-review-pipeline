@@ -895,6 +895,17 @@ mod tests {
         let (_, failed) = call_text(&root, "jet", &jet_arguments("f.csv"));
         assert!(!failed);
         refused(&root, "../f.csv");
+        // classify, like queue, resolves each path before reading it.
+        for name in ["transactions.csv", "coding-evidence.json"] {
+            let example = crate::test_support::examples().join("classification");
+            std::fs::copy(example.join(name), inside.join("sub").join(name)).unwrap();
+        }
+        let (text, failed) = call_text(
+            &root,
+            "classify",
+            r#"{"original_transactions":"transactions.csv","current_transactions":"transactions.csv","coding_evidence":"coding-evidence.json","currency":"AUD"}"#,
+        );
+        assert!(!failed, "{text}");
         let root = Root::open(&inside).unwrap();
         std::fs::rename(&inside, temp.join("moved")).unwrap();
         std::fs::create_dir_all(inside.join("sub")).unwrap();

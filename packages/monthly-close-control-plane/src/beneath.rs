@@ -35,8 +35,12 @@ impl Root {
         let failed = |error: Error| format!("directory {}: {error}", path.display());
         let absolute = std::path::absolute(path).map_err(failed)?;
         let dir = Dir::open_ambient_dir(&absolute, ambient_authority()).map_err(failed)?;
+        // Readers that resolve a path before reading it (queue, classify)
+        // must still find it under the root, so keep the root resolved too;
+        // if it cannot be, those reads are refused rather than widened.
+        let path = crate::pypath::resolve(&absolute, true).unwrap_or(absolute);
         Ok(Self {
-            path: absolute,
+            path,
             dir: Rc::new(dir),
         })
     }
