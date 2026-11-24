@@ -345,7 +345,7 @@ fn super_findings(line: &Line, counted: &Decimal) -> Vec<Json> {
     if required.is_zero() {
         return findings;
     }
-    let late =
+    let past_calendar_days =
         |received: Date| isodate::ordinal(received) - isodate::ordinal(line.paid) > RECEIPT_DAYS;
     match line.received {
         None => findings.push(finding(
@@ -354,7 +354,7 @@ fn super_findings(line: &Line, counted: &Decimal) -> Vec<Json> {
             [("expected", &required), ("recorded", &line.paid_super), ("difference", &shortfall)],
             "No fund receipt date is recorded for this pay line's super guarantee.".into(),
         )),
-        Some(received) if late(received) => findings.push(finding(
+        Some(received) if past_calendar_days(received) => findings.push(finding(
             "SG_TIMING_REVIEW",
             line,
             [("expected", &required), ("recorded", &line.paid_super), ("difference", &shortfall)],
@@ -540,29 +540,25 @@ mod tests {
 
     #[test]
     fn differences_shortfalls_and_receipts_are_listed() {
+        let row = |id, earnings, withheld, paid_super, received| {
+            (
+                id,
+                "2026-07-09",
+                "WEEKLY",
+                "2",
+                earnings,
+                withheld,
+                paid_super,
+                received,
+            )
+        };
         let result = run_text(&register(&[
             // Withheld $2 under the formula; super a cent short; received on day 8.
-            (
-                "E1",
-                "2026-07-09",
-                "WEEKLY",
-                "2",
-                "1333.45",
-                "243.00",
-                "160.00",
-                "2026-07-17",
-            ),
-            // Within $1 of the formula, and no receipt yet.
-            (
-                "E2",
-                "2026-07-09",
-                "WEEKLY",
-                "2",
-                "1333.45",
-                "246.00",
-                "160.01",
-                "",
-            ),
+            row("E1", "1333.45", "243.00", "160.00", "2026-07-17"),
+            // Within $1 of the formula, and a missing receipt date.
+            row("E2", "1333.45", "246.00", "160.01", ""),
+            // Expected super 60.00, recorded 50.00, and a missing receipt date.
+            row("E3", "500.00", "21.00", "50.00", ""),
         ]))
         .unwrap();
         assert!(result.at("status").is_str("REVIEW"));
@@ -575,11 +571,17 @@ mod tests {
                 ("SG_SHORTFALL", "E1"),
                 ("SG_TIMING_REVIEW", "E1"),
                 ("SG_RECEIPT_DATE_MISSING", "E2"),
+                ("SG_SHORTFALL", "E3"),
+                ("SG_RECEIPT_DATE_MISSING", "E3"),
             ]
         );
-        let first = &result.at("findings").as_array().unwrap()[0];
-        assert!(first.at("expected").is_str("245.00"));
-        assert!(first.at("difference").is_str("-2.00"));
+        let findings = result.at("findings").as_array().unwrap();
+        assert!(findings[0].at("expected").is_str("245.00"));
+        assert!(findings[0].at("difference").is_str("-2.00"));
+        assert!(findings[3].at("difference").is_str("0.00"));
+        assert!(findings[5].at("expected").is_str("60.00"));
+        assert!(findings[5].at("recorded").is_str("50.00"));
+        assert!(findings[5].at("difference").is_str("10.00"));
     }
 
     #[test]

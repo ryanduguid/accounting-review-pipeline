@@ -190,6 +190,24 @@ mod tests {
     }
 
     #[test]
+    fn bom_prefixed_result_hashes_raw_bytes() {
+        let dir = TempDir::new();
+        let path = write(
+            &dir,
+            "bom.json",
+            &format!("\u{feff}{}", result("Varrock", "PASS", "")),
+        );
+        let card = scorecard(&[path]).unwrap();
+        assert!(card.at("status").is_str("PASS"));
+        let results = card.at("results").as_array().unwrap();
+        assert!(
+            results[0]
+                .at("source_sha256")
+                .is_str("9bcf976fcb8c7868be34ea33fa8c79d4aea702a02fd955107d83b3525d6570c0")
+        );
+    }
+
+    #[test]
     fn every_result_at_pass_scores_100_and_none_scores_0() {
         let dir = TempDir::new();
         let pass = [write(&dir, "a.json", &result("Varrock", "PASS", ""))];
