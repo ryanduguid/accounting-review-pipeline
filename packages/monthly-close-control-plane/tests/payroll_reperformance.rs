@@ -63,7 +63,7 @@ fn the_example_register_lists_each_line_worth_review_and_exits_2() {
         listed,
         [
             ("SG_SHORTFALL".into(), "E4".into(), "10.00".into()),
-            ("SG_TIMING_REVIEW".into(), "E4".into(), "0.00".into()),
+            ("SG_TIMING_REVIEW".into(), "E4".into(), "10.00".into()),
             ("PAYG_DIFFERENCE".into(), "E2".into(), "-6.00".into()),
         ]
     );

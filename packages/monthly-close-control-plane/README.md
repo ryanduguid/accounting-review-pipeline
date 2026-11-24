@@ -104,7 +104,7 @@ manifest. It is in development source only.
 [Payroll reperformance](docs/payroll-reperformance.md) (`close-control payroll`)
 reperforms PAYG withholding by the ATO's Schedule 1 formulas and the super
 guarantee on a register's 2026-27 pay lines, and lists differences, shortfalls
-and late fund receipts worth review. It is in development source only.
+and fund receipt dates worth review. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.

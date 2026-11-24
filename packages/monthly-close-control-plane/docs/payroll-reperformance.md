@@ -47,7 +47,7 @@ Tenant,EmployeeID,PayDate,Frequency,Scale,Adjusted,Earnings,Withheld,QualifyingE
 | --- | --- |
 | `PAYG_DIFFERENCE` | `Withheld` differs by more than $1 from the Schedule 1 formula's amount. The ATO accepts the tax table's footnote method too, which can differ slightly above $3,400 a week. |
 | `SG_SHORTFALL` | `Super` is less than 12% of the line's qualifying earnings, rounded to the cent, counted up to the 2026-27 maximum contribution base of $270,830 per employee. |
-| `SG_NOT_RECEIVED` | Super is due on the line and `FundReceived` is blank. |
+| `SG_RECEIPT_DATE_MISSING` | Super is due on the line and `FundReceived` is blank; the register does not show when, or whether, the fund received it. |
 | `SG_TIMING_REVIEW` | The fund received the contribution more than 7 calendar days after payday. |
 
 Withholding follows Schedule 1 (published 17 June 2026, for payments made from
