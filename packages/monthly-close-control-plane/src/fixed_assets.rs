@@ -362,11 +362,7 @@ mod tests {
             ]),
         )
         .unwrap();
-        assert!(
-            result.at("status").is_str("PASS"),
-            "{}",
-            pyjson::pretty(&result)
-        );
+        assert!(result.at("status").is_str("PASS"));
         assert!(codes(&result).is_empty());
         let first = &result.at("accounts").as_array().unwrap()[1];
         assert!(first.at("role").is_str("accumulated_depreciation"));
@@ -442,6 +438,56 @@ mod tests {
         );
         assert_eq!(pyjson::canonical(result.at("assets_in_service")), "2");
         assert_eq!(pyjson::canonical(result.at("asset_count")), "3");
+    }
+
+    #[test]
+    fn an_asset_bought_on_the_report_date_counts_and_one_sold_then_does_not() {
+        let bought = ("FA-5", "710", "711", "100.00", "0.00", "2026-09-30", "");
+        let sold = (
+            "FA-6",
+            "710",
+            "711",
+            "50.00",
+            "10.00",
+            "2025-01-01",
+            "2026-09-30",
+        );
+        let result = run_text(
+            &register(&[VAN, bought, sold]),
+            &ledger(&[("710", "30100.00", "0.00"), ("711", "0.00", "6000.00")]),
+        )
+        .unwrap();
+        assert!(result.at("status").is_str("PASS"));
+        assert_eq!(pyjson::canonical(result.at("assets_in_service")), "2");
+    }
+
+    #[test]
+    fn a_ledger_balance_finer_than_a_cent_is_compared_exactly() {
+        // The canonical trial balance carries any precision; nothing is rounded.
+        let result = run_text(
+            &register(&[VAN]),
+            &ledger(&[("710", "30000.001", "0.00"), ("711", "0.005", "6000.005")]),
+        )
+        .unwrap();
+        assert_eq!(codes(&result), [("COST_DIFFERENCE".into(), "710".into())]);
+        let finding = &result.at("findings").as_array().unwrap()[0];
+        assert!(finding.at("ledger_balance").is_str("30000.001"));
+        assert!(finding.at("difference").is_str("0.001"));
+    }
+
+    #[test]
+    fn a_disposed_asset_s_accounts_keep_their_roles() {
+        let sold = (
+            "FA-3",
+            "711",
+            "712",
+            "5.00",
+            "1.00",
+            "2024-01-01",
+            "2025-01-01",
+        );
+        let error = run_text(&register(&[VAN, sold]), &ledger(&[("710", "1", "0")])).unwrap_err();
+        assert!(error.contains("both a cost and"), "{error}");
     }
 
     #[test]
