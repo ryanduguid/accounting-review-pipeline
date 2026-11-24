@@ -45,8 +45,9 @@ row named.
 | `STATEMENT_PAGE_BREAK` | A page opens at a balance other than the previous page's closing balance. |
 
 Each finding gives the row, page, date, the expected and stated balances and
-their difference. The next row is checked against the stated balance, so one
-error is listed once.
+their difference. The next row is checked against the stated balance, so each
+broken equation is listed once. One mistyped balance can break 2: its own line
+and the row after it.
 
 ## Limits
 

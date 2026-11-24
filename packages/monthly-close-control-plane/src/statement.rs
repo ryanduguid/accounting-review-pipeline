@@ -44,9 +44,10 @@ fn load(source: &SourceSnapshot, currency: &str) -> Result<(String, Vec<Row>)> {
         let row = row?;
         let name = row.text("Account", false)?;
         if *account.get_or_insert_with(|| name.clone()) != name {
-            return Err(
-                "A statement must be for one account; tie out each account separately.".into(),
-            );
+            return Err(format!(
+                "{path}: row {} is for a second account; a statement must be for one account, so tie out each account separately.",
+                row.number
+            ));
         }
         rows.push(parse(&row, &path, source, currency)?);
     }
@@ -59,7 +60,16 @@ fn load(source: &SourceSnapshot, currency: &str) -> Result<(String, Vec<Row>)> {
 fn parse(row: &loader::CsvRow, path: &str, source: &SourceSnapshot, currency: &str) -> Result<Row> {
     let text = |field| row.text(field, matches!(field, "Description" | "Amount"));
     let refuse = |what: String| Err(format!("{path}: row {} {what}", row.number));
-    let money = |raw: &str, field| reconciliation::money(raw, field, &source.path, row.number);
+    // The shared bound check names the field but not the row; name the row here.
+    let money = |raw: &str, field: &str| {
+        reconciliation::money(raw, field, &source.path, row.number).map_err(|error| {
+            error.replacen(
+                &format!("{path}: {field} "),
+                &format!("{path}: row {} {field} ", row.number),
+                1,
+            )
+        })
+    };
     if text("Currency")? != currency {
         return refuse(format!(
             "is not in the declared --currency {}.",
@@ -224,8 +234,10 @@ fn review(source: &SourceSnapshot, currency: &str) -> Result<Json> {
     }
     let (Some(closing), None) = (&walk.last_closing, &walk.running) else {
         return Err(format!(
-            "{}: page {} has no CLOSING row; supply every page in full.",
-            walk.path, walk.page
+            "{}: page {} has no CLOSING row after row {}; supply every page in full.",
+            walk.path,
+            walk.page,
+            rows[rows.len() - 1].number
         ));
     };
     let status = if walk.findings.is_empty() {
@@ -309,6 +321,39 @@ mod tests {
     }
 
     #[test]
+    fn a_page_with_no_lines_closes_at_its_opening() {
+        let empty = |closing| {
+            run(&[
+                ("1", "OPENING", "2026-09-01", "", "10.00"),
+                ("1", "CLOSING", "2026-09-30", "", closing),
+            ])
+            .unwrap()
+        };
+        assert!(empty("10.00").at("status").is_str("PASS"));
+        assert_eq!(
+            codes(&empty("12.00")),
+            [("STATEMENT_CLOSING_BREAK".into(), "2.00".into())]
+        );
+    }
+
+    #[test]
+    fn one_mistyped_balance_breaks_two_equations() {
+        let result = run(&[
+            ("1", "OPENING", "2026-09-01", "", "100.00"),
+            ("1", "LINE", "2026-09-02", "10.00", "111.00"),
+            ("1", "CLOSING", "2026-09-30", "", "110.00"),
+        ])
+        .unwrap();
+        assert_eq!(
+            codes(&result),
+            [
+                ("STATEMENT_RUNNING_BREAK".into(), "1.00".into()),
+                ("STATEMENT_CLOSING_BREAK".into(), "-1.00".into()),
+            ]
+        );
+    }
+
+    #[test]
     fn running_closing_and_page_breaks_are_listed() {
         let mut rows = TIES;
         rows[2].4 = "851.50"; // the running balance is a dollar out
@@ -378,7 +423,7 @@ mod tests {
         );
         assert_eq!(
             refused(|rows| rows.truncate(6)),
-            "statement.csv: page 2 has no CLOSING row; supply every page in full."
+            "statement.csv: page 2 has no CLOSING row after row 7; supply every page in full."
         );
         assert_eq!(
             refused(|rows| rows[2].2 = "2026-08-31"),
@@ -388,7 +433,7 @@ mod tests {
 
     #[test]
     fn malformed_rows_are_refused() {
-        let cases: [(Edit, &str); 6] = [
+        let cases: [(Edit, &str); 8] = [
             (
                 |rows| rows[0].3 = "1.00",
                 "row 2 has an Amount, but OPENING rows carry a Balance only.",
@@ -405,7 +450,15 @@ mod tests {
             (|rows| rows.clear(), "no statement rows were supplied."),
             (
                 |rows| rows[1].3 = "1.001",
-                "Amount must be below 10^15 with at most two decimal places.",
+                "row 3 Amount must be below 10^15 with at most two decimal places.",
+            ),
+            (
+                |rows| rows[0].4 = "1000000000000000",
+                "row 2 Balance must be below 10^15 with at most two decimal places.",
+            ),
+            (
+                |rows| rows[0].4 = "NaN",
+                "row 2 has invalid Balance: 'NaN'.",
             ),
         ];
         for (edit, error) in cases {
@@ -421,7 +474,7 @@ mod tests {
         let source = SourceSnapshot::new(Path::new("statement.csv"), other_account.into_bytes());
         assert_eq!(
             decimal::with_precision(40, || review(&source, "AUD")).unwrap_err(),
-            "A statement must be for one account; tie out each account separately."
+            "statement.csv: row 3 is for a second account; a statement must be for one account, so tie out each account separately."
         );
         let source = SourceSnapshot::new(
             Path::new("statement.csv"),
