@@ -1,0 +1,13 @@
+usage: close-control coding [-h] --lines LINES --currency CURRENCY
+                            --period-start PERIOD_START --period-end
+                            PERIOD_END
+
+options:
+  -h, --help            show this help message and exit
+  --lines LINES         one tenant's Tenant,LineID,Date,Contact,AccountID,TaxCo
+                        de,Amount,Currency CSV of coded lines to the period end
+  --currency CURRENCY   three-letter currency every row carries, e.g. AUD
+  --period-start PERIOD_START
+                        first day of the period, YYYY-MM-DD
+  --period-end PERIOD_END
+                        last day of the period, YYYY-MM-DD

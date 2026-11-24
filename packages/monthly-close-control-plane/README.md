@@ -102,6 +102,10 @@ period in a register of bills and payments. It is in development source only.
 (`close-control fixed-assets`) ties a fixed-asset register's cost and
 accumulated depreciation, less disposals, to the trial balance account by
 account. It is in development source only.
+[Account and tax-code coding review](docs/coding-review.md)
+(`close-control coding`) lists period lines coded to an account or tax code
+that departs from the usual coding of the same contact or account before the
+period. It is in development source only.
 [Assistant access over MCP](docs/mcp-server.md) (`close-control mcp`) serves the
 read-only commands to an assistant for the folder you name, with an MCP Bundle
 manifest. It is in development source only.
