@@ -556,7 +556,7 @@ fn unknown_review_arguments_preserve_sources_and_existing_output() {
         assert_eq!(
             stderr,
             format!(
-                "usage: close-control [-h]\n                     {{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,mcp,payroll}} ...\nclose-control: error: unrecognized arguments: {diagnostic}\n"
+                "usage: close-control [-h]\n                     {{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,mcp,payroll,statement}} ...\nclose-control: error: unrecognized arguments: {diagnostic}\n"
             )
         );
         assert_eq!(snapshot(&inputs.0), before, "{diagnostic}");

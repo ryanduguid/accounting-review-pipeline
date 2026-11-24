@@ -9,7 +9,8 @@ use crate::{
     models::Status,
     payroll, publication,
     pyjson::{self, Json, PyStr},
-    pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, stdio, viewer,
+    pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, statement,
+    stdio, viewer,
 };
 use num_bigint::BigInt;
 use std::{
@@ -18,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 14] = [
+const COMMANDS: [&str; 15] = [
     "review",
     "workbench",
     "view",
@@ -33,6 +34,7 @@ const COMMANDS: [&str; 14] = [
     "duplicates",
     "mcp",
     "payroll",
+    "statement",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -58,6 +60,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "duplicates" => saved!("duplicates"),
         "mcp" => saved!("mcp"),
         "payroll" => saved!("payroll"),
+        "statement" => saved!("statement"),
         _ => saved!("root"),
     }
 }
@@ -211,6 +214,10 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         ),
         "mcp" => (&[], &["DIRECTORY"]),
         "payroll" => (&["--register"], &["--register"]),
+        "statement" => (
+            &["--statement", "--currency"],
+            &["--statement", "--currency"],
+        ),
         _ => return None,
     })
 }
@@ -772,7 +779,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" | "jet" | "duplicates" | "payroll" => {
+            "classify" | "schedule" | "jet" | "duplicates" | "payroll" | "statement" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -792,6 +799,10 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--period-end")?,
                     )?,
                     "payroll" => payroll::payroll_reperformance(&args.path("--register"))?,
+                    "statement" => statement::statement_tie_out(
+                        &args.path("--statement"),
+                        args.raw("--currency"),
+                    )?,
                     _ => schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?,
                 };
                 stdio::out_literal(&(pyjson::pretty(&value) + "\n"));
