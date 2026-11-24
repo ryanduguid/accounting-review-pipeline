@@ -86,9 +86,6 @@ impl Root {
 
     /// Whether `path` is a directory beneath the root, reached without a link.
     pub fn directory(&self, path: &Path) -> std::io::Result<()> {
-        if path == self.path {
-            return Ok(());
-        }
         let (dir, name) = self.parent(path)?;
         open_dir(&dir, name).map(drop)
     }
@@ -121,11 +118,7 @@ impl Root {
         #[cfg(unix)]
         cap_std::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
         let mut file = dir.open_with(name, &options)?;
-        let metadata = file.metadata()?;
-        if metadata.is_dir() {
-            return Err(Error::new(ErrorKind::IsADirectory, "is a directory"));
-        }
-        if !metadata.is_file() {
+        if !file.metadata()?.is_file() {
             return Err(refused("is not a regular file"));
         }
         let mut bytes = Vec::new();

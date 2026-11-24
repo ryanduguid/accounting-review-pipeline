@@ -932,11 +932,16 @@ mod tests {
     #[test]
     fn reads_outside_a_tool_call_are_not_confined() {
         let temp = TempDir::new();
-        let (_, root) = client(&temp);
+        let (inside, root) = client(&temp);
         let outside = temp.join("outside.csv");
         assert!(crate::beneath::read(&outside).is_ok());
-        assert!(root.within(|| crate::beneath::read(&outside)).is_err());
+        // The root itself and a path that climbs back out are not files
+        // beneath it, however they are reached.
+        for path in [&outside, &inside, &inside.join("..").join("outside.csv")] {
+            assert!(root.within(|| crate::beneath::read(path)).is_err());
+        }
         assert!(crate::beneath::read(&outside).is_ok());
+        assert!(Root::open(Path::new("")).is_err());
     }
 
     #[test]
