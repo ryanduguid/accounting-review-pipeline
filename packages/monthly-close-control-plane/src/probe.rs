@@ -248,7 +248,8 @@ const SUMMARY_OPTION: &str = concat!(
     "  --summary             count the displayed packs by state, by control with\n",
     "                        exceptions and by control not run\n",
 );
-/// The root help lines for the native-only `demo`, `jet` and `mcp` commands.
+/// The root help lines for the native-only `demo`, `jet`, `duplicates`, `mcp`
+/// and `payroll` commands.
 const DEMO_COMMAND: &str = concat!(
     "    demo                write the fabricated example inputs and review them,\n",
     "                        with no checkout needed\n",
@@ -258,6 +259,8 @@ const DEMO_COMMAND: &str = concat!(
     "                        recurring bills in a supplier register\n",
     "    mcp                 serve the read-only commands to an assistant over\n",
     "                        stdio (Model Context Protocol)\n",
+    "    payroll             reperform PAYG withholding and super guarantee on a\n",
+    "                        payroll register's 2026-27 pay lines\n",
 );
 /// The root help line for `schedule` once it took the `prepayments` kind, and
 /// the line the frozen baseline printed.
@@ -271,10 +274,10 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
 );
 /// The frozen Python baseline predates the GST reasonableness, contacts,
 /// required control and queue summary options and the `demo`, `jet`,
-/// `duplicates` and `mcp` commands, so CLI output compared with it drops their
+/// `duplicates`, `mcp` and `payroll` commands, so CLI output compared with it drops their
 /// usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet,duplicates,mcp}", ",schedule}")
+    text.replace(",schedule,demo,jet,duplicates,mcp,payroll}", ",schedule}")
         .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
         .replace(
             "{expenses,migration,interentity,prepayments}",
@@ -282,7 +285,7 @@ fn without_native_options(text: &str) -> String {
         )
         .replace("'interentity', 'prepayments')", "'interentity')")
         .replace(
-            ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp')",
+            ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp', 'payroll')",
             ", 'schedule')",
         )
         .replace(DEMO_COMMAND, "")
@@ -1107,7 +1110,7 @@ mod tests {
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
         assert!(
-            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'mcp')"),
+            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'mcp', 'payroll')"),
             "{error}"
         );
         let frozen = without_native_options(&error);

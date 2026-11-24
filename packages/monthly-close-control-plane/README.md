@@ -101,6 +101,10 @@ period in a register of bills and payments. It is in development source only.
 [Assistant access over MCP](docs/mcp-server.md) (`close-control mcp`) serves the
 read-only commands to an assistant for the folder you name, with an MCP Bundle
 manifest. It is in development source only.
+[Payroll reperformance](docs/payroll-reperformance.md) (`close-control payroll`)
+reperforms PAYG withholding by the ATO's Schedule 1 formulas and the super
+guarantee on a register's 2026-27 pay lines, and lists differences, shortfalls
+and late fund receipts worth review. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.

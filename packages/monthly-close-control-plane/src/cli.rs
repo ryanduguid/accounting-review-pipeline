@@ -7,7 +7,7 @@ use crate::{
     decimal::Decimal,
     drivers, duplicates, engine, journal_entries, loader, mcp,
     models::Status,
-    publication,
+    payroll, publication,
     pyjson::{self, Json, PyStr},
     pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, stdio, viewer,
 };
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 13] = [
+const COMMANDS: [&str; 14] = [
     "review",
     "workbench",
     "view",
@@ -32,6 +32,7 @@ const COMMANDS: [&str; 13] = [
     "jet",
     "duplicates",
     "mcp",
+    "payroll",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -56,6 +57,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "jet" => saved!("jet"),
         "duplicates" => saved!("duplicates"),
         "mcp" => saved!("mcp"),
+        "payroll" => saved!("payroll"),
         _ => saved!("root"),
     }
 }
@@ -208,6 +210,7 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
             &["--transactions", "--currency", "--period-end"],
         ),
         "mcp" => (&[], &["DIRECTORY"]),
+        "payroll" => (&["--register"], &["--register"]),
         _ => return None,
     })
 }
@@ -769,7 +772,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" | "jet" | "duplicates" => {
+            "classify" | "schedule" | "jet" | "duplicates" | "payroll" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -788,6 +791,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--period-start")?,
                         &args.literal("--period-end")?,
                     )?,
+                    "payroll" => payroll::payroll_reperformance(&args.path("--register"))?,
                     _ => schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?,
                 };
                 stdio::out_literal(&(pyjson::pretty(&value) + "\n"));
