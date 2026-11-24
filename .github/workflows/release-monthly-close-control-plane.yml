@@ -1,8 +1,8 @@
 name: Release monthly-close-control-plane
 
 # One namespaced tag releases exactly one component: the close-control executable for
-# Linux x86_64 (musl) and Windows x86_64, with the source archives, SBOMs and
-# signed provenance. The reusable workflow refuses the release unless the
+# Linux, macOS and Windows (x86_64 and arm64), with the source archives, SBOMs
+# and signed provenance. The reusable workflow refuses the release unless the
 # directory leaf, the tag prefix and the artifact stem agree (monthly-close-control-plane).
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
       attestations: write # Record provenance and SBOM attestations for release assets.
       contents: write # Create the draft release, upload assets and publish it.
       id-token: write # Obtain the OIDC identity required to sign attestations.
-    uses: ryanduguid/release-policy/.github/workflows/release-binary.yml@1058bbf7a3f22f3c5c421676cf5f89a14389100c
+    uses: ryanduguid/release-policy/.github/workflows/release-binary.yml@d7039efe6d8c441f1f213c674902909e80535599
     with:
       artifact-stem: monthly-close-control-plane
       binary: close-control
