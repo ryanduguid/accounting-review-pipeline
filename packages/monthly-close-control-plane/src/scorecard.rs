@@ -10,7 +10,10 @@ use crate::{
     pyjson::{self, Json},
     pypath, pytext,
 };
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 pub const BOUNDARY: &str = "Review evidence only. The score counts the results supplied: a check that was not run cannot lower it, and a result at PASS shows only what that check tested.";
 pub const FORMULA: &str = "floor(100 * results at PASS / results supplied)";
@@ -23,9 +26,29 @@ struct Category {
     findings: i64,
 }
 
+impl Category {
+    fn json(&self) -> Json {
+        let codes = self.codes.iter();
+        Json::object([
+            ("category", Json::str(&self.label)),
+            ("status", Json::str(&self.status)),
+            ("findings", Json::int(self.findings)),
+            (
+                "codes",
+                Json::Object(
+                    codes
+                        .map(|(code, count)| (code.as_str().into(), Json::int(*count)))
+                        .collect(),
+                ),
+            ),
+            ("source_sha256", Json::str(&self.sha256)),
+        ])
+    }
+}
+
 /// One result file, which must carry `status`, `tenant` and `findings` as the
 /// register and schedule commands write them.
-fn category(path: &PathBuf) -> Result<(String, Category)> {
+fn category(path: &Path) -> Result<(String, Category)> {
     let source = SourceSnapshot::capture(path, "Result")?;
     let name = pypath::text(path);
     let refuse = || {
@@ -99,26 +122,7 @@ pub fn scorecard(paths: &[PathBuf]) -> Result<Json> {
     let passed = categories.iter().filter(|c| c.status == "PASS").count();
     let total = categories.len();
     let score = (100 * passed).checked_div(total).unwrap_or_default();
-    let results = categories
-        .iter()
-        .map(|c| {
-            Json::object([
-                ("category", Json::str(&c.label)),
-                ("status", Json::str(&c.status)),
-                ("findings", Json::int(c.findings)),
-                (
-                    "codes",
-                    Json::Object(
-                        c.codes
-                            .iter()
-                            .map(|(code, count)| (code.as_str().into(), Json::int(*count)))
-                            .collect(),
-                    ),
-                ),
-                ("source_sha256", Json::str(&c.sha256)),
-            ])
-        })
-        .collect();
+    let results = categories.iter().map(Category::json).collect();
     let clear = total > 0 && passed == total;
     Ok(Json::object([
         ("schema_version", Json::int(1)),
