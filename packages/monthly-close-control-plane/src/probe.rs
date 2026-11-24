@@ -248,7 +248,7 @@ const SUMMARY_OPTION: &str = concat!(
     "  --summary             count the displayed packs by state, by control with\n",
     "                        exceptions and by control not run\n",
 );
-/// The root help lines for the native-only `demo` and `jet` commands.
+/// The root help lines for the native-only `demo`, `jet` and `mcp` commands.
 const DEMO_COMMAND: &str = concat!(
     "    demo                write the fabricated example inputs and review them,\n",
     "                        with no checkout needed\n",
@@ -256,6 +256,8 @@ const DEMO_COMMAND: &str = concat!(
     "                        worth review, with a Benford first-digit test\n",
     "    duplicates          list possible duplicate bills and payments and missing\n",
     "                        recurring bills in a supplier register\n",
+    "    mcp                 serve the read-only commands to an assistant over\n",
+    "                        stdio (Model Context Protocol)\n",
 );
 /// The root help line for `schedule` once it took the `prepayments` kind, and
 /// the line the frozen baseline printed.
@@ -268,10 +270,11 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
     "                        schedule\n",
 );
 /// The frozen Python baseline predates the GST reasonableness, contacts,
-/// required control and queue summary options and the `demo` and `jet`
-/// commands, so CLI output compared with it drops their usage and help lines.
+/// required control and queue summary options and the `demo`, `jet`,
+/// `duplicates` and `mcp` commands, so CLI output compared with it drops their
+/// usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet,duplicates}", ",schedule}")
+    text.replace(",schedule,demo,jet,duplicates,mcp}", ",schedule}")
         .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
         .replace(
             "{expenses,migration,interentity,prepayments}",
@@ -279,7 +282,7 @@ fn without_native_options(text: &str) -> String {
         )
         .replace("'interentity', 'prepayments')", "'interentity')")
         .replace(
-            ", 'schedule', 'demo', 'jet', 'duplicates')",
+            ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp')",
             ", 'schedule')",
         )
         .replace(DEMO_COMMAND, "")
@@ -1093,10 +1096,10 @@ mod tests {
             "{review,workbench,view,queue,reconcile,drivers,compare,classify,schedule}";
         let (code, help, _) = stdio::capture(|| cli::main(vec!["--help".into()]));
         assert_eq!(code, 0);
-        assert!(help.contains("    demo ") && help.contains("    jet "));
+        assert!(help.contains("    demo ") && help.contains("    mcp "));
         let frozen = without_native_options(&help);
         assert!(
-            !frozen.contains("demo") && !frozen.contains("jet"),
+            !frozen.contains("demo") && !frozen.contains("mcp"),
             "{frozen}"
         );
         assert_eq!(frozen.matches(FROZEN_CHOICES).count(), 2, "{frozen}");
@@ -1104,12 +1107,12 @@ mod tests {
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
         assert!(
-            error.contains("'schedule', 'demo', 'jet', 'duplicates')"),
+            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'mcp')"),
             "{error}"
         );
         let frozen = without_native_options(&error);
         assert!(
-            !frozen.contains("demo") && !frozen.contains("jet"),
+            !frozen.contains("demo") && !frozen.contains("mcp"),
             "{frozen}"
         );
         assert!(frozen.contains("'classify', 'schedule')"), "{frozen}");

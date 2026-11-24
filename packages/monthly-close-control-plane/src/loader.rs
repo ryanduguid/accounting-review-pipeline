@@ -14,7 +14,6 @@ use crate::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::{Path, PathBuf},
 };
 
@@ -55,7 +54,7 @@ impl SourceSnapshot {
         }
     }
     pub fn capture(path: &Path, label: &str) -> Result<Self> {
-        let content = fs::read(path).map_err(|e| {
+        let content = crate::beneath::read(path).map_err(|e| {
             let path = pypath::text(path);
             if e.kind() == std::io::ErrorKind::NotFound {
                 format!("{label} does not exist: {path}.")
@@ -677,6 +676,7 @@ pub fn load_reviewer_acknowledgement(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn snapshot(text: &str) -> SourceSnapshot {
         SourceSnapshot::new(Path::new("input.csv"), text.as_bytes().to_vec())
