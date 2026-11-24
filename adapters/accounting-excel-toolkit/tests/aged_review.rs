@@ -1231,20 +1231,101 @@ fn failure_catalogue_runs_actual_cli_and_expected_exits() {
 }
 
 #[cfg(unix)]
+fn write_executable(path: &Path, bytes: &[u8]) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // Materialise the script in a child process so this multi-threaded test
+    // binary never holds a writable fd that a concurrent fork could inherit
+    // and trigger ETXTBSY (os error 26) on execve.
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", "umask 077 && cat > \"$1\" && chmod 700 \"$1\"", "_"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(bytes).unwrap();
+    assert!(child.wait().unwrap().success());
+}
+
+#[cfg(unix)]
 #[test]
 fn replay_refuses_an_incompatible_verifier_output_contract() {
-    use std::os::unix::fs::PermissionsExt;
-
     let temp = Temp::new();
     let executable = b"#!/bin/sh\nprintf '%s\\n' '{\"summary_status\":\"PASS\"}'\n";
-    let verifier = temp.write("incompatible-verifier", executable);
-    fs::set_permissions(&verifier, fs::Permissions::from_mode(0o700)).unwrap();
+    let verifier = temp.root.join("incompatible-verifier");
+    write_executable(&verifier, executable);
     let error = replay::pack("clean", &verifier).unwrap_err();
     assert_eq!(
         error,
         "Replay clean failed its output contract: 0: {\"summary_status\":\"PASS\"}\n"
     );
     assert_eq!(fs::read(verifier).unwrap(), executable);
+}
+
+#[cfg(unix)]
+struct ForkStorm {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    workers: Vec<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(unix)]
+impl ForkStorm {
+    fn start(dir: &Path) -> Self {
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let workers = (0..4)
+            .map(|_| {
+                let stop = std::sync::Arc::clone(&stop);
+                let dir = dir.to_path_buf();
+                std::thread::spawn(move || {
+                    while !stop.load(Ordering::Relaxed) {
+                        let status = std::process::Command::new("/bin/sh")
+                            .args(["-c", ":"])
+                            .current_dir(&dir)
+                            .status()
+                            .unwrap();
+                        assert!(status.success());
+                    }
+                })
+            })
+            .collect();
+        Self { stop, workers }
+    }
+
+    fn finish(mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        for worker in self.workers.drain(..) {
+            worker.join().unwrap();
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ForkStorm {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        for worker in self.workers.drain(..) {
+            let _ = worker.join();
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn replay_written_verifier_survives_concurrent_forks() {
+    let temp = Temp::new();
+    let executable = b"#!/bin/sh\nprintf '%s\\n' '{\"summary_status\":\"PASS\"}'\n";
+    let storm = ForkStorm::start(&temp.root);
+    for index in 0..25 {
+        let verifier = temp.root.join(format!("incompatible-verifier-{index}"));
+        write_executable(&verifier, executable);
+        let error = replay::pack("clean", &verifier).unwrap_err();
+        assert_eq!(
+            error,
+            "Replay clean failed its output contract: 0: {\"summary_status\":\"PASS\"}\n"
+        );
+    }
+    storm.finish();
 }
 
 #[test]
