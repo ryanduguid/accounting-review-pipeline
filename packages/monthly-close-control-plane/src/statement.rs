@@ -42,56 +42,56 @@ fn load(source: &SourceSnapshot, currency: &str) -> Result<(String, Vec<Row>)> {
     let mut rows = Vec::new();
     for row in loader::csv_rows(source, &COLUMNS, "Statement")? {
         let row = row?;
-        let text = |field| row.text(field, matches!(field, "Description" | "Amount"));
-        let refuse = |what: String| Err(format!("{path}: row {} {what}", row.number));
-        let name = text("Account")?;
+        let name = row.text("Account", false)?;
         if *account.get_or_insert_with(|| name.clone()) != name {
             return Err(
                 "A statement must be for one account; tie out each account separately.".into(),
             );
         }
-        if text("Currency")? != currency {
-            return refuse(format!(
-                "is not in the declared --currency {}.",
-                pytext::repr(currency)
-            ));
-        }
-        let Ok(page) = text("Page")?.parse::<u32>() else {
-            return refuse("Page must be a whole number from 1.".into());
-        };
-        let kind = text("Kind")?;
-        if !["OPENING", "LINE", "CLOSING"].contains(&kind.as_str()) {
-            return refuse("Kind must be OPENING, LINE or CLOSING.".into());
-        }
-        let raw = text("Amount")?;
-        let amount = match (kind.as_str(), raw.is_empty()) {
-            ("LINE", true) => return refuse("is a LINE with no Amount.".into()),
-            ("LINE", false) => Some(reconciliation::money(
-                &raw,
-                "Amount",
-                &source.path,
-                row.number,
-            )?),
-            (_, false) => {
-                return refuse(format!(
-                    "has an Amount, but {kind} rows carry a Balance only."
-                ));
-            }
-            (_, true) => None,
-        };
-        rows.push(Row {
-            number: row.number,
-            page,
-            kind,
-            date: row.date("Date")?,
-            amount,
-            balance: reconciliation::money(&text("Balance")?, "Balance", &source.path, row.number)?,
-        });
+        rows.push(parse(&row, &path, source, currency)?);
     }
     if rows.is_empty() {
         return Err(format!("{path}: no statement rows were supplied."));
     }
     Ok((account.unwrap_or_default(), rows))
+}
+
+fn parse(row: &loader::CsvRow, path: &str, source: &SourceSnapshot, currency: &str) -> Result<Row> {
+    let text = |field| row.text(field, matches!(field, "Description" | "Amount"));
+    let refuse = |what: String| Err(format!("{path}: row {} {what}", row.number));
+    let money = |raw: &str, field| reconciliation::money(raw, field, &source.path, row.number);
+    if text("Currency")? != currency {
+        return refuse(format!(
+            "is not in the declared --currency {}.",
+            pytext::repr(currency)
+        ));
+    }
+    let Ok(page) = text("Page")?.parse::<u32>() else {
+        return refuse("Page must be a whole number from 1.".into());
+    };
+    let kind = text("Kind")?;
+    if !["OPENING", "LINE", "CLOSING"].contains(&kind.as_str()) {
+        return refuse("Kind must be OPENING, LINE or CLOSING.".into());
+    }
+    let raw = text("Amount")?;
+    let amount = match (kind.as_str(), raw.is_empty()) {
+        ("LINE", true) => return refuse("is a LINE with no Amount.".into()),
+        ("LINE", false) => Some(money(&raw, "Amount")?),
+        (_, false) => {
+            return refuse(format!(
+                "has an Amount, but {kind} rows carry a Balance only."
+            ));
+        }
+        (_, true) => None,
+    };
+    Ok(Row {
+        number: row.number,
+        page,
+        kind,
+        date: row.date("Date")?,
+        amount,
+        balance: money(&text("Balance")?, "Balance")?,
+    })
 }
 
 pub fn statement_tie_out(path: &Path, currency: &str) -> Result<Json> {
@@ -118,107 +118,124 @@ fn break_json(code: &str, row: &Row, expected: &Decimal, reason: String) -> Json
     ])
 }
 
-/// Walks the rows in file order. Each page is an OPENING row, its LINE rows
-/// and a CLOSING row; pages run 1, 2, 3 in order.
-fn review(source: &SourceSnapshot, currency: &str) -> Result<Json> {
-    let (account, rows) = load(source, currency)?;
-    let path = crate::pypath::text(&source.path);
-    let mut findings = Vec::new();
-    let mut running: Option<Decimal> = None;
-    let mut last_closing: Option<Decimal> = None;
-    let mut page = 0;
-    let mut previous_date: Option<Date> = None;
-    let mut lines = 0;
-    for row in &rows {
-        if previous_date.is_some_and(|date| row.date < date) {
+/// The walk through a statement's rows in file order. Each page is an
+/// OPENING row, its LINE rows and a CLOSING row; pages run 1, 2, 3 in order.
+#[derive(Default)]
+struct Walk {
+    path: String,
+    findings: Vec<Json>,
+    /// The balance the open page has reached; `None` between pages.
+    running: Option<Decimal>,
+    last_closing: Option<Decimal>,
+    page: u32,
+    previous_date: Option<Date>,
+    lines: i64,
+}
+
+impl Walk {
+    fn row(&mut self, row: &Row) -> Result<()> {
+        if self.previous_date.is_some_and(|date| row.date < date) {
             return Err(format!(
-                "{path}: row {} is dated before the row above it; supply the statement in its printed order.",
-                row.number
+                "{}: row {} is dated before the row above it; supply the statement in its printed order.",
+                self.path, row.number
             ));
         }
-        previous_date = Some(row.date);
-        match row.kind.as_str() {
-            "OPENING" => {
-                if running.is_some() || row.page != page + 1 {
-                    return Err(format!(
-                        "{path}: row {} opens page {} out of order; each page runs OPENING, LINE rows, CLOSING, from page 1 with none missing.",
-                        row.number, row.page
-                    ));
-                }
-                page = row.page;
-                if let Some(closing) = &last_closing
-                    && row.balance != *closing
-                {
-                    findings.push(break_json(
-                        "STATEMENT_PAGE_BREAK",
-                        row,
-                        closing,
-                        format!(
-                            "Page {} opens at {}, but page {} closed at {}.",
-                            row.page,
-                            reconciliation::fixed(&row.balance),
-                            row.page - 1,
-                            reconciliation::fixed(closing)
-                        ),
-                    ));
-                }
-                running = Some(row.balance.clone());
-            }
-            kind => {
-                let Some(before) = running.as_ref().filter(|_| row.page == page) else {
-                    return Err(format!(
-                        "{path}: row {} is a {kind} row outside an opened page {}.",
-                        row.number, row.page
-                    ));
-                };
-                let (code, expected) = match &row.amount {
-                    Some(amount) => ("STATEMENT_RUNNING_BREAK", before.add(amount).value),
-                    None => ("STATEMENT_CLOSING_BREAK", before.clone()),
-                };
-                if row.balance != expected {
-                    let reason = if row.amount.is_some() {
-                        format!(
-                            "The running balance {} is not the balance above it plus this line ({}).",
-                            reconciliation::fixed(&row.balance),
-                            reconciliation::fixed(&expected)
-                        )
-                    } else {
-                        format!(
-                            "Page {} closes at {}, but its lines run to {}.",
-                            row.page,
-                            reconciliation::fixed(&row.balance),
-                            reconciliation::fixed(&expected)
-                        )
-                    };
-                    findings.push(break_json(code, row, &expected, reason));
-                }
-                if row.amount.is_some() {
-                    lines += 1;
-                    running = Some(row.balance.clone());
-                } else {
-                    last_closing = Some(row.balance.clone());
-                    running = None;
-                }
-            }
+        self.previous_date = Some(row.date);
+        if row.kind == "OPENING" {
+            self.open(row)
+        } else {
+            self.carry(row)
         }
     }
-    if running.is_some() {
-        return Err(format!(
-            "{path}: page {page} has no CLOSING row; supply every page in full."
-        ));
+
+    fn open(&mut self, row: &Row) -> Result<()> {
+        if self.running.is_some() || row.page != self.page + 1 {
+            return Err(format!(
+                "{}: row {} opens page {} out of order; each page runs OPENING, LINE rows, CLOSING, from page 1 with none missing.",
+                self.path, row.number, row.page
+            ));
+        }
+        self.page = row.page;
+        if let Some(closing) = &self.last_closing
+            && row.balance != *closing
+        {
+            let reason = format!(
+                "Page {} opens at {}, but page {} closed at {}.",
+                row.page,
+                reconciliation::fixed(&row.balance),
+                row.page - 1,
+                reconciliation::fixed(closing)
+            );
+            let finding = break_json("STATEMENT_PAGE_BREAK", row, closing, reason);
+            self.findings.push(finding);
+        }
+        self.running = Some(row.balance.clone());
+        Ok(())
     }
-    let first = &rows[0];
-    let closing = last_closing.expect("a closed page sets it");
+
+    /// A LINE carries the running balance forward; a CLOSING row ends the page.
+    fn carry(&mut self, row: &Row) -> Result<()> {
+        let Some(before) = self.running.take().filter(|_| row.page == self.page) else {
+            return Err(format!(
+                "{}: row {} is a {} row outside an opened page {}.",
+                self.path, row.number, row.kind, row.page
+            ));
+        };
+        let stated = reconciliation::fixed(&row.balance);
+        let (expected, code, reason) = match &row.amount {
+            Some(amount) => {
+                let expected = before.add(amount).value;
+                let reason = format!(
+                    "The running balance {stated} is not the balance above it plus this line ({}).",
+                    reconciliation::fixed(&expected)
+                );
+                (expected, "STATEMENT_RUNNING_BREAK", reason)
+            }
+            None => {
+                let reason = format!(
+                    "Page {} closes at {stated}, but its lines run to {}.",
+                    row.page,
+                    reconciliation::fixed(&before)
+                );
+                (before, "STATEMENT_CLOSING_BREAK", reason)
+            }
+        };
+        if row.balance != expected {
+            self.findings.push(break_json(code, row, &expected, reason));
+        }
+        if row.amount.is_some() {
+            self.lines += 1;
+            self.running = Some(row.balance.clone());
+        } else {
+            self.last_closing = Some(row.balance.clone());
+        }
+        Ok(())
+    }
+}
+
+fn review(source: &SourceSnapshot, currency: &str) -> Result<Json> {
+    let (account, rows) = load(source, currency)?;
+    let mut walk = Walk {
+        path: crate::pypath::text(&source.path),
+        ..Walk::default()
+    };
+    for row in &rows {
+        walk.row(row)?;
+    }
+    let (Some(closing), None) = (&walk.last_closing, &walk.running) else {
+        return Err(format!(
+            "{}: page {} has no CLOSING row; supply every page in full.",
+            walk.path, walk.page
+        ));
+    };
+    let status = if walk.findings.is_empty() {
+        "PASS"
+    } else {
+        "REVIEW"
+    };
     Ok(Json::object([
         ("schema_version", Json::int(1)),
-        (
-            "status",
-            Json::str(if findings.is_empty() {
-                "PASS"
-            } else {
-                "REVIEW"
-            }),
-        ),
+        ("status", Json::str(status)),
         ("account", Json::str(&account)),
         ("currency", Json::str(currency)),
         ("boundary", Json::str(BOUNDARY)),
@@ -226,17 +243,17 @@ fn review(source: &SourceSnapshot, currency: &str) -> Result<Json> {
             "source_sha256",
             Json::object([("statement", Json::str(&source.sha256))]),
         ),
-        ("page_count", Json::int(i64::from(page))),
-        ("line_count", Json::int(lines)),
+        ("page_count", Json::int(i64::from(walk.page))),
+        ("line_count", Json::int(walk.lines)),
         (
             "opening_balance",
-            Json::str(&reconciliation::fixed(&first.balance)),
+            Json::str(&reconciliation::fixed(&rows[0].balance)),
         ),
         (
             "closing_balance",
-            Json::str(&reconciliation::fixed(&closing)),
+            Json::str(&reconciliation::fixed(closing)),
         ),
-        ("findings", Json::Array(findings)),
+        ("findings", Json::Array(walk.findings)),
     ]))
 }
 
@@ -325,71 +342,72 @@ mod tests {
         );
     }
 
+    type Rows = Vec<(
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+    )>;
+
+    fn refused(edit: fn(&mut Rows)) -> String {
+        let mut rows = TIES.to_vec();
+        edit(&mut rows);
+        run(&rows).unwrap_err()
+    }
+
     #[test]
-    fn malformed_statements_are_refused() {
-        let mut missing_page = TIES.to_vec();
-        for row in &mut missing_page[4..] {
-            row.0 = "3";
-        }
-        let mut unclosed = TIES.to_vec();
-        unclosed.pop();
-        let mut early = TIES.to_vec();
-        early[2].2 = "2026-08-31";
-        let mut opened_twice = TIES.to_vec();
-        opened_twice.insert(1, ("1", "OPENING", "2026-09-01", "", "1000.00"));
-        let mut stray = TIES.to_vec();
-        stray.insert(0, ("1", "LINE", "2026-09-01", "1.00", "1.00"));
-        let mut opening_amount = TIES.to_vec();
-        opening_amount[0].3 = "1.00";
-        let mut line_without_amount = TIES.to_vec();
-        line_without_amount[1].3 = "";
-        let mut bad_kind = TIES.to_vec();
-        bad_kind[1].1 = "FEE";
-        let mut bad_page = TIES.to_vec();
-        bad_page[0].0 = "one";
-        for (rows, error) in [
+    fn pages_out_of_order_are_refused() {
+        let order = "each page runs OPENING, LINE rows, CLOSING, from page 1 with none missing.";
+        let missing_page = refused(|rows| rows[4..].iter_mut().for_each(|row| row.0 = "3"));
+        assert_eq!(
+            missing_page,
+            format!("statement.csv: row 6 opens page 3 out of order; {order}")
+        );
+        let opened_twice =
+            refused(|rows| rows.insert(1, ("1", "OPENING", "2026-09-01", "", "1.00")));
+        assert_eq!(
+            opened_twice,
+            format!("statement.csv: row 3 opens page 1 out of order; {order}")
+        );
+        assert_eq!(
+            refused(|rows| rows.insert(0, ("1", "LINE", "2026-09-01", "1.00", "1.00"))),
+            "statement.csv: row 2 is a LINE row outside an opened page 1."
+        );
+        assert_eq!(
+            refused(|rows| drop(rows.pop())),
+            "statement.csv: page 2 has no CLOSING row; supply every page in full."
+        );
+        assert_eq!(
+            refused(|rows| rows[2].2 = "2026-08-31"),
+            "statement.csv: row 4 is dated before the row above it; supply the statement in its printed order."
+        );
+    }
+
+    #[test]
+    fn malformed_rows_are_refused() {
+        let cases: [(fn(&mut Rows), &str); 6] = [
             (
-                missing_page,
-                "statement.csv: row 6 opens page 3 out of order; each page runs OPENING, LINE rows, CLOSING, from page 1 with none missing.",
+                |rows| rows[0].3 = "1.00",
+                "row 2 has an Amount, but OPENING rows carry a Balance only.",
+            ),
+            (|rows| rows[1].3 = "", "row 3 is a LINE with no Amount."),
+            (
+                |rows| rows[1].1 = "FEE",
+                "row 3 Kind must be OPENING, LINE or CLOSING.",
             ),
             (
-                unclosed,
-                "statement.csv: page 2 has no CLOSING row; supply every page in full.",
+                |rows| rows[0].0 = "one",
+                "row 2 Page must be a whole number from 1.",
             ),
+            (|rows| rows.clear(), "no statement rows were supplied."),
             (
-                early,
-                "statement.csv: row 4 is dated before the row above it; supply the statement in its printed order.",
+                |rows| rows[1].3 = "1.001",
+                "Amount must be below 10^15 with at most two decimal places.",
             ),
-            (
-                opened_twice,
-                "statement.csv: row 3 opens page 1 out of order; each page runs OPENING, LINE rows, CLOSING, from page 1 with none missing.",
-            ),
-            (
-                stray,
-                "statement.csv: row 2 is a LINE row outside an opened page 1.",
-            ),
-            (
-                opening_amount,
-                "statement.csv: row 2 has an Amount, but OPENING rows carry a Balance only.",
-            ),
-            (
-                line_without_amount,
-                "statement.csv: row 3 is a LINE with no Amount.",
-            ),
-            (
-                bad_kind,
-                "statement.csv: row 3 Kind must be OPENING, LINE or CLOSING.",
-            ),
-            (
-                bad_page,
-                "statement.csv: row 2 Page must be a whole number from 1.",
-            ),
-            (
-                Vec::new(),
-                "statement.csv: no statement rows were supplied.",
-            ),
-        ] {
-            assert_eq!(run(&rows).unwrap_err(), error);
+        ];
+        for (edit, error) in cases {
+            assert_eq!(refused(edit), format!("statement.csv: {error}"));
         }
     }
 
