@@ -1,0 +1,1 @@
+usage: close-control payroll [-h] --register REGISTER

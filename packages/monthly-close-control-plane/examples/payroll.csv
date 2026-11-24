@@ -1,0 +1,5 @@
+Tenant,EmployeeID,PayDate,Frequency,Scale,Adjusted,Earnings,Withheld,QualifyingEarnings,Super,FundReceived
+Varrock Ventures Pty Ltd,E1,2026-07-09,WEEKLY,2,N,1333.45,245.00,1333.45,160.01,2026-07-14
+Varrock Ventures Pty Ltd,E2,2026-07-16,FORTNIGHTLY,5,N,1299.30,80.00,1299.30,155.92,2026-07-20
+Varrock Ventures Pty Ltd,E3,2026-07-31,MONTHLY,2,Y,5400.33,827.00,5400.33,648.04,2026-08-05
+Varrock Ventures Pty Ltd,E4,2026-07-09,WEEKLY,1,N,500.00,90.00,500.00,50.00,2026-07-21
