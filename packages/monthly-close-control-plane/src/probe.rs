@@ -257,6 +257,8 @@ const DEMO_COMMAND: &str = concat!(
     "                        worth review, with a Benford first-digit test\n",
     "    duplicates          list possible duplicate bills and payments and missing\n",
     "                        recurring bills in a supplier register\n",
+    "    fixed-assets        tie a fixed-asset register's cost and accumulated\n",
+    "                        depreciation to the trial balance\n",
     "    mcp                 serve the read-only commands to an assistant over\n",
     "                        stdio (Model Context Protocol)\n",
     "    payroll             reperform PAYG withholding and super guarantee on a\n",
@@ -281,7 +283,7 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
 /// usage and help lines.
 fn without_native_options(text: &str) -> String {
     text.replace(
-        ",schedule,demo,jet,duplicates,mcp,payroll,statement}",
+        ",schedule,demo,jet,duplicates,fixed-assets,mcp,payroll,statement}",
         ",schedule}",
     )
     .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
@@ -291,7 +293,7 @@ fn without_native_options(text: &str) -> String {
     )
     .replace("'interentity', 'prepayments')", "'interentity')")
     .replace(
-        ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp', 'payroll', 'statement')",
+        ", 'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'mcp', 'payroll', 'statement')",
         ", 'schedule')",
     )
     .replace(DEMO_COMMAND, "")
@@ -1117,7 +1119,7 @@ mod tests {
         assert_eq!(code, 1);
         assert!(
             error.contains(
-                "'schedule', 'demo', 'jet', 'duplicates', 'mcp', 'payroll', 'statement')"
+                "'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'mcp', 'payroll', 'statement')"
             ),
             "{error}"
         );

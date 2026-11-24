@@ -1,11 +1,11 @@
 usage: close-control [-h]
-                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,mcp,payroll,statement} ...
+                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,mcp,payroll,statement} ...
 
 Create a review-first monthly close control pack from validated trial-balance
 exports.
 
 positional arguments:
-  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,mcp,payroll,statement}
+  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,mcp,payroll,statement}
     review (workbench)  run integrity, variance, mapping, and optional
                         reconciliation controls (as `workbench`, with the
                         local close-review banner)
@@ -27,6 +27,8 @@ positional arguments:
                         worth review, with a Benford first-digit test
     duplicates          list possible duplicate bills and payments and missing
                         recurring bills in a supplier register
+    fixed-assets        tie a fixed-asset register's cost and accumulated
+                        depreciation to the trial balance
     mcp                 serve the read-only commands to an assistant over
                         stdio (Model Context Protocol)
     payroll             reperform PAYG withholding and super guarantee on a
