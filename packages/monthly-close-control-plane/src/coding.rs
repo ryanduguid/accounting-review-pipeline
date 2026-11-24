@@ -7,6 +7,7 @@
 use crate::{
     Result,
     decimal::{self, Decimal},
+    duplicates,
     isodate::Date,
     loader::{self, SourceSnapshot},
     pyjson::Json,
@@ -133,14 +134,7 @@ fn finding(code: &str, line: &Line, (value, count, total): &(&str, usize, usize)
 
 /// Review the lines in `path` for the period `start` to `end`.
 pub fn coding_review(path: &Path, currency: &str, start: &str, end: &str) -> Result<Json> {
-    if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) {
-        return Err("Declare a three-letter currency, such as AUD.".into());
-    }
-    let start = reconciliation::date(start).map_err(|error| format!("--period-start: {error}"))?;
-    let end = reconciliation::date(end).map_err(|error| format!("--period-end: {error}"))?;
-    if start > end {
-        return Err("--period-start must not follow --period-end.".into());
-    }
+    let (start, end) = duplicates::period_options(currency, start, end)?;
     let source = SourceSnapshot::capture(path, "Lines")?;
     decimal::with_precision(40, || review(&source, currency, start, end))
 }
@@ -177,14 +171,8 @@ fn review(source: &SourceSnapshot, currency: &str, start: Date, end: Date) -> Re
         }
     }
     let passed = !period.is_empty() && findings.is_empty();
-    Ok(Json::object([
-        ("schema_version", Json::int(1)),
-        ("status", Json::str(if passed { "PASS" } else { "REVIEW" })),
-        ("tenant", Json::str(&tenant)),
-        ("currency", Json::str(currency)),
-        ("period_start", Json::str(&start.iso())),
-        ("period_end", Json::str(&end.iso())),
-        ("boundary", Json::str(BOUNDARY)),
+    let mut result = duplicates::period_result(passed, &tenant, currency, (start, end), BOUNDARY);
+    for (key, value) in [
         (
             "source_sha256",
             Json::object([("lines", Json::str(&source.sha256))]),
@@ -194,7 +182,10 @@ fn review(source: &SourceSnapshot, currency: &str, start: Date, end: Date) -> Re
         ("minimum_history", Json::int(MINIMUM_HISTORY as i64)),
         ("usual_share_percent", Json::int(USUAL_SHARE_PERCENT as i64)),
         ("findings", Json::Array(findings)),
-    ]))
+    ] {
+        result.set(key, value);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
