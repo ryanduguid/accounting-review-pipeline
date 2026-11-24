@@ -15,6 +15,7 @@ pub mod drivers;
 pub mod duplicates;
 pub mod engine;
 pub mod equity;
+pub mod fixed_assets;
 #[cfg(feature = "tools")]
 #[doc(hidden)]
 pub mod fuzzing;
