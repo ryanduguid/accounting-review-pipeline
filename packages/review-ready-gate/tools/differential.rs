@@ -1427,24 +1427,36 @@ fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
     }
     Ok(Some(probe::encode(&result)))
 }
-/// The optional slot a case's profile has here and lacks in the baseline, so
-/// that the native result lists one more control not run: `fs_mapping` in
-/// `year_end` and `bank_rec` in `bas`. The `note-pack-` and `document-pack-`
-/// cases review the `bas` examples.
-fn slot_the_baseline_lacks(name: &str) -> Option<&'static str> {
+/// The optional slots a case's profile has here and lacks in the baseline, in
+/// slot order, so that the native result lists more controls not run:
+/// `fs_mapping` in `year_end`, and `bank_rec` and `paygw_control_gl` in `bas`.
+/// The `note-pack-` and `document-pack-` cases review the `bas` examples.
+fn slots_the_baseline_lacks(name: &str) -> &'static [&'static str] {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|prefix| name.starts_with(prefix));
     if starts(&["pack-year-end-ready-", "cli-runtime-year-end-ready-"]) {
-        Some("fs_mapping")
+        &["fs_mapping"]
     } else if starts(&[
         "pack-bas-",
         "cli-runtime-bas-",
         "note-pack-",
         "document-pack-",
     ]) {
-        Some("bank_rec")
+        &["bank_rec", "paygw_control_gl"]
     } else {
-        None
+        &[]
     }
+}
+/// The native result with each of `slots` taken out in turn, or `None` when
+/// any is not there to take out.
+fn without_absent_controls(native: &str, slots: &[&str]) -> Result<Option<String>> {
+    let mut result = native.to_owned();
+    for slot in slots {
+        let Some(next) = without_absent_control(&result, slot)? else {
+            return Ok(None);
+        };
+        result = next;
+    }
+    Ok(Some(result))
 }
 #[expect(
     clippy::too_many_lines,
@@ -1519,8 +1531,9 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<()> {
     let mut recorded = 0;
     for ((name, actual), expected) in names.iter().zip(actual.lines()).zip(expected.lines()) {
         if !probe::equivalent(actual, expected)? {
-            if let Some(slot) = slot_the_baseline_lacks(name)
-                && let Some(native) = without_absent_control(actual, slot)?
+            let slots = slots_the_baseline_lacks(name);
+            if !slots.is_empty()
+                && let Some(native) = without_absent_controls(actual, slots)?
                 && probe::equivalent(&native, expected)?
             {
                 recorded += 1;

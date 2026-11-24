@@ -35,7 +35,7 @@ pub struct SelfReview {
     pub prepared_on: Date,
     pub engagement_type: String,
     pub period_end: Date,
-    /// The first day of the period, where a `bas` self-review declares one.
+    /// The first day of the period, where a `bas` or `ias` self-review declares one.
     pub period_start: Option<Date>,
     pub assertions: Vec<(String, bool)>,
 }

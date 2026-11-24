@@ -182,12 +182,12 @@ pub(crate) fn verify_schema(document: &Json) -> Result<()> {
         ));
     }
     let engagement = document.at("engagement_type");
-    if !["bas", "month_end", "year_end"]
+    if !["bas", "ias", "month_end", "year_end"]
         .iter()
         .any(|s| engagement.is_str(s))
     {
         return Err(format!(
-            "{JSON_NAME}: engagement_type must be one of bas, month_end, year_end; got {}",
+            "{JSON_NAME}: engagement_type must be one of bas, ias, month_end, year_end; got {}",
             value_repr(engagement)
         ));
     }

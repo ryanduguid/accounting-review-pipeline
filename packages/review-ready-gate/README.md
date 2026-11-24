@@ -162,10 +162,11 @@ It runs against a repo-stored synthetic pack, fails the job when the pack is `BL
 | Profile | Required artefacts | Extra controls |
 | --- | --- | --- |
 | `bas` | trial balance, activity statement, GST control GL, open items, self-review | 1A less 1B ties to GST control movement; the GST control accounts roll forward to the TB; no GST posting dated after `period_end`, or before `period_start` where the self-review declares one |
+| `ias` | trial balance, activity statement, open items, self-review | the [activity-statement checks](#payg-withholding-and-other-labels); with `paygw_control_gl.csv`, withholding ties to PAYG withholding control movement and those accounts roll forward to the TB |
 | `month_end` | current TB, prior TB, bank rec, open items, self-review | bank rec statement against its GL balance, and that GL balance against the current TB; prior date earlier; same tenant |
 | `year_end` | current TB, prior TB, tie-out matrix, open items, self-review | no `UNSUPPORTED` statement lines; with `fs_mapping.csv`, each `TIED` line computed from the current TB |
 
-Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out). Optional in `bas`: `bank_rec.csv`, which runs the bank reconciliation described next; use `--require-control bank_rec` when its absence must prevent `READY`.
+Optional in every profile: `prior_findings.csv`. An OPEN prior finding that is still present is marked `repeat`. Optional in `year_end`: `fs_mapping.csv`, the [computed statement tie-out](#computed-statement-tie-out). Optional in `bas`: `bank_rec.csv`, which runs the bank reconciliation described next; use `--require-control bank_rec` when its absence must prevent `READY`. Optional in `bas` and `ias`: `paygw_control_gl.csv`, the [PAYG withholding tie-out](#payg-withholding-and-other-labels); use `--require-control paygw_control_gl` when its absence must prevent `READY`. An `ias` pack is an instalment activity statement, so it needs no 1A, 1B or GST control file.
 
 The bank reconciliation is tied twice for each account. Its `StatementBalance`
 must agree with its `GLBalance`, and that `GLBalance` must agree with the current
@@ -246,7 +247,7 @@ Filenames inside the pack directory are fixed. Header-only CSV schemas live unde
 
 `engagement_type` must match `--profile`. `prepared_on` must not be earlier than `period_end`. Any assertion that is not `true` is `NOT_READY`. The assertions are necessary, not sufficient: a preparer who ticks `pack_complete` whilst the GST control file is missing still gets `MISSING_ARTEFACT`. The JSON Schema is [schemas/self_review.json](schemas/self_review.json).
 
-A `bas` self-review may also declare the first day of its period, such as `"period_start": "2026-01-01"`. A GST control posting dated before it is then `NOT_READY` with `PERIOD_ORDER`, which is what stops an earlier quarter's file. It must be an ISO date not later than `period_end`. The other profiles read no period start and refuse the key.
+A `bas` or `ias` self-review may also declare the first day of its period, such as `"period_start": "2026-01-01"`. A GST or PAYG withholding control posting dated before it is then `NOT_READY` with `PERIOD_ORDER`, which is what stops an earlier quarter's file. It must be an ISO date not later than `period_end`. The other profiles read no period start and refuse the key.
 
 ### Open items
 
@@ -291,6 +292,25 @@ digits produce. A posting is named only when its direction explains the
 difference, not merely its size. The hint is a starting point, not a diagnosis.
 
 This is a cash-style control-account tie-out on the files you supply. It is not a lodgement, not a cash-versus-accruals bridge, and not a substitute for the `bas-preparation` skill.
+
+### PAYG withholding and other labels
+
+In `bas` and `ias`, whatever the pack supplies, the activity statement's own figures are checked against the ATO's instructions for the labels (read on 24 November 2026: [PAYG withholding](https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/business-activity-statements-bas/pay-as-you-go-payg-withholding), [wine equalisation tax](https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/business-activity-statements-bas/wine-equalisation-tax-wet), [fuel tax credits](https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/business-activity-statements-bas/fuel-tax-credits/how-to-complete-your-activity-statement-labels)). Each break is `NOT_READY` with `TIEOUT_BREAK`:
+
+- `W1` to `W5`, `4`, `1C`, `1D`, `7C` and `7D` are never negative
+- `W5`, where reported, is `W2 + W4 + W3`, a missing label counting as nil
+- `4`, where reported with `W5`, equals `W5`
+- `W2` is not more than `W1`, since it is withheld from the payments shown there
+
+With `paygw_control_gl.csv`, in the GST control file's columns (`Date,AccountID,AccountName,Debit,Credit,Description`) and holding the period's withholding postings to the PAYG withholding liability accounts:
+
+- the withholding the statement reports, `W5`, or `W2 + W4 + W3` without it, is compared with the file's `sum(Credit) - sum(Debit)`; a difference beyond `--tieout-tolerance` is `NOT_READY`
+- when those labels are whole dollars, as on a lodged statement, a statement lower than the ledger by under `$1` for each of `W2`, `W4` and `W3` it reports also ties: the ATO rounds each label's cents down. A statement higher than the ledger gets no allowance
+- a statement with none of `W2`, `W3`, `W4` or `W5` cannot be tied, and says so. A large withholder reports `W1` only and leaves the file out
+- the file's accounts must be in the trial balance and roll forward to it as the GST control accounts do, with the activity statement's optional `PAYGW_OPENING` declaring the balance carried in from before the period, signed and checked like `GST_OPENING`
+- a posting dated after `period_end`, or before a declared `period_start`, is `NOT_READY` with `PERIOD_ORDER`
+
+`W1` is reported, not tied: the gate reads no payroll register.
 
 ### Computed statement tie-out
 
@@ -431,7 +451,7 @@ cargo test --locked --all-features
 cargo build --locked --release
 ```
 
-The test suite covers schema gates, fabricated packs for all 3 engagement profiles, empty and incomplete artefacts, GST, GST roll-forward, bank-rec and computed statement breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing and the command-line exit contract.
+The test suite covers schema gates, fabricated packs for all 4 engagement profiles, empty and incomplete artefacts, GST, GST roll-forward, PAYG withholding, bank-rec and computed statement breaks, unsupported tie-outs, acknowledgement parsing, deterministic pack generation, fail-closed pack viewing and the command-line exit contract.
 
 CI runs Cargo format, lint and tests on Linux and Windows, builds the release
 binary and exercises it from an empty directory. The feature-gated differential
@@ -450,7 +470,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for verification and data handling.
 - A `bas` pack's GST control accounts must be in the trial balance and roll forward to it, and a GST break carries a difference hint. The baseline tied only 1A less 1B to the control file. The differential's `bas` examples hold the GST control account and tie, so it compares them unchanged.
 - A `bas` self-review may declare `period_start`, and a GST control posting dated before it is a finding. The baseline refuses the key. The differential's self-reviews do not declare it, so it compares them unchanged.
 - A `year_end` pack lists `fs_mapping` under 'Controls not run' when the file is absent, and computes `TIED` lines from the trial balance when it is present. The baseline has no such slot. For the `year-end-ready` example the differential takes exactly that entry out of the native result, its pack JSON, the summary's line and count, and the printed list of controls not run, then compares everything else byte for byte, including the exit code, standard error and `findings.csv`; a result without exactly that entry is an unexplained difference.
-- A `bas` pack lists `bank_rec` under 'Controls not run' when the file is absent, and runs the bank reconciliation when it is present. The baseline has no such slot. For every case that reviews a `bas` example the differential takes exactly that entry out of the native result, as it does for `fs_mapping`: its pack JSON, the summary's line and count, and the printed list of controls not run. Where that leaves no control, it writes what the renderer writes for none. It compares everything else byte for byte, and a result without exactly that entry is an unexplained difference. A `month_end` pack that supplies `prior_findings.csv` keeps the native output for no control not run in the comparison.
+- The `ias` profile is native only. The probe takes `ias` out of the command line's list of profile choices and out of the lists of profiles in refusals before comparing their text, and no case reviews an `ias` pack.
+- A `bas` pack lists `bank_rec` and `paygw_control_gl` under 'Controls not run' when their files are absent, and runs the bank reconciliation and the PAYG withholding tie-out when they are present. The baseline has no such slots. For every case that reviews a `bas` example the differential takes exactly those entries out of the native result, as it does for `fs_mapping`: its pack JSON, the summary's line and count, and the printed list of controls not run. Where that leaves no control, it writes what the renderer writes for none. It compares everything else byte for byte, and a result without exactly that entry is an unexplained difference. A `month_end` pack that supplies `prior_findings.csv` keeps the native output for no control not run in the comparison.
 - `queue` is new: the baseline has no command that lists several packs.
 - A bank reconciliation's `GLBalance` is tied to the trial balance, and an account the trial balance does not hold is a finding. The baseline compared it only with `StatementBalance`. The differential's packs tie on both, so it compares them unchanged.
 
