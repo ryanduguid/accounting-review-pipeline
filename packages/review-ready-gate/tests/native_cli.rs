@@ -2237,8 +2237,8 @@ fn an_empty_bas_directory_produces_a_usable_not_ready_report_without_source_clai
         ]
     );
     let skipped = json_array(document.at("controls_not_run"));
-    assert_eq!(skipped.len(), 2);
-    for slot in ["bank_rec", "prior_findings"] {
+    assert_eq!(skipped.len(), 3);
+    for slot in ["bank_rec", "paygw_control_gl", "prior_findings"] {
         assert!(skipped.iter().any(|row| row.at("slot").is_str(slot)));
     }
     let shown = view_read_only(&output);

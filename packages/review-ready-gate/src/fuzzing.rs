@@ -15,11 +15,12 @@ pub fn exercise(bytes: &[u8]) {
     let _ = loader::load_open_items(&source);
     let _ = loader::load_activity_statement(&source);
     let _ = loader::load_gst_control(&source);
+    let _ = loader::load_paygw_control(&source);
     let _ = loader::load_bank_rec(&source);
     let _ = loader::load_tie_out_matrix(&source);
     let _ = loader::load_fs_mapping(&source);
     let _ = loader::load_prior_findings(&source);
-    for profile in ["bas", "month_end", "year_end"] {
+    for profile in ["bas", "ias", "month_end", "year_end"] {
         let _ = loader::load_self_review(&source, profile);
     }
 }
