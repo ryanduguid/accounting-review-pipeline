@@ -9,8 +9,8 @@ use crate::{
     models::Status,
     payroll, publication,
     pyjson::{self, Json, PyStr},
-    pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, statement,
-    stdio, viewer,
+    pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, scorecard,
+    statement, stdio, viewer,
 };
 use num_bigint::BigInt;
 use std::{
@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 17] = [
+const COMMANDS: [&str; 18] = [
     "review",
     "workbench",
     "view",
@@ -34,6 +34,7 @@ const COMMANDS: [&str; 17] = [
     "duplicates",
     "fixed-assets",
     "coding",
+    "scorecard",
     "mcp",
     "payroll",
     "statement",
@@ -62,6 +63,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "duplicates" => saved!("duplicates"),
         "fixed-assets" => saved!("fixed-assets"),
         "coding" => saved!("coding"),
+        "scorecard" => saved!("scorecard"),
         "mcp" => saved!("mcp"),
         "payroll" => saved!("payroll"),
         "statement" => saved!("statement"),
@@ -220,6 +222,7 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
             &["--lines", "--currency", "--period-start", "--period-end"],
             &["--lines", "--currency", "--period-start", "--period-end"],
         ),
+        "scorecard" => (&["--result"], &["--result"]),
         "jet" => (
             &["--transactions", "--currency", "--period-end"],
             &["--transactions", "--currency", "--period-end"],
@@ -462,6 +465,7 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
             "--calculation-evidence",
             "--require-calculation",
             "--require-control",
+            "--result",
         ]
         .contains(&flag)
             || command == "queue" && flag == "--pack-dir"
@@ -792,7 +796,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 Ok(0)
             }
             "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "coding"
-            | "payroll" | "statement" => {
+            | "scorecard" | "payroll" | "statement" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -821,6 +825,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.path("--trial-balance"),
                         &args.literal("--currency")?,
                     )?,
+                    "scorecard" => scorecard::scorecard(&args.paths("--result"))?,
                     "coding" => coding::coding_review(
                         &args.path("--lines"),
                         &args.literal("--currency")?,

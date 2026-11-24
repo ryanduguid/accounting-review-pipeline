@@ -1,0 +1,7 @@
+usage: close-control scorecard [-h] --result RESULT
+
+options:
+  -h, --help       show this help message and exit
+  --result RESULT  one client's JSON result from jet, duplicates, coding,
+                   fixed-assets or schedule, named by its file; repeat for
+                   each category
