@@ -209,8 +209,9 @@ fn missing_recurring(bills: &[&Document], start: Date, end: Date) -> Vec<Json> {
         .collect()
 }
 
-/// Review the register in `path` for the period `start` to `end`.
-pub fn duplicate_documents(path: &Path, currency: &str, start: &str, end: &str) -> Result<Json> {
+/// The `--currency`, `--period-start` and `--period-end` options of a
+/// one-tenant register command, checked before anything is read.
+pub(crate) fn period_options(currency: &str, start: &str, end: &str) -> Result<(Date, Date)> {
     if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) {
         return Err("Declare a three-letter currency, such as AUD.".into());
     }
@@ -219,6 +220,31 @@ pub fn duplicate_documents(path: &Path, currency: &str, start: &str, end: &str) 
     if start > end {
         return Err("--period-start must not follow --period-end.".into());
     }
+    Ok((start, end))
+}
+
+/// The fields every one-tenant register result opens with.
+pub(crate) fn period_result(
+    passed: bool,
+    tenant: &str,
+    currency: &str,
+    (start, end): (Date, Date),
+    boundary: &str,
+) -> Json {
+    Json::object([
+        ("schema_version", Json::int(1)),
+        ("status", Json::str(if passed { "PASS" } else { "REVIEW" })),
+        ("tenant", Json::str(tenant)),
+        ("currency", Json::str(currency)),
+        ("period_start", Json::str(&start.iso())),
+        ("period_end", Json::str(&end.iso())),
+        ("boundary", Json::str(boundary)),
+    ])
+}
+
+/// Review the register in `path` for the period `start` to `end`.
+pub fn duplicate_documents(path: &Path, currency: &str, start: &str, end: &str) -> Result<Json> {
+    let (start, end) = period_options(currency, start, end)?;
     let source = SourceSnapshot::capture(path, "Documents")?;
     decimal::with_precision(40, || review(&source, currency, start, end))
 }
@@ -256,14 +282,8 @@ fn review(source: &SourceSnapshot, currency: &str, start: Date, end: Date) -> Re
         .filter(|document| document.date >= start)
         .count();
     let passed = in_period > 0 && findings.is_empty();
-    Ok(Json::object([
-        ("schema_version", Json::int(1)),
-        ("status", Json::str(if passed { "PASS" } else { "REVIEW" })),
-        ("tenant", Json::str(&tenant)),
-        ("currency", Json::str(currency)),
-        ("period_start", Json::str(&start.iso())),
-        ("period_end", Json::str(&end.iso())),
-        ("boundary", Json::str(BOUNDARY)),
+    let mut result = period_result(passed, &tenant, currency, (start, end), BOUNDARY);
+    for (key, value) in [
         (
             "source_sha256",
             Json::object([("documents", Json::str(&source.sha256))]),
@@ -272,7 +292,10 @@ fn review(source: &SourceSnapshot, currency: &str, start: Date, end: Date) -> Re
         ("documents_in_period", Json::int(in_period as i64)),
         ("window_days", Json::int(i64::from(WINDOW_DAYS))),
         ("findings", Json::Array(findings)),
-    ]))
+    ] {
+        result.set(key, value);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
