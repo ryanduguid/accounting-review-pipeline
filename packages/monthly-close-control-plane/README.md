@@ -26,11 +26,11 @@ The maintained source is under
 in the Accounting Review Pipeline. The `monthly-close-control-plane`
 distribution and `close-control` command remain compatibility identifiers.
 
-Version 1.0.0 provides a standalone Rust `close-control` binary. Install from this
-directory with `cargo install --locked --path .`, or download the Linux x86_64
-or Windows x86_64 executable from its `monthly-close-control-plane/v<version>`
-GitHub Release and verify it as [RELEASING.md](RELEASING.md#verify-a-release)
-describes. It replaces the Python runtime and import API.
+`close-control` is a standalone Rust binary. Install from this directory with
+`cargo install --locked --path .`, or download the Linux x86_64 or Windows
+x86_64 executable from its `monthly-close-control-plane/v<version>` GitHub
+Release and verify it as [RELEASING.md](RELEASING.md#verify-a-release)
+describes.
 
 A small, **review-first** monthly-close control pack for a validated trial-balance export. You point it at a current and a prior trial balance and it hands you an exception pack for close review:
 
@@ -56,7 +56,7 @@ Explicit exception queue
 Human review and workpaper acknowledgement
 ```
 
-The first MVP accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report or claim that a close has been approved.
+It accepts the canonical CSV written by [xero-trial-balance-export](https://github.com/ryanduguid/accounting-review-pipeline/tree/main/packages/xero-trial-balance-export) (`xero-trial-balance-export`). Each file must contain exactly one tenant and one report date; current and prior files must name the same tenant, and the prior date must be earlier. It does **not** connect to Xero, store OAuth tokens, write journals, make payments, lodge BAS, lock a period, distribute a client report or claim that a close has been approved.
 
 ## Quick demo
 
@@ -89,7 +89,7 @@ variance drivers and the balance policy. The quick start builds the native comma
 from source; released executables are an alternative on Linux x86_64 and Windows x86_64.
 The [classification evidence check](docs/classification-evidence.md) compares
 selected postings with supplied purpose and account assertions, preserving
-original discrepancies after a recode. It first ships in 0.2.0.
+original discrepancies after a recode.
 [Journal-entry tests](docs/journal-entry-tests.md) (`close-control jet`) list
 unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
 seldom-used-account journals in a general-ledger listing, with a Benford
@@ -111,8 +111,8 @@ The [architecture note](docs/architecture.md) sets out the control boundary and
 the review-pack pipeline. For transaction-level clearing-account matching, see the
 [3-month reconciliation example](docs/clearing-reconciliation.md).
 The `reconcile` command suggests matches, records reviewed allocations and
-carries outstanding items forward. It ships from 0.1.5 and uses a separate
-mapped transaction schema; a trial-balance export is insufficient.
+carries outstanding items forward. It uses a separate mapped transaction
+schema; a trial-balance export is insufficient.
 
 The repository contains fabricated data only. Do not commit client trial balances, workpapers, exports or credentials.
 
@@ -144,7 +144,8 @@ unexplained movements, and inside a checkout it is one `git add -A` away from a
 history that every clone copies. A `.gitignore` entry is a convention the next
 commit can waive, and it does nothing about the copy sitting in the working
 tree meanwhile. A checkout is any directory at or above the output holding
-`.git`, `.hg`, `.svn` or `.bzr`, because the harm is the pack going under
+`.git`, `.hg`, `.svn` or `.bzr` (a `.git` file counts, so a worktree or
+submodule is a checkout too), because the harm is the pack going under
 version control and every one of those copies a committed pack to each clone.
 A directory inside the work tree named by `GIT_WORK_TREE` counts too, since
 Git can hold its metadata elsewhere and leave a tracked tree carrying no
@@ -154,8 +155,9 @@ command never opens, cannot be discovered from here: the check is a backstop
 for the location you chose, not a proof that a directory is untracked.
 An output the command cannot examine, such as one behind a symbolic-link loop
 or an unreadable parent, is refused on the same grounds rather than assumed
-safe. The refusal applies to writing only: `close-control view` still opens a
-pack wherever it already is.
+safe. The library applies the same refusal, so a caller that bypasses the CLI
+does not bypass it. The refusal applies to writing only: `close-control view`
+still opens a pack wherever it already is.
 
 Use exit code `0` only for an all-`PASS` pack, `2` for `REVIEW` or `BLOCKED`, and `1` for a malformed file, an invalid command configuration, an `--output` path inside a version-control checkout, or an `--output` path that cannot be written.
 
@@ -277,7 +279,7 @@ Add `--mapping-policy examples/mapping_policy.csv` to the quick demo to use the
 fabricated policy that matches `examples/account_mapping.csv`. Keep real policy
 files outside the checkout. The pack's `source_sha256.mapping_policy` records
 the exact bytes read by the control. Runs without this option retain their
-existing behaviour. This option ships from 0.1.5.
+existing behaviour.
 
 ## Balance policy
 
@@ -865,9 +867,8 @@ Passed through unchanged:
 ## Data and operational boundaries
 
 - Use a separate, access-controlled working directory for client source files and outputs.
-- A generated pack cannot be written into a version-control checkout at all. `write_review_pack` walks up from the resolved `--output` directory and refuses if any level holds `.git`, `.hg`, `.svn` or `.bzr`, before it creates anything; a `.git` file counts as well as a directory, so a worktree and a submodule are checkouts too. A level it cannot examine is refused rather than read as an absence. The library enforces this too, so a caller that bypasses the CLI does not bypass the rule.
 - Keep this checkout limited to fabricated fixtures. Its `.gitignore` blocks CSVs outside `examples/` and `schemas/`, names `close-review-pack.json` and `close-summary.md`, and names `exceptions.csv` and `client-queries.csv` inside those 2 re-included directories, so all 4 generated pack files are covered. That stays as a second line: it catches a pack copied in by hand, which no guard on the writer can see.
-- Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage and client authorisation are deliberately outside this MVP.
+- Produce the source CSV through a read-only export workflow. Live Xero OAuth, token storage and client authorisation are deliberately outside this tool.
 - The tool is a configurable review aid that requires professional judgement.
 
 ## Development
@@ -896,10 +897,6 @@ The next layers remain separate components. This project stays a local review-pa
 - [Tax Radar AU](https://github.com/ryanduguid/PaulGoodman/blob/main/RADAR.md) - a provenance-first monitor that turns source-version metadata into a technical-review queue, now maintained inside the Australian tax legislation corpus.
 
 [examples/close-loop.md](examples/close-loop.md) runs close-control and the co-located gateway on local files: `close-control` reviews the gateway's May/June sample CSVs, then the gateway evaluates its own bundled context.
-
-## Roadmap
-
-The next layers are deliberately separated from the control engine. The pipeline components above are co-located without sharing runtime authority, and Tax Radar AU remains separate. The close-loop example runs the gateway on local files only.
 
 ## Licence
 
