@@ -350,7 +350,9 @@ mod tests {
         &'static str,
     )>;
 
-    fn refused(edit: fn(&mut Rows)) -> String {
+    type Edit = fn(&mut Rows);
+
+    fn refused(edit: Edit) -> String {
         let mut rows = TIES.to_vec();
         edit(&mut rows);
         run(&rows).unwrap_err()
@@ -375,7 +377,7 @@ mod tests {
             "statement.csv: row 2 is a LINE row outside an opened page 1."
         );
         assert_eq!(
-            refused(|rows| drop(rows.pop())),
+            refused(|rows| rows.truncate(6)),
             "statement.csv: page 2 has no CLOSING row; supply every page in full."
         );
         assert_eq!(
@@ -386,7 +388,7 @@ mod tests {
 
     #[test]
     fn malformed_rows_are_refused() {
-        let cases: [(fn(&mut Rows), &str); 6] = [
+        let cases: [(Edit, &str); 6] = [
             (
                 |rows| rows[0].3 = "1.00",
                 "row 2 has an Amount, but OPENING rows carry a Balance only.",
