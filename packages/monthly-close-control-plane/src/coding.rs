@@ -48,6 +48,7 @@ fn load(source: &SourceSnapshot, currency: &str, end: Date) -> Result<(String, V
     let path = crate::pypath::text(&source.path);
     let mut tenant = None;
     let mut lines: Vec<Line> = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
     for row in loader::csv_rows(source, &COLUMNS, "Lines")? {
         let row = row?;
         let text = |field| row.text(field, field == "Contact");
@@ -63,7 +64,7 @@ fn load(source: &SourceSnapshot, currency: &str, end: Date) -> Result<(String, V
             ));
         }
         let id = text("LineID")?;
-        if lines.iter().any(|line| line.id == id) {
+        if !seen.insert(id.clone()) {
             return refuse(format!("repeats LineID {}.", pytext::repr(&id)));
         }
         let date = row.date("Date")?;
@@ -89,10 +90,10 @@ fn load(source: &SourceSnapshot, currency: &str, end: Date) -> Result<(String, V
 
 /// For each key, the coding that carries at least `MINIMUM_HISTORY` earlier
 /// lines and `USUAL_SHARE_PERCENT` of them, with its count and the total.
-fn usual<'a>(
-    history: impl Iterator<Item = (String, &'a str)>,
-) -> BTreeMap<String, (&'a str, usize, usize)> {
-    let mut counts: BTreeMap<String, BTreeMap<&str, usize>> = BTreeMap::new();
+fn usual<'a, K: Ord>(
+    history: impl Iterator<Item = (K, &'a str)>,
+) -> BTreeMap<K, (&'a str, usize, usize)> {
+    let mut counts: BTreeMap<K, BTreeMap<&str, usize>> = BTreeMap::new();
     for (key, value) in history {
         *counts.entry(key).or_default().entry(value).or_default() += 1;
     }
@@ -148,7 +149,7 @@ fn review(source: &SourceSnapshot, currency: &str, start: Date, end: Date) -> Re
     let (tenant, lines) = load(source, currency, end)?;
     let (earlier, period): (Vec<&Line>, Vec<&Line>) =
         lines.iter().partition(|line| line.date < start);
-    let pair = |line: &Line| format!("{}|{}", contact_key(&line.contact), line.account);
+    let pair = |line: &Line| (contact_key(&line.contact), line.account.clone());
     let with_contact = || earlier.iter().filter(|line| !line.contact.is_empty());
     let accounts =
         usual(with_contact().map(|line| (contact_key(&line.contact), line.account.as_str())));
@@ -347,6 +348,26 @@ mod tests {
             ("P1", "2026-09-10", "Lumbridge Power", "611", "INPUT"),
         ]);
         assert_eq!(listed(&rows), ["UNUSUAL_ACCOUNT P1 610 (4 of 5)"]);
+    }
+
+    #[test]
+    fn a_separator_in_a_name_cannot_join_another_contact_s_history() {
+        let joined = [
+            ("H1", "2026-06-01", "A|B", "c", "X"),
+            ("H2", "2026-07-01", "A|B", "c", "X"),
+            ("H3", "2026-08-01", "A|B", "c", "X"),
+        ];
+        let mut rows = joined.to_vec();
+        rows.extend([
+            ("H4", "2026-06-02", "Z", "b|c", "Y"),
+            ("H5", "2026-07-02", "Z", "b|c", "Y"),
+            ("H6", "2026-08-02", "Z", "b|c", "Y"),
+            ("P1", "2026-09-01", "A", "b|c", "X"),
+        ]);
+        assert_eq!(listed(&rows), ["UNUSUAL_ACCOUNT_TAX_CODE P1 Y (3 of 3)"]);
+        let mut rows = joined.to_vec();
+        rows.push(("P1", "2026-09-01", "A", "b|c", "Y"));
+        assert!(listed(&rows).is_empty());
     }
 
     #[test]

@@ -28,8 +28,9 @@ Tenant,LineID,Date,Contact,AccountID,TaxCode,Amount,Currency
 Each `LineID` appears once, each `Amount` has at most 2 decimal places, and
 every row carries the declared `--currency`. `Contact` may be empty, as for a
 manual journal. A listing with more than one `Tenant` is refused, and a line
-dated after `--period-end` is refused, so the result describes the coding as
-it stood at the period end. Tax codes are compared exactly as the ledger
+dated after `--period-end` is refused. The review uses the coding as
+supplied for lines dated to the period end; it cannot tell whether a line was
+recoded or backdated after the period end. Tax codes are compared exactly as the ledger
 writes them; the command does not know what any code means.
 
 Lines dated before `--period-start` are the history. Include enough of it,
