@@ -5,7 +5,7 @@
 
 # Native binary smoke from an empty directory, with COMPONENT naming the source.
 set -euo pipefail
-[[ "$(review-ready --version)" = "review-ready 1.0.1" ]]
+[[ "$(review-ready --version)" = "review-ready 1.1.0" ]]
 
 review-ready gate --profile bas --pack "${COMPONENT}/examples/bas-ready" --output pack
 [[ -f pack/readiness-pack.json ]]

@@ -39,23 +39,25 @@ tag only with the owner's explicit approval for that release.
 
     ```bash
     git fetch origin main
-    git tag -a monthly-close-control-plane/v1.1.0 -m "monthly-close-control-plane/v1.1.0" origin/main
-    git push origin monthly-close-control-plane/v1.1.0
+    git tag -a monthly-close-control-plane/v1.2.0 -m "monthly-close-control-plane/v1.2.0" origin/main
+    git push origin monthly-close-control-plane/v1.2.0
     ```
 
 The workflow runs `cargo test --locked` and builds `close-control` with
 `cargo-auditable` on each target, checks static linkage and `close-control --version`,
-audits the embedded dependency list against RustSec, then publishes 9 assets:
+audits the embedded dependency list against RustSec, then publishes 17 assets:
 
 | Asset | Contents |
 | --- | --- |
 | `monthly-close-control-plane-<version>.zip`, `.tar.gz` | deterministic source archives |
 | `monthly-close-control-plane-<version>.spdx.json` | SPDX SBOM of the source |
-| `monthly-close-control-plane-<version>-x86_64-unknown-linux-musl.tar.gz` | static Linux `close-control` with `LICENSE`, `NOTICE` and `README.md` |
-| `monthly-close-control-plane-<version>-x86_64-unknown-linux-musl.spdx.json` | SBOM of the Linux executable |
-| `monthly-close-control-plane-<version>-x86_64-pc-windows-msvc.zip` | Windows `close-control.exe` with the same documents |
-| `monthly-close-control-plane-<version>-x86_64-pc-windows-msvc.spdx.json` | SBOM of the Windows executable |
-| `SHA256SUMS` | digests of the 7 assets above |
+| `monthly-close-control-plane-<version>-x86_64-unknown-linux-musl.tar.gz`, `aarch64-unknown-linux-musl.tar.gz` | static Linux `close-control` with `LICENSE`, `NOTICE` and `README.md` |
+| `monthly-close-control-plane-<version>-x86_64-unknown-linux-musl.spdx.json`, `aarch64-unknown-linux-musl.spdx.json` | SBOMs of the Linux executables |
+| `monthly-close-control-plane-<version>-x86_64-apple-darwin.tar.gz`, `aarch64-apple-darwin.tar.gz` | macOS `close-control` with the same documents |
+| `monthly-close-control-plane-<version>-x86_64-apple-darwin.spdx.json`, `aarch64-apple-darwin.spdx.json` | SBOMs of the macOS executables |
+| `monthly-close-control-plane-<version>-x86_64-pc-windows-msvc.zip`, `aarch64-pc-windows-msvc.zip` | Windows `close-control.exe` with the same documents |
+| `monthly-close-control-plane-<version>-x86_64-pc-windows-msvc.spdx.json`, `aarch64-pc-windows-msvc.spdx.json` | SBOMs of the Windows executables |
+| `SHA256SUMS` | digests of the 15 files above |
 | `monthly-close-control-plane-<version>.intoto.jsonl` | signed provenance bundle |
 
 From 1.1.0, each release executable records the tagged commit in the
@@ -73,7 +75,7 @@ Download an explicit tag and target, never `latest`. The signer digest comes
 from the caller at the tagged commit, so the recipe stays right when the pin moves:
 
 ```bash
-tag=monthly-close-control-plane/v1.1.0
+tag=monthly-close-control-plane/v1.2.0
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#monthly-close-control-plane/v}"
 asset="monthly-close-control-plane-${version}-x86_64-unknown-linux-musl.tar.gz"  # or -x86_64-pc-windows-msvc.zip

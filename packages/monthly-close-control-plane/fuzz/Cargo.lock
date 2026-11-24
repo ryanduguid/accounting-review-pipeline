@@ -233,7 +233,7 @@ checksum = "4facc753ae494aeb6e3c22f839b158aebd4f9270f55cd3c79906c45476c47ab4"
 
 [[package]]
 name = "monthly-close-control-plane"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "cap-std",
  "getrandom",

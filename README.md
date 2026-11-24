@@ -76,14 +76,14 @@ In Claude Code, add this repository as a plugin marketplace and install the `clo
 /plugin install close-review@accounting-review-pipeline
 ```
 
-The skill runs the installed `close-control` on files you name, checks the pack with `close-control view` and answers only from `close-review-pack.json` and `exceptions.csv`. It runs no server, uses no network, never approves or posts anything and stops on an exit code it does not recognise. The plugin holds the skill only and does not install `close-control`: download that executable from the release asset for your platform, today `monthly-close-control-plane/v1.1.0`, verify it as below and put it on your PATH. Without it, the skill stops and points you here. For another agent, copy [`packages/monthly-close-control-plane/skills/close-review`](packages/monthly-close-control-plane/skills/close-review/SKILL.md) into its skills directory instead.
+The skill runs the installed `close-control` on files you name, checks the pack with `close-control view` and answers only from `close-review-pack.json` and `exceptions.csv`. It runs no server, uses no network, never approves or posts anything and stops on an exit code it does not recognise. The plugin holds the skill only and does not install `close-control`: download that executable from the release asset for your platform, today `monthly-close-control-plane/v1.2.0`, verify it as below and put it on your PATH. Without it, the skill stops and points you here. For another agent, copy [`packages/monthly-close-control-plane/skills/close-review`](packages/monthly-close-control-plane/skills/close-review/SKILL.md) into its skills directory instead.
 
-Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper Review Gate) from its component's [GitHub Release](https://github.com/ryanduguid/accounting-review-pipeline/releases), tagged `monthly-close-control-plane/v<version>` or `review-ready-gate/v<version>`. The latest releases are `monthly-close-control-plane/v1.1.0` and `review-ready-gate/v1.0.1`; changes under an unreleased heading in the [Monthly Close Controls](packages/monthly-close-control-plane/RELEASE_NOTES.md) or [Workpaper Review Gate](packages/review-ready-gate/RELEASE_NOTES.md) release notes are not in them, so build from source for those. Each release holds one executable for each of 2 platforms:
+Download `close-control` (Monthly Close Controls) or `review-ready` (Workpaper Review Gate) from its component's [GitHub Release](https://github.com/ryanduguid/accounting-review-pipeline/releases), tagged `monthly-close-control-plane/v<version>` or `review-ready-gate/v<version>`. The latest releases are `monthly-close-control-plane/v1.2.0` and `review-ready-gate/v1.1.0`; changes under an unreleased heading in the [Monthly Close Controls](packages/monthly-close-control-plane/RELEASE_NOTES.md) or [Workpaper Review Gate](packages/review-ready-gate/RELEASE_NOTES.md) release notes are not in them, so build from source for those. Each release holds one executable for each of 6 native targets:
 
-| Command | Linux x86_64 (static, musl) | Windows x86_64 |
-| --- | --- | --- |
-| `close-control` | `monthly-close-control-plane-<version>-x86_64-unknown-linux-musl.tar.gz` | `monthly-close-control-plane-<version>-x86_64-pc-windows-msvc.zip` |
-| `review-ready` | `review-ready-gate-<version>-x86_64-unknown-linux-musl.tar.gz` | `review-ready-gate-<version>-x86_64-pc-windows-msvc.zip` |
+| Command | Linux (`x86_64` / `aarch64` musl) | macOS (`x86_64` / `aarch64`) | Windows (`x86_64` / `aarch64`) |
+| --- | --- | --- | --- |
+| `close-control` | `monthly-close-control-plane-<version>-<target>.tar.gz` | `monthly-close-control-plane-<version>-<target>.tar.gz` | `monthly-close-control-plane-<version>-<target>.zip` |
+| `review-ready` | `review-ready-gate-<version>-<target>.tar.gz` | `review-ready-gate-<version>-<target>.tar.gz` | `review-ready-gate-<version>-<target>.zip` |
 
 Download an explicit tag, never `latest`, and verify the archive against the release's signed `SHA256SUMS` and attestations before extracting it, using the recipe in [Monthly Close Controls](packages/monthly-close-control-plane/RELEASING.md#verify-a-release) or [Workpaper Review Gate](packages/review-ready-gate/RELEASING.md#verify-a-release). The archive holds the executable with its `LICENSE`, `NOTICE` and `README.md`; put the executable on your PATH.
 
@@ -126,8 +126,8 @@ The canonical GitHub repository is
 | Component | Directory | Identity | Source version | Latest release |
 |---|---|---|---|---|
 | Xero Trial Balance Export | `packages/xero-trial-balance-export/` | native Rust commands `export-tb` and `xero-tb-auth`; the only OAuth, Xero and network producer | 1.0.0 (unreleased) | 0.1.15, Python, PyPI |
-| Workpaper Review Gate | `packages/review-ready-gate/` | native Rust command `review-ready`; Python runtime and import API removed | 1.0.1 | 1.0.1, native, GitHub release |
-| Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust command `close-control`; Python runtime and import API removed | 1.1.0 | 1.1.0, native, GitHub release |
+| Workpaper Review Gate | `packages/review-ready-gate/` | native Rust command `review-ready`; Python runtime and import API removed | 1.1.0 | 1.1.0, native, GitHub release |
+| Monthly Close Controls | `packages/monthly-close-control-plane/` | native Rust command `close-control`; Python runtime and import API removed | 1.2.0 | 1.2.0, native, GitHub release |
 | Xero Ledger Review Gate | `packages/elizabeth-anne-alexander/` | Rust binary `elizabeth-anne-alexander`; the released Python distribution imports `elizabeth_anne_alexander` | 1.0.0 (unreleased) | 0.2.6, Python, PyPI |
 | Accounting Excel Toolkit | `adapters/accounting-excel-toolkit/` | source-archive adapter `accounting-excel-toolkit` (Power Query and VBA) | 1.0.1 | 1.0.1, GitHub release archive |
 | Australian Accounting Power BI | `apps/australian-accounting-power-bi/` | PBIP reference application | 1.0.0 | none |

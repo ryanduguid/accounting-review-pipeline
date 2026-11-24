@@ -27,8 +27,8 @@ in the Accounting Review Pipeline. The `monthly-close-control-plane`
 distribution and `close-control` command remain compatibility identifiers.
 
 `close-control` is a standalone Rust binary. Install from this directory with
-`cargo install --locked --path .`, or download the Linux x86_64 or Windows
-x86_64 executable from its `monthly-close-control-plane/v<version>` GitHub
+`cargo install --locked --path .`, or download the Linux, macOS or Windows
+(x86_64 or arm64) executable from its `monthly-close-control-plane/v<version>` GitHub
 Release and verify it as [RELEASING.md](RELEASING.md#verify-a-release)
 describes.
 
@@ -86,41 +86,41 @@ migration snapshots, inter-entity balances, and prepayments and accruals from
 supplied canonical records.
 Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
 variance drivers and the balance policy. The quick start builds the native command
-from source; released executables are an alternative on Linux x86_64 and Windows x86_64.
+from source; released executables are an alternative on Linux, macOS and Windows (x86_64 and arm64).
 The [classification evidence check](docs/classification-evidence.md) compares
 selected postings with supplied purpose and account assertions, preserving
 original discrepancies after a recode.
 [Journal-entry tests](docs/journal-entry-tests.md) (`close-control jet`) list
 unbalanced, post-closing, period-end, undescribed, weekend, round-sum and
 seldom-used-account journals in a general-ledger listing, with a Benford
-first-digit test. It is in development source only.
+first-digit test.
 [Duplicate bills and payments](docs/duplicate-documents.md)
 (`close-control duplicates`) lists repeated supplier references, same-amount
 bills or payments days apart, and monthly supplier bills missing from the
-period in a register of bills and payments. It is in development source only.
+period in a register of bills and payments.
 [Fixed-asset register tie-out](docs/fixed-asset-register.md)
 (`close-control fixed-assets`) ties a fixed-asset register's cost and
 accumulated depreciation, less disposals, to the trial balance account by
-account. It is in development source only.
+account.
 [Account and tax-code coding review](docs/coding-review.md)
 (`close-control coding`) lists period lines coded to an account or tax code
 that departs from the usual coding of the same contact or account before the
-period. It is in development source only.
+period.
 [Close scorecard](docs/scorecard.md) (`close-control scorecard`) summarises one
 client's jet, duplicates, coding, fixed-assets and schedule results by
 category, with a score of the results at `PASS` as a percentage of those
-supplied. It is in development source only.
+supplied.
 [Assistant access over MCP](docs/mcp-server.md) (`close-control mcp`) serves the
 read-only commands to an assistant for the folder you name, with an MCP Bundle
-manifest. It is in development source only.
+manifest.
 [Payroll reperformance](docs/payroll-reperformance.md) (`close-control payroll`)
 reperforms PAYG withholding by the ATO's Schedule 1 formulas and the super
 guarantee on a register's 2026-27 pay lines, and lists differences, shortfalls
-and fund receipt dates worth review. It is in development source only.
+and fund receipt dates worth review.
 [Statement tie-out](docs/statement-tie-out.md) (`close-control statement`)
 checks that each line of a bank statement carries the running balance
 forward, that each page closes where its lines end and that each page opens
-where the last one closed. It is in development source only.
+where the last one closed.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.

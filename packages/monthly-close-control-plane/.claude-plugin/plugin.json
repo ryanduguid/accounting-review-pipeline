@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "close-review",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Runs your installed close-control on trial-balance CSV files you name and answers only from the verified review pack. Needs the close-control executable.",
   "author": {
     "name": "Ryan Duguid"

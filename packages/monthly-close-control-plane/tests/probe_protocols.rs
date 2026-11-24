@@ -219,8 +219,8 @@ fn successful_money_and_directory_requests_leave_mapping_usable() {
         &[
             r#"{"ok":"12.00"}"#,
             r#"{"ok":"-12.345"}"#,
-            r#"{"ok":{"code":0,"stdout":"close-control 1.1.0\n","stderr":"","files":{}}}"#,
-            r#"{"ok":{"code":0,"stdout":"close-control 1.1.0\n","stderr":"","files":{}}}"#,
+            r#"{"ok":{"code":0,"stdout":"close-control 1.2.0\n","stderr":"","files":{}}}"#,
+            r#"{"ok":{"code":0,"stdout":"close-control 1.2.0\n","stderr":"","files":{}}}"#,
             MAPPED,
         ],
     );
