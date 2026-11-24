@@ -200,6 +200,26 @@ fn default_directory_uses_only_the_executable_and_known_build_layout() {
     );
 }
 
+fn copy_executable(source: &Path, destination: &Path) {
+    #[cfg(unix)]
+    {
+        // Copy in a child process so this multi-threaded test binary never
+        // holds a writable fd on destination that a concurrent fork could
+        // inherit and trigger ETXTBSY (os error 26) on execve.
+        let status = std::process::Command::new("cp")
+            .arg("--")
+            .arg(source)
+            .arg(destination)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    #[cfg(not(unix))]
+    {
+        fs::copy(source, destination).unwrap();
+    }
+}
+
 #[test]
 fn installed_binary_is_independent_of_cwd_and_build_checkout() {
     let temp = Temp::new();
@@ -210,7 +230,7 @@ fn installed_binary_is_independent_of_cwd_and_build_checkout() {
         "check-vba-encoding{}",
         std::env::consts::EXE_SUFFIX
     ));
-    fs::copy(env!("CARGO_BIN_EXE_check-vba-encoding"), &binary).unwrap();
+    copy_executable(Path::new(env!("CARGO_BIN_EXE_check-vba-encoding")), &binary);
     let output = child_profile::command(binary)
         .current_dir(&wrong.0)
         .output()
@@ -222,6 +242,78 @@ fn installed_binary_is_independent_of_cwd_and_build_checkout() {
     );
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 file(s) pass"));
     assert!(output.stderr.is_empty());
+}
+
+#[cfg(unix)]
+struct ForkStorm {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    workers: Vec<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(unix)]
+impl ForkStorm {
+    fn start(dir: &Path) -> Self {
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let workers = (0..4)
+            .map(|_| {
+                let stop = std::sync::Arc::clone(&stop);
+                let dir = dir.to_path_buf();
+                std::thread::spawn(move || {
+                    while !stop.load(Ordering::Relaxed) {
+                        let status = std::process::Command::new("/bin/sh")
+                            .args(["-c", ":"])
+                            .current_dir(&dir)
+                            .status()
+                            .unwrap();
+                        assert!(status.success());
+                    }
+                })
+            })
+            .collect();
+        Self { stop, workers }
+    }
+
+    fn finish(mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        for worker in self.workers.drain(..) {
+            worker.join().unwrap();
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ForkStorm {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        for worker in self.workers.drain(..) {
+            let _ = worker.join();
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn copied_binary_survives_concurrent_forks() {
+    let temp = Temp::new();
+    let wrong = Temp::new();
+    temp.write("vba/forms/Form.FRM", CLEAN);
+    wrong.write("vba/Wrong.bas", b"\xff\n");
+    let storm = ForkStorm::start(&wrong.0);
+    let source = Path::new(env!("CARGO_BIN_EXE_check-vba-encoding"));
+    for index in 0..15 {
+        let binary = temp.0.join(format!("check-vba-encoding-{index}"));
+        copy_executable(source, &binary);
+        let output = child_profile::command(&binary)
+            .current_dir(&wrong.0)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    storm.finish();
 }
 
 #[test]

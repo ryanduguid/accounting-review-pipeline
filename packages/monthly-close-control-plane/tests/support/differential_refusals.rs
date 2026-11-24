@@ -215,3 +215,79 @@ fn exchange_reports_the_real_child_stderr_and_reaps_successful_children() -> Res
     );
     Ok(())
 }
+
+#[test]
+fn exchange_deadline_helper() {
+    let Ok(mode) = env::var("CLOSE_CONTROL_DIFF_TEST_MODE") else {
+        return;
+    };
+    let mut out = std::io::stdout().lock();
+    match mode.as_str() {
+        "steady" => {
+            writeln!(out, "ready").unwrap();
+            out.flush().unwrap();
+            for tick in 0..6 {
+                thread::sleep(Duration::from_millis(250));
+                writeln!(out, "tick-{tick}").unwrap();
+                out.flush().unwrap();
+            }
+        }
+        "stall" => thread::sleep(Duration::from_secs(10)),
+        "runaway" => {
+            for tick in 0..200 {
+                writeln!(out, "runaway-{tick}").unwrap();
+                out.flush().unwrap();
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+        other => panic!("unexpected test mode: {other}"),
+    }
+}
+
+#[test]
+fn exchange_resets_idle_deadline_on_line_progress_and_enforces_both_deadlines() -> Result<()> {
+    let helper = |mode: &str| -> Result<Command> {
+        let mut command = Command::new(env::current_exe()?);
+        command
+            .args([
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+                "tests::exchange_deadline_helper",
+            ])
+            .env("CLOSE_CONTROL_DIFF_TEST_MODE", mode);
+        Ok(command)
+    };
+    let lines = exchange_with_deadlines(
+        helper("steady")?,
+        "",
+        Duration::from_secs(1),
+        Duration::from_secs(10),
+    )?;
+    for tick in 0..6 {
+        assert!(lines.iter().any(|line| line == &format!("tick-{tick}")));
+    }
+    assert_eq!(
+        exchange_with_deadlines(
+            helper("stall")?,
+            "",
+            Duration::from_secs(1),
+            Duration::from_secs(10),
+        )
+        .unwrap_err()
+        .to_string(),
+        "comparison process exceeded its 1-second deadline"
+    );
+    assert_eq!(
+        exchange_with_deadlines(
+            helper("runaway")?,
+            "",
+            Duration::from_secs(5),
+            Duration::from_secs(1),
+        )
+        .unwrap_err()
+        .to_string(),
+        "comparison process exceeded its 1-second total deadline"
+    );
+    Ok(())
+}

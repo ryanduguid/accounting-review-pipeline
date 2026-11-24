@@ -66,7 +66,7 @@ fn run_observing(
             .spawn()
             .expect("start genuine monthly differential"),
     );
-    let deadline = Instant::now() + Duration::from_secs(180);
+    let deadline = Instant::now() + Duration::from_secs(600);
     let status = loop {
         observe();
         if let Some(status) = child.0.try_wait().unwrap() {

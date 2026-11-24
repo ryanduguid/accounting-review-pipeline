@@ -6,6 +6,10 @@ use std::{
     io::Write,
     path::Path,
     process::{Command, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -300,11 +304,28 @@ fn dates(c: &mut Corpus) {
     }
 }
 
+const EXCHANGE_IDLE_DEADLINE: Duration = Duration::from_secs(120);
+const EXCHANGE_TOTAL_DEADLINE: Duration = Duration::from_secs(600);
+
+fn exchange(command: Command, corpus: &str) -> Result<Vec<String>> {
+    exchange_with_deadlines(
+        command,
+        corpus,
+        EXCHANGE_IDLE_DEADLINE,
+        EXCHANGE_TOTAL_DEADLINE,
+    )
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "drives one oracle exchange over stdio"
 )]
-fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
+fn exchange_with_deadlines(
+    mut command: Command,
+    corpus: &str,
+    idle_deadline: Duration,
+    total_deadline: Duration,
+) -> Result<Vec<String>> {
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -315,11 +336,20 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
     let writer = thread::spawn(move || stdin.write_all(&data));
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
+    let started = Instant::now();
+    let last_progress_ms = Arc::new(AtomicU64::new(0));
+    let reader_progress = Arc::clone(&last_progress_ms);
     let reader = thread::spawn(move || {
-        use std::io::Read;
-        let mut out = out;
+        use std::io::BufRead;
+        let mut out = std::io::BufReader::new(out);
         let mut bytes = Vec::new();
-        out.read_to_end(&mut bytes).map(|_| bytes)
+        loop {
+            if out.read_until(b'\n', &mut bytes)? == 0 {
+                return Ok::<Vec<u8>, std::io::Error>(bytes);
+            }
+            let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            reader_progress.store(elapsed, Ordering::Release);
+        }
     });
     let errors = thread::spawn(move || {
         use std::io::Read;
@@ -327,14 +357,26 @@ fn exchange(mut command: Command, corpus: &str) -> Result<Vec<String>> {
         let mut bytes = Vec::new();
         err.read_to_end(&mut bytes).map(|_| bytes)
     });
-    let deadline = Instant::now() + Duration::from_secs(120);
     let status: Result<_> = (|| {
         loop {
             if let Some(status) = child.try_wait()? {
                 return Ok(status);
             }
-            if Instant::now() >= deadline {
-                return Err("comparison process exceeded its 120-second deadline".into());
+            let progress = Duration::from_millis(last_progress_ms.load(Ordering::Acquire));
+            let elapsed = started.elapsed();
+            if elapsed.saturating_sub(progress) >= idle_deadline {
+                return Err(format!(
+                    "comparison process exceeded its {}-second deadline",
+                    idle_deadline.as_secs()
+                )
+                .into());
+            }
+            if elapsed >= total_deadline {
+                return Err(format!(
+                    "comparison process exceeded its {}-second total deadline",
+                    total_deadline.as_secs()
+                )
+                .into());
             }
             thread::sleep(Duration::from_millis(20));
         }

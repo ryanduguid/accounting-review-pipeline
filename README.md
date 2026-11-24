@@ -223,7 +223,7 @@ records that commit; any other value fails the build. Without it, a full lowerca
 | JSON field | Meaning |
 |---|---|
 | `overall_status` | The separate readiness result: whether configured evidence permits the pack to enter human review. |
-| `engagement_type` | The selected `bas`, `month_end` or `year_end` evidence profile. |
+| `engagement_type` | The selected `bas`, `ias`, `month_end` or `year_end` evidence profile. |
 | `period_end` | The reporting date declared by the preparer's self-review. |
 | `findings` | Missing, incomplete or integrity conditions found by the configured gates. |
 | `source_sha256` | Filenames and SHA-256 digests identifying the exact input byte snapshots assessed. |
