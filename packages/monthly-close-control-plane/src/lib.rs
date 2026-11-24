@@ -38,6 +38,7 @@ pub mod reconciliation;
 pub mod reconciliation_report;
 pub mod report;
 pub mod schedules;
+pub mod scorecard;
 #[allow(unused_macros)]
 pub mod stdio;
 mod tables;
