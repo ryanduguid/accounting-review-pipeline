@@ -117,6 +117,10 @@ manifest. It is in development source only.
 reperforms PAYG withholding by the ATO's Schedule 1 formulas and the super
 guarantee on a register's 2026-27 pay lines, and lists differences, shortfalls
 and fund receipt dates worth review. It is in development source only.
+[Statement tie-out](docs/statement-tie-out.md) (`close-control statement`)
+checks that each line of a bank statement carries the running balance
+forward, that each page closes where its lines end and that each page opens
+where the last one closed. It is in development source only.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
