@@ -1,0 +1,9 @@
+usage: close-control statement [-h] --statement STATEMENT --currency CURRENCY
+
+options:
+  -h, --help            show this help message and exit
+  --statement STATEMENT
+                        one account's Account,Page,Kind,Date,Description,
+                        Amount,Balance,Currency CSV of statement rows, in
+                        printed order
+  --currency CURRENCY   the statement's three-letter currency, such as AUD

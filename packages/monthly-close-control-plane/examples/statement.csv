@@ -1,0 +1,10 @@
+Account,Page,Kind,Date,Description,Amount,Balance,Currency
+Varrock Ventures operating account,1,OPENING,2026-10-01,Opening balance,,12000.00,AUD
+Varrock Ventures operating account,1,LINE,2026-10-02,Customer receipt INV-1042,3450.00,15450.00,AUD
+Varrock Ventures operating account,1,LINE,2026-10-05,Supplier payment,-1245.00,14025.00,AUD
+Varrock Ventures operating account,1,LINE,2026-10-09,Account fee,-15.00,14010.00,AUD
+Varrock Ventures operating account,1,CLOSING,2026-10-15,Closing balance,,14010.00,AUD
+Varrock Ventures operating account,2,OPENING,2026-10-15,Opening balance,,14010.00,AUD
+Varrock Ventures operating account,2,LINE,2026-10-20,Payroll,-6200.00,7810.00,AUD
+Varrock Ventures operating account,2,LINE,2026-10-28,Customer receipt INV-1051,2200.00,10010.00,AUD
+Varrock Ventures operating account,2,CLOSING,2026-10-31,Closing balance,,10010.00,AUD

@@ -9,7 +9,8 @@ use crate::{
     models::Status,
     payroll, publication,
     pyjson::{self, Json, PyStr},
-    pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, stdio, viewer,
+    pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, statement,
+    stdio, viewer,
 };
 use num_bigint::BigInt;
 use std::{
@@ -18,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 16] = [
+const COMMANDS: [&str; 17] = [
     "review",
     "workbench",
     "view",
@@ -35,6 +36,7 @@ const COMMANDS: [&str; 16] = [
     "coding",
     "mcp",
     "payroll",
+    "statement",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -62,6 +64,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "coding" => saved!("coding"),
         "mcp" => saved!("mcp"),
         "payroll" => saved!("payroll"),
+        "statement" => saved!("statement"),
         _ => saved!("root"),
     }
 }
@@ -223,6 +226,10 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         ),
         "mcp" => (&[], &["DIRECTORY"]),
         "payroll" => (&["--register"], &["--register"]),
+        "statement" => (
+            &["--statement", "--currency"],
+            &["--statement", "--currency"],
+        ),
         _ => return None,
     })
 }
@@ -785,7 +792,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 Ok(0)
             }
             "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "coding"
-            | "payroll" => {
+            | "payroll" | "statement" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -805,6 +812,10 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--period-end")?,
                     )?,
                     "payroll" => payroll::payroll_reperformance(&args.path("--register"))?,
+                    "statement" => statement::statement_tie_out(
+                        &args.path("--statement"),
+                        args.raw("--currency"),
+                    )?,
                     "fixed-assets" => fixed_assets::fixed_assets(
                         &args.path("--register"),
                         &args.path("--trial-balance"),
