@@ -3,7 +3,7 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use crate::{
-    Result, classification, comparison,
+    Result, classification, coding, comparison,
     decimal::Decimal,
     drivers, duplicates, engine, fixed_assets, journal_entries, loader, mcp,
     models::Status,
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 15] = [
+const COMMANDS: [&str; 16] = [
     "review",
     "workbench",
     "view",
@@ -32,6 +32,7 @@ const COMMANDS: [&str; 15] = [
     "jet",
     "duplicates",
     "fixed-assets",
+    "coding",
     "mcp",
     "payroll",
 ];
@@ -58,6 +59,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "jet" => saved!("jet"),
         "duplicates" => saved!("duplicates"),
         "fixed-assets" => saved!("fixed-assets"),
+        "coding" => saved!("coding"),
         "mcp" => saved!("mcp"),
         "payroll" => saved!("payroll"),
         _ => saved!("root"),
@@ -210,6 +212,10 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         "fixed-assets" => (
             &["--register", "--trial-balance", "--currency"],
             &["--register", "--trial-balance", "--currency"],
+        ),
+        "coding" => (
+            &["--lines", "--currency", "--period-start", "--period-end"],
+            &["--lines", "--currency", "--period-start", "--period-end"],
         ),
         "jet" => (
             &["--transactions", "--currency", "--period-end"],
@@ -778,7 +784,8 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "payroll" => {
+            "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "coding"
+            | "payroll" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -802,6 +809,12 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.path("--register"),
                         &args.path("--trial-balance"),
                         &args.literal("--currency")?,
+                    )?,
+                    "coding" => coding::coding_review(
+                        &args.path("--lines"),
+                        &args.literal("--currency")?,
+                        &args.literal("--period-start")?,
+                        &args.literal("--period-end")?,
                     )?,
                     _ => schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?,
                 };

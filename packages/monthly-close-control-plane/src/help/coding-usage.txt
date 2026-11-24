@@ -1,0 +1,3 @@
+usage: close-control coding [-h] --lines LINES --currency CURRENCY
+                            --period-start PERIOD_START --period-end
+                            PERIOD_END
