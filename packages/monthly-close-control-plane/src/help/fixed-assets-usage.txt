@@ -1,0 +1,2 @@
+usage: close-control fixed-assets [-h] --register REGISTER --trial-balance
+                                  TRIAL_BALANCE --currency CURRENCY

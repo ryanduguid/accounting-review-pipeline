@@ -1,0 +1,12 @@
+usage: close-control fixed-assets [-h] --register REGISTER --trial-balance
+                                  TRIAL_BALANCE --currency CURRENCY
+
+options:
+  -h, --help            show this help message and exit
+  --register REGISTER   one tenant's Tenant,AssetID,Description,CostAccountID,
+                        DepreciationAccountID,Cost,AccumulatedDepreciation,Acq
+                        uisitionDate,DisposalDate,Currency CSV at the trial
+                        balance's ReportDate
+  --trial-balance TRIAL_BALANCE
+                        the canonical trial balance the register ties to
+  --currency CURRENCY   three-letter currency every row carries, e.g. AUD

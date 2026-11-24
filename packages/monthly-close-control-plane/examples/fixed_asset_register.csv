@@ -1,0 +1,6 @@
+Tenant,AssetID,Description,CostAccountID,DepreciationAccountID,Cost,AccumulatedDepreciation,AcquisitionDate,DisposalDate,Currency
+Varrock Ventures Pty Ltd,FA-001,Delivery van,710,711,42000.00,9800.00,2025-03-03,,AUD
+Varrock Ventures Pty Ltd,FA-002,Workshop compressor,710,711,6500.00,1950.00,2025-05-19,,AUD
+Varrock Ventures Pty Ltd,FA-003,Old delivery van,710,711,28000.00,24500.00,2021-07-01,2026-08-14,AUD
+Varrock Ventures Pty Ltd,FA-004,Office laptops,720,721,4800.00,5100.00,2024-07-01,,AUD
+Varrock Ventures Pty Ltd,FA-005,Reception desk,720,721,1900.00,380.00,2025-11-10,,AUD
