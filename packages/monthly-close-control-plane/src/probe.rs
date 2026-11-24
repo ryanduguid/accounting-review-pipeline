@@ -256,6 +256,8 @@ const DEMO_COMMAND: &str = concat!(
     "                        worth review, with a Benford first-digit test\n",
     "    duplicates          list possible duplicate bills and payments and missing\n",
     "                        recurring bills in a supplier register\n",
+    "    fixed-assets        tie a fixed-asset register's cost and accumulated\n",
+    "                        depreciation to the trial balance\n",
     "    mcp                 serve the read-only commands to an assistant over\n",
     "                        stdio (Model Context Protocol)\n",
 );
@@ -274,29 +276,32 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
 /// `duplicates` and `mcp` commands, so CLI output compared with it drops their
 /// usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet,duplicates,mcp}", ",schedule}")
-        .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
-        .replace(
-            "{expenses,migration,interentity,prepayments}",
-            "{expenses,migration,interentity}",
-        )
-        .replace("'interentity', 'prepayments')", "'interentity')")
-        .replace(
-            ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp')",
-            ", 'schedule')",
-        )
-        .replace(DEMO_COMMAND, "")
-        .replace(CONTACTS_USAGE, "")
-        .replace(CONTACTS_OPTION, "")
-        .replace(GST_USAGE, "")
-        .replace(GST_OPTIONS, "")
-        .replace(
-            REQUIRED_CONTROL_USAGE,
-            "[--require-calculation LABEL] --output OUTPUT\n",
-        )
-        .replace(REQUIRED_CONTROL_OPTION, "")
-        .replace(SUMMARY_USAGE, "[--reviewer REVIEWER]\n")
-        .replace(SUMMARY_OPTION, "")
+    text.replace(
+        ",schedule,demo,jet,duplicates,fixed-assets,mcp}",
+        ",schedule}",
+    )
+    .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
+    .replace(
+        "{expenses,migration,interentity,prepayments}",
+        "{expenses,migration,interentity}",
+    )
+    .replace("'interentity', 'prepayments')", "'interentity')")
+    .replace(
+        ", 'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'mcp')",
+        ", 'schedule')",
+    )
+    .replace(DEMO_COMMAND, "")
+    .replace(CONTACTS_USAGE, "")
+    .replace(CONTACTS_OPTION, "")
+    .replace(GST_USAGE, "")
+    .replace(GST_OPTIONS, "")
+    .replace(
+        REQUIRED_CONTROL_USAGE,
+        "[--require-calculation LABEL] --output OUTPUT\n",
+    )
+    .replace(REQUIRED_CONTROL_OPTION, "")
+    .replace(SUMMARY_USAGE, "[--reviewer REVIEWER]\n")
+    .replace(SUMMARY_OPTION, "")
 }
 fn decimal_json(value: Option<&Decimal>) -> Json {
     value.map_or(Json::Null, |value| Json::str(&value.to_sci_string()))
@@ -1107,7 +1112,7 @@ mod tests {
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
         assert!(
-            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'mcp')"),
+            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'mcp')"),
             "{error}"
         );
         let frozen = without_native_options(&error);

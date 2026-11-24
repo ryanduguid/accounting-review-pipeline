@@ -5,7 +5,7 @@
 use crate::{
     Result, classification, comparison,
     decimal::Decimal,
-    drivers, duplicates, engine, journal_entries, loader, mcp,
+    drivers, duplicates, engine, fixed_assets, journal_entries, loader, mcp,
     models::Status,
     publication,
     pyjson::{self, Json, PyStr},
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 13] = [
+const COMMANDS: [&str; 14] = [
     "review",
     "workbench",
     "view",
@@ -31,6 +31,7 @@ const COMMANDS: [&str; 13] = [
     "demo",
     "jet",
     "duplicates",
+    "fixed-assets",
     "mcp",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
@@ -55,6 +56,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "demo" => saved!("demo"),
         "jet" => saved!("jet"),
         "duplicates" => saved!("duplicates"),
+        "fixed-assets" => saved!("fixed-assets"),
         "mcp" => saved!("mcp"),
         _ => saved!("root"),
     }
@@ -202,6 +204,10 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
                 "--period-start",
                 "--period-end",
             ],
+        ),
+        "fixed-assets" => (
+            &["--register", "--trial-balance", "--currency"],
+            &["--register", "--trial-balance", "--currency"],
         ),
         "jet" => (
             &["--transactions", "--currency", "--period-end"],
@@ -769,7 +775,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" | "jet" | "duplicates" => {
+            "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -787,6 +793,11 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--currency")?,
                         &args.literal("--period-start")?,
                         &args.literal("--period-end")?,
+                    )?,
+                    "fixed-assets" => fixed_assets::fixed_assets(
+                        &args.path("--register"),
+                        &args.path("--trial-balance"),
+                        &args.literal("--currency")?,
                     )?,
                     _ => schedules::review_schedule(&args.path("--input"), args.raw("--kind"))?,
                 };

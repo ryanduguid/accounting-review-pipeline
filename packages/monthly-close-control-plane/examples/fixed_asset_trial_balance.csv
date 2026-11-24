@@ -1,0 +1,6 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-09-30,Varrock Ventures Pty Ltd,Assets,100,Operating Bank,1000,15000.00,0.00,120000.00,0.00
+2026-09-30,Varrock Ventures Pty Ltd,Assets,710,Motor Vehicles and Plant at Cost,1710,0.00,0.00,76500.00,0.00
+2026-09-30,Varrock Ventures Pty Ltd,Assets,711,Motor Vehicles and Plant Accumulated Depreciation,1711,0.00,700.00,0.00,36250.00
+2026-09-30,Varrock Ventures Pty Ltd,Assets,720,Office Equipment at Cost,1720,0.00,0.00,6700.00,0.00
+2026-09-30,Varrock Ventures Pty Ltd,Assets,721,Office Equipment Accumulated Depreciation,1721,0.00,160.00,0.00,5480.00
