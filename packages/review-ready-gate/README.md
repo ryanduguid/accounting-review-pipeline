@@ -300,14 +300,14 @@ In `bas` and `ias`, whatever the pack supplies, the activity statement's own fig
 - `W1` to `W5`, `4`, `1C`, `1D`, `7C` and `7D` are never negative
 - `W5`, where reported, is `W2 + W4 + W3`, a missing label counting as nil
 - `4`, where reported with `W5`, equals `W5`
-- `W2` is not more than `W1`, since it is withheld from the payments shown there
+- `W2` is not more than `W1`, where `W1` is reported, since it is withheld from the payments shown there; a payer reporting through Single Touch Payroll leaves `W1` out
 
 With `paygw_control_gl.csv`, in the GST control file's columns (`Date,AccountID,AccountName,Debit,Credit,Description`) and holding the period's withholding postings to the PAYG withholding liability accounts:
 
 - the withholding the statement reports, `W5`, or `W2 + W4 + W3` without it, is compared with the file's `sum(Credit) - sum(Debit)`; a difference beyond `--tieout-tolerance` is `NOT_READY`
-- when those labels are whole dollars, as on a lodged statement, a statement lower than the ledger by under `$1` for each of `W2`, `W4` and `W3` it reports also ties: the ATO rounds each label's cents down. A statement higher than the ledger gets no allowance
+- when those labels are whole dollars, as on a lodged statement, a statement lower than the ledger by under `$1` for each of `W2`, `W4` and `W3` it reports also ties, or under `$3` for `W5` reported alone: the ATO rounds each label's cents down. A statement higher than the ledger gets no allowance
 - a statement with none of `W2`, `W3`, `W4` or `W5` cannot be tied, and says so. A large withholder reports `W1` only and leaves the file out
-- the file's accounts must be in the trial balance and roll forward to it as the GST control accounts do, with the activity statement's optional `PAYGW_OPENING` declaring the balance carried in from before the period, signed and checked like `GST_OPENING`
+- the file's accounts must be in the trial balance, must not also be in the GST control file, and roll forward to the trial balance as the GST control accounts do, with the activity statement's optional `PAYGW_OPENING` declaring the balance carried in from before the period, signed and checked like `GST_OPENING`
 - a posting dated after `period_end`, or before a declared `period_start`, is `NOT_READY` with `PERIOD_ORDER`
 
 `W1` is reported, not tied: the gate reads no payroll register.

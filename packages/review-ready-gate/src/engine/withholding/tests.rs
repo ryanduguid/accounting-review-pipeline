@@ -106,14 +106,18 @@ fn statement_arithmetic_breaks_are_named() {
 }
 
 #[test]
-fn w2_without_w1_exceeds_a_nil_w1() {
-    let got = reasons(&review("ias", &[(STATEMENT, "Label,Amount\nW2,5200\n")]));
-    assert!(
-        got.iter().any(|r| r.ends_with(
-            "Activity statement W2 (5200) exceeds W1 (0); W2 is withheld from the payments shown at W1."
-        )),
-        "{got:?}"
-    );
+fn w2_without_w1_is_accepted_as_single_touch_payroll_reporting() {
+    let got = reasons(&review(
+        "ias",
+        &[(
+            STATEMENT,
+            "Label,Amount
+W2,5200
+W5,5200
+",
+        )],
+    ));
+    assert!(got.is_empty(), "{got:?}");
 }
 
 fn tie_reasons(statement: &str, rows: &[(&str, &str)]) -> Vec<String> {
@@ -141,6 +145,24 @@ fn whole_dollar_labels_tie_when_the_ledger_is_higher_by_under_a_dollar_each() {
         [
             "PAYG withholding on the activity statement (W5 5200) does not tie to PAYG withholding control movement (5201.00); difference -1.00 exceeds tolerance 0.01 or the allowance of under $1 for each of the 1 whole-dollar withholding labels."
         ]
+    );
+    // W5 alone stands for 3 labels rounded down, though its arithmetic is listed.
+    let alone = tie_reasons(
+        "Label,Amount
+W5,5200
+",
+        &[("2026-01-15", "5202.97")],
+    );
+    assert!(alone.is_empty(), "{alone:?}");
+    assert_eq!(
+        tie_reasons(
+            "Label,Amount
+W5,5200
+",
+            &[("2026-01-15", "5203.00")]
+        )
+        .len(),
+        1
     );
     // Two labels, up to two dollars of rounding.
     let parts = "Label,Amount\nW1,24000\nW2,5200\nW4,100\n";
@@ -278,4 +300,48 @@ fn control_balances_beyond_28_digits_are_refused() {
         ],
     );
     assert_eq!(run("ias", &dir).unwrap_err(), PRECISION);
+}
+
+#[test]
+fn an_account_in_both_control_files_is_not_rolled_forward() {
+    // GST movement 100 carried in at 50, PAYG movement 50 carried in at 100:
+    // each roll-forward alone ties the shared account's closing 150.
+    let tb = example_tb()
+        .replace("0.00,5200.00,0.00,5200.00", "0.00,150.00,0.00,150.00")
+        .replace("24000.00,0.00,24000.00,0.00", "500.00,0.00,500.00,0.00")
+        .replace("0.00,18800.00,31200.00,0.00", "0.00,350.00,49650.00,0.00");
+    let gst = "Date,AccountID,AccountName,Debit,Credit,Description
+2026-01-20,830,Tax payable,0.00,100.00,GST
+";
+    let statement = "Label,Amount
+1A,100.00
+1B,0.00
+GST_OPENING,50.00
+W1,500
+W2,50
+W5,50
+4,50
+PAYGW_OPENING,100.00
+";
+    let review = fs::read_to_string(test_support::examples().join("ias-ready/self_review.json"))
+        .unwrap()
+        .replace("\"ias\"", "\"bas\"");
+    let tmp = TempDir::new();
+    let dir = pack(
+        &tmp,
+        &[
+            (TB, &tb),
+            ("gst_control_gl.csv", gst),
+            (CONTROL, &control(&[("2026-01-15", "50.00")])),
+            (STATEMENT, statement),
+            ("self_review.json", &review),
+        ],
+    );
+    let pack = run("bas", &dir).unwrap();
+    assert_eq!(
+        reasons(&pack),
+        [
+            "TIEOUT_BREAK paygw_control_gl Accounts are in both the GST and the PAYG withholding control files: 830. Neither roll-forward explains their closing balance alone."
+        ]
+    );
 }

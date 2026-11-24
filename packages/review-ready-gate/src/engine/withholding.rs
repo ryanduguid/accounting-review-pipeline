@@ -93,15 +93,15 @@ fn apply_statement(statement: &[ActivityLabel], findings: &mut Vec<Finding>) -> 
             w5.to_sci_string()
         )));
     }
-    if let Some(w2) = label(statement, "W2") {
-        let w1 = label(statement, "W1").unwrap_or(&zero);
-        if w2 > w1 {
-            findings.push(statement_break(format!(
-                "Activity statement W2 ({}) exceeds W1 ({}); W2 is withheld from the payments shown at W1.",
-                w2.to_sci_string(),
-                w1.to_sci_string()
-            )));
-        }
+    // A payer reporting through Single Touch Payroll leaves W1 out.
+    if let (Some(w2), Some(w1)) = (label(statement, "W2"), label(statement, "W1"))
+        && w2 > w1
+    {
+        findings.push(statement_break(format!(
+            "Activity statement W2 ({}) exceeds W1 ({}); W2 is withheld from the payments shown at W1.",
+            w2.to_sci_string(),
+            w1.to_sci_string()
+        )));
     }
     Ok(())
 }
@@ -143,7 +143,12 @@ fn apply_tie(
     };
     let movement = movement(control)?;
     let difference = exact_sub(&withheld, &movement, BAS_PRECISION)?;
-    let labels = reported.len().max(1);
+    // W5 alone stands for W2, W4 and W3, each rounded down.
+    let labels = if reported.is_empty() {
+        WITHHELD.len()
+    } else {
+        reported.len()
+    };
     let whole = withheld.is_integral() && reported.iter().all(|a| a.is_integral());
     let allowance = Decimal::parse(&labels.to_string()).unwrap();
     let rounded = whole && difference.is_signed() && difference.abs() < allowance;
@@ -202,6 +207,31 @@ fn accounts_missing(accounts: &BTreeSet<&str>, tb: &[TrialBalanceRow]) -> Option
     ))
 }
 
+/// Accounts in both control files, whose closing balance neither file's
+/// roll-forward can explain alone.
+fn shared(accounts: &BTreeSet<&str>, loaded: &Loaded) -> Option<Finding> {
+    let gst: BTreeSet<_> = loaded
+        .gst_control_gl
+        .iter()
+        .flatten()
+        .map(|r| r.account_id.as_str())
+        .collect();
+    let both: Vec<String> = accounts
+        .intersection(&gst)
+        .map(|a| (*a).to_owned())
+        .collect();
+    (!both.is_empty()).then(|| Finding::new(
+        "TIEOUT_BREAK",
+        "NOT_READY",
+        SLOT,
+        format!(
+            "Accounts are in both the GST and the PAYG withholding control files: {}. Neither roll-forward explains their closing balance alone.",
+            first_three(&both)
+        ),
+        "Return the pack. Keep GST and PAYG withholding in separate control accounts, or reconcile the shared account by hand.",
+    ))
+}
+
 /// The control accounts' closing balance in the trial balance against the
 /// balance they carry in, the statement's `PAYGW_OPENING` or nil, plus the
 /// period's movement.
@@ -214,7 +244,7 @@ fn apply_roll_forward(
         return Ok(());
     };
     let accounts: BTreeSet<_> = control.iter().map(|r| r.account_id.as_str()).collect();
-    if let Some(finding) = accounts_missing(&accounts, tb) {
+    if let Some(finding) = accounts_missing(&accounts, tb).or_else(|| shared(&accounts, loaded)) {
         findings.push(finding);
         return Ok(());
     }
