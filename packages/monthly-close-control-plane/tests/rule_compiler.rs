@@ -381,3 +381,56 @@ fn rule_compiler_rejects_invalid_inputs_and_tampered_rulesets() {
     let toml = special.to_toml();
     assert!(toml.contains("a\\\\b\\\"c\\nd\\re\\tf"));
 }
+
+#[test]
+fn rule_matching_enforces_token_boundaries_against_substring_collisions() {
+    let history = vec![
+        rec(
+            "2026-06-30",
+            "600",
+            "rent",
+            OverrideDisposition::AcceptKnownTiming,
+        ),
+        rec(
+            "2026-07-31",
+            "600",
+            "rent",
+            OverrideDisposition::AcceptKnownTiming,
+        ),
+    ];
+    let ruleset = rule_compiler::compile_rules(&history, &CompilePolicy::default()).unwrap();
+    let open = vec![
+        OpenException {
+            item_id: "SUBSTR-TRAP".into(),
+            tenant: "Fabricated Varrock".into(),
+            control: "period_variance".into(),
+            account_id: "600".into(),
+            text: "Parent expenditure recharge".into(),
+        },
+        OpenException {
+            item_id: "TRUE-MATCH".into(),
+            tenant: "Fabricated Varrock".into(),
+            control: "period_variance".into(),
+            account_id: "600".into(),
+            text: "August rent accrual".into(),
+        },
+    ];
+    let report = rule_compiler::replay_rules(&ruleset, &open).unwrap();
+    assert_eq!(report.rule_cleared.len(), 1);
+    assert_eq!(report.rule_cleared[0].item_id, "TRUE-MATCH");
+    assert_eq!(report.exceptions_remaining, vec!["SUBSTR-TRAP".to_owned()]);
+
+    // Punctuation-only pattern is refused.
+    assert!(
+        rule_compiler::compile_rules(
+            &[rec(
+                "2026-07-31",
+                "600",
+                "---",
+                OverrideDisposition::AcceptKnownTiming
+            )],
+            &CompilePolicy::default(),
+        )
+        .is_err()
+    );
+}

@@ -35,7 +35,9 @@ writes a deterministic stored ZIP archive sealing:
 - `manifest.json` (`close-binder-manifest-v1`) recording byte lengths, SHA-256
   digests, source hashes and the optional audit chain head.
 
-`verify_binder` and `verify_binder_bytes` validate ZIP structure, CRC-32
+`verify_binder` and `verify_binder_bytes` require an independently stored
+`BinderAnchor` (`manifest_sha256` and optional `audit_chain_head`) and validate
+ZIP structure, CRC-32
 checksums, exact manifest inventory, SHA-256 digests, embedded pack metadata and
 the audit hash chain. Any modification fails closed.
 
@@ -59,6 +61,8 @@ the audit hash chain. Any modification fails closed.
   rules, serialisable to canonical JSON or TOML.
 - `backtest_rules(&ruleset, &held_out)` replays compiled rules against held-out
   dispositions with zero model calls and demotes any rule with a conflict.
-- `replay_rules(&ruleset, &open_items)` verifies `ruleset_sha256` before replay
+- `replay_rules(&ruleset, &open_items)` verifies `ruleset_sha256` before replay,
+matches patterns on alphanumeric token boundaries (preventing substring
+collisions)
   and keeps unmatched or multi-rule conflicting items in `exceptions_remaining`.
 

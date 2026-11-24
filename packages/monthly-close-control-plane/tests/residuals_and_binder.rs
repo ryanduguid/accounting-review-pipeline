@@ -256,7 +256,7 @@ fn binder_export_verify_audit_chain_and_tamper_detection() {
         Some(chain_summary.head_sha256.clone())
     );
 
-    let verified = binder::verify_binder(&zip_path).unwrap();
+    let verified = binder::verify_binder(&zip_path, &exported.anchor()).unwrap();
     assert_eq!(verified, exported);
 
     // Export without audit chain works cleanly too.
@@ -269,7 +269,10 @@ fn binder_export_verify_audit_chain_and_tamper_detection() {
     })
     .unwrap();
     assert_eq!(plain.audit_chain_head, None);
-    assert_eq!(binder::verify_binder(&zip_no_chain).unwrap(), plain);
+    assert_eq!(
+        binder::verify_binder(&zip_no_chain, &plain.anchor()).unwrap(),
+        plain
+    );
 
     // Determinism: exporting the same inputs to a second path produces identical ZIP bytes.
     let zip_copy = dir.join("binders/2026-08-copy.zip");
@@ -288,10 +291,10 @@ fn binder_export_verify_audit_chain_and_tamper_detection() {
         .unwrap()
         + 15;
     tampered[idx] ^= 0x01;
-    assert!(binder::verify_binder_bytes(&tampered).is_err());
+    assert!(binder::verify_binder_bytes(&tampered, &exported.anchor()).is_err());
 
     // Missing zip file fails cleanly.
-    assert!(binder::verify_binder(&dir.join("missing.zip")).is_err());
+    assert!(binder::verify_binder(&dir.join("missing.zip"), &exported.anchor()).is_err());
 
     // Path validation & reserved/duplicate collisions.
     for bad in [
@@ -362,4 +365,31 @@ fn binder_export_verify_audit_chain_and_tamper_detection() {
             .unwrap_err()
             .contains("tampered")
     );
+}
+
+#[test]
+fn duplicate_clustering_anchors_to_first_date_without_chaining() {
+    let rows = "\
+Fabricated Varrock,CLEAR-100,AUD,CH1,2026-08-01,CHAIN-REF,Repeat payment,88.00,0.00
+Fabricated Varrock,CLEAR-100,AUD,CH2,2026-08-07,CHAIN-REF,Repeat payment,88.00,0.00
+Fabricated Varrock,CLEAR-100,AUD,CH3,2026-08-13,CHAIN-REF,Repeat payment,88.00,0.00
+";
+    let pack = make_reconciliation_pack(rows, "264.00");
+    let report = residuals::classify_pack(&pack, &ResidualPolicy::default()).unwrap();
+    assert_eq!(report.items.len(), 2);
+    let dup = report
+        .items
+        .iter()
+        .find(|i| i.class == ResidualClass::Duplicate)
+        .unwrap();
+    assert_eq!(
+        dup.transaction_ids,
+        vec!["CH1".to_owned(), "CH2".to_owned()]
+    );
+    let sep = report
+        .items
+        .iter()
+        .find(|i| i.transaction_ids == vec!["CH3".to_owned()])
+        .unwrap();
+    assert_eq!(sep.class, ResidualClass::Unexplained);
 }

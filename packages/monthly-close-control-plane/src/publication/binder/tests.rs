@@ -7,9 +7,7 @@ use super::*;
 #[test]
 #[allow(clippy::too_many_lines)]
 fn write_atomic_and_collect_entries_cover_io_and_toctou_errors() {
-    let dir = std::env::temp_dir().join(format!("binder-unit-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
+    let dir = crate::test_support::TempDir::new();
     let target = dir.join("out.zip");
     assert!(
         write_atomic_with(
@@ -70,7 +68,7 @@ fn write_atomic_and_collect_entries_cover_io_and_toctou_errors() {
             .collect(),
     };
     let req = BinderRequest {
-        pack_dir: dir.clone(),
+        pack_dir: dir.0.clone(),
         output_zip: target.clone(),
         attachments: Vec::new(),
         audit_chain: None,
@@ -87,7 +85,6 @@ fn write_atomic_and_collect_entries_cover_io_and_toctou_errors() {
             .unwrap()
             .contains("changed during binder export")
     );
-    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -178,6 +175,17 @@ fn zip_truncation_duplicates_trailing_and_source_hash_errors_are_rejected() {
     assert!(read_source_hashes(&bad_val).is_err());
 }
 
+fn anchor_for(files: &BTreeMap<String, Vec<u8>>, audit_head: Option<&str>) -> BinderAnchor {
+    let manifest_sha256 = files
+        .get(MANIFEST_PATH)
+        .map(|b| sha256(b))
+        .unwrap_or_else(|| "0".repeat(64));
+    BinderAnchor {
+        manifest_sha256,
+        audit_chain_head: audit_head.map(str::to_owned),
+    }
+}
+
 #[test]
 #[allow(clippy::too_many_lines)]
 fn manifest_verification_rejects_every_tampered_shape() {
@@ -191,7 +199,7 @@ fn manifest_verification_rejects_every_tampered_shape() {
     );
     // Missing manifest.
     assert!(
-        verify_binder_bytes(&write_zip(&base))
+        verify_binder_bytes(&write_zip(&base), &anchor_for(&base, None))
             .unwrap_err()
             .contains("missing manifest.json")
     );
@@ -199,7 +207,7 @@ fn manifest_verification_rejects_every_tampered_shape() {
     let mut non_utf8 = base.clone();
     non_utf8.insert(MANIFEST_PATH.to_owned(), vec![0xff, 0xfe]);
     assert!(
-        verify_binder_bytes(&write_zip(&non_utf8))
+        verify_binder_bytes(&write_zip(&non_utf8), &anchor_for(&non_utf8, None))
             .unwrap_err()
             .contains("valid UTF-8")
     );
@@ -207,7 +215,7 @@ fn manifest_verification_rejects_every_tampered_shape() {
     let mut bad_json = base.clone();
     bad_json.insert(MANIFEST_PATH.to_owned(), b"{".to_vec());
     assert!(
-        verify_binder_bytes(&write_zip(&bad_json))
+        verify_binder_bytes(&write_zip(&bad_json), &anchor_for(&bad_json, None))
             .unwrap_err()
             .contains("valid JSON")
     );
@@ -215,7 +223,7 @@ fn manifest_verification_rejects_every_tampered_shape() {
     let mut bad_schema = base.clone();
     bad_schema.insert(MANIFEST_PATH.to_owned(), br#"{"schema":"other"}"#.to_vec());
     assert!(
-        verify_binder_bytes(&write_zip(&bad_schema))
+        verify_binder_bytes(&write_zip(&bad_schema), &anchor_for(&bad_schema, None))
             .unwrap_err()
             .contains("close-binder-manifest-v1")
     );
@@ -226,7 +234,7 @@ fn manifest_verification_rejects_every_tampered_shape() {
         format!(r#"{{"schema":"{MANIFEST_SCHEMA}"}}"#).into_bytes(),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&no_entries))
+        verify_binder_bytes(&write_zip(&no_entries), &anchor_for(&no_entries, None))
             .unwrap_err()
             .contains("missing entries")
     );
@@ -238,9 +246,12 @@ fn manifest_verification_rejects_every_tampered_shape() {
             .into_bytes(),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&bad_entries_sha))
-            .unwrap_err()
-            .contains("manifest_entries_sha256")
+        verify_binder_bytes(
+            &write_zip(&bad_entries_sha),
+            &anchor_for(&bad_entries_sha, None)
+        )
+        .unwrap_err()
+        .contains("manifest_entries_sha256")
     );
 }
 
@@ -312,7 +323,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         make_manifest(&bad_len_arr, "PASS", &src_sha, None),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("invalid byte length")
     );
@@ -324,7 +335,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         make_manifest(&missing_arr, "PASS", &src_sha, None),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("missing manifest entry")
     );
@@ -343,7 +354,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         make_manifest(&wrong_sha_arr, "PASS", &src_sha, None),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("failed digest")
     );
@@ -358,7 +369,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         make_manifest(&dup_arr, "PASS", &src_sha, None),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("duplicate entry")
     );
@@ -379,7 +390,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         ),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("not listed")
     );
@@ -396,9 +407,12 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         ),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&partial_files))
-            .unwrap_err()
-            .contains("missing required pack artefact")
+        verify_binder_bytes(
+            &write_zip(&partial_files),
+            &anchor_for(&partial_files, None)
+        )
+        .unwrap_err()
+        .contains("missing required pack artefact")
     );
 
     let mut z = files.clone();
@@ -413,7 +427,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         MANIFEST_PATH.to_owned(),
         make_manifest(&arr, "PASS", &src_sha, None),
     );
-    assert!(verify_binder_bytes(&write_zip(&z)).is_err());
+    assert!(verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None)).is_err());
 
     let mut z = files.clone();
     z.insert(
@@ -426,7 +440,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         ),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("pack_status")
     );
@@ -442,7 +456,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         ),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("source_sha256")
     );
@@ -458,7 +472,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         ),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("presence does not match")
     );
@@ -485,7 +499,7 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
         ),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z))
+        verify_binder_bytes(&write_zip(&z), &anchor_for(&z, None))
             .unwrap_err()
             .contains("audit_chain_head_sha256")
     );
@@ -516,8 +530,137 @@ fn manifest_entries_pack_and_audit_mismatch_paths_are_rejected() {
             .into_bytes(),
     );
     assert!(
-        verify_binder_bytes(&write_zip(&z2))
+        verify_binder_bytes(&write_zip(&z2), &anchor_for(&z2, None))
             .unwrap_err()
             .contains("must be UTF-8 text")
+    );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn self_consistent_rebuilt_zip_is_rejected_against_original_anchor() {
+    let src_sha = "a".repeat(64);
+    let pack = crate::engine::CloseReviewPack {
+        status: crate::models::Status::Pass,
+        current_report_dates: vec!["2026-08-31".into()],
+        prior_report_dates: vec!["2026-07-31".into()],
+        source_hashes: [("current".to_owned(), src_sha.clone())]
+            .into_iter()
+            .collect(),
+        absolute_threshold: crate::decimal::Decimal::parse("1000").unwrap(),
+        percentage_threshold: crate::decimal::Decimal::parse("0.10").unwrap(),
+        reconciliation_tolerance: crate::decimal::Decimal::parse("0.01").unwrap(),
+        gst_tolerance: None,
+        exceptions: Vec::new(),
+        acknowledgement: None,
+        calculation_evidence: Vec::new(),
+        required_calculations: Vec::new(),
+        required_controls: Vec::new(),
+        controls_not_run: Vec::new(),
+        relied_on: BTreeSet::new(),
+        equity_reconciliation: None,
+        producer: None,
+    };
+    let rendered = crate::report::rendered(&pack).unwrap();
+    let mut files = BTreeMap::new();
+    for (name, data) in PACK_NAMES.into_iter().zip(rendered) {
+        files.insert(name.to_owned(), data);
+    }
+    let chain = build_audit_chain(&[AuditEventInput {
+        timestamp: "2026-08-31T10:00:00Z".into(),
+        actor: "RD".into(),
+        action: "review".into(),
+        target: "pack".into(),
+        detail: "checked".into(),
+    }])
+    .unwrap();
+    let chain_head = verify_audit_chain(&chain).unwrap().head_sha256;
+    files.insert(AUDIT_CHAIN_PATH.to_owned(), chain);
+    files.insert("notes/a.txt".to_owned(), b"original".to_vec());
+
+    let seal = |entries: &BTreeMap<String, Vec<u8>>, head: &str| {
+        let arr = Json::Array(
+            entries
+                .iter()
+                .map(|(p, d)| {
+                    Json::object([
+                        ("path", Json::str(p)),
+                        ("bytes", Json::int(d.len() as i64)),
+                        ("sha256", Json::str(&sha256(d))),
+                    ])
+                })
+                .collect(),
+        );
+        let m = Json::object([
+            ("schema", Json::str(MANIFEST_SCHEMA)),
+            ("pack_status", Json::str("PASS")),
+            (
+                "source_sha256",
+                Json::object([("current", Json::str(&src_sha))]),
+            ),
+            ("entries", arr.clone()),
+            (
+                "manifest_entries_sha256",
+                Json::str(&sha256(pyjson::canonical(&arr).as_bytes())),
+            ),
+            ("audit_chain_head_sha256", Json::str(head)),
+        ]);
+        let mb = pyjson::pretty_utf8(&m).unwrap().into_bytes();
+        let mut all = entries.clone();
+        all.insert(MANIFEST_PATH.to_owned(), mb.clone());
+        (
+            write_zip(&all),
+            BinderAnchor {
+                manifest_sha256: sha256(&mb),
+                audit_chain_head: Some(head.to_owned()),
+            },
+        )
+    };
+
+    let (orig_zip, orig_anchor) = seal(&files, &chain_head);
+    assert!(verify_binder_bytes(&orig_zip, &orig_anchor).is_ok());
+
+    // Wrong audit_chain_head in anchor fails even when manifest_sha256 matches.
+    let bad_head_anchor = BinderAnchor {
+        manifest_sha256: orig_anchor.manifest_sha256.clone(),
+        audit_chain_head: Some("f".repeat(64)),
+    };
+    assert!(
+        verify_binder_bytes(&orig_zip, &bad_head_anchor)
+            .unwrap_err()
+            .contains("audit_chain_head_sha256 does not match the trusted anchor")
+    );
+
+    // Invalid anchor hex fails closed.
+    assert!(
+        verify_binder_bytes(
+            &orig_zip,
+            &BinderAnchor {
+                manifest_sha256: "short".into(),
+                audit_chain_head: None
+            }
+        )
+        .unwrap_err()
+        .contains("64 lowercase hex")
+    );
+
+    // Attacker modifies attachment, rewrites audit chain, recalculates manifest & rebuilds ZIP.
+    let mut forged = files;
+    forged.insert("notes/a.txt".to_owned(), b"tampered".to_vec());
+    let forged_chain = build_audit_chain(&[AuditEventInput {
+        timestamp: "2026-08-31T10:00:00Z".into(),
+        actor: "EVIL".into(),
+        action: "review".into(),
+        target: "pack".into(),
+        detail: "forged".into(),
+    }])
+    .unwrap();
+    let forged_head = verify_audit_chain(&forged_chain).unwrap().head_sha256;
+    forged.insert(AUDIT_CHAIN_PATH.to_owned(), forged_chain);
+    let (forged_zip, _) = seal(&forged, &forged_head);
+    assert!(
+        verify_binder_bytes(&forged_zip, &orig_anchor)
+            .unwrap_err()
+            .contains("manifest.json SHA-256 does not match the trusted anchor")
     );
 }

@@ -61,6 +61,12 @@ pub struct BinderRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BinderAnchor {
+    pub manifest_sha256: String,
+    pub audit_chain_head: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BinderVerification {
     pub pack_status: String,
     pub entry_count: usize,
@@ -70,11 +76,21 @@ pub struct BinderVerification {
     pub audit_chain_head: Option<String>,
 }
 
+impl BinderVerification {
+    pub fn anchor(&self) -> BinderAnchor {
+        BinderAnchor {
+            manifest_sha256: self.manifest_sha256.clone(),
+            audit_chain_head: self.audit_chain_head.clone(),
+        }
+    }
+}
+
 type EntryMap = BTreeMap<String, Vec<u8>>;
 type DigestMap = BTreeMap<String, String>;
 
 struct BuiltManifest {
     bytes: Vec<u8>,
+    pack_status: String,
     source_hashes: DigestMap,
     entry_hashes: DigestMap,
 }
@@ -476,6 +492,7 @@ fn build_manifest(
     let bytes = format!("{}\n", pyjson::pretty_utf8(&manifest)?).into_bytes();
     Ok(BuiltManifest {
         bytes,
+        pack_status,
         source_hashes,
         entry_hashes,
     })
@@ -575,6 +592,7 @@ pub fn export_binder(request: &BinderRequest) -> Result<BinderVerification> {
     } = collect_entries(request, &verified, &mut |p| fs::read(p))?;
     let BuiltManifest {
         bytes: manifest_bytes,
+        pack_status,
         source_hashes,
         entry_hashes,
     } = build_manifest(&verified, &entries, audit_head.as_deref())?;
@@ -584,11 +602,6 @@ pub fn export_binder(request: &BinderRequest) -> Result<BinderVerification> {
     write_atomic_with(&target, &zip_bytes, &mut write_file_sync, &mut |a, b| {
         fs::rename(a, b)
     })?;
-    let pack_status = json_str(
-        &verified.document,
-        "overall_status",
-        "close-review-pack.json",
-    )?;
     Ok(BinderVerification {
         pack_status,
         entry_count: entry_hashes.len(),
@@ -679,19 +692,15 @@ fn verify_embedded_pack_and_audit(
     })
 }
 
-pub fn verify_binder(zip_path: &Path) -> Result<BinderVerification> {
-    let raw = fs::read(zip_path)
-        .map_err(|e| format!("Cannot read binder archive {}: {e}.", zip_path.display()))?;
-    verify_binder_bytes(&raw)
+fn valid_sha256_hex(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-pub fn verify_binder_bytes(raw: &[u8]) -> Result<BinderVerification> {
-    let mut entries = read_zip(raw)?;
-    let manifest_bytes = entries
-        .remove(MANIFEST_PATH)
-        .ok_or_else(|| "Binder archive is missing manifest.json.".to_owned())?;
-    let manifest_sha256 = sha256(&manifest_bytes);
-    let manifest_text = std::str::from_utf8(&manifest_bytes)
+fn parse_manifest(manifest_bytes: &[u8]) -> Result<Json> {
+    let manifest_text = std::str::from_utf8(manifest_bytes)
         .map_err(|_| "manifest.json must be valid UTF-8.".to_owned())?;
     let manifest =
         pyjson::loads(manifest_text).map_err(|_| "manifest.json is not valid JSON.".to_owned())?;
@@ -701,6 +710,30 @@ pub fn verify_binder_bytes(raw: &[u8]) -> Result<BinderVerification> {
     {
         return Err("manifest.json must declare schema 'close-binder-manifest-v1'.".into());
     }
+    Ok(manifest)
+}
+
+pub fn verify_binder(zip_path: &Path, anchor: &BinderAnchor) -> Result<BinderVerification> {
+    let raw = fs::read(zip_path)
+        .map_err(|e| format!("Cannot read binder archive {}: {e}.", zip_path.display()))?;
+    verify_binder_bytes(&raw, anchor)
+}
+
+pub fn verify_binder_bytes(raw: &[u8], anchor: &BinderAnchor) -> Result<BinderVerification> {
+    if !valid_sha256_hex(&anchor.manifest_sha256) {
+        return Err(
+            "Trusted binder anchor manifest_sha256 must be 64 lowercase hex characters.".into(),
+        );
+    }
+    let mut entries = read_zip(raw)?;
+    let manifest_bytes = entries
+        .remove(MANIFEST_PATH)
+        .ok_or_else(|| "Binder archive is missing manifest.json.".to_owned())?;
+    let manifest_sha256 = sha256(&manifest_bytes);
+    if manifest_sha256 != anchor.manifest_sha256 {
+        return Err("Binder manifest.json SHA-256 does not match the trusted anchor.".into());
+    }
+    let manifest = parse_manifest(&manifest_bytes)?;
     let entry_hashes = verify_manifest_entries(&manifest, &entries)?;
     for name in PACK_NAMES {
         if !entry_hashes.contains_key(name) {
@@ -714,6 +747,9 @@ pub fn verify_binder_bytes(raw: &[u8]) -> Result<BinderVerification> {
         source_hashes,
         audit_chain_head,
     } = verify_embedded_pack_and_audit(&manifest, &entries)?;
+    if audit_chain_head != anchor.audit_chain_head {
+        return Err("Binder audit_chain_head_sha256 does not match the trusted anchor.".into());
+    }
     Ok(BinderVerification {
         pack_status,
         entry_count: entry_hashes.len(),

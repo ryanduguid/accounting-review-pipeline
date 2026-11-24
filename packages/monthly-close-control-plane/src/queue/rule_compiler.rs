@@ -153,6 +153,14 @@ fn normalise_pattern(raw: &str) -> String {
         .join(" ")
 }
 
+fn tokenise(raw: &str) -> Vec<String> {
+    pytext::casefold(raw)
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 fn validate_date(raw: &str, field: &str) -> Result<()> {
     if isodate::date_fromisoformat(raw).is_none() {
         return Err(format!("Field '{field}' must be a valid YYYY-MM-DD date."));
@@ -175,8 +183,10 @@ fn validate_record(record: &OverrideRecord) -> Result<String> {
         }
     }
     let pattern = normalise_pattern(&record.pattern);
-    if pattern.is_empty() {
-        return Err("Override record field 'pattern' must not be blank.".into());
+    if tokenise(&pattern).is_empty() {
+        return Err(
+            "Override record field 'pattern' must contain at least one alphanumeric token.".into(),
+        );
     }
     Ok(pattern)
 }
@@ -481,6 +491,15 @@ pub fn compile_rules(
     })
 }
 
+fn phrase_matches(haystack: &str, needle: &str) -> bool {
+    let hay = tokenise(haystack);
+    let pat = tokenise(needle);
+    !pat.is_empty()
+        && hay
+            .windows(pat.len())
+            .any(|window| window == pat.as_slice())
+}
+
 fn rule_matches(
     rule: &CompiledRule,
     tenant: &str,
@@ -491,7 +510,7 @@ fn rule_matches(
     rule.tenant == tenant.trim()
         && rule.control == control.trim()
         && rule.account_id == account_id.trim()
-        && normalise_pattern(text).contains(&rule.match_pattern)
+        && phrase_matches(text, &rule.match_pattern)
 }
 
 fn check_backtest_record(

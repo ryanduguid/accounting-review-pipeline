@@ -626,3 +626,41 @@ fn engine_false_positive_traps_raise_zero_exceptions() {
     );
     assert!(pack.exceptions.is_empty());
 }
+
+#[test]
+fn flux_rejects_duplicate_account_keys_instead_of_overwriting() {
+    let july = Date::new(2026, 7, 31).unwrap();
+    let aug = Date::new(2026, 8, 31).unwrap();
+    let clean_prior = vec![row(
+        july, "Expenses", "601", "6010", "Rent", "500.00", "0.00", "1500.00", "0.00",
+    )];
+    let dup_current = vec![
+        row(
+            aug, "Expenses", "601", "6010", "Rent", "0.00", "0.00", "1500.00", "0.00",
+        ),
+        row(
+            aug, "Expenses", "601", "6010", "Rent", "500.00", "0.00", "2000.00", "0.00",
+        ),
+    ];
+    assert!(
+        flux::evaluate_flux(&dup_current, &clean_prior, &FluxPolicy::default())
+            .unwrap_err()
+            .contains("duplicate account")
+    );
+    let dup_prior = vec![
+        row(
+            july, "Expenses", "601", "6010", "Rent", "500.00", "0.00", "1500.00", "0.00",
+        ),
+        row(
+            july, "Expenses", "601", "6010", "Rent", "600.00", "0.00", "1600.00", "0.00",
+        ),
+    ];
+    let clean_current = vec![row(
+        aug, "Expenses", "601", "6010", "Rent", "500.00", "0.00", "2000.00", "0.00",
+    )];
+    assert!(
+        flux::evaluate_flux(&clean_current, &dup_prior, &FluxPolicy::default())
+            .unwrap_err()
+            .contains("duplicate account")
+    );
+}

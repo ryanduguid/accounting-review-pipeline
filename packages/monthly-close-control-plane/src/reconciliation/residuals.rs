@@ -411,7 +411,7 @@ fn classify_duplicates(
         bucket.sort_by_key(|row| (isodate::ordinal(row.date), row.id.as_str()));
         let mut cluster: Vec<&Row> = Vec::new();
         for row in bucket {
-            let within = cluster.last().is_some_and(|prev| {
+            let within = cluster.first().is_some_and(|prev| {
                 isodate::ordinal(row.date) - isodate::ordinal(prev.date)
                     <= policy.duplicate_window_days
             });

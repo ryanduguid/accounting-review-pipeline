@@ -138,8 +138,20 @@ impl FluxReport {
     }
 }
 
-fn row_map(rows: &[TrialBalanceRow]) -> BTreeMap<(String, String), &TrialBalanceRow> {
-    rows.iter().map(|row| (row.key(), row)).collect()
+fn row_map<'a>(
+    rows: &'a [TrialBalanceRow],
+    label: &str,
+) -> Result<BTreeMap<(String, String), &'a TrialBalanceRow>> {
+    let mut map = BTreeMap::new();
+    for row in rows {
+        if map.insert(row.key(), row).is_some() {
+            return Err(format!(
+                "{label} trial balance contains duplicate account '{}' for tenant '{}'.",
+                row.account_id, row.tenant
+            ));
+        }
+    }
+    Ok(map)
 }
 
 fn is_recurring(prior: &TrialBalanceRow, prior_charge: &Decimal, policy: &FluxPolicy) -> bool {
@@ -307,8 +319,8 @@ pub fn evaluate_flux(
 ) -> Result<FluxReport> {
     policy.validate()?;
     decimal::with_precision(40, || {
-        let current_map = row_map(current);
-        let prior_map = row_map(prior);
+        let current_map = row_map(current, "Current")?;
+        let prior_map = row_map(prior, "Prior")?;
         let mut findings = check_sudden_zero(&current_map, &prior_map, policy);
         findings.extend(check_sign_flips(&current_map, &prior_map, policy));
         findings.sort_by(|a, b| {
