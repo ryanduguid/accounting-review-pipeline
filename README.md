@@ -165,8 +165,8 @@ through a root caller pinned to a Release Policy commit. `accounting-excel-toolk
 source-archive workflow at the independently reviewed commit
 `ca5492bd09693be9e1fd47d980e2740ef8daf023`. `monthly-close-control-plane/v*` and
 `review-ready-gate/v*` call the native binary workflow at
-`1058bbf7a3f22f3c5c421676cf5f89a14389100c`, which publishes the command for Linux x86_64
-(musl) and Windows x86_64 with source archives, SBOMs, `SHA256SUMS` and signed provenance.
+`d7039efe6d8c441f1f213c674902909e80535599`, which publishes the command for Linux, macOS
+and Windows (x86_64 and arm64) with source archives, SBOMs, `SHA256SUMS` and signed provenance.
 One tag publishes exactly one component; the
 identity gate refuses a tag whose prefix does not equal the component directory leaf and its
 distribution name or archive stem. Each component's `RELEASING.md` describes its preflight; the tag name

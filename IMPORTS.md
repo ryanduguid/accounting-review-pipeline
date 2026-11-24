@@ -110,8 +110,8 @@ commits unreachable from every branch and tag. GitHub refuses a reusable-workflo
 unreachable commit before any job starts, which is how the `review-ready-gate/v0.1.4` tag
 produced no release. Every active root release caller now pins a policy commit that descends
 from the squash-landed Python 3.14 migration: the source-archive caller pins `ca5492b` and the
-2 native binary callers pin `1058bbf`. The callers pinned `a601f1d` and `0f7ca4c` before
-`ca5492b`. The reusable workflows remain reachable at those immutable commits.
+2 native binary callers pin `d7039ef`. Earlier releases pinned `a601f1d`, `0f7ca4c`, `ca5492b`
+and `1058bbf`. The reusable workflows remain reachable at those immutable commits.
 `tests/test_release_pins.py` holds the README and the release recipes to whatever the
 callers pin today.
 
