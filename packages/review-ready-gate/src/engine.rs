@@ -17,6 +17,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod withholding;
+
 #[derive(Default)]
 struct Loaded {
     trial_balance: Option<Vec<TrialBalanceRow>>,
@@ -25,6 +27,7 @@ struct Loaded {
     self_review: Option<SelfReview>,
     activity_statement: Option<Vec<ActivityLabel>>,
     gst_control_gl: Option<Vec<GstControlRow>>,
+    paygw_control_gl: Option<Vec<GstControlRow>>,
     bank_rec: Option<Vec<BankRecRow>>,
     tie_out_matrix: Option<Vec<TieOutRow>>,
     fs_mapping: Option<Vec<FsMappingRow>>,
@@ -56,6 +59,7 @@ impl Loaded {
                 load_activity_statement(source)?,
             ),
             "gst_control_gl" => held(&mut self.gst_control_gl, load_gst_control(source)?),
+            "paygw_control_gl" => held(&mut self.paygw_control_gl, load_paygw_control(source)?),
             "bank_rec" => held(&mut self.bank_rec, load_bank_rec(source)?),
             "tie_out_matrix" => held(&mut self.tie_out_matrix, load_tie_out_matrix(source)?),
             "fs_mapping" => held(&mut self.fs_mapping, load_fs_mapping(source)?),
@@ -322,6 +326,7 @@ pub fn review_requiring(
     apply_bas(&loaded, &mut findings, &tolerance)?;
     apply_gst_roll_forward(&loaded, &mut findings, &tolerance)?;
     apply_gst_period(&loaded, &mut findings);
+    withholding::apply(&loaded, &mut findings, &tolerance)?;
     apply_bank_rec(&loaded, &mut findings, &tolerance)?;
     apply_year_end(&loaded, &mut findings);
     apply_statement_mapping(&loaded, &mut findings, &tolerance)?;

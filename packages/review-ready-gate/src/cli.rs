@@ -16,7 +16,7 @@ use std::{
 fn usage(command: &str) -> String {
     let options = match command {
         "gate" => {
-            "gate [-h] --profile {bas,month_end,year_end} --pack PACK --output OUTPUT [--review-note REVIEW_NOTE] [--document DOCUMENT] [--require-control NAME] [--tieout-tolerance TIEOUT_TOLERANCE]"
+            "gate [-h] --profile {bas,ias,month_end,year_end} --pack PACK --output OUTPUT [--review-note REVIEW_NOTE] [--document DOCUMENT] [--require-control NAME] [--tieout-tolerance TIEOUT_TOLERANCE]"
         }
         "view" => "view [-h] --pack-dir PACK_DIR [--document DOCUMENT]",
         "queue" => {
@@ -240,7 +240,7 @@ fn parse(command: &str, args: &[String]) -> std::result::Result<Option<Arguments
         };
         if flag == "--profile" && !crate::profiles::PROFILE_NAMES.contains(&value.as_str()) {
             return Err(format!(
-                "argument --profile: invalid choice: {} (choose from 'bas', 'month_end', 'year_end')",
+                "argument --profile: invalid choice: {} (choose from 'bas', 'ias', 'month_end', 'year_end')",
                 pytext::repr_os(&value)
             ));
         }

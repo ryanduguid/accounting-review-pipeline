@@ -32,12 +32,23 @@ const SELF: Slot = slot!("self_review", ".json", true);
 const PRIOR: Slot = slot!("prior_findings", ".csv", false);
 const TB: Slot = slot!("trial_balance", ".csv", true);
 const OLD_TB: Slot = slot!("prior_trial_balance", ".csv", true, "trial_balance");
-pub const PROFILE_NAMES: [&str; 3] = ["bas", "month_end", "year_end"];
+const PAYGW: Slot = slot!("paygw_control_gl", ".csv", false);
+pub const PROFILE_NAMES: [&str; 4] = ["bas", "ias", "month_end", "year_end"];
 const BAS: &[Slot] = &[
     TB,
     slot!("activity_statement", ".csv", true),
     slot!("gst_control_gl", ".csv", true),
     slot!("bank_rec", ".csv", false),
+    PAYGW,
+    OPEN,
+    SELF,
+    PRIOR,
+];
+/// An instalment activity statement: no GST, so no 1A, 1B or GST control file.
+const IAS: &[Slot] = &[
+    TB,
+    slot!("activity_statement", ".csv", true),
+    PAYGW,
     OPEN,
     SELF,
     PRIOR,
@@ -61,7 +72,7 @@ const YEAR: &[Slot] = &[
 ];
 
 pub(crate) static CONTROL_NAMES: LazyLock<BTreeSet<&'static str>> = LazyLock::new(|| {
-    [BAS, MONTH, YEAR]
+    [BAS, IAS, MONTH, YEAR]
         .into_iter()
         .flatten()
         .map(|slot| slot.name)
@@ -76,10 +87,11 @@ pub fn control_names() -> BTreeSet<&'static str> {
 pub fn slots_for(profile: &str) -> Result<&'static [Slot]> {
     match profile {
         "bas" => Ok(BAS),
+        "ias" => Ok(IAS),
         "month_end" => Ok(MONTH),
         "year_end" => Ok(YEAR),
         _ => Err(format!(
-            "unknown engagement profile {}; expected one of: bas, month_end, year_end.",
+            "unknown engagement profile {}; expected one of: bas, ias, month_end, year_end.",
             crate::pytext::repr(profile)
         )),
     }
@@ -102,6 +114,7 @@ mod tests {
                 "fs_mapping",
                 "gst_control_gl",
                 "open_items",
+                "paygw_control_gl",
                 "prior_findings",
                 "prior_trial_balance",
                 "self_review",

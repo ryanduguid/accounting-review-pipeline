@@ -367,8 +367,17 @@ pub fn load_activity_statement(snapshot: &SourceSnapshot) -> Result<Vec<Activity
 }
 
 pub fn load_gst_control(snapshot: &SourceSnapshot) -> Result<Vec<GstControlRow>> {
+    load_control(snapshot, "GST-control")
+}
+
+/// The PAYG withholding control file, in the GST control file's columns.
+pub fn load_paygw_control(snapshot: &SourceSnapshot) -> Result<Vec<GstControlRow>> {
+    load_control(snapshot, "PAYG withholding control")
+}
+
+fn load_control(snapshot: &SourceSnapshot, noun: &str) -> Result<Vec<GstControlRow>> {
     let mut rows = Vec::new();
-    for r in csv_rows(snapshot, &GST_COLUMNS, "GST-control file")? {
+    for r in csv_rows(snapshot, &GST_COLUMNS, &format!("{noun} file"))? {
         rows.push(GstControlRow {
             posted_on: r.date("Date")?,
             account_id: r.text("AccountID", false)?,
@@ -380,7 +389,7 @@ pub fn load_gst_control(snapshot: &SourceSnapshot) -> Result<Vec<GstControlRow>>
     }
     if rows.is_empty() {
         return Err(format!(
-            "{}: no GST-control rows were supplied.",
+            "{}: no {noun} rows were supplied.",
             pypath::text(&snapshot.path)
         ));
     }
@@ -589,10 +598,10 @@ pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<Self
         "assertions",
         "period_start",
     ];
-    // Only the bas profile reads period_start, so only it may declare one: a
+    // Only the bas and ias profiles read period_start, so only they may declare one: a
     // key another profile ignored would look checked. The refusal keeps the
     // baseline's wording, which the differential compares byte for byte.
-    let declares_start = profile == "bas" && value.has_exact_keys(&keys);
+    let declares_start = matches!(profile, "bas" | "ias") && value.has_exact_keys(&keys);
     if !declares_start && !value.has_exact_keys(&keys[..5]) {
         return Err(format!(
             "{path}: self-review must contain exactly preparer_initials, prepared_on, engagement_type, period_end, and assertions."

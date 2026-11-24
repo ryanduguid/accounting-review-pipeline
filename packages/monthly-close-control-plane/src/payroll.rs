@@ -481,6 +481,16 @@ mod tests {
                 "{frequency} {scale} {earnings}"
             );
         }
+        // Monthly earnings not ending in 33 cents take no extra cent: $5,000
+        // a month is $1,153 a week once cents are dropped.
+        assert_eq!(
+            withholding("MONTHLY", "2", &d("5000.00")),
+            nearest_dollar(
+                &withholding("WEEKLY", "2", &d("1153.00"))
+                    .mul(&d("13"))
+                    .div(&d("3"))
+            )
+        );
     }
 
     #[test]
