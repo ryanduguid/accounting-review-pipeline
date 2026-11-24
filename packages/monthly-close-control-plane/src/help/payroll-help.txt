@@ -1,0 +1,7 @@
+usage: close-control payroll [-h] --register REGISTER
+
+options:
+  -h, --help           show this help message and exit
+  --register REGISTER  one tenant's Tenant,EmployeeID,PayDate,Frequency,Scale,
+                       Adjusted,Earnings,Withheld,QualifyingEarnings,Super,
+                       FundReceived CSV of 2026-27 pay lines

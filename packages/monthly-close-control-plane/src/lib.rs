@@ -24,6 +24,7 @@ pub mod journal_entries;
 pub mod loader;
 pub mod mcp;
 pub mod models;
+pub mod payroll;
 pub mod prepayments;
 #[cfg(feature = "probe")]
 pub mod probe;

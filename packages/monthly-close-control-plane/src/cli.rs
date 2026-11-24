@@ -7,7 +7,7 @@ use crate::{
     decimal::Decimal,
     drivers, duplicates, engine, fixed_assets, journal_entries, loader, mcp,
     models::Status,
-    publication,
+    payroll, publication,
     pyjson::{self, Json, PyStr},
     pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, scorecard,
     stdio, viewer,
@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 16] = [
+const COMMANDS: [&str; 17] = [
     "review",
     "workbench",
     "view",
@@ -36,6 +36,7 @@ const COMMANDS: [&str; 16] = [
     "coding",
     "scorecard",
     "mcp",
+    "payroll",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -63,6 +64,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "coding" => saved!("coding"),
         "scorecard" => saved!("scorecard"),
         "mcp" => saved!("mcp"),
+        "payroll" => saved!("payroll"),
         _ => saved!("root"),
     }
 }
@@ -224,6 +226,7 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
             &["--transactions", "--currency", "--period-end"],
         ),
         "mcp" => (&[], &["DIRECTORY"]),
+        "payroll" => (&["--register"], &["--register"]),
         _ => return None,
     })
 }
@@ -787,7 +790,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 Ok(0)
             }
             "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "coding"
-            | "scorecard" => {
+            | "scorecard" | "payroll" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -806,6 +809,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--period-start")?,
                         &args.literal("--period-end")?,
                     )?,
+                    "payroll" => payroll::payroll_reperformance(&args.path("--register"))?,
                     "fixed-assets" => fixed_assets::fixed_assets(
                         &args.path("--register"),
                         &args.path("--trial-balance"),
