@@ -104,7 +104,7 @@ manifest. It is in development source only.
 [Payroll reperformance](docs/payroll-reperformance.md) (`close-control payroll`)
 reperforms PAYG withholding by the ATO's Schedule 1 formulas and the super
 guarantee on a register's 2026-27 pay lines, and lists differences, shortfalls
-and late fund receipts worth review. It is in development source only.
+and fund receipt dates worth review. It is in development source only.
 [Statement tie-out](docs/statement-tie-out.md) (`close-control statement`)
 checks that each line of a bank statement carries the running balance
 forward, that each page closes where its lines end and that each page opens

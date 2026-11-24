@@ -347,18 +347,17 @@ fn super_findings(line: &Line, counted: &Decimal) -> Vec<Json> {
     }
     let late =
         |received: Date| isodate::ordinal(received) - isodate::ordinal(line.paid) > RECEIPT_DAYS;
-    let zero = Decimal::zero();
     match line.received {
         None => findings.push(finding(
-            "SG_NOT_RECEIVED",
+            "SG_RECEIPT_DATE_MISSING",
             line,
-            [("expected", &required), ("recorded", &line.paid_super), ("difference", &zero)],
+            [("expected", &required), ("recorded", &line.paid_super), ("difference", &shortfall)],
             "No fund receipt date is recorded for this pay line's super guarantee.".into(),
         )),
         Some(received) if late(received) => findings.push(finding(
             "SG_TIMING_REVIEW",
             line,
-            [("expected", &required), ("recorded", &line.paid_super), ("difference", &zero)],
+            [("expected", &required), ("recorded", &line.paid_super), ("difference", &shortfall)],
             format!(
                 "The fund received the contribution on {}, more than {RECEIPT_DAYS} calendar days after the pay date. Whether that is within the 7 business days, or 20 for a new employee or fund, depends on public holidays and the employee's history, which this command does not read.",
                 received.iso()
@@ -575,7 +574,7 @@ mod tests {
                 ("PAYG_DIFFERENCE", "E1"),
                 ("SG_SHORTFALL", "E1"),
                 ("SG_TIMING_REVIEW", "E1"),
-                ("SG_NOT_RECEIVED", "E2"),
+                ("SG_RECEIPT_DATE_MISSING", "E2"),
             ]
         );
         let first = &result.at("findings").as_array().unwrap()[0];
