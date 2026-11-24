@@ -15,10 +15,11 @@
 - `src/engine.rs`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
 - `src/loader.rs`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
 - `src/report.rs` and `src/publication.rs`: Render and publish JSON, Markdown and CSV review-pack files, including source evidence and any supplied human acknowledgement.
-- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify, schedule, demo, jet, duplicates and mcp.
+- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify, schedule, demo, jet, duplicates, coding and mcp.
 - `src/mcp.rs`: Read-only Model Context Protocol server over stdio for the commands that only read files (`mcp`); `mcpb/manifest.json` describes it as an MCP Bundle.
 - `src/journal_entries.rs`: Journal-entry tests and a Benford first-digit test over a general-ledger listing (`jet`).
 - `src/duplicates.rs`: Possible duplicate bills and payments, and missing recurring supplier bills, in a register (`duplicates`).
+- `src/coding.rs`: Period lines coded away from the usual account or tax code of the same contact or account (`coding`).
 
 ## Architectural boundaries
 1. **Review-first policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.

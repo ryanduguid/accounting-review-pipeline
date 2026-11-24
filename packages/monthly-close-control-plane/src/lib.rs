@@ -8,6 +8,7 @@ pub mod beneath;
 pub mod calculation_evidence;
 pub mod classification;
 pub mod cli;
+pub mod coding;
 pub mod comparison;
 pub mod decimal;
 pub mod drivers;

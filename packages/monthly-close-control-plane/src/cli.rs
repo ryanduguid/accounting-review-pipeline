@@ -3,7 +3,7 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use crate::{
-    Result, classification, comparison,
+    Result, classification, coding, comparison,
     decimal::Decimal,
     drivers, duplicates, engine, journal_entries, loader, mcp,
     models::Status,
@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 13] = [
+const COMMANDS: [&str; 14] = [
     "review",
     "workbench",
     "view",
@@ -31,6 +31,7 @@ const COMMANDS: [&str; 13] = [
     "demo",
     "jet",
     "duplicates",
+    "coding",
     "mcp",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
@@ -55,6 +56,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "demo" => saved!("demo"),
         "jet" => saved!("jet"),
         "duplicates" => saved!("duplicates"),
+        "coding" => saved!("coding"),
         "mcp" => saved!("mcp"),
         _ => saved!("root"),
     }
@@ -202,6 +204,10 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
                 "--period-start",
                 "--period-end",
             ],
+        ),
+        "coding" => (
+            &["--lines", "--currency", "--period-start", "--period-end"],
+            &["--lines", "--currency", "--period-start", "--period-end"],
         ),
         "jet" => (
             &["--transactions", "--currency", "--period-end"],
@@ -769,7 +775,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 stdio::out_literal(&(pyjson::pretty(&comparison::compare_packs(&config)?) + "\n"));
                 Ok(0)
             }
-            "classify" | "schedule" | "jet" | "duplicates" => {
+            "classify" | "schedule" | "jet" | "duplicates" | "coding" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -784,6 +790,12 @@ fn run(command: &str, args: &Arguments) -> i32 {
                     )?,
                     "duplicates" => duplicates::duplicate_documents(
                         &args.path("--documents"),
+                        &args.literal("--currency")?,
+                        &args.literal("--period-start")?,
+                        &args.literal("--period-end")?,
+                    )?,
+                    "coding" => coding::coding_review(
+                        &args.path("--lines"),
                         &args.literal("--currency")?,
                         &args.literal("--period-start")?,
                         &args.literal("--period-end")?,

@@ -256,6 +256,8 @@ const DEMO_COMMAND: &str = concat!(
     "                        worth review, with a Benford first-digit test\n",
     "    duplicates          list possible duplicate bills and payments and missing\n",
     "                        recurring bills in a supplier register\n",
+    "    coding              list period lines coded away from a contact's or\n",
+    "                        account's usual account or tax code\n",
     "    mcp                 serve the read-only commands to an assistant over\n",
     "                        stdio (Model Context Protocol)\n",
 );
@@ -274,7 +276,7 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
 /// `duplicates` and `mcp` commands, so CLI output compared with it drops their
 /// usage and help lines.
 fn without_native_options(text: &str) -> String {
-    text.replace(",schedule,demo,jet,duplicates,mcp}", ",schedule}")
+    text.replace(",schedule,demo,jet,duplicates,coding,mcp}", ",schedule}")
         .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
         .replace(
             "{expenses,migration,interentity,prepayments}",
@@ -282,7 +284,7 @@ fn without_native_options(text: &str) -> String {
         )
         .replace("'interentity', 'prepayments')", "'interentity')")
         .replace(
-            ", 'schedule', 'demo', 'jet', 'duplicates', 'mcp')",
+            ", 'schedule', 'demo', 'jet', 'duplicates', 'coding', 'mcp')",
             ", 'schedule')",
         )
         .replace(DEMO_COMMAND, "")
@@ -1107,7 +1109,7 @@ mod tests {
         let (code, _, error) = stdio::capture(|| cli::main(vec!["closing".into()]));
         assert_eq!(code, 1);
         assert!(
-            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'mcp')"),
+            error.contains("'schedule', 'demo', 'jet', 'duplicates', 'coding', 'mcp')"),
             "{error}"
         );
         let frozen = without_native_options(&error);
