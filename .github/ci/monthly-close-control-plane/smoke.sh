@@ -5,7 +5,7 @@
 
 # Run the native commands against fabricated files from an empty directory.
 set -euo pipefail
-[[ "$(close-control --version)" = "close-control 1.1.0" ]]
+[[ "$(close-control --version)" = "close-control 1.2.0" ]]
 
 review() {
   close-control "$1" --current "$COMPONENT/examples/current_trial_balance.csv" \

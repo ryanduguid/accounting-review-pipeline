@@ -1,3 +1,23 @@
+# v1.1.0
+
+## Added
+
+- `--profile ias` checks an instalment activity statement pack (trial balance,
+  activity statement, open items and self-review) without requiring GST labels
+  `1A`/`1B` or `gst_control_gl.csv`. Both `bas` and `ias` profiles check the
+  activity statement's arithmetic (`W1` to `W5`, `4`, `1C`, `1D`, `7C`, `7D`),
+  and accept optional `paygw_control_gl.csv` tie-outs with opening-balance
+  roll-forward (#703).
+
+## Changed
+
+- Release binaries now ship for 6 native targets: Linux (`x86_64` and `aarch64`
+  static musl), macOS (`x86_64` and `aarch64`) and Windows (`x86_64` and
+  `aarch64`) (#711).
+- Hardened decimal parsing, recovery evidence preservation, publication guards
+  and path handling across the readiness engine, and simplified binary
+  entry points (#660, #662, #672, #696).
+
 # v1.0.1
 
 ## Fixed

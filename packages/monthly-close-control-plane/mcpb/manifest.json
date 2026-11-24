@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "close-control",
   "display_name": "Monthly Close Controls",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Read-only close review tools over local files: view and queue verified review packs, compare packs, and run journal-entry, schedule and coding checks.",
   "long_description": "Runs the read-only commands of the close-control executable on files inside the folders you choose. It writes no file, reaches no network and approves nothing; every result is review evidence for a person.",
   "author": {

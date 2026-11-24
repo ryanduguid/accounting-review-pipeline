@@ -1,3 +1,36 @@
+# v1.2.0
+
+## Added
+
+- `close-control jet`: journal-entry tests and a Benford first-digit test
+  over a general-ledger listing.
+- `close-control schedule`: prepayment and accrual schedule reconciliation
+  (#698).
+- `close-control duplicates`: possible duplicate bills and payments and missing
+  monthly supplier bills (#699).
+- `close-control fixed-assets`: fixed-asset register cost and accumulated
+  depreciation tie-out to the trial balance.
+- `close-control coding`: account and tax-code coding review against a contact's
+  or account's prior coding.
+- `close-control payroll`: 2026-27 PAYG Schedule 1 withholding and super
+  guarantee reperformance.
+- `close-control statement`: bank statement running-balance tie-out across
+  lines and pages (#709).
+- `close-control scorecard`: per-client category summary and score across
+  saved close results.
+- `close-control mcp`: read-only MCP stdio server and bundle manifest for the
+  file-reading commands.
+- Residual taxonomy, audit binder and flux checks in close review packs.
+
+## Changed and fixed
+
+- Fixed statement refusal error prefixes, aligned payroll `past_calendar_days`
+  and missing-receipt descriptions, and added scorecard BOM-hash and CLI
+  validation coverage (#710).
+- Release binaries now ship for 6 native targets: Linux (`x86_64` and `aarch64`
+  static musl), macOS (`x86_64` and `aarch64`) and Windows (`x86_64` and
+  `aarch64`) (#711).
+
 # v1.1.0
 
 ## Added

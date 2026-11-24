@@ -1,7 +1,7 @@
 # Workpaper Review Gate
 
 Workpaper Review Gate checks whether an Australian accounting workpaper pack is
-ready for manager review. Version 1.0.0 provides the `review-ready` Rust binary.
+ready for manager review. Version 1.1.0 provides the `review-ready` Rust binary.
 
 From this component directory, install with Rust stable and run the fabricated demo:
 
@@ -12,7 +12,7 @@ review-ready gate --profile bas --pack examples/bas-ready --output ../../../revi
 
 The demo exits `0` for `READY`. A human still decides whether the pack may proceed.
 Python imports and the Python runtime were removed in this major version.
-Released executables for Linux x86_64 and Windows x86_64 ship on
+Released executables for Linux, macOS and Windows (x86_64 and arm64) ship on
 `review-ready-gate/v<version>` GitHub Releases; verify one as
 [RELEASING.md](RELEASING.md#verify-a-release) describes before running it.
 

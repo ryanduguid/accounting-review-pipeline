@@ -39,23 +39,25 @@ tag only with the owner's explicit approval for that release.
 
     ```bash
     git fetch origin main
-    git tag -a review-ready-gate/v1.0.1 -m "review-ready-gate/v1.0.1" origin/main
-    git push origin review-ready-gate/v1.0.1
+    git tag -a review-ready-gate/v1.1.0 -m "review-ready-gate/v1.1.0" origin/main
+    git push origin review-ready-gate/v1.1.0
     ```
 
 The workflow runs `cargo test --locked` and builds `review-ready` with
 `cargo-auditable` on each target, checks static linkage and `review-ready --version`,
-audits the embedded dependency list against RustSec, then publishes 9 assets:
+audits the embedded dependency list against RustSec, then publishes 17 assets:
 
 | Asset | Contents |
 | --- | --- |
 | `review-ready-gate-<version>.zip`, `.tar.gz` | deterministic source archives |
 | `review-ready-gate-<version>.spdx.json` | SPDX SBOM of the source |
-| `review-ready-gate-<version>-x86_64-unknown-linux-musl.tar.gz` | static Linux `review-ready` with `LICENSE`, `NOTICE` and `README.md` |
-| `review-ready-gate-<version>-x86_64-unknown-linux-musl.spdx.json` | SBOM of the Linux executable |
-| `review-ready-gate-<version>-x86_64-pc-windows-msvc.zip` | Windows `review-ready.exe` with the same documents |
-| `review-ready-gate-<version>-x86_64-pc-windows-msvc.spdx.json` | SBOM of the Windows executable |
-| `SHA256SUMS` | digests of the 7 assets above |
+| `review-ready-gate-<version>-x86_64-unknown-linux-musl.tar.gz`, `aarch64-unknown-linux-musl.tar.gz` | static Linux `review-ready` with `LICENSE`, `NOTICE` and `README.md` |
+| `review-ready-gate-<version>-x86_64-unknown-linux-musl.spdx.json`, `aarch64-unknown-linux-musl.spdx.json` | SBOMs of the Linux executables |
+| `review-ready-gate-<version>-x86_64-apple-darwin.tar.gz`, `aarch64-apple-darwin.tar.gz` | macOS `review-ready` with the same documents |
+| `review-ready-gate-<version>-x86_64-apple-darwin.spdx.json`, `aarch64-apple-darwin.spdx.json` | SBOMs of the macOS executables |
+| `review-ready-gate-<version>-x86_64-pc-windows-msvc.zip`, `aarch64-pc-windows-msvc.zip` | Windows `review-ready.exe` with the same documents |
+| `review-ready-gate-<version>-x86_64-pc-windows-msvc.spdx.json`, `aarch64-pc-windows-msvc.spdx.json` | SBOMs of the Windows executables |
+| `SHA256SUMS` | digests of the 15 files above |
 | `review-ready-gate-<version>.intoto.jsonl` | signed provenance bundle |
 
 From 1.0.1, each release executable records the tagged commit in the
@@ -73,7 +75,7 @@ Download an explicit tag and target, never `latest`. The signer digest comes
 from the caller at the tagged commit, so the recipe stays right when the pin moves:
 
 ```bash
-tag=review-ready-gate/v1.0.1
+tag=review-ready-gate/v1.1.0
 repo=ryanduguid/accounting-review-pipeline
 version="${tag#review-ready-gate/v}"
 asset="review-ready-gate-${version}-x86_64-unknown-linux-musl.tar.gz"  # or -x86_64-pc-windows-msvc.zip
