@@ -540,7 +540,7 @@ mod tests {
 
     /// A root for messages that read no file.
     fn nowhere() -> Root {
-        Root::open(&std::env::temp_dir()).unwrap()
+        Root::open(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap()
     }
 
     fn error_code(reply: &Json) -> Option<num_bigint::BigInt> {
