@@ -3,6 +3,8 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! Local transaction allocations. Suggestions never clear an item.
+pub mod residuals;
+
 use crate::{
     Result,
     decimal::{self, Decimal, Rounding},

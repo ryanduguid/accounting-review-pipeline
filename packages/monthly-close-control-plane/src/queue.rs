@@ -3,6 +3,8 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! Verify every explicitly supplied pack before applying display filters.
+pub mod rule_compiler;
+
 use crate::{
     Result, isodate,
     pyjson::{self, Json, PyStr},

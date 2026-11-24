@@ -3,6 +3,8 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 //! Rank local transaction evidence without clearing or explaining a variance.
+pub mod flux;
+
 use crate::{
     Result,
     decimal::{self, Decimal},
