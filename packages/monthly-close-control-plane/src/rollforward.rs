@@ -9,7 +9,7 @@ use crate::{
     Result,
     decimal::Decimal,
     isodate::{self, Date},
-    prepayments::{basis, evidence, items, unexpired},
+    prepayments::{accrual_items, basis, evidence, items, unexpired},
     pyjson::{Json, PyStr},
     schedules::{ScheduleFields, date, exact, finding, money, number, object, rows, text},
 };
@@ -113,26 +113,10 @@ fn accruals(
     totals: &mut BTreeMap<PyStr, Roll>,
     findings: &mut Vec<Json>,
 ) -> Result<Vec<Json>> {
-    let entries = items(
-        data,
-        "accruals",
-        "item_id account_id description amount accrued reversed evidence",
-    )?;
+    let entries = accrual_items(data, cutoff)?;
     let mut workpaper = Vec::with_capacity(entries.len());
     for entry in entries {
-        let (row, identifier, account) = entry?;
-        let amount = money(row.at("amount"), "accrual amount")?;
-        let accrued = date(row.at("accrued"), "accrued")?;
-        let reversed = match row.at("reversed") {
-            Json::Null => None,
-            value => Some(date(value, "reversed")?),
-        };
-        if amount <= Decimal::zero()
-            || accrued > cutoff
-            || reversed.is_some_and(|day| day < accrued)
-        {
-            return Err("An accrual needs a positive amount, a date on or before the cutoff and no reversal before it.".into());
-        }
+        let (row, identifier, account, (amount, accrued, reversed)) = entry?;
         let credit = negate(&amount)?;
         let open_after = |day: Date| reversed.is_none_or(|reversal| reversal > day);
         let brought_forward = accrued < period_start;

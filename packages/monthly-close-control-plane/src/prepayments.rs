@@ -130,20 +130,21 @@ fn prepayments(
     Ok(workpaper)
 }
 
-fn accruals(
+/// An accrual's amount, the date it was accrued and the date it was reversed.
+pub(crate) type Accrual = (Decimal, Date, Option<Date>);
+
+/// Each accrual with its item id, account and checked dates: a positive
+/// amount, accrued on or before the cutoff and never reversed before that.
+pub(crate) fn accrual_items(
     data: &Json,
-    period_start: Date,
     cutoff: Date,
-    expected: &mut BTreeMap<PyStr, Decimal>,
-    findings: &mut Vec<Json>,
-) -> Result<Vec<Json>> {
+) -> Result<impl ExactSizeIterator<Item = Result<(&Json, PyStr, PyStr, Accrual)>>> {
     let entries = items(
         data,
         "accruals",
         "item_id account_id description amount accrued reversed evidence",
     )?;
-    let mut workpaper = Vec::with_capacity(entries.len());
-    for entry in entries {
+    Ok(entries.map(move |entry| {
         let (row, identifier, account) = entry?;
         let amount = money(row.at("amount"), "accrual amount")?;
         let accrued = date(row.at("accrued"), "accrued")?;
@@ -157,6 +158,21 @@ fn accruals(
         {
             return Err("An accrual needs a positive amount, a date on or before the cutoff and no reversal before it.".into());
         }
+        Ok((row, identifier, account, (amount, accrued, reversed)))
+    }))
+}
+
+fn accruals(
+    data: &Json,
+    period_start: Date,
+    cutoff: Date,
+    expected: &mut BTreeMap<PyStr, Decimal>,
+    findings: &mut Vec<Json>,
+) -> Result<Vec<Json>> {
+    let entries = accrual_items(data, cutoff)?;
+    let mut workpaper = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let (row, identifier, account, (amount, accrued, reversed)) = entry?;
         let outstanding = reversed.is_none_or(|day| day > cutoff);
         let balance = if outstanding {
             exact(Decimal::zero().sub(&amount))?
