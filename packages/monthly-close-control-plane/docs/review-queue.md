@@ -46,4 +46,4 @@ The queue writes no files and changes no findings, acknowledgement, accounting r
 
 ## Source pattern
 
-The [LodgeiT dashboard guide](https://help.lodgeit.net.au/support/solutions/articles/60000609258-dashboard-work-status-filter-and-sort-team-form-period-client-group-), inspected on 9 October 2026, illustrates filters for work, period and people. This implementation uses only metadata already present in this component's verified packs. It adds no LodgeiT integration or shared pipeline status.
+Public documentation from a commercial tax-and-workpaper vendor (dashboard filtering guide, inspected on 9 October 2026) illustrates filters for work, period and people. This implementation uses only metadata already present in this component's verified packs. It adds no external vendor integration or shared pipeline status.

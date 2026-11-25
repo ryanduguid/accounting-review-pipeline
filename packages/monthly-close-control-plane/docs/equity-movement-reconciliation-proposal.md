@@ -155,8 +155,4 @@ change a result or confer accounting approval.
 
 ## Basis for the proposal
 
-This adopts the separate movement-check idea from
-[Clawdog's equity roll-forward](https://github.com/lodgeit-labs/clawdog/blob/89566b76a967810255256dae1cfd213f6c071530/engine/audit.pl#L177).
-The implementation should use this repository's existing Python, exact arithmetic,
-local evidence and review-state contracts. No Clawdog code or Prolog dependency is
-needed.
+This adopts the separate movement-check idea from a comparable open-source Prolog audit engine's equity roll-forward implementation. The implementation should use this repository's existing Python, exact arithmetic, local evidence and review-state contracts. No external Prolog engine or dependency is needed.

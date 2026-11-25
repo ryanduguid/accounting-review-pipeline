@@ -1,6 +1,6 @@
 name: Joined accounting examples
 
-# Runs every joined route against the latest main of au-fpa-pack and
+# Runs every joined route against the latest main of OzFPA and
 # australian-accounting, so a companion change that breaks a route shows up the
 # next day. Pull requests and pushes run joined-fixtures.yml, which pins the
 # companions instead. Not a required check: a red run here is the signal.
