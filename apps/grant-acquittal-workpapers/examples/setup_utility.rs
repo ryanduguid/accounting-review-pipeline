@@ -89,7 +89,7 @@ impl Ops for SystemOps {
             cmd.env(k, v);
         }
         configure_group(&mut cmd);
-        let child = cmd.spawn().map_err(|e| format!("Failed to launch {program}: {e}"))?;
+        let child = spawn_retrying_busy(&mut cmd).map_err(|e| format!("Failed to launch {program}: {e}"))?;
         match wait_child(child, timeout_secs) {
             Ok(Some(0)) => Ok(()),
             Ok(code) => Err(format!("Command {program} exited with {code:?}")),
@@ -116,7 +116,7 @@ impl Ops for SystemOps {
             cmd.env(k, v);
         }
         configure_group(&mut cmd);
-        let mut child = cmd.spawn().map_err(|e| format!("Failed to launch {program}: {e}"))?;
+        let mut child = spawn_retrying_busy(&mut cmd).map_err(|e| format!("Failed to launch {program}: {e}"))?;
         let out_h = spawn_reader(child.stdout.take());
         let err_h = spawn_reader(child.stderr.take());
         let waited = wait_child(child, timeout_secs);
@@ -131,6 +131,27 @@ impl Ops for SystemOps {
             Err(()) => Err(format!("Command {program} timed out after {timeout_secs}s")),
         }
     }
+}
+
+#[cfg(unix)]
+fn is_busy_exec(err: &std::io::Error) -> bool {
+    err.raw_os_error() == Some(libc::ETXTBSY)
+}
+
+#[cfg(not(unix))]
+fn is_busy_exec(_err: &std::io::Error) -> bool {
+    false
+}
+
+fn spawn_retrying_busy(cmd: &mut Command) -> std::io::Result<Child> {
+    for _ in 0..10 {
+        match cmd.spawn() {
+            Ok(child) => return Ok(child),
+            Err(err) if is_busy_exec(&err) => thread::sleep(Duration::from_millis(5)),
+            Err(err) => return Err(err),
+        }
+    }
+    cmd.spawn()
 }
 
 fn path_override<'a>(env_vars: &[(&'a str, &'a str)]) -> Option<&'a OsStr> {

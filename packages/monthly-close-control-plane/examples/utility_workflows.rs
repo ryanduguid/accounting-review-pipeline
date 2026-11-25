@@ -272,6 +272,27 @@ fn wait_child(mut child: Child, timeout_secs: f64) -> Result<Option<i32>, ()> {
     }
 }
 
+#[cfg(unix)]
+fn is_busy_exec(err: &std::io::Error) -> bool {
+    err.raw_os_error() == Some(libc::ETXTBSY)
+}
+
+#[cfg(not(unix))]
+fn is_busy_exec(_err: &std::io::Error) -> bool {
+    false
+}
+
+fn spawn_retrying_busy(cmd: &mut Command) -> std::io::Result<Child> {
+    for _ in 0..10 {
+        match cmd.spawn() {
+            Ok(child) => return Ok(child),
+            Err(err) if is_busy_exec(&err) => thread::sleep(Duration::from_millis(5)),
+            Err(err) => return Err(err),
+        }
+    }
+    cmd.spawn()
+}
+
 /// Stop the whole command tree on timeout or interruption.
 fn captured(
     command: &[String],
@@ -293,9 +314,8 @@ fn captured(
         cmd.env(key, value);
     }
     configure_group(&mut cmd);
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| CaptureError::Launch(e.to_string()))?;
+    let mut child =
+        spawn_retrying_busy(&mut cmd).map_err(|e| CaptureError::Launch(e.to_string()))?;
     let out_handle = spawn_reader(child.stdout.take());
     let err_handle = spawn_reader(child.stderr.take());
     let waited = wait_child(child, timeout_secs);
