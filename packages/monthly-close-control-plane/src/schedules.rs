@@ -125,7 +125,13 @@ fn joined(values: &[PyStr], separator: &str) -> PyStr {
 }
 
 /// The schedule kinds, in the order the help lists them.
-pub const KINDS: [&str; 4] = ["expenses", "migration", "interentity", "prepayments"];
+pub const KINDS: [&str; 5] = [
+    "expenses",
+    "migration",
+    "interentity",
+    "prepayments",
+    "rollforward",
+];
 
 pub fn review_schedule(path: &Path, kind: &str) -> Result<Json> {
     review_snapshot(&SourceSnapshot::capture(path, "schedule")?, kind)
@@ -162,6 +168,7 @@ pub fn review_snapshot(snapshot: &SourceSnapshot, kind: &str) -> Result<Json> {
         "expenses" => expenses(&data, cutoff),
         "migration" => migration(&data),
         "prepayments" => crate::prepayments::review(&data, cutoff),
+        "rollforward" => crate::rollforward::review(&data, cutoff),
         _ => interentity(&data, cutoff),
     })?;
     let findings = result

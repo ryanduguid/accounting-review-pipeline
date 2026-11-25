@@ -28,7 +28,7 @@ fn month_end(day: Date) -> bool {
 }
 
 /// The unexpired part of a prepayment at `cutoff`, to the cent, half up.
-fn unexpired(
+pub(crate) fn unexpired(
     amount: &Decimal,
     start: Date,
     end: Date,
@@ -61,7 +61,15 @@ fn unexpired(
         .expect("a schedule amount below 10^16 fits 80 digits"))
 }
 
-fn evidence(row: &Json, identifier: &PyStr, findings: &mut Vec<Json>) -> Result<()> {
+/// A prepayment's `basis`: daily or monthly.
+pub(crate) fn basis(row: &Json) -> Result<String> {
+    let basis = row.at("basis").as_pystr().and_then(PyStr::to_utf8);
+    basis
+        .filter(|basis| ["daily", "monthly"].contains(&basis.as_str()))
+        .ok_or_else(|| "basis must be daily or monthly.".into())
+}
+
+pub(crate) fn evidence(row: &Json, identifier: &PyStr, findings: &mut Vec<Json>) -> Result<()> {
     let evidence = row
         .at("evidence")
         .as_pystr()
@@ -74,7 +82,7 @@ fn evidence(row: &Json, identifier: &PyStr, findings: &mut Vec<Json>) -> Result<
 
 /// Each row of `list` with its item id and account, its description checked
 /// as the row is reached, so a row's errors come before the next row's.
-fn items<'a>(
+pub(crate) fn items<'a>(
     data: &'a Json,
     list: &str,
     fields: &str,
@@ -106,10 +114,7 @@ fn prepayments(
         let amount = money(row.at("amount"), "prepayment amount")?;
         let start = date(row.at("start"), "prepayment start")?;
         let end = date(row.at("end"), "prepayment end")?;
-        let basis = row.at("basis").as_pystr().and_then(PyStr::to_utf8);
-        let basis = basis
-            .filter(|basis| ["daily", "monthly"].contains(&basis.as_str()))
-            .ok_or("basis must be daily or monthly.")?;
+        let basis = basis(row)?;
         if amount <= Decimal::zero() || end < start {
             return Err(
                 "A prepayment needs a positive amount and an end on or after its start.".into(),

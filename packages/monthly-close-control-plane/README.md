@@ -83,7 +83,8 @@ and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots, inter-entity balances, and prepayments and accruals from
-supplied canonical records.
+supplied canonical records, and roll prepayment, deferred revenue and accrual
+accounts forward from opening to closing, tied to the ledger at both ends.
 Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
 variance drivers and the balance policy. The quick start builds the native command
 from source; released executables are an alternative on Linux, macOS and Windows (x86_64 and arm64).
