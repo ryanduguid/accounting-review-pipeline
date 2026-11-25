@@ -13,6 +13,11 @@ publish = false
 name = "grant-workpaper"
 path = "src/main.rs"
 
+[[example]]
+name = "setup_utility"
+path = "examples/setup_utility.rs"
+test = true
+
 [dependencies]
 sha2 = "0.11"
 

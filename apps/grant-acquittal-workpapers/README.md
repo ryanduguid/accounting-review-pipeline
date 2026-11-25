@@ -29,9 +29,10 @@ for the setup and replay utility below, which has no runtime dependencies.
 
 ## Run all joined accounting examples
 
-From this directory, with Python 3.14 or later, Git, uv and cargo on PATH:
+From this directory, with Git, uv and cargo on PATH (plus Python 3.14 or later when using the retained `setup_utility.py` script or replaying older commits):
 
 ```powershell
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-demo
 python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 

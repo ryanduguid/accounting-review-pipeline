@@ -7,10 +7,10 @@ The driver refuses a WIP checkout without its job-to-cash example
 (`examples/job_to_cash.rs` for the native crate, `examples/job_to_cash.py` for
 the earlier Python package) before creating outputs or environments.
 
-For one-command setup, run this from `apps/grant-acquittal-workpapers` in a
-pipeline checkout:
+For one-command setup, run either the Rust `setup_utility` example or the retained Python script from `apps/grant-acquittal-workpapers` in a pipeline checkout:
 
 ```powershell
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-demo
 python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
@@ -45,6 +45,7 @@ component-lock compatibility.
 From a directory containing those 3 checkout folders:
 
 ```powershell
+cargo run --locked --manifest-path accounting-review-pipeline/packages/monthly-close-control-plane/Cargo.toml --example utility_workflows -- --fpa au-fpa-pack --accounting australian-accounting --grants accounting-review-pipeline/apps/grant-acquittal-workpapers --output ../utility-results --environment-root ../utility-environments
 python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa au-fpa-pack --accounting australian-accounting --grants accounting-review-pipeline/apps/grant-acquittal-workpapers --output ../utility-results --environment-root ../utility-environments
 ```
 

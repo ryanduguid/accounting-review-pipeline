@@ -62,6 +62,11 @@ name = "differential-negative-controls"
 path = "tests/support/differential_negative_controls.rs"
 required-features = ["probe"]
 
+[[example]]
+name = "utility_workflows"
+path = "examples/utility_workflows.rs"
+test = true
+
 [profile.release]
 lto = true
 codegen-units = 1
