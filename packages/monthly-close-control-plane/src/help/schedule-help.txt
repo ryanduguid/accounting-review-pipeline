@@ -1,7 +1,7 @@
-usage: close-control schedule [-h] --kind {expenses,migration,interentity,prepayments}
+usage: close-control schedule [-h] --kind {expenses,migration,interentity,prepayments,rollforward}
                               --input INPUT
 
 options:
   -h, --help            show this help message and exit
-  --kind {expenses,migration,interentity,prepayments}
+  --kind {expenses,migration,interentity,prepayments,rollforward}
   --input INPUT

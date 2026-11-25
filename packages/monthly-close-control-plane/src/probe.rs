@@ -290,10 +290,10 @@ fn without_native_options(text: &str) -> String {
     )
     .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
     .replace(
-        "{expenses,migration,interentity,prepayments}",
+        "{expenses,migration,interentity,prepayments,rollforward}",
         "{expenses,migration,interentity}",
     )
-    .replace("'interentity', 'prepayments')", "'interentity')")
+    .replace("'interentity', 'prepayments', 'rollforward')", "'interentity')")
     .replace(
         ", 'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'coding', 'scorecard', 'mcp', 'payroll', 'statement', 'bas')",
         ", 'schedule')",

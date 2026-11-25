@@ -24,6 +24,7 @@
 - `src/payroll.rs`: PAYG withholding by Schedule 1 and super guarantee reperformed on 2026-27 pay lines (`payroll`).
 - `src/scorecard.rs`: One client's close results summarised by category with a stated score (`scorecard`).
 - `src/statement.rs`: A bank statement's running balances, page closings and page openings tied out (`statement`).
+- `src/rollforward.rs`: Prepayment, deferred revenue and accrual accounts rolled from opening through additions and releases to closing, tied to the ledger at both ends (`schedule --kind rollforward`).
 - `src/bas.rs`: BAS labels drafted from a ledger's tax codes and a payroll register, each total naming its rows, for a reviewer; it lodges nothing (`bas`).
 
 ## Architectural boundaries
