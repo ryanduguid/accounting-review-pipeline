@@ -302,10 +302,10 @@ pub fn bas_workpaper(config: &BasConfig) -> Result<Json> {
     };
     let ledger = SourceSnapshot::capture(config.ledger, "Ledger")?;
     let map = SourceSnapshot::capture(config.tax_codes, "Tax-code map")?;
-    let payroll = match config.payroll {
-        Some(path) => Some(SourceSnapshot::capture(path, "Payroll register")?),
-        None => None,
-    };
+    let payroll = config
+        .payroll
+        .map(|path| SourceSnapshot::capture(path, "Payroll register"))
+        .transpose()?;
     let sources = Sources {
         ledger: &ledger,
         map: &map,
@@ -438,8 +438,10 @@ fn label_entries(
         }
         let entry = labels.get(label).unwrap_or(&empty);
         let amount = reconciliation::fixed(&entry.amount);
-        let whole = whole_dollars(&entry.amount);
-        if whole.is_none() {
+        // G1, 1A and 1B take 0 when nil; the others are left blank.
+        let blank = entry.amount.is_zero() && !ZERO_WHEN_NIL.contains(&label);
+        let whole = whole_dollars(&entry.amount).filter(|_| !blank);
+        if whole.is_none() && !blank {
             findings.push(Json::object([
                 ("code", Json::str("NEGATIVE_LABEL")),
                 ("label", Json::str(label)),
@@ -460,11 +462,16 @@ fn label_entries(
                 "source",
                 Json::str(if from_payroll { "payroll" } else { "ledger" }),
             ),
+            ("blank", Json::Bool(blank)),
             ("rows", Json::Array(rows)),
         ]));
     }
     drafted
 }
+
+/// Labels the ATO says take 0 rather than a blank when there is nothing to
+/// report.
+const ZERO_WHEN_NIL: [&str; 3] = ["G1", "1A", "1B"];
 
 const NEGATIVE_REASON: &str = "The BAS takes no negative figure. Credit notes or refunds larger than the period's own amounts are usually an adjustment, which this draft does not place.";
 
@@ -565,14 +572,14 @@ fn reasonableness(tenant: &str, placed: &Placed) -> Result<Vec<Json>> {
         rows: Vec::new(),
     };
     let tolerance = |text| Decimal::parse(text).expect("literal decimal");
-    let (items, _) = engine::gst_reasonableness_exceptions(
+    engine::gst_reasonableness_exceptions(
         &rows,
         &mapping,
         Ok(&none),
         &tolerance(GST_ABSOLUTE_TOLERANCE),
         &tolerance(GST_PERCENTAGE_TOLERANCE),
-    )?;
-    Ok(items.iter().map(reasonableness_finding).collect())
+    )
+    .map(|(items, _)| items.iter().map(reasonableness_finding).collect())
 }
 
 fn reasonableness_finding(item: &ExceptionItem) -> Json {
@@ -805,6 +812,17 @@ mod tests {
                 .is_empty()
         );
         assert!(result.at("source_sha256").get("payroll").is_some());
+        let labels_json = result.at("labels").as_array().unwrap();
+        assert!(labels_json[1].at("blank").as_bool().unwrap());
+        assert!(!labels_json[0].at("blank").as_bool().unwrap());
+        let later = PAYROLL.replace("2026-07-09", "2026-10-08");
+        let result = run(&ledger(&[SALE]), MAP, Some(&later), false).unwrap();
+        let drafted = labels(&result);
+        assert_eq!(drafted[5], "1A 100.00 \"100\" [A]");
+        assert_eq!(drafted[6], "1B 0.00 \"0\" []");
+        assert_eq!(drafted[7], "W1 0.00 null []");
+        assert_eq!(drafted[8], "W2 0.00 null []");
+        assert!(result.at("status").is_str("PASS"));
         let other = PAYROLL.replace("\nT,", "\nU,");
         let error = run(&ledger(&[SALE]), MAP, Some(&other), false).unwrap_err();
         assert!(error.contains("another tenant"), "{error}");

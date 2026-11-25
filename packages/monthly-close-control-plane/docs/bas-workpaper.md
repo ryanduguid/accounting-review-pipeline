@@ -68,6 +68,11 @@ input-taxed purchases and purchases from suppliers not registered for GST. Use
 private use, costs not deductible for income tax, or purchases for making
 input-taxed sales.
 
+Use `export_sale` only for exported goods whose free-on-board value G2 takes.
+G2 does not take most GST-free services, international transport of goods or
+passengers, or the freight and insurance on an export: map those
+`gst_free_sale` (G3) where they are GST-free.
+
 ## The rules, from the ATO
 
 Read at ato.gov.au on 26 November 2026: 'Step 1: Sales' and 'Step 3:
@@ -92,6 +97,9 @@ purchases using the calculation worksheet' and 'Step 5: Summary' (9 September
   from them, by pay date.
 - The BAS takes whole dollars, cents dropped, and no negative figure. Each
   label gives its exact `amount` and its `whole_dollars`.
+- G1, 1A and 1B take 0 when there is nothing to report. Other labels are left
+  blank: W1 when no payments were made and W2 when nothing was withheld. A nil
+  label other than G1, 1A and 1B has `blank` set and no `whole_dollars`.
 
 Amounts are drafted including GST (`amounts_include_gst`), which both the
 calculation worksheet method and the accounts method allow.
@@ -100,7 +108,7 @@ calculation worksheet method and the accounts method allow.
 
 | Field | Holds |
 | --- | --- |
-| `labels` | Each drafted label with its `amount`, `whole_dollars`, `source` (`ledger` or `payroll`) and the `rows` behind it: ledger `LineID`s, or `payroll row N`. |
+| `labels` | Each drafted label with its `amount`, `whole_dollars`, `blank`, `source` (`ledger` or `payroll`) and the `rows` behind it: ledger `LineID`s, or `payroll row N`. |
 | `unplaced` | Each row in the period that could not be placed, with its reason: no map row for its tax code, GST on a treatment that takes none, or GST that is not part of its `Gross`. |
 | `bas_excluded_rows` | Rows in the period mapped `bas_excluded`. |
 | `labels_not_drafted` | W1 and W2 when no `--payroll` register was supplied. |
@@ -115,9 +123,10 @@ negative, which the BAS cannot take.
 
 The status is `BLOCKED` when any row in the period is unplaced, since the
 labels would leave it out. Otherwise it is `REVIEW` when there is a finding or
-no row falls in the period, and `PASS` when every row was placed and nothing
-was listed. `PASS` means the draft is complete against the map, not that the
-map or the coding is right.
+no row falls in the period, and `PASS` when every row in the period was
+placed (rows mapped `bas_excluded` count as placed and are still listed) and
+there is no finding. `PASS` means the draft is complete against the map, not
+that the map or the coding is right.
 
 ## Limits
 

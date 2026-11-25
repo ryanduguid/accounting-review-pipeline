@@ -99,6 +99,31 @@ fn the_example_ledger_drafts_every_label_and_blocks_on_its_unmapped_row() {
 }
 
 #[test]
+fn a_ledger_with_every_row_placed_exits_0() {
+    let temp = std::env::temp_dir().join(format!("closecontrol-bas-{}", std::process::id()));
+    std::fs::create_dir_all(&temp).unwrap();
+    let clean = temp.join("ledger.csv");
+    let source = std::fs::read_to_string(example("bas_ledger.csv")).unwrap();
+    let kept: Vec<_> = source
+        .lines()
+        .filter(|line| !line.contains(",U-1,"))
+        .collect();
+    std::fs::write(&clean, kept.join("\n") + "\n").unwrap();
+    let output = child_profile::command(BIN)
+        .args(["bas", "--ledger", clean.to_str().unwrap(), "--tax-codes"])
+        .arg(example("bas_tax_codes.csv"))
+        .args(["--currency", "AUD", "--period-start", "2026-07-01"])
+        .args(["--period-end", "2026-09-30", "--basis", "cash"])
+        .output()
+        .unwrap();
+    std::fs::remove_dir_all(&temp).unwrap();
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let result = pyjson::loads(&String::from_utf8(output.stdout).unwrap()).unwrap();
+    assert!(result.at("status").is_str("PASS"));
+    assert_eq!(pyjson::canonical(result.at("rows_unpaid")), "4");
+}
+
+#[test]
 fn a_bad_basis_or_missing_file_exits_1() {
     for args in [
         &["--basis", "payments"][..],
