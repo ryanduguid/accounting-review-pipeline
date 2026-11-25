@@ -69,6 +69,7 @@ stay in the retained files. A passing fixture check never approves accounting.
 To repeat the source revisions from a previous complete run:
 
 ```powershell
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 python setup_utility.py --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 ```
 

@@ -5,23 +5,26 @@
 //! Set up and run the fabricated accounting examples in a new workspace.
 
 use grant_acquittal_workpapers::{
-    argtheme::{self, Stream},
     oserror,
     pyjson::{self, Json},
 };
+#[cfg(not(windows))]
+use std::collections::HashMap;
+#[cfg(windows)]
+use std::collections::HashSet;
+#[cfg(windows)]
+use std::ffi::OsString;
 use std::{
     collections::BTreeMap,
     env,
+    ffi::OsStr,
     fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
     time::{Duration, Instant},
 };
-
-#[cfg(windows)]
-use std::ffi::OsString;
 
 const PIPELINE: &str = "accounting-review-pipeline";
 const GRANT_PROJECT: &str = "apps/grant-acquittal-workpapers";
@@ -33,9 +36,11 @@ const COMPANIONS: [(&str, &str); 2] = [
     ("australian-accounting", "australian-accounting"),
 ];
 
-const USAGE: &str =
-    "usage: setup_utility [-h] --workspace WORKSPACE [--replay-manifest REPLAY_MANIFEST] [--summary SUMMARY]";
 const HELP_BODY: &str = "Set up and run the fabricated accounting examples in a new workspace.\n\noptions:\n  -h, --help            show this help message and exit\n  --workspace WORKSPACE\n                        New directory outside every Git checkout\n  --replay-manifest REPLAY_MANIFEST\n                        Replay clean source commits from an all-route manifest or replay.json\n  --summary SUMMARY     Append a result summary outside source and workspace directories";
+
+fn usage_line(prog: &str) -> String {
+    format!("usage: {prog} [-h] --workspace WORKSPACE [--replay-manifest REPLAY_MANIFEST] [--summary SUMMARY]")
+}
 
 #[derive(Clone, Debug)]
 struct Captured {
@@ -74,7 +79,8 @@ impl Ops for SystemOps {
         let Some((program, args)) = command.split_first() else {
             return Err("empty command".into());
         };
-        let mut cmd = Command::new(program);
+        let resolved = resolve_program(program, path_override(env_vars));
+        let mut cmd = Command::new(&resolved);
         cmd.args(args).stdin(Stdio::null());
         if let Some(dir) = cwd {
             cmd.current_dir(dir);
@@ -100,7 +106,8 @@ impl Ops for SystemOps {
         let Some((program, args)) = command.split_first() else {
             return Err("empty command".into());
         };
-        let mut cmd = Command::new(program);
+        let resolved = resolve_program(program, path_override(env_vars));
+        let mut cmd = Command::new(&resolved);
         cmd.args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -126,9 +133,40 @@ impl Ops for SystemOps {
     }
 }
 
+fn path_override<'a>(env_vars: &[(&'a str, &'a str)]) -> Option<&'a OsStr> {
+    env_vars
+        .iter()
+        .rfind(|(k, _)| {
+            if cfg!(windows) {
+                k.eq_ignore_ascii_case("PATH")
+            } else {
+                *k == "PATH"
+            }
+        })
+        .map(|(_, v)| OsStr::new(*v))
+}
+
+fn resolve_program(program: &str, env_path: Option<&OsStr>) -> PathBuf {
+    if Path::new(program).components().count() > 1 {
+        return PathBuf::from(program);
+    }
+    which_on_path_in(program, env_path).unwrap_or_else(|| PathBuf::from(program))
+}
+
 fn which_on_path(tool: &str) -> Option<PathBuf> {
-    let path_var = env::var_os("PATH")?;
-    env::split_paths(&path_var).find_map(|dir| executable_in(&dir, tool))
+    which_on_path_in(tool, None)
+}
+
+fn which_on_path_in(tool: &str, path_override: Option<&OsStr>) -> Option<PathBuf> {
+    let owned;
+    let path_var = match path_override {
+        Some(v) => v,
+        None => {
+            owned = env::var_os("PATH")?;
+            owned.as_os_str()
+        }
+    };
+    env::split_paths(path_var).find_map(|dir| executable_in(&dir, tool))
 }
 
 #[cfg(unix)]
@@ -141,18 +179,19 @@ fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
-    let direct = dir.join(tool);
-    if direct.is_file() {
-        return Some(direct);
-    }
     let pathext = env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".COM;.EXE;.BAT;.CMD"));
-    for ext in pathext.to_string_lossy().split(';').filter(|e| !e.is_empty()) {
-        let candidate = dir.join(format!("{tool}{ext}"));
-        if candidate.is_file() {
-            return Some(candidate);
+    let text = pathext.to_string_lossy();
+    let exts: Vec<&str> = text.split(';').filter(|e| !e.is_empty()).collect();
+    let lower = tool.to_ascii_lowercase();
+    if exts.iter().any(|e| lower.ends_with(&e.to_ascii_lowercase())) {
+        let direct = dir.join(tool);
+        if direct.is_file() {
+            return Some(direct);
         }
     }
-    None
+    exts.iter()
+        .map(|ext| dir.join(format!("{tool}{ext}")))
+        .find(|candidate| candidate.is_file())
 }
 
 #[cfg(unix)]
@@ -208,11 +247,22 @@ fn spawn_reader(stream: Option<impl Read + Send + 'static>) -> thread::JoinHandl
     })
 }
 
+#[cfg(unix)]
+fn status_code(status: ExitStatus) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    status.code().or_else(|| status.signal().map(|s| -s))
+}
+
+#[cfg(not(unix))]
+fn status_code(status: ExitStatus) -> Option<i32> {
+    status.code()
+}
+
 fn wait_child(mut child: Child, timeout_secs: f64) -> Result<Option<i32>, ()> {
     let deadline = Instant::now() + Duration::from_secs_f64(timeout_secs);
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return Ok(status.code()),
+            Ok(Some(status)) => return Ok(status_code(status)),
             Ok(None) if Instant::now() >= deadline => {
                 kill_tree(child.id());
                 let _ = child.wait();
@@ -244,21 +294,143 @@ fn strip_verbatim(path: PathBuf) -> PathBuf {
     }
 }
 
+#[cfg(windows)]
+fn read_link_deep(path: &Path) -> Option<PathBuf> {
+    let mut current = path.to_path_buf();
+    let mut seen = HashSet::new();
+    while seen.insert(oserror::decode_os(current.as_os_str()).to_lowercase()) {
+        let Ok(target) = fs::read_link(&current) else {
+            break;
+        };
+        let joined = if target.is_absolute() {
+            target
+        } else {
+            current.parent()?.join(target)
+        };
+        current = std::path::absolute(joined).ok()?;
+    }
+    Some(current)
+}
+
+#[cfg(windows)]
+fn resolve_absolute(path: &Path) -> PathBuf {
+    let mut current = path.to_path_buf();
+    let mut tail = Vec::new();
+    loop {
+        let base = match fs::canonicalize(&current) {
+            Ok(found) => Some(strip_verbatim(found)),
+            Err(_) => read_link_deep(&current).filter(|followed| *followed != current),
+        };
+        if let Some(mut result) = base {
+            for name in tail.iter().rev() {
+                result.push(name);
+            }
+            return result;
+        }
+        let Some(name) = current.file_name().map(OsStr::to_os_string) else {
+            return path.to_path_buf();
+        };
+        tail.push(name);
+        current.pop();
+    }
+}
+
 #[cfg(not(windows))]
-fn strip_verbatim(path: PathBuf) -> PathBuf {
-    path
+struct RealPath {
+    rest: Vec<Option<Vec<u8>>>,
+    part_count: usize,
+    current: Vec<u8>,
+    seen: HashMap<Vec<u8>, Option<Vec<u8>>>,
+}
+
+#[cfg(not(windows))]
+fn os_path(bytes: &[u8]) -> PathBuf {
+    use std::os::unix::ffi::OsStringExt;
+    PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()))
+}
+
+#[cfg(not(windows))]
+impl RealPath {
+    fn push_parts(&mut self, text: &[u8]) {
+        let parts: Vec<&[u8]> = text.split(|&b| b == b'/').collect();
+        self.part_count += parts.len();
+        self.rest.extend(parts.into_iter().rev().map(|p| Some(p.to_vec())));
+    }
+
+    fn step(&mut self, name: &[u8]) {
+        if name.is_empty() || name == b"." {
+            return;
+        }
+        if name == b".." {
+            let cut = self.current.iter().rposition(|&b| b == b'/').unwrap_or(0);
+            self.current.truncate(cut.max(1));
+            return;
+        }
+        let mut newpath = self.current.clone();
+        if newpath != b"/" {
+            newpath.push(b'/');
+        }
+        newpath.extend_from_slice(name);
+        match fs::symlink_metadata(os_path(&newpath)) {
+            Ok(meta) if meta.file_type().is_symlink() => self.step_symlink(newpath),
+            _ => self.current = newpath,
+        }
+    }
+
+    fn step_symlink(&mut self, newpath: Vec<u8>) {
+        match self.seen.get(&newpath) {
+            Some(Some(resolved)) => self.current = resolved.clone(),
+            Some(None) => self.current = newpath,
+            None => match fs::read_link(os_path(&newpath)) {
+                Ok(target) => self.follow(newpath, &target),
+                Err(_) => self.current = newpath,
+            },
+        }
+    }
+
+    fn follow(&mut self, link: Vec<u8>, target: &Path) {
+        use std::os::unix::ffi::OsStrExt;
+        let bytes = target.as_os_str().as_bytes();
+        if bytes.starts_with(b"/") {
+            self.current = b"/".to_vec();
+        }
+        self.seen.insert(link.clone(), None);
+        self.rest.push(Some(link));
+        self.rest.push(None);
+        self.push_parts(bytes);
+    }
+}
+
+#[cfg(not(windows))]
+fn resolve_absolute(path: &Path) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    let filename = path.as_os_str().as_bytes();
+    let trimmed = &filename[..filename.len() - filename.iter().rev().take_while(|&&b| b == b'/').count()];
+    let mut walk = RealPath {
+        rest: Vec::new(),
+        part_count: 0,
+        current: b"/".to_vec(),
+        seen: HashMap::new(),
+    };
+    walk.push_parts(trimmed);
+    while walk.part_count > 0 {
+        let Some(name) = walk.rest.pop().expect("part_count tracks entries") else {
+            let link = walk.rest.pop().flatten().expect("link follows marker");
+            walk.seen.insert(link, Some(walk.current.clone()));
+            continue;
+        };
+        walk.part_count -= 1;
+        walk.step(&name);
+    }
+    os_path(&walk.current)
 }
 
 fn resolve_path(path: &Path) -> Result<PathBuf, String> {
-    let abs = std::path::absolute(path).map_err(|e| e.to_string())?;
-    let mut cur = PathBuf::new();
-    for component in abs.components() {
-        cur.push(component.as_os_str());
-        if let Ok(canon) = fs::canonicalize(&cur) {
-            cur = strip_verbatim(canon);
-        }
+    if oserror::decode_os(path.as_os_str()).contains('\0') {
+        return Err("embedded null byte".into());
     }
-    Ok(cur)
+    let abs = std::path::absolute(path).map_err(|e| e.to_string())?;
+    Ok(resolve_absolute(&abs))
 }
 
 fn is_within(resolved: &Path, root: &Path) -> bool {
@@ -679,6 +851,16 @@ fn append_summary(summary_target: &Path, workspace: &Path, was_present: bool, su
     file.write_all(encoded.as_bytes()).map_err(|e| e.to_string())
 }
 
+fn check_summary_target(source: &Path, summary: &Path, workspace: &Path) -> Result<(), String> {
+    let target = resolve_path(summary)?;
+    let pipe = pipeline_root(source)?;
+    let ws = resolve_path(workspace)?;
+    if is_within(&target, &pipe) || is_within(&target, &ws) {
+        return Err("Summary must be outside the pipeline checkout and workspace".into());
+    }
+    Ok(())
+}
+
 fn run_main(
     ops: &dyn Ops,
     source: &Path,
@@ -687,33 +869,23 @@ fn run_main(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> i32 {
+    let usage = usage_line(prog);
     let parsed = match parse_cli(args) {
         Ok(Some(cli)) => cli,
         Ok(None) => {
-            let _ = argtheme::theme(Stream::Stdout);
-            write_stream(out, &format!("{USAGE}\n\n{HELP_BODY}\n"));
+            write_stream(out, &format!("{usage}\n\n{HELP_BODY}\n"));
             return 0;
         }
         Err(msg) => {
-            let _ = argtheme::theme(Stream::Stderr);
-            write_stream(err, &format!("{USAGE}\n{prog}: error: {msg}\n"));
+            write_stream(err, &format!("{usage}\n{prog}: error: {msg}\n"));
             return 2;
         }
     };
-    if let Some(summary_path) = &parsed.summary {
-        let valid = (|| -> Result<bool, String> {
-            let target = resolve_path(summary_path)?;
-            let pipe = pipeline_root(source)?;
-            let ws = resolve_path(&parsed.workspace)?;
-            Ok(is_within(&target, &pipe) || is_within(&target, &ws))
-        })();
-        if matches!(valid, Ok(true)) {
-            write_stream(
-                err,
-                &format!("{USAGE}\n{prog}: error: Summary must be outside the pipeline checkout and workspace\n"),
-            );
-            return 2;
-        }
+    if let Some(summary_path) = &parsed.summary
+        && let Err(error) = check_summary_target(source, summary_path, &parsed.workspace)
+    {
+        write_stream(err, &format!("{usage}\n{prog}: error: {error}\n"));
+        return 2;
     }
     run_checked(ops, source, &parsed, out, err)
 }
@@ -759,7 +931,15 @@ fn default_source() -> PathBuf {
         && let Some(dir) = exe.parent()
     {
         if dir.file_name().is_some_and(|n| n == "examples") {
-            if let Some(crate_dir) = dir.parent().and_then(Path::parent).and_then(Path::parent)
+            let parent = dir.parent();
+            let in_target = parent
+                .and_then(Path::file_name)
+                .is_some_and(|n| n == "debug" || n == "release");
+            if !in_target && let Some(comp) = parent {
+                return comp.to_path_buf();
+            }
+            if in_target
+                && let Some(crate_dir) = parent.and_then(Path::parent).and_then(Path::parent)
                 && crate_dir.join("Cargo.toml").is_file()
             {
                 return crate_dir.to_path_buf();
@@ -1423,5 +1603,151 @@ mod tests {
             "--example".into(),
             "utility_workflows".into()
         ]));
+    }
+
+    #[test]
+    fn nonexistent_parent_traversal_into_pipeline_and_git_repo_fails() {
+        let temp = TempDir::new("setup-dotdot");
+        let pipe = temp.join("pipeline");
+        fake_pipeline(&pipe, true);
+        let git_repo = temp.join("repo");
+        fs::create_dir_all(&git_repo).unwrap();
+        let ops = SystemOps;
+        ops.run_status(
+            &git_command(&["init", "--", &oserror::path_text(&git_repo)]),
+            None,
+            &[],
+            30.0,
+        )
+        .unwrap();
+        let pipe_ws = temp.join("missing").join("..").join("pipeline").join("ws");
+        assert!(
+            setup(&ops, &pipe.join(GRANT_PROJECT), &pipe_ws, None)
+                .unwrap_err()
+                .contains("separate")
+        );
+        let repo_ws = temp.join("missing").join("..").join("repo").join("ws");
+        assert!(
+            setup(&ops, &pipe.join(GRANT_PROJECT), &repo_ws, None)
+                .unwrap_err()
+                .contains("outside existing Git")
+        );
+        assert!(!pipe.join("ws").exists() && !git_repo.join("ws").exists());
+        let sum_dotdot = temp.join("missing").join("..").join("pipeline").join("sum.md");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let args = [
+            "--workspace".into(),
+            oserror::path_text(&temp.join("ok-ws")),
+            "--summary".into(),
+            oserror::path_text(&sum_dotdot),
+        ];
+        assert_eq!(
+            run_main(
+                &default_stub(None),
+                &pipe.join(GRANT_PROJECT),
+                "setup_utility",
+                &args,
+                &mut out,
+                &mut err
+            ),
+            2
+        );
+        assert!(!pipe.join("sum.md").exists());
+    }
+
+    #[test]
+    fn invalid_summary_path_fails_before_setup() {
+        let temp = TempDir::new("setup-bad-summary");
+        let pipe = temp.join("pipeline");
+        fake_pipeline(&pipe, true);
+        let ws = temp.join("ws");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let args = [
+            "--workspace".into(),
+            oserror::path_text(&ws),
+            "--summary".into(),
+            "bad\0path".into(),
+        ];
+        let code = run_main(
+            &default_stub(None),
+            &pipe.join(GRANT_PROJECT),
+            "setup_utility",
+            &args,
+            &mut out,
+            &mut err,
+        );
+        assert_eq!(code, 2);
+        assert!(!ws.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlink_summary_inside_guarded_dirs_is_refused() {
+        let temp = TempDir::new("setup-dangling-sum");
+        let pipe = temp.join("pipeline");
+        fake_pipeline(&pipe, true);
+        let ws = temp.join("ws");
+        let link_pipe = temp.join("link-pipe.md");
+        std::os::unix::fs::symlink(pipe.join("missing/summary.md"), &link_pipe).unwrap();
+        let link_ws = temp.join("link-ws.md");
+        std::os::unix::fs::symlink(ws.join("missing/summary.md"), &link_ws).unwrap();
+        for bad in [&link_pipe, &link_ws] {
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let args = [
+                "--workspace".into(),
+                oserror::path_text(&ws),
+                "--summary".into(),
+                oserror::path_text(bad),
+            ];
+            assert_eq!(
+                run_main(
+                    &default_stub(None),
+                    &pipe.join(GRANT_PROJECT),
+                    "setup_utility",
+                    &args,
+                    &mut out,
+                    &mut err
+                ),
+                2
+            );
+            assert!(String::from_utf8(err).unwrap().contains("Summary must be outside"));
+        }
+        assert!(!ws.exists());
+    }
+
+    #[cfg(unix)]
+    fn write_exec_shim(bin: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let p = bin.join("fake-tool");
+        fs::write(&p, "#!/bin/sh\necho \"$1\"\n").unwrap();
+        let mut perms = fs::metadata(&p).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&p, perms).unwrap();
+        p
+    }
+
+    #[cfg(not(unix))]
+    fn write_exec_shim(bin: &Path) -> PathBuf {
+        let p = bin.join("fake-tool.cmd");
+        fs::write(&p, "@echo off\r\necho %1\r\n").unwrap();
+        p
+    }
+
+    #[test]
+    fn system_ops_resolves_and_runs_path_shim() {
+        let temp = TempDir::new("setup-shim");
+        let bin = temp.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let script_path = write_exec_shim(&bin);
+        let path_val = oserror::path_text(&bin);
+        assert_eq!(
+            which_on_path_in("fake-tool", Some(OsStr::new(&path_val))).as_deref(),
+            Some(script_path.as_path())
+        );
+        let cap = SystemOps
+            .run_capture(&["fake-tool".into(), "ok".into()], &[("PATH", &path_val)], 10.0)
+            .unwrap();
+        assert_eq!(cap.exit_code, Some(0));
+        assert_eq!(cap.stdout.trim(), "ok");
     }
 }

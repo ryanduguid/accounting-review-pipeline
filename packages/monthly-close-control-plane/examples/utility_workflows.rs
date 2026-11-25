@@ -16,10 +16,12 @@ use monthly_close_control_plane::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env, fs,
+    env,
+    ffi::OsStr,
+    fs,
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -113,9 +115,40 @@ impl Ops for SystemOps {
     }
 }
 
+fn path_override(env_vars: &[(String, String)]) -> Option<&OsStr> {
+    env_vars
+        .iter()
+        .rfind(|(k, _)| {
+            if cfg!(windows) {
+                k.eq_ignore_ascii_case("PATH")
+            } else {
+                k == "PATH"
+            }
+        })
+        .map(|(_, v)| OsStr::new(v.as_str()))
+}
+
+fn resolve_program(program: &str, env_path: Option<&OsStr>) -> PathBuf {
+    if Path::new(program).components().count() > 1 {
+        return PathBuf::from(program);
+    }
+    which_on_path_in(program, env_path).unwrap_or_else(|| PathBuf::from(program))
+}
+
 fn which_on_path(tool: &str) -> Option<PathBuf> {
-    let path_var = env::var_os("PATH")?;
-    for dir in env::split_paths(&path_var) {
+    which_on_path_in(tool, None)
+}
+
+fn which_on_path_in(tool: &str, path_override: Option<&OsStr>) -> Option<PathBuf> {
+    let owned;
+    let path_var = match path_override {
+        Some(v) => v,
+        None => {
+            owned = env::var_os("PATH")?;
+            owned.as_os_str()
+        }
+    };
+    for dir in env::split_paths(path_var) {
         if let Some(found) = executable_in(&dir, tool) {
             return Some(found);
         }
@@ -133,22 +166,22 @@ fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
-    let direct = dir.join(tool);
-    if direct.is_file() {
-        return Some(direct);
-    }
     let pathext = env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".COM;.EXE;.BAT;.CMD"));
-    for ext in pathext
-        .to_string_lossy()
-        .split(';')
-        .filter(|e| !e.is_empty())
+    let text = pathext.to_string_lossy();
+    let exts: Vec<&str> = text.split(';').filter(|e| !e.is_empty()).collect();
+    let lower = tool.to_ascii_lowercase();
+    if exts
+        .iter()
+        .any(|e| lower.ends_with(&e.to_ascii_lowercase()))
     {
-        let candidate = dir.join(format!("{tool}{ext}"));
-        if candidate.is_file() {
-            return Some(candidate);
+        let direct = dir.join(tool);
+        if direct.is_file() {
+            return Some(direct);
         }
     }
-    None
+    exts.iter()
+        .map(|ext| dir.join(format!("{tool}{ext}")))
+        .find(|candidate| candidate.is_file())
 }
 
 #[cfg(unix)]
@@ -208,11 +241,22 @@ fn decode_stream(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).replace("\r\n", "\n")
 }
 
+#[cfg(unix)]
+fn status_code(status: ExitStatus) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    status.code().or_else(|| status.signal().map(|s| -s))
+}
+
+#[cfg(not(unix))]
+fn status_code(status: ExitStatus) -> Option<i32> {
+    status.code()
+}
+
 fn wait_child(mut child: Child, timeout_secs: f64) -> Result<Option<i32>, ()> {
     let deadline = Instant::now() + Duration::from_secs_f64(timeout_secs);
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return Ok(status.code()),
+            Ok(Some(status)) => return Ok(status_code(status)),
             Ok(None) if Instant::now() >= deadline => {
                 kill_tree(child.id());
                 let _ = child.wait();
@@ -238,7 +282,8 @@ fn captured(
     let Some((program, args)) = command.split_first() else {
         return Err(CaptureError::Launch("empty command".to_owned()));
     };
-    let mut cmd = Command::new(program);
+    let resolved = resolve_program(program, path_override(env_vars));
+    let mut cmd = Command::new(&resolved);
     cmd.args(args)
         .current_dir(cwd)
         .stdin(Stdio::null())
@@ -332,12 +377,73 @@ fn strip_toml_comments(text: &str) -> String {
     out
 }
 
-fn parse_toml_string(src: &str, start: usize) -> Option<(String, usize)> {
-    let bytes = src.as_bytes();
-    let q = *bytes.get(start)?;
-    if q != b'"' && q != b'\'' {
-        return None;
+fn push_toml_escape(src: &str, i: &mut usize, out: &mut String, multiline: bool) -> Option<()> {
+    let esc = src[*i..].chars().next()?;
+    if multiline && matches!(esc, ' ' | '\t' | '\r' | '\n') {
+        let mut saw_newline = false;
+        while let Some(c) = src[*i..].chars().next() {
+            if c == '\n' {
+                saw_newline = true;
+            } else if !matches!(c, ' ' | '\t' | '\r') {
+                break;
+            }
+            *i += c.len_utf8();
+        }
+        return saw_newline.then_some(());
     }
+    *i += esc.len_utf8();
+    out.push(match esc {
+        'b' => '\u{0008}',
+        'f' => '\u{000C}',
+        'n' => '\n',
+        'r' => '\r',
+        't' => '\t',
+        '\\' => '\\',
+        '"' => '"',
+        other => other,
+    });
+    Some(())
+}
+
+fn parse_multiline_toml_string(src: &str, start: usize, q: char) -> Option<(String, usize)> {
+    let mut i = start + 3;
+    if src[i..].starts_with("\r\n") {
+        i += 2;
+    } else if src[i..].starts_with('\n') {
+        i += 1;
+    }
+    let mut out = String::new();
+    while i < src.len() {
+        let ch = src[i..].chars().next()?;
+        if ch == q {
+            let count = src[i..].chars().take(6).take_while(|&c| c == q).count();
+            if (3..=5).contains(&count) {
+                for _ in 0..(count - 3) {
+                    out.push(q);
+                }
+                return Some((out, i + count));
+            }
+        }
+        if q == '"' && ch == '\\' {
+            i += 1;
+            push_toml_escape(src, &mut i, &mut out, true)?;
+        } else {
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    None
+}
+
+fn parse_toml_string(src: &str, start: usize) -> Option<(String, usize)> {
+    let rest = src.get(start..)?;
+    if rest.starts_with("\"\"\"") {
+        return parse_multiline_toml_string(src, start, '"');
+    }
+    if rest.starts_with("'''") {
+        return parse_multiline_toml_string(src, start, '\'');
+    }
+    let q = rest.bytes().next().filter(|&b| b == b'"' || b == b'\'')?;
     let mut i = start + 1;
     let mut out = String::new();
     while i < src.len() {
@@ -347,16 +453,7 @@ fn parse_toml_string(src: &str, start: usize) -> Option<(String, usize)> {
         }
         if q == b'"' && ch == '\\' {
             i += 1;
-            let esc = src[i..].chars().next()?;
-            out.push(match esc {
-                'n' => '\n',
-                'r' => '\r',
-                't' => '\t',
-                '\\' => '\\',
-                '"' => '"',
-                other => other,
-            });
-            i += esc.len_utf8();
+            push_toml_escape(src, &mut i, &mut out, false)?;
         } else {
             out.push(ch);
             i += ch.len_utf8();
@@ -446,6 +543,69 @@ fn parse_uv_workspace(text: &str) -> WorkspaceSpec {
     spec
 }
 
+fn skip_inline_value(src: &str, mut pos: usize) -> usize {
+    let bytes = src.as_bytes();
+    let mut depth = 0usize;
+    while pos < bytes.len() {
+        match bytes[pos] {
+            b'"' | b'\'' => {
+                if let Some((_, next)) = parse_toml_string(src, pos) {
+                    pos = next;
+                    continue;
+                }
+            }
+            b'[' | b'{' => depth += 1,
+            b']' => depth = depth.saturating_sub(1),
+            b'}' | b',' if depth == 0 => return pos,
+            b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        pos += 1;
+    }
+    pos
+}
+
+fn parse_inline_workspace(src: &str, mut pos: usize, spec: &mut WorkspaceSpec) -> Option<usize> {
+    let bytes = src.as_bytes();
+    while bytes.get(pos).is_some_and(u8::is_ascii_whitespace) {
+        pos += 1;
+    }
+    if bytes.get(pos) != Some(&b'{') {
+        return None;
+    }
+    spec.defined = true;
+    pos += 1;
+    while pos < src.len() {
+        while bytes
+            .get(pos)
+            .is_some_and(|b| b.is_ascii_whitespace() || *b == b',')
+        {
+            pos += 1;
+        }
+        if bytes.get(pos) == Some(&b'}') {
+            return Some(pos + 1);
+        }
+        let eq_rel = src[pos..].find('=')?;
+        if src[pos..pos + eq_rel].contains('}') {
+            return None;
+        }
+        let key = src[pos..pos + eq_rel].trim();
+        let val_start = pos + eq_rel + 1;
+        pos = if key == "members" {
+            let (vals, next) = parse_string_array(src, val_start)?;
+            spec.members = vals;
+            next
+        } else if key == "exclude" {
+            let (vals, next) = parse_string_array(src, val_start)?;
+            spec.exclude = vals;
+            next
+        } else {
+            skip_inline_value(src, val_start)
+        };
+    }
+    None
+}
+
 fn apply_toml_kv(
     clean: &str,
     section: &str,
@@ -465,6 +625,11 @@ fn apply_toml_kv(
         format!("{section}.{key}")
     };
     let val_start = start + eq + 1;
+    if full == "tool.uv.workspace"
+        && let Some(next) = parse_inline_workspace(clean, val_start, spec)
+    {
+        return next;
+    }
     if full == "tool.uv.workspace.members" {
         spec.defined = true;
         if let Some((vals, next)) = parse_string_array(clean, val_start) {
@@ -481,17 +646,61 @@ fn apply_toml_kv(
     skip_toml_value(clean, val_start)
 }
 
-fn glob_match(pattern: &str, text: &str) -> bool {
-    let (p, t) = (pattern.as_bytes(), text.as_bytes());
+fn fold_eq(a: char, b: char, ci: bool) -> bool {
+    a == b || (ci && a.to_lowercase().eq(b.to_lowercase()))
+}
+
+fn fold_char(c: char, ci: bool) -> char {
+    if ci {
+        c.to_lowercase().next().unwrap_or(c)
+    } else {
+        c
+    }
+}
+
+fn match_char_class(pat: &[char], start: usize, ch: char, ci: bool) -> Option<(bool, usize)> {
+    let neg = pat.get(start) == Some(&'!');
+    let mut i = start + usize::from(neg);
+    let mut first = true;
+    let mut matched = false;
+    let cf = fold_char(ch, ci);
+    while i < pat.len() && (first || pat[i] != ']') {
+        first = false;
+        if i + 2 < pat.len() && pat[i + 1] == '-' && pat[i + 2] != ']' {
+            let (lo, hi) = (fold_char(pat[i], ci), fold_char(pat[i + 2], ci));
+            matched |= (lo..=hi).contains(&cf);
+            i += 3;
+        } else {
+            matched |= fold_eq(pat[i], ch, ci);
+            i += 1;
+        }
+    }
+    (i < pat.len() && pat[i] == ']').then_some((matched ^ neg, i + 1))
+}
+
+fn step_glob_token(p: &[char], ch: char, ci: bool) -> Option<usize> {
+    match *p.first()? {
+        '?' => Some(1),
+        '[' => match match_char_class(p, 1, ch, ci) {
+            Some((ok, next)) => ok.then_some(next),
+            None => (ch == '[').then_some(1),
+        },
+        pc if fold_eq(pc, ch, ci) => Some(1),
+        _ => None,
+    }
+}
+
+fn glob_match_ci(pattern: &str, text: &str, ci: bool) -> bool {
+    let (p, t): (Vec<char>, Vec<char>) = (pattern.chars().collect(), text.chars().collect());
     let (mut pi, mut ti, mut star, mut match_ti) = (0usize, 0usize, None, 0usize);
     while ti < t.len() {
-        if pi < p.len() && (p[pi] == b'?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == b'*' {
+        if pi < p.len() && p[pi] == '*' {
             star = Some(pi);
             match_ti = ti;
             pi += 1;
+        } else if let Some(step) = step_glob_token(&p[pi..], t[ti], ci) {
+            pi += step;
+            ti += 1;
         } else if let Some(s) = star {
             pi = s + 1;
             match_ti += 1;
@@ -500,31 +709,52 @@ fn glob_match(pattern: &str, text: &str) -> bool {
             return false;
         }
     }
-    while pi < p.len() && p[pi] == b'*' {
+    while pi < p.len() && p[pi] == '*' {
         pi += 1;
     }
     pi == p.len()
 }
 
-fn py_path_match(member: &str, pattern: &str) -> bool {
+fn py_path_match_ci(member: &str, pattern: &str, ci: bool) -> bool {
+    fn split(s: &str) -> Vec<&str> {
+        s.split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .collect()
+    }
     if pattern.is_empty() {
         return false;
     }
-    let m_parts: Vec<&str> = member
-        .split('/')
-        .filter(|s| !s.is_empty() && *s != ".")
-        .collect();
-    let p_parts: Vec<&str> = pattern
-        .split('/')
-        .filter(|s| !s.is_empty() && *s != ".")
-        .collect();
+    let m_norm = if ci {
+        member.replace('\\', "/")
+    } else {
+        member.to_owned()
+    };
+    let p_norm = if ci {
+        pattern.replace('\\', "/")
+    } else {
+        pattern.to_owned()
+    };
+    let (m_anch, p_anch) = (m_norm.starts_with('/'), p_norm.starts_with('/'));
+    let (m_parts, p_parts) = (split(&m_norm), split(&p_norm));
+    if p_anch {
+        return m_anch
+            && m_parts.len() == p_parts.len()
+            && m_parts
+                .iter()
+                .zip(p_parts.iter())
+                .all(|(m, p)| glob_match_ci(p, m, ci));
+    }
     if p_parts.is_empty() || m_parts.len() < p_parts.len() {
         return false;
     }
     let tail = &m_parts[m_parts.len() - p_parts.len()..];
     tail.iter()
         .zip(p_parts.iter())
-        .all(|(m, p)| glob_match(p, m))
+        .all(|(m, p)| glob_match_ci(p, m, ci))
+}
+
+fn py_path_match(member: &str, pattern: &str) -> bool {
+    py_path_match_ci(member, pattern, cfg!(windows))
 }
 
 fn posix_rel(rel: &Path) -> String {
@@ -1598,7 +1828,11 @@ struct CliArgs {
     workflow: String,
 }
 
-const USAGE: &str = "usage: utility_workflows [-h] --fpa FPA [--accounting ACCOUNTING] [--grants GRANTS] --output OUTPUT [--environment-root ENVIRONMENT_ROOT] [--timeout TIMEOUT] [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]";
+fn usage_line(prog: &str) -> String {
+    format!(
+        "usage: {prog} [-h] --fpa FPA [--accounting ACCOUNTING] [--grants GRANTS] --output OUTPUT [--environment-root ENVIRONMENT_ROOT] [--timeout TIMEOUT] [--workflow {{all,close-forecast,quarter,job-cash,grant-cash}}]"
+    )
+}
 const HELP: &str = "Run fabricated workflows with explicit lock authority and source evidence.\n\noptions:\n  -h, --help            show this help message and exit\n  --fpa FPA\n  --accounting ACCOUNTING\n  --grants GRANTS\n  --output OUTPUT\n  --environment-root ENVIRONMENT_ROOT\n                        optional new directory for isolated installations\n  --timeout TIMEOUT     seconds per command, including setup (default: 300)\n  --workflow {all,close-forecast,quarter,job-cash,grant-cash}";
 
 struct CliBuilder {
@@ -1758,14 +1992,15 @@ fn run_main(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> i32 {
+    let usage = usage_line(prog);
     let parsed = match parse_cli(args) {
         Ok(Some(cli)) => cli,
         Ok(None) => {
-            let _ = write_stream(out, &format!("{USAGE}\n\n{HELP}\n"));
+            let _ = write_stream(out, &format!("{usage}\n\n{HELP}\n"));
             return 0;
         }
         Err(message) => {
-            let _ = write_stream(err, &format!("{USAGE}\n{prog}: error: {message}\n"));
+            let _ = write_stream(err, &format!("{usage}\n{prog}: error: {message}\n"));
             return 2;
         }
     };
@@ -2532,5 +2767,92 @@ mod tests {
             "Utility workflows: Command timeout must be positive and at most 3600 seconds\n"
         );
         assert!(!bad_out.exists());
+    }
+
+    #[test]
+    fn toml_parser_handles_multiline_strings_and_inline_workspace() {
+        let toml = concat!(
+            "[package]\n",
+            "description = \"\"\"\n[tool.uv.workspace]\nmembers = [\"bogus\"]\n\"\"\"\n",
+            "note = '''\n[ignored]\nquoted \"\"\"stays\"\"\" literal\n'''\n",
+            "[tool.uv]\n",
+            "workspace = { extra = { nested = \"}\" }, members = [\"packages/*\"], exclude = [\"packages/ignored\"] }\n",
+        );
+        let spec = parse_uv_workspace(toml);
+        assert!(spec.defined);
+        assert_eq!(spec.members, vec!["packages/*".to_owned()]);
+        assert_eq!(spec.exclude, vec!["packages/ignored".to_owned()]);
+        let sample = "\"\"\"\nhello \\\n  \"world\"\"\"\"\"";
+        let (parsed, end) = parse_toml_string(sample, 0).unwrap();
+        assert_eq!(parsed, "hello \"world\"\"");
+        assert_eq!(end, sample.len());
+    }
+
+    #[test]
+    fn py_path_match_matches_purepath_brackets_anchors_and_case() {
+        assert!(py_path_match_ci("a/b/c", "**", false));
+        assert!(py_path_match_ci("a/b/c", "a/**/c", false));
+        assert!(!py_path_match_ci("packages/x/y", "packages/**", false));
+        assert!(py_path_match_ci("packages/a1", "packages/a[0-9]", false));
+        assert!(!py_path_match_ci("packages/a1", "packages/a[!0-9]", false));
+        assert!(py_path_match_ci("a*b", "a[*]b", false));
+        assert!(py_path_match_ci("a^", "a[^b]", false));
+        assert!(py_path_match_ci("a[", "a[", false));
+        assert!(!py_path_match_ci("packages/a", "/packages/a", false));
+        assert!(py_path_match_ci("/packages/a", "/packages/a", false));
+        assert!(!py_path_match_ci("/x/packages/a", "/packages/a", false));
+        assert!(py_path_match_ci("Packages/Foo", "packages/foo", true));
+        assert!(!py_path_match_ci("Packages/Foo", "packages/foo", false));
+    }
+
+    #[cfg(unix)]
+    fn write_exec_shim(bin: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let p = bin.join("fake-wf-tool");
+        fs::write(&p, "#!/bin/sh\necho \"$1\"\n").unwrap();
+        let mut perms = fs::metadata(&p).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&p, perms).unwrap();
+        p
+    }
+
+    #[cfg(not(unix))]
+    fn write_exec_shim(bin: &Path) -> PathBuf {
+        let p = bin.join("fake-wf-tool.cmd");
+        fs::write(&p, "@echo off\r\necho %1\r\n").unwrap();
+        p
+    }
+
+    #[test]
+    fn captured_resolves_path_shim_and_reports_signal_exit() {
+        let temp = temp::TempDir::new();
+        let bin = temp.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let shim = write_exec_shim(&bin);
+        let path_val = pypath::text(&bin);
+        assert_eq!(
+            which_on_path_in("fake-wf-tool", Some(OsStr::new(&path_val))).as_deref(),
+            Some(shim.as_path())
+        );
+        let env_vars = vec![("PATH".to_owned(), path_val)];
+        let cap = captured(
+            &["fake-wf-tool".into(), "ok".into()],
+            &temp.0,
+            &env_vars,
+            10.0,
+        )
+        .unwrap();
+        assert_eq!((cap.exit_code, cap.stdout.trim()), (Some(0), "ok"));
+        #[cfg(unix)]
+        {
+            let sig = captured(
+                &["sh".into(), "-c".into(), "kill -9 $$".into()],
+                &temp.0,
+                &[],
+                10.0,
+            )
+            .unwrap();
+            assert_eq!(sig.exit_code, Some(-9));
+        }
     }
 }
