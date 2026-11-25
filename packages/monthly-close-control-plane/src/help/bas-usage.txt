@@ -1,0 +1,4 @@
+usage: close-control bas [-h] --ledger LEDGER --tax-codes TAX_CODES
+                         [--payroll PAYROLL] --currency CURRENCY
+                         --period-start PERIOD_START --period-end PERIOD_END
+                         --basis {accruals,cash}

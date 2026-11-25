@@ -3,7 +3,7 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use crate::{
-    Result, classification, coding, comparison,
+    Result, bas, classification, coding, comparison,
     decimal::Decimal,
     drivers, duplicates, engine, fixed_assets, journal_entries, loader, mcp,
     models::Status,
@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 18] = [
+const COMMANDS: [&str; 19] = [
     "review",
     "workbench",
     "view",
@@ -38,6 +38,7 @@ const COMMANDS: [&str; 18] = [
     "mcp",
     "payroll",
     "statement",
+    "bas",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -67,6 +68,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "mcp" => saved!("mcp"),
         "payroll" => saved!("payroll"),
         "statement" => saved!("statement"),
+        "bas" => saved!("bas"),
         _ => saved!("root"),
     }
 }
@@ -232,6 +234,25 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         "statement" => (
             &["--statement", "--currency"],
             &["--statement", "--currency"],
+        ),
+        "bas" => (
+            &[
+                "--ledger",
+                "--tax-codes",
+                "--payroll",
+                "--currency",
+                "--period-start",
+                "--period-end",
+                "--basis",
+            ],
+            &[
+                "--ledger",
+                "--tax-codes",
+                "--currency",
+                "--period-start",
+                "--period-end",
+                "--basis",
+            ],
         ),
         _ => return None,
     })
@@ -796,7 +817,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 Ok(0)
             }
             "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "coding"
-            | "scorecard" | "payroll" | "statement" => {
+            | "scorecard" | "payroll" | "statement" | "bas" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -826,6 +847,15 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--currency")?,
                     )?,
                     "scorecard" => scorecard::scorecard(&args.paths("--result"))?,
+                    "bas" => bas::bas_workpaper(&bas::BasConfig {
+                        ledger: &args.path("--ledger"),
+                        tax_codes: &args.path("--tax-codes"),
+                        payroll: args.optional_path("--payroll").as_deref(),
+                        currency: &args.literal("--currency")?,
+                        period_start: &args.literal("--period-start")?,
+                        period_end: &args.literal("--period-end")?,
+                        basis: args.raw("--basis"),
+                    })?,
                     "coding" => coding::coding_review(
                         &args.path("--lines"),
                         &args.literal("--currency")?,

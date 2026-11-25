@@ -1,11 +1,11 @@
 usage: close-control [-h]
-                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement} ...
+                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas} ...
 
 Create a review-first monthly close control pack from validated trial-balance
 exports.
 
 positional arguments:
-  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement}
+  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas}
     review (workbench)  run integrity, variance, mapping, and optional
                         reconciliation controls (as `workbench`, with the
                         local close-review banner)
@@ -39,6 +39,8 @@ positional arguments:
                         payroll register's 2026-27 pay lines
     statement           tie out a bank statement's running balances, page
                         closings and page openings
+    bas                 draft BAS labels from a ledger's tax codes, each total
+                        naming its rows, for a reviewer
 
 options:
   -h, --help            show this help message and exit

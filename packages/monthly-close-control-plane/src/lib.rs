@@ -4,6 +4,7 @@
 
 //! Offline monthly close controls. An acknowledgement never changes a status.
 
+pub mod bas;
 pub mod beneath;
 pub mod calculation_evidence;
 pub mod classification;

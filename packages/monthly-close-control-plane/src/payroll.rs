@@ -169,21 +169,21 @@ fn withholding(frequency: &str, scale: &str, earnings: &Decimal) -> Decimal {
     }
 }
 
-struct Line {
-    row: usize,
+pub(crate) struct Line {
+    pub(crate) row: usize,
     employee: String,
-    paid: Date,
+    pub(crate) paid: Date,
     frequency: String,
     scale: String,
     adjusted: bool,
-    earnings: Decimal,
-    withheld: Decimal,
+    pub(crate) earnings: Decimal,
+    pub(crate) withheld: Decimal,
     qualifying: Decimal,
     paid_super: Decimal,
     received: Option<Date>,
 }
 
-fn load(source: &SourceSnapshot) -> Result<(String, Vec<Line>)> {
+pub(crate) fn load(source: &SourceSnapshot) -> Result<(String, Vec<Line>)> {
     let path = crate::pypath::text(&source.path);
     let mut tenant = None;
     let mut lines = Vec::new();
