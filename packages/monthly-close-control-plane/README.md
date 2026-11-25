@@ -121,6 +121,10 @@ and fund receipt dates worth review.
 checks that each line of a bank statement carries the running balance
 forward, that each page closes where its lines end and that each page opens
 where the last one closed.
+[Drafted BAS workpaper](docs/bas-workpaper.md) (`close-control bas`) drafts
+BAS labels G1, G2, G3, G10, G11, 1A and 1B from a ledger's tax codes, and W1
+and W2 from a payroll register, with every total naming the rows behind it and
+every row it could not place listed. It lodges nothing.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.

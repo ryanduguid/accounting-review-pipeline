@@ -1,0 +1,22 @@
+usage: close-control bas [-h] --ledger LEDGER --tax-codes TAX_CODES
+                         [--payroll PAYROLL] --currency CURRENCY
+                         --period-start PERIOD_START --period-end PERIOD_END
+                         --basis {accruals,cash}
+
+options:
+  -h, --help            show this help message and exit
+  --ledger LEDGER       one tenant's Tenant,LineID,Date,PaidDate,AccountID,TaxC
+                        ode,Gross,GST,Currency CSV of sales and purchases
+  --tax-codes TAX_CODES
+                        TaxCode,AccountID,Treatment CSV placing each tax code,
+                        or a tax code on one account, on the BAS labels
+  --payroll PAYROLL     payroll register, as `payroll` reads it, to draft W1
+                        and W2
+  --currency CURRENCY   three-letter currency every row carries, e.g. AUD
+  --period-start PERIOD_START
+                        first day of the BAS period, YYYY-MM-DD
+  --period-end PERIOD_END
+                        last day of the BAS period, YYYY-MM-DD
+  --basis {accruals,cash}
+                        the GST accounting basis: accruals places a row by the
+                        earlier of Date and PaidDate, cash by PaidDate

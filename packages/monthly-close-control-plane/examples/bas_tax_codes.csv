@@ -1,0 +1,10 @@
+TaxCode,AccountID,Treatment
+OUTPUT,,taxable_sale
+EXPORT,,export_sale
+GSTFREE,,gst_free_sale
+INPUTTAXED,,input_taxed_sale
+INPUT,,non_capital_creditable
+INPUT,720,capital_creditable
+INPUT,420,non_capital_not_creditable
+INPUTTAXEDEXP,,non_capital_no_gst
+EXCLUDED,,bas_excluded
