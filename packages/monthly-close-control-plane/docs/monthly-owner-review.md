@@ -12,7 +12,7 @@ sources. A review pack does not approve a close or authorise collection messages
 ## Run the maintained examples
 
 Use current source checkouts (`accounting-review-pipeline`, `OzFPA` and `australian-accounting`) and the locked environments described in
-[utility workflows](utility-workflows.md). From the directory holding both
+[utility workflows](utility-workflows.md). From the directory holding all 3
 public repositories, run each route into a new output and environment directory
 (passing your local `OzFPA` checkout to `--fpa`):
 

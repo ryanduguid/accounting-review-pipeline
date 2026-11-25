@@ -129,8 +129,9 @@ class ReplayTests(unittest.TestCase):
 
         with patch.object(setup_utility.sys, "version_info", (3, 14)), patch.object(setup_utility.shutil, "which", return_value="tool"), patch.object(setup_utility, "checkout_revision", side_effect=checkout), patch.object(setup_utility.subprocess, "run", side_effect=run):
             setup_utility.setup(workspace, self.manifest)
+        expected_repos = {"au-fpa-pack": "OzFPA", "australian-accounting": "australian-accounting"}
         self.assertEqual([source for _, source, _ in seen[:2]],
-                         [f"https://github.com/ryanduguid/{setup_utility.COMPANION_REPOSITORIES[name]}.git" for name in setup_utility.COMPANIONS])
+                         [f"https://github.com/ryanduguid/{expected_repos[name]}.git" for name in setup_utility.COMPANIONS])
         # The pipeline commit comes from the local pipeline checkout, which may hold unpushed work.
         self.assertEqual(seen[-1], ("accounting-review-pipeline", str(setup_utility.SOURCE.resolve().parents[1]), "1" * 40))
         self.assertEqual(len(seen), 3)
