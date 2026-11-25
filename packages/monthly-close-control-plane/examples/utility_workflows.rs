@@ -369,9 +369,12 @@ fn strip_toml_comments(text: &str) -> String {
                 && (!triple || (i + 2 < chars.len() && chars[i + 1] == q && chars[i + 2] == q))
             {
                 if triple {
-                    out.push(chars[i + 1]);
-                    out.push(chars[i + 2]);
-                    i += 2;
+                    let mut extra = 3;
+                    while extra < 5 && chars.get(i + extra) == Some(&q) {
+                        extra += 1;
+                    }
+                    out.extend(&chars[i + 1..i + extra]);
+                    i += extra - 1;
                 }
                 quote = None;
             }
@@ -2806,6 +2809,29 @@ mod tests {
         let (parsed, end) = parse_toml_string(sample, 0).unwrap();
         assert_eq!(parsed, "hello \"world\"\"");
         assert_eq!(end, sample.len());
+    }
+
+    #[test]
+    fn strip_toml_comments_handles_four_and_five_quote_closing_delimiters() {
+        assert_eq!(
+            strip_toml_comments("\"\"\"x\"\"\"\" # comment\n'''y''''' # comment"),
+            "\"\"\"x\"\"\"\" \n'''y''''' "
+        );
+        assert_eq!(
+            strip_toml_comments(
+                "a = \"\"\"x # kept\"\"\"\" # stripped\nb = '''y # kept''''' # stripped\nc = \"z\" # stripped"
+            ),
+            "a = \"\"\"x # kept\"\"\"\" \nb = '''y # kept''''' \nc = \"z\" "
+        );
+        let toml = concat!(
+            "a = \"\"\"x\"\"\"\" # comment\n",
+            "b = '''y''''' # comment\n",
+            "[tool.uv.workspace] # real\n",
+            "members = [\"packages/*\"] # keep\n",
+        );
+        let spec = parse_uv_workspace(toml);
+        assert!(spec.defined);
+        assert_eq!(spec.members, vec!["packages/*".to_owned()]);
     }
 
     #[test]
