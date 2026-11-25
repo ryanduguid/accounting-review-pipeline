@@ -2830,10 +2830,13 @@ mod tests {
         fs::create_dir_all(&bin).unwrap();
         let shim = write_exec_shim(&bin);
         let path_val = pypath::text(&bin);
-        assert_eq!(
-            which_on_path_in("fake-wf-tool", Some(OsStr::new(&path_val))).as_deref(),
-            Some(shim.as_path())
-        );
+        let found = which_on_path_in("fake-wf-tool", Some(OsStr::new(&path_val))).unwrap();
+        if cfg!(windows) {
+            let (got, exp) = (pypath::text(&found), pypath::text(&shim));
+            assert!(got.eq_ignore_ascii_case(&exp));
+        } else {
+            assert_eq!(found, shim);
+        }
         let env_vars = vec![("PATH".to_owned(), path_val)];
         let cap = captured(
             &["fake-wf-tool".into(), "ok".into()],

@@ -1740,10 +1740,13 @@ mod tests {
         fs::create_dir_all(&bin).unwrap();
         let script_path = write_exec_shim(&bin);
         let path_val = oserror::path_text(&bin);
-        assert_eq!(
-            which_on_path_in("fake-tool", Some(OsStr::new(&path_val))).as_deref(),
-            Some(script_path.as_path())
-        );
+        let found = which_on_path_in("fake-tool", Some(OsStr::new(&path_val))).unwrap();
+        if cfg!(windows) {
+            let (got, exp) = (oserror::path_text(&found), oserror::path_text(&script_path));
+            assert!(got.eq_ignore_ascii_case(&exp));
+        } else {
+            assert_eq!(found, script_path);
+        }
         let cap = SystemOps
             .run_capture(&["fake-tool".into(), "ok".into()], &[("PATH", &path_val)], 10.0)
             .unwrap();
