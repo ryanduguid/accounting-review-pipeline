@@ -48,8 +48,9 @@ class SetupUtilityTests(unittest.TestCase):
         self.assertEqual(output, self.workspace / "results")
         clones = [args for args, _ in self.calls if "clone" in args]
         self.assertEqual(len(clones), 2)
+        expected_repos = {"au-fpa-pack": "OzFPA", "australian-accounting": "australian-accounting"}
         for name, args in zip(setup_utility.COMPANIONS, clones):
-            self.assertIn(f"https://github.com/ryanduguid/{name}.git", args)
+            self.assertIn(f"https://github.com/ryanduguid/{expected_repos[name]}.git", args)
             self.assertEqual(args[args.index("--branch") + 1], "main")
         driver, options = self.calls[-1]
         # The enclosing pipeline checkout runs the close controls and supplies the grant route.

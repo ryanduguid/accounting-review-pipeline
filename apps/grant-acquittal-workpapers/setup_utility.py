@@ -21,6 +21,10 @@ PIPELINE = "accounting-review-pipeline"
 GRANT_PROJECT = "apps/grant-acquittal-workpapers"
 DRIVER = "packages/monthly-close-control-plane/examples/utility_workflows.py"
 COMPANIONS = ("au-fpa-pack", "australian-accounting")
+COMPANION_REPOSITORIES = {
+    "au-fpa-pack": "OzFPA",
+    "australian-accounting": "australian-accounting",
+}
 
 
 def git_command(*arguments: str) -> list[str]:
@@ -104,7 +108,7 @@ def setup(workspace: Path, replay_manifest: Path | None = None) -> Path:
     sources = workspace / "sources"
     sources.mkdir()
     for name in COMPANIONS:
-        url = f"https://github.com/ryanduguid/{name}.git"
+        url = f"https://github.com/ryanduguid/{COMPANION_REPOSITORIES[name]}.git"
         if revisions is None:
             subprocess.run(git_command("clone", "--depth", "1", "--branch", "main", "--single-branch",  # nosemgrep
                                        "--", url, str(sources / name)), check=True, timeout=180, env=environment)

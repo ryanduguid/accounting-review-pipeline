@@ -1,6 +1,6 @@
-# Reusing LodgeiT workflow patterns in the review pipeline
+# Reusing commercial workflow patterns in the review pipeline
 
-Use the pipeline's existing import, mapping and evidence controls to make workpaper review easier to follow. The public LodgeiT documentation inspected on 9 October 2026 provides useful workflow examples; it does not establish tax treatment or interoperability with this repository.
+Use the pipeline's existing import, mapping and evidence controls to make workpaper review easier to follow. Public documentation from a commercial tax-and-workpaper vendor inspected on 9 October 2026 provides useful workflow patterns; it does not establish tax treatment or interoperability with this repository.
 
 ## Patterns and current owners
 
@@ -12,9 +12,9 @@ Use the pipeline's existing import, mapping and evidence controls to make workpa
 | Separate preparation, review and later actions | [Status contract](../README.md#status-contract) and [ledger-review gate](../packages/elizabeth-anne-alexander/README.md) | Keep readiness, control results and recorded human decisions separate. |
 | Retain the history behind a result | [Review-pack contract](../README.md#review-pack-contract) | Keep the related output files together and retain the exact input digests. |
 
-LodgeiT's [mapping guide](https://help.lodgeit.net.au/support/solutions/articles/60000609338-chart-of-accounts-and-mapping) describes classification and tags, with review of automatic suggestions. Its [workpaper guide](https://help.lodgeit.net.au/support/solutions/articles/60000609509-using-workpapers) links evidence and reviewers to accounts and periods. Its [audit-trail guide](https://help.lodgeit.net.au/support/solutions/articles/60000609142-audit-trail-and-document-history) records who changed a form and when.
+That vendor's public mapping guide describes classification and tags, with review of automatic suggestions; its workpaper guide links evidence and reviewers to accounts and periods; and its audit-trail guide records who changed a form and when.
 
-The pipeline already implements explicit mapping and balance policies. Its review groups are not LodgeiT tax categories. Reusing the workflow does not mean importing the vendor's taxonomy or inferring a tax tag from an account name.
+The pipeline already implements explicit mapping and balance policies. Its review groups are not vendor-specific tax categories. Reusing the workflow does not mean importing the vendor's taxonomy or inferring a tax tag from an account name.
 
 ## Preparation and review checklist
 
@@ -31,18 +31,18 @@ with failed controls and a changed journal line that breaks both checks.
 
 ## Improvements to consider next
 
-The [dashboard guide](https://help.lodgeit.net.au/support/solutions/articles/60000609258-dashboard-work-status-filter-and-sort-team-form-period-client-group-) suggests useful queue filters: work type, period, owner and due date. The [local close review queue](../packages/monthly-close-control-plane/docs/review-queue.md) now lists explicitly supplied packs after verification, with filters for recorded period, state and reviewer. It labels missing metadata and omitted controls. Owners and due dates are absent from the pack schema and are not inferred from a reviewer acknowledgement.
+The vendor's dashboard guide suggests useful queue filters: work type, period, owner and due date. The [local close review queue](../packages/monthly-close-control-plane/docs/review-queue.md) now lists explicitly supplied packs after verification, with filters for recorded period, state and reviewer. It labels missing metadata and omitted controls. Owners and due dates are absent from the pack schema and are not inferred from a reviewer acknowledgement.
 
-The [rollover guide](https://help.lodgeit.net.au/support/solutions/articles/60000688784-rollover) describes selected prior-year information carrying forward. A future preparation helper should show the originating period and require current-period evidence. Carrying forward a template must not carry forward a review decision.
+The vendor's rollover guide describes selected prior-year information carrying forward. A future preparation helper should show the originating period and require current-period evidence. Carrying forward a template must not carry forward a review decision.
 
-The [workpaper guide](https://help.lodgeit.net.au/support/solutions/articles/60000609509-using-workpapers) warns that switching between API and spreadsheet imports can change line-item identity and duplicate or disrupt work. A future importer should show its proposed identity mapping before replacing anything. Preserve zero-balance source accounts when the existing contract accepts them; the vendor's omission of zero-value accounts is not a rule for this pipeline.
+The vendor's workpaper guide warns that switching between API and spreadsheet imports can change line-item identity and duplicate or disrupt work. A future importer should show its proposed identity mapping before replacing anything. Preserve zero-balance source accounts when the existing contract accepts them; the vendor's omission of zero-value accounts is not a rule for this pipeline.
 
-The [form workflow](https://help.lodgeit.net.au/support/solutions/articles/60000609327-form-workflow-sequence-and-e-signature) and [queued-status guidance](https://help.lodgeit.net.au/support/solutions/articles/60001644142-form-status-lodging-pre-lodged-queued) describe operations outside this pipeline's authority. They are useful evidence that validation, signatures and confirmed submission are separate events. Do not copy the vendor's sign-and-lodge flow into the local review commands.
+The vendor's form-workflow and queued-status guides describe operations outside this pipeline's authority. They are useful evidence that validation, signatures and confirmed submission are separate events. Do not copy the vendor's sign-and-lodge flow into the local review commands.
 
 Rollover and import preview remain proposals. The queue retains the existing pack schema, states and review authority.
 
-## ClientRelay preparation patterns
+## Related client-management preparation patterns
 
-The separately hosted [ClientRelay help site](https://help.clientrelay.lodgeit.net.au/support/home) documents a client-management product alongside LodgeiT. Its [client and contact guide](https://help.clientrelay.lodgeit.net.au/support/solutions/articles/60001645837-understanding-the-difference-between-contacts-and-clients) distinguishes an entity receiving a service from a person associated with it. Preserve that distinction when recording a pack's owner or a proposed recipient; an entity match does not establish a person's signing authority.
+A separately hosted vendor client-management portal documents practice workflows alongside the tax platform. Its client-and-contact guide distinguishes an entity receiving a service from a person associated with it. Preserve that distinction when recording a pack's owner or a proposed recipient; an entity match does not establish a person's signing authority.
 
-Its [workflow guide](https://help.clientrelay.lodgeit.net.au/support/solutions/articles/60001645858-daisy-chaining-tasks-e-g-onboarding-proposals-questionnaire-) describes completion-triggered transitions. A local preparation workflow can identify the next missing input while retaining each component's status and the human decision. Transitioning a local record must not send a client message or create a signature, invoice or payment. ClientRelay's public app redirected to sign-in; account access and workflow execution were not tested.
+Its workflow guide describes completion-triggered transitions. A local preparation workflow can identify the next missing input while retaining each component's status and the human decision. Transitioning a local record must not send a client message or create a signature, invoice or payment. That portal's public app redirected to sign-in; account access and workflow execution were not tested.

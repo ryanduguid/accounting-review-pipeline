@@ -11,13 +11,14 @@ sources. A review pack does not approve a close or authorise collection messages
 
 ## Run the maintained examples
 
-Use current source checkouts and the locked environments described in
-[utility workflows](utility-workflows.md). From the directory holding both
-public repositories, run each route into a new output and environment directory:
+Use current source checkouts (`accounting-review-pipeline`, `OzFPA` and `australian-accounting`) and the locked environments described in
+[utility workflows](utility-workflows.md). From the directory holding all 3
+public repositories, run each route into a new output and environment directory
+(passing your local `OzFPA` checkout to `--fpa`):
 
 ```powershell
-python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa au-fpa-pack --workflow close-forecast --output ../owner-close-results --environment-root ../owner-close-environments
-python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa au-fpa-pack --workflow quarter --output ../owner-quarter-results --environment-root ../owner-quarter-environments
+python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa OzFPA --workflow close-forecast --output ../owner-close-results --environment-root ../owner-close-environments
+python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa OzFPA --workflow quarter --output ../owner-quarter-results --environment-root ../owner-quarter-environments
 ```
 
 The first route shares source hashes between the Lumbridge close and forecast.
