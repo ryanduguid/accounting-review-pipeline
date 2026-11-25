@@ -402,6 +402,39 @@ mod tests {
     }
 
     #[test]
+    fn items_on_the_period_boundaries_roll_as_their_dates_say() {
+        let mut data = example();
+        // P2 is recorded after its service ended, D2 part-way through its
+        // service; A1 is reversed on the cutoff, A2 the day before the period.
+        for (list, index, field, value) in [
+            ("prepayments", 1, "amount", "62.00"),
+            ("prepayments", 1, "start", "2026-07-01"),
+            ("prepayments", 1, "end", "2026-08-31"),
+            ("deferred_revenue", 1, "start", "2026-09-01"),
+            ("deferred_revenue", 1, "end", "2026-09-30"),
+            ("accruals", 0, "accrued", "2026-08-15"),
+            ("accruals", 0, "reversed", "2026-09-30"),
+            ("accruals", 1, "accrued", "2026-08-01"),
+            ("accruals", 1, "reversed", "2026-08-31"),
+        ] {
+            edit(&mut data, list, index, field, Json::str(value));
+        }
+        let result = run(&data).unwrap();
+        assert_eq!(
+            rolls(&result, "prepayments", "item_id")[1],
+            "P2 0 62.00 -62.00 0.00"
+        );
+        assert_eq!(
+            rolls(&result, "deferred_revenue", "item_id")[1],
+            "D2 0 -500.00 500.00 0.00"
+        );
+        assert_eq!(
+            rolls(&result, "accruals", "item_id"),
+            ["A1 -3000.00 0 3000.00 0", "A2 0 0 0 0"]
+        );
+    }
+
+    #[test]
     fn an_accrual_raised_and_reversed_in_the_period_nets_to_nil() {
         let mut data = example();
         edit(&mut data, "accruals", 1, "accrued", Json::str("2026-09-02"));

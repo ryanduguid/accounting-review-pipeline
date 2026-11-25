@@ -99,7 +99,9 @@ gives the ledger's `ledger_opening` and `ledger_closing` and their
 `NO_LEDGER_BALANCE` (with the `end`) for a scheduled account missing from a
 ledger list, `UNSCHEDULED_BALANCE` for a ledger account with a balance at
 either end and nothing scheduled, and `UNREVERSED_ACCRUAL` and
-`MISSING_EVIDENCE` as above.
+`MISSING_EVIDENCE` as above. A ledger account at nil at both ends with nothing
+scheduled has nothing to roll and is left out, as the prepayments kind leaves
+out a nil unscheduled balance.
 
 ```powershell
 cargo run --locked --release --bin close-control -- schedule --kind rollforward --input examples/schedules/rollforward.json
