@@ -192,6 +192,20 @@ fn a_ledger_row_split_across_lines_is_named_once_per_total() {
 }
 
 #[test]
+fn grant_references_follow_allocation_order_not_budget_order() {
+    let fixture = Fixture::new();
+    // A5 (L4, Administration) now comes first, though Delivery is the first budget line.
+    fixture.edit_csv("allocations.csv", |rows| {
+        let administration = rows.remove(4);
+        rows.insert(0, administration);
+    });
+    let result = fixture.review().unwrap();
+    let grant_a = &rows(&result, "funding_movements")[0];
+    assert_eq!(ids(grant_a.at("expenditure_allocated_ledger_rows")), ["L4", "L1", "L3"]);
+    assert_eq!(ids(grant_a.at("cash_paid_allocated_ledger_rows")), ["L4", "L1"]);
+}
+
+#[test]
 fn reference_cells_reach_the_csv_tables() {
     let fixture = Fixture::new();
     let result = fixture.review().unwrap();

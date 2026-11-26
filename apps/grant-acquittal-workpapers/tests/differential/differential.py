@@ -14,7 +14,7 @@ stdout, stderr and every file left behind. The program name in argparse
 messages, the working directory path and random staging names are normalised;
 a CPython traceback is compared by exit code only. The reference cells the Rust
 command adds beside each total (`*_ledger_rows`, `*_receipt_rows` and
-`*_contribution_rows`) are removed from both sides before files are compared.
+`*_contribution_rows`) are removed from the Rust side before files are compared.
 Timeout artifacts retain fabricated case bytes as base64 without copying the
 child environment or interpreting case filenames as artifact paths.
 """
@@ -285,26 +285,44 @@ REFERENCE = re.compile(r"_(ledger|receipt|contribution)_rows$")
 REFERENCE_TABLES = ("budget_lines.csv", "funding_movements.csv", "contributions.csv")
 
 
-def without_references(rel, data):
-    """The file with the Rust command's reference cells removed, in a canonical form.
+def json_text(document):
+    """The bytes the frozen script writes for a document: indent 2, text mode."""
+    text = json.dumps(document, indent=2) + "\n"
+    return (text.replace("\n", "\r\n") if os.name == "nt" else text).encode("utf-8")
 
-    Applied to both sides, so the rest of the file must still match exactly.
-    Bytes that do not parse are compared as they are."""
+
+def csv_text(rows):
+    """The bytes csv.DictWriter writes for these rows, as the frozen script opened its CSV files."""
+    stream = io.StringIO(newline="")
+    csv.writer(stream).writerows(rows)
+    return stream.getvalue().encode("utf-8")
+
+
+def without_references(rel, data):
+    """The Rust command's file with its reference cells removed.
+
+    Only the Rust side is rewritten, and only when writing the parsed file back
+    the frozen script's way reproduces its exact bytes; otherwise the bytes are
+    compared as they are, so any other difference still shows."""
     name = rel.rsplit("/", 1)[-1]
     try:
         if name == "workpaper.json":
             document = json.loads(data.decode("utf-8"))
-            tables = [document] + [row for value in document.values() if isinstance(value, list) for row in value]
-            for row in tables:
+            if json_text(document) != data:
+                return data
+            rows = [document] + [row for value in document.values() if isinstance(value, list) for row in value]
+            for row in rows:
                 if isinstance(row, dict):
                     for key in [key for key in row if REFERENCE.search(key)]:
                         del row[key]
-            return b"json:" + json.dumps(document, indent=2).encode("utf-8") + (b"crlf" if b"\r\n" in data else b"")
+            return json_text(document)
         if name in REFERENCE_TABLES:
             rows = list(csv.reader(io.StringIO(data.decode("utf-8"), newline="")))
-            keep = [index for index, heading in enumerate(rows[0] if rows else []) if not REFERENCE.search(heading)]
-            return b"csv:" + json.dumps([[row[i] for i in keep if i < len(row)] for row in rows]).encode("utf-8")
-    except (ValueError, UnicodeError, csv.Error, AttributeError):
+            if not rows or csv_text(rows) != data:
+                return data
+            keep = [index for index, heading in enumerate(rows[0]) if not REFERENCE.search(heading)]
+            return csv_text([[row[index] for index in keep] for row in rows])
+    except (ValueError, UnicodeError, csv.Error, IndexError):
         pass
     return data
 
@@ -409,8 +427,8 @@ def main():
                 files_py, files_rs = snapshot(cwd_py), snapshot(cwd_rs)
                 for rel in sorted(set(files_py) | set(files_rs)):
                     a, b = files_py.get(rel), files_rs.get(rel)
-                    if isinstance(a, bytes) and isinstance(b, bytes):
-                        a, b = without_references(rel, a), without_references(rel, b)
+                    if isinstance(b, bytes):
+                        b = without_references(rel, b)
                     if a != b:
                         problems.append(f"file {rel}\n  python: {str(files_py.get(rel))[:300]}\n  rust:   {str(files_rs.get(rel))[:300]}")
             key = (name, python.returncode)

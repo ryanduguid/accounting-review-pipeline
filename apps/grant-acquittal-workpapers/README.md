@@ -209,8 +209,9 @@ CI extracts that script and runs 1,500 cases with seed `20261012` on Linux and
 Windows under Python 3.15, retaining native child coverage. The comparator
 normalises program names, working directories and random staging names; Python
 tracebacks are compared by exit code only. The reference cells, which the
-script never wrote, are removed from both sides before the files are compared,
-so every other value must still match.
+script never wrote, are removed from the binary's files before comparison, and
+only when writing a file back the script's way reproduces its exact bytes, so
+every other byte must still match.
 
 ```powershell
 $oracleScript = 'C:\path\to\grant_workpaper.py'

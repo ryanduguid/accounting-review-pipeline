@@ -379,21 +379,8 @@ impl Default for Spend {
 impl Spend {
     fn add(&mut self, value: Amount, row: &str) {
         self.amount = self.amount.add(value);
-        if !value.is_zero() {
-            self.name(row);
-        }
-    }
-
-    fn name(&mut self, row: &str) {
-        if self.seen.insert(row.to_string()) {
+        if !value.is_zero() && self.seen.insert(row.to_string()) {
             self.rows.push(row.to_string());
-        }
-    }
-
-    fn take(&mut self, totals: &Totals, key: &(String, String)) {
-        self.amount = self.amount.add(totals.get(key));
-        for row in totals.rows(key) {
-            self.name(row);
         }
     }
 }
@@ -443,6 +430,10 @@ struct Workings<'a> {
     period_totals: Totals,
     approved_totals: Totals,
     paid_totals: Totals,
+    /// Expenditure and cash allocated to each grant, keyed (grant, ""), so the
+    /// rows behind a grant's totals keep allocation order across budget lines.
+    grant_totals: Totals,
+    grant_paid_totals: Totals,
     details: Vec<Json>,
     funding: Totals,
     contributed: Totals,
@@ -458,6 +449,8 @@ fn calculate(input: &Sources) -> Result<Json> {
         period_totals: Totals::default(),
         approved_totals: Totals::default(),
         paid_totals: Totals::default(),
+        grant_totals: Totals::default(),
+        grant_paid_totals: Totals::default(),
         details: Vec::new(),
         funding: Totals::default(),
         contributed: Totals::default(),
@@ -595,6 +588,9 @@ impl<'a> Workings<'a> {
         let ledger_id = field(row, "ledger_id");
         self.totals.add(key.clone(), expense, ledger_id);
         self.paid_totals.add(key.clone(), paid, ledger_id);
+        let grant_key = (key.0.clone(), String::new());
+        self.grant_totals.add(grant_key.clone(), expense, ledger_id);
+        self.grant_paid_totals.add(grant_key, paid, ledger_id);
         let in_period = agreement.start <= item_date && item_date <= agreement.end;
         self.review_allocation(row, item, in_period, key, expense);
         self.details
@@ -728,7 +724,7 @@ impl<'a> Workings<'a> {
         let mut movements: Vec<Json> = Vec::new();
         for (identifier, agreement) in self.grants {
             let (spent, paid) = self.budget_lines(identifier, agreement.budget, &mut budget_rows)?;
-            movements.push(self.movement(identifier, agreement.source, &spent, &paid)?);
+            movements.push(self.movement(identifier, agreement.source, spent, paid)?);
         }
         Ok((budget_rows, movements))
     }
@@ -739,13 +735,13 @@ impl<'a> Workings<'a> {
         identifier: &str,
         budget: &[(PyStr, Json)],
         rows: &mut Vec<Json>,
-    ) -> Result<(Spend, Spend)> {
-        let (mut spent, mut paid) = (Spend::default(), Spend::default());
+    ) -> Result<(Amount, Amount)> {
+        let (mut spent, mut paid) = (Amount::ZERO, Amount::ZERO);
         for (line, value) in budget {
             let line_text = line.lossy();
             let key = (identifier.to_string(), line_text.clone());
-            spent.take(&self.totals, &key);
-            paid.take(&self.paid_totals, &key);
+            spent = spent.add(self.totals.get(&key));
+            paid = paid.add(self.paid_totals.get(&key));
             let mut row = vec![
                 (PyStr::from("grant_id"), Json::str(identifier)),
                 (PyStr::from("budget_line"), Json::Str(line.clone())),
@@ -772,13 +768,13 @@ impl<'a> Workings<'a> {
         Ok((spent, paid))
     }
 
-    fn movement(&mut self, identifier: &str, agreement: &Json, spent: &Spend, paid: &Spend) -> Result<Json> {
+    fn movement(&mut self, identifier: &str, agreement: &Json, spent: Amount, paid: Amount) -> Result<Json> {
         let key = (identifier.to_string(), String::new());
         let received = self.funding.get(&key);
         let remaining = money_json(agreement.at("opening_unspent_funding"))?
             .add(received)
-            .sub(spent.amount);
-        let cash = money_json(agreement.at("opening_cash"))?.add(received).sub(paid.amount);
+            .sub(spent);
+        let cash = money_json(agreement.at("opening_cash"))?.add(received).sub(paid);
         if remaining.is_negative() || cash.is_negative() {
             self.findings.push(finding("FUNDING_SHORTFALL", identifier));
         }
@@ -794,13 +790,16 @@ impl<'a> Workings<'a> {
                 PyStr::from("funding_received_receipt_rows"),
                 row_list(self.funding.rows(&key)),
             ),
+            (PyStr::from("expenditure_allocated"), Json::str(&spent.to_string())),
             (
-                PyStr::from("expenditure_allocated"),
-                Json::str(&spent.amount.to_string()),
+                PyStr::from("expenditure_allocated_ledger_rows"),
+                row_list(self.grant_totals.rows(&key)),
             ),
-            (PyStr::from("expenditure_allocated_ledger_rows"), row_list(&spent.rows)),
-            (PyStr::from("cash_paid_allocated"), Json::str(&paid.amount.to_string())),
-            (PyStr::from("cash_paid_allocated_ledger_rows"), row_list(&paid.rows)),
+            (PyStr::from("cash_paid_allocated"), Json::str(&paid.to_string())),
+            (
+                PyStr::from("cash_paid_allocated_ledger_rows"),
+                row_list(self.grant_paid_totals.rows(&key)),
+            ),
             (PyStr::from("closing_cash_allocation"), Json::str(&cash.to_string())),
             (
                 PyStr::from("unspent_funding_workpaper"),
