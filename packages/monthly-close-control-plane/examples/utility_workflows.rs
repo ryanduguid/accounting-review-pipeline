@@ -6,6 +6,8 @@
 
 #[path = "support/pyprocess.rs"]
 mod pyprocess;
+#[path = "support/pyusage.rs"]
+mod pyusage;
 #[cfg(test)]
 #[path = "../tests/support/temp.rs"]
 pub(crate) mod temp;
@@ -14,14 +16,11 @@ mod utility_results;
 
 use monthly_close_control_plane::{
     pyjson::{self, Json, PyStr},
-    pypath, sha256,
+    pypath, pytext, sha256,
 };
 #[cfg(test)]
 use pyprocess::which_on_path_in;
-use pyprocess::{
-    configure_group, path_override, resolve_program, spawn_reader, spawn_retrying_busy, wait_child,
-    which_on_path,
-};
+use pyprocess::{path_override, resolve_program, run_tree, which_on_path};
 #[cfg(test)]
 use std::ffi::OsStr;
 use std::{
@@ -143,22 +142,16 @@ fn captured(
     for (key, value) in env_vars {
         cmd.env(key, value);
     }
-    configure_group(&mut cmd);
-    let mut child =
-        spawn_retrying_busy(&mut cmd).map_err(|e| CaptureError::Launch(e.to_string()))?;
-    let out_handle = spawn_reader(child.stdout.take());
-    let err_handle = spawn_reader(child.stderr.take());
-    let waited = wait_child(child, timeout_secs);
-    let stdout = decode_stream(&out_handle.join().unwrap_or_default());
-    let stderr = decode_stream(&err_handle.join().unwrap_or_default());
-    match waited {
-        Ok(exit_code) => Ok(Captured {
-            exit_code,
-            stdout,
-            stderr,
-        }),
-        Err(()) => Err(CaptureError::Timeout { stdout, stderr }),
+    let done = run_tree(&mut cmd, timeout_secs).map_err(|e| CaptureError::Launch(e.to_string()))?;
+    let (stdout, stderr) = (decode_stream(&done.stdout), decode_stream(&done.stderr));
+    if done.timed_out {
+        return Err(CaptureError::Timeout { stdout, stderr });
     }
+    Ok(Captured {
+        exit_code: done.code,
+        stdout,
+        stderr,
+    })
 }
 
 fn git_output(ops: &dyn Ops, root: &Path, arguments: &[&str]) -> Result<String, String> {
@@ -1545,9 +1538,9 @@ fn build_manifest(
             "tools",
             Json::object([
                 (
-                    "driver_rust",
+                    "driver",
                     Json::str(concat!(
-                        "monthly-close-control-plane ",
+                        "utility_workflows (Rust), monthly-close-control-plane ",
                         env!("CARGO_PKG_VERSION")
                     )),
                 ),
@@ -1681,9 +1674,20 @@ struct CliArgs {
     workflow: String,
 }
 
+/// argparse's usage line for this parser.
 fn usage_line(prog: &str) -> String {
-    format!(
-        "usage: {prog} [-h] --fpa FPA [--accounting ACCOUNTING] [--grants GRANTS] --output OUTPUT [--environment-root ENVIRONMENT_ROOT] [--timeout TIMEOUT] [--workflow {{all,close-forecast,quarter,job-cash,grant-cash}}]"
+    pyusage::usage_line(
+        prog,
+        &[
+            "[-h]",
+            "--fpa FPA",
+            "[--accounting ACCOUNTING]",
+            "[--grants GRANTS]",
+            "--output OUTPUT",
+            "[--environment-root ENVIRONMENT_ROOT]",
+            "[--timeout TIMEOUT]",
+            "[--workflow {all,close-forecast,quarter,job-cash,grant-cash}]",
+        ],
     )
 }
 const HELP: &str = "Run fabricated workflows with explicit lock authority and source evidence.\n\noptions:\n  -h, --help            show this help message and exit\n  --fpa FPA\n  --accounting ACCOUNTING\n  --grants GRANTS\n  --output OUTPUT\n  --environment-root ENVIRONMENT_ROOT\n                        optional new directory for isolated installations\n  --timeout TIMEOUT     seconds per command, including setup (default: 300)\n  --workflow {all,close-forecast,quarter,job-cash,grant-cash}";
@@ -1713,9 +1717,12 @@ fn set_cli_flag(flag: &str, value: &str, builder: &mut CliBuilder) -> Result<(),
         "--output" => builder.output = Some(PathBuf::from(value)),
         "--environment-root" => builder.env_root = Some(PathBuf::from(value)),
         "--timeout" => {
-            builder.timeout = value
-                .parse::<f64>()
-                .map_err(|_| format!("argument --timeout: invalid float value: {value:?}"))?;
+            builder.timeout = value.parse::<f64>().map_err(|_| {
+                format!(
+                    "argument --timeout: invalid float value: {}",
+                    pytext::repr_os(value)
+                )
+            })?;
         }
         "--workflow" => {
             if !matches!(
@@ -1723,7 +1730,8 @@ fn set_cli_flag(flag: &str, value: &str, builder: &mut CliBuilder) -> Result<(),
                 "all" | "close-forecast" | "quarter" | "job-cash" | "grant-cash"
             ) {
                 return Err(format!(
-                    "argument --workflow: invalid choice: {value:?} (choose from all, close-forecast, quarter, job-cash, grant-cash)"
+                    "argument --workflow: invalid choice: {} (choose from 'all', 'close-forecast', 'quarter', 'job-cash', 'grant-cash')",
+                    pytext::repr_os(value)
                 ));
             }
             builder.workflow = value.to_owned();
@@ -2170,6 +2178,29 @@ mod tests {
             matches!(err, CaptureError::Timeout { ref stdout, .. } if stdout.contains("ready")),
             "{err:?}"
         );
+        let pidfile = temp.join("pid");
+        let (cmd, env_vars) = pyprocess::tests::tree_command("parent-waits", &pidfile);
+        let err = captured(&cmd, &temp.0, &env_vars, 5.0).unwrap_err();
+        assert!(matches!(err, CaptureError::Timeout { .. }), "{err:?}");
+        pyprocess::tests::assert_tree_gone(&pidfile);
+    }
+
+    /// A child that exits whilst its grandchild holds the pipes times out as
+    /// Python's `communicate` does, at the deadline, and leaves nothing running.
+    #[test]
+    fn capture_is_bounded_when_a_descendant_holds_the_pipes() {
+        let temp = temp::TempDir::new();
+        let pidfile = temp.join("pid");
+        let (cmd, env_vars) = pyprocess::tests::tree_command("parent-exits", &pidfile);
+        let started = std::time::Instant::now();
+        let err = captured(&cmd, &temp.0, &env_vars, 5.0).unwrap_err();
+        assert!(
+            started.elapsed().as_secs_f64() < 15.0,
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(matches!(err, CaptureError::Timeout { .. }), "{err:?}");
+        pyprocess::tests::assert_tree_gone(&pidfile);
     }
 
     #[test]
@@ -2269,6 +2300,10 @@ mod tests {
                     && out.join("replay.json").is_file()
                     && !out.join("manifest.json").exists()
             );
+            if mode == "exit" {
+                let record = fs::read_to_string(out.join("failed-calls.json")).unwrap();
+                assert_contract("failed_calls", &skeleton(&pyjson::loads(&record).unwrap()));
+            }
         }
     }
 
@@ -2541,6 +2576,21 @@ mod tests {
         .unwrap();
         assert_eq!(count, 23);
         assert!(manifest.at("fixture_validation").is_str("passed"));
+        assert_contract("manifest", &skeleton(&manifest));
+        let Json::Array(calls) = manifest.at("calls") else {
+            panic!("calls must be an array");
+        };
+        let sequence = calls
+            .iter()
+            .map(|call| {
+                Json::Array(vec![
+                    call.at("owner").clone(),
+                    call.at("kind").clone(),
+                    call.at("expected_exit").clone(),
+                ])
+            })
+            .collect();
+        assert_contract("calls", &Json::Array(sequence));
         assert!(
             output.join("manifest.json").is_file() && !output.join("failed-results.json").exists()
         );
@@ -2603,6 +2653,103 @@ mod tests {
             String::from_utf8(out).unwrap(),
             String::from_utf8(err).unwrap(),
         )
+    }
+
+    /// The cases and contracts tests/test_utility_workflows.py records from
+    /// utility_workflows.py.
+    fn recorded() -> Json {
+        pyjson::loads(include_str!("../tests/fixtures/utility_workflows_cli.json")).unwrap()
+    }
+
+    fn text(value: &Json) -> String {
+        match value {
+            Json::Str(s) => s.to_utf8().unwrap(),
+            other => panic!("expected a string, got {other:?}"),
+        }
+    }
+
+    /// `_skeleton` in the Python test: keys and Python type names, lists by
+    /// their first item, stub-shaped sections as `*`.
+    fn skeleton(value: &Json) -> Json {
+        match value {
+            Json::Object(items) => Json::Object(
+                items
+                    .iter()
+                    .map(|(key, item)| {
+                        let stubbed = ["projects", "runtimes", "outputs_sha256"]
+                            .iter()
+                            .any(|k| key.is(k));
+                        (
+                            key.clone(),
+                            if stubbed {
+                                Json::str("*")
+                            } else {
+                                skeleton(item)
+                            },
+                        )
+                    })
+                    .collect(),
+            ),
+            Json::Array(items) => Json::Array(items.iter().take(1).map(skeleton).collect()),
+            Json::Str(_) => Json::str("str"),
+            Json::Int(_) => Json::str("int"),
+            Json::Float(_) => Json::str("float"),
+            Json::Bool(_) => Json::str("bool"),
+            Json::Null => Json::str("NoneType"),
+        }
+    }
+
+    fn assert_contract(name: &str, actual: &Json) {
+        let expected = recorded();
+        let expected = expected.at("contracts").at(name);
+        assert!(
+            pyjson::py_eq(expected, actual, false),
+            "{name}: {actual:?} != {expected:?}"
+        );
+    }
+
+    #[test]
+    fn recorded_python_cases_match() {
+        let fixture = recorded();
+        let Json::Array(cases) = fixture.at("cases") else {
+            panic!("cases must be an array");
+        };
+        assert!(cases.len() >= 10);
+        let prog = text(fixture.at("prog"));
+        for case in cases {
+            let name = text(case.at("name"));
+            let temp = temp::TempDir::new();
+            let root = pypath::text(&temp.0).replace('\\', "/");
+            let close = temp.join("pipeline/packages/monthly-close-control-plane");
+            fs::create_dir_all(&close).unwrap();
+            fs::write(close.join("Cargo.toml"), "[package]").unwrap();
+            fs::create_dir_all(temp.join("fpa")).unwrap();
+            fs::write(temp.join("fpa/pyproject.toml"), "[project]").unwrap();
+            fs::create_dir(temp.join("existing")).unwrap();
+            let Json::Array(raw) = case.at("args") else {
+                panic!("{name}: args must be an array");
+            };
+            let args: Vec<String> = raw
+                .iter()
+                .map(|a| text(a).replace("{root}", &root))
+                .collect();
+            let stub = StubOps {
+                missing_tool: None,
+                seen: RefCell::new(Vec::new()),
+                handler: Box::new(|cmd, _, _, _| panic!("no command runs here: {cmd:?}")),
+            };
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let code = run_main(&stub, &close, &prog, &args, &mut out, &mut err);
+            let Json::Int(exit) = case.at("exit") else {
+                panic!("{name}: exit must be an integer");
+            };
+            assert_eq!(code.to_string(), exit.to_string(), "{name}: exit code");
+            // write_stream translates newlines as Python's text mode does on
+            // Windows; the recorded cases hold the untranslated text.
+            let lines = |bytes: Vec<u8>| String::from_utf8(bytes).unwrap().replace("\r\n", "\n");
+            assert_eq!(lines(out), text(case.at("stdout")), "{name}: stdout");
+            assert_eq!(lines(err), text(case.at("stderr")), "{name}: stderr");
+        }
     }
 
     #[test]

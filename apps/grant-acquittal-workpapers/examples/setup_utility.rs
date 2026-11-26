@@ -7,6 +7,7 @@
 use grant_acquittal_workpapers::{
     oserror,
     pyjson::{self, Json},
+    pytext,
 };
 #[cfg(not(windows))]
 use std::collections::HashMap;
@@ -26,11 +27,11 @@ use std::{
 };
 #[path = "support/pyprocess.rs"]
 mod pyprocess;
+#[path = "support/pyusage.rs"]
+mod pyusage;
 #[cfg(test)]
 use pyprocess::which_on_path_in;
-use pyprocess::{
-    configure_group, path_override, resolve_program, spawn_reader, spawn_retrying_busy, wait_child, which_on_path,
-};
+use pyprocess::{path_override, resolve_program, run_tree, which_on_path};
 
 const PIPELINE: &str = "accounting-review-pipeline";
 const GRANT_PROJECT: &str = "apps/grant-acquittal-workpapers";
@@ -44,33 +45,7 @@ const COMPANIONS: [(&str, &str); 2] = [
 
 const HELP_BODY: &str = "Set up and run the fabricated accounting examples in a new workspace.\n\noptions:\n  -h, --help            show this help message and exit\n  --workspace WORKSPACE\n                        New directory outside every Git checkout\n  --replay-manifest REPLAY_MANIFEST\n                        Replay clean source commits from an all-route manifest\n                        or replay.json\n  --summary SUMMARY     Append a result summary outside source and workspace\n                        directories";
 
-/// argparse's text width at its default 80 columns: the help above and the
-/// usage below are laid out as setup_utility.py prints them there.
-const TEXT_WIDTH: usize = 78;
-
-/// `_format_usage`'s `get_lines`: wrap parts under `indent`, the first line
-/// starting `first_len` characters in.
-fn usage_lines(parts: &[&str], indent: &str, first_len: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line: Vec<&str> = Vec::new();
-    let mut line_len = first_len - 1;
-    for part in parts {
-        let part_len = part.chars().count();
-        if line_len + 1 + part_len > TEXT_WIDTH && !line.is_empty() {
-            lines.push(line.join(" "));
-            line.clear();
-            line_len = indent.len() - 1;
-        }
-        line.push(part);
-        line_len += part_len + 1;
-    }
-    if !line.is_empty() {
-        lines.push(line.join(" "));
-    }
-    lines
-}
-
-/// argparse's usage line for this parser, wrapped as `HelpFormatter` wraps it.
+/// argparse's usage line for this parser.
 fn usage_line(prog: &str) -> String {
     const OPTIONS: [&str; 4] = [
         "[-h]",
@@ -78,22 +53,7 @@ fn usage_line(prog: &str) -> String {
         "[--replay-manifest REPLAY_MANIFEST]",
         "[--summary SUMMARY]",
     ];
-    let prefix = "usage: ";
-    let prog_len = prog.chars().count();
-    let single = format!("{prog} {}", OPTIONS.join(" "));
-    if prefix.len() + single.chars().count() <= TEXT_WIDTH {
-        return format!("{prefix}{single}");
-    }
-    if (prefix.len() + prog_len) as f64 <= 0.75 * TEXT_WIDTH as f64 {
-        let indent = " ".repeat(prefix.len() + prog_len + 1);
-        let mut parts = vec![prog];
-        parts.extend(OPTIONS);
-        let lines = usage_lines(&parts, &indent, prefix.len());
-        return format!("{prefix}{}", lines.join(&format!("\n{indent}")));
-    }
-    let indent = " ".repeat(prefix.len());
-    let lines = usage_lines(&OPTIONS, &indent, indent.len());
-    format!("{prefix}{prog}\n{indent}{}", lines.join(&format!("\n{indent}")))
+    pyusage::usage_line(prog, &OPTIONS)
 }
 
 #[derive(Clone, Debug)]
@@ -130,24 +90,14 @@ impl Ops for SystemOps {
         env_vars: &[(&str, &str)],
         timeout_secs: f64,
     ) -> Result<(), String> {
-        let Some((program, args)) = command.split_first() else {
-            return Err("empty command".into());
-        };
-        let resolved = resolve_program(program, path_override(env_vars));
-        let mut cmd = Command::new(&resolved);
-        cmd.args(args).stdin(Stdio::null());
+        let mut cmd = system_command(command, env_vars)?;
         if let Some(dir) = cwd {
             cmd.current_dir(dir);
         }
-        for &(k, v) in env_vars {
-            cmd.env(k, v);
-        }
-        configure_group(&mut cmd);
-        let child = spawn_retrying_busy(&mut cmd).map_err(|e| format!("Failed to launch {program}: {e}"))?;
-        match wait_child(child, timeout_secs) {
-            Ok(Some(0)) => Ok(()),
-            Ok(code) => Err(format!("Command {program} exited with {code:?}")),
-            Err(()) => Err(format!("Command {program} timed out after {timeout_secs}s")),
+        let done = finish(command, &mut cmd, timeout_secs)?;
+        match done.code {
+            Some(0) => Ok(()),
+            code => Err(called_process_error(command, code)),
         }
     }
 
@@ -157,34 +107,110 @@ impl Ops for SystemOps {
         env_vars: &[(&str, &str)],
         timeout_secs: f64,
     ) -> Result<Captured, String> {
-        let Some((program, args)) = command.split_first() else {
-            return Err("empty command".into());
-        };
-        let resolved = resolve_program(program, path_override(env_vars));
-        let mut cmd = Command::new(&resolved);
-        cmd.args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        for &(k, v) in env_vars {
-            cmd.env(k, v);
-        }
-        configure_group(&mut cmd);
-        let mut child = spawn_retrying_busy(&mut cmd).map_err(|e| format!("Failed to launch {program}: {e}"))?;
-        let out_h = spawn_reader(child.stdout.take());
-        let err_h = spawn_reader(child.stderr.take());
-        let waited = wait_child(child, timeout_secs);
-        let stdout = String::from_utf8_lossy(&out_h.join().unwrap_or_default()).replace("\r\n", "\n");
-        let stderr = String::from_utf8_lossy(&err_h.join().unwrap_or_default()).replace("\r\n", "\n");
-        match waited {
-            Ok(exit_code) => Ok(Captured {
-                exit_code,
-                stdout,
-                stderr,
-            }),
-            Err(()) => Err(format!("Command {program} timed out after {timeout_secs}s")),
-        }
+        let mut cmd = system_command(command, env_vars)?;
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let done = finish(command, &mut cmd, timeout_secs)?;
+        let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).replace("\r\n", "\n");
+        Ok(Captured {
+            exit_code: done.code,
+            stdout: text(&done.stdout),
+            stderr: text(&done.stderr),
+        })
     }
+}
+
+/// `command` resolved on the child's `PATH`, with its environment and no stdin.
+fn system_command(command: &[String], env_vars: &[(&str, &str)]) -> Result<Command, String> {
+    let Some((program, args)) = command.split_first() else {
+        return Err("empty command".into());
+    };
+    let mut cmd = Command::new(resolve_program(program, path_override(env_vars)));
+    cmd.args(args).stdin(Stdio::null());
+    for &(k, v) in env_vars {
+        cmd.env(k, v);
+    }
+    Ok(cmd)
+}
+
+/// Runs the tree; a timeout reads as `subprocess.TimeoutExpired` does.
+fn finish(command: &[String], cmd: &mut Command, timeout_secs: f64) -> Result<pyprocess::Finished, String> {
+    let done = run_tree(cmd, timeout_secs).map_err(|e| format!("Failed to launch {}: {e}", command[0]))?;
+    if done.timed_out {
+        return Err(format!(
+            "Command '{}' timed out after {timeout_secs} seconds",
+            command_repr(command)
+        ));
+    }
+    Ok(done)
+}
+
+/// Python's `repr` of the argument list, as the subprocess errors print it.
+fn command_repr(command: &[String]) -> String {
+    let items: Vec<String> = command.iter().map(String::as_str).map(pytext::repr_os).collect();
+    format!("[{}]", items.join(", "))
+}
+
+/// Signal names as Python's `signal.Signals` gives them; real-time signals
+/// read as unknown.
+#[cfg(unix)]
+const SIGNALS: &[(i32, &str)] = &[
+    (libc::SIGHUP, "SIGHUP"),
+    (libc::SIGINT, "SIGINT"),
+    (libc::SIGQUIT, "SIGQUIT"),
+    (libc::SIGILL, "SIGILL"),
+    (libc::SIGTRAP, "SIGTRAP"),
+    (libc::SIGABRT, "SIGABRT"),
+    (libc::SIGBUS, "SIGBUS"),
+    (libc::SIGFPE, "SIGFPE"),
+    (libc::SIGKILL, "SIGKILL"),
+    (libc::SIGUSR1, "SIGUSR1"),
+    (libc::SIGSEGV, "SIGSEGV"),
+    (libc::SIGUSR2, "SIGUSR2"),
+    (libc::SIGPIPE, "SIGPIPE"),
+    (libc::SIGALRM, "SIGALRM"),
+    (libc::SIGTERM, "SIGTERM"),
+    #[cfg(target_os = "linux")]
+    (libc::SIGSTKFLT, "SIGSTKFLT"),
+    (libc::SIGCHLD, "SIGCHLD"),
+    (libc::SIGCONT, "SIGCONT"),
+    (libc::SIGSTOP, "SIGSTOP"),
+    (libc::SIGTSTP, "SIGTSTP"),
+    (libc::SIGTTIN, "SIGTTIN"),
+    (libc::SIGTTOU, "SIGTTOU"),
+    (libc::SIGURG, "SIGURG"),
+    (libc::SIGXCPU, "SIGXCPU"),
+    (libc::SIGXFSZ, "SIGXFSZ"),
+    (libc::SIGVTALRM, "SIGVTALRM"),
+    (libc::SIGPROF, "SIGPROF"),
+    (libc::SIGWINCH, "SIGWINCH"),
+    (libc::SIGIO, "SIGIO"),
+    #[cfg(target_os = "linux")]
+    (libc::SIGPWR, "SIGPWR"),
+    (libc::SIGSYS, "SIGSYS"),
+];
+
+#[cfg(not(unix))]
+const SIGNALS: &[(i32, &str)] = &[];
+
+/// `str(subprocess.CalledProcessError(code, command))`: a POSIX signal death
+/// arrives as the negative signal number, and Windows exit codes are unsigned.
+fn called_process_error(command: &[String], code: Option<i32>) -> String {
+    let shown = command_repr(command);
+    // A finished child always has an exit code or, on POSIX, a signal.
+    let code = code.unwrap_or(-1);
+    if code < 0 && cfg!(unix) {
+        let signal = -code;
+        return match SIGNALS.iter().find(|(number, _)| *number == signal) {
+            Some((_, name)) => format!("Command '{shown}' died with <Signals.{name}: {signal}>."),
+            None => format!("Command '{shown}' died with unknown signal {signal}."),
+        };
+    }
+    let status = if cfg!(windows) {
+        u32::from_ne_bytes(code.to_ne_bytes()).to_string()
+    } else {
+        code.to_string()
+    };
+    format!("Command '{shown}' returned non-zero exit status {status}.")
 }
 
 #[cfg(windows)]
@@ -463,9 +489,10 @@ fn checkout_revision(
         environment,
         30.0,
     )?;
-    let actual = ops.run_capture(&git_command(&["-C", &dest, "rev-parse", "HEAD"]), environment, 30.0)?;
+    let rev_parse = git_command(&["-C", &dest, "rev-parse", "HEAD"]);
+    let actual = ops.run_capture(&rev_parse, environment, 30.0)?;
     if actual.exit_code != Some(0) {
-        return Err(format!("Git rev-parse HEAD failed: {}", actual.stderr));
+        return Err(called_process_error(&rev_parse, actual.exit_code));
     }
     if actual.stdout.trim() != revision {
         return Err("Fetched commit does not match the recorded revision".into());
@@ -1725,5 +1752,81 @@ mod tests {
             .unwrap();
         assert_eq!(cap.exit_code, Some(0));
         assert_eq!(cap.stdout.trim(), "ok");
+    }
+
+    /// Failed commands read as `subprocess.CalledProcessError` prints them.
+    #[test]
+    fn failed_commands_report_python_called_process_errors() {
+        let temp = TempDir::new("setup-called-process");
+        let missing = oserror::path_text(&temp.join("missing"));
+        let cmd = git_command(&["-C", &missing, "status"]);
+        let err = SystemOps.run_status(&cmd, None, &[], 30.0).unwrap_err();
+        let shown = format!("['git', '-C', {}, 'status']", pytext::repr_os(&missing));
+        assert_eq!(err, format!("Command '{shown}' returned non-zero exit status 128."));
+        let shell = |script: &str| {
+            let cmd: Vec<String> = if cfg!(windows) {
+                vec!["cmd".into(), "/C".into(), script.into()]
+            } else {
+                vec!["sh".into(), "-c".into(), script.into()]
+            };
+            SystemOps.run_status(&cmd, None, &[], 30.0).unwrap_err()
+        };
+        if cfg!(windows) {
+            assert_eq!(
+                shell("exit -1"),
+                "Command '['cmd', '/C', 'exit -1']' returned non-zero exit status 4294967295."
+            );
+        } else {
+            assert_eq!(
+                shell("kill -9 $$"),
+                "Command '['sh', '-c', 'kill -9 $$']' died with <Signals.SIGKILL: 9>."
+            );
+        }
+        if cfg!(target_os = "linux") {
+            assert_eq!(
+                shell("kill -35 $$"),
+                "Command '['sh', '-c', 'kill -35 $$']' died with unknown signal 35."
+            );
+        }
+    }
+
+    fn tree_env(env_vars: &[(String, String)]) -> Vec<(&str, &str)> {
+        env_vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect()
+    }
+
+    /// A child that exits whilst its grandchild holds the output pipes: the
+    /// capture stops at the timeout and the grandchild is killed.
+    #[test]
+    fn capture_is_bounded_when_a_descendant_holds_the_pipes() {
+        let temp = TempDir::new("setup-tree-capture");
+        let pidfile = temp.join("pid");
+        let (cmd, env_vars) = pyprocess::tests::tree_command("parent-exits", &pidfile);
+        let started = std::time::Instant::now();
+        let err = SystemOps.run_capture(&cmd, &tree_env(&env_vars), 5.0).unwrap_err();
+        assert!(started.elapsed().as_secs_f64() < 15.0, "{:?}", started.elapsed());
+        assert!(err.contains("timed out after 5 seconds"), "{err}");
+        pyprocess::tests::assert_tree_gone(&pidfile);
+    }
+
+    /// A child that exits 0 leaving a grandchild behind: the status call
+    /// succeeds and the grandchild does not outlive it.
+    #[test]
+    fn status_leaves_no_descendant_running() {
+        let temp = TempDir::new("setup-tree-status");
+        let pidfile = temp.join("pid");
+        let (cmd, env_vars) = pyprocess::tests::tree_command("parent-exits", &pidfile);
+        SystemOps.run_status(&cmd, None, &tree_env(&env_vars), 30.0).unwrap();
+        pyprocess::tests::assert_tree_gone(&pidfile);
+    }
+
+    /// A timeout kills the grandchild as well as the child.
+    #[test]
+    fn status_timeout_kills_descendants() {
+        let temp = TempDir::new("setup-tree-timeout");
+        let pidfile = temp.join("pid");
+        let (cmd, env_vars) = pyprocess::tests::tree_command("parent-waits", &pidfile);
+        let err = SystemOps.run_status(&cmd, None, &tree_env(&env_vars), 5.0).unwrap_err();
+        assert!(err.contains("timed out after 5 seconds"), "{err}");
+        pyprocess::tests::assert_tree_gone(&pidfile);
     }
 }
