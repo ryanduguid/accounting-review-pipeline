@@ -3,6 +3,8 @@
 # Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 """The portable runner refuses destructive destinations before running commands."""
+import contextlib
+import io
 import json
 import runpy
 import shutil
@@ -10,12 +12,19 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 ROOT = Path(__file__).parents[1]
 MODULE = runpy.run_path(str(ROOT / "examples/utility_workflows.py"))
 PREPARE = MODULE["prepare"]
+# The command-line cases and file contracts that utility_workflows.py and its
+# Rust port share; examples/utility_workflows.rs checks the same file.
+RECORDED = ROOT / "tests/fixtures/utility_workflows_cli.json"
+# Provenance, runtimes and output hashes take their shape from each test's
+# stubs, so the contracts record only that the keys are there.
+STUB_SHAPED = {"projects", "runtimes", "outputs_sha256"}
 
 
 def test_missing_companion_entrypoint_fails_before_creating_outputs(tmp_path):
@@ -578,3 +587,57 @@ def test_real_cli_invalid_timeout_refuses_before_creating_output(tmp_path):
     assert result.returncode == 1
     assert result.stderr == "Utility workflows: Command timeout must be positive and at most 3600 seconds\n"
     assert not output.exists()
+
+
+def _cli_case(arguments, root):
+    """Run one recorded command line in a fresh fake layout; return (exit code, stdout, stderr)."""
+    close = root / "pipeline/packages/monthly-close-control-plane"
+    close.mkdir(parents=True)
+    (close / "Cargo.toml").write_text("[package]")
+    (root / "fpa").mkdir()
+    (root / "fpa/pyproject.toml").write_text("[project]")
+    (root / "existing").mkdir()
+    argv = [argument.replace("{root}", root.as_posix()) for argument in arguments]
+    scope = MODULE["main"].__globals__
+    out, err = io.StringIO(), io.StringIO()
+    with (patch.dict(scope, {"COMPONENT": close}),
+          patch.object(scope["shutil"], "which", side_effect=lambda name: name),
+          patch.object(sys, "argv", ["utility_workflows.py"]),
+          patch.dict("os.environ", {"NO_COLOR": "1"}),
+          contextlib.redirect_stdout(out), contextlib.redirect_stderr(err)):
+        try:
+            code = MODULE["main"](argv)
+        except SystemExit as stop:
+            code = stop.code
+    return code, out.getvalue(), err.getvalue()
+
+
+def _skeleton(value):
+    """The keys and Python value types of a JSON document, lists by their first item."""
+    if isinstance(value, dict):
+        return {key: "*" if key in STUB_SHAPED else _skeleton(item) for key, item in sorted(value.items())}
+    if isinstance(value, list):
+        return [_skeleton(item) for item in value[:1]]
+    return type(value).__name__
+
+
+def _contracts(fixture, monkeypatch):
+    """The success manifest, its command sequence and a failed run's failed-calls.json."""
+    manifest = fixture["run"](**fixture["arguments"])
+    failing = dict(fixture["arguments"], output=fixture["arguments"]["output"].with_name("failed-results"),
+                   environment_root=None)
+    monkeypatch.setitem(fixture["scope"], "captured",
+                        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "partial", "failure"))
+    with pytest.raises(ValueError, match="failed"):
+        fixture["run"](**failing)
+    failed = json.loads((failing["output"] / "failed-calls.json").read_text())
+    return {"manifest": _skeleton(manifest), "failed_calls": _skeleton(failed),
+            "calls": [[call["owner"], call["kind"], call["expected_exit"]] for call in manifest["calls"]]}
+
+
+def test_recorded_cases_and_contracts_match_the_python_driver(workflow_producers, monkeypatch, tmp_path):
+    recorded = json.loads(RECORDED.read_text(encoding="utf-8"))
+    assert len(recorded["cases"]) >= 10
+    for index, case in enumerate(recorded["cases"]):
+        assert _cli_case(case["args"], tmp_path / str(index)) == (case["exit"], case["stdout"], case["stderr"]), case["name"]
+    assert _contracts(workflow_producers, monkeypatch) == recorded["contracts"]

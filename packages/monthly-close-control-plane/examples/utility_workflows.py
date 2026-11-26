@@ -261,7 +261,7 @@ def run_workflows(*, output: Path, fpa: Path, accounting: Path | None = None, gr
         RESULTS["summary"](output, calls, provenance, lines=verified_lines)
         manifest = {"fixture_validation": "passed", "execution_mode": "source-project",
                     "schema_version": "utility-workflows.v2", "workflow": workflow, "calls": calls,
-                    "projects": provenance, "runtimes": runtimes, "tools": {"driver_python": sys.version, "uv": uv_version.stdout.strip()},
+                    "projects": provenance, "runtimes": runtimes, "tools": {"driver": f"utility_workflows.py, Python {sys.version}", "uv": uv_version.stdout.strip()},
                     "outputs_sha256": {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                        for path in sorted(output.rglob("*")) if path.is_file()},
                     "scope": "Fabricated local workflows. Engine review statuses remain unchanged. Fresh environments do not establish a hosted CI result."}
