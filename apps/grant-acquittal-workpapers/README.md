@@ -181,16 +181,6 @@ is listed once, in the order it was read, when it adds a non-zero amount, so
 an empty list means a total of nil. JSON holds each reference as a list of
 IDs; CSV writes it as that list's Python form, such as `['L1', 'L3']`.
 
-Every total names the rows behind it in a reference cell beside it, so a
-reviewer can trace each figure to its source. A cell ending `_ledger_rows`
-lists ledger IDs: `ledger_total`, `allocated_total` and `unallocated_total`
-in `workpaper.json`, each `budget_lines.csv` total, and expenditure and cash
-paid in `funding_movements.csv`. `funding_received_receipt_rows` lists receipt
-IDs and each `contributions.csv` kind has a `_contribution_rows` cell. A row
-is listed once, in the order it was read, when it adds a non-zero amount, so
-an empty list means a total of nil. JSON holds each reference as a list of
-IDs; CSV writes it as that list's Python form, such as `['L1', 'L3']`.
-
 CSV text that could start a spreadsheet formula is escaped. JSON retains the supplied values. Keep all real workpapers and inputs outside this repository.
 
 Required identities and evidence must contain visible text. Unicode letters and
