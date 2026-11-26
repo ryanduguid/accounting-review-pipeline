@@ -2,6 +2,7 @@ usage: grant-workpaper.exe
        [-h]
        --input INPUT
        --output OUTPUT
+       [--ignore-file IGNORE_FILE]
 
 Local grant
 allocation and
@@ -16,6 +17,19 @@ options:
     exit
   --input INPUT
   --output OUTPUT
+  --ignore-file IGNORE_FILE
+    CSV of ledger_
+    id,reason
+    naming ledger
+    rows dated
+    outside the
+    ledger period
+    to leave out
+    of every
+    total; each is
+    listed on the
+    workpaper with
+    its reason
 
 Copyright 2026 Ryan Duguid. No warranty.
 AGPL-3.0-or-later with additional terms (see NOTICE).
