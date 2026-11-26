@@ -486,6 +486,11 @@ real mapping and settlement files outside the checkout.
 
 ## Worked example
 
+The [dormant-entity example](examples/dormant-entity/README.md) reviews 2
+manual trial balances and a cash confirmation without a connected ledger.
+It traces the $100 balances and shows how missing equity evidence keeps the
+pack in review.
+
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
 
 ```text
