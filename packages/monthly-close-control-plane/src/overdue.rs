@@ -419,6 +419,23 @@ mod tests {
     }
 
     #[test]
+    fn an_early_payer_is_judged_from_a_negative_median() {
+        let rows = "T,E-1,Early,2026-05-01,2026-06-10,2026-06-05,10.00,AUD
+                    T,E-2,Early,2026-06-01,2026-07-10,2026-07-06,10.00,AUD
+                    T,E-3,Early,2026-07-01,2026-08-10,2026-08-04,10.00,AUD
+                    T,E-4,Early,2026-08-20,2026-09-27,,10.00,AUD
+                    T,E-5,Early,2026-08-30,2026-09-30,,10.00,AUD
+";
+        let result = run(rows).unwrap();
+        let entry = only(&result);
+        assert_eq!(text(entry.at("invoice_id")), "E-4");
+        assert_eq!(text(entry.at("history").at("median_days_late")), "-5.0");
+        assert_eq!(text(entry.at("history").at("threshold_days")), "2.0");
+        assert!(entry.at("code").is_str("OVERDUE_AGAINST_HISTORY"));
+        assert_eq!(pyjson::canonical(result.at("open_count")), "2");
+    }
+
+    #[test]
     fn bad_rows_are_refused() {
         for (row, expected) in [
             (
