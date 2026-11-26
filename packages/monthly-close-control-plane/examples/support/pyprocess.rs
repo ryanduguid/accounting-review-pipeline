@@ -16,7 +16,6 @@ use std::process::Stdio;
 use std::{
     env,
     ffi::OsStr,
-    fs,
     io::Read,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus},
@@ -66,7 +65,7 @@ pub fn which_on_path_in(tool: &str, path_override: Option<&OsStr>) -> Option<Pat
 pub fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
     let candidate = dir.join(tool);
-    let meta = fs::metadata(&candidate).ok()?;
+    let meta = std::fs::metadata(&candidate).ok()?;
     (meta.is_file() && meta.permissions().mode() & 0o111 != 0).then_some(candidate)
 }
 
