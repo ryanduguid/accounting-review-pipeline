@@ -285,6 +285,26 @@ REFERENCE = re.compile(r"_(ledger|receipt|contribution)_rows$")
 REFERENCE_TABLES = ("budget_lines.csv", "funding_movements.csv", "contributions.csv")
 
 
+# The option the Rust command adds. The frozen script gets the same argparse
+# argument, so usage, help and option errors still compare byte for byte; no
+# case passes it, as the script would not read the file.
+IGNORE_ANCHOR = '    parser.add_argument("--output", required=True, type=Path)\n'
+IGNORE_HELP = ("CSV of ledger_id,reason naming ledger rows dated outside the ledger period to leave out of "
+               "every total; each is listed on the workpaper with its reason")
+
+
+def with_ignore_option(script, folder):
+    """A copy of the frozen script, named as it was, that declares --ignore-file."""
+    source = script.read_text(encoding="utf-8")
+    if source.count(IGNORE_ANCHOR) != 1:
+        raise SystemExit(f"{script}: the --output argument line was not found exactly once")
+    patched = folder / script.name
+    patched.write_text(source.replace(
+        IGNORE_ANCHOR, IGNORE_ANCHOR + f'    parser.add_argument("--ignore-file", type=Path, help={IGNORE_HELP!r})\n'),
+        encoding="utf-8")
+    return patched
+
+
 def json_text(document):
     """The bytes the frozen script writes for a document: indent 2, text mode."""
     text = json.dumps(document, indent=2) + "\n"
@@ -386,6 +406,8 @@ def main():
     scratch = Path(tempfile.mkdtemp(prefix="grant-diff-"))
     failures, outcomes = 0, {}
     try:
+        (scratch / "oracle").mkdir()
+        script = with_ignore_option(script, scratch / "oracle")
         for index in range(args.cases):
             case = Case()
             if rng.random() < 0.1:

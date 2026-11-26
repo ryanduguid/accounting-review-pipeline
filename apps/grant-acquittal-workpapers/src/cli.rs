@@ -14,7 +14,8 @@ use crate::workpaper::{self, Failure};
 use crate::{oserror, pytext};
 
 const DESCRIPTION: &str = "Local grant allocation and funding workpapers from explicitly reviewed inputs.";
-const FLAGS: [&str; 4] = ["-h", "--help", "--input", "--output"];
+const FLAGS: [&str; 5] = ["-h", "--help", "--input", "--output", "--ignore-file"];
+const IGNORE_HELP: &str = "CSV of ledger_id,reason naming ledger rows dated outside the ledger period to leave out of every total; each is listed on the workpaper with its reason";
 
 /// argparse's formatter width: `shutil.get_terminal_size().columns` minus 2.
 fn width() -> usize {
@@ -53,7 +54,7 @@ fn usage_lines(parts: &[Part], indent: &str, prefix_len: Option<usize>, text_wid
     lines
 }
 
-/// `HelpFormatter._format_usage` for this parser's three optionals.
+/// `HelpFormatter._format_usage` for this parser's four optionals.
 fn usage(prog: &str, t: &Theme) -> String {
     let prefix = "usage: ";
     let text_width = width();
@@ -68,6 +69,13 @@ fn usage(prog: &str, t: &Theme) -> String {
         },
         option("--input", "INPUT"),
         option("--output", "OUTPUT"),
+        Part {
+            plain: "[--ignore-file IGNORE_FILE]".into(),
+            coloured: format!(
+                "[{}--ignore-file {}IGNORE_FILE{}]",
+                t.summary_long_option, t.summary_label, t.reset
+            ),
+        },
     ];
     let plain: Vec<&str> = parts.iter().map(|p| p.plain.as_str()).collect();
     let rest = if prefix.len() + pytext::py_len(&format!("{prog} {}", plain.join(" "))) <= text_width {
@@ -92,7 +100,7 @@ fn usage(prog: &str, t: &Theme) -> String {
 }
 
 /// The options section's rows: the invocation and its help, if any.
-fn help_rows(t: &Theme) -> [(Part, Option<&'static str>); 3] {
+fn help_rows(t: &Theme) -> [(Part, Option<&'static str>); 4] {
     let flag = |text: &str, colour: &str| format!("{colour}{text}{}", t.reset);
     let option = |name: &str, label: &str| Part {
         plain: format!("{name} {label}"),
@@ -106,6 +114,7 @@ fn help_rows(t: &Theme) -> [(Part, Option<&'static str>); 3] {
         (help, Some("show this help message and exit")),
         (option("--input", "INPUT"), None),
         (option("--output", "OUTPUT"), None),
+        (option("--ignore-file", "IGNORE_FILE"), Some(IGNORE_HELP)),
     ]
 }
 
@@ -246,10 +255,14 @@ enum Exit {
     Error(String),
 }
 
-fn parse(args: &[String]) -> Result<(&str, &str), Exit> {
+/// The input folder, the output folder and any ignore file.
+type Parsed<'a> = (&'a str, &'a str, Option<&'a str>);
+
+fn parse(args: &[String]) -> Result<Parsed<'_>, Exit> {
     let mut extras = Vec::new();
     let mut input = None;
     let mut output = None;
+    let mut ignore = None;
     let mut index = 0;
     while let Some(token) = args.get(index) {
         index += 1;
@@ -277,14 +290,14 @@ fn parse(args: &[String]) -> Result<(&str, &str), Exit> {
                 _ => return Err(Exit::Error(format!("argument {flag}: expected one argument"))),
             },
         };
-        if flag == "--input" {
-            input = Some(value);
-        } else {
-            output = Some(value);
+        match flag {
+            "--input" => input = Some(value),
+            "--output" => output = Some(value),
+            _ => ignore = Some(value),
         }
     }
     match (input, output) {
-        (Some(input), Some(output)) if extras.is_empty() => Ok((input, output)),
+        (Some(input), Some(output)) if extras.is_empty() => Ok((input, output, ignore)),
         (Some(_), Some(_)) => Err(Exit::Error(format!("unrecognized arguments: {}", extras.join(" ")))),
         (input, output) => {
             let missing: Vec<&str> = [("--input", input.is_none()), ("--output", output.is_none())]
@@ -322,9 +335,13 @@ fn report(result: &crate::pyjson::Json, stdout: &mut dyn Write, stderr: &mut dyn
         Some(crate::pyjson::Json::Array(items)) => items.len(),
         _ => 0,
     };
+    let ignored = match result.get("ignored_items") {
+        Some(crate::pyjson::Json::Array(items)) => format!("; {} out-of-period ledger rows ignored", items.len()),
+        _ => String::new(),
+    };
     if let Err(error) = writeln!(
         stdout,
-        "grant-workpaper: {}; {count} review items",
+        "grant-workpaper: {}; {count} review items{ignored}",
         status.unwrap_or_default()
     ) {
         // The script's last print sat outside its handler, so a failed write
@@ -341,7 +358,7 @@ fn report(result: &crate::pyjson::Json, stdout: &mut dyn Write, stderr: &mut dyn
 
 /// `main(argv)`: the process exit code.
 pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
-    let (input, output) = match parse(args) {
+    let (input, output, ignore) = match parse(args) {
         Ok(parsed) => parsed,
         // argparse's _print_message ignores an OSError from either stream.
         Err(Exit::Help) => {
@@ -365,7 +382,8 @@ pub fn main(prog: &str, args: &[String], cwd: &Path, stdout: &mut dyn Write, std
     // Path("") is ".", as argparse's type=Path made it.
     let input = if input.is_empty() { "." } else { input };
     let output = if output.is_empty() { "." } else { output };
-    let result = workpaper::review(input, cwd);
+    // Path("") is ".", which names a folder, so an empty ignore path fails to read.
+    let result = workpaper::review_ignoring(input, ignore, cwd);
     let outcome = result.and_then(|result| workpaper::write(&result, output, cwd).map(|()| result));
     match outcome {
         Ok(result) => report(&result, stdout, stderr),

@@ -6,6 +6,7 @@
 //! Each test keeps the Python test's name.
 
 mod contributions;
+mod ignore;
 mod references;
 mod workpaper_tests;
 
