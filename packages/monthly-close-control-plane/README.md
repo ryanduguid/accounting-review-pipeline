@@ -634,6 +634,14 @@ its header or its totals drift from the cases.
 | `gst_reasonableness` | 2 of 2 | 2 of 2 | 0 |
 | Total | 17 of 17 | 10 of 10 | 0 |
 
+The detection rate is circular, so read it as a contract check, not recall. The
+same author wrote each control, its 'Cannot detect' cell and the cases seeded from
+both, so a case only counts if the author already knew to plant it. A full score
+shows each control does what its contract says on conditions built to that
+contract; it does not estimate how many misstatements a real close would show, and
+a condition nobody anticipated cannot appear in the table. Recall on real ledgers
+needs cases labelled by someone other than the author and has not been measured.
+
 `calculation_evidence` and `equity_reconciliation` need inputs this fixture does not
 supply, calculation evidence files and an equity schedule with its currency evidence,
 so the benchmark leaves them out. `tests/calculation_evidence.rs` covers the first,
