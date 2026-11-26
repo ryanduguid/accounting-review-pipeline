@@ -400,6 +400,8 @@ pub mod tests {
     fn tree_helper() {
         let Ok(role) = env::var(ROLE) else { return };
         if role != "grandchild" {
+            // The test binary re-runs itself as the tree; nothing is trusted from its path.
+            // nosemgrep: rust.lang.security.current-exe.current-exe
             let exe = env::current_exe().unwrap();
             let child = Command::new(exe)
                 .args(["--exact", HELPER, "--nocapture", "--quiet"])
@@ -419,6 +421,8 @@ pub mod tests {
 
     /// The command and environment that start the tree in `role`.
     pub fn tree_command(role: &str, pidfile: &Path) -> (Vec<String>, Vec<(String, String)>) {
+        // The test binary re-runs itself as the tree; nothing is trusted from its path.
+        // nosemgrep: rust.lang.security.current-exe.current-exe
         let exe = env::current_exe().unwrap().to_string_lossy().into_owned();
         let command = [exe.as_str(), "--exact", HELPER, "--nocapture", "--quiet"];
         let env_vars = vec![
