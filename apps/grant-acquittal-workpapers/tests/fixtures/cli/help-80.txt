@@ -1,11 +1,16 @@
 usage: grant-workpaper [-h] --input INPUT --output OUTPUT
+                       [--ignore-file IGNORE_FILE]
 
 Local grant allocation and funding workpapers from explicitly reviewed inputs.
 
 options:
-  -h, --help       show this help message and exit
+  -h, --help            show this help message and exit
   --input INPUT
   --output OUTPUT
+  --ignore-file IGNORE_FILE
+                        CSV of ledger_id,reason naming ledger rows dated
+                        outside the ledger period to leave out of every total;
+                        each is listed on the workpaper with its reason
 
 Copyright 2026 Ryan Duguid. No warranty.
 AGPL-3.0-or-later with additional terms (see NOTICE).

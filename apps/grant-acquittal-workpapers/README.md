@@ -150,6 +150,16 @@ terms of the agreement for the reviewer to apply. Without the file, every
 contribution column is nil. An unreadable path or dangling link is an input
 error; no workpaper is published. Readable file links remain supported.
 
+A ledger row dated outside the ledger period fails the run unless an ignore
+file names it. Pass `--ignore-file <path>`, a CSV with the headings
+`ledger_id,reason`. Each entry must name a row in `ledger.csv` dated outside
+the period and give a visible reason. That row is left out of every total and
+listed with its reason in `workpaper.md`, `workpaper.json` and
+`ignored_items.csv`, and the summary line counts it; it still needs valid
+amounts, and an allocation to it is an input error. A missing or unreadable
+file, wrong headings, a duplicate or unknown ID, a row inside the period or a
+blank reason fails the run, and no workpaper is published.
+
 ## Outputs
 
 - `workpaper.md` and `workpaper.json`: reconciliation, review items and source SHA-256 values.
@@ -159,6 +169,7 @@ error; no workpaper is published. Readable file links remain supported.
 - `funding_movements.csv`: opening funding, receipts, expenditure and cash movements.
 - `contributions.csv`: interest, cash co-contributions and in-kind contributions per grant.
 - `findings.csv`: items requiring review.
+- `ignored_items.csv`: with `--ignore-file` only, each ignored ledger row and its reason.
 
 Every total names the rows behind it in a reference cell beside it, so a
 reviewer can trace each figure to its source. A cell ending `_ledger_rows`
@@ -206,11 +217,15 @@ Use `grant_workpaper.py` from the immutable
 [pre-port commit](https://github.com/ryanduguid/accounting-review-pipeline/blob/89cebd44f4b6ec276882cd69277935fa3ba980bc/apps/grant-acquittal-workpapers/grant_workpaper.py).
 CI extracts that script and runs 1,500 cases with seed `20261012` on Linux and
 Windows under Python 3.15, retaining native child coverage. The comparator
-normalises program names, working directories and random staging names; Python
+normalises program names (with the indent of wrapped usage lines under them),
+working directories and random staging names; Python
 tracebacks are compared by exit code only. The reference cells, which the
 script never wrote, are removed from the binary's files before comparison, and
 only when writing a file back the script's way reproduces its exact bytes, so
-every other byte must still match.
+every other byte must still match. The script is given the same
+`--ignore-file` argument declaration, so usage, help and option errors still
+compare byte for byte; no case passes the option, which the script never read,
+and `src/tests/ignore.rs` covers it instead.
 
 ```powershell
 $oracleScript = 'C:\path\to\grant_workpaper.py'
