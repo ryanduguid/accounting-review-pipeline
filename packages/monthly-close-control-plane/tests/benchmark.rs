@@ -775,3 +775,24 @@ fn readme_benchmark_table_matches_the_cases() {
         "README Detection benchmark table differs from tests/benchmark.rs"
     );
 }
+
+#[test]
+fn readme_says_the_benchmark_is_not_recall() {
+    let section: String = README
+        .lines()
+        .skip_while(|line| *line != "## Detection benchmark")
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .collect::<Vec<_>>()
+        .join(" ");
+    for phrase in [
+        "circular",
+        "labelled by someone other than the author",
+        "has not been measured",
+    ] {
+        assert!(
+            section.contains(phrase),
+            "Detection benchmark lost its caveat: {phrase}"
+        );
+    }
+}
