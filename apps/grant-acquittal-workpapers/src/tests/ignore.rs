@@ -123,9 +123,10 @@ fn without_the_option_nothing_changes_and_an_early_row_still_fails() {
     );
 }
 
-/// Each malformed ignore file (`None`: no file at all) and the start of its error.
-const MALFORMED: [(&str, Option<&[u8]>, &str); 9] = [
+/// Each malformed ignore file (`None`: no file, or a directory) and the start of its error.
+const MALFORMED: [(&str, Option<&[u8]>, &str); 10] = [
     ("missing file", None, "Ignore file: [Errno 2] No such file or directory"),
+    ("directory", None, "Ignore file: [Errno "),
     (
         "wrong headings",
         Some(b"id,reason\nL5,x\n"),
@@ -172,6 +173,10 @@ fn a_malformed_ignore_file_fails_the_run_and_publishes_nothing() {
             Some(body) => {
                 std::fs::write(fixture.root().join(IGNORE), body).unwrap();
                 IGNORE
+            }
+            None if label == "directory" => {
+                std::fs::create_dir(fixture.root().join("ignore-dir")).unwrap();
+                "ignore-dir"
             }
             None => "absent.csv",
         };
