@@ -1673,16 +1673,18 @@ mod tests {
                 panic!("{name}: exit must be an integer");
             };
             assert_eq!(code.to_string(), *exit, "{name}: exit code");
-            assert_eq!(
-                String::from_utf8(out).unwrap(),
-                text(case.at("stdout")),
-                "{name}: stdout"
-            );
-            assert_eq!(
-                String::from_utf8(err).unwrap(),
-                text(case.at("stderr")),
-                "{name}: stderr"
-            );
+            // The streams translate newlines as Python's text mode does on
+            // Windows; the recorded cases hold the untranslated text.
+            let lines = |bytes: Vec<u8>| {
+                let written = String::from_utf8(bytes).unwrap();
+                if cfg!(windows) {
+                    written.replace("\r\n", "\n")
+                } else {
+                    written
+                }
+            };
+            assert_eq!(lines(out), text(case.at("stdout")), "{name}: stdout");
+            assert_eq!(lines(err), text(case.at("stderr")), "{name}: stderr");
         }
     }
 
