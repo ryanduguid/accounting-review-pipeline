@@ -1,0 +1,86 @@
+{
+  "note": "Recorded from setup_utility.py; examples/setup_utility.rs and tests/test_setup_utility_parity.py both check these cases.",
+  "prog": "setup_utility.py",
+  "cases": [
+    {
+      "name": "help",
+      "args": [
+        "--help"
+      ],
+      "exit": 0,
+      "stdout": "usage: setup_utility.py [-h] --workspace WORKSPACE\n                        [--replay-manifest REPLAY_MANIFEST]\n                        [--summary SUMMARY]\n\nSet up and run the fabricated accounting examples in a new workspace.\n\noptions:\n  -h, --help            show this help message and exit\n  --workspace WORKSPACE\n                        New directory outside every Git checkout\n  --replay-manifest REPLAY_MANIFEST\n                        Replay clean source commits from an all-route manifest\n                        or replay.json\n  --summary SUMMARY     Append a result summary outside source and workspace\n                        directories\n",
+      "stderr": ""
+    },
+    {
+      "name": "no arguments",
+      "args": [],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: setup_utility.py [-h] --workspace WORKSPACE\n                        [--replay-manifest REPLAY_MANIFEST]\n                        [--summary SUMMARY]\nsetup_utility.py: error: the following arguments are required: --workspace\n"
+    },
+    {
+      "name": "workspace without a value",
+      "args": [
+        "--workspace"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: setup_utility.py [-h] --workspace WORKSPACE\n                        [--replay-manifest REPLAY_MANIFEST]\n                        [--summary SUMMARY]\nsetup_utility.py: error: argument --workspace: expected one argument\n"
+    },
+    {
+      "name": "unknown argument",
+      "args": [
+        "--workspace",
+        "{root}/ws",
+        "--bogus"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: setup_utility.py [-h] --workspace WORKSPACE\n                        [--replay-manifest REPLAY_MANIFEST]\n                        [--summary SUMMARY]\nsetup_utility.py: error: unrecognized arguments: --bogus\n"
+    },
+    {
+      "name": "existing workspace",
+      "args": [
+        "--workspace",
+        "{root}/existing"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Setup failed: Choose a new workspace; existing paths are never reused. Existing checkouts were not updated. Keep any partial workspace for diagnosis and retry with a new path.\n"
+    },
+    {
+      "name": "workspace inside the pipeline",
+      "args": [
+        "--workspace",
+        "{root}/pipeline/ws"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Setup failed: The workspace must be separate from the pipeline checkout. Existing checkouts were not updated. Keep any partial workspace for diagnosis and retry with a new path.\n"
+    },
+    {
+      "name": "summary inside the workspace",
+      "args": [
+        "--workspace",
+        "{root}/ws",
+        "--summary",
+        "{root}/ws/summary.md"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: setup_utility.py [-h] --workspace WORKSPACE\n                        [--replay-manifest REPLAY_MANIFEST]\n                        [--summary SUMMARY]\nsetup_utility.py: error: Summary must be outside the pipeline checkout and workspace\n"
+    },
+    {
+      "name": "summary inside the pipeline",
+      "args": [
+        "--workspace",
+        "{root}/ws",
+        "--summary",
+        "{root}/pipeline/summary.md"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: setup_utility.py [-h] --workspace WORKSPACE\n                        [--replay-manifest REPLAY_MANIFEST]\n                        [--summary SUMMARY]\nsetup_utility.py: error: Summary must be outside the pipeline checkout and workspace\n"
+    }
+  ]
+}

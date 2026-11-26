@@ -4,6 +4,8 @@
 
 //! Run fabricated workflows with explicit lock authority and source evidence.
 
+#[path = "support/pyprocess.rs"]
+mod pyprocess;
 #[cfg(test)]
 #[path = "../tests/support/temp.rs"]
 pub(crate) mod temp;
@@ -14,20 +16,22 @@ use monthly_close_control_plane::{
     pyjson::{self, Json, PyStr},
     pypath, sha256,
 };
+#[cfg(test)]
+use pyprocess::which_on_path_in;
+use pyprocess::{
+    configure_group, path_override, resolve_program, spawn_reader, spawn_retrying_busy, wait_child,
+    which_on_path,
+};
+#[cfg(test)]
+use std::ffi::OsStr;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env,
-    ffi::OsStr,
-    fs,
-    io::{Read, Write},
+    env, fs,
+    io::Write,
     path::{Path, PathBuf},
-    process::{Child, Command, ExitStatus, Stdio},
-    thread,
-    time::{Duration, Instant},
+    process::{Command, Stdio},
+    time::Instant,
 };
-
-#[cfg(windows)]
-use std::ffi::OsString;
 use utility_results::CallRecord;
 
 const WIP_BIN: &[&str] = &[
@@ -115,182 +119,8 @@ impl Ops for SystemOps {
     }
 }
 
-fn path_override(env_vars: &[(String, String)]) -> Option<&OsStr> {
-    env_vars
-        .iter()
-        .rfind(|(k, _)| {
-            if cfg!(windows) {
-                k.eq_ignore_ascii_case("PATH")
-            } else {
-                k == "PATH"
-            }
-        })
-        .map(|(_, v)| OsStr::new(v.as_str()))
-}
-
-fn resolve_program(program: &str, env_path: Option<&OsStr>) -> PathBuf {
-    if Path::new(program).components().count() > 1 {
-        return PathBuf::from(program);
-    }
-    which_on_path_in(program, env_path).unwrap_or_else(|| PathBuf::from(program))
-}
-
-fn which_on_path(tool: &str) -> Option<PathBuf> {
-    which_on_path_in(tool, None)
-}
-
-fn which_on_path_in(tool: &str, path_override: Option<&OsStr>) -> Option<PathBuf> {
-    let owned;
-    let path_var = match path_override {
-        Some(v) => v,
-        None => {
-            owned = env::var_os("PATH")?;
-            owned.as_os_str()
-        }
-    };
-    for dir in env::split_paths(path_var) {
-        if let Some(found) = executable_in(&dir, tool) {
-            return Some(found);
-        }
-    }
-    None
-}
-
-#[cfg(unix)]
-fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-    let candidate = dir.join(tool);
-    let meta = fs::metadata(&candidate).ok()?;
-    (meta.is_file() && meta.permissions().mode() & 0o111 != 0).then_some(candidate)
-}
-
-#[cfg(windows)]
-fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
-    let pathext = env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".COM;.EXE;.BAT;.CMD"));
-    let text = pathext.to_string_lossy();
-    let exts: Vec<&str> = text.split(';').filter(|e| !e.is_empty()).collect();
-    let lower = tool.to_ascii_lowercase();
-    if exts
-        .iter()
-        .any(|e| lower.ends_with(&e.to_ascii_lowercase()))
-    {
-        let direct = dir.join(tool);
-        if direct.is_file() {
-            return Some(direct);
-        }
-    }
-    exts.iter()
-        .map(|ext| dir.join(format!("{tool}{ext}")))
-        .find(|candidate| candidate.is_file())
-}
-
-#[cfg(unix)]
-fn configure_group(cmd: &mut Command) {
-    use std::os::unix::process::CommandExt;
-    // SAFETY: setsid is async-signal-safe and isolates the child in its own session/group.
-    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    unsafe {
-        cmd.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-}
-
-#[cfg(windows)]
-fn configure_group(cmd: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
-}
-
-#[cfg(unix)]
-fn kill_tree(pid: u32) {
-    if let Ok(pgid) = libc::pid_t::try_from(pid) {
-        // SAFETY: pgid equals the session leader PID created via setsid.
-        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-        unsafe {
-            libc::killpg(pgid, libc::SIGKILL);
-        }
-    }
-}
-
-#[cfg(windows)]
-fn kill_tree(pid: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-fn spawn_reader(stream: Option<impl Read + Send + 'static>) -> thread::JoinHandle<Vec<u8>> {
-    thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(mut reader) = stream {
-            let _ = reader.read_to_end(&mut buf);
-        }
-        buf
-    })
-}
-
 fn decode_stream(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).replace("\r\n", "\n")
-}
-
-#[cfg(unix)]
-fn status_code(status: ExitStatus) -> Option<i32> {
-    use std::os::unix::process::ExitStatusExt;
-    status.code().or_else(|| status.signal().map(|s| -s))
-}
-
-#[cfg(not(unix))]
-fn status_code(status: ExitStatus) -> Option<i32> {
-    status.code()
-}
-
-fn wait_child(mut child: Child, timeout_secs: f64) -> Result<Option<i32>, ()> {
-    let deadline = Instant::now() + Duration::from_secs_f64(timeout_secs);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status_code(status)),
-            Ok(None) if Instant::now() >= deadline => {
-                kill_tree(child.id());
-                let _ = child.wait();
-                return Err(());
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(10)),
-            Err(_) => {
-                kill_tree(child.id());
-                let _ = child.wait();
-                return Err(());
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
-fn is_busy_exec(err: &std::io::Error) -> bool {
-    err.raw_os_error() == Some(libc::ETXTBSY)
-}
-
-#[cfg(not(unix))]
-fn is_busy_exec(_err: &std::io::Error) -> bool {
-    false
-}
-
-fn spawn_retrying_busy(cmd: &mut Command) -> std::io::Result<Child> {
-    for _ in 0..10 {
-        match cmd.spawn() {
-            Ok(child) => return Ok(child),
-            Err(err) if is_busy_exec(&err) => thread::sleep(Duration::from_millis(5)),
-            Err(err) => return Err(err),
-        }
-    }
-    cmd.spawn()
 }
 
 /// Stop the whole command tree on timeout or interruption.
@@ -1985,25 +1815,9 @@ fn parse_cli(args: &[String]) -> Result<Option<CliArgs>, String> {
     }))
 }
 
+/// This crate's source directory, as utility_workflows.py's `Path(__file__).resolve().parents[1]`:
+/// fixed at build time, so a shared or relocated target directory cannot move it.
 fn default_component() -> PathBuf {
-    if let Ok(exe) = env::current_exe()
-        && let Some(dir) = exe.parent()
-        && dir.file_name().is_some_and(|n| n == "examples")
-    {
-        let parent = dir.parent();
-        let in_target = parent
-            .and_then(Path::file_name)
-            .is_some_and(|n| n == "debug" || n == "release");
-        if !in_target && let Some(comp) = parent {
-            return comp.to_path_buf();
-        }
-        if in_target
-            && let Some(crate_dir) = parent.and_then(Path::parent).and_then(Path::parent)
-            && crate_dir.join("Cargo.toml").is_file()
-        {
-            return crate_dir.to_path_buf();
-        }
-    }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
@@ -2063,6 +1877,8 @@ fn write_stream(stream: &mut dyn Write, text: &str) -> std::io::Result<()> {
 }
 
 fn main() -> std::process::ExitCode {
+    // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let mut argv = env::args_os();
     let prog = argv
         .next()
@@ -2092,8 +1908,27 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    fn sys_ops() -> SystemOps {
-        SystemOps
+    /// Runs real commands but reports every tool as installed, so tests that
+    /// are not about tool lookup pass on hosts without uv.
+    struct HostOps;
+
+    impl Ops for HostOps {
+        fn which(&self, _tool: &str) -> bool {
+            true
+        }
+        fn run(
+            &self,
+            command: &[String],
+            cwd: &Path,
+            env_vars: &[(String, String)],
+            timeout_secs: f64,
+        ) -> Result<Captured, CaptureError> {
+            SystemOps.run(command, cwd, env_vars, timeout_secs)
+        }
+    }
+
+    fn sys_ops() -> HostOps {
+        HostOps
     }
 
     type StubHandler =

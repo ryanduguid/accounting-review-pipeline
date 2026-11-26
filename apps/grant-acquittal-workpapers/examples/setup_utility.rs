@@ -12,18 +12,24 @@ use grant_acquittal_workpapers::{
 use std::collections::HashMap;
 #[cfg(windows)]
 use std::collections::HashSet;
+#[cfg(any(windows, test))]
+use std::ffi::OsStr;
 #[cfg(windows)]
 use std::ffi::OsString;
 use std::{
     collections::BTreeMap,
     env,
-    ffi::OsStr,
     fs::{self, OpenOptions},
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
-    process::{Child, Command, ExitStatus, Stdio},
-    thread,
-    time::{Duration, Instant},
+    process::{Command, Stdio},
+};
+#[path = "support/pyprocess.rs"]
+mod pyprocess;
+#[cfg(test)]
+use pyprocess::which_on_path_in;
+use pyprocess::{
+    configure_group, path_override, resolve_program, spawn_reader, spawn_retrying_busy, wait_child, which_on_path,
 };
 
 const PIPELINE: &str = "accounting-review-pipeline";
@@ -36,10 +42,58 @@ const COMPANIONS: [(&str, &str); 2] = [
     ("australian-accounting", "australian-accounting"),
 ];
 
-const HELP_BODY: &str = "Set up and run the fabricated accounting examples in a new workspace.\n\noptions:\n  -h, --help            show this help message and exit\n  --workspace WORKSPACE\n                        New directory outside every Git checkout\n  --replay-manifest REPLAY_MANIFEST\n                        Replay clean source commits from an all-route manifest or replay.json\n  --summary SUMMARY     Append a result summary outside source and workspace directories";
+const HELP_BODY: &str = "Set up and run the fabricated accounting examples in a new workspace.\n\noptions:\n  -h, --help            show this help message and exit\n  --workspace WORKSPACE\n                        New directory outside every Git checkout\n  --replay-manifest REPLAY_MANIFEST\n                        Replay clean source commits from an all-route manifest\n                        or replay.json\n  --summary SUMMARY     Append a result summary outside source and workspace\n                        directories";
 
+/// argparse's text width at its default 80 columns: the help above and the
+/// usage below are laid out as setup_utility.py prints them there.
+const TEXT_WIDTH: usize = 78;
+
+/// `_format_usage`'s `get_lines`: wrap parts under `indent`, the first line
+/// starting `first_len` characters in.
+fn usage_lines(parts: &[&str], indent: &str, first_len: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line: Vec<&str> = Vec::new();
+    let mut line_len = first_len - 1;
+    for part in parts {
+        let part_len = part.chars().count();
+        if line_len + 1 + part_len > TEXT_WIDTH && !line.is_empty() {
+            lines.push(line.join(" "));
+            line.clear();
+            line_len = indent.len() - 1;
+        }
+        line.push(part);
+        line_len += part_len + 1;
+    }
+    if !line.is_empty() {
+        lines.push(line.join(" "));
+    }
+    lines
+}
+
+/// argparse's usage line for this parser, wrapped as `HelpFormatter` wraps it.
 fn usage_line(prog: &str) -> String {
-    format!("usage: {prog} [-h] --workspace WORKSPACE [--replay-manifest REPLAY_MANIFEST] [--summary SUMMARY]")
+    const OPTIONS: [&str; 4] = [
+        "[-h]",
+        "--workspace WORKSPACE",
+        "[--replay-manifest REPLAY_MANIFEST]",
+        "[--summary SUMMARY]",
+    ];
+    let prefix = "usage: ";
+    let prog_len = prog.chars().count();
+    let single = format!("{prog} {}", OPTIONS.join(" "));
+    if prefix.len() + single.chars().count() <= TEXT_WIDTH {
+        return format!("{prefix}{single}");
+    }
+    if (prefix.len() + prog_len) as f64 <= 0.75 * TEXT_WIDTH as f64 {
+        let indent = " ".repeat(prefix.len() + prog_len + 1);
+        let mut parts = vec![prog];
+        parts.extend(OPTIONS);
+        let lines = usage_lines(&parts, &indent, prefix.len());
+        return format!("{prefix}{}", lines.join(&format!("\n{indent}")));
+    }
+    let indent = " ".repeat(prefix.len());
+    let lines = usage_lines(&OPTIONS, &indent, indent.len());
+    format!("{prefix}{prog}\n{indent}{}", lines.join(&format!("\n{indent}")))
 }
 
 #[derive(Clone, Debug)]
@@ -129,172 +183,6 @@ impl Ops for SystemOps {
                 stderr,
             }),
             Err(()) => Err(format!("Command {program} timed out after {timeout_secs}s")),
-        }
-    }
-}
-
-#[cfg(unix)]
-fn is_busy_exec(err: &std::io::Error) -> bool {
-    err.raw_os_error() == Some(libc::ETXTBSY)
-}
-
-#[cfg(not(unix))]
-fn is_busy_exec(_err: &std::io::Error) -> bool {
-    false
-}
-
-fn spawn_retrying_busy(cmd: &mut Command) -> std::io::Result<Child> {
-    for _ in 0..10 {
-        match cmd.spawn() {
-            Ok(child) => return Ok(child),
-            Err(err) if is_busy_exec(&err) => thread::sleep(Duration::from_millis(5)),
-            Err(err) => return Err(err),
-        }
-    }
-    cmd.spawn()
-}
-
-fn path_override<'a>(env_vars: &[(&'a str, &'a str)]) -> Option<&'a OsStr> {
-    env_vars
-        .iter()
-        .rfind(|(k, _)| {
-            if cfg!(windows) {
-                k.eq_ignore_ascii_case("PATH")
-            } else {
-                *k == "PATH"
-            }
-        })
-        .map(|(_, v)| OsStr::new(*v))
-}
-
-fn resolve_program(program: &str, env_path: Option<&OsStr>) -> PathBuf {
-    if Path::new(program).components().count() > 1 {
-        return PathBuf::from(program);
-    }
-    which_on_path_in(program, env_path).unwrap_or_else(|| PathBuf::from(program))
-}
-
-fn which_on_path(tool: &str) -> Option<PathBuf> {
-    which_on_path_in(tool, None)
-}
-
-fn which_on_path_in(tool: &str, path_override: Option<&OsStr>) -> Option<PathBuf> {
-    let owned;
-    let path_var = match path_override {
-        Some(v) => v,
-        None => {
-            owned = env::var_os("PATH")?;
-            owned.as_os_str()
-        }
-    };
-    env::split_paths(path_var).find_map(|dir| executable_in(&dir, tool))
-}
-
-#[cfg(unix)]
-fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-    let candidate = dir.join(tool);
-    let meta = fs::metadata(&candidate).ok()?;
-    (meta.is_file() && meta.permissions().mode() & 0o111 != 0).then_some(candidate)
-}
-
-#[cfg(windows)]
-fn executable_in(dir: &Path, tool: &str) -> Option<PathBuf> {
-    let pathext = env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".COM;.EXE;.BAT;.CMD"));
-    let text = pathext.to_string_lossy();
-    let exts: Vec<&str> = text.split(';').filter(|e| !e.is_empty()).collect();
-    let lower = tool.to_ascii_lowercase();
-    if exts.iter().any(|e| lower.ends_with(&e.to_ascii_lowercase())) {
-        let direct = dir.join(tool);
-        if direct.is_file() {
-            return Some(direct);
-        }
-    }
-    exts.iter()
-        .map(|ext| dir.join(format!("{tool}{ext}")))
-        .find(|candidate| candidate.is_file())
-}
-
-#[cfg(unix)]
-fn configure_group(cmd: &mut Command) {
-    use std::os::unix::process::CommandExt;
-    // SAFETY: setsid is async-signal-safe and isolates the child in its own session/group.
-    // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-    unsafe {
-        cmd.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-}
-
-#[cfg(windows)]
-fn configure_group(cmd: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
-}
-
-#[cfg(unix)]
-fn kill_tree(pid: u32) {
-    if let Ok(pgid) = libc::pid_t::try_from(pid) {
-        // SAFETY: pgid equals the session leader PID created via setsid.
-        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-        unsafe {
-            libc::killpg(pgid, libc::SIGKILL);
-        }
-    }
-}
-
-#[cfg(windows)]
-fn kill_tree(pid: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-fn spawn_reader(stream: Option<impl Read + Send + 'static>) -> thread::JoinHandle<Vec<u8>> {
-    thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(mut reader) = stream {
-            let _ = reader.read_to_end(&mut buf);
-        }
-        buf
-    })
-}
-
-#[cfg(unix)]
-fn status_code(status: ExitStatus) -> Option<i32> {
-    use std::os::unix::process::ExitStatusExt;
-    status.code().or_else(|| status.signal().map(|s| -s))
-}
-
-#[cfg(not(unix))]
-fn status_code(status: ExitStatus) -> Option<i32> {
-    status.code()
-}
-
-fn wait_child(mut child: Child, timeout_secs: f64) -> Result<Option<i32>, ()> {
-    let deadline = Instant::now() + Duration::from_secs_f64(timeout_secs);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status_code(status)),
-            Ok(None) if Instant::now() >= deadline => {
-                kill_tree(child.id());
-                let _ = child.wait();
-                return Err(());
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(10)),
-            Err(_) => {
-                kill_tree(child.id());
-                let _ = child.wait();
-                return Err(());
-            }
         }
     }
 }
@@ -947,32 +835,15 @@ fn run_checked(ops: &dyn Ops, source: &Path, parsed: &CliArgs, out: &mut dyn Wri
     result
 }
 
+/// This crate's source directory, as setup_utility.py's `Path(__file__).resolve().parent`:
+/// fixed at build time, so a shared or relocated target directory cannot move it.
 fn default_source() -> PathBuf {
-    if let Ok(exe) = env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        if dir.file_name().is_some_and(|n| n == "examples") {
-            let parent = dir.parent();
-            let in_target = parent
-                .and_then(Path::file_name)
-                .is_some_and(|n| n == "debug" || n == "release");
-            if !in_target && let Some(comp) = parent {
-                return comp.to_path_buf();
-            }
-            if in_target
-                && let Some(crate_dir) = parent.and_then(Path::parent).and_then(Path::parent)
-                && crate_dir.join("Cargo.toml").is_file()
-            {
-                return crate_dir.to_path_buf();
-            }
-        } else {
-            return dir.to_path_buf();
-        }
-    }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 fn main() -> std::process::ExitCode {
+    // argv is the user's own command line, decoded as Python decodes sys.argv; it grants nothing.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let mut argv = env::args_os();
     let prog = argv
         .next()
@@ -995,6 +866,8 @@ mod tests {
         fn new(prefix: &str) -> Self {
             static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let id = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // a test scratch directory with a unique name; it holds only fabricated files.
+            // nosemgrep: rust.lang.security.temp-dir.temp-dir
             let path = env::temp_dir().join(format!("{prefix}-{}-{id}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).unwrap();
@@ -1012,6 +885,33 @@ mod tests {
 
     type StatusHook = dyn Fn(&[String], Option<&Path>) -> Result<(), String>;
     type CaptureHook = dyn Fn(&[String]) -> Result<Captured, String>;
+
+    /// Runs real commands but reports every tool as installed, so tests that
+    /// are not about tool lookup pass on hosts without uv.
+    struct HostOps;
+
+    impl Ops for HostOps {
+        fn which(&self, _tool: &str) -> bool {
+            true
+        }
+        fn run_status(
+            &self,
+            command: &[String],
+            cwd: Option<&Path>,
+            env_vars: &[(&str, &str)],
+            timeout_secs: f64,
+        ) -> Result<(), String> {
+            SystemOps.run_status(command, cwd, env_vars, timeout_secs)
+        }
+        fn run_capture(
+            &self,
+            command: &[String],
+            env_vars: &[(&str, &str)],
+            timeout_secs: f64,
+        ) -> Result<Captured, String> {
+            SystemOps.run_capture(command, env_vars, timeout_secs)
+        }
+    }
 
     struct StubOps {
         missing: Option<&'static str>,
@@ -1633,7 +1533,7 @@ mod tests {
         fake_pipeline(&pipe, true);
         let git_repo = temp.join("repo");
         fs::create_dir_all(&git_repo).unwrap();
-        let ops = SystemOps;
+        let ops = HostOps;
         ops.run_status(
             &git_command(&["init", "--", &oserror::path_text(&git_repo)]),
             None,
@@ -1734,6 +1634,56 @@ mod tests {
             assert!(String::from_utf8(err).unwrap().contains("Summary must be outside"));
         }
         assert!(!ws.exists());
+    }
+
+    /// The cases tests/test_setup_utility_parity.py records from setup_utility.py.
+    #[test]
+    fn recorded_python_cases_match() {
+        let fixture = pyjson::loads_bytes(include_bytes!("../tests/fixtures/setup_utility_cli.json")).unwrap();
+        let text = |value: &Json| match value {
+            Json::Str(s) => s.lossy(),
+            other => panic!("expected a string, got {}", pyjson::repr(other)),
+        };
+        let Json::Array(cases) = fixture.at("cases") else {
+            panic!("cases must be an array");
+        };
+        assert!(cases.len() >= 8);
+        let prog = text(fixture.at("prog"));
+        for case in cases {
+            let name = text(case.at("name"));
+            let temp = TempDir::new("setup-parity");
+            let root = oserror::path_text(&temp.0).replace('\\', "/");
+            let pipe = temp.join("pipeline");
+            fake_pipeline(&pipe, true);
+            fs::create_dir(temp.join("existing")).unwrap();
+            let Json::Array(raw) = case.at("args") else {
+                panic!("{name}: args must be an array");
+            };
+            let args: Vec<String> = raw.iter().map(|a| text(a).replace("{root}", &root)).collect();
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let code = run_main(
+                &default_stub(None),
+                &pipe.join(GRANT_PROJECT),
+                &prog,
+                &args,
+                &mut out,
+                &mut err,
+            );
+            let Json::Int(exit) = case.at("exit") else {
+                panic!("{name}: exit must be an integer");
+            };
+            assert_eq!(code.to_string(), *exit, "{name}: exit code");
+            assert_eq!(
+                String::from_utf8(out).unwrap(),
+                text(case.at("stdout")),
+                "{name}: stdout"
+            );
+            assert_eq!(
+                String::from_utf8(err).unwrap(),
+                text(case.at("stderr")),
+                "{name}: stderr"
+            );
+        }
     }
 
     #[cfg(unix)]
