@@ -795,6 +795,10 @@ to the close.
 close-control review   --current examples/current_trial_balance.csv   --prior examples/prior_trial_balance.csv   --calculation-evidence examples/calculation-evidence-coal-lsl-levy.json   --require-calculation coal-lsl-levy   --output ../../../close-control-calculation-demo
 ```
 
+An evidence file declares `"schema": "calculation-evidence/1"`. Files written
+under the schema's previous id are still read, and recorded with the id they
+state, until 1.4.0; any other id is refused.
+
 The control is off unless you use one of those 2 flags, and a pack produced
 without them carries exactly the fields it always did: the
 `calculation_evidence` key appears only when the control ran.

@@ -1,8 +1,8 @@
 {
-  "schema": "lodgeit-calculation-evidence/1",
-  "calculation_sha256": "aa8ed76799267b04bd43b69e982fd5ba3fc081cb53ceda589c5b3cf5e00fae3c",
+  "schema": "calculation-evidence/1",
+  "calculation_sha256": "8b548420d40ad0c69e0805e678080f37e19a36d654c9705e1b3add2b18f8c1ff",
   "calculation": {
-    "schema": "lodgeit-calculation-evidence/1",
+    "schema": "calculation-evidence/1",
     "label": "coal-lsl-levy-unresolved",
     "synthetic_input": true,
     "provider": {

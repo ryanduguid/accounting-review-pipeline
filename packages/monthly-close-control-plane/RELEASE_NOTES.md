@@ -1,3 +1,11 @@
+# Unreleased
+
+## Changed
+
+- Calculation evidence has a neutral schema id, `calculation-evidence/1`, and
+  the examples use it. Files under the previous id are still read, and
+  recorded with the id they state, until 1.4.0 removes it.
+
 # v1.2.0
 
 ## Added
