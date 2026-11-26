@@ -134,6 +134,9 @@ It posts nothing.
 [Overdue against history](docs/overdue-alert.md) (`close-control overdue`)
 lists open invoices overdue against the customer's own payment history, the
 median and spread of how late it has paid, rather than a fixed ageing bucket.
+`close-control rules list` prints each [control](#controls)'s id, when it
+runs, what it checks and the source its rule rests on: the firm's own policy
+or input, this tool's contract, or the ATO page a figure comes from.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
