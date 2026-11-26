@@ -83,7 +83,8 @@ and [reconcile ledger equity movements](docs/equity-reconciliation.md).
 period variance in a verified pack.
 The [evidence schedules](docs/evidence-schedules.md) reconcile expenses,
 migration snapshots, inter-entity balances, and prepayments and accruals from
-supplied canonical records.
+supplied canonical records, and roll prepayment, deferred revenue and accrual
+accounts forward from opening to closing, tied to the ledger at both ends.
 Version 1.0.0 includes comparison, equity reconciliation, evidence schedules,
 variance drivers and the balance policy. The quick start builds the native command
 from source; released executables are an alternative on Linux, macOS and Windows (x86_64 and arm64).
@@ -125,6 +126,14 @@ where the last one closed.
 BAS labels G1, G2, G3, G10, G11, 1A and 1B from a ledger's tax codes, and W1
 and W2 from a payroll register, with every total naming the rows behind it and
 every row it could not place listed. It lodges nothing.
+[Pre-posting journal review](docs/prepost-review.md) (`close-control prepost`)
+flags draft journals before they are posted: unbalanced, outside the period,
+duplicates of posted entries or other drafts, account pairs the ledger has
+never posted, and the `jet` tests, each with a risk score and a suggested fix.
+It posts nothing.
+[Overdue against history](docs/overdue-alert.md) (`close-control overdue`)
+lists open invoices overdue against the customer's own payment history, the
+median and spread of how late it has paid, rather than a fixed ageing bucket.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
@@ -476,6 +485,11 @@ says the settlements are as declared, all only when the mapping was used. Keep
 real mapping and settlement files outside the checkout.
 
 ## Worked example
+
+The [dormant-entity example](examples/dormant-entity/README.md) reviews 2
+manual trial balances and a cash confirmation without a connected ledger.
+It traces the $100 balances and shows how missing equity evidence keeps the
+pack in review.
 
 Running the quick-demo command above against the fabricated fixtures in `examples/` prints:
 

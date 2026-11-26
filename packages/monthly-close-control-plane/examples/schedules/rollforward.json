@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "currency": "AUD",
+  "cutoff": "2026-09-30",
+  "tenant": "Fabricated Services",
+  "period_start": "2026-09-01",
+  "prepayments": [
+    {
+      "item_id": "P1",
+      "account_id": "625",
+      "description": "Fabricated annual insurance",
+      "amount": "1200.00",
+      "recorded": "2026-06-25",
+      "start": "2026-07-01",
+      "end": "2027-06-30",
+      "basis": "monthly",
+      "evidence": "policy-P1"
+    },
+    {
+      "item_id": "P2",
+      "account_id": "626",
+      "description": "Fabricated software licence",
+      "amount": "365.00",
+      "recorded": "2026-09-10",
+      "start": "2026-09-16",
+      "end": "2027-09-15",
+      "basis": "daily",
+      "evidence": "invoice-P2"
+    }
+  ],
+  "deferred_revenue": [
+    {
+      "item_id": "D1",
+      "account_id": "840",
+      "description": "Fabricated annual support contract",
+      "amount": "2400.00",
+      "recorded": "2026-08-20",
+      "start": "2026-09-01",
+      "end": "2027-08-31",
+      "basis": "monthly",
+      "evidence": "contract-D1"
+    },
+    {
+      "item_id": "D2",
+      "account_id": "840",
+      "description": "Fabricated October workshop deposit",
+      "amount": "500.00",
+      "recorded": "2026-09-05",
+      "start": "2026-10-15",
+      "end": "2026-10-15",
+      "basis": "daily",
+      "evidence": "receipt-D2"
+    }
+  ],
+  "accruals": [
+    {
+      "item_id": "A1",
+      "account_id": "826",
+      "description": "Fabricated September audit fee",
+      "amount": "3000.00",
+      "accrued": "2026-09-30",
+      "reversed": null,
+      "evidence": "engagement-A1"
+    },
+    {
+      "item_id": "A2",
+      "account_id": "826",
+      "description": "Fabricated August cleaning",
+      "amount": "200.00",
+      "accrued": "2026-08-31",
+      "reversed": "2026-09-01",
+      "evidence": "quote-A2"
+    }
+  ],
+  "opening_balances": [
+    {"account_id": "625", "balance": "1000.00"},
+    {"account_id": "626", "balance": "0.00"},
+    {"account_id": "826", "balance": "-200.00"},
+    {"account_id": "840", "balance": "-2400.00"}
+  ],
+  "ledger_balances": [
+    {"account_id": "625", "balance": "900.00"},
+    {"account_id": "626", "balance": "365.00"},
+    {"account_id": "826", "balance": "-3000.00"},
+    {"account_id": "840", "balance": "-2700.00"}
+  ]
+}

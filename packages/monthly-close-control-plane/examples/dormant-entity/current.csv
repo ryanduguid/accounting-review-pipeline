@@ -1,0 +1,3 @@
+ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
+2026-08-31,Fabricated Banksia Dormant Pty Ltd,Assets,A1,Bank,090,0.00,0.00,100.00,0.00
+2026-08-31,Fabricated Banksia Dormant Pty Ltd,Equity,E1,Issued capital,300,0.00,0.00,0.00,100.00

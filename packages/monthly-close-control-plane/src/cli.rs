@@ -7,7 +7,7 @@ use crate::{
     decimal::Decimal,
     drivers, duplicates, engine, fixed_assets, journal_entries, loader, mcp,
     models::Status,
-    payroll, publication,
+    overdue, payroll, prepost, publication,
     pyjson::{self, Json, PyStr},
     pypath, pytext, queue, reconciliation, reconciliation_report, report, schedules, scorecard,
     statement, stdio, viewer,
@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 19] = [
+const COMMANDS: [&str; 21] = [
     "review",
     "workbench",
     "view",
@@ -39,6 +39,8 @@ const COMMANDS: [&str; 19] = [
     "payroll",
     "statement",
     "bas",
+    "prepost",
+    "overdue",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -69,6 +71,8 @@ fn text(command: &str, usage: bool) -> &'static str {
         "payroll" => saved!("payroll"),
         "statement" => saved!("statement"),
         "bas" => saved!("bas"),
+        "prepost" => saved!("prepost"),
+        "overdue" => saved!("overdue"),
         _ => saved!("root"),
     }
 }
@@ -234,6 +238,26 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
         "statement" => (
             &["--statement", "--currency"],
             &["--statement", "--currency"],
+        ),
+        "overdue" => (
+            &["--invoices", "--currency", "--as-at"],
+            &["--invoices", "--currency", "--as-at"],
+        ),
+        "prepost" => (
+            &[
+                "--drafts",
+                "--posted",
+                "--currency",
+                "--period-start",
+                "--period-end",
+            ],
+            &[
+                "--drafts",
+                "--posted",
+                "--currency",
+                "--period-start",
+                "--period-end",
+            ],
         ),
         "bas" => (
             &[
@@ -817,7 +841,7 @@ fn run(command: &str, args: &Arguments) -> i32 {
                 Ok(0)
             }
             "classify" | "schedule" | "jet" | "duplicates" | "fixed-assets" | "coding"
-            | "scorecard" | "payroll" | "statement" | "bas" => {
+            | "scorecard" | "payroll" | "statement" | "bas" | "prepost" | "overdue" => {
                 let value = match command {
                     "classify" => classification::classify(
                         &args.path("--original-transactions"),
@@ -847,6 +871,18 @@ fn run(command: &str, args: &Arguments) -> i32 {
                         &args.literal("--currency")?,
                     )?,
                     "scorecard" => scorecard::scorecard(&args.paths("--result"))?,
+                    "overdue" => overdue::overdue_against_history(
+                        &args.path("--invoices"),
+                        &args.literal("--currency")?,
+                        &args.literal("--as-at")?,
+                    )?,
+                    "prepost" => prepost::prepost_review(
+                        &args.path("--drafts"),
+                        &args.path("--posted"),
+                        &args.literal("--currency")?,
+                        &args.literal("--period-start")?,
+                        &args.literal("--period-end")?,
+                    )?,
                     "bas" => bas::bas_workpaper(&bas::BasConfig {
                         ledger: &args.path("--ledger"),
                         tax_codes: &args.path("--tax-codes"),

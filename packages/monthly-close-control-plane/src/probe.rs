@@ -270,6 +270,10 @@ const DEMO_COMMAND: &str = concat!(
     "                        closings and page openings\n",
     "    bas                 draft BAS labels from a ledger's tax codes, each total\n",
     "                        naming its rows, for a reviewer\n",
+    "    prepost             review draft journals before posting, with a risk\n",
+    "                        score and a suggested fix for each flag\n",
+    "    overdue             list open invoices overdue against the customer's own\n",
+    "                        payment history\n",
 );
 /// The root help line for `schedule` once it took the `prepayments` kind, and
 /// the line the frozen baseline printed.
@@ -285,17 +289,17 @@ const FROZEN_SCHEDULE_COMMAND: &str = concat!(
 /// so CLI output compared with it drops their usage and help lines.
 fn without_native_options(text: &str) -> String {
     text.replace(
-        ",schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas}",
+        ",schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas,prepost,overdue}",
         ",schedule}",
     )
     .replace(PREPAYMENTS_COMMAND, FROZEN_SCHEDULE_COMMAND)
     .replace(
-        "{expenses,migration,interentity,prepayments}",
+        "{expenses,migration,interentity,prepayments,rollforward}",
         "{expenses,migration,interentity}",
     )
-    .replace("'interentity', 'prepayments')", "'interentity')")
+    .replace("'interentity', 'prepayments', 'rollforward')", "'interentity')")
     .replace(
-        ", 'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'coding', 'scorecard', 'mcp', 'payroll', 'statement', 'bas')",
+        ", 'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'coding', 'scorecard', 'mcp', 'payroll', 'statement', 'bas', 'prepost', 'overdue')",
         ", 'schedule')",
     )
     .replace(DEMO_COMMAND, "")
@@ -1121,7 +1125,7 @@ mod tests {
         assert_eq!(code, 1);
         assert!(
             error.contains(
-                "'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'coding', 'scorecard', 'mcp', 'payroll', 'statement', 'bas')"
+                "'schedule', 'demo', 'jet', 'duplicates', 'fixed-assets', 'coding', 'scorecard', 'mcp', 'payroll', 'statement', 'bas', 'prepost', 'overdue')"
             ),
             "{error}"
         );

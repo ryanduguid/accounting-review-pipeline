@@ -25,8 +25,10 @@ pub mod journal_entries;
 pub mod loader;
 pub mod mcp;
 pub mod models;
+pub mod overdue;
 pub mod payroll;
 pub mod prepayments;
+pub mod prepost;
 #[cfg(feature = "probe")]
 pub mod probe;
 pub mod publication;
@@ -39,6 +41,7 @@ pub mod queue;
 pub mod reconciliation;
 pub mod reconciliation_report;
 pub mod report;
+pub mod rollforward;
 pub mod schedules;
 pub mod scorecard;
 pub mod statement;

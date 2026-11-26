@@ -7,6 +7,7 @@ cargo run --locked --release --bin close-control -- schedule --kind expenses --i
 cargo run --locked --release --bin close-control -- schedule --kind migration --input examples/schedules/migration.json
 cargo run --locked --release --bin close-control -- schedule --kind interentity --input examples/schedules/interentity.json
 cargo run --locked --release --bin close-control -- schedule --kind prepayments --input examples/schedules/prepayments.json
+cargo run --locked --release --bin close-control -- schedule --kind rollforward --input examples/schedules/rollforward.json
 ```
 
 Each fabricated example returns REVIEW (exit 2). JSON goes to standard output. PASS exits 0; malformed input exits 1. A PASS concerns only the supplied records, never approval, completeness of a ledger or a tax conclusion. Redirect output to a new file outside the checkout when retaining a workpaper. The result contains the SHA-256 of the exact input bytes.
@@ -64,3 +65,60 @@ finds the licence account still at its $365 cost, and finds a June accrual
 never reversed and without evidence. The schedule does not post the
 amortisation or reversal, judge whether a cost should be prepaid or accrued, or
 find items missing from it.
+
+## Roll-forward
+
+`--kind rollforward` rolls each prepayment, deferred revenue and accrual
+account from its opening balance through the period's additions and releases
+to its closing balance, and ties both ends to the ledger. The schedule declares
+`period_start` and `cutoff`, and lists `prepayments`, `deferred_revenue`,
+`accruals`, the ledger's `opening_balances` (the day before `period_start`) and
+its closing `ledger_balances`, all debit-positive.
+
+Prepayments and deferred revenue take the prepayment fields above plus
+`recorded`, the date the item was first booked, on or before the cutoff. Both
+amortise as a prepayment does, on the same `daily` or `monthly` basis; a
+monthly item also needs `period_start` on the first of a month. Deferred
+revenue is a liability, so its balances are credits (negative). Accruals take
+the same fields as above.
+
+For each item and each account:
+
+| Column | Holds |
+| --- | --- |
+| `opening` | An item recorded before `period_start`: its unexpired part, or an accrual outstanding, the day before. Otherwise nil. |
+| `additions` | An item recorded, or an accrual raised, in the period: its full amount. |
+| `releases` | What expired or was reversed in the period: `closing` less `opening` and `additions`. |
+| `closing` | The unexpired part, or the accrual outstanding, at the cutoff. |
+
+An item recorded part-way through its service period is added in full, and
+the part already expired is released in the same period. Each account's row
+gives the ledger's `ledger_opening` and `ledger_closing` and their
+`opening_difference` and `closing_difference`. Findings:
+`OPENING_DIFFERENCE` and `BALANCE_DIFFERENCE` for an end that does not tie,
+`NO_LEDGER_BALANCE` (with the `end`) for a scheduled account missing from a
+ledger list, `UNSCHEDULED_BALANCE` for a ledger account with a balance at
+either end and nothing scheduled, and `UNREVERSED_ACCRUAL` and
+`MISSING_EVIDENCE` as above. A ledger account at nil at both ends with nothing
+scheduled has nothing to roll and is left out, as the prepayments kind leaves
+out a nil unscheduled balance.
+
+```powershell
+cargo run --locked --release --bin close-control -- schedule --kind rollforward --input examples/schedules/rollforward.json
+```
+
+The fabricated schedule rolls September 2026: insurance from $1,000 to $900,
+a support contract's deferred revenue from $2,400 to $2,200 with a $500
+workshop deposit added, and the audit fee accrued while August's cleaning
+accrual reverses. It finds the licence account still at its $365 cost, $15
+above the $350 unexpired.
+
+What the roll-forward tests show: the tests use fabricated schedules whose
+expected figures were worked out by hand from the rules above. Within each row
+`closing` equals `opening` plus `additions` plus `releases` by construction,
+because `releases` is derived from the other 3, so that identity cannot fail
+and proves nothing. What can fail is each end against the ledger, and the
+tests check that a wrong opening, a wrong closing, a missing ledger balance
+and an unscheduled balance are each listed. They cannot show that a schedule
+lists every item, that an item's service period or `recorded` date is right,
+or that releases were posted to the right revenue or expense account.

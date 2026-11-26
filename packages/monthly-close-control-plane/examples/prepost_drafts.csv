@@ -1,0 +1,15 @@
+Tenant,AccountID,Currency,TransactionID,Date,Reference,Description,Debit,Credit
+Varrock Ventures Pty Ltd,610,AUD,D-1,2026-08-06,RENT-08,Fabricated August rent,2450.75,0
+Varrock Ventures Pty Ltd,090,AUD,D-1,2026-08-06,RENT-08,Fabricated August rent,0,2450.75
+Varrock Ventures Pty Ltd,110,AUD,D-2,2026-08-03,INV-2049,Fabricated July invoice raised in August,940.35,0
+Varrock Ventures Pty Ltd,200,AUD,D-2,2026-08-03,INV-2049,Fabricated July invoice raised in August,0,940.35
+Varrock Ventures Pty Ltd,610,AUD,D-3,2026-08-12,REP-08,Fabricated repairs,520.00,0
+Varrock Ventures Pty Ltd,090,AUD,D-3,2026-08-12,REP-08,Fabricated repairs,0,502.00
+Varrock Ventures Pty Ltd,680,AUD,D-4,2026-08-31,,,20000.00,0
+Varrock Ventures Pty Ltd,090,AUD,D-4,2026-08-31,,,0,20000.00
+Varrock Ventures Pty Ltd,110,AUD,D-5,2026-09-05,INV-2101,Fabricated invoice to Lumbridge Traders,1200.50,0
+Varrock Ventures Pty Ltd,200,AUD,D-5,2026-09-05,INV-2101,Fabricated invoice to Lumbridge Traders,0,1200.50
+Varrock Ventures Pty Ltd,610,AUD,D-6,2026-08-06,RENT-08,Fabricated August rent,2450.75,0
+Varrock Ventures Pty Ltd,090,AUD,D-6,2026-08-06,RENT-08,Fabricated August rent,0,2450.75
+Varrock Ventures Pty Ltd,610,AUD,D-7,2026-08-20,CLN-08,Fabricated office cleaning,312.40,0
+Varrock Ventures Pty Ltd,090,AUD,D-7,2026-08-20,CLN-08,Fabricated office cleaning,0,312.40
