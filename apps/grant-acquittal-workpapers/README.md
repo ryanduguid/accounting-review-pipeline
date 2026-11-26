@@ -17,7 +17,8 @@ eligibility or acquittal approval. Choose a new output folder for each run.
 `rust-toolchain.toml` pins the Rust toolchain, which rustup installs on first
 use, and `Cargo.lock` pins its 2 dependencies, `sha2` and, on Unix, `libc`. From 0.2.0 the Python
 script `grant_workpaper.py` is gone. The Rust command reads the same inputs and
-writes byte-identical files, exit codes and messages, matching the script under
+writes the same files, exit codes and messages, matching the script byte for byte
+apart from the reference cell beside each total (see Outputs) under
 Python 3.15 (a date outside the calendar reports the range error that version's
 `date.fromisoformat` gives). One exception: the command refuses `agreements.json`
 nested more than 10,000 levels deep (`agreements.json is nested too deeply to
@@ -159,6 +160,16 @@ error; no workpaper is published. Readable file links remain supported.
 - `contributions.csv`: interest, cash co-contributions and in-kind contributions per grant.
 - `findings.csv`: items requiring review.
 
+Every total names the rows behind it in a reference cell beside it, so a
+reviewer can trace each figure to its source. A cell ending `_ledger_rows`
+lists ledger IDs: `ledger_total`, `allocated_total` and `unallocated_total`
+in `workpaper.json`, each `budget_lines.csv` total, and expenditure and cash
+paid in `funding_movements.csv`. `funding_received_receipt_rows` lists receipt
+IDs and each `contributions.csv` kind has a `_contribution_rows` cell. A row
+is listed once, in the order it was read, when it adds a non-zero amount, so
+an empty list means a total of nil. JSON holds each reference as a list of
+IDs; CSV writes it as that list's Python form, such as `['L1', 'L3']`.
+
 CSV text that could start a spreadsheet formula is escaped. JSON retains the supplied values. Keep all real workpapers and inputs outside this repository.
 
 Required identities and evidence must contain visible text. Unicode letters and
@@ -197,7 +208,10 @@ Use `grant_workpaper.py` from the immutable
 CI extracts that script and runs 1,500 cases with seed `20261012` on Linux and
 Windows under Python 3.15, retaining native child coverage. The comparator
 normalises program names, working directories and random staging names; Python
-tracebacks are compared by exit code only.
+tracebacks are compared by exit code only. The reference cells, which the
+script never wrote, are removed from the binary's files before comparison, and
+only when writing a file back the script's way reproduces its exact bytes, so
+every other byte must still match.
 
 ```powershell
 $oracleScript = 'C:\path\to\grant_workpaper.py'

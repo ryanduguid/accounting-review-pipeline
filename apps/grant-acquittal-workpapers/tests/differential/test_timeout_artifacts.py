@@ -93,5 +93,31 @@ class TimeoutArtifacts(unittest.TestCase):
         self.assertFalse(self.artifact.exists())
 
 
+class ReferenceCells(unittest.TestCase):
+    """The comparator removes only the Rust command's reference cells."""
+
+    def test_reference_columns_are_removed_and_every_other_byte_kept(self):
+        rust = differential.csv_text([["grant_id", "allocated", "allocated_ledger_rows"], ["G-A", "600", "['L1']"]])
+        frozen = differential.csv_text([["grant_id", "allocated"], ["G-A", "600"]])
+        self.assertEqual(differential.without_references("out/budget_lines.csv", rust), frozen)
+        document = {"ledger_total": "6500", "ledger_total_ledger_rows": ["L1"], "budget_lines": [{"a": "1", "a_ledger_rows": []}]}
+        expected = differential.json_text({"ledger_total": "6500", "budget_lines": [{"a": "1"}]})
+        self.assertEqual(differential.without_references("out/workpaper.json", differential.json_text(document)), expected)
+
+    def test_a_file_the_frozen_writer_would_not_produce_is_compared_as_it_is(self):
+        rows = [["grant_id", "allocated_ledger_rows"], ["G-A", "[]"]]
+        lf = differential.csv_text(rows).replace(b"\r\n", b"\n")
+        self.assertEqual(differential.without_references("out/budget_lines.csv", lf), lf)
+        quoted = b'"grant_id",allocated_ledger_rows\r\nG-A,[]\r\n'
+        self.assertEqual(differential.without_references("out/budget_lines.csv", quoted), quoted)
+        compact = json.dumps({"ledger_total": "1", "ledger_total_ledger_rows": []}).encode() + b"\n"
+        self.assertEqual(differential.without_references("out/workpaper.json", compact), compact)
+        self.assertEqual(differential.without_references("out/budget_lines.csv", b"\xff"), b"\xff")
+
+    def test_other_files_are_untouched(self):
+        data = b"code,reference\r\nX,a_ledger_rows\r\n"
+        self.assertEqual(differential.without_references("out/findings.csv", data), data)
+
+
 if __name__ == "__main__":
     unittest.main()
