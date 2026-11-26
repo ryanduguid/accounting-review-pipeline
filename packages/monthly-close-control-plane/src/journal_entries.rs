@@ -76,7 +76,21 @@ fn finding(
     ])
 }
 
-fn is_weekend(date: Date) -> bool {
+/// Whether any line of a journal carries a description or reference.
+pub(crate) fn has_narration(rows: &[&Json]) -> bool {
+    rows.iter().any(|row| {
+        !field(row, "Description").trim().is_empty() || !field(row, "Reference").trim().is_empty()
+    })
+}
+
+/// A line of at least 1,000 that is a whole multiple of 1,000.
+pub(crate) fn is_round(amount: &Decimal) -> bool {
+    let magnitude = amount.copy_abs();
+    magnitude >= Decimal::parse("1000").unwrap()
+        && reconciliation::fixed(&magnitude).ends_with("000.00")
+}
+
+pub(crate) fn is_weekend(date: Date) -> bool {
     // Ordinal 1 is Monday 1 January 0001.
     (isodate::ordinal(date) + 6) % 7 >= 5
 }
@@ -236,10 +250,8 @@ fn review(source: &SourceSnapshot, currency: &str, period_end: Date) -> Result<J
                 "Dated on the last day of the period.".into(),
             );
         }
-        if members.iter().all(|line| {
-            field(&line.item.row, "Description").trim().is_empty()
-                && field(&line.item.row, "Reference").trim().is_empty()
-        }) {
+        let rows: Vec<&Json> = members.iter().map(|line| &line.item.row).collect();
+        if !has_narration(&rows) {
             add(
                 "no_description",
                 first,
@@ -254,9 +266,7 @@ fn review(source: &SourceSnapshot, currency: &str, period_end: Date) -> Result<J
             add("weekend", date, "Dated on a Saturday or Sunday.".into());
         }
     }
-    let thousand = Decimal::parse("1000").unwrap();
     for line in &lines {
-        let magnitude = line.item.amount.copy_abs();
         let mut add = |test, reason| {
             findings.entry(test).or_default().push(finding(
                 test,
@@ -267,7 +277,7 @@ fn review(source: &SourceSnapshot, currency: &str, period_end: Date) -> Result<J
                 reason,
             ));
         };
-        if magnitude >= thousand && reconciliation::fixed(&magnitude).ends_with("000.00") {
+        if is_round(&line.item.amount) {
             add("round_amount", "A whole multiple of 1,000.".to_owned());
         }
         if journals.len() > 1 && accounts[line.account.as_str()] == 1 {

@@ -126,6 +126,11 @@ where the last one closed.
 BAS labels G1, G2, G3, G10, G11, 1A and 1B from a ledger's tax codes, and W1
 and W2 from a payroll register, with every total naming the rows behind it and
 every row it could not place listed. It lodges nothing.
+[Pre-posting journal review](docs/prepost-review.md) (`close-control prepost`)
+flags draft journals before they are posted: unbalanced, outside the period,
+duplicates of posted entries or other drafts, account pairs the ledger has
+never posted, and the `jet` tests, each with a risk score and a suggested fix.
+It posts nothing.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.

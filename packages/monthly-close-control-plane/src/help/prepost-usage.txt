@@ -1,0 +1,3 @@
+usage: close-control prepost [-h] --drafts DRAFTS --posted POSTED --currency
+                             CURRENCY --period-start PERIOD_START --period-end
+                             PERIOD_END
