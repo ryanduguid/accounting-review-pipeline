@@ -436,6 +436,14 @@ mod tests {
     }
 
     #[test]
+    fn a_lower_case_currency_is_refused_before_reading() {
+        let error = super::overdue_against_history(Path::new("none.csv"), "aud", "2026-09-30")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("three-letter currency"), "{error}");
+    }
+
+    #[test]
     fn bad_rows_are_refused() {
         for (row, expected) in [
             (
