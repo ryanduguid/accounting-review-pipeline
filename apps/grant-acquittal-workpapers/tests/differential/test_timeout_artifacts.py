@@ -119,5 +119,26 @@ class ReferenceCells(unittest.TestCase):
         self.assertEqual(differential.without_references("out/findings.csv", data), data)
 
 
+class UsageIndent(unittest.TestCase):
+    """Wrapped usage lines differ only by the program name's width."""
+
+    def test_only_the_usage_continuation_is_reindented(self):
+        def usage(prog):
+            pad = " " * len(f"usage: {prog} ")
+            return (f"usage: {prog} [-h] --input INPUT\n{pad}[--ignore-file IGNORE_FILE]\n\n"
+                    "options:\n  --ignore-file IGNORE_FILE\n                        help text\n").encode()
+
+        python = differential.normalise(usage("grant_workpaper.py"), Path("/no-such-cwd"), ("grant_workpaper.py",))
+        rust = differential.normalise(usage("grant-workpaper"), Path("/no-such-cwd"), ("grant-workpaper",))
+        self.assertEqual(python, rust)
+        self.assertIn(b"\n                        help text\n", rust)
+
+    def test_a_misaligned_continuation_still_differs(self):
+        # 11 spaces is not a.py's indent of 12, so only the Rust line is re-indented.
+        python = differential.normalise(b"usage: a.py [-h]\n           [--x X]\n", Path("/no-such-cwd"), ("a.py",))
+        rust = differential.normalise(b"usage: ab [-h]\n          [--x X]\n", Path("/no-such-cwd"), ("ab",))
+        self.assertNotEqual(python, rust)
+
+
 if __name__ == "__main__":
     unittest.main()

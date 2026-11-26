@@ -270,6 +270,21 @@ def snapshot(cwd):
     return out
 
 
+def usage_indent(data, prog):
+    """Wrapped usage lines, indented under the program name, re-indented under <prog>."""
+    pad = b" " * len(f"usage: {prog} ".encode())
+    lines = data.split(b"\n")
+    in_usage = False
+    for index, line in enumerate(lines):
+        if line.startswith(b"usage: <prog>"):
+            in_usage = True
+        elif in_usage and line.startswith(pad) and line[len(pad):len(pad) + 1] not in (b"", b" "):
+            lines[index] = b" " * len(b"usage: <prog> ") + line[len(pad):]
+        else:
+            in_usage = False
+    return b"\n".join(lines)
+
+
 def normalise(data, cwd, progs):
     for form in (str(cwd), str(cwd).replace("\\", "\\\\")):
         data = data.replace(form.encode(), b"<x>")
@@ -277,12 +292,33 @@ def normalise(data, cwd, progs):
     for prog in progs:
         data = data.replace(b"usage: " + prog.encode(), b"usage: <prog>")
         data = data.replace(prog.encode() + b": error:", b"<prog>: error:")
+        data = usage_indent(data, prog)
     return re.sub(rb"\.grant-workpaper-[a-z0-9_]{8}", b".grant-workpaper-<random>", data)
 
 
 # Reference cells the Rust command adds beside each total; the frozen script has none.
 REFERENCE = re.compile(r"_(ledger|receipt|contribution)_rows$")
 REFERENCE_TABLES = ("budget_lines.csv", "funding_movements.csv", "contributions.csv")
+
+
+# The option the Rust command adds. The frozen script gets the same argparse
+# argument, so usage, help and option errors still compare byte for byte; no
+# case passes it, as the script would not read the file.
+IGNORE_ANCHOR = '    parser.add_argument("--output", required=True, type=Path)\n'
+IGNORE_HELP = ("CSV of ledger_id,reason naming ledger rows dated outside the ledger period to leave out of "
+               "every total; each is listed on the workpaper with its reason")
+
+
+def with_ignore_option(script, folder):
+    """A copy of the frozen script, named as it was, that declares --ignore-file."""
+    source = script.read_text(encoding="utf-8")
+    if source.count(IGNORE_ANCHOR) != 1:
+        raise SystemExit(f"{script}: the --output argument line was not found exactly once")
+    patched = folder / script.name
+    patched.write_text(source.replace(
+        IGNORE_ANCHOR, IGNORE_ANCHOR + f'    parser.add_argument("--ignore-file", type=Path, help={IGNORE_HELP!r})\n'),
+        encoding="utf-8")
+    return patched
 
 
 def json_text(document):
@@ -386,6 +422,8 @@ def main():
     scratch = Path(tempfile.mkdtemp(prefix="grant-diff-"))
     failures, outcomes = 0, {}
     try:
+        (scratch / "oracle").mkdir()
+        script = with_ignore_option(script, scratch / "oracle")
         for index in range(args.cases):
             case = Case()
             if rng.random() < 0.1:

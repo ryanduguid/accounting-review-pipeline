@@ -218,8 +218,25 @@ const NAMES: [&str; 4] = ["agreements.json", "ledger.csv", "allocations.csv", "r
 
 /// `review(source)`.
 pub fn review(source: &str, cwd: &Path) -> Result<Json> {
-    let content = read_inputs(source, cwd)?;
-    let bytes = |name: &str| &content.iter().find(|(n, _)| *n == name).expect("read above").1;
+    review_ignoring(source, None, cwd)
+}
+
+/// `review(source)` with an optional ignore file of out-of-period ledger rows.
+pub fn review_ignoring(source: &str, ignore: Option<&str>, cwd: &Path) -> Result<Json> {
+    let mut content = read_inputs(source, cwd)?;
+    if let Some(path) = ignore {
+        let shown = display(path);
+        let bytes = std::fs::read(cwd.join(oserror::encode_os(&shown)))
+            .map_err(|e| Failure::Error(format!("Ignore file: {}", file_error(&e, &shown))))?;
+        content.push(("ignore_file", bytes));
+    }
+    review_content(&content)
+}
+
+/// The workpaper for the read input files, with `ignore_file` when one was given.
+fn review_content(content: &[(&'static str, Vec<u8>)]) -> Result<Json> {
+    let find = |name: &str| content.iter().find(|(n, _)| *n == name).map(|(_, b)| b.as_slice());
+    let bytes = |name: &str| find(name).expect("read above");
     let agreements = match pyjson::loads_bytes(bytes("agreements.json")) {
         Ok(value) => value,
         Err(LoadError::Value(message)) => return fail(message),
@@ -241,15 +258,15 @@ pub fn review(source: &str, cwd: &Path) -> Result<Json> {
         "receipt_id grant_id date amount evidence",
         "receipt_id",
     )?;
-    let contributions = if content.iter().any(|(n, _)| *n == "contributions.csv") {
-        rows(
-            bytes("contributions.csv"),
+    let contributions = match find("contributions.csv") {
+        Some(file) => rows(
+            file,
             "contribution_id grant_id date kind amount evidence",
             "contribution_id",
-        )?
-    } else {
-        Vec::new()
+        )?,
+        None => Vec::new(),
     };
+    let ignored = find("ignore_file").map(ignore_entries).transpose()?;
     let agreement_rows = match agreements.at("agreements") {
         Json::Array(items) if !ledger.is_empty() && !items.is_empty() => items,
         _ => return fail("Supply ledger evidence and at least one reviewed agreement"),
@@ -261,10 +278,21 @@ pub fn review(source: &str, cwd: &Path) -> Result<Json> {
         allocations: &allocations,
         receipts: &receipts,
         contributions: &contributions,
+        ignored: ignored.as_deref(),
         start,
         end,
-        content: &content,
+        content,
     })
+}
+
+/// The ignore file's entries: `ledger_id,reason`, each with a visible reason.
+fn ignore_entries(content: &[u8]) -> Result<Vec<Record>> {
+    let prefixed = |Failure::Error(message)| Failure::Error(format!("Ignore file: {message}"));
+    let entries = rows(content, "ledger_id reason", "ledger_id").map_err(prefixed)?;
+    for entry in &entries {
+        text_field(field(entry, "reason"), "Reason", true).map_err(prefixed)?;
+    }
+    Ok(entries)
 }
 
 /// The four required files, then contributions.csv when present (a failure
@@ -398,6 +426,8 @@ struct Sources<'a> {
     allocations: &'a [Record],
     receipts: &'a [Record],
     contributions: &'a [Record],
+    /// The ignore file's entries, when one was supplied.
+    ignored: Option<&'a [Record]>,
     start: Date,
     end: Date,
     content: &'a [(&'static str, Vec<u8>)],
@@ -435,6 +465,9 @@ struct Workings<'a> {
     grant_totals: Totals,
     grant_paid_totals: Totals,
     details: Vec<Json>,
+    /// Out-of-period ledger rows the ignore file leaves out, with their reasons.
+    ignored: Vec<Json>,
+    ignored_ids: HashSet<&'a str>,
     funding: Totals,
     contributed: Totals,
 }
@@ -452,10 +485,12 @@ fn calculate(input: &Sources) -> Result<Json> {
         grant_totals: Totals::default(),
         grant_paid_totals: Totals::default(),
         details: Vec::new(),
+        ignored: Vec::new(),
+        ignored_ids: HashSet::new(),
         funding: Totals::default(),
         contributed: Totals::default(),
     };
-    work.ledger(input.ledger, input.start, input.end)?;
+    work.ledger(input.ledger, input.ignored.unwrap_or_default(), input.start, input.end)?;
     for row in input.allocations {
         work.allocation(row)?;
     }
@@ -517,6 +552,25 @@ fn agreements(agreements: &[Json]) -> Result<Vec<(String, Agreement<'_>)>> {
     Ok(grants)
 }
 
+/// A ledger row's reason to be ignored: only a row dated outside the ledger
+/// period may be ignored, and such a row must be.
+fn ignore_reason<'r>(
+    row: &Record,
+    date: Date,
+    reason: Option<&'r str>,
+    start: Date,
+    end: Date,
+) -> Result<Option<&'r str>> {
+    match (date < start || date > end, reason) {
+        (true, None) => fail("Ledger rows must fall inside the declared ledger period"),
+        (false, Some(_)) => fail(format!(
+            "Ignore file: ledger row {} is inside the declared ledger period",
+            pytext::repr(field(row, "ledger_id"))
+        )),
+        _ => Ok(reason),
+    }
+}
+
 /// `start <= date(text) <= end`.
 fn within(text: &str, start: Date, end: Date) -> Result<bool> {
     let date = iso(text)?;
@@ -532,18 +586,27 @@ impl<'a> Workings<'a> {
         self.grants.iter().find(|(g, _)| g == id).map(|(_, g)| *g)
     }
 
-    fn ledger(&mut self, ledger: &'a [Record], start: Date, end: Date) -> Result<()> {
+    fn ledger(&mut self, ledger: &'a [Record], ignored: &'a [Record], start: Date, end: Date) -> Result<()> {
+        let reasons: HashMap<&str, &str> = ignored
+            .iter()
+            .map(|entry| (field(entry, "ledger_id"), field(entry, "reason")))
+            .collect();
         for row in ledger {
+            let id = field(row, "ledger_id");
             let date = iso(field(row, "date"))?;
-            if date < start || date > end {
-                return fail("Ledger rows must fall inside the declared ledger period");
-            }
+            let reason = ignore_reason(row, date, reasons.get(id).copied(), start, end)?;
             let expense = money(field(row, "amount"))?;
             let paid = money(field(row, "cash_paid"))?;
             if expense <= Amount::ZERO || paid > expense {
                 return fail("Source expenses must be positive; cash paid cannot exceed the expense");
             }
-            let id = field(row, "ledger_id");
+            if let Some(reason) = reason {
+                let mut item = record_json(row);
+                item.push((PyStr::from("reason"), Json::str(reason)));
+                self.ignored.push(Json::Object(item));
+                self.ignored_ids.insert(id);
+                continue;
+            }
             self.sources.insert(
                 id,
                 LedgerSource {
@@ -559,13 +622,28 @@ impl<'a> Workings<'a> {
                 self.findings.push(finding("MISSING_SOURCE_EVIDENCE", id));
             }
         }
-        Ok(())
+        match ignored
+            .iter()
+            .find(|entry| !self.ignored_ids.contains(field(entry, "ledger_id")))
+        {
+            Some(entry) => fail(format!(
+                "Ignore file: no ledger row {}",
+                pytext::repr(field(entry, "ledger_id"))
+            )),
+            None => Ok(()),
+        }
     }
 
     fn allocation(&mut self, row: &Record) -> Result<()> {
         let grant = self.grant(field(row, "grant_id"));
         let source = self.sources.get_mut(field(row, "ledger_id"));
         let (Some(source), Some(agreement)) = (source, grant) else {
+            if self.ignored_ids.contains(field(row, "ledger_id")) {
+                return fail(format!(
+                    "Allocation references an ignored ledger row: {}",
+                    pytext::repr(field(row, "ledger_id"))
+                ));
+            }
             return fail("Allocation references an unknown ledger row or grant");
         };
         let line = field(row, "budget_line");
@@ -699,7 +777,9 @@ impl<'a> Workings<'a> {
         let mut tieout = Vec::with_capacity(ledger.len());
         for row in ledger {
             let key = field(row, "ledger_id");
-            let source = &self.sources[key];
+            let Some(source) = self.sources.get(key) else {
+                continue; // an ignored out-of-period row
+            };
             let unallocated = source.expense.sub(source.allocated);
             let unpaid = source.paid.sub(source.cash_allocated);
             tieout.push(Json::object([
@@ -842,6 +922,10 @@ impl<'a> Workings<'a> {
             (PyStr::from("findings"), Json::Array(self.findings)),
             (PyStr::from("scope"), Json::str(SCOPE)),
         ]);
+        if input.ignored.is_some() {
+            let at = fields.len() - 2; // after ledger_tieout, before findings and scope
+            fields.insert(at, (PyStr::from("ignored_items"), Json::Array(self.ignored)));
+        }
         Json::Object(fields)
     }
 
@@ -851,7 +935,9 @@ impl<'a> Workings<'a> {
         let mut unallocated_rows = Vec::new();
         for row in ledger {
             let id = field(row, "ledger_id");
-            let source = &self.sources[id];
+            let Some(source) = self.sources.get(id) else {
+                continue; // an ignored out-of-period row
+            };
             ledger_total.add(source.expense, id);
             allocated_total.add(source.allocated, id);
             if source.allocated != source.expense {
@@ -1024,10 +1110,17 @@ fn validated_rows<'a>(name: &str, rows: &'a [Json]) -> Result<Vec<&'a TableRow>>
     Ok(validated)
 }
 
-fn validated_tables(result: &Json) -> Result<[Vec<&TableRow>; TABLES.len()]> {
-    let mut tables = std::array::from_fn(|_| Vec::new());
-    for (name, rows) in TABLES.into_iter().zip(&mut tables) {
-        *rows = validated_rows(name, array(result, name)?)?;
+/// Every table to write, with `ignored_items` when an ignore file was used.
+fn validated_tables(result: &Json) -> Result<Vec<(&'static str, Vec<&TableRow>)>> {
+    let mut tables = Vec::with_capacity(TABLES.len() + 1);
+    for name in TABLES {
+        tables.push((name, validated_rows(name, array(result, name)?)?));
+    }
+    if result.get("ignored_items").is_some() {
+        tables.push((
+            "ignored_items",
+            validated_rows("ignored_items", array(result, "ignored_items")?)?,
+        ));
     }
     Ok(tables)
 }
@@ -1042,14 +1135,14 @@ pub fn write_files(result: &Json, output: &Path) -> Result<()> {
 fn write_validated_files(
     result: &Json,
     output: &Path,
-    tables: [Vec<&TableRow>; TABLES.len()],
+    tables: Vec<(&str, Vec<&TableRow>)>,
     report: &[u8],
 ) -> Result<()> {
     write_new(
         &output.join("workpaper.json"),
         &text_mode(&(pyjson::dumps_indent2(result) + "\n")),
     )?;
-    for (name, rows) in TABLES.into_iter().zip(tables) {
+    for (name, rows) in tables {
         write_new(&output.join(format!("{name}.csv")), csv_table(&rows).as_bytes())?;
     }
     write_new(&output.join("workpaper.md"), report)
@@ -1142,6 +1235,7 @@ fn markdown_report(result: &Json) -> Result<Vec<u8>> {
             required_report_text(row, "unspent_funding_workpaper")?
         ));
     }
+    lines.extend(ignored_lines(result)?);
     lines.extend([String::new(), "## Items requiring review".to_string(), String::new()]);
     let found = array(result, "findings")?;
     for row in found {
@@ -1156,6 +1250,34 @@ fn markdown_report(result: &Json) -> Result<Vec<u8>> {
     }
     lines.extend([String::new(), required_report_text(result, "scope")?, String::new()]);
     Ok(text_mode(&lines.join("\n")))
+}
+
+/// The report's list of ignored out-of-period ledger rows, when an ignore file was used.
+fn ignored_lines(result: &Json) -> Result<Vec<String>> {
+    if result.get("ignored_items").is_none() {
+        return Ok(Vec::new());
+    }
+    let items = array(result, "ignored_items")?;
+    let mut lines = vec![
+        String::new(),
+        "## Ignored out-of-period ledger rows".to_string(),
+        String::new(),
+        "The ignore file leaves these rows out of every total above.".to_string(),
+        String::new(),
+    ];
+    for row in items {
+        lines.push(format!(
+            "- {} ({}, {}): {}",
+            markdown(&required_report_text(row, "ledger_id")?),
+            markdown(&required_report_text(row, "date")?),
+            markdown(&required_report_text(row, "amount")?),
+            markdown(&required_report_text(row, "reason")?)
+        ));
+    }
+    if items.is_empty() {
+        lines.push("None.".into());
+    }
+    Ok(lines)
 }
 
 /// Atomically publish a complete directory without replacing any destination.
