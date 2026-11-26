@@ -110,6 +110,20 @@ fn help_wraps_like_python_at_narrow_and_normal_widths() {
 }
 
 #[test]
+fn a_wide_terminal_keeps_the_usage_on_one_line() {
+    let output = command(
+        &["--help"],
+        &[("PYTHON_COLORS", "0"), ("COLUMNS", "120"), ("LINES", "24")],
+    );
+    assert_eq!(output.status.code(), Some(0));
+    let help = plain(&output.stdout);
+    assert_eq!(
+        help.lines().next(),
+        Some(format!("usage: {PROGRAM} [-h] --input INPUT --output OUTPUT [--ignore-file IGNORE_FILE]").as_str())
+    );
+}
+
+#[test]
 fn help_and_argument_refusals_match_the_pinned_argparse_contract() {
     let help = command(&["-hx"], &[("PYTHON_COLORS", "0")]);
     assert_eq!(help.status.code(), Some(0));
