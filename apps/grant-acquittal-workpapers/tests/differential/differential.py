@@ -12,7 +12,9 @@ Each case writes the same mutated inputs into two working directories, runs
 both implementations with the same arguments, and compares exit codes,
 stdout, stderr and every file left behind. The program name in argparse
 messages, the working directory path and random staging names are normalised;
-a CPython traceback is compared by exit code only.
+a CPython traceback is compared by exit code only. The reference cells the Rust
+command adds beside each total (`*_ledger_rows`, `*_receipt_rows` and
+`*_contribution_rows`) are removed from both sides before files are compared.
 Timeout artifacts retain fabricated case bytes as base64 without copying the
 child environment or interpreting case filenames as artifact paths.
 """
@@ -278,6 +280,35 @@ def normalise(data, cwd, progs):
     return re.sub(rb"\.grant-workpaper-[a-z0-9_]{8}", b".grant-workpaper-<random>", data)
 
 
+# Reference cells the Rust command adds beside each total; the frozen script has none.
+REFERENCE = re.compile(r"_(ledger|receipt|contribution)_rows$")
+REFERENCE_TABLES = ("budget_lines.csv", "funding_movements.csv", "contributions.csv")
+
+
+def without_references(rel, data):
+    """The file with the Rust command's reference cells removed, in a canonical form.
+
+    Applied to both sides, so the rest of the file must still match exactly.
+    Bytes that do not parse are compared as they are."""
+    name = rel.rsplit("/", 1)[-1]
+    try:
+        if name == "workpaper.json":
+            document = json.loads(data.decode("utf-8"))
+            tables = [document] + [row for value in document.values() if isinstance(value, list) for row in value]
+            for row in tables:
+                if isinstance(row, dict):
+                    for key in [key for key in row if REFERENCE.search(key)]:
+                        del row[key]
+            return b"json:" + json.dumps(document, indent=2).encode("utf-8") + (b"crlf" if b"\r\n" in data else b"")
+        if name in REFERENCE_TABLES:
+            rows = list(csv.reader(io.StringIO(data.decode("utf-8"), newline="")))
+            keep = [index for index, heading in enumerate(rows[0] if rows else []) if not REFERENCE.search(heading)]
+            return b"csv:" + json.dumps([[row[i] for i in keep if i < len(row)] for row in rows]).encode("utf-8")
+    except (ValueError, UnicodeError, csv.Error, AttributeError):
+        pass
+    return data
+
+
 def encoded_bytes(value):
     return None if value is None else base64.b64encode(value).decode("ascii")
 
@@ -377,7 +408,10 @@ def main():
                         problems.append(f"{stream}\n  python: {a[:500]!r}\n  rust:   {b[:500]!r}")
                 files_py, files_rs = snapshot(cwd_py), snapshot(cwd_rs)
                 for rel in sorted(set(files_py) | set(files_rs)):
-                    if files_py.get(rel) != files_rs.get(rel):
+                    a, b = files_py.get(rel), files_rs.get(rel)
+                    if isinstance(a, bytes) and isinstance(b, bytes):
+                        a, b = without_references(rel, a), without_references(rel, b)
+                    if a != b:
                         problems.append(f"file {rel}\n  python: {str(files_py.get(rel))[:300]}\n  rust:   {str(files_rs.get(rel))[:300]}")
             key = (name, python.returncode)
             outcomes[key] = outcomes.get(key, 0) + 1
