@@ -156,6 +156,45 @@ fn a_required_control_that_ran_leaves_a_pass_alone() {
 }
 
 #[test]
+fn dormant_entity_example_reconciles_cash_and_leaves_equity_for_review() {
+    let temp = TempDir::new();
+    let output = temp.join("review");
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/dormant-entity");
+    for file in ["current.csv", "prior.csv"] {
+        let source = fs::read_to_string(example.join(file)).unwrap();
+        let mut rows = source.lines().skip(1);
+        assert!(
+            rows.next()
+                .unwrap()
+                .ends_with("A1,Bank,090,0.00,0.00,100.00,0.00")
+        );
+        assert!(
+            rows.next()
+                .unwrap()
+                .ends_with("E1,Issued capital,300,0.00,0.00,0.00,100.00")
+        );
+        assert!(rows.next().is_none());
+    }
+    let result = child_profile::command(BIN)
+        .current_dir(example)
+        .args(["review", "--current", "current.csv", "--prior", "prior.csv"])
+        .args(["--subledger", "bank-confirmation.csv"])
+        .args(["--require-control", "subledger_reconciliation"])
+        .args(["--require-control", "equity_reconciliation", "--output"])
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    let document = pack(&output);
+    assert!(document.at("overall_status").is_str("REVIEW"));
+    assert_eq!(state_of(&document, "subledger_reconciliation"), "ran");
+    assert_eq!(state_of(&document, "equity_reconciliation"), "skipped");
+    assert_eq!(required_control_reasons(&document).len(), 1);
+    assert_eq!(document.at("exceptions").as_array().unwrap().len(), 1);
+    assert!(viewer::verify_pack(&output).is_ok());
+}
+
+#[test]
 fn a_control_with_a_supplied_input_it_could_not_finish_on_is_failed_not_skipped() {
     let temp = TempDir::new();
     let mapping = temp.join("gst.csv");
