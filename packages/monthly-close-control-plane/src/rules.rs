@@ -9,6 +9,10 @@
 use crate::models::Control;
 
 /// When the control runs, what it checks, and the source of its rule.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one exhaustive match arm per control"
+)]
 pub fn describe(control: Control) -> (&'static str, &'static str, &'static str) {
     match control {
         Control::TrialBalanceIntegrity => (
