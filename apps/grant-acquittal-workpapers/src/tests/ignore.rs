@@ -123,57 +123,54 @@ fn without_the_option_nothing_changes_and_an_early_row_still_fails() {
     );
 }
 
+/// Each malformed ignore file (`None`: no file at all) and the start of its error.
+const MALFORMED: [(&str, Option<&[u8]>, &str); 9] = [
+    ("missing file", None, "Ignore file: [Errno 2] No such file or directory"),
+    (
+        "wrong headings",
+        Some(b"id,reason\nL5,x\n"),
+        "Ignore file: Expected exact CSV headings: ledger_id reason",
+    ),
+    (
+        "duplicate",
+        Some(b"ledger_id,reason\nL5,a\nL5,b\nL6,c\n"),
+        "Ignore file: Missing or duplicate ledger_id: 'L5'",
+    ),
+    (
+        "blank reason",
+        Some(b"ledger_id,reason\nL5,  \nL6,c\n"),
+        "Ignore file: Reason must be visible text",
+    ),
+    (
+        "unknown row",
+        Some(b"ledger_id,reason\nL5,a\nL6,b\nL9,c\n"),
+        "Ignore file: no ledger row 'L9'",
+    ),
+    (
+        "in period",
+        Some(b"ledger_id,reason\nL5,a\nL6,b\nL1,c\n"),
+        "Ignore file: ledger row 'L1' is inside the declared ledger period",
+    ),
+    (
+        "one left out",
+        Some(b"ledger_id,reason\nL5,a\n"),
+        "Ledger rows must fall inside the declared ledger period",
+    ),
+    ("bad bytes", Some(b"ledger_id,reason\nL5,\xff\n"), "Ignore file: "),
+    (
+        "extra field",
+        Some(b"ledger_id,reason\nL5,a,b\nL6,c\n"),
+        "Ignore file: Every CSV row must have the exact field count",
+    ),
+];
+
 #[test]
 fn a_malformed_ignore_file_fails_the_run_and_publishes_nothing() {
-    let cases: [(&str, Option<&str>, &str); 9] = [
-        ("missing file", None, "Ignore file: [Errno 2] No such file or directory"),
-        (
-            "wrong headings",
-            Some("id,reason\nL5,x\n"),
-            "Ignore file: Expected exact CSV headings: ledger_id reason",
-        ),
-        (
-            "duplicate",
-            Some("ledger_id,reason\nL5,a\nL5,b\nL6,c\n"),
-            "Ignore file: Missing or duplicate ledger_id: 'L5'",
-        ),
-        (
-            "blank reason",
-            Some("ledger_id,reason\nL5,  \nL6,c\n"),
-            "Ignore file: Reason must be visible text",
-        ),
-        (
-            "unknown row",
-            Some("ledger_id,reason\nL5,a\nL6,b\nL9,c\n"),
-            "Ignore file: no ledger row 'L9'",
-        ),
-        (
-            "in period",
-            Some("ledger_id,reason\nL5,a\nL6,b\nL1,c\n"),
-            "Ignore file: ledger row 'L1' is inside the declared ledger period",
-        ),
-        (
-            "one left out",
-            Some("ledger_id,reason\nL5,a\n"),
-            "Ledger rows must fall inside the declared ledger period",
-        ),
-        ("bad bytes", Some(""), "Ignore file: "),
-        (
-            "extra field",
-            Some("ledger_id,reason\nL5,a,b\nL6,c\n"),
-            "Ignore file: Every CSV row must have the exact field count",
-        ),
-    ];
-    for (label, body, expected) in cases {
+    for (label, body, expected) in MALFORMED {
         let fixture = fixture_with_early_rows();
         let path = match body {
             Some(body) => {
-                let bytes = if label == "bad bytes" {
-                    b"ledger_id,reason\nL5,\xff\n".to_vec()
-                } else {
-                    body.as_bytes().to_vec()
-                };
-                std::fs::write(fixture.root().join(IGNORE), bytes).unwrap();
+                std::fs::write(fixture.root().join(IGNORE), body).unwrap();
                 IGNORE
             }
             None => "absent.csv",

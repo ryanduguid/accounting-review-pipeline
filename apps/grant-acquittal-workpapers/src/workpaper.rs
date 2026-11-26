@@ -230,7 +230,13 @@ pub fn review_ignoring(source: &str, ignore: Option<&str>, cwd: &Path) -> Result
             .map_err(|e| Failure::Error(format!("Ignore file: {}", file_error(&e, &shown))))?;
         content.push(("ignore_file", bytes));
     }
-    let bytes = |name: &str| &content.iter().find(|(n, _)| *n == name).expect("read above").1;
+    review_content(&content)
+}
+
+/// The workpaper for the read input files, with `ignore_file` when one was given.
+fn review_content(content: &[(&'static str, Vec<u8>)]) -> Result<Json> {
+    let find = |name: &str| content.iter().find(|(n, _)| *n == name).map(|(_, b)| b.as_slice());
+    let bytes = |name: &str| find(name).expect("read above");
     let agreements = match pyjson::loads_bytes(bytes("agreements.json")) {
         Ok(value) => value,
         Err(LoadError::Value(message)) => return fail(message),
@@ -252,19 +258,15 @@ pub fn review_ignoring(source: &str, ignore: Option<&str>, cwd: &Path) -> Result
         "receipt_id grant_id date amount evidence",
         "receipt_id",
     )?;
-    let contributions = if content.iter().any(|(n, _)| *n == "contributions.csv") {
-        rows(
-            bytes("contributions.csv"),
+    let contributions = match find("contributions.csv") {
+        Some(file) => rows(
+            file,
             "contribution_id grant_id date kind amount evidence",
             "contribution_id",
-        )?
-    } else {
-        Vec::new()
+        )?,
+        None => Vec::new(),
     };
-    let ignored = match ignore {
-        Some(_) => Some(ignore_entries(bytes("ignore_file"))?),
-        None => None,
-    };
+    let ignored = find("ignore_file").map(ignore_entries).transpose()?;
     let agreement_rows = match agreements.at("agreements") {
         Json::Array(items) if !ledger.is_empty() && !items.is_empty() => items,
         _ => return fail("Supply ledger evidence and at least one reviewed agreement"),
@@ -279,7 +281,7 @@ pub fn review_ignoring(source: &str, ignore: Option<&str>, cwd: &Path) -> Result
         ignored: ignored.as_deref(),
         start,
         end,
-        content: &content,
+        content,
     })
 }
 

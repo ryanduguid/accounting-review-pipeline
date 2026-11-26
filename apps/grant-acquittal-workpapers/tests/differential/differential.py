@@ -270,6 +270,21 @@ def snapshot(cwd):
     return out
 
 
+def usage_indent(data, prog):
+    """Wrapped usage lines, indented under the program name, re-indented under <prog>."""
+    pad = b" " * len(f"usage: {prog} ".encode())
+    lines = data.split(b"\n")
+    in_usage = False
+    for index, line in enumerate(lines):
+        if line.startswith(b"usage: <prog>"):
+            in_usage = True
+        elif in_usage and line.startswith(pad) and line[len(pad):len(pad) + 1] not in (b"", b" "):
+            lines[index] = b" " * len(b"usage: <prog> ") + line[len(pad):]
+        else:
+            in_usage = False
+    return b"\n".join(lines)
+
+
 def normalise(data, cwd, progs):
     for form in (str(cwd), str(cwd).replace("\\", "\\\\")):
         data = data.replace(form.encode(), b"<x>")
@@ -277,6 +292,7 @@ def normalise(data, cwd, progs):
     for prog in progs:
         data = data.replace(b"usage: " + prog.encode(), b"usage: <prog>")
         data = data.replace(prog.encode() + b": error:", b"<prog>: error:")
+        data = usage_indent(data, prog)
     return re.sub(rb"\.grant-workpaper-[a-z0-9_]{8}", b".grant-workpaper-<random>", data)
 
 

@@ -37,7 +37,7 @@ const COLOUR_ENV: [&str; 4] = ["PYTHON_COLORS", "NO_COLOR", "FORCE_COLOR", "TERM
 #[cfg(windows)]
 #[test]
 fn real_console_uses_native_width_and_colours_on_both_streams() {
-    let usage = "usage: grant-workpaper.exe [-h] --input INPUT --output OUTPUT\n\
+    let usage = "usage: grant-workpaper.exe [-h] --input INPUT --output OUTPUT\n                           [--ignore-file IGNORE_FILE]\n\
                  grant-workpaper.exe: error: the following arguments are required: --input, --output\n";
     windows_console::check(
         "real_console_uses_native_width_and_colours_on_both_streams",
@@ -88,6 +88,14 @@ fn plain(bytes: &[u8]) -> String {
     result.replace("\r\n", "\n")
 }
 
+/// The 80-column usage, which wraps the ignore-file option under the program name.
+fn usage80() -> String {
+    format!(
+        "usage: {PROGRAM} [-h] --input INPUT --output OUTPUT\n{}[--ignore-file IGNORE_FILE]",
+        " ".repeat(PROGRAM.len() + 8)
+    )
+}
+
 #[test]
 fn help_wraps_like_python_at_narrow_and_normal_widths() {
     for (width, expected) in [("20", HELP20), ("40", HELP40), ("80", HELP80)] {
@@ -120,7 +128,7 @@ fn help_and_argument_refusals_match_the_pinned_argparse_contract() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             plain(&output.stderr),
-            format!("usage: {PROGRAM} [-h] --input INPUT --output OUTPUT\n{PROGRAM}: error: {diagnostic}\n")
+            format!("{}\n{PROGRAM}: error: {diagnostic}\n", usage80())
         );
     }
     for token in ["-", "-1", "--bogus", "--"] {
@@ -132,9 +140,7 @@ fn help_and_argument_refusals_match_the_pinned_argparse_contract() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             plain(&output.stderr),
-            format!(
-                "usage: {PROGRAM} [-h] --input INPUT --output OUTPUT\n{PROGRAM}: error: unrecognized arguments: {token}\n"
-            )
+            format!("{}\n{PROGRAM}: error: unrecognized arguments: {token}\n", usage80())
         );
     }
 }
@@ -160,8 +166,8 @@ fn missing_or_invalid_dimensions_keep_the_python_fallbacks() {
 #[test]
 fn colour_overrides_have_python_precedence_on_both_streams() {
     let required = format!(
-        "usage: {PROGRAM} [-h] --input INPUT --output OUTPUT\n\
-         {PROGRAM}: error: the following arguments are required: --input, --output\n"
+        "{}\n{PROGRAM}: error: the following arguments are required: --input, --output\n",
+        usage80()
     );
     let cases = [
         ([Some("0"), None, Some("1"), None], false),

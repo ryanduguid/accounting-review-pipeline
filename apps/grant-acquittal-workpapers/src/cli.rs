@@ -299,17 +299,17 @@ fn parse(args: &[String]) -> Result<Parsed<'_>, Exit> {
     match (input, output) {
         (Some(input), Some(output)) if extras.is_empty() => Ok((input, output, ignore)),
         (Some(_), Some(_)) => Err(Exit::Error(format!("unrecognized arguments: {}", extras.join(" ")))),
-        (input, output) => {
-            let missing: Vec<&str> = [("--input", input.is_none()), ("--output", output.is_none())]
-                .into_iter()
-                .filter_map(|(flag, absent)| absent.then_some(flag))
-                .collect();
-            Err(Exit::Error(format!(
-                "the following arguments are required: {}",
-                missing.join(", ")
-            )))
-        }
+        (input, output) => Err(missing(input.is_none(), output.is_none())),
     }
+}
+
+/// argparse's error for the absent required options.
+fn missing(input: bool, output: bool) -> Exit {
+    let flags: Vec<&str> = [("--input", input), ("--output", output)]
+        .into_iter()
+        .filter_map(|(flag, absent)| absent.then_some(flag))
+        .collect();
+    Exit::Error(format!("the following arguments are required: {}", flags.join(", ")))
 }
 
 /// `-h`/`--help`: print help, unless it was given an explicit value argparse refuses.
@@ -493,17 +493,17 @@ mod tests {
         // Python 3.15 with FORCE_COLOR=1 and 80 columns.
         assert_eq!(
             usage("grant_workpaper.py", &argtheme::COLOURED),
-            "\x1b[1;34musage: \x1b[0m\x1b[1;35mgrant_workpaper.py\x1b[0m [\x1b[32m-h\x1b[0m] \x1b[36m--input \x1b[33mINPUT\x1b[0m \x1b[36m--output \x1b[33mOUTPUT\x1b[0m"
+            "\x1b[1;34musage: \x1b[0m\x1b[1;35mgrant_workpaper.py\x1b[0m [\x1b[32m-h\x1b[0m] \x1b[36m--input \x1b[33mINPUT\x1b[0m \x1b[36m--output \x1b[33mOUTPUT\x1b[0m\n                          [\x1b[36m--ignore-file \x1b[33mIGNORE_FILE\x1b[0m]"
         );
         assert_eq!(
             usage("grant_workpaper.py", &argtheme::PLAIN),
-            "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT"
+            "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT\n                          [--ignore-file IGNORE_FILE]"
         );
         assert_eq!(
             help("grant_workpaper.py", &argtheme::PLAIN)
                 .strip_suffix(LICENCE_NOTICE)
                 .expect("help ends with the licence notice"),
-            "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT\n\nLocal grant allocation and funding workpapers from explicitly reviewed inputs.\n\noptions:\n  -h, --help       show this help message and exit\n  --input INPUT\n  --output OUTPUT\n"
+            "usage: grant_workpaper.py [-h] --input INPUT --output OUTPUT\n                          [--ignore-file IGNORE_FILE]\n\nLocal grant allocation and funding workpapers from explicitly reviewed inputs.\n\noptions:\n  -h, --help            show this help message and exit\n  --input INPUT\n  --output OUTPUT\n  --ignore-file IGNORE_FILE\n                        CSV of ledger_id,reason naming ledger rows dated\n                        outside the ledger period to leave out of every total;\n                        each is listed on the workpaper with its reason\n"
         );
     }
 }
