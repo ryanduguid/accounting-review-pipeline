@@ -379,6 +379,12 @@ was built for; the hard cases are the blind-spot values, and 299 of 300 passed. 
 template with fixed prose and only its slots varying, so the sample behaves like 9
 templates, not 900 independent documents, and a halt rate mostly reports that prose.
 
+The miss counts are circular in the same way. The generator that plants each value
+and the sweep that must find it were written by the same author from the same list
+of shapes, so a miss count of 0 shows the sweep meets its own contract; it is not
+recall on workpapers nobody built for it. Recall on real workpapers needs values
+labelled by someone other than the author and has not been measured.
+
 `split-identifiers` spells each identifier with one of 7 gaps no structured pattern
 takes, and every document halts as it should. `columnar-balances` holds only amounts
 with cents, in aligned columns, one per line and in a table, and none halts.

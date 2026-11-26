@@ -534,3 +534,24 @@ fn a_planted_value_that_survives_is_counted_as_a_miss() {
     assert_eq!(measure(&document, true, &mut counts), ["hana falador"]);
     assert_eq!(counts.0[2], 1);
 }
+
+#[test]
+fn readme_says_the_benchmark_is_not_recall() {
+    let section: String = README
+        .lines()
+        .skip_while(|line| *line != "## Detection benchmark")
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .collect::<Vec<_>>()
+        .join(" ");
+    for phrase in [
+        "circular",
+        "labelled by someone other than the author",
+        "has not been measured",
+    ] {
+        assert!(
+            section.contains(phrase),
+            "Detection benchmark lost its caveat: {phrase}"
+        );
+    }
+}
