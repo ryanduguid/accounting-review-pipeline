@@ -30,9 +30,10 @@ for the setup and replay utility below, which has no runtime dependencies.
 
 ## Run all joined accounting examples
 
-From this directory, with Python 3.14 or later, Git, uv and cargo on PATH:
+From this directory, with Git, uv and cargo on PATH (plus Python 3.14 or later when using the retained `setup_utility.py` script or replaying older commits):
 
 ```powershell
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-demo
 python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
@@ -69,6 +70,7 @@ stay in the retained files. A passing fixture check never approves accounting.
 To repeat the source revisions from a previous complete run:
 
 ```powershell
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 python setup_utility.py --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 ```
 

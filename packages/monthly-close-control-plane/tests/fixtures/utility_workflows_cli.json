@@ -1,0 +1,330 @@
+{
+  "note": "Recorded from utility_workflows.py; examples/utility_workflows.rs and tests/test_utility_workflows.py both check these cases and contracts.",
+  "prog": "utility_workflows.py",
+  "cases": [
+    {
+      "name": "help",
+      "args": [
+        "--help"
+      ],
+      "exit": 0,
+      "stdout": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\n\nRun fabricated workflows with explicit lock authority and source evidence.\n\noptions:\n  -h, --help            show this help message and exit\n  --fpa FPA\n  --accounting ACCOUNTING\n  --grants GRANTS\n  --output OUTPUT\n  --environment-root ENVIRONMENT_ROOT\n                        optional new directory for isolated installations\n  --timeout TIMEOUT     seconds per command, including setup (default: 300)\n  --workflow {all,close-forecast,quarter,job-cash,grant-cash}\n",
+      "stderr": ""
+    },
+    {
+      "name": "no arguments",
+      "args": [],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\nutility_workflows.py: error: the following arguments are required: --fpa, --output\n"
+    },
+    {
+      "name": "fpa without a value",
+      "args": [
+        "--fpa"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\nutility_workflows.py: error: argument --fpa: expected one argument\n"
+    },
+    {
+      "name": "missing output",
+      "args": [
+        "--fpa",
+        "{root}/fpa"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\nutility_workflows.py: error: the following arguments are required: --output\n"
+    },
+    {
+      "name": "unknown argument",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out",
+        "--bogus"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\nutility_workflows.py: error: unrecognized arguments: --bogus\n"
+    },
+    {
+      "name": "invalid workflow",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out",
+        "--workflow",
+        "monthly"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\nutility_workflows.py: error: argument --workflow: invalid choice: 'monthly' (choose from 'all', 'close-forecast', 'quarter', 'job-cash', 'grant-cash')\n"
+    },
+    {
+      "name": "timeout not a number",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out",
+        "--timeout",
+        "soon"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "usage: utility_workflows.py [-h] --fpa FPA [--accounting ACCOUNTING]\n                            [--grants GRANTS] --output OUTPUT\n                            [--environment-root ENVIRONMENT_ROOT]\n                            [--timeout TIMEOUT]\n                            [--workflow {all,close-forecast,quarter,job-cash,grant-cash}]\nutility_workflows.py: error: argument --timeout: invalid float value: 'soon'\n"
+    },
+    {
+      "name": "zero timeout",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out",
+        "--timeout",
+        "0"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Utility workflows: Command timeout must be positive and at most 3600 seconds\n"
+    },
+    {
+      "name": "timeout above an hour",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out",
+        "--timeout",
+        "3601"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Utility workflows: Command timeout must be positive and at most 3600 seconds\n"
+    },
+    {
+      "name": "all workflows without companions",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Utility workflows: This workflow needs --accounting and/or --grants checkouts\n"
+    },
+    {
+      "name": "output inside a source",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/fpa/out",
+        "--workflow",
+        "quarter"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Utility workflows: Output must be outside all source checkouts\n"
+    },
+    {
+      "name": "existing output",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/existing",
+        "--workflow",
+        "quarter"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Utility workflows: Choose a new output directory\n"
+    },
+    {
+      "name": "environment root is the output",
+      "args": [
+        "--fpa",
+        "{root}/fpa",
+        "--output",
+        "{root}/out",
+        "--environment-root",
+        "{root}/out",
+        "--workflow",
+        "quarter"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Utility workflows: Fresh environment root must be a separate new directory\n"
+    }
+  ],
+  "contracts": {
+    "manifest": {
+      "calls": [
+        {
+          "arguments": [
+            "str"
+          ],
+          "elapsed_seconds": "float",
+          "exit_code": "int",
+          "expected_exit": "int",
+          "failure": "NoneType",
+          "kind": "str",
+          "owner": "str"
+        }
+      ],
+      "execution_mode": "str",
+      "fixture_validation": "str",
+      "outputs_sha256": "*",
+      "projects": "*",
+      "runtimes": "*",
+      "schema_version": "str",
+      "scope": "str",
+      "tools": {
+        "driver": "str",
+        "uv": "str"
+      },
+      "workflow": "str"
+    },
+    "failed_calls": {
+      "calls": [
+        {
+          "arguments": [
+            "str"
+          ],
+          "elapsed_seconds": "float",
+          "exit_code": "int",
+          "expected_exit": "int",
+          "failure": "NoneType",
+          "kind": "str",
+          "owner": "str"
+        }
+      ],
+      "projects": "*",
+      "stderr": "str",
+      "stdout": "str"
+    },
+    "calls": [
+      [
+        "close",
+        "runtime",
+        0
+      ],
+      [
+        "fpa",
+        "runtime",
+        0
+      ],
+      [
+        "wip",
+        "runtime",
+        0
+      ],
+      [
+        "grants",
+        "runtime",
+        0
+      ],
+      [
+        "fpa",
+        "workflow",
+        0
+      ],
+      [
+        "close",
+        "workflow",
+        2
+      ],
+      [
+        "close",
+        "workflow",
+        0
+      ],
+      [
+        "fpa",
+        "workflow",
+        0
+      ],
+      [
+        "fpa",
+        "workflow",
+        0
+      ],
+      [
+        "close",
+        "workflow",
+        2
+      ],
+      [
+        "close",
+        "workflow",
+        0
+      ],
+      [
+        "close",
+        "workflow",
+        2
+      ],
+      [
+        "close",
+        "workflow",
+        0
+      ],
+      [
+        "close",
+        "workflow",
+        0
+      ],
+      [
+        "close",
+        "workflow",
+        2
+      ],
+      [
+        "close",
+        "workflow",
+        0
+      ],
+      [
+        "close",
+        "workflow",
+        0
+      ],
+      [
+        "wip",
+        "workflow",
+        0
+      ],
+      [
+        "fpa",
+        "workflow",
+        0
+      ],
+      [
+        "wip",
+        "workflow",
+        0
+      ],
+      [
+        "fpa",
+        "workflow",
+        0
+      ],
+      [
+        "grants",
+        "workflow",
+        2
+      ],
+      [
+        "fpa",
+        "workflow",
+        0
+      ]
+    ]
+  }
+}
