@@ -7,6 +7,7 @@
 //! not compile until it is described here.
 
 use crate::models::Control;
+use std::fmt::Write;
 
 /// When the control runs, what it checks, and the source of its rule.
 #[expect(
@@ -32,7 +33,7 @@ pub fn describe(control: Control) -> (&'static str, &'static str, &'static str) 
         ),
         Control::PeriodVariance => (
             "every review",
-            "no account's YTD net balance moves by both --absolute-threshold and --percentage-threshold",
+            "no account's YTD net balance moves by both --absolute-threshold and --percentage-threshold; a nil prior balance is tested on the absolute threshold alone",
             "the firm's thresholds, defaults 1000 and 0.10 (README 'Controls')",
         ),
         Control::AccountMetadata => (
@@ -57,12 +58,12 @@ pub fn describe(control: Control) -> (&'static str, &'static str, &'static str) 
         ),
         Control::SubledgerReconciliation => (
             "with --subledger",
-            "each YTD net balance agrees with its SubledgerBalance within --reconciliation-tolerance",
+            "each supplied subledger row agrees with its account's YTD net balance within --reconciliation-tolerance and names an account in the trial balance; an account with no row is not checked",
             "the supplied subledger balances (README 'Optional mapping and reconciliation inputs')",
         ),
         Control::GstReasonableness => (
             "with --gst-mapping and --gst-settlements",
-            "net GST movement, settlements added back, is near 1/10 of taxable sales less 1/10 of creditable purchases",
+            "net GST movement, settlements added back, is within tolerance of 1/10 of taxable sales less 1/10 of creditable purchases, and each side on its own when the GST accounts are classed gst_collected and gst_paid; it does not run when a moved account is unclassed or mixed, or the settlements declaration is missing or malformed",
             "the ATO's GST pages cited, with the date checked, in README 'GST reasonableness'",
         ),
         Control::CalculationEvidence => (
@@ -82,7 +83,7 @@ pub fn describe(control: Control) -> (&'static str, &'static str, &'static str) 
         ),
         Control::ContactRegister => (
             "with --contacts",
-            "each ABN has 11 digits and passes the ABN check digits, and no ABN or name repeats",
+            "each non-blank ABN has 11 digits and passes the ABN check digits, and no valid ABN or name (ignoring case and spacing) is on more than one contact",
             "the ABN check-digit algorithm; nothing is looked up (README 'Optional mapping and reconciliation inputs')",
         ),
         Control::Required => (
@@ -98,10 +99,11 @@ pub fn render() -> String {
     let mut out = String::new();
     for &control in Control::ALL {
         let (runs, checks, source) = describe(control);
-        out.push_str(&format!(
+        let _ = write!(
+            out,
             "{}\n  runs:   {runs}\n  checks: {checks}\n  source: {source}\n",
             control.as_str()
-        ));
+        );
     }
     out.push_str(
         "\nThese are review rules: each raises an exception for a reviewer and none approves a close.\n",
