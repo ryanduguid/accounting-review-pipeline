@@ -191,7 +191,7 @@ impl Reader {
 struct Tree {
     child: Child,
     #[cfg(windows)]
-    job: Option<job::Job>,
+    job: job::Job,
 }
 
 #[cfg(unix)]
@@ -227,6 +227,9 @@ impl Tree {
 }
 
 #[cfg(windows)]
+const NO_JOB: &str = "Windows refused a job object for the command";
+
+#[cfg(windows)]
 impl Tree {
     /// Starts the child suspended, so nothing it starts can escape the job
     /// before the job holds it, then lets it run.
@@ -234,30 +237,31 @@ impl Tree {
         use std::os::windows::process::CommandExt;
         use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_SUSPENDED};
         cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED);
-        let mut child = spawn_retrying_busy(cmd)?;
+        let child = spawn_retrying_busy(cmd)?;
         let job = job::Job::holding(&child);
-        if let Err(err) = job::resume(child.id()) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(err);
-        }
-        Ok(Self { child, job })
+        Self::start(child, job)
     }
 
-    /// Terminates the job; without one (assignment refused), falls back to
-    /// `taskkill /T`, which reaches only descendants whose parent still runs.
-    fn kill(&self) {
-        match &self.job {
-            Some(job) => job.terminate(),
-            None => {
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &self.child.id().to_string(), "/T", "/F"])
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+    /// Lets the suspended child run once a job holds it. Without a job its
+    /// descendants could not be found later, so the run fails closed: the
+    /// child is killed before it has run.
+    fn start(mut child: Child, job: Option<job::Job>) -> std::io::Result<Self> {
+        let started = match job {
+            Some(job) => job::resume(child.id()).map(|()| job),
+            None => Err(std::io::Error::other(NO_JOB)),
+        };
+        match started {
+            Ok(job) => Ok(Self { child, job }),
+            Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                Err(err)
             }
         }
+    }
+
+    fn kill(&self) {
+        self.job.terminate();
     }
 }
 
@@ -447,6 +451,27 @@ pub mod tests {
             stop(pid);
             panic!("descendant {pid} outlived the call");
         }
+    }
+
+    /// Windows: a child no job could hold is killed before it runs, so it
+    /// never starts the grandchild that would record itself.
+    #[cfg(windows)]
+    #[test]
+    fn unheld_child_is_killed_before_it_runs() {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+        // a test scratch path with a unique name; nothing is read from it but the absence check.
+        // nosemgrep: rust.lang.security.temp-dir.temp-dir
+        let pidfile = env::temp_dir().join(format!("pyprocess-unheld-{}", std::process::id()));
+        let (command, env_vars) = tree_command("parent-waits", &pidfile);
+        let mut cmd = Command::new(&command[0]);
+        cmd.args(&command[1..]).envs(env_vars);
+        cmd.creation_flags(CREATE_SUSPENDED);
+        let child = cmd.spawn().unwrap();
+        let pid = child.id();
+        assert!(super::Tree::start(child, None).is_err());
+        thread::sleep(Duration::from_secs(1));
+        assert!(!alive(pid) && !pidfile.exists());
     }
 
     #[cfg(target_os = "linux")]
