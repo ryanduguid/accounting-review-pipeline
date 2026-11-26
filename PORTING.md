@@ -4,16 +4,15 @@ This repository retains a small set of Python and PowerShell scripts alongside i
 
 ## Ported utility scripts
 
-- `apps/grant-acquittal-workpapers/examples/setup_utility.rs` (`[[example]]` target `setup_utility`): Rust port of `apps/grant-acquittal-workpapers/setup_utility.py`. Uses the crate's existing `pyjson`, `oserror` and `argtheme` modules with zero new `Cargo.lock` dependencies, enforces workspace and `--summary` isolation, invokes the Rust `utility_workflows` example when present in the target pipeline checkout and falls back to `utility_workflows.py` when replaying older pipeline commits.
-- `packages/monthly-close-control-plane/examples/utility_results.rs` and `packages/monthly-close-control-plane/examples/utility_workflows.rs` (`[[example]]` target `utility_workflows`): Rust port of `examples/utility_results.py` and `examples/utility_workflows.py`. Reuses the crate's `pyjson`, `pypath`, `decimal` and `sha2` helpers with zero new `Cargo.lock` dependencies, isolates subprocesses in process groups (`setsid`/`killpg` on Unix, `CREATE_NEW_PROCESS_GROUP`/`taskkill` on Windows) and preserves the source mutation guard and provenance checks.
+- `apps/grant-acquittal-workpapers/examples/setup_utility.rs` (`[[example]]` target `setup_utility`): Rust port of `apps/grant-acquittal-workpapers/setup_utility.py`, which it replaced. Uses the crate's existing `pyjson`, `oserror` and `argtheme` modules with zero new `Cargo.lock` dependencies, enforces workspace and `--summary` isolation, invokes the Rust `utility_workflows` example when present in the target pipeline checkout and falls back to `utility_workflows.py` when replaying older pipeline commits.
+- `packages/monthly-close-control-plane/examples/utility_results.rs` and `packages/monthly-close-control-plane/examples/utility_workflows.rs` (`[[example]]` target `utility_workflows`): Rust port of `examples/utility_results.py` and `examples/utility_workflows.py`. Reuses the crate's `pyjson`, `pypath`, `decimal` and `sha2` helpers with zero new `Cargo.lock` dependencies, kills each timed-out or failed subprocess with its descendants (a POSIX session and `killpg` on Unix, a job object on Windows) and preserves the source mutation guard and provenance checks.
 
-## Retained `.py` entrypoints (cutover hold)
+## Retained `.py` entrypoints (outside callers)
 
-- `apps/grant-acquittal-workpapers/setup_utility.py`
 - `packages/monthly-close-control-plane/examples/utility_results.py`
 - `packages/monthly-close-control-plane/examples/utility_workflows.py`
 
-These 3 scripts stay intact until a dedicated CI and joined-workflow cutover PR switches `.github/workflows/joined-fixtures.yml` and `.github/workflows/joined-latest-main.yml` to the Rust binaries and updates `.github/workflows/ci.yml`'s 13-file maintained Python inventory check (`if set(sources) != maintained`).
+CI in this repository runs the Rust `setup_utility` and `utility_workflows` examples; `setup_utility.py` is gone. These 2 scripts stay whole because the companion repositories' joined-fixture workflows and documentation still call `utility_workflows.py`. They stay in `.github/workflows/ci.yml`'s maintained Python inventory, and their recorded command-line cases (`tests/fixtures/utility_workflows_cli.json`) are checked against both implementations.
 
 ## Retained scripts by constraint
 

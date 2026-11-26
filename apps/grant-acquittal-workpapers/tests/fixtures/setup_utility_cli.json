@@ -1,5 +1,5 @@
 {
-  "note": "Recorded from setup_utility.py; examples/setup_utility.rs and tests/test_setup_utility_parity.py both check these cases.",
+  "note": "Recorded from setup_utility.py before the Rust port replaced it; examples/setup_utility.rs checks these cases.",
   "prog": "setup_utility.py",
   "cases": [
     {

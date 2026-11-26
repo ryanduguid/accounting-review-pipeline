@@ -26,15 +26,14 @@ read`). The script's
 limit came from the C stack, so it varied by platform and stack size: under
 Python 3.15 it read about 13,800 nested arrays on Windows and 65,000 on Linux
 with an 8 MiB stack. The Python `pyproject.toml` and its `uv.lock` remain
-for the setup and replay utility below, which has no runtime dependencies.
+for the Python differential test tools, which have no runtime dependencies.
 
 ## Run all joined accounting examples
 
-From this directory, with Git, uv and cargo on PATH (plus Python 3.14 or later when using the retained `setup_utility.py` script or replaying older commits):
+From this directory, with Git, uv and cargo on PATH (plus Python 3.14 or later when replaying a pipeline commit older than the Rust workflow driver):
 
 ```powershell
 cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-demo
-python setup_utility.py --workspace ../../../accounting-utility-demo
 ```
 
 This optional development command clones the public au-fpa-pack and
@@ -71,7 +70,6 @@ To repeat the source revisions from a previous complete run:
 
 ```powershell
 cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
-python setup_utility.py --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 ```
 
 Replay accepts only full commit IDs from an all-route `utility-workflows.v2`
@@ -109,7 +107,7 @@ The au-fpa-pack source example `examples/restricted-cash/grant_cash.py`
 consumes the hash-bound JSON workpaper and a separate reviewed cash plan.
 It retains source findings, unplanned commitments and the distinction between
 cash allocations and unspent funding. The Monthly Close Controls
-`examples/utility_workflows.py --workflow grant-cash` recipe runs both owners
+`utility_workflows --workflow grant-cash` example runs both owners
 without importing one repository into the other.
 
 ## Run grant cash with an existing checkout
@@ -191,15 +189,14 @@ The fabricated ledger totals $6,500. Allocations total $6,300 and $200 remains u
 
 ## Verification and development
 
-Run `cargo test --locked` above for the workpaper, and
-`python -m unittest discover -s tests -v` for the setup and replay utility. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
+Run `cargo test --locked --all-targets` above for the workpaper and the setup and replay utility. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
 
 GitHub Actions runs the Rust tests, `cargo fmt --check` and `cargo clippy` on Linux
 and Windows, including a competing destination created immediately before
-publication, and runs the bundled example from a release build. The utility's
-unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
+publication, and runs the bundled example from a release build. The Python
+differential tools' unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
 `RENAME_EXCL` path is untested there.
-It also runs Ruff with a pinned version on the utility. Local lint uses
+It also runs Ruff with a pinned version on those tools. Local lint uses
 `uv run --with ruff==0.16.6 ruff check .`.
 
 `tests/differential/differential.py` compares the binary with the 0.1.0 Python
