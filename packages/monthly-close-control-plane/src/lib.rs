@@ -27,6 +27,7 @@ pub mod mcp;
 pub mod models;
 pub mod payroll;
 pub mod prepayments;
+pub mod prepost;
 #[cfg(feature = "probe")]
 pub mod probe;
 pub mod publication;

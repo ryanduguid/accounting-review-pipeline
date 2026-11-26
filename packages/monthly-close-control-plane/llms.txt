@@ -15,7 +15,7 @@
 - `src/engine.rs`: Builds `PASS`, `REVIEW`, or `BLOCKED` exception packs without mutating an accounting system.
 - `src/loader.rs`: Validates input schemas and captures immutable byte snapshots with SHA-256 source digests.
 - `src/report.rs` and `src/publication.rs`: Render and publish JSON, Markdown and CSV review-pack files, including source evidence and any supplied human acknowledgement.
-- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify, schedule, demo, jet, duplicates, fixed-assets, coding, scorecard, mcp, payroll, statement and bas.
+- `src/cli.rs`: Runs review/workbench, view, queue, reconcile, drivers, compare, classify, schedule, demo, jet, duplicates, fixed-assets, coding, scorecard, mcp, payroll, statement, bas and prepost.
 - `src/mcp.rs`: Read-only Model Context Protocol server over stdio for the commands that only read files (`mcp`); `mcpb/manifest.json` describes it as an MCP Bundle.
 - `src/journal_entries.rs`: Journal-entry tests and a Benford first-digit test over a general-ledger listing (`jet`).
 - `src/duplicates.rs`: Possible duplicate bills and payments, and missing recurring supplier bills, in a register (`duplicates`).
@@ -26,6 +26,7 @@
 - `src/statement.rs`: A bank statement's running balances, page closings and page openings tied out (`statement`).
 - `src/rollforward.rs`: Prepayment, deferred revenue and accrual accounts rolled from opening through additions and releases to closing, tied to the ledger at both ends (`schedule --kind rollforward`).
 - `src/bas.rs`: BAS labels drafted from a ledger's tax codes and a payroll register, each total naming its rows, for a reviewer; it lodges nothing (`bas`).
+- `src/prepost.rs`: Draft journals reviewed before posting against the posted listing, each flag with a weight and a suggested fix; it posts nothing (`prepost`).
 
 ## Architectural boundaries
 1. **Review-first policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.
