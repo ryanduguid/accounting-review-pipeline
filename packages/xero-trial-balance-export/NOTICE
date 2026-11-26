@@ -14,14 +14,14 @@ material or in the Appropriate Legal Notices displayed by works containing
 it. The attribution may be reworded to reflect modifications. Ryan Duguid
 asks, but does not require, that it link to https://github.com/ryanduguid/accounting-review-pipeline.
 
-The Rust exporter includes the public CA bundle from certifi 2026.10.23 to
+The Rust exporter includes the public CA bundle from certifi 2026.11.20 to
 preserve the Python exporter's TLS trust roots. That bundle is licensed under
 the Mozilla Public License 2.0; see data/certifi-LICENSE. Its SHA-256 is
-2ef52ad56b4803e264045c915e55c236cbfa045b84b81efefc218a19eb44bd2b.
+bb92c6ac31c92f4f553bffd6bf093db02c858c23e111b0b4df9bafa3fdbe00d1.
 
 The bundle's unmodified Source Code Form is included as data/cacert.pem.
 The matching upstream source is available from
-https://pypi.org/project/certifi/2026.10.23/#files.
+https://pypi.org/project/certifi/2026.11.20/#files.
 The exporter's own licence (see LICENSE) does not replace MPL-2.0 for the
 bundle.
 See https://mozilla.org/MPL/2.0/.
