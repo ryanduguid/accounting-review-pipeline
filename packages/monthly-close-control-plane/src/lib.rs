@@ -25,6 +25,7 @@ pub mod journal_entries;
 pub mod loader;
 pub mod mcp;
 pub mod models;
+pub mod overdue;
 pub mod payroll;
 pub mod prepayments;
 pub mod prepost;
