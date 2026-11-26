@@ -1,0 +1,10 @@
+usage: close-control overdue [-h] --invoices INVOICES --currency CURRENCY
+                             --as-at AS_AT
+
+options:
+  -h, --help            show this help message and exit
+  --invoices INVOICES   one tenant's sales invoices, paid and open, as a Tenant
+                        ,InvoiceID,Customer,IssueDate,DueDate,PaidDate,Amount,C
+                        urrency CSV
+  --currency CURRENCY   three-letter currency every row carries, e.g. AUD
+  --as-at AS_AT         the date open invoices are judged at, YYYY-MM-DD

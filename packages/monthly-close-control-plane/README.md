@@ -131,6 +131,9 @@ flags draft journals before they are posted: unbalanced, outside the period,
 duplicates of posted entries or other drafts, account pairs the ledger has
 never posted, and the `jet` tests, each with a risk score and a suggested fix.
 It posts nothing.
+[Overdue against history](docs/overdue-alert.md) (`close-control overdue`)
+lists open invoices overdue against the customer's own payment history, the
+median and spread of how late it has paid, rather than a fixed ageing bucket.
 
 The [portable workflow recipe](docs/utility-workflows.md) joins close packs,
 forecasts, WIP and grant workpapers through each repository's locked environment.
