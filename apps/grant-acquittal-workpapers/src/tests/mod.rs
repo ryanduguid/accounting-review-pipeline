@@ -6,6 +6,7 @@
 //! Each test keeps the Python test's name.
 
 mod contributions;
+mod references;
 mod workpaper_tests;
 
 use std::path::{Path, PathBuf};
