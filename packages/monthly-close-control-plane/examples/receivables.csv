@@ -1,0 +1,13 @@
+Tenant,InvoiceID,Customer,IssueDate,DueDate,PaidDate,Amount,Currency
+Varrock Ventures Pty Ltd,INV-3001,Lumbridge Traders,2026-05-16,2026-06-15,2026-06-19,4180.00,AUD
+Varrock Ventures Pty Ltd,INV-3002,Falador Freight,2026-05-01,2026-05-31,2026-07-02,2615.40,AUD
+Varrock Ventures Pty Ltd,INV-3003,Lumbridge Traders,2026-06-15,2026-07-15,2026-07-20,3920.55,AUD
+Varrock Ventures Pty Ltd,INV-3004,Falador Freight,2026-05-31,2026-06-30,2026-08-05,2890.10,AUD
+Varrock Ventures Pty Ltd,INV-3005,Draynor Supplies,2026-06-20,2026-07-20,2026-07-25,760.00,AUD
+Varrock Ventures Pty Ltd,INV-3006,Lumbridge Traders,2026-07-16,2026-08-15,2026-08-21,4305.25,AUD
+Varrock Ventures Pty Ltd,INV-3007,Falador Freight,2026-07-01,2026-07-31,2026-09-09,3104.80,AUD
+Varrock Ventures Pty Ltd,INV-3008,Falador Freight,2026-08-01,2026-08-31,,2950.00,AUD
+Varrock Ventures Pty Ltd,INV-3009,Lumbridge Traders,2026-08-11,2026-09-10,,4410.60,AUD
+Varrock Ventures Pty Ltd,INV-3010,Draynor Supplies,2026-08-16,2026-09-15,,815.30,AUD
+Varrock Ventures Pty Ltd,INV-3011,Lumbridge Traders,2026-08-21,2026-09-20,2026-10-03,3988.15,AUD
+Varrock Ventures Pty Ltd,INV-3012,Falador Freight,2026-09-15,2026-10-15,,3022.70,AUD

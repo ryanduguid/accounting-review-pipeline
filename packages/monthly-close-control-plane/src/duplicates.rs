@@ -42,7 +42,7 @@ struct Document {
 }
 
 /// Supplier names compare once case and whitespace are ignored.
-fn supplier_key(name: &str) -> String {
+pub(crate) fn supplier_key(name: &str) -> String {
     pytext::casefold(name).split_whitespace().collect()
 }
 
