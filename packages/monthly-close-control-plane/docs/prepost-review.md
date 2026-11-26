@@ -57,7 +57,7 @@ posted; `REVIEW` when any other flag is raised; and `PASS` when none is.
 | --- | --- | --- | --- |
 | `UNBALANCED` | 3 | the draft's debits do not equal its credits | correct the lines |
 | `OUTSIDE_PERIOD` | 3 | a line is dated before `--period-start` or after `--period-end` (cut-off) | date it in the period it belongs to |
-| `DUPLICATE_OF_POSTED` | 3 | a posted journal posts the same amounts to the same accounts, on the same date or under the same non-blank reference | check it is not already posted |
+| `DUPLICATE_OF_POSTED` | 3 | a posted journal posts the same amounts to the same accounts and shares a date or a non-blank reference with it | check it is not already posted |
 | `DUPLICATE_DRAFT` | 3 | another draft does the same | keep one |
 | `UNUSUAL_ACCOUNT_PAIR` | 2 | the draft debits one account and credits another that no posted journal pairs | confirm the accounts |
 | `PERIOD_END` | 1 | a line is dated on `--period-end` | keep the cut-off evidence |

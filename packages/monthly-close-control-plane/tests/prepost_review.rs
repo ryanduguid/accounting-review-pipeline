@@ -104,6 +104,7 @@ fn the_example_drafts_raise_each_flag_and_block_on_the_unbalanced_one() {
     let first = &result.at("journals").as_array().unwrap()[0];
     let flag = &first.at("flags").as_array().unwrap()[0];
     assert_eq!(text(flag.at("suggested_fix")), "Keep one of the drafts.");
+    assert_eq!(pyjson::canonical(flag.at("weight")), "3");
     let again = prepost(&example("prepost_drafts.csv"), "2026-08-31");
     assert_eq!(output.stdout, again.stdout, "output must be deterministic");
 }

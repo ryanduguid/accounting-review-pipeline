@@ -129,32 +129,38 @@ fn pairs(lines: &[Line]) -> BTreeSet<(String, String)> {
     found
 }
 
-/// A journal's id, first date and first non-blank reference.
-type Named = (String, Date, String);
+/// A journal's id, the dates its lines carry and their non-blank references.
+type Named = (String, BTreeSet<Date>, BTreeSet<String>);
 
 fn named(id: &str, lines: &[Line]) -> Named {
-    let date = lines.iter().map(|line| line.item.date).min().unwrap();
-    let reference = lines
+    let dates = lines.iter().map(|line| line.item.date).collect();
+    let references = lines
         .iter()
         .map(|line| {
             drivers::field(&line.item.row, "Reference")
                 .trim()
                 .to_owned()
         })
-        .find(|reference| !reference.is_empty())
-        .unwrap_or_default();
-    (id.to_owned(), date, reference)
+        .filter(|reference| !reference.is_empty())
+        .collect();
+    (id.to_owned(), dates, references)
 }
 
 /// The journals in `others` that repeat `lines`: the same amounts to the same
-/// accounts on the same date or under the same reference. A recurring entry
-/// with a new date and reference is not a repeat.
-fn repeats(id: &str, lines: &[Line], others: &BTreeMap<Signature, Vec<Named>>) -> Vec<String> {
-    let (_, date, reference) = named(id, lines);
+/// accounts, sharing a date or a non-blank reference. A recurring entry with
+/// a new date and reference is not a repeat. `skip` is the draft's own id
+/// when `others` are the drafts.
+fn repeats(
+    lines: &[Line],
+    others: &BTreeMap<Signature, Vec<Named>>,
+    skip: Option<&str>,
+) -> Vec<String> {
+    let (_, dates, references) = named("", lines);
     let same = others.get(&signature(lines)).map_or(&[][..], Vec::as_slice);
     same.iter()
-        .filter(|(other, day, named)| {
-            other != id && (*day == date || (!reference.is_empty() && *named == reference))
+        .filter(|(other, days, named)| {
+            skip != Some(other.as_str())
+                && (!days.is_disjoint(&dates) || !named.is_disjoint(&references))
         })
         .map(|(other, _, _)| other.clone())
         .collect()
@@ -203,8 +209,8 @@ fn ledger_reasons(id: &str, lines: &[Line], context: &Context) -> [Option<String
     let net = lines.iter().fold(Decimal::zero(), |sum, line| {
         sum.add(&line.item.amount).value
     });
-    let posted = repeats(id, lines, &context.posted);
-    let twins = repeats(id, lines, &context.drafts);
+    let posted = repeats(lines, &context.posted, None);
+    let twins = repeats(lines, &context.drafts, Some(id));
     let unusual: Vec<String> = pairs(lines)
         .into_iter()
         .filter(|pair| !context.pairs.contains(pair))
@@ -227,13 +233,13 @@ fn ledger_reasons(id: &str, lines: &[Line], context: &Context) -> [Option<String
         }),
         (!posted.is_empty()).then(|| {
             format!(
-                "Posts the same amounts to the same accounts, on the same date or under the same reference, as posted journal {}.",
+                "Posts the same amounts to the same accounts, sharing a date or a non-blank reference, as posted journal {}.",
                 posted.join(", ")
             )
         }),
         (!twins.is_empty()).then(|| {
             format!(
-                "Posts the same amounts to the same accounts, on the same date or under the same reference, as draft {}.",
+                "Posts the same amounts to the same accounts, sharing a date or a non-blank reference, as draft {}.",
                 twins.join(", ")
             )
         }),
@@ -282,6 +288,7 @@ fn reviewed(id: &str, lines: &[Line], context: &Context) -> (Json, Vec<&'static 
         score += weight;
         flags.push(Json::object([
             ("code", Json::str(code)),
+            ("weight", Json::int(*weight)),
             ("reason", Json::str(&reason)),
             ("suggested_fix", Json::str(fix)),
         ]));
@@ -468,6 +475,36 @@ mod tests {
         assert!(entry.at("risk").is_str("high"));
         let reason = text(entry.at("flags").as_array().unwrap()[0].at("reason"));
         assert_eq!(reason, "Debits less credits is 10.00.");
+    }
+
+    #[test]
+    fn a_draft_with_a_posted_journal_s_id_is_still_a_duplicate_of_it() {
+        let drafts = RENT.replace("J-1,2026-07-06", "J-1,2026-08-06");
+        let result = run(&drafts, RENT).unwrap();
+        assert_eq!(flags(&result), ["J-1 DUPLICATE_OF_POSTED"]);
+    }
+
+    #[test]
+    fn a_shared_reference_on_any_line_matches_whatever_the_row_order() {
+        let posted = "T,610,AUD,J-1,2026-07-06,RENT-07,Rent,2000.75,0\n\
+                      T,615,AUD,J-1,2026-07-07,FEE-07,Fee,450.00,0\n\
+                      T,090,AUD,J-1,2026-07-07,,Bank,0,2450.75\n";
+        let draft = "T,090,AUD,D-1,2026-08-10,,Bank,0,2450.75\n\
+                     T,615,AUD,D-1,2026-08-10,FEE-07,Fee,450.00,0\n\
+                     T,610,AUD,D-1,2026-08-10,RENT-08,Rent,2000.75,0\n";
+        let other =
+            "T,090,AUD,D-0,2026-08-03,X,Other,0,10.00\nT,615,AUD,D-0,2026-08-03,X,Other,10.00,0\n";
+        for drafts in [draft.to_owned(), format!("{other}{draft}")] {
+            let result = run(&drafts, posted).unwrap();
+            let found = flags(&result);
+            assert!(
+                found.contains(&"D-1 DUPLICATE_OF_POSTED".to_owned()),
+                "{found:?}"
+            );
+        }
+        let renamed = draft.replace("FEE-07", "FEE-08");
+        let result = run(&renamed, posted).unwrap();
+        assert_eq!(flags(&result), ["D-1 "]);
     }
 
     #[test]
