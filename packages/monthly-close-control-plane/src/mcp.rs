@@ -170,7 +170,7 @@ fn tools() -> Json {
         ),
         tool(
             "schedule",
-            "Review a canonical expense, migration or inter-entity schedule.",
+            "Review a canonical expense, migration, inter-entity, prepayment or roll-forward schedule.",
             vec![
                 (
                     "kind",
@@ -178,11 +178,7 @@ fn tools() -> Json {
                         ("type", Json::str("string")),
                         (
                             "enum",
-                            Json::Array(
-                                ["expenses", "migration", "interentity"]
-                                    .map(Json::str)
-                                    .to_vec(),
-                            ),
+                            Json::Array(schedules::KINDS.map(Json::str).to_vec()),
                         ),
                     ]),
                 ),
@@ -328,8 +324,9 @@ fn run_tool(name: &str, args: &Arguments) -> Option<Result<String>> {
         })()),
         "schedule" => pretty((|| {
             let kind = args.text("kind")?;
-            if !["expenses", "migration", "interentity"].contains(&kind.as_str()) {
-                return Err("kind must be expenses, migration or interentity.".into());
+            if !schedules::KINDS.contains(&kind.as_str()) {
+                let (last, rest) = schedules::KINDS.split_last().unwrap();
+                return Err(format!("kind must be {} or {last}.", rest.join(", ")));
             }
             schedules::review_schedule(&args.path("input")?, &kind)
         })()),
@@ -704,7 +701,10 @@ mod tests {
         );
         assert_eq!(text, "summary must be true or false.");
         let (text, _) = call_text(&nowhere(), "schedule", r#"{"kind":"budget","input":"x"}"#);
-        assert_eq!(text, "kind must be expenses, migration or interentity.");
+        assert_eq!(
+            text,
+            "kind must be expenses, migration, interentity, prepayments or rollforward."
+        );
     }
 
     #[test]

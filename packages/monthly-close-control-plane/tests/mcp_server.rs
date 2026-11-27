@@ -42,6 +42,8 @@ fn workspace(temp: &TempDir) -> PathBuf {
     for name in [
         "journal_entries.csv",
         "schedules/expenses.json",
+        "schedules/prepayments.json",
+        "schedules/rollforward.json",
         "classification/transactions.csv",
         "classification/coding-evidence.json",
     ] {
@@ -104,6 +106,22 @@ fn calls() -> Vec<(i64, String, String)> {
                 path("journal_entries.csv")
             ),
         ),
+        (
+            7,
+            "schedule".into(),
+            format!(
+                r#"{{"kind":"prepayments","input":{}}}"#,
+                path("schedules-prepayments.json")
+            ),
+        ),
+        (
+            8,
+            "schedule".into(),
+            format!(
+                r#"{{"kind":"rollforward","input":{}}}"#,
+                path("schedules-rollforward.json")
+            ),
+        ),
     ]
 }
 
@@ -143,7 +161,7 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
         .lines()
         .map(|line| pyjson::loads(line).unwrap())
         .collect();
-    assert_eq!(replies.len(), 7);
+    assert_eq!(replies.len(), 9);
     assert!(
         replies[0]
             .at("result")
@@ -181,6 +199,20 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
     }
     let (jet, _) = text(6);
     assert!(jet.contains("\"unbalanced_journal\""), "{jet}");
+    // The prepayment and roll-forward kinds return what the command prints.
+    for (index, kind) in [(7, "prepayments"), (8, "rollforward")] {
+        let (result, failed) = text(index);
+        assert!(!failed, "{result}");
+        let command = child_profile::command(BIN)
+            .args(["schedule", "--kind", kind, "--input"])
+            .arg(root.join(format!("schedules-{kind}.json")))
+            .output()
+            .unwrap();
+        assert_eq!(
+            result.trim_end(),
+            String::from_utf8(command.stdout).unwrap().trim_end()
+        );
+    }
 }
 
 #[test]

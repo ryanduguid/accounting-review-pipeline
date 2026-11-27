@@ -51,7 +51,7 @@
     },
     {
       "name": "schedule",
-      "description": "Review a canonical expense, migration or inter-entity schedule."
+      "description": "Review a canonical expense, migration, inter-entity, prepayment or roll-forward schedule."
     },
     {
       "name": "jet",
