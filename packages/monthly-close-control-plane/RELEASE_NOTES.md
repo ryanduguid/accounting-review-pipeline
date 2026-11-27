@@ -20,7 +20,9 @@
   saved close results.
 - `close-control mcp`: read-only MCP stdio server and bundle manifest for the
   file-reading commands.
-- Residual taxonomy, audit binder and flux checks in close review packs.
+- Library modules for a residual taxonomy, a sealed audit binder and flux
+  checks ([close extensions](docs/close-extensions.md)). No command or close
+  review pack runs them yet.
 
 ## Changed and fixed
 
