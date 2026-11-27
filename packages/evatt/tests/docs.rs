@@ -40,6 +40,8 @@ fn public_docs_keep_the_assurance_boundary_and_no_retired_claims() {
         "prints finding kinds and locations, without detected values",
         "no client data passes through evatt until the policy governing it",
         "that includes testing",
+        "redaction does not settle confidentiality",
+        "it does not replace that permission",
         "re-runs the same detection",
         "must write your own",
         "matching evidence is not permission",
