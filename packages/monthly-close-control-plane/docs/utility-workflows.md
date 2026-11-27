@@ -1,20 +1,19 @@
 # Run the joined accounting examples
 
-Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and australian-accounting; the grant workpapers live in this repository at `apps/grant-acquittal-workpapers/`. Install Python 3.14 or later, Git, uv and Rust. The retained Python driver runs Python companions through uv and builds the close command, the grant command and the native WIP example through Cargo. Initial setup may download public dependencies. The calculations use local fabricated inputs.
+Use current Git checkouts of Accounting Review Pipeline, au-fpa-pack and australian-accounting; the grant workpapers live in this repository at `apps/grant-acquittal-workpapers/`. Install Python 3.14 or later, Git, uv and Rust. The Rust `utility_workflows` example runs Python companions through uv and builds the close command, the grant command and the native WIP example through Cargo. Initial setup may download public dependencies. The calculations use local fabricated inputs.
 
 The joined examples are available on all three repositories' `main` branches.
 The driver refuses a WIP checkout without its job-to-cash example
 (`examples/job_to_cash.rs` for the native crate, `examples/job_to_cash.py` for
 the earlier Python package) before creating outputs or environments.
 
-For one-command setup, run this from `apps/grant-acquittal-workpapers` in a
-pipeline checkout:
+For one-command setup, run the Rust `setup_utility` example from `apps/grant-acquittal-workpapers` in a pipeline checkout:
 
 ```powershell
-python setup_utility.py --workspace ../../../accounting-utility-demo
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-demo
 ```
 
-The setup command needs Python 3.14 or later, Git, uv and cargo on PATH; cargo
+The setup command needs Git, uv and cargo on PATH (and Python 3.14 or later to replay a pipeline commit older than the Rust driver); cargo
 builds the native close and grant commands, and the native WIP example, from
 their component lockfiles. It clones the
 two companions at `main`, uses the enclosing pipeline checkout for the close
@@ -45,8 +44,10 @@ component-lock compatibility.
 From a directory containing those 3 checkout folders:
 
 ```powershell
-python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa au-fpa-pack --accounting australian-accounting --grants accounting-review-pipeline/apps/grant-acquittal-workpapers --output ../utility-results --environment-root ../utility-environments
+cargo run --locked --manifest-path accounting-review-pipeline/packages/monthly-close-control-plane/Cargo.toml --example utility_workflows -- --fpa au-fpa-pack --accounting australian-accounting --grants accounting-review-pipeline/apps/grant-acquittal-workpapers --output ../utility-results --environment-root ../utility-environments
 ```
+
+`examples/utility_workflows.py` takes the same arguments and is kept for callers outside this repository; CI runs the Rust example.
 
 Both destination directories must be new, separate and outside the source checkouts. Paths can contain spaces when quoted. No machine-specific user directory or private task harness is required. RTK is used when installed but is not a dependency. Omit `--environment-root` to use uv's ordinary project environments.
 

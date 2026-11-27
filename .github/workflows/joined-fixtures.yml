@@ -54,8 +54,14 @@ jobs:
         with:
           version: '0.13.5'
           enable-cache: false
+      # Build the Rust driver first, so a compile failure is not read as a fixture failure.
+      - name: Build the workflow driver
+        shell: bash
+        working-directory: sources/accounting-review-pipeline/packages/monthly-close-control-plane
+        run: cargo build --locked --quiet --example utility_workflows
       - name: Verify the public fixture workflows
         shell: bash
+        working-directory: sources/accounting-review-pipeline/packages/monthly-close-control-plane
         run: |
           fixture_status=0
           for workflow in close-forecast quarter job-cash grant-cash; do
@@ -64,7 +70,7 @@ jobs:
             if [ "$workflow" = grant-cash ]; then
               grants=(--grants "$GITHUB_WORKSPACE/sources/accounting-review-pipeline/apps/grant-acquittal-workpapers")
             fi
-            python sources/accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py \
+            cargo run --locked --quiet --example utility_workflows -- \
               --workflow "$workflow" \
               --fpa "$GITHUB_WORKSPACE/sources/au-fpa-pack" \
               --accounting "$GITHUB_WORKSPACE/sources/australian-accounting" \

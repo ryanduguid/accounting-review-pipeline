@@ -444,6 +444,42 @@ fn present_non_boolean_flags_are_unreadable_and_block_the_full_review() {
 }
 
 #[test]
+fn the_current_and_previous_schema_ids_are_read_and_recorded_as_stated() {
+    let current = loaded(GOOD.as_bytes()).unwrap();
+    assert_eq!(current.schema, "calculation-evidence/1");
+    assert!(current.usable());
+    // A file written before 1.3.0 carries the previous id inside its digested
+    // calculation block too, and its digest covers that spelling.
+    let previous = pyjson::loads(&GOOD.replace(
+        "\"calculation-evidence/1\"",
+        "\"lodgeit-calculation-evidence/1\"",
+    ))
+    .unwrap();
+    let stale = loaded(&bytes(previous.clone(), false)).unwrap();
+    assert!(
+        !stale.usable() && stale.findings[0].contains("does not match the calculation block"),
+        "the edit must change the digested block"
+    );
+    let previous = loaded(&bytes(previous, true)).unwrap();
+    assert_eq!(previous.schema, "lodgeit-calculation-evidence/1");
+    assert!(previous.usable());
+    for refused in [
+        "calculation-evidence/2",
+        "Calculation-evidence/1",
+        "lodgeit-calculation-evidence/2",
+    ] {
+        let mut value = record();
+        value.set("schema", Json::str(refused));
+        assert!(
+            loaded(&bytes(value, false))
+                .unwrap_err()
+                .contains("unknown schema"),
+            "{refused}"
+        );
+    }
+}
+
+#[test]
 #[expect(
     clippy::too_many_lines,
     reason = "one refusal case per malformed shape"
@@ -1018,8 +1054,7 @@ fn duplicate_keys_are_unreadable_in_both_orders_and_at_nested_depths() {
         assert_eq!(pack.status, Status::Blocked);
         assert!(pack.relied_on.is_empty());
     }
-    let raw =
-        br#"{"schema":"lodgeit-calculation-evidence/1","calculation":{"rows":[{"a":1,"a":2}]}}"#;
+    let raw = br#"{"schema":"calculation-evidence/1","calculation":{"rows":[{"a":1,"a":2}]}}"#;
     assert!(loaded(raw).unwrap_err().contains("more than once"));
     let mut bom = b"\xef\xbb\xbf".to_vec();
     bom.extend_from_slice(GOOD.as_bytes());

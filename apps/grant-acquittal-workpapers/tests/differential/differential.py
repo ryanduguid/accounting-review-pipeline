@@ -12,7 +12,9 @@ Each case writes the same mutated inputs into two working directories, runs
 both implementations with the same arguments, and compares exit codes,
 stdout, stderr and every file left behind. The program name in argparse
 messages, the working directory path and random staging names are normalised;
-a CPython traceback is compared by exit code only.
+a CPython traceback is compared by exit code only. The reference cells the Rust
+command adds beside each total (`*_ledger_rows`, `*_receipt_rows` and
+`*_contribution_rows`) are removed from the Rust side before files are compared.
 Timeout artifacts retain fabricated case bytes as base64 without copying the
 child environment or interpreting case filenames as artifact paths.
 """
@@ -268,6 +270,21 @@ def snapshot(cwd):
     return out
 
 
+def usage_indent(data, prog):
+    """Wrapped usage lines, indented under the program name, re-indented under <prog>."""
+    pad = b" " * len(f"usage: {prog} ".encode())
+    lines = data.split(b"\n")
+    in_usage = False
+    for index, line in enumerate(lines):
+        if line.startswith(b"usage: <prog>"):
+            in_usage = True
+        elif in_usage and line.startswith(pad) and line[len(pad):len(pad) + 1] not in (b"", b" "):
+            lines[index] = b" " * len(b"usage: <prog> ") + line[len(pad):]
+        else:
+            in_usage = False
+    return b"\n".join(lines)
+
+
 def normalise(data, cwd, progs):
     for form in (str(cwd), str(cwd).replace("\\", "\\\\")):
         data = data.replace(form.encode(), b"<x>")
@@ -275,7 +292,75 @@ def normalise(data, cwd, progs):
     for prog in progs:
         data = data.replace(b"usage: " + prog.encode(), b"usage: <prog>")
         data = data.replace(prog.encode() + b": error:", b"<prog>: error:")
+        data = usage_indent(data, prog)
     return re.sub(rb"\.grant-workpaper-[a-z0-9_]{8}", b".grant-workpaper-<random>", data)
+
+
+# Reference cells the Rust command adds beside each total; the frozen script has none.
+REFERENCE = re.compile(r"_(ledger|receipt|contribution)_rows$")
+REFERENCE_TABLES = ("budget_lines.csv", "funding_movements.csv", "contributions.csv")
+
+
+# The option the Rust command adds. The frozen script gets the same argparse
+# argument, so usage, help and option errors still compare byte for byte; no
+# case passes it, as the script would not read the file.
+IGNORE_ANCHOR = '    parser.add_argument("--output", required=True, type=Path)\n'
+IGNORE_HELP = ("CSV of ledger_id,reason naming ledger rows dated outside the ledger period to leave out of "
+               "every total; each is listed on the workpaper with its reason")
+
+
+def with_ignore_option(script, folder):
+    """A copy of the frozen script, named as it was, that declares --ignore-file."""
+    source = script.read_text(encoding="utf-8")
+    if source.count(IGNORE_ANCHOR) != 1:
+        raise SystemExit(f"{script}: the --output argument line was not found exactly once")
+    patched = folder / script.name
+    patched.write_text(source.replace(
+        IGNORE_ANCHOR, IGNORE_ANCHOR + f'    parser.add_argument("--ignore-file", type=Path, help={IGNORE_HELP!r})\n'),
+        encoding="utf-8")
+    return patched
+
+
+def json_text(document):
+    """The bytes the frozen script writes for a document: indent 2, text mode."""
+    text = json.dumps(document, indent=2) + "\n"
+    return (text.replace("\n", "\r\n") if os.name == "nt" else text).encode("utf-8")
+
+
+def csv_text(rows):
+    """The bytes csv.DictWriter writes for these rows, as the frozen script opened its CSV files."""
+    stream = io.StringIO(newline="")
+    csv.writer(stream).writerows(rows)
+    return stream.getvalue().encode("utf-8")
+
+
+def without_references(rel, data):
+    """The Rust command's file with its reference cells removed.
+
+    Only the Rust side is rewritten, and only when writing the parsed file back
+    the frozen script's way reproduces its exact bytes; otherwise the bytes are
+    compared as they are, so any other difference still shows."""
+    name = rel.rsplit("/", 1)[-1]
+    try:
+        if name == "workpaper.json":
+            document = json.loads(data.decode("utf-8"))
+            if json_text(document) != data:
+                return data
+            rows = [document] + [row for value in document.values() if isinstance(value, list) for row in value]
+            for row in rows:
+                if isinstance(row, dict):
+                    for key in [key for key in row if REFERENCE.search(key)]:
+                        del row[key]
+            return json_text(document)
+        if name in REFERENCE_TABLES:
+            rows = list(csv.reader(io.StringIO(data.decode("utf-8"), newline="")))
+            if not rows or csv_text(rows) != data:
+                return data
+            keep = [index for index, heading in enumerate(rows[0]) if not REFERENCE.search(heading)]
+            return csv_text([[row[index] for index in keep] for row in rows])
+    except (ValueError, UnicodeError, csv.Error, IndexError):
+        pass
+    return data
 
 
 def encoded_bytes(value):
@@ -337,6 +422,8 @@ def main():
     scratch = Path(tempfile.mkdtemp(prefix="grant-diff-"))
     failures, outcomes = 0, {}
     try:
+        (scratch / "oracle").mkdir()
+        script = with_ignore_option(script, scratch / "oracle")
         for index in range(args.cases):
             case = Case()
             if rng.random() < 0.1:
@@ -377,7 +464,10 @@ def main():
                         problems.append(f"{stream}\n  python: {a[:500]!r}\n  rust:   {b[:500]!r}")
                 files_py, files_rs = snapshot(cwd_py), snapshot(cwd_rs)
                 for rel in sorted(set(files_py) | set(files_rs)):
-                    if files_py.get(rel) != files_rs.get(rel):
+                    a, b = files_py.get(rel), files_rs.get(rel)
+                    if isinstance(b, bytes):
+                        b = without_references(rel, b)
+                    if a != b:
                         problems.append(f"file {rel}\n  python: {str(files_py.get(rel))[:300]}\n  rust:   {str(files_rs.get(rel))[:300]}")
             key = (name, python.returncode)
             outcomes[key] = outcomes.get(key, 0) + 1

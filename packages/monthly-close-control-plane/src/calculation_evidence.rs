@@ -16,7 +16,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const SCHEMA: &str = "lodgeit-calculation-evidence/1";
+const SCHEMA: &str = "calculation-evidence/1";
+/// The id evidence files carried before 1.3.0. Still read, and recorded as the
+/// file states it, until 1.4.0 removes it; the frozen differential corpus
+/// supplies files with this id, so its removal must rewrite them too.
+const PREVIOUS_SCHEMA: &str = "lodgeit-calculation-evidence/1";
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 static NULL: Json = Json::Null;
 
@@ -174,7 +178,7 @@ pub fn load(snapshot: &SourceSnapshot) -> Result<CalculationEvidence> {
         return Err(format!("{path}: evidence must be a JSON object."));
     }
     let schema = text(field(&record, "schema"), "schema", source, 120)?;
-    if schema != SCHEMA {
+    if schema != SCHEMA && schema != PREVIOUS_SCHEMA {
         return Err(format!(
             "{path}: evidence schema {} is not one this pipeline reads ({SCHEMA}). An unknown schema is refused rather than guessed at.",
             pytext::repr(&schema)

@@ -838,6 +838,11 @@ pub fn pretty(value: &Json) -> String {
     pretty_points(value, true, true).to_utf8().unwrap()
 }
 
+/// `json.dumps(value, indent=2)` preserving insertion order and ASCII escapes.
+pub fn pretty_ordered(value: &Json) -> String {
+    pretty_points(value, false, true).to_utf8().unwrap()
+}
+
 /// The clearing and driver exports preserve insertion order and literal Unicode.
 pub fn pretty_utf8(value: &Json) -> Result<String, String> {
     encode_utf8(&pretty_points(value, false, false))

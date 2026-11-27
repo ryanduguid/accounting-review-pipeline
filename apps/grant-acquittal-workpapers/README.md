@@ -17,7 +17,8 @@ eligibility or acquittal approval. Choose a new output folder for each run.
 `rust-toolchain.toml` pins the Rust toolchain, which rustup installs on first
 use, and `Cargo.lock` pins its 2 dependencies, `sha2` and, on Unix, `libc`. From 0.2.0 the Python
 script `grant_workpaper.py` is gone. The Rust command reads the same inputs and
-writes byte-identical files, exit codes and messages, matching the script under
+writes the same files, exit codes and messages, matching the script byte for byte
+apart from the reference cell beside each total (see Outputs) under
 Python 3.15 (a date outside the calendar reports the range error that version's
 `date.fromisoformat` gives). One exception: the command refuses `agreements.json`
 nested more than 10,000 levels deep (`agreements.json is nested too deeply to
@@ -25,14 +26,14 @@ read`). The script's
 limit came from the C stack, so it varied by platform and stack size: under
 Python 3.15 it read about 13,800 nested arrays on Windows and 65,000 on Linux
 with an 8 MiB stack. The Python `pyproject.toml` and its `uv.lock` remain
-for the setup and replay utility below, which has no runtime dependencies.
+for the Python differential test tools, which have no runtime dependencies.
 
 ## Run all joined accounting examples
 
-From this directory, with Python 3.14 or later, Git, uv and cargo on PATH:
+From this directory, with Git, uv and cargo on PATH (plus Python 3.14 or later when replaying a pipeline commit older than the Rust workflow driver):
 
 ```powershell
-python setup_utility.py --workspace ../../../accounting-utility-demo
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-demo
 ```
 
 This optional development command clones the public au-fpa-pack and
@@ -68,7 +69,7 @@ stay in the retained files. A passing fixture check never approves accounting.
 To repeat the source revisions from a previous complete run:
 
 ```powershell
-python setup_utility.py --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
+cargo run --locked --example setup_utility -- --workspace ../../../accounting-utility-replay --replay-manifest ../../../accounting-utility-demo/results/manifest.json
 ```
 
 Replay accepts only full commit IDs from an all-route `utility-workflows.v2`
@@ -106,7 +107,7 @@ The au-fpa-pack source example `examples/restricted-cash/grant_cash.py`
 consumes the hash-bound JSON workpaper and a separate reviewed cash plan.
 It retains source findings, unplanned commitments and the distinction between
 cash allocations and unspent funding. The Monthly Close Controls
-`examples/utility_workflows.py --workflow grant-cash` recipe runs both owners
+`utility_workflows --workflow grant-cash` example runs both owners
 without importing one repository into the other.
 
 ## Run grant cash with an existing checkout
@@ -149,6 +150,16 @@ terms of the agreement for the reviewer to apply. Without the file, every
 contribution column is nil. An unreadable path or dangling link is an input
 error; no workpaper is published. Readable file links remain supported.
 
+A ledger row dated outside the ledger period fails the run unless an ignore
+file names it. Pass `--ignore-file <path>`, a CSV with the headings
+`ledger_id,reason`. Each entry must name a row in `ledger.csv` dated outside
+the period and give a visible reason. That row is left out of every total and
+listed with its reason in `workpaper.md`, `workpaper.json` and
+`ignored_items.csv`, and the summary line counts it; it still needs valid
+amounts, and an allocation to it is an input error. A missing or unreadable
+file, wrong headings, a duplicate or unknown ID, a row inside the period or a
+blank reason fails the run, and no workpaper is published.
+
 ## Outputs
 
 - `workpaper.md` and `workpaper.json`: reconciliation, review items and source SHA-256 values.
@@ -158,6 +169,17 @@ error; no workpaper is published. Readable file links remain supported.
 - `funding_movements.csv`: opening funding, receipts, expenditure and cash movements.
 - `contributions.csv`: interest, cash co-contributions and in-kind contributions per grant.
 - `findings.csv`: items requiring review.
+- `ignored_items.csv`: with `--ignore-file` only, each ignored ledger row and its reason.
+
+Every total names the rows behind it in a reference cell beside it, so a
+reviewer can trace each figure to its source. A cell ending `_ledger_rows`
+lists ledger IDs: `ledger_total`, `allocated_total` and `unallocated_total`
+in `workpaper.json`, each `budget_lines.csv` total, and expenditure and cash
+paid in `funding_movements.csv`. `funding_received_receipt_rows` lists receipt
+IDs and each `contributions.csv` kind has a `_contribution_rows` cell. A row
+is listed once, in the order it was read, when it adds a non-zero amount, so
+an empty list means a total of nil. JSON holds each reference as a list of
+IDs; CSV writes it as that list's Python form, such as `['L1', 'L3']`.
 
 CSV text that could start a spreadsheet formula is escaped. JSON retains the supplied values. Keep all real workpapers and inputs outside this repository.
 
@@ -178,15 +200,14 @@ The fabricated ledger totals $6,500. Allocations total $6,300 and $200 remains u
 
 ## Verification and development
 
-Run `cargo test --locked` above for the workpaper, and
-`python -m unittest discover -s tests -v` for the setup and replay utility. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
+Run `cargo test --locked --all-targets` above for the workpaper and the setup and replay utility. No external service, credential, model judgement or real client data is required. The tests include excessive shared allocations, partly paid expenditure, different grant periods, budget and agreement-date boundaries, cash-only and unspent-only shortfalls, missing evidence, duplicate source IDs, CSV injection (a negative figure stays a number) and refusing to overwrite a prior run. No live agreement or independent practitioner evaluation is claimed.
 
 GitHub Actions runs the Rust tests, `cargo fmt --check` and `cargo clippy` on Linux
 and Windows, including a competing destination created immediately before
-publication, and runs the bundled example from a release build. The utility's
-unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
+publication, and runs the bundled example from a release build. The Python
+differential tools' unittest suite runs with Python 3.14 and 3.15. It does not run macOS, so the
 `RENAME_EXCL` path is untested there.
-It also runs Ruff with a pinned version on the utility. Local lint uses
+It also runs Ruff with a pinned version on those tools. Local lint uses
 `uv run --with ruff==0.16.6 ruff check .`.
 
 `tests/differential/differential.py` compares the binary with the 0.1.0 Python
@@ -196,8 +217,15 @@ Use `grant_workpaper.py` from the immutable
 [pre-port commit](https://github.com/ryanduguid/accounting-review-pipeline/blob/89cebd44f4b6ec276882cd69277935fa3ba980bc/apps/grant-acquittal-workpapers/grant_workpaper.py).
 CI extracts that script and runs 1,500 cases with seed `20261012` on Linux and
 Windows under Python 3.15, retaining native child coverage. The comparator
-normalises program names, working directories and random staging names; Python
-tracebacks are compared by exit code only.
+normalises program names (with the indent of wrapped usage lines under them),
+working directories and random staging names; Python
+tracebacks are compared by exit code only. The reference cells, which the
+script never wrote, are removed from the binary's files before comparison, and
+only when writing a file back the script's way reproduces its exact bytes, so
+every other byte must still match. The script is given the same
+`--ignore-file` argument declaration, so usage, help and option errors still
+compare byte for byte; no case passes the option, which the script never read,
+and `src/tests/ignore.rs` covers it instead.
 
 ```powershell
 $oracleScript = 'C:\path\to\grant_workpaper.py'

@@ -93,5 +93,52 @@ class TimeoutArtifacts(unittest.TestCase):
         self.assertFalse(self.artifact.exists())
 
 
+class ReferenceCells(unittest.TestCase):
+    """The comparator removes only the Rust command's reference cells."""
+
+    def test_reference_columns_are_removed_and_every_other_byte_kept(self):
+        rust = differential.csv_text([["grant_id", "allocated", "allocated_ledger_rows"], ["G-A", "600", "['L1']"]])
+        frozen = differential.csv_text([["grant_id", "allocated"], ["G-A", "600"]])
+        self.assertEqual(differential.without_references("out/budget_lines.csv", rust), frozen)
+        document = {"ledger_total": "6500", "ledger_total_ledger_rows": ["L1"], "budget_lines": [{"a": "1", "a_ledger_rows": []}]}
+        expected = differential.json_text({"ledger_total": "6500", "budget_lines": [{"a": "1"}]})
+        self.assertEqual(differential.without_references("out/workpaper.json", differential.json_text(document)), expected)
+
+    def test_a_file_the_frozen_writer_would_not_produce_is_compared_as_it_is(self):
+        rows = [["grant_id", "allocated_ledger_rows"], ["G-A", "[]"]]
+        lf = differential.csv_text(rows).replace(b"\r\n", b"\n")
+        self.assertEqual(differential.without_references("out/budget_lines.csv", lf), lf)
+        quoted = b'"grant_id",allocated_ledger_rows\r\nG-A,[]\r\n'
+        self.assertEqual(differential.without_references("out/budget_lines.csv", quoted), quoted)
+        compact = json.dumps({"ledger_total": "1", "ledger_total_ledger_rows": []}).encode() + b"\n"
+        self.assertEqual(differential.without_references("out/workpaper.json", compact), compact)
+        self.assertEqual(differential.without_references("out/budget_lines.csv", b"\xff"), b"\xff")
+
+    def test_other_files_are_untouched(self):
+        data = b"code,reference\r\nX,a_ledger_rows\r\n"
+        self.assertEqual(differential.without_references("out/findings.csv", data), data)
+
+
+class UsageIndent(unittest.TestCase):
+    """Wrapped usage lines differ only by the program name's width."""
+
+    def test_only_the_usage_continuation_is_reindented(self):
+        def usage(prog):
+            pad = " " * len(f"usage: {prog} ")
+            return (f"usage: {prog} [-h] --input INPUT\n{pad}[--ignore-file IGNORE_FILE]\n\n"
+                    "options:\n  --ignore-file IGNORE_FILE\n                        help text\n").encode()
+
+        python = differential.normalise(usage("grant_workpaper.py"), Path("/no-such-cwd"), ("grant_workpaper.py",))
+        rust = differential.normalise(usage("grant-workpaper"), Path("/no-such-cwd"), ("grant-workpaper",))
+        self.assertEqual(python, rust)
+        self.assertIn(b"\n                        help text\n", rust)
+
+    def test_a_misaligned_continuation_still_differs(self):
+        # 11 spaces is not a.py's indent of 12, so only the Rust line is re-indented.
+        python = differential.normalise(b"usage: a.py [-h]\n           [--x X]\n", Path("/no-such-cwd"), ("a.py",))
+        rust = differential.normalise(b"usage: ab [-h]\n          [--x X]\n", Path("/no-such-cwd"), ("ab",))
+        self.assertNotEqual(python, rust)
+
+
 if __name__ == "__main__":
     unittest.main()
