@@ -1554,6 +1554,76 @@ mod tests {
     }
 
     #[test]
+    fn success_clones_fixed_main_into_a_new_nested_workspace_with_spaces() {
+        let temp = TempDir::new("setup-success");
+        let pipe = temp.join("pipe line");
+        fake_pipeline(&pipe, true);
+        let stub = default_stub(None);
+        let ws = temp.join("new parent").join("new workspace");
+        let output = setup(&stub, &pipe.join(GRANT_PROJECT), &ws, None).unwrap();
+        assert!(output.ends_with("results") && ws.join("results").join("manifest.json").is_file());
+        let seen = stub.seen.borrow();
+        let clones: Vec<_> = seen.iter().filter(|cmd| cmd.iter().any(|s| s == "clone")).collect();
+        assert_eq!(clones.len(), COMPANIONS.len());
+        for ((name, repo), clone) in COMPANIONS.iter().zip(&clones) {
+            assert!(clone.contains(&format!("https://github.com/ryanduguid/{repo}.git")));
+            assert_eq!(clone[clone.iter().position(|s| s == "--branch").unwrap() + 1], "main");
+            assert!(Path::new(clone.last().unwrap()).ends_with(Path::new("sources").join(name)));
+        }
+        // The enclosing pipeline checkout supplies the runner; the companions stay separate.
+        assert!(Path::new(&seen.last().unwrap()[1]).ends_with(DRIVER_PY));
+    }
+
+    #[test]
+    fn failed_clone_workflow_or_missing_manifest_is_never_success() {
+        let temp = TempDir::new("setup-failures");
+        let pipe = temp.join("pipeline");
+        fake_pipeline(&pipe, true);
+        let source = pipe.join(GRANT_PROJECT);
+        let with_status = |status_hook: Box<StatusHook>| StubOps {
+            status_hook,
+            ..default_stub(None)
+        };
+        let failed_clone = with_status(Box::new(|cmd, _| {
+            assert!(cmd.iter().any(|s| s == "clone"), "a workflow ran after a failed clone");
+            Err("Command returned non-zero exit status 1.".into())
+        }));
+        let ws = temp.join("clone");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let args = ["--workspace".into(), oserror::path_text(&ws)];
+        assert_eq!(
+            run_main(&failed_clone, &source, "setup_utility", &args, &mut out, &mut err),
+            1
+        );
+        assert!(!ws.join("results").exists());
+        assert!(fs::read_dir(ws.join("sources")).unwrap().next().is_none());
+
+        let clone_then = |workflow: Result<(), String>| {
+            with_status(Box::new(move |cmd, _| {
+                if cmd.iter().any(|s| s == "clone") {
+                    fs::create_dir(Path::new(cmd.last().unwrap())).unwrap();
+                    return Ok(());
+                }
+                workflow.clone()
+            }))
+        };
+        let ws = temp.join("workflow");
+        let args = ["--workspace".into(), oserror::path_text(&ws)];
+        let failed_workflow = clone_then(Err("Command returned non-zero exit status 2.".into()));
+        assert_eq!(
+            run_main(&failed_workflow, &source, "setup_utility", &args, &mut out, &mut err),
+            1
+        );
+        assert!(!ws.join("results").join("manifest.json").exists());
+        let no_manifest = clone_then(Ok(()));
+        assert!(
+            setup(&no_manifest, &source, &temp.join("silent"), None)
+                .unwrap_err()
+                .contains("success manifest")
+        );
+    }
+
+    #[test]
     fn nonexistent_parent_traversal_into_pipeline_and_git_repo_fails() {
         let temp = TempDir::new("setup-dotdot");
         let pipe = temp.join("pipeline");
@@ -1663,7 +1733,7 @@ mod tests {
         assert!(!ws.exists());
     }
 
-    /// The cases tests/test_setup_utility_parity.py records from setup_utility.py.
+    /// The cases recorded from setup_utility.py before the Rust port replaced it.
     #[test]
     fn recorded_python_cases_match() {
         let fixture = pyjson::loads_bytes(include_bytes!("../tests/fixtures/setup_utility_cli.json")).unwrap();
