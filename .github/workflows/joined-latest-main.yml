@@ -39,7 +39,8 @@ jobs:
           enable-cache: false
       - name: Set up and verify all joined examples
         shell: bash
-        run: python apps/grant-acquittal-workpapers/setup_utility.py --workspace "${{ runner.temp }}/accounting-utility" --summary "$GITHUB_STEP_SUMMARY"
+        working-directory: apps/grant-acquittal-workpapers
+        run: cargo run --locked --quiet --example setup_utility -- --workspace "${{ runner.temp }}/accounting-utility" --summary "$GITHUB_STEP_SUMMARY"
       - name: Retain fabricated results and failure diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

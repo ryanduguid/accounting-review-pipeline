@@ -17,8 +17,8 @@ public repositories, run each route into a new output and environment directory
 (passing your local `OzFPA` checkout to `--fpa`):
 
 ```powershell
-python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa OzFPA --workflow close-forecast --output ../owner-close-results --environment-root ../owner-close-environments
-python accounting-review-pipeline/packages/monthly-close-control-plane/examples/utility_workflows.py --fpa OzFPA --workflow quarter --output ../owner-quarter-results --environment-root ../owner-quarter-environments
+cargo run --locked --manifest-path accounting-review-pipeline/packages/monthly-close-control-plane/Cargo.toml --example utility_workflows -- --fpa OzFPA --workflow close-forecast --output ../owner-close-results --environment-root ../owner-close-environments
+cargo run --locked --manifest-path accounting-review-pipeline/packages/monthly-close-control-plane/Cargo.toml --example utility_workflows -- --fpa OzFPA --workflow quarter --output ../owner-quarter-results --environment-root ../owner-quarter-environments
 ```
 
 The first route shares source hashes between the Lumbridge close and forecast.

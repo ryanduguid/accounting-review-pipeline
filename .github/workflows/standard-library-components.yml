@@ -4,7 +4,7 @@ name: Standard-library components
 # The Excel adapter, the Power BI application and the grant workpapers
 # application have no Python dependencies and are not uv workspace members.
 # The grant application keeps a
-# pyproject.toml for its setup and replay utility and is never released. Each
+# pyproject.toml for its Python differential test tools and is never released. Each
 # gets the same lint tools at the same pins (configured in its own ruff and mypy
 # settings) and its standard-library suite runs on the same Python matrix. The
 # grant application's Python suite also runs on Windows. The 3 components' Rust
