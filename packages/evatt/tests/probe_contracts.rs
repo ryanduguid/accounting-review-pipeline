@@ -105,6 +105,22 @@ fn small_benchmark_requests_report_the_measured_source_and_counters() {
     assert_measurement(&measured, 12, stats.candidate_starts, 0, stats.characters_examined);
 }
 
+/// The detector's spans and kinds for the TFN, email and number request.
+fn assert_detector_spans(response: &Json) {
+    let detected = "TFN: 123456782\nsample@example.test\n12345678\n12345678";
+    let structured = reported(response.at("structured"));
+    assert_eq!(structured[0], (5, 14, "tfn".to_owned(), "123456782".to_owned()));
+    let (spans, _) = patterns::structured_and_ambiguous(detected).unwrap();
+    assert_eq!(structured, expected(&spans, true));
+    let email = reported(response.at("email_scanner"));
+    assert_eq!(email, [(15, 34, String::new(), "sample@example.test".to_owned())]);
+    assert_eq!(email, expected(&evatt::email::spans(detected), false));
+    let numbers = reported(response.at("numbers"));
+    assert!(numbers.contains(&(35, 43, String::new(), "12345678".to_owned())));
+    assert!(numbers.contains(&(44, 52, String::new(), "12345678".to_owned())));
+    assert_eq!(numbers, expected(&redact::numbers(detected).unwrap(), false));
+}
+
 fn assert_measurement(measured: &Json, points: i64, candidates: usize, retries: usize, examined: usize) {
     assert!(measured.has_exact_keys(&[
         "seconds",
@@ -168,21 +184,7 @@ fn probe_preserves_unicode_offsets_and_continues_after_a_bad_json_line() {
     assert!(array(name)[2].is_str("Jane Roe"));
     assert!(!array(&array(responses[1].at("values"))[0]).is_empty());
     assert!(array(&array(responses[2].at("values"))[0]).is_empty());
-    let detected = "TFN: 123456782
-sample@example.test
-12345678
-12345678";
-    let structured = reported(responses[3].at("structured"));
-    assert_eq!(structured[0], (5, 14, "tfn".to_owned(), "123456782".to_owned()));
-    let (spans, _) = patterns::structured_and_ambiguous(detected).unwrap();
-    assert_eq!(structured, expected(&spans, true));
-    let email = reported(responses[3].at("email_scanner"));
-    assert_eq!(email, [(15, 34, String::new(), "sample@example.test".to_owned())]);
-    assert_eq!(email, expected(&evatt::email::spans(detected), false));
-    let numbers = reported(responses[3].at("numbers"));
-    assert!(numbers.contains(&(35, 43, String::new(), "12345678".to_owned())));
-    assert!(numbers.contains(&(44, 52, String::new(), "12345678".to_owned())));
-    assert_eq!(numbers, expected(&redact::numbers(detected).unwrap(), false));
+    assert_detector_spans(&responses[3]);
     assert!(!array(responses[3].at("unknowns")).is_empty());
     assert_measurement(&responses[4], 11, 0, 0, 0);
 }
