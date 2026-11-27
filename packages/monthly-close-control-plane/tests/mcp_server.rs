@@ -210,7 +210,15 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
             .unwrap();
         assert_eq!(
             result.trim_end(),
-            String::from_utf8(command.stdout).unwrap().trim_end()
+            // The command writes the platform's line endings.
+            String::from_utf8(command.stdout)
+                .unwrap()
+                .replace(
+                    "
+", "
+"
+                )
+                .trim_end()
         );
     }
 }
