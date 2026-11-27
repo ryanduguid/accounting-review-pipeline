@@ -135,25 +135,27 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         package_dir: [packages/elizabeth-anne-alexander, packages/evatt, packages/xero-trial-balance-export, packages/review-ready-gate, packages/monthly-close-control-plane, adapters/accounting-excel-toolkit, apps/grant-acquittal-workpapers, apps/australian-accounting-power-bi]
-        # Each floor is the crate's measured line coverage on Linux, rounded down
-        # (3 November 2026). Raise it with the tests, never lower it to pass.
+        # Each floor is the crate's lowest measured line coverage on Linux, rounded
+        # down (main 532c38b, 27 November 2026; for the adapter and applications,
+        # the lower of the tests alone and the full report). Raise it with the
+        # tests, never lower it to pass.
         include:
           - package_dir: packages/elizabeth-anne-alexander
-            coverage_floor: 90
+            coverage_floor: 97
           - package_dir: packages/evatt
-            coverage_floor: 81
+            coverage_floor: 96
           - package_dir: packages/xero-trial-balance-export
-            coverage_floor: 76
+            coverage_floor: 96
           - package_dir: packages/review-ready-gate
-            coverage_floor: 71
+            coverage_floor: 97
           - package_dir: packages/monthly-close-control-plane
-            coverage_floor: 56
+            coverage_floor: 98
           - package_dir: adapters/accounting-excel-toolkit
-            coverage_floor: 88
+            coverage_floor: 96
           - package_dir: apps/grant-acquittal-workpapers
-            coverage_floor: 85
+            coverage_floor: 97
           - package_dir: apps/australian-accounting-power-bi
-            coverage_floor: 62
+            coverage_floor: 72
     defaults:
       run:
         shell: bash
