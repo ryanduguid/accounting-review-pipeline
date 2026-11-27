@@ -51,6 +51,14 @@ whatever the operator does with the output, and a control being evaluated is not
 yet a control anyone has agreed to rely on. Use the fabricated files under
 `evatt/samples/` until the sign-off exists.
 
+Redaction does not settle confidentiality. Code item 6 covers any information
+relating to a client's affairs, not only identifiers, and the Tax Practitioners
+Board says practitioners must obtain each client's permission before divulging
+client information to a third party, which can include entering it into AI
+models and tools ([TPB(GS) 55/2026](https://www.tpb.gov.au/tpbgs-552026-use-artificial-intelligence-and-code-professional-conduct),
+issued 22 July 2026; [Confidentiality of client information](https://www.tpb.gov.au/confidentiality-client-information)).
+evatt reduces what a disclosure contains; it does not replace that permission.
+
 Build and run from `packages/evatt/`:
 
 ```bash
