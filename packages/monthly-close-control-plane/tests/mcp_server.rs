@@ -213,11 +213,7 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
             // The command writes the platform's line endings.
             String::from_utf8(command.stdout)
                 .unwrap()
-                .replace(
-                    "
-", "
-"
-                )
+                .replace("\r\n", "\n")
                 .trim_end()
         );
     }
