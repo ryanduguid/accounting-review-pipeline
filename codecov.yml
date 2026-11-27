@@ -1,4 +1,6 @@
-# The project status enforces full measured coverage across all CI reports.
+# The project status enforces full measured coverage across all CI reports, and
+# the patch status fails any change that leaves a line it adds or changes
+# untested. Both fail when CI fails.
 coverage:
   status:
     project:
@@ -6,9 +8,12 @@ coverage:
         target: 100%
         threshold: 0%
         if_not_found: failure
+        if_ci_failed: error
     patch:
       default:
-        informational: true
+        target: 100%
+        threshold: 0%
+        if_ci_failed: error
 comment: false
 # Keep carryforward available for flagged uploads.
 flag_management:
