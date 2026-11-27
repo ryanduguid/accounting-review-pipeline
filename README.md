@@ -196,7 +196,7 @@ spellings, and records where the consumers differ.
 
 ## Review-pack contract
 
-The [workflow reuse note](docs/lodgeit-workflow-reuse.md) maps public
+The [workflow reuse note](docs/workflow-reuse.md) maps public
 import, workpaper and review patterns to Accounting Review Pipeline's components,
 with a checklist for using their local evidence outputs.
 
