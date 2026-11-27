@@ -28,6 +28,7 @@
 - `src/bas.rs`: BAS labels drafted from a ledger's tax codes and a payroll register, each total naming its rows, for a reviewer; it lodges nothing (`bas`).
 - `src/prepost.rs`: Draft journals reviewed before posting against the posted listing, each flag with a weight and a suggested fix; it posts nothing (`prepost`).
 - `src/overdue.rs`: Open invoices overdue against the customer's own payment history (median days late and spread), not a fixed ageing bucket (`overdue`).
+- `src/rules.rs`: Each review control's id, when it runs, what it checks and the source of its rule (`rules list`).
 
 ## Architectural boundaries
 1. **Review-first policy**: Exceptions remain visible for a human reviewer. An acknowledgement records that review occurred; it does not approve a close or change a result to `PASS`.

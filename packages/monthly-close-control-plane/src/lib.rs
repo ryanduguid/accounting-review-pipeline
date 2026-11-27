@@ -42,6 +42,7 @@ pub mod reconciliation;
 pub mod reconciliation_report;
 pub mod report;
 pub mod rollforward;
+pub mod rules;
 pub mod schedules;
 pub mod scorecard;
 pub mod statement;

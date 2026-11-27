@@ -1,11 +1,11 @@
 usage: close-control [-h]
-                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas,prepost,overdue} ...
+                     {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas,prepost,overdue,rules} ...
 
 Create a review-first monthly close control pack from validated trial-balance
 exports.
 
 positional arguments:
-  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas,prepost,overdue}
+  {review,workbench,view,queue,reconcile,drivers,compare,classify,schedule,demo,jet,duplicates,fixed-assets,coding,scorecard,mcp,payroll,statement,bas,prepost,overdue,rules}
     review (workbench)  run integrity, variance, mapping, and optional
                         reconciliation controls (as `workbench`, with the
                         local close-review banner)
@@ -45,6 +45,8 @@ positional arguments:
                         score and a suggested fix for each flag
     overdue             list open invoices overdue against the customer's own
                         payment history
+    rules               list each review control's id, when it runs, what it
+                        checks and its source
 
 options:
   -h, --help            show this help message and exit

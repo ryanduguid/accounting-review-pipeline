@@ -1,0 +1,1 @@
+usage: close-control rules [-h] {list}

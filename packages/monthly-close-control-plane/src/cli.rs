@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const COMMANDS: [&str; 21] = [
+const COMMANDS: [&str; 22] = [
     "review",
     "workbench",
     "view",
@@ -41,6 +41,7 @@ const COMMANDS: [&str; 21] = [
     "bas",
     "prepost",
     "overdue",
+    "rules",
 ];
 fn text(command: &str, usage: bool) -> &'static str {
     macro_rules! saved {
@@ -73,6 +74,7 @@ fn text(command: &str, usage: bool) -> &'static str {
         "bas" => saved!("bas"),
         "prepost" => saved!("prepost"),
         "overdue" => saved!("overdue"),
+        "rules" => saved!("rules"),
         _ => saved!("root"),
     }
 }
@@ -234,6 +236,7 @@ fn options(command: &str) -> Option<(&'static [&'static str], &'static [&'static
             &["--transactions", "--currency", "--period-end"],
         ),
         "mcp" => (&[], &["DIRECTORY"]),
+        "rules" => (&[], &["action"]),
         "payroll" => (&["--register"], &["--register"]),
         "statement" => (
             &["--statement", "--currency"],
@@ -403,6 +406,19 @@ fn parse(command: &str, args: &[String]) -> Result<Option<Arguments>> {
         }
         if ["-h", "--help"].contains(&raw.as_str()) {
             return Ok(None);
+        }
+        if command == "rules" && !raw.starts_with('-') {
+            if result.0.contains_key("action") {
+                unknown.push(raw.clone());
+            } else if raw == "list" {
+                result.0.insert("action".into(), vec![raw.clone()]);
+            } else {
+                return Err(format!(
+                    "argument action: invalid choice: {} (choose from 'list')",
+                    pytext::repr_os(raw)
+                ));
+            }
+            continue;
         }
         if command == "mcp" && !raw.starts_with('-') {
             result
@@ -801,6 +817,10 @@ fn run(command: &str, args: &Arguments) -> i32 {
     }
     if command == "mcp" {
         return serve_mcp(args);
+    }
+    if command == "rules" {
+        stdio::out_literal(&crate::rules::render());
+        return 0;
     }
     let result = || -> Result<i32> {
         match command {

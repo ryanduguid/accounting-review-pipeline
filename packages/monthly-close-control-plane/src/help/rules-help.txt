@@ -1,0 +1,8 @@
+usage: close-control rules [-h] {list}
+
+positional arguments:
+  {list}      list each review control: its id, when it runs, what it checks
+              and the source of its rule
+
+options:
+  -h, --help  show this help message and exit
