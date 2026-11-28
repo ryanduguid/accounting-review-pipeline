@@ -13,64 +13,98 @@ use crate::pytext;
 struct Opt {
     flag: &'static str,
     dest: &'static str,
+    required: bool,
 }
 
 struct Command {
     name: &'static str,
     help: &'static str,
     options: &'static [Opt],
+    positional: Option<&'static str>,
 }
 
 const INPUT: Opt = Opt {
     flag: "--in",
     dest: "SOURCE",
+    required: true,
 };
 const MAP: Opt = Opt {
     flag: "--map",
     dest: "ENTITY_MAP",
+    required: true,
 };
 const OUTPUT: Opt = Opt {
     flag: "--out",
     dest: "OUT",
+    required: true,
 };
 const DESTINATION: Opt = Opt {
     flag: "--destination",
     dest: "DESTINATION",
+    required: true,
 };
 const DECISION_REF: Opt = Opt {
     flag: "--decision-ref",
     dest: "DECISION_REF",
+    required: true,
 };
 const RECORD: Opt = Opt {
     flag: "--record",
     dest: "RECORD",
+    required: true,
+};
+const SESSION: Opt = Opt {
+    flag: "--session",
+    dest: "SESSION_MAP",
+    required: true,
+};
+const OPT_INPUT: Opt = Opt {
+    flag: "--in",
+    dest: "SOURCE",
+    required: false,
+};
+const OPT_OUTPUT: Opt = Opt {
+    flag: "--out",
+    dest: "OUT",
+    required: false,
 };
 
-static COMMANDS: [Command; 5] = [
+static COMMANDS: [Command; 6] = [
     Command {
         name: "redact",
         help: "raw markdown to sanitised markdown",
         options: &[INPUT, MAP, OUTPUT],
+        positional: None,
     },
     Command {
         name: "restore",
         help: "reverse the entity map over an answer",
         options: &[INPUT, MAP, OUTPUT],
+        positional: None,
     },
     Command {
         name: "verify",
         help: "re-scan a sanitised file",
         options: &[INPUT, MAP],
+        positional: None,
     },
     Command {
         name: "disclosure-record",
         help: "record local evidence for an intended disclosure",
         options: &[INPUT, MAP, DESTINATION, DECISION_REF, OUTPUT],
+        positional: None,
     },
     Command {
         name: "disclosure-check",
         help: "check local evidence; does not authenticate permission",
         options: &[INPUT, MAP, DESTINATION, DECISION_REF, RECORD],
+        positional: None,
+    },
+    Command {
+        name: "hook",
+        help: "mask tool results and restore tool arguments",
+        options: &[SESSION, OPT_INPUT, OPT_OUTPUT],
+        positional: Some("{post-tool,pre-tool}"),
     },
 ];
 
@@ -281,17 +315,33 @@ fn command_usage(prog: &str, command: &Command, t: &Theme) -> String {
         coloured: format!("[{}-h{}]", t.summary_short_option, t.reset),
     }];
     for option in command.options {
-        let plain = format!("{} {}", option.flag, option.dest);
-        let colour = format!(
-            "{}{} {}{}{}",
-            t.summary_long_option, option.flag, t.summary_label, option.dest, t.reset
-        );
+        let plain = if option.required {
+            format!("{} {}", option.flag, option.dest)
+        } else {
+            format!("[{} {}]", option.flag, option.dest)
+        };
+        let colour = if option.required {
+            format!(
+                "{}{} {}{}{}",
+                t.summary_long_option, option.flag, t.summary_label, option.dest, t.reset
+            )
+        } else {
+            format!(
+                "[{}{} {}{}{}]",
+                t.summary_long_option, option.flag, t.summary_label, option.dest, t.reset
+            )
+        };
         parts.push(Part {
             plain,
             coloured: colour,
         });
     }
-    usage(&format!("{prog} {}", command.name), &parts, &[], t)
+    let pos: Vec<Part> = command
+        .positional
+        .into_iter()
+        .map(|name| coloured(name, t.summary_action, t))
+        .collect();
+    usage(&format!("{prog} {}", command.name), &parts, &pos, t)
 }
 
 fn command_help(prog: &str, command: &Command, t: &Theme) -> String {
@@ -322,6 +372,7 @@ fn command_help(prog: &str, command: &Command, t: &Theme) -> String {
 
 pub struct Parsed {
     pub command: &'static str,
+    pub action: Option<String>,
     pub values: BTreeMap<&'static str, String>,
 }
 
@@ -329,6 +380,12 @@ impl Parsed {
     pub fn path(&self, flag: &str) -> PathBuf {
         let text = crate::pypath::display(&self.values[flag]);
         PathBuf::from(crate::pypath::encode_os(&text))
+    }
+
+    pub fn optional_path(&self, flag: &str) -> Option<PathBuf> {
+        self.values
+            .get(flag)
+            .map(|value| PathBuf::from(crate::pypath::encode_os(&crate::pypath::display(value))))
     }
 }
 
@@ -452,13 +509,20 @@ fn sub_exit(prog: &str, command: &Command, message: String) -> Exit {
 fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
     let mut extras: Vec<String> = Vec::new();
     let (command, index) = parse_command(prog, args, &mut extras)?;
-    let values = parse_options(prog, command, &args[index..], &mut extras)?;
+    let (values, action) = parse_options(prog, command, &args[index..], &mut extras)?;
     let missing: Vec<&str> = command
         .options
         .iter()
-        .filter(|o| !values.contains_key(o.flag))
+        .filter(|o| o.required && !values.contains_key(o.flag))
         .map(|o| o.flag)
         .collect();
+    if command.positional.is_some() && action.is_none() {
+        return Err(sub_exit(
+            prog,
+            command,
+            "the following arguments are required: mode".into(),
+        ));
+    }
     if !missing.is_empty() {
         return Err(sub_exit(
             prog,
@@ -471,6 +535,7 @@ fn parse(prog: &str, args: &[String]) -> Result<Parsed, Exit> {
     }
     Ok(Parsed {
         command: command.name,
+        action,
         values,
     })
 }
@@ -532,27 +597,46 @@ fn invalid_choice(token: &str) -> String {
     )
 }
 
+fn parse_hook_mode(prog: &str, command: &Command, token: &str) -> Result<String, Exit> {
+    if matches!(token, "post-tool" | "pre-tool") {
+        Ok(token.to_owned())
+    } else {
+        Err(sub_exit(
+            prog,
+            command,
+            format!(
+                "argument mode: invalid choice: {} (choose from 'post-tool', 'pre-tool')",
+                pytext::repr_os(token)
+            ),
+        ))
+    }
+}
+
 /// The subcommand's options after its name.
 fn parse_options(
     prog: &str,
     command: &Command,
     args: &[String],
     extras: &mut Vec<String>,
-) -> Result<BTreeMap<&'static str, String>, Exit> {
+) -> Result<(BTreeMap<&'static str, String>, Option<String>), Exit> {
     let sub_error = |message: String| sub_exit(prog, command, message);
     let mut flags: Vec<&'static str> = vec!["-h", "--help"];
     flags.extend(command.options.iter().map(|o| o.flag));
     let mut values: BTreeMap<&'static str, String> = BTreeMap::new();
+    let mut action: Option<String> = None;
     let mut index = 0;
     while let Some(token) = args.get(index) {
         index += 1;
         if token == "--" {
-            // Everything from here is positional, and this parser takes none.
             extras.extend(args[index - 1..].iter().cloned());
             break;
         }
         let (flag, explicit) = match classify(token, &flags).map_err(sub_error)? {
             Class::Flag(flag, explicit) => (flag, explicit),
+            Class::Positional if command.positional.is_some() && action.is_none() => {
+                action = Some(parse_hook_mode(prog, command, token)?);
+                continue;
+            }
             Class::UnknownOption | Class::Positional => {
                 extras.push(token.clone());
                 continue;
@@ -574,7 +658,7 @@ fn parse_options(
         };
         values.insert(flag, value);
     }
-    Ok(values)
+    Ok((values, action))
 }
 
 fn private(args: &[String]) -> bool {

@@ -22,6 +22,7 @@ pub mod disclosure;
 pub mod email;
 pub mod entities;
 pub mod files;
+pub mod hook;
 pub mod oserror;
 mod persist;
 pub mod pypath;
