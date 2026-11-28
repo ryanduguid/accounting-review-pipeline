@@ -272,6 +272,28 @@ fn fetch_assets_for_status(
     Ok(all)
 }
 
+fn parse_bank_summary(payload: &Json) -> Result<&Json> {
+    let Some(Json::Array(reports)) = payload.get("Reports") else {
+        return Err(Failure::message(
+            "error: Xero Bank Summary response is missing a Reports list.",
+        ));
+    };
+    let [summary] = reports.as_slice() else {
+        return Err(Failure::message(
+            "error: Xero Bank Summary response must contain exactly one report.",
+        ));
+    };
+    if !summary
+        .get("ReportType")
+        .is_some_and(|v| v.is_str("BankSummary"))
+    {
+        return Err(Failure::message(
+            "error: returned report is not identified as a BankSummary.",
+        ));
+    }
+    Ok(summary)
+}
+
 pub fn fetch_bank_summary(
     http: &impl Http,
     session: &TokenSession,
@@ -296,24 +318,7 @@ pub fn fetch_bank_summary(
         Some(&id),
         &[("fromDate", &from), ("toDate", &to)],
     )?;
-    let Some(Json::Array(reports)) = payload.get("Reports") else {
-        return Err(Failure::message(
-            "error: Xero Bank Summary response is missing a Reports list.",
-        ));
-    };
-    let [summary] = reports.as_slice() else {
-        return Err(Failure::message(
-            "error: Xero Bank Summary response must contain exactly one report.",
-        ));
-    };
-    if !summary
-        .get("ReportType")
-        .is_some_and(|v| v.is_str("BankSummary"))
-    {
-        return Err(Failure::message(
-            "error: returned report is not identified as a BankSummary.",
-        ));
-    }
+    let summary = parse_bank_summary(&payload)?;
     Ok(Json::object([
         ("schema_version", Json::str("xero-bank-summary.v1")),
         ("entity_ref", tenant_block(tenant)),

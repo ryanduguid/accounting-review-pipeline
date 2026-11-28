@@ -201,7 +201,7 @@ fn token_delimiter(ch: char) -> bool {
 }
 
 fn has_file_extension(token: &str) -> bool {
-    let trimmed = token.trim_end_matches(|c: char| matches!(c, '.' | ':' | '!' | '?'));
+    let trimmed = token.trim_end_matches(['.', ':', '!', '?']);
     let Some((stem, ext)) = trimmed.rsplit_once('.') else {
         return false;
     };

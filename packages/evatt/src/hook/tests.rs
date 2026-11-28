@@ -109,8 +109,12 @@ fn failure_mode_3_paths_file_extensions_and_scanner_stamps_are_exempt_while_real
     assert_eq!(map.entries.len(), 1);
 }
 
+fn vec_args(items: &[&str]) -> Vec<String> {
+    items.iter().map(|s| (*s).to_owned()).collect()
+}
+
 #[test]
-fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
+fn hook_file_io_round_trip_and_missing_session_error() {
     let tmp = TempDir::new().unwrap();
     let session = tmp.path().join("session.json");
     let input = tmp.path().join("in.json");
@@ -118,49 +122,66 @@ fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
     let restored_path = tmp.path().join("restored.json");
     fs::write(&input, "ACN 004 085 616\n").unwrap();
 
-    // Missing session map on pre-tool fails cleanly.
-    let mut out = Vec::new();
     let mut err = Vec::new();
+    let code = run_hook_io(
+        "pre-tool",
+        &session,
+        None,
+        None,
+        "ACN_01".as_bytes(),
+        &mut Vec::new(),
+        &mut err,
+    );
+    assert_eq!(code, 1);
+    assert!(String::from_utf8(err).unwrap().contains("does not exist"));
+
+    let mask_args = vec_args(&[
+        "hook",
+        "post-tool",
+        "--session",
+        session.to_str().unwrap(),
+        "--in",
+        input.to_str().unwrap(),
+        "--out",
+        masked_path.to_str().unwrap(),
+    ]);
+    assert_eq!(crate::cli::main(&mask_args, &mut Vec::new(), &mut Vec::new()), 0);
+    assert_eq!(fs::read_to_string(&masked_path).unwrap(), "ACN ACN_01\n");
+
+    let restore_args = vec_args(&[
+        "hook",
+        "pre-tool",
+        "--session",
+        session.to_str().unwrap(),
+        "--in",
+        masked_path.to_str().unwrap(),
+        "--out",
+        restored_path.to_str().unwrap(),
+    ]);
+    assert_eq!(crate::cli::main(&restore_args, &mut Vec::new(), &mut Vec::new()), 0);
+    assert_eq!(fs::read_to_string(&restored_path).unwrap(), "ACN 004 085 616\n");
+}
+
+#[test]
+fn hook_session_map_persists_ordinals_across_invocations() {
+    let tmp = TempDir::new().unwrap();
+    let session = tmp.path().join("session.json");
+    let mut out1 = Vec::new();
     assert_eq!(
         run_hook_io(
-            "pre-tool",
+            "post-tool",
             &session,
             None,
             None,
-            "ACN_01".as_bytes(),
-            &mut out,
-            &mut err
-        ),
-        1
-    );
-    assert!(String::from_utf8(err).unwrap().contains("does not exist"));
-
-    // File-backed post-tool and pre-tool through the CLI parser.
-    let args = |items: &[&str]| items.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-    let mut out = Vec::new();
-    let mut err = Vec::new();
-    assert_eq!(
-        crate::cli::main(
-            &args(&[
-                "hook",
-                "post-tool",
-                "--session",
-                session.to_str().unwrap(),
-                "--in",
-                input.to_str().unwrap(),
-                "--out",
-                masked_path.to_str().unwrap(),
-            ]),
-            &mut out,
-            &mut err,
+            "ACN 004 085 616".as_bytes(),
+            &mut out1,
+            &mut Vec::new(),
         ),
         0
     );
-    assert_eq!(fs::read_to_string(&masked_path).unwrap(), "ACN ACN_01\n");
+    assert_eq!(String::from_utf8(out1).unwrap(), "ACN ACN_01");
 
-    // Second post-tool updates existing session map and allocates next ordinal.
-    let mut out = Vec::new();
-    let mut err = Vec::new();
+    let mut out2 = Vec::new();
     assert_eq!(
         run_hook_io(
             "post-tool",
@@ -168,49 +189,29 @@ fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
             None,
             None,
             "ACN 005 749 986".as_bytes(),
-            &mut out,
-            &mut err,
+            &mut out2,
+            &mut Vec::new(),
         ),
         0
     );
-    assert_eq!(String::from_utf8(out).unwrap(), "ACN ACN_02");
+    assert_eq!(String::from_utf8(out2).unwrap(), "ACN ACN_02");
+}
 
-    // Pre-tool restores via file output.
-    let mut out = Vec::new();
-    let mut err = Vec::new();
-    assert_eq!(
-        crate::cli::main(
-            &args(&[
-                "hook",
-                "pre-tool",
-                "--session",
-                session.to_str().unwrap(),
-                "--in",
-                masked_path.to_str().unwrap(),
-                "--out",
-                restored_path.to_str().unwrap(),
-            ]),
-            &mut out,
-            &mut err,
-        ),
-        0
-    );
-    assert_eq!(fs::read_to_string(&restored_path).unwrap(), "ACN 004 085 616\n");
-
-    // Help, missing mode, invalid mode, unknown mode, --out collision, read/write failures.
+#[test]
+fn hook_cli_help_and_mode_validation_errors() {
+    let tmp = TempDir::new().unwrap();
+    let session = tmp.path().join("session.json");
     let mut help_out = Vec::new();
-    let mut help_err = Vec::new();
     assert_eq!(
-        crate::cli::main(&args(&["hook", "--help"]), &mut help_out, &mut help_err),
+        crate::cli::main(&vec_args(&["hook", "--help"]), &mut help_out, &mut Vec::new()),
         0
     );
     assert!(String::from_utf8(help_out).unwrap().contains("{post-tool,pre-tool}"));
-    let mut bad_out = Vec::new();
     let mut bad_err = Vec::new();
     assert_eq!(
         crate::cli::main(
-            &args(&["hook", "--session", session.to_str().unwrap()]),
-            &mut bad_out,
+            &vec_args(&["hook", "--session", session.to_str().unwrap()]),
+            &mut Vec::new(),
             &mut bad_err
         ),
         1
@@ -219,8 +220,8 @@ fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
     let mut bad_err = Vec::new();
     assert_eq!(
         crate::cli::main(
-            &args(&["hook", "bogus", "--session", session.to_str().unwrap()]),
-            &mut bad_out,
+            &vec_args(&["hook", "bogus", "--session", session.to_str().unwrap()]),
+            &mut Vec::new(),
             &mut bad_err,
         ),
         1
@@ -232,21 +233,24 @@ fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
         1
     );
     assert!(String::from_utf8(err).unwrap().contains("unknown hook mode"));
+}
+
+#[test]
+fn hook_io_rejects_overwrite_and_stream_failures() {
+    let tmp = TempDir::new().unwrap();
+    let session = tmp.path().join("session.json");
     let mut err = Vec::new();
-    assert_eq!(
-        run_hook_io(
-            "post-tool",
-            &session,
-            None,
-            Some(&session),
-            "".as_bytes(),
-            &mut Vec::new(),
-            &mut err
-        ),
-        1
+    let code = run_hook_io(
+        "post-tool",
+        &session,
+        None,
+        Some(&session),
+        "".as_bytes(),
+        &mut Vec::new(),
+        &mut err,
     );
+    assert_eq!(code, 1);
     assert!(String::from_utf8(err).unwrap().contains("overwrite"));
-    let mut err = Vec::new();
     assert_eq!(
         run_hook_io(
             "post-tool",
@@ -255,11 +259,10 @@ fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
             None,
             FailingReader,
             &mut Vec::new(),
-            &mut err
+            &mut Vec::new()
         ),
         1
     );
-    let mut err = Vec::new();
     let mut writer = FailingWriter;
     assert!(writer.flush().is_ok());
     assert_eq!(
@@ -270,12 +273,15 @@ fn hook_file_io_persistence_cli_and_error_paths_are_covered() {
             None,
             "ok".as_bytes(),
             &mut writer,
-            &mut err
+            &mut Vec::new()
         ),
         1
     );
+}
 
-    // Malformed session maps, missing metadata, and directory session path are refused.
+#[test]
+fn hook_rejects_malformed_and_directory_session_maps() {
+    let tmp = TempDir::new().unwrap();
     assert!(check_owner_only(&tmp.path().join("absent-session.json")).is_err());
     let dir_session = tmp.path().join("dir-session");
     fs::create_dir(&dir_session).unwrap();

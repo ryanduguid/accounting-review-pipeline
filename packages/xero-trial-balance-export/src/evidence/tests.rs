@@ -112,21 +112,40 @@ fn scopes_enforce_read_only_suffix_and_reject_write_or_broad_scopes() {
     assert!(stub.post("https://example.invalid", &creds, &[]).is_err());
 }
 
+fn sample_tb_row(id: &str, debit: &str, credit: &str) -> std::collections::BTreeMap<String, Json> {
+    [
+        ("AccountID", id),
+        ("Account", "Cash (100)"),
+        ("Section", "Assets"),
+        ("Debit", debit),
+        ("Credit", credit),
+        ("YTD Debit", debit),
+        ("YTD Credit", credit),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.into(), Json::str(v)))
+    .collect()
+}
+
+const SYNTHETIC_ORG_BODY: &str = r#"{
+  "Organisations": [{
+    "Name": "Synthetic Pty Ltd",
+    "CountryCode": "AU",
+    "BaseCurrency": "AUD",
+    "SalesTaxBasis": "ACCRUALS",
+    "FinancialYearEndDay": 30,
+    "FinancialYearEndMonth": 6,
+    "OrganisationEntityType": "COMPANY"
+  }]
+}"#;
+
 #[test]
-fn organisation_read_folds_base_currency_and_gst_basis_into_tb_manifest() {
-    let (scratch, session, creds, tenant) = setup_session();
-    let body = r#"{
-      "Organisations": [{
-        "Name": "Synthetic Pty Ltd",
-        "CountryCode": "AU",
-        "BaseCurrency": "AUD",
-        "SalesTaxBasis": "ACCRUALS",
-        "FinancialYearEndDay": 30,
-        "FinancialYearEndMonth": 6,
-        "OrganisationEntityType": "COMPANY"
-      }]
-    }"#;
-    let http = StubHttp::new("tenant-001", vec![(ORGANISATION_URL, vec![], body)]);
+fn organisation_read_returns_profile_and_export_with_limitations() {
+    let (_scratch, session, creds, tenant) = setup_session();
+    let http = StubHttp::new(
+        "tenant-001",
+        vec![(ORGANISATION_URL, vec![], SYNTHETIC_ORG_BODY)],
+    );
     let org = fetch_organisation(&http, &session, &creds, &tenant).unwrap();
     assert_eq!(org.base_currency, "AUD");
     assert_eq!(org.gst_basis, "ACCRUALS");
@@ -134,36 +153,24 @@ fn organisation_read_folds_base_currency_and_gst_basis_into_tb_manifest() {
     assert_eq!(org.financial_year_end_day, Some(30));
 
     let exported = organisation_export(&tenant, &org);
-    assert!(
-        exported
-            .at("organisation")
-            .at("base_currency")
-            .is_str("AUD")
-    );
-    assert!(
-        exported
-            .at("organisation")
-            .at("gst_basis")
-            .is_str("ACCRUALS")
-    );
-    assert!(!exported.at("limitations").as_array().unwrap().is_empty());
+    let org_json = exported.at("organisation");
+    assert!(org_json.at("base_currency").is_str("AUD"));
+    assert!(org_json.at("gst_basis").is_str("ACCRUALS"));
+    assert!(matches!(exported.at("limitations"), Json::Array(items) if !items.is_empty()));
+}
 
-    // Fold into TB manifest via export::publish_with_organisation.
-    let row = |id: &str, d: &str, c: &str| {
-        [
-            ("AccountID", id),
-            ("Account", "Cash (100)"),
-            ("Section", "Assets"),
-            ("Debit", d),
-            ("Credit", c),
-            ("YTD Debit", d),
-            ("YTD Credit", c),
-        ]
-        .into_iter()
-        .map(|(k, v)| (k.into(), Json::str(v)))
-        .collect()
-    };
-    let rows = vec![row("a1", "10.00", "0"), row("a2", "0", "10.00")];
+#[test]
+fn organisation_profile_folds_into_tb_manifest() {
+    let (scratch, session, creds, tenant) = setup_session();
+    let http = StubHttp::new(
+        "tenant-001",
+        vec![(ORGANISATION_URL, vec![], SYNTHETIC_ORG_BODY)],
+    );
+    let org = fetch_organisation(&http, &session, &creds, &tenant).unwrap();
+    let rows = vec![
+        sample_tb_row("a1", "10.00", "0"),
+        sample_tb_row("a2", "0", "10.00"),
+    ];
     let csv_path = scratch.0.join("tb.csv");
     let (res, _, _) = crate::stdio::capture(|| {
         export::publish_with_organisation(
@@ -180,20 +187,13 @@ fn organisation_read_folds_base_currency_and_gst_basis_into_tb_manifest() {
     res.unwrap();
     let manifest_raw = fs::read_to_string(publication::manifest_path(&csv_path)).unwrap();
     let manifest = crate::pyjson::loads(&manifest_raw).unwrap();
-    assert!(
-        manifest
-            .at("organisation")
-            .at("base_currency")
-            .is_str("AUD")
-    );
-    assert!(
-        manifest
-            .at("organisation")
-            .at("gst_basis")
-            .is_str("ACCRUALS")
-    );
+    let org_json = manifest.at("organisation");
+    assert!(org_json.at("base_currency").is_str("AUD"));
+    assert!(org_json.at("gst_basis").is_str("ACCRUALS"));
+}
 
-    // Fallback entity_type and malformed Organisation payloads.
+#[test]
+fn organisation_parser_handles_defaults_and_rejects_malformed_payloads() {
     let minimal = crate::pyjson::loads(
         r#"{"Organisations":[{"Name":"Min","CountryCode":"NZ","BaseCurrency":"NZD","SalesTaxBasis":"CASH"}]}"#,
     )
@@ -216,52 +216,52 @@ fn organisation_read_folds_base_currency_and_gst_basis_into_tb_manifest() {
 #[test]
 fn asset_register_unions_all_three_statuses_across_pages_with_limitations() {
     let (_scratch, session, creds, tenant) = setup_session();
+    let page = |status, p, body| (ASSETS_URL, vec![("status", status), ("page", p)], body);
     let http = StubHttp::new(
         "tenant-001",
         vec![
-            (
-                ASSETS_URL,
-                vec![("status", "DRAFT"), ("page", "1")],
+            page(
+                "DRAFT",
+                "1",
                 r#"{"pagination":{"page":1,"pageCount":2},"items":[{"assetId":"d1"}]}"#,
             ),
-            (
-                ASSETS_URL,
-                vec![("status", "DRAFT"), ("page", "2")],
+            page(
+                "DRAFT",
+                "2",
                 r#"{"pagination":{"page":2,"pageCount":2},"items":[{"assetId":"d2"}]}"#,
             ),
-            (
-                ASSETS_URL,
-                vec![("status", "REGISTERED"), ("page", "1")],
+            page(
+                "REGISTERED",
+                "1",
                 r#"{"pagination":{"page":1,"pageCount":1},"items":[{"assetId":"r1"}]}"#,
             ),
-            (
-                ASSETS_URL,
-                vec![("status", "DISPOSED"), ("page", "1")],
+            page(
+                "DISPOSED",
+                "1",
                 r#"{"pagination":{"page":1,"pageCount":1},"items":[]}"#,
             ),
         ],
     );
     let register = fetch_asset_register(&http, &session, &creds, &tenant).unwrap();
-    assert_eq!(register.at("items").as_array().unwrap().len(), 3);
-    assert_eq!(register.at("counts").at("DRAFT"), &Json::int(2));
-    assert_eq!(register.at("counts").at("REGISTERED"), &Json::int(1));
-    assert_eq!(register.at("counts").at("DISPOSED"), &Json::int(0));
-    let lim = crate::pyjson::dumps(register.at("limitations"), false);
-    assert!(lim.contains("book depreciation only"));
-
-    let bad_http = StubHttp::new(
-        "tenant-001",
-        vec![(
-            ASSETS_URL,
-            vec![("status", "DRAFT"), ("page", "1")],
-            r#"{}"#,
-        )],
+    assert!(matches!(register.at("items"), Json::Array(items) if items.len() == 3));
+    let counts = register.at("counts");
+    for (status, want) in [("DRAFT", 2), ("REGISTERED", 1), ("DISPOSED", 0)] {
+        assert!(crate::pyjson::py_eq(
+            counts.at(status),
+            &Json::int(want),
+            false
+        ));
+    }
+    assert!(
+        crate::pyjson::canonical(register.at("limitations")).contains("book depreciation only")
     );
-    assert!(fetch_asset_register(&bad_http, &session, &creds, &tenant).is_err());
+
+    let bad = StubHttp::new("tenant-001", vec![page("DRAFT", "1", r#"{}"#)]);
+    assert!(fetch_asset_register(&bad, &session, &creds, &tenant).is_err());
 }
 
 #[test]
-fn bank_summary_and_published_bas_validate_shapes_empty_lists_and_limitations() {
+fn bank_summary_validates_date_range_shape_and_limitations() {
     let (_scratch, session, creds, tenant) = setup_session();
     let summary_body =
         r#"{"Reports":[{"ReportID":"BankSummary","ReportType":"BankSummary","Rows":[]}]}"#;
@@ -276,12 +276,11 @@ fn bank_summary_and_published_bas_validate_shapes_empty_lists_and_limitations() 
     let bank =
         fetch_bank_summary(&http, &session, &creds, &tenant, "2026-04-01", "2026-06-30").unwrap();
     assert!(bank.at("from_date").is_str("2026-04-01"));
-    assert!(!bank.at("limitations").as_array().unwrap().is_empty());
-
-    // Inverted date range and malformed bank summary payloads fail cleanly.
+    assert!(matches!(bank.at("limitations"), Json::Array(items) if !items.is_empty()));
     assert!(
         fetch_bank_summary(&http, &session, &creds, &tenant, "2026-07-01", "2026-06-30").is_err()
     );
+
     for bad_body in [
         r#"{}"#,
         r#"{"Reports":[]}"#,
@@ -307,19 +306,21 @@ fn bank_summary_and_published_bas_validate_shapes_empty_lists_and_limitations() 
             .is_err()
         );
     }
+}
 
-    // Empty published BAS list returns status nothing_published, never no_bas_obligation.
+#[test]
+fn published_bas_distinguishes_nothing_published_and_filters_by_period() {
+    let (_scratch, session, creds, tenant) = setup_session();
     let empty_http = StubHttp::new(
         "tenant-001",
         vec![(REPORTS_URL, vec![], r#"{"Reports":[]}"#)],
     );
     let none_pub = fetch_published_bas(&empty_http, &session, &creds, &tenant, None).unwrap();
     assert!(none_pub.at("status").is_str("nothing_published"));
-    assert!(none_pub.at("reports").as_array().unwrap().is_empty());
-    let lim = crate::pyjson::dumps(none_pub.at("limitations"), false);
+    assert!(matches!(none_pub.at("reports"), Json::Array(items) if items.is_empty()));
+    let lim = crate::pyjson::canonical(none_pub.at("limitations"));
     assert!(lim.contains("nothing_published") && lim.contains("Draft"));
 
-    // Published BAS list filters BAS reports and fetches detail by ReportID.
     let list_body = r#"{"Reports":[
       {"ReportID":"r-other","ReportType":"ProfitAndLoss","ReportName":"P&L"},
       {"ReportID":"bas-q3-2026","ReportType":"BAS","ReportName":"BAS Q3 2026","ReportDate":"2026-03-31"},
@@ -336,9 +337,12 @@ fn bank_summary_and_published_bas_validate_shapes_empty_lists_and_limitations() 
     let published =
         fetch_published_bas(&pub_http, &session, &creds, &tenant, Some("Q4 2026")).unwrap();
     assert!(published.at("status").is_str("published"));
-    assert_eq!(published.at("reports").as_array().unwrap().len(), 1);
+    assert!(matches!(published.at("reports"), Json::Array(items) if items.len() == 1));
+}
 
-    // Malformed BAS list, invalid ReportID, and malformed BAS detail fail cleanly.
+#[test]
+fn published_bas_rejects_malformed_list_id_and_detail_payloads() {
+    let (_scratch, session, creds, tenant) = setup_session();
     let bad_list = StubHttp::new("tenant-001", vec![(REPORTS_URL, vec![], r#"{}"#)]);
     assert!(fetch_published_bas(&bad_list, &session, &creds, &tenant, None).is_err());
 
