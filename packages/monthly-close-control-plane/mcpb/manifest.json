@@ -3,7 +3,7 @@
   "name": "close-control",
   "display_name": "Monthly Close Controls",
   "version": "1.2.0",
-  "description": "Read-only close review tools over local files: view and queue verified review packs, compare packs, and run journal-entry, schedule and coding checks.",
+  "description": "Read-only close review tools over local files: view, queue and compare verified packs, and run close, BAS, payroll, statement, register and rule checks.",
   "long_description": "Runs the read-only commands of the close-control executable on files inside the folders you choose. It writes no file, reaches no network and approves nothing; every result is review evidence for a person.",
   "author": {
     "name": "Ryan Duguid"
@@ -56,6 +56,46 @@
     {
       "name": "jet",
       "description": "Journal-entry tests and a Benford first-digit test over one tenant's general-ledger listing."
+    },
+    {
+      "name": "duplicates",
+      "description": "Check a document register for possible duplicate invoices or payments in a period."
+    },
+    {
+      "name": "fixed-assets",
+      "description": "Tie a fixed-asset register to a trial balance by asset and accumulated depreciation accounts."
+    },
+    {
+      "name": "coding",
+      "description": "Compare a period's account and tax coding against prior postings by the same supplier."
+    },
+    {
+      "name": "scorecard",
+      "description": "Summarise saved check result JSON files for one tenant into a close scorecard."
+    },
+    {
+      "name": "payroll",
+      "description": "Reperform PAYG withholding and super guarantee on a payroll register."
+    },
+    {
+      "name": "statement",
+      "description": "Check that a bank statement's running balances and page totals tie out."
+    },
+    {
+      "name": "bas",
+      "description": "Draft a BAS workpaper from a ledger, tax-code map and optional payroll register."
+    },
+    {
+      "name": "prepost",
+      "description": "Review draft postings against prior posted transactions before posting."
+    },
+    {
+      "name": "overdue",
+      "description": "Flag open invoices that are overdue relative to each customer's payment history."
+    },
+    {
+      "name": "rules",
+      "description": "List every close review control, when it runs, what it checks and its source."
     }
   ],
   "compatibility": {
