@@ -307,6 +307,23 @@ pub fn publish(
     quiet: bool,
     no_manifest: bool,
 ) -> Result<()> {
+    publish_with_organisation(rows, tenant, date, path, cash, quiet, no_manifest, None)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "extends publish with optional organisation metadata"
+)]
+pub fn publish_with_organisation(
+    rows: &[report::Record],
+    tenant: &Json,
+    date: &str,
+    path: &Path,
+    cash: bool,
+    quiet: bool,
+    no_manifest: bool,
+    organisation: Option<&crate::evidence::OrganisationProfile>,
+) -> Result<()> {
     let (output, totals) = report::build_rows(rows, tenant, date)?;
     amount::check_balanced(&totals, Some(output.len()))?;
     let aside = publication::set_aside_manifest(path, quiet)?;
@@ -341,13 +358,14 @@ pub fn publish(
         );
     }
     if !no_manifest {
-        let manifest = publication::write_manifest(
+        let manifest = publication::write_manifest_with_organisation(
             path,
             &digest,
             tenant,
             date,
             if cash { "cash" } else { "accrual" },
             quiet,
+            organisation,
         )?;
         if quiet {
             crate::outln!("Wrote manifest beside the export (filename withheld under --quiet)");

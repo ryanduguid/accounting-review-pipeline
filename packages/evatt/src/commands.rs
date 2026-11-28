@@ -366,6 +366,17 @@ fn disclosure_command(args: &Parsed, stdout: &mut dyn Write, stderr: &mut dyn Wr
 }
 
 pub fn run(args: &Parsed, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
+    if args.command == "hook" {
+        return crate::hook::run_hook_io(
+            args.action.as_deref().unwrap_or(""),
+            &args.path("--session"),
+            args.optional_path("--in").as_deref(),
+            args.optional_path("--out").as_deref(),
+            std::io::stdin(),
+            stdout,
+            stderr,
+        );
+    }
     if args.command.starts_with("disclosure-") {
         return disclosure_command(args, stdout, stderr);
     }

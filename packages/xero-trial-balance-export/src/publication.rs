@@ -311,19 +311,37 @@ pub fn manifest(
     basis: &str,
     generated_at: &str,
 ) -> Json {
-    Json::object([
-        ("schema_version", Json::str("xero-source-manifest.v1")),
-        ("mode", Json::str("live")),
-        ("source_system", Json::str("xero-trial-balance-export")),
+    manifest_with_organisation(path, digest, tenant, date, basis, generated_at, None)
+}
+
+pub fn manifest_with_organisation(
+    path: &Path,
+    digest: &str,
+    tenant: &Json,
+    date: &str,
+    basis: &str,
+    generated_at: &str,
+    organisation: Option<&crate::evidence::OrganisationProfile>,
+) -> Json {
+    let mut pairs = vec![
         (
-            "entity_ref",
+            crate::pyjson::PyStr::from("schema_version"),
+            Json::str("xero-source-manifest.v1"),
+        ),
+        (crate::pyjson::PyStr::from("mode"), Json::str("live")),
+        (
+            crate::pyjson::PyStr::from("source_system"),
+            Json::str("xero-trial-balance-export"),
+        ),
+        (
+            crate::pyjson::PyStr::from("entity_ref"),
             Json::object([
                 ("tenant_id", tenant.at("tenantId").clone()),
                 ("tenant_name", tenant.at("tenantName").clone()),
             ]),
         ),
         (
-            "report",
+            crate::pyjson::PyStr::from("report"),
             Json::object([
                 ("name", Json::str("Trial Balance")),
                 ("as_at", Json::str(date)),
@@ -331,7 +349,7 @@ pub fn manifest(
             ]),
         ),
         (
-            "export",
+            crate::pyjson::PyStr::from("export"),
             Json::object([
                 ("schema", Json::str("xero-tb-csv.v1")),
                 (
@@ -342,7 +360,14 @@ pub fn manifest(
                 ("generated_at", Json::str(generated_at)),
             ]),
         ),
-    ])
+    ];
+    if let Some(org) = organisation {
+        pairs.push((
+            crate::pyjson::PyStr::from("organisation"),
+            org.to_manifest_json(),
+        ));
+    }
+    Json::Object(pairs)
 }
 
 pub fn write_manifest(
@@ -353,12 +378,32 @@ pub fn write_manifest(
     basis: &str,
     quiet: bool,
 ) -> Result<PathBuf> {
+    write_manifest_with_organisation(path, digest, tenant, date, basis, quiet, None)
+}
+
+pub fn write_manifest_with_organisation(
+    path: &Path,
+    digest: &str,
+    tenant: &Json,
+    date: &str,
+    basis: &str,
+    quiet: bool,
+    organisation: Option<&crate::evidence::OrganisationProfile>,
+) -> Result<PathBuf> {
     let generated_at = jiff::Timestamp::now()
         .strftime("%Y-%m-%dT%H:%M:%S%:z")
         .to_string();
     let payload = format!(
         "{}\n",
-        pyjson::pretty(&manifest(path, digest, tenant, date, basis, &generated_at))
+        pyjson::pretty(&manifest_with_organisation(
+            path,
+            digest,
+            tenant,
+            date,
+            basis,
+            &generated_at,
+            organisation,
+        ))
     )
     .into_bytes();
     let manifest = manifest_path(path);

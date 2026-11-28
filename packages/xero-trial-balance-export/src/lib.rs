@@ -8,6 +8,7 @@ pub mod cache_json;
 pub mod cli;
 pub mod config;
 pub mod dpapi;
+pub mod evidence;
 pub mod export;
 #[cfg(any(test, feature = "tools"))]
 #[doc(hidden)]

@@ -4,7 +4,7 @@
 
 //! Keep the documented read-only OAuth boundary tied to the inspected native source.
 use sha2::{Digest, Sha256};
-use xero_trial_balance_export::{auth, http};
+use xero_trial_balance_export::{auth, evidence, http};
 
 fn digest(raw: &[u8]) -> Option<String> {
     if raw.starts_with(&[0xef, 0xbb, 0xbf]) {
@@ -81,6 +81,26 @@ fn native_scopes_endpoints_and_documented_boundary_match_the_reviewed_contract()
             .replace("30-minute grace period", "unlimited grace period")
             .contains(REFRESH_PARAGRAPH)
     );
+}
+
+#[test]
+fn extended_read_only_evidence_scopes_all_end_in_read_and_refuse_write_scopes() {
+    assert!(!evidence::READ_ONLY_SCOPES.is_empty());
+    for scope in evidence::READ_ONLY_SCOPES {
+        assert!(scope.ends_with(".read"), "non-read scope: {scope}");
+    }
+    assert!(evidence::assert_read_only_scopes(&evidence::READ_ONLY_SCOPES).is_ok());
+    for refused in [
+        "accounting.transactions",
+        "accounting.settings",
+        "assets",
+        "accounting.reports.read",
+    ] {
+        assert!(
+            evidence::assert_read_only_scopes(&[refused]).is_err(),
+            "{refused}"
+        );
+    }
 }
 
 #[test]
