@@ -162,7 +162,7 @@ pub(super) fn apply_self_review_contradictions(
     Ok(())
 }
 
-pub fn classify_bank_accounts(
+pub(super) fn classify_bank_accounts(
     loaded: &Loaded,
     tolerance: &Decimal,
 ) -> Result<Vec<BankAccountCoverage>> {
