@@ -303,15 +303,16 @@ fn control_projection_requires_exactly_one_matching_entry() -> Result<()> {
     let document = result.at("ok").at("pack");
     let original = probe::encode(document);
     let selected = control(document, "fs_mapping");
+    let bank = control(document, "bank_rec");
     let retained = control(document, "prior_findings");
     let (projected, entry, left) = without_control_entry(document, "fs_mapping").unwrap();
-    assert_eq!(left, 1);
+    assert_eq!(left, 2);
     assert_eq!(probe::encode(&entry), probe::encode(&selected));
     let mut expected = document.clone();
     set(
         &mut expected,
         &["controls_not_run"],
-        Json::Array(vec![retained]),
+        Json::Array(vec![bank, retained]),
     );
     assert_eq!(probe::encode(&projected), probe::encode(&expected));
     assert_eq!(probe::encode(document), original);
@@ -334,7 +335,7 @@ fn control_projection_requires_exactly_one_matching_entry() -> Result<()> {
 #[test]
 fn projected_files_match_an_independently_rendered_pack() -> Result<()> {
     for (example, profile, slot, left) in [
-        ("year-end-ready", "year_end", "fs_mapping", 1),
+        ("year-end-ready", "year_end", "fs_mapping", 2),
         ("month-end-ready", "month_end", "prior_findings", 0),
     ] {
         let result = review_result(example, profile)?;
@@ -369,7 +370,7 @@ fn file_projection_preserves_lf_and_crlf_rendering() -> Result<()> {
         let projected = without_control_files(
             files(&result),
             &control(document, "fs_mapping"),
-            1,
+            2,
             "fs_mapping",
         )?
         .unwrap();
@@ -396,18 +397,18 @@ fn file_projection_refuses_missing_and_non_string_files_or_entry_fields() -> Res
     let entry = control(result.at("ok").at("pack"), "fs_mapping");
     for length in 0..3 {
         assert!(
-            without_control_files(&files(&result)[..length], &entry, 1, "fs_mapping")?.is_none()
+            without_control_files(&files(&result)[..length], &entry, 2, "fs_mapping")?.is_none()
         );
     }
     for index in 0..3 {
         let mut malformed = files(&result).to_vec();
         malformed[index] = Json::Null;
-        assert!(without_control_files(&malformed, &entry, 1, "fs_mapping")?.is_none());
+        assert!(without_control_files(&malformed, &entry, 2, "fs_mapping")?.is_none());
     }
     for key in ["filename", "reason"] {
         let mut malformed = entry.clone();
         set(&mut malformed, &[key], Json::Bool(false));
-        assert!(without_control_files(files(&result), &malformed, 1, "fs_mapping")?.is_none());
+        assert!(without_control_files(files(&result), &malformed, 2, "fs_mapping")?.is_none());
     }
     Ok(())
 }
@@ -426,7 +427,7 @@ fn file_projection_refuses_changed_or_duplicated_markers_and_counts() -> Result<
                     text.replace("fs_mapping", "changed")
                 }
             })?;
-            assert!(without_control_files(files(&result), &entry, 1, "fs_mapping")?.is_none());
+            assert!(without_control_files(files(&result), &entry, 2, "fs_mapping")?.is_none());
         }
     }
     let summary = String::from_utf8(unhex(&text(&files(&source)[1]).unwrap())?)?;
@@ -437,13 +438,13 @@ fn file_projection_refuses_changed_or_duplicated_markers_and_counts() -> Result<
     };
     for replacement in [
         "- Controls not run: 7.".to_owned(),
-        format!("- Controls not run: 2.{newline}- Controls not run: 2."),
+        format!("- Controls not run: 3.{newline}- Controls not run: 3."),
     ] {
         let mut result = source.clone();
         change_file(&mut result, 1, |text| {
-            text.replace("- Controls not run: 2.", &replacement)
+            text.replace("- Controls not run: 3.", &replacement)
         })?;
-        assert!(without_control_files(files(&result), &entry, 1, "fs_mapping")?.is_none());
+        assert!(without_control_files(files(&result), &entry, 2, "fs_mapping")?.is_none());
     }
     Ok(())
 }
@@ -604,7 +605,7 @@ fn genuine_cli_result_projects_files_and_diagnostic_together() -> Result<()> {
         &text(&files(&source)[0]).unwrap(),
     )?)?)?;
     let stdout = text(source.at("ok").at("stdout")).unwrap();
-    let line = "review-ready: 2 control(s) did not run: fs_mapping, prior_findings";
+    let line = "review-ready: 3 control(s) did not run: bank_rec, fs_mapping, prior_findings";
     assert_eq!(stdout.matches(line).count(), 1);
     let mut expected = source.clone();
     set(
@@ -612,7 +613,7 @@ fn genuine_cli_result_projects_files_and_diagnostic_together() -> Result<()> {
         &["ok", "stdout"],
         Json::str(&stdout.replace(
             line,
-            "review-ready: 1 control(s) did not run: prior_findings",
+            "review-ready: 2 control(s) did not run: bank_rec, prior_findings",
         )),
     );
     set(

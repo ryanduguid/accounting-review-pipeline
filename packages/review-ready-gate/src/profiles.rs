@@ -64,6 +64,7 @@ const MONTH: &[Slot] = &[
 const YEAR: &[Slot] = &[
     TB,
     OLD_TB,
+    slot!("bank_rec", ".csv", false),
     slot!("tie_out_matrix", ".csv", true),
     slot!("fs_mapping", ".csv", false),
     OPEN,

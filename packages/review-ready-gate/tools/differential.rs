@@ -1429,12 +1429,13 @@ fn without_absent_control(native: &str, slot: &str) -> Result<Option<String>> {
 }
 /// The optional slots a case's profile has here and lacks in the baseline, in
 /// slot order, so that the native result lists more controls not run:
-/// `fs_mapping` in `year_end`, and `bank_rec` and `paygw_control_gl` in `bas`.
+/// `bank_rec` and `fs_mapping` in `year_end`, and `bank_rec` and
+/// `paygw_control_gl` in `bas`.
 /// The `note-pack-` and `document-pack-` cases review the `bas` examples.
 fn slots_the_baseline_lacks(name: &str) -> &'static [&'static str] {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|prefix| name.starts_with(prefix));
     if starts(&["pack-year-end-ready-", "cli-runtime-year-end-ready-"]) {
-        &["fs_mapping"]
+        &["bank_rec", "fs_mapping"]
     } else if starts(&[
         "pack-bas-",
         "cli-runtime-bas-",

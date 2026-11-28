@@ -12,7 +12,10 @@ use crate::{
     profiles, publication, pycsv,
     pyjson::{self, Json, LoadError, PyStr},
     pypath, pytext,
-    report::{self, ACKNOWLEDGEMENT_EFFECT, CSV_FIELDS, PACK_NAMES, REVIEW_BOUNDARY},
+    report::{
+        self, ACKNOWLEDGEMENT_EFFECT, CSV_FIELDS, CSV_FIELDS_WITH_EVIDENCE, PACK_NAMES,
+        REVIEW_BOUNDARY,
+    },
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -37,6 +40,89 @@ const OPTIONAL_MEMBERS: [&str; 3] = ["controls_not_run", "producer", "required_c
 const PRODUCER_FIELDS: [&str; 4] = ["commit", "component", "pack_contract", "version"];
 const FINDING_HEADER: &str = "| Status | Code | Slot | Repeat | Reason |";
 const FINDING_DIVIDER: &str = "| --- | --- | --- | --- | --- |";
+const FINDING_HEADER_EVIDENCE: &str = "| Status | Code | Slot | Repeat | Reason | Evidence |";
+const FINDING_DIVIDER_EVIDENCE: &str = "| --- | --- | --- | --- | --- | --- |";
+const FINDING_JSON_EVIDENCE: [&str; 7] = [
+    "code",
+    "status",
+    "slot",
+    "repeat",
+    "reason",
+    "reviewer_action",
+    "evidence",
+];
+
+fn parse_evidence_links(index: usize, value: &Json) -> Result<Vec<EvidenceLink>> {
+    let items = value
+        .as_array()
+        .filter(|items| !items.is_empty())
+        .ok_or_else(|| {
+            format!("{JSON_NAME}: findings[{index}].evidence must be a non-empty list")
+        })?;
+    let mut links = Vec::with_capacity(items.len());
+    for (j, entry) in items.iter().enumerate() {
+        if !entry.has_exact_keys(&["file", "sha256", "locator"]) {
+            return Err(format!(
+                "{JSON_NAME}: findings[{index}].evidence[{j}] must hold exactly file, sha256 and locator"
+            ));
+        }
+        let file = string(entry.at("file")).ok_or_else(|| {
+            format!("{JSON_NAME}: findings[{index}].evidence[{j}].file must be a string")
+        })?;
+        report::validate_evidence_file(&file).map_err(|reason| {
+            format!("{JSON_NAME}: findings[{index}].evidence[{j}].file {reason}")
+        })?;
+        let sha256 = string(entry.at("sha256")).filter(|s| digest(s)).ok_or_else(|| {
+            format!(
+                "{JSON_NAME}: findings[{index}].evidence[{j}].sha256 is not a lowercase SHA-256 digest"
+            )
+        })?;
+        let locator = string(entry.at("locator"))
+            .filter(|s| !pytext::strip(s).is_empty() && !pytext::control_or_format(s, false))
+            .ok_or_else(|| {
+                format!(
+                    "{JSON_NAME}: findings[{index}].evidence[{j}].locator must be a non-empty string"
+                )
+            })?;
+        links.push(EvidenceLink {
+            file,
+            sha256,
+            locator,
+        });
+    }
+    Ok(links)
+}
+
+fn finding_links(item: &Json, index: usize) -> Result<Vec<EvidenceLink>> {
+    item.get("evidence")
+        .map_or_else(|| Ok(Vec::new()), |ev| parse_evidence_links(index, ev))
+}
+
+fn stays_inside(root: &Path, target: &Path) -> bool {
+    pypath::resolve(root, false)
+        .ok()
+        .zip(pypath::resolve(target, false).ok())
+        .is_some_and(|(root, resolved)| {
+            resolved
+                .ancestors()
+                .skip(1)
+                .any(|ancestor| pypath::same_path(ancestor, &root))
+        })
+}
+
+fn verify_evidence_paths(directory: &Path, findings: &[Finding]) -> Result<()> {
+    for finding in findings {
+        for link in &finding.evidence {
+            if !stays_inside(directory, &directory.join(&link.file)) {
+                return Err(format!(
+                    "{JSON_NAME}: evidence link {} escapes the pack directory",
+                    link.file
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 fn string(value: &Json) -> Option<String> {
     value.as_pystr()?.to_utf8()
@@ -261,12 +347,15 @@ pub(crate) fn verify_schema(document: &Json) -> Result<()> {
         let Json::Object(pairs) = item else {
             return Err(format!("{JSON_NAME}: findings[{i}] must be an object"));
         };
-        if !item.has_exact_keys(&CSV_FIELDS) {
+        if !item.has_exact_keys(&CSV_FIELDS) && !item.has_exact_keys(&FINDING_JSON_EVIDENCE) {
             return Err(format!(
                 "{JSON_NAME}: findings[{i}] does not hold the fields the writer emits: holds {}, expected {}",
                 list_repr(pairs.iter().map(|(k, _)| k.clone()).collect()),
                 list_repr(CSV_FIELDS.iter().map(|s| (*s).into()).collect())
             ));
+        }
+        if let Some(ev) = item.get("evidence") {
+            parse_evidence_links(i, ev)?;
         }
         if !["NOT_READY", "BLOCKED"]
             .iter()
@@ -373,17 +462,25 @@ fn verify_required_controls(document: &Json, findings: &[Json]) -> Result<()> {
     }
     Ok(())
 }
-fn read_csv(payload: &[u8]) -> Result<Vec<Vec<String>>> {
+fn read_csv(payload: &[u8], has_evidence: bool) -> Result<Vec<Vec<String>>> {
     let payload = payload.strip_prefix(b"\xef\xbb\xbf").unwrap_or(payload);
     let text = std::str::from_utf8(payload).map_err(|_| format!("{CSV_NAME}: not valid UTF-8"))?;
     let mut reader = pycsv::Reader::new(text);
     let csv_error = || format!("{CSV_NAME}: not valid CSV: field larger than field limit (131072)");
+    let expected_header: Vec<String> = if has_evidence {
+        CSV_FIELDS_WITH_EVIDENCE
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect()
+    } else {
+        CSV_FIELDS.iter().map(|s| (*s).to_string()).collect()
+    };
     if reader
         .next()
         .transpose()
         .map_err(|_| csv_error())?
         .as_deref()
-        != Some(&CSV_FIELDS.map(str::to_string))
+        != Some(expected_header.as_slice())
     {
         return Err(format!(
             "{CSV_NAME}: header row does not match the written contract"
@@ -392,12 +489,12 @@ fn read_csv(payload: &[u8]) -> Result<Vec<Vec<String>>> {
     let mut rows = Vec::new();
     for (i, row) in reader.enumerate() {
         let row = row.map_err(|_| csv_error())?;
-        if row.len() != CSV_FIELDS.len() {
+        if row.len() != expected_header.len() {
             return Err(format!(
                 "{CSV_NAME}: row {} holds {} cells, but the header declares {}",
                 i + 1,
                 row.len(),
-                CSV_FIELDS.len()
+                expected_header.len()
             ));
         }
         rows.push(row);
@@ -562,6 +659,7 @@ fn verify_agreement(
             csv.len()
         ));
     }
+    let has_evidence = findings.iter().any(|f| f.get("evidence").is_some());
     for (i, (item, row)) in findings.iter().zip(csv).enumerate() {
         for (col, field) in CSV_FIELDS.iter().enumerate() {
             let mut expected = string(item.at(field))
@@ -578,10 +676,26 @@ fn verify_agreement(
                 ));
             }
         }
+        if has_evidence {
+            let expected = report::evidence_csv(&finding_links(item, i)?);
+            if expected != row[CSV_FIELDS.len()] {
+                return Err(format!(
+                    "evidence_file disagrees on finding {}: {JSON_NAME} says {}, {CSV_NAME} says {}",
+                    i + 1,
+                    pytext::repr(&expected),
+                    pytext::repr(&row[CSV_FIELDS.len()])
+                ));
+            }
+        }
     }
     let lines = pytext::split_lines(summary);
+    let (table_header, table_divider, expected_cells) = if has_evidence {
+        (FINDING_HEADER_EVIDENCE, FINDING_DIVIDER_EVIDENCE, 6)
+    } else {
+        (FINDING_HEADER, FINDING_DIVIDER, 5)
+    };
     if findings.is_empty() {
-        if summary.contains(FINDING_HEADER) {
+        if summary.contains(FINDING_HEADER) || summary.contains(FINDING_HEADER_EVIDENCE) {
             return Err(format!(
                 "findings disagree: {SUMMARY_NAME} tabulates findings but {JSON_NAME} lists none"
             ));
@@ -590,7 +704,7 @@ fn verify_agreement(
         let headers: Vec<_> = lines
             .iter()
             .enumerate()
-            .filter(|(_, line)| **line == FINDING_HEADER)
+            .filter(|(_, line)| **line == table_header)
             .map(|(i, _)| i)
             .collect();
         if headers.len() != 1 {
@@ -600,7 +714,7 @@ fn verify_agreement(
             ));
         }
         let divider = headers[0] + 1;
-        if lines.get(divider) != Some(&FINDING_DIVIDER) {
+        if lines.get(divider) != Some(&table_divider) {
             return Err(format!(
                 "{SUMMARY_NAME}: the findings table has no delimiter row"
             ));
@@ -617,9 +731,9 @@ fn verify_agreement(
         }
         for (i, (item, line)) in findings.iter().zip(rows).enumerate() {
             let row = md_cells(line);
-            if row.len() != 5 {
+            if row.len() != expected_cells {
                 return Err(format!(
-                    "{SUMMARY_NAME}: finding {} has {} cells, expected 5",
+                    "{SUMMARY_NAME}: finding {} has {} cells, expected {expected_cells}",
                     i + 1,
                     row.len()
                 ));
@@ -644,14 +758,25 @@ fn verify_agreement(
             for ((column, expected), actual) in ["status", "code", "slot", "repeat", "reason"]
                 .iter()
                 .zip(expected)
-                .zip(row)
+                .zip(&row[..5])
             {
-                if expected != actual {
+                if expected != *actual {
                     return Err(format!(
                         "{column} disagrees on finding {}: {JSON_NAME} says {}, {SUMMARY_NAME} says {}",
                         i + 1,
                         pytext::repr(&expected),
                         pytext::repr(actual)
+                    ));
+                }
+            }
+            if has_evidence {
+                let expected = report::evidence_markdown(&finding_links(item, i)?);
+                if expected != row[5] {
+                    return Err(format!(
+                        "evidence disagrees on finding {}: {JSON_NAME} says {}, {SUMMARY_NAME} says {}",
+                        i + 1,
+                        pytext::repr(&expected),
+                        pytext::repr(row[5])
                     ));
                 }
             }
@@ -773,15 +898,19 @@ pub(crate) fn canonical_pack(
         .expect("validated pack findings must be an array");
     let findings = findings
         .iter()
-        .map(|f| Finding {
-            code: string(f.at("code")).unwrap(),
-            status: string(f.at("status")).unwrap(),
-            slot: string(f.at("slot")).unwrap(),
-            reason: string(f.at("reason")).unwrap(),
-            reviewer_action: string(f.at("reviewer_action")).unwrap(),
-            repeat: f.at("repeat").is_str("true"),
+        .enumerate()
+        .map(|(i, f)| {
+            Ok(Finding {
+                code: string(f.at("code")).unwrap(),
+                status: string(f.at("status")).unwrap(),
+                slot: string(f.at("slot")).unwrap(),
+                reason: string(f.at("reason")).unwrap(),
+                reviewer_action: string(f.at("reviewer_action")).unwrap(),
+                repeat: f.at("repeat").is_str("true"),
+                evidence: finding_links(f, i)?,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     let controls_not_run = document.get("controls_not_run").map(|controls| {
         controls
             .as_array()
@@ -854,9 +983,16 @@ pub fn verify_pack(directory: &Path) -> Result<VerifiedPack> {
     verify_schema(&document)?;
     let summary =
         String::from_utf8(summary_bytes).map_err(|_| format!("{SUMMARY_NAME}: not valid UTF-8"))?;
-    let csv = read_csv(&csv_bytes)?;
+    let has_evidence = document
+        .at("findings")
+        .as_array()
+        .expect("validated pack findings must be an array")
+        .iter()
+        .any(|f| f.get("evidence").is_some());
+    let csv = read_csv(&csv_bytes, has_evidence)?;
     let evidence = verify_agreement(&document, &summary, &csv)?;
     let pack = canonical_pack(&document, evidence)?;
+    verify_evidence_paths(directory, &pack.findings)?;
     if pack.status != engine::overall(&pack.findings) {
         return Err(format!(
             "{JSON_NAME}: overall_status disagrees with the findings"
@@ -949,7 +1085,7 @@ mod tests {
         let document = parse_json(&json).unwrap();
         verify_schema(&document).unwrap();
         let summary = String::from_utf8(summary).unwrap();
-        let csv = read_csv(&csv).unwrap();
+        let csv = read_csv(&csv, false).unwrap();
         let evidence = verify_agreement(&document, &summary, &csv).unwrap();
         let first = &evidence[0];
         let line = format!(

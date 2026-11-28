@@ -83,6 +83,63 @@ pub const CSV_FIELDS: [&str; 6] = [
     "reason",
     "reviewer_action",
 ];
+pub const CSV_FIELDS_WITH_EVIDENCE: [&str; 7] = [
+    "code",
+    "status",
+    "slot",
+    "repeat",
+    "reason",
+    "reviewer_action",
+    "evidence_file",
+];
+
+pub fn validate_evidence_file(file: &str) -> Result<()> {
+    if file.is_empty()
+        || pytext::strip(file) != file
+        || pytext::control_or_format(file, false)
+        || file.contains(['\\', '\0', '(', ')', '[', ']', '<', '>'])
+        || file.starts_with('/')
+        || file.contains("://")
+    {
+        return Err("must be a safe relative path inside the pack.".into());
+    }
+    if file
+        .split('/')
+        .next()
+        .is_some_and(|first| first.contains(':'))
+    {
+        return Err("must not use a URI scheme or drive prefix.".into());
+    }
+    if file.split('/').any(|part| matches!(part, "" | "." | "..")) {
+        return Err("must not contain empty or parent path segments.".into());
+    }
+    Ok(())
+}
+
+pub fn evidence_markdown(links: &[EvidenceLink]) -> String {
+    if links.is_empty() {
+        return "-".into();
+    }
+    links
+        .iter()
+        .map(|link| {
+            let label = md_cell(&format!("{} ({})", link.file, link.locator));
+            let target = md_cell(&link.file.replace(' ', "%20"));
+            format!("[{label}]({target})")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn evidence_csv(links: &[EvidenceLink]) -> String {
+    csv_safe(
+        &links
+            .iter()
+            .map(|link| link.file.as_str())
+            .collect::<Vec<_>>()
+            .join("; "),
+    )
+}
 
 pub fn money(value: &Decimal) -> Result<String> {
     value
@@ -125,14 +182,38 @@ fn note_lines(comment: &str) -> Vec<String> {
     lines
 }
 pub fn finding_json(f: &Finding) -> Json {
-    Json::object([
-        ("code", Json::str(&f.code)),
-        ("status", Json::str(&f.status)),
-        ("slot", Json::str(&f.slot)),
-        ("repeat", Json::str(if f.repeat { "true" } else { "false" })),
-        ("reason", Json::str(&f.reason)),
-        ("reviewer_action", Json::str(&f.reviewer_action)),
-    ])
+    let mut pairs = vec![
+        (PyStr::from("code"), Json::str(&f.code)),
+        (PyStr::from("status"), Json::str(&f.status)),
+        (PyStr::from("slot"), Json::str(&f.slot)),
+        (
+            PyStr::from("repeat"),
+            Json::str(if f.repeat { "true" } else { "false" }),
+        ),
+        (PyStr::from("reason"), Json::str(&f.reason)),
+        (
+            PyStr::from("reviewer_action"),
+            Json::str(&f.reviewer_action),
+        ),
+    ];
+    if !f.evidence.is_empty() {
+        pairs.push((
+            PyStr::from("evidence"),
+            Json::Array(
+                f.evidence
+                    .iter()
+                    .map(|link| {
+                        Json::object([
+                            ("file", Json::str(&link.file)),
+                            ("sha256", Json::str(&link.sha256)),
+                            ("locator", Json::str(&link.locator)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ));
+    }
+    Json::Object(pairs)
 }
 #[expect(
     clippy::too_many_lines,
@@ -312,19 +393,32 @@ pub fn as_markdown(pack: &ReadinessPack) -> Result<String> {
     if pack.findings.is_empty() {
         lines.push("No readiness findings were raised. A human must still decide whether the file is acceptable.".into());
     } else {
-        lines.extend([
-            "| Status | Code | Slot | Repeat | Reason |".into(),
-            "| --- | --- | --- | --- | --- |".into(),
-        ]);
+        let has_evidence = pack.findings.iter().any(|f| !f.evidence.is_empty());
+        if has_evidence {
+            lines.extend([
+                "| Status | Code | Slot | Repeat | Reason | Evidence |".into(),
+                "| --- | --- | --- | --- | --- | --- |".into(),
+            ]);
+        } else {
+            lines.extend([
+                "| Status | Code | Slot | Repeat | Reason |".into(),
+                "| --- | --- | --- | --- | --- |".into(),
+            ]);
+        }
         for f in &pack.findings {
-            lines.push(format!(
+            let base = format!(
                 "| {} | {} | {} | {} | {} |",
                 f.status,
                 f.code,
                 md_cell(&f.slot),
                 if f.repeat { "yes" } else { "no" },
                 md_cell(&f.reason)
-            ));
+            );
+            if has_evidence {
+                lines.push(format!("{base} {} |", evidence_markdown(&f.evidence)));
+            } else {
+                lines.push(base);
+            }
         }
     }
     lines.extend(["".into(), "## Human acknowledgement".into(), "".into()]);
@@ -345,16 +439,27 @@ pub fn as_markdown(pack: &ReadinessPack) -> Result<String> {
     Ok(lines.join("\n"))
 }
 pub fn as_csv(pack: &ReadinessPack) -> String {
-    let mut out = pycsv::write_record(&CSV_FIELDS);
+    let has_evidence = pack.findings.iter().any(|f| !f.evidence.is_empty());
+    let mut out = if has_evidence {
+        pycsv::write_record(&CSV_FIELDS_WITH_EVIDENCE)
+    } else {
+        pycsv::write_record(&CSV_FIELDS)
+    };
     for f in &pack.findings {
-        out.push_str(&pycsv::write_record(&[
-            &f.code,
-            &f.status,
-            &csv_safe(&f.slot),
-            if f.repeat { "true" } else { "false" },
-            &csv_safe(&f.reason),
-            &csv_safe(&f.reviewer_action),
-        ]));
+        let repeat = if f.repeat { "true" } else { "false" };
+        let slot = csv_safe(&f.slot);
+        let reason = csv_safe(&f.reason);
+        let action = csv_safe(&f.reviewer_action);
+        if has_evidence {
+            let evidence = evidence_csv(&f.evidence);
+            out.push_str(&pycsv::write_record(&[
+                &f.code, &f.status, &slot, repeat, &reason, &action, &evidence,
+            ]));
+        } else {
+            out.push_str(&pycsv::write_record(&[
+                &f.code, &f.status, &slot, repeat, &reason, &action,
+            ]));
+        }
     }
     out
 }

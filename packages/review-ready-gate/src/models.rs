@@ -29,6 +29,14 @@ pub struct OpenItem {
     pub resolution: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelfReviewItem {
+    pub name: String,
+    pub answer: bool,
+    pub covers: Vec<String>,
+    pub requires_artefact: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct SelfReview {
     pub preparer_initials: String,
@@ -38,6 +46,9 @@ pub struct SelfReview {
     /// The first day of the period, where a `bas` or `ias` self-review declares one.
     pub period_start: Option<Date>,
     pub assertions: Vec<(String, bool)>,
+    pub items: Vec<SelfReviewItem>,
+    pub schedules: Vec<String>,
+    pub bank_evidence_searched: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +72,8 @@ pub struct BankRecRow {
     pub account_id: String,
     pub statement_balance: Decimal,
     pub gl_balance: Decimal,
+    pub as_at: Option<Date>,
+    pub unverified: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +102,13 @@ pub struct PriorFinding {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EvidenceLink {
+    pub file: String,
+    pub sha256: String,
+    pub locator: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Finding {
     pub code: String,
     pub status: String,
@@ -96,6 +116,7 @@ pub struct Finding {
     pub reason: String,
     pub reviewer_action: String,
     pub repeat: bool,
+    pub evidence: Vec<EvidenceLink>,
 }
 
 impl Finding {
@@ -113,7 +134,13 @@ impl Finding {
             reason: reason.into(),
             reviewer_action: action.into(),
             repeat: false,
+            evidence: Vec::new(),
         }
+    }
+
+    pub fn with_evidence(mut self, link: EvidenceLink) -> Self {
+        self.evidence.push(link);
+        self
     }
 }
 

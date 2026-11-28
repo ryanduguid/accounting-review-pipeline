@@ -207,8 +207,17 @@ impl CsvRow {
     }
 }
 
-#[expect(clippy::too_many_lines, reason = "reads and validates one CSV's rows")]
 fn csv_rows(snapshot: &SourceSnapshot, required: &[&str], label: &str) -> Result<Vec<CsvRow>> {
+    csv_rows_optional(snapshot, required, &[], label)
+}
+
+#[expect(clippy::too_many_lines, reason = "reads and validates one CSV's rows")]
+fn csv_rows_optional(
+    snapshot: &SourceSnapshot,
+    required: &[&str],
+    optional: &[&str],
+    label: &str,
+) -> Result<Vec<CsvRow>> {
     let path = pypath::text(&snapshot.path);
     let csv_error =
         || format!("{path}: {label} is not valid CSV: field larger than field limit (131072).");
@@ -229,9 +238,10 @@ fn csv_rows(snapshot: &SourceSnapshot, required: &[&str], label: &str) -> Result
         ));
     }
     let expected: BTreeSet<_> = required.iter().copied().collect();
+    let allowed: BTreeSet<_> = required.iter().chain(optional).copied().collect();
     let actual: BTreeSet<_> = headers.iter().map(String::as_str).collect();
     let missing: Vec<_> = expected.difference(&actual).copied().collect();
-    let unexpected: Vec<_> = actual.difference(&expected).copied().collect();
+    let unexpected: Vec<_> = actual.difference(&allowed).copied().collect();
     let mut detail = Vec::new();
     if !missing.is_empty() {
         detail.push(format!("missing {}", missing.join(", ")));
@@ -396,23 +406,60 @@ fn load_control(snapshot: &SourceSnapshot, noun: &str) -> Result<Vec<GstControlR
     Ok(rows)
 }
 
+fn parse_bank_rec_row(r: &CsvRow, path: &str) -> Result<BankRecRow> {
+    let account_id = r.text("AccountID", false)?;
+    let status = if r.values.contains_key("Status") {
+        let status = r.text("Status", true)?;
+        if !["", "RECONCILED", "DIFFERENCE", "UNVERIFIED"].contains(&status.as_str()) {
+            return Err(format!(
+                "{path}: row {} Status must be RECONCILED, DIFFERENCE, or UNVERIFIED.",
+                r.number
+            ));
+        }
+        status
+    } else {
+        String::new()
+    };
+    let unverified = status == "UNVERIFIED";
+    let as_at = if r.values.contains_key("AsAtDate") && !r.text("AsAtDate", true)?.is_empty() {
+        Some(r.date("AsAtDate")?)
+    } else {
+        None
+    };
+    let optional_money = |field: &str| {
+        if unverified && r.text(field, true)?.is_empty() {
+            Ok(Decimal::zero())
+        } else {
+            r.money(field)
+        }
+    };
+    Ok(BankRecRow {
+        account_id,
+        statement_balance: optional_money("StatementBalance")?,
+        gl_balance: optional_money("GLBalance")?,
+        as_at,
+        unverified,
+    })
+}
+
 pub fn load_bank_rec(snapshot: &SourceSnapshot) -> Result<Vec<BankRecRow>> {
     let path = pypath::text(&snapshot.path);
     let mut rows = Vec::new();
     let mut seen = BTreeSet::new();
-    for r in csv_rows(snapshot, &BANK_COLUMNS, "Bank-rec file")? {
-        let account_id = r.text("AccountID", false)?;
-        if !seen.insert(account_id.clone()) {
+    for r in csv_rows_optional(
+        snapshot,
+        &BANK_COLUMNS,
+        &["AsAtDate", "Status"],
+        "Bank-rec file",
+    )? {
+        let row = parse_bank_rec_row(&r, &path)?;
+        if !seen.insert(row.account_id.clone()) {
             return Err(format!(
                 "{path}: duplicate AccountID {}.",
-                pytext::repr(&account_id)
+                pytext::repr(&row.account_id)
             ));
         }
-        rows.push(BankRecRow {
-            account_id,
-            statement_balance: r.money("StatementBalance")?,
-            gl_balance: r.money("GLBalance")?,
-        });
+        rows.push(row);
     }
     if rows.is_empty() {
         return Err(format!("{path}: no bank-rec rows were supplied."));
@@ -586,27 +633,115 @@ fn checked_initials(value: &Json, name: &str, path: &str) -> Result<String> {
     Ok(pytext::strip(&text).into())
 }
 
-#[expect(clippy::too_many_lines, reason = "validates every self-review field")]
-pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<SelfReview> {
-    let path = pypath::text(&snapshot.path);
-    let value = json(snapshot, false)?;
-    let keys = [
+fn non_empty_str(value: &Json, label: &str, path: &str) -> Result<String> {
+    let Some(text) = json_text(value) else {
+        return Err(format!("{path}: {label} must be a non-empty string."));
+    };
+    let trimmed = pytext::strip(&text);
+    if trimmed.is_empty() || pytext::control_or_format(trimmed, false) {
+        return Err(format!("{path}: {label} must be a non-empty string."));
+    }
+    Ok(trimmed.into())
+}
+
+fn parse_string_list(document: &Json, key: &str, path: &str) -> Result<Vec<String>> {
+    let Some(list) = document.get(key) else {
+        return Ok(Vec::new());
+    };
+    let Json::Array(entries) = list else {
+        return Err(format!("{path}: {key} must be a list of strings."));
+    };
+    entries
+        .iter()
+        .enumerate()
+        .map(|(i, item)| non_empty_str(item, &format!("{key}[{i}]"), path))
+        .collect()
+}
+
+fn parse_self_review_items(document: &Json, path: &str) -> Result<Vec<SelfReviewItem>> {
+    let Some(list) = document.get("items") else {
+        return Ok(Vec::new());
+    };
+    let Json::Array(entries) = list else {
+        return Err(format!("{path}: items must be a list of objects."));
+    };
+    entries
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| parse_one_item(entry, i, path))
+        .collect()
+}
+
+fn parse_one_item(entry: &Json, index: usize, path: &str) -> Result<SelfReviewItem> {
+    let required = ["name", "answer", "covers"];
+    let with_artefact = ["name", "answer", "covers", "requires_artefact"];
+    if !entry.has_exact_keys(&required) && !entry.has_exact_keys(&with_artefact) {
+        return Err(format!(
+            "{path}: items[{index}] must contain name, answer, covers, and optional requires_artefact."
+        ));
+    }
+    let name = non_empty_str(entry.at("name"), &format!("items[{index}].name"), path)?;
+    let Json::Bool(answer) = entry.at("answer") else {
+        return Err(format!(
+            "{path}: items[{index}].answer must be a JSON boolean."
+        ));
+    };
+    let covers = parse_string_list(entry, "covers", path)?;
+    if covers.is_empty() {
+        return Err(format!("{path}: items[{index}].covers must not be empty."));
+    }
+    let requires_artefact = entry
+        .get("requires_artefact")
+        .map(|v| {
+            let file = non_empty_str(v, &format!("items[{index}].requires_artefact"), path)?;
+            crate::report::validate_evidence_file(&file)
+                .map_err(|e| format!("{path}: items[{index}].requires_artefact {e}"))?;
+            Ok::<_, String>(file)
+        })
+        .transpose()?;
+    Ok(SelfReviewItem {
+        name,
+        answer: *answer,
+        covers,
+        requires_artefact,
+    })
+}
+
+fn self_review_keys_valid(value: &Json, profile: &str) -> bool {
+    const REQUIRED: [&str; 5] = [
         "preparer_initials",
         "prepared_on",
         "engagement_type",
         "period_end",
         "assertions",
-        "period_start",
     ];
+    const OPTIONAL: [&str; 3] = ["items", "schedules", "bank_evidence_searched"];
+    let Some(pairs) = value.as_object() else {
+        return false;
+    };
+    let keys: BTreeSet<_> = pairs.iter().filter_map(|(k, _)| k.to_utf8()).collect();
+    keys.len() == pairs.len()
+        && REQUIRED.iter().all(|k| keys.contains(*k))
+        && keys.iter().all(|k| {
+            REQUIRED.contains(&k.as_str())
+                || OPTIONAL.contains(&k.as_str())
+                || (k == "period_start" && matches!(profile, "bas" | "ias"))
+        })
+}
+
+#[expect(clippy::too_many_lines, reason = "validates every self-review field")]
+pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<SelfReview> {
+    let path = pypath::text(&snapshot.path);
+    let value = json(snapshot, false)?;
     // Only the bas and ias profiles read period_start, so only they may declare one: a
     // key another profile ignored would look checked. The refusal keeps the
     // baseline's wording, which the differential compares byte for byte.
-    let declares_start = matches!(profile, "bas" | "ias") && value.has_exact_keys(&keys);
-    if !declares_start && !value.has_exact_keys(&keys[..5]) {
+    if !self_review_keys_valid(&value, profile) {
         return Err(format!(
             "{path}: self-review must contain exactly preparer_initials, prepared_on, engagement_type, period_end, and assertions."
         ));
     }
+    let declares_start = value.get("period_start").is_some();
     let initials = checked_initials(value.at("preparer_initials"), "preparer_initials", &path)?;
     if !value.at("engagement_type").is_str(profile) {
         return Err(format!(
@@ -665,6 +800,13 @@ pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<Self
             _ => Err(format!("{path}: assertions.{name} must be a JSON boolean.")),
         })
         .collect::<Result<Vec<_>>>()?;
+    let items = parse_self_review_items(&value, &path)?;
+    let schedules = parse_string_list(&value, "schedules", &path)?;
+    for schedule in &schedules {
+        crate::engine::controls::schedule_evidence_file(schedule)
+            .ok_or_else(|| format!("{path}: unknown schedule {}.", pytext::repr(schedule)))?;
+    }
+    let bank_evidence_searched = parse_string_list(&value, "bank_evidence_searched", &path)?;
     Ok(SelfReview {
         preparer_initials: initials,
         prepared_on,
@@ -672,6 +814,9 @@ pub fn load_self_review(snapshot: &SourceSnapshot, profile: &str) -> Result<Self
         period_end,
         period_start,
         assertions,
+        items,
+        schedules,
+        bank_evidence_searched,
     })
 }
 
