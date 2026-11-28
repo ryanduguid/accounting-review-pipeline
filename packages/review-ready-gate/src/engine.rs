@@ -17,6 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod controls;
 mod withholding;
 
 #[derive(Default)]
@@ -328,8 +329,25 @@ pub fn review_requiring(
     apply_gst_period(&loaded, &mut findings);
     withholding::apply(&loaded, &mut findings, &tolerance)?;
     apply_bank_rec(&loaded, &mut findings, &tolerance)?;
+    controls::apply_bank_coverage(
+        profile,
+        &loaded,
+        &tolerance,
+        &evidence,
+        &mut controls,
+        &mut findings,
+    )?;
     apply_year_end(&loaded, &mut findings);
     apply_statement_mapping(&loaded, &mut findings, &tolerance)?;
+    controls::apply_self_review_contradictions(&loaded, pack_dir, &evidence, &mut findings)?;
+    controls::apply_pack_evidence_controls(
+        slots,
+        &loaded,
+        pack_dir,
+        acknowledgement_path,
+        &evidence,
+        &mut findings,
+    )?;
     if !document_paths.is_empty() {
         let bundles = document_paths
             .iter()
@@ -689,6 +707,9 @@ fn apply_bank_rec(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Deci
         return Ok(());
     };
     for row in bank {
+        if row.unverified {
+            continue;
+        }
         let Some(account) = tb.iter().find(|r| r.account_id == row.account_id) else {
             findings.push(Finding::new(
                 "BANK_REC_BREAK",
@@ -725,6 +746,9 @@ fn apply_bank_rec(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Deci
 }
 fn apply_bank_statement(loaded: &Loaded, findings: &mut Vec<Finding>, tolerance: &Decimal) {
     for row in loaded.bank_rec.iter().flatten() {
+        if row.unverified {
+            continue;
+        }
         // The existing bank control rounds subtraction in the fixed 28-digit context.
         let difference = row.statement_balance.sub(&row.gl_balance).value;
         if difference.abs() > *tolerance {
@@ -1284,6 +1308,8 @@ mod tests {
             account_id: "bank".into(),
             statement_balance: Decimal::parse("1000000000000000000000000000.01").unwrap(),
             gl_balance: Decimal::zero(),
+            as_at: None,
+            unverified: false,
         }]);
         findings.clear();
         apply_bank_rec(&loaded, &mut findings, &tolerance).unwrap();
@@ -1339,6 +1365,8 @@ mod tests {
                 account_id: "bank".into(),
                 statement_balance: amount("100.01"),
                 gl_balance: amount("100.00"),
+                as_at: None,
+                unverified: false,
             }]),
             ..Loaded::default()
         };
@@ -1497,6 +1525,11 @@ Retained earnings,900,CREDIT
         assert_eq!(
             pack.controls_not_run.unwrap(),
             [
+                ControlNotRun {
+                    slot: "bank_rec".into(),
+                    filename: "bank_rec.csv".into(),
+                    reason: "no file was supplied".into(),
+                },
                 ControlNotRun {
                     slot: "fs_mapping".into(),
                     filename: "fs_mapping.csv".into(),
