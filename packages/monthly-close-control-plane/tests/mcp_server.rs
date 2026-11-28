@@ -41,6 +41,16 @@ fn workspace(temp: &TempDir) -> PathBuf {
     assert_eq!(demo.status.code(), Some(2), "{demo:?}");
     for name in [
         "journal_entries.csv",
+        "duplicates.csv",
+        "fixed_asset_register.csv",
+        "fixed_asset_trial_balance.csv",
+        "coding_lines.csv",
+        "payroll.csv",
+        "statement.csv",
+        "bas_ledger.csv",
+        "bas_tax_codes.csv",
+        "prepost_drafts.csv",
+        "receivables.csv",
         "schedules/expenses.json",
         "schedules/prepayments.json",
         "schedules/rollforward.json",
@@ -50,6 +60,20 @@ fn workspace(temp: &TempDir) -> PathBuf {
         let target = root.join(name.replace('/', "-"));
         fs::copy(examples().join(name), target).unwrap();
     }
+    let jet_out = child_profile::command(BIN)
+        .args([
+            "jet",
+            "--transactions",
+            root.join("journal_entries.csv").to_str().unwrap(),
+            "--currency",
+            "AUD",
+            "--period-end",
+            "2026-07-31",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(jet_out.status.code(), Some(2), "{jet_out:?}");
+    fs::write(root.join("jet.json"), &jet_out.stdout).unwrap();
     root
 }
 
@@ -217,6 +241,166 @@ fn an_assistant_session_reads_packs_and_files_inside_the_allowed_directory() {
                 .trim_end()
         );
     }
+}
+
+#[expect(clippy::too_many_lines, reason = "one request per read-only tool")]
+fn read_only_calls() -> Vec<(i64, &'static str, String)> {
+    let path = |name: &str| quoted(Path::new(name));
+    vec![
+        (
+            1,
+            "duplicates",
+            format!(
+                r#"{{"documents":{},"currency":"AUD","period_start":"2026-09-01","period_end":"2026-09-30"}}"#,
+                path("duplicates.csv")
+            ),
+        ),
+        (
+            2,
+            "fixed-assets",
+            format!(
+                r#"{{"register":{},"trial_balance":{},"currency":"AUD"}}"#,
+                path("fixed_asset_register.csv"),
+                path("fixed_asset_trial_balance.csv"),
+            ),
+        ),
+        (
+            3,
+            "coding",
+            format!(
+                r#"{{"lines":{},"currency":"AUD","period_start":"2026-09-01","period_end":"2026-09-30"}}"#,
+                path("coding_lines.csv")
+            ),
+        ),
+        (
+            4,
+            "scorecard",
+            format!(r#"{{"results":[{}]}}"#, path("jet.json")),
+        ),
+        (
+            5,
+            "payroll",
+            format!(r#"{{"register":{}}}"#, path("payroll.csv")),
+        ),
+        (
+            6,
+            "statement",
+            format!(
+                r#"{{"statement":{},"currency":"AUD"}}"#,
+                path("statement.csv")
+            ),
+        ),
+        (
+            7,
+            "bas",
+            format!(
+                r#"{{"ledger":{},"tax_codes":{},"currency":"AUD","period_start":"2026-07-01","period_end":"2026-09-30","basis":"accruals"}}"#,
+                path("bas_ledger.csv"),
+                path("bas_tax_codes.csv"),
+            ),
+        ),
+        (
+            8,
+            "bas",
+            format!(
+                r#"{{"ledger":{},"tax_codes":{},"payroll":{},"currency":"AUD","period_start":"2026-07-01","period_end":"2026-09-30","basis":"cash"}}"#,
+                path("bas_ledger.csv"),
+                path("bas_tax_codes.csv"),
+                path("payroll.csv"),
+            ),
+        ),
+        (
+            9,
+            "prepost",
+            format!(
+                r#"{{"drafts":{},"posted":{},"currency":"AUD","period_start":"2026-08-01","period_end":"2026-08-31"}}"#,
+                path("prepost_drafts.csv"),
+                path("journal_entries.csv"),
+            ),
+        ),
+        (
+            10,
+            "overdue",
+            format!(
+                r#"{{"invoices":{},"currency":"AUD","as_at":"2026-09-30"}}"#,
+                path("receivables.csv")
+            ),
+        ),
+        (11, "rules", "{}".into()),
+    ]
+}
+
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "exercises all 10 added read-only tools"
+)]
+fn remaining_read_only_commands_are_served_as_mcp_tools() {
+    let temp = TempDir::new();
+    let root = workspace(&temp);
+    let mut input = String::new();
+    for (id, tool, arguments) in read_only_calls() {
+        input += &format!(
+            "{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"tools/call\",\"params\":{{\"name\":\"{tool}\",\"arguments\":{arguments}}}}}\n"
+        );
+    }
+    let mut child = child_profile::command(BIN)
+        .arg("mcp")
+        .arg(&root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let replies: Vec<Json> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| pyjson::loads(line).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 11);
+    for (index, reply) in replies[..10].iter().enumerate() {
+        let result = reply.at("result");
+        assert_eq!(
+            result.at("isError").as_bool(),
+            Some(false),
+            "{index}: {reply:?}"
+        );
+        let text = result.at("content").as_array().unwrap()[0]
+            .at("text")
+            .as_pystr()
+            .unwrap()
+            .to_utf8()
+            .unwrap();
+        let parsed = pyjson::loads(&text).unwrap();
+        assert!(parsed.get("status").is_some(), "{index}: {text}");
+    }
+    let rules_reply = replies[10].at("result");
+    assert_eq!(rules_reply.at("isError").as_bool(), Some(false));
+    let rules_text = rules_reply.at("content").as_array().unwrap()[0]
+        .at("text")
+        .as_pystr()
+        .unwrap()
+        .to_utf8()
+        .unwrap();
+    let cli_rules = child_profile::command(BIN)
+        .args(["rules", "list"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        rules_text,
+        String::from_utf8(cli_rules.stdout)
+            .unwrap()
+            .replace("\r\n", "\n")
+    );
 }
 
 #[test]

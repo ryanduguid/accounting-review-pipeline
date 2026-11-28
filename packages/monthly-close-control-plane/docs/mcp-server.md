@@ -16,6 +16,16 @@ nothing. It runs until the assistant closes its input, then exits `0`; it exits
 | `classify` | `close-control classify` | `original_transactions`, `current_transactions`, `coding_evidence`, `currency` |
 | `schedule` | `close-control schedule` | `kind`, `input` |
 | `jet` | [`close-control jet`](journal-entry-tests.md) | `transactions`, `currency`, `period_end` |
+| `duplicates` | `close-control duplicates` | `documents`, `currency`, `period_start`, `period_end` |
+| `fixed-assets` | `close-control fixed-assets` | `register`, `trial_balance`, `currency` |
+| `coding` | `close-control coding` | `lines`, `currency`, `period_start`, `period_end` |
+| `scorecard` | `close-control scorecard` | `results` |
+| `payroll` | `close-control payroll` | `register` |
+| `statement` | `close-control statement` | `statement`, `currency` |
+| `bas` | `close-control bas` | `ledger`, `tax_codes`, optional `payroll`, `currency`, `period_start`, `period_end`, `basis` |
+| `prepost` | `close-control prepost` | `drafts`, `posted`, `currency`, `period_start`, `period_end` |
+| `overdue` | `close-control overdue` | `invoices`, `currency`, `as_at` |
+| `rules` | `close-control rules list` | none |
 
 Each tool returns the text its command prints: the review sheet, the queue or
 the JSON result. A tool that cannot run, such as one given a file that does not

@@ -6,11 +6,12 @@
 //! commands that only read local files, on paths beneath the directory the
 //! user allowed when starting it; none writes a file or reaches a network.
 use crate::{
-    Result,
+    Result, bas,
     beneath::Root,
-    classification, comparison, journal_entries,
+    classification, coding, comparison, duplicates, fixed_assets, journal_entries, overdue,
+    payroll, prepost,
     pyjson::{self, Json, PyStr},
-    queue, schedules, viewer,
+    queue, rules, schedules, scorecard, statement, viewer,
 };
 use std::{
     io::{BufRead, Write},
@@ -207,6 +208,195 @@ fn tools() -> Json {
             ],
             &["transactions", "currency", "period_end"],
         ),
+        tool(
+            "duplicates",
+            "Check a document register for possible duplicate invoices or payments in a period.",
+            vec![
+                (
+                    "documents",
+                    path("path, relative to the server's directory, of the document register CSV"),
+                ),
+                ("currency", currency()),
+                (
+                    "period_start",
+                    string_property("first day of the period, YYYY-MM-DD"),
+                ),
+                (
+                    "period_end",
+                    string_property("last day of the period, YYYY-MM-DD"),
+                ),
+            ],
+            &["documents", "currency", "period_start", "period_end"],
+        ),
+        tool(
+            "fixed-assets",
+            "Tie a fixed-asset register to a trial balance by asset and accumulated depreciation accounts.",
+            vec![
+                (
+                    "register",
+                    path(
+                        "path, relative to the server's directory, of the fixed-asset register CSV",
+                    ),
+                ),
+                (
+                    "trial_balance",
+                    path("path, relative to the server's directory, of the trial balance CSV"),
+                ),
+                ("currency", currency()),
+            ],
+            &["register", "trial_balance", "currency"],
+        ),
+        tool(
+            "coding",
+            "Compare a period's account and tax coding against prior postings by the same supplier.",
+            vec![
+                (
+                    "lines",
+                    path("path, relative to the server's directory, of the transaction lines CSV"),
+                ),
+                ("currency", currency()),
+                (
+                    "period_start",
+                    string_property("first day of the period, YYYY-MM-DD"),
+                ),
+                (
+                    "period_end",
+                    string_property("last day of the period, YYYY-MM-DD"),
+                ),
+            ],
+            &["lines", "currency", "period_start", "period_end"],
+        ),
+        tool(
+            "scorecard",
+            "Summarise saved check result JSON files for one tenant into a close scorecard.",
+            vec![(
+                "results",
+                Json::object([
+                    ("type", Json::str("array")),
+                    (
+                        "items",
+                        string_property(
+                            "path, relative to the server's directory, of a saved result JSON file",
+                        ),
+                    ),
+                    ("minItems", Json::int(1)),
+                ]),
+            )],
+            &["results"],
+        ),
+        tool(
+            "payroll",
+            "Reperform PAYG withholding and super guarantee on a payroll register.",
+            vec![(
+                "register",
+                path("path, relative to the server's directory, of the payroll register CSV"),
+            )],
+            &["register"],
+        ),
+        tool(
+            "statement",
+            "Check that a bank statement's running balances and page totals tie out.",
+            vec![
+                (
+                    "statement",
+                    path("path, relative to the server's directory, of the bank statement CSV"),
+                ),
+                ("currency", currency()),
+            ],
+            &["statement", "currency"],
+        ),
+        tool(
+            "bas",
+            "Draft a BAS workpaper from a ledger, tax-code map and optional payroll register.",
+            vec![
+                (
+                    "ledger",
+                    path("path, relative to the server's directory, of the ledger CSV"),
+                ),
+                (
+                    "tax_codes",
+                    path("path, relative to the server's directory, of the tax-code map CSV"),
+                ),
+                (
+                    "payroll",
+                    path(
+                        "optional path, relative to the server's directory, of the payroll register CSV",
+                    ),
+                ),
+                ("currency", currency()),
+                (
+                    "period_start",
+                    string_property("first day of the period, YYYY-MM-DD"),
+                ),
+                (
+                    "period_end",
+                    string_property("last day of the period, YYYY-MM-DD"),
+                ),
+                (
+                    "basis",
+                    Json::object([
+                        ("type", Json::str("string")),
+                        (
+                            "enum",
+                            Json::Array(["accruals", "cash"].map(Json::str).to_vec()),
+                        ),
+                    ]),
+                ),
+            ],
+            &[
+                "ledger",
+                "tax_codes",
+                "currency",
+                "period_start",
+                "period_end",
+                "basis",
+            ],
+        ),
+        tool(
+            "prepost",
+            "Review draft postings against prior posted transactions before posting.",
+            vec![
+                (
+                    "drafts",
+                    path("path, relative to the server's directory, of the draft postings CSV"),
+                ),
+                (
+                    "posted",
+                    path(
+                        "path, relative to the server's directory, of the posted transactions CSV",
+                    ),
+                ),
+                ("currency", currency()),
+                (
+                    "period_start",
+                    string_property("first day of the period, YYYY-MM-DD"),
+                ),
+                (
+                    "period_end",
+                    string_property("last day of the period, YYYY-MM-DD"),
+                ),
+            ],
+            &["drafts", "posted", "currency", "period_start", "period_end"],
+        ),
+        tool(
+            "overdue",
+            "Flag open invoices that are overdue relative to each customer's payment history.",
+            vec![
+                (
+                    "invoices",
+                    path("path, relative to the server's directory, of the invoices CSV"),
+                ),
+                ("currency", currency()),
+                ("as_at", string_property("as-at date, YYYY-MM-DD")),
+            ],
+            &["invoices", "currency", "as_at"],
+        ),
+        tool(
+            "rules",
+            "List every close review control, when it runs, what it checks and its source.",
+            vec![],
+            &[],
+        ),
     ])
 }
 
@@ -242,7 +432,11 @@ impl Arguments<'_> {
     fn pack(&self, key: &str) -> Result<PathBuf> {
         pack(&self.text(key)?, self.root)
     }
-    fn paths(&self, key: &str) -> Result<Vec<PathBuf>> {
+    fn paths_with(
+        &self,
+        key: &str,
+        open: fn(&str, &Root) -> Result<PathBuf>,
+    ) -> Result<Vec<PathBuf>> {
         let items = self
             .values
             .get(key)
@@ -256,9 +450,15 @@ impl Arguments<'_> {
                     .as_pystr()
                     .and_then(PyStr::to_utf8)
                     .ok_or_else(|| format!("{key} must be a non-empty list of paths."))?;
-                pack(&raw, self.root)
+                open(&raw, self.root)
             })
             .collect()
+    }
+    fn paths(&self, key: &str) -> Result<Vec<PathBuf>> {
+        self.paths_with(key, pack)
+    }
+    fn files(&self, key: &str) -> Result<Vec<PathBuf>> {
+        self.paths_with(key, file)
     }
 }
 
@@ -337,6 +537,69 @@ fn run_tool(name: &str, args: &Arguments) -> Option<Result<String>> {
                 &args.text("period_end")?,
             )
         })()),
+        "duplicates" => pretty((|| {
+            duplicates::duplicate_documents(
+                &args.path("documents")?,
+                &args.text("currency")?,
+                &args.text("period_start")?,
+                &args.text("period_end")?,
+            )
+        })()),
+        "fixed-assets" => pretty((|| {
+            fixed_assets::fixed_assets(
+                &args.path("register")?,
+                &args.path("trial_balance")?,
+                &args.text("currency")?,
+            )
+        })()),
+        "coding" => pretty((|| {
+            coding::coding_review(
+                &args.path("lines")?,
+                &args.text("currency")?,
+                &args.text("period_start")?,
+                &args.text("period_end")?,
+            )
+        })()),
+        "scorecard" => pretty((|| scorecard::scorecard(&args.files("results")?))()),
+        "payroll" => pretty((|| payroll::payroll_reperformance(&args.path("register")?))()),
+        "statement" => pretty((|| {
+            statement::statement_tie_out(&args.path("statement")?, &args.text("currency")?)
+        })()),
+        "bas" => pretty((|| {
+            let ledger = args.path("ledger")?;
+            let tax_codes = args.path("tax_codes")?;
+            let payroll = args.optional_path("payroll")?;
+            let currency = args.text("currency")?;
+            let period_start = args.text("period_start")?;
+            let period_end = args.text("period_end")?;
+            let basis = args.text("basis")?;
+            bas::bas_workpaper(&bas::BasConfig {
+                ledger: &ledger,
+                tax_codes: &tax_codes,
+                payroll: payroll.as_deref(),
+                currency: &currency,
+                period_start: &period_start,
+                period_end: &period_end,
+                basis: &basis,
+            })
+        })()),
+        "prepost" => pretty((|| {
+            prepost::prepost_review(
+                &args.path("drafts")?,
+                &args.path("posted")?,
+                &args.text("currency")?,
+                &args.text("period_start")?,
+                &args.text("period_end")?,
+            )
+        })()),
+        "overdue" => pretty((|| {
+            overdue::overdue_against_history(
+                &args.path("invoices")?,
+                &args.text("currency")?,
+                &args.text("as_at")?,
+            )
+        })()),
+        "rules" => Ok(rules::render()),
         _ => return None,
     })
 }
@@ -659,7 +922,24 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            ["view", "queue", "compare", "classify", "schedule", "jet"]
+            [
+                "view",
+                "queue",
+                "compare",
+                "classify",
+                "schedule",
+                "jet",
+                "duplicates",
+                "fixed-assets",
+                "coding",
+                "scorecard",
+                "payroll",
+                "statement",
+                "bas",
+                "prepost",
+                "overdue",
+                "rules",
+            ]
         );
     }
 
@@ -694,6 +974,10 @@ mod tests {
             let (text, _) = call_text(&nowhere(), "queue", arguments);
             assert_eq!(text, "pack_dirs must be a non-empty list of paths.");
         }
+        for arguments in [r#"{}"#, r#"{"results":[]}"#, r#"{"results":[1]}"#] {
+            let (text, _) = call_text(&nowhere(), "scorecard", arguments);
+            assert_eq!(text, "results must be a non-empty list of paths.");
+        }
         let (text, _) = call_text(
             &nowhere(),
             "queue",
@@ -705,6 +989,127 @@ mod tests {
             text,
             "kind must be expenses, migration, interentity, prepayments or rollforward."
         );
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "table of missing required arguments for each added tool"
+    )]
+    fn added_tools_refuse_missing_arguments() {
+        let temp = TempDir::new();
+        let dir = temp.join("args");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.csv"), "h\n").unwrap();
+        std::fs::write(dir.join("b.csv"), "h\n").unwrap();
+        let root = Root::open(&dir).unwrap();
+        for (tool, arguments, expected) in [
+            ("duplicates", r#"{}"#, "documents is required."),
+            (
+                "duplicates",
+                r#"{"documents":"a.csv"}"#,
+                "currency is required.",
+            ),
+            (
+                "duplicates",
+                r#"{"documents":"a.csv","currency":"AUD"}"#,
+                "period_start is required.",
+            ),
+            (
+                "duplicates",
+                r#"{"documents":"a.csv","currency":"AUD","period_start":"2026-09-01"}"#,
+                "period_end is required.",
+            ),
+            ("fixed-assets", r#"{}"#, "register is required."),
+            (
+                "fixed-assets",
+                r#"{"register":"a.csv"}"#,
+                "trial_balance is required.",
+            ),
+            (
+                "fixed-assets",
+                r#"{"register":"a.csv","trial_balance":"b.csv"}"#,
+                "currency is required.",
+            ),
+            ("coding", r#"{}"#, "lines is required."),
+            ("coding", r#"{"lines":"a.csv"}"#, "currency is required."),
+            (
+                "coding",
+                r#"{"lines":"a.csv","currency":"AUD"}"#,
+                "period_start is required.",
+            ),
+            (
+                "coding",
+                r#"{"lines":"a.csv","currency":"AUD","period_start":"2026-09-01"}"#,
+                "period_end is required.",
+            ),
+            ("payroll", r#"{}"#, "register is required."),
+            ("statement", r#"{}"#, "statement is required."),
+            (
+                "statement",
+                r#"{"statement":"a.csv"}"#,
+                "currency is required.",
+            ),
+            ("bas", r#"{}"#, "ledger is required."),
+            ("bas", r#"{"ledger":"a.csv"}"#, "tax_codes is required."),
+            (
+                "bas",
+                r#"{"ledger":"a.csv","tax_codes":"b.csv","payroll":"/bad"}"#,
+                "/bad: give a path relative",
+            ),
+            (
+                "bas",
+                r#"{"ledger":"a.csv","tax_codes":"b.csv"}"#,
+                "currency is required.",
+            ),
+            (
+                "bas",
+                r#"{"ledger":"a.csv","tax_codes":"b.csv","currency":"AUD"}"#,
+                "period_start is required.",
+            ),
+            (
+                "bas",
+                r#"{"ledger":"a.csv","tax_codes":"b.csv","currency":"AUD","period_start":"2026-07-01"}"#,
+                "period_end is required.",
+            ),
+            (
+                "bas",
+                r#"{"ledger":"a.csv","tax_codes":"b.csv","currency":"AUD","period_start":"2026-07-01","period_end":"2026-09-30"}"#,
+                "basis is required.",
+            ),
+            ("prepost", r#"{}"#, "drafts is required."),
+            ("prepost", r#"{"drafts":"a.csv"}"#, "posted is required."),
+            (
+                "prepost",
+                r#"{"drafts":"a.csv","posted":"b.csv"}"#,
+                "currency is required.",
+            ),
+            (
+                "prepost",
+                r#"{"drafts":"a.csv","posted":"b.csv","currency":"AUD"}"#,
+                "period_start is required.",
+            ),
+            (
+                "prepost",
+                r#"{"drafts":"a.csv","posted":"b.csv","currency":"AUD","period_start":"2026-08-01"}"#,
+                "period_end is required.",
+            ),
+            ("overdue", r#"{}"#, "invoices is required."),
+            (
+                "overdue",
+                r#"{"invoices":"a.csv"}"#,
+                "currency is required.",
+            ),
+            (
+                "overdue",
+                r#"{"invoices":"a.csv","currency":"AUD"}"#,
+                "as_at is required.",
+            ),
+        ] {
+            let (text, failed) = call_text(&root, tool, arguments);
+            assert!(failed, "{tool} {arguments}: {text}");
+            assert!(text.starts_with(expected), "{tool} {arguments}: {text}");
+        }
     }
 
     #[test]
