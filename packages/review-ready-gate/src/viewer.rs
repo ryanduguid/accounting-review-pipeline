@@ -1085,7 +1085,7 @@ mod tests {
         let document = parse_json(&json).unwrap();
         verify_schema(&document).unwrap();
         let summary = String::from_utf8(summary).unwrap();
-        let csv = read_csv(&csv).unwrap();
+        let csv = read_csv(&csv, false).unwrap();
         let evidence = verify_agreement(&document, &summary, &csv).unwrap();
         let first = &evidence[0];
         let line = format!(

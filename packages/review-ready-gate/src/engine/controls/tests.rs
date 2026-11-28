@@ -101,7 +101,7 @@ fn self_review_contradictions_check_no_with_figures_yes_without_and_required_art
 }
 
 #[test]
-fn self_review_movement_only_tb_account_triggers_contradiction_and_validation_rejects_bad_items() {
+fn self_review_movement_only_tb_account_triggers_contradiction() {
     let tmp = TempDir::new();
     let dir = copy_pack(&tmp, "month-end-ready", "mov");
     let tb = "\
@@ -133,7 +133,11 @@ ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebi
             .iter()
             .any(|f| f.code == "SELF_REVIEW_CONTRADICTION" && f.reason.contains("5500=50.00"))
     );
+}
 
+#[test]
+fn self_review_loader_rejects_malformed_items_and_schedules() {
+    let tmp = TempDir::new();
     let bad_cases = [
         r#""items": "not-a-list""#,
         r#""items": [{}]"#,
@@ -159,10 +163,7 @@ ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebi
     }
 }
 
-#[test]
-fn bank_coverage_classifies_accounts_blocks_year_end_and_lists_month_end_controls_not_run() {
-    let tmp = TempDir::new();
-    let tb = "\
+const MULTI_BANK_TB: &str = "\
 ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebit,YTDCredit
 2026-06-30,Varrock Ventures Pty Ltd,Bank,100,Operating Bank,1000,15000.00,0.00,120000.00,0.00
 2026-06-30,Varrock Ventures Pty Ltd,Bank,101,Savings Bank,1001,1000.00,0.00,5000.00,0.00
@@ -171,7 +172,8 @@ ReportDate,Tenant,Section,AccountID,AccountName,AccountCode,Debit,Credit,YTDDebi
 2026-06-30,Varrock Ventures Pty Ltd,Bank,104,FX Clearing,1004,0.00,0.00,1000.00,0.00
 2026-06-30,Varrock Ventures Pty Ltd,Equity,900,Retained Earnings,3000,0.00,16500.00,0.00,131000.00
 ";
-    let rec = "\
+
+const MULTI_BANK_REC: &str = "\
 AccountID,StatementBalance,GLBalance,AsAtDate,Status
 100,120000.00,120000.00,2026-06-30,RECONCILED
 101,4900.00,5000.00,2026-06-30,DIFFERENCE
@@ -179,9 +181,13 @@ AccountID,StatementBalance,GLBalance,AsAtDate,Status
 103,,,2026-06-30,UNVERIFIED
 104,1000.00,1000.00,2026-05-31,RECONCILED
 ";
+
+#[test]
+fn bank_coverage_blocks_year_end_and_raises_client_query_when_sources_searched() {
+    let tmp = TempDir::new();
     let dir = copy_pack(&tmp, "year-end-ready", "ye-bank");
-    fs::write(dir.join("trial_balance.csv"), tb).unwrap();
-    fs::write(dir.join("bank_rec.csv"), rec).unwrap();
+    fs::write(dir.join("trial_balance.csv"), MULTI_BANK_TB).unwrap();
+    fs::write(dir.join("bank_rec.csv"), MULTI_BANK_REC).unwrap();
     let pack = engine::review_pack("year_end", &dir, None, tolerance(), &[]).unwrap();
     assert_eq!(pack.status, "BLOCKED");
     let unverified: Vec<_> = pack
@@ -200,8 +206,6 @@ AccountID,StatementBalance,GLBalance,AsAtDate,Status
             .reason
             .contains("does not match period_end 2026-06-30")
     );
-
-    // Declaring searched evidence sources raises a client statement query.
     let review_searched = fs::read_to_string(dir.join("self_review.json"))
         .unwrap()
         .replace(
@@ -217,17 +221,19 @@ AccountID,StatementBalance,GLBalance,AsAtDate,Status
             && f.reason.contains("Client query:")
             && f.reason.contains("client_folder, mailbox")
     }));
+}
 
-    // Month-end lists unverified Bank accounts under controls_not_run.
+#[test]
+fn bank_coverage_lists_month_end_controls_not_run_and_rejects_bad_status() {
+    let tmp = TempDir::new();
     let me = copy_pack(&tmp, "month-end-ready", "me-bank");
-    fs::write(me.join("trial_balance.csv"), tb).unwrap();
-    fs::write(me.join("bank_rec.csv"), rec).unwrap();
+    fs::write(me.join("trial_balance.csv"), MULTI_BANK_TB).unwrap();
+    fs::write(me.join("bank_rec.csv"), MULTI_BANK_REC).unwrap();
     let me_pack = engine::review_pack("month_end", &me, None, tolerance(), &[]).unwrap();
     let not_run = me_pack.controls_not_run.unwrap();
     assert!(not_run.iter().any(|c| c.slot == "bank_rec:103"));
     assert!(not_run.iter().any(|c| c.slot == "bank_rec:104"));
 
-    // Invalid Status value in bank_rec.csv is refused.
     let bad_rec = tmp.join("bad_bank_rec.csv");
     fs::write(
         &bad_rec,
@@ -236,21 +242,26 @@ AccountID,StatementBalance,GLBalance,AsAtDate,Status
     .unwrap();
     let snap = SourceSnapshot::capture(&bad_rec, "bank_rec").unwrap();
     assert!(crate::loader::load_bank_rec(&snap).is_err());
+}
 
-    // Direct classification helper verifies all 3 verdicts and empty TB path.
-    let empty_loaded = Loaded::default();
+#[test]
+fn classify_bank_accounts_reports_all_three_verdicts_and_handles_empty_tb() {
+    let tmp = TempDir::new();
+    let me = copy_pack(&tmp, "month-end-ready", "me-classify");
+    fs::write(me.join("trial_balance.csv"), MULTI_BANK_TB).unwrap();
+    fs::write(me.join("bank_rec.csv"), MULTI_BANK_REC).unwrap();
     assert!(
-        classify_bank_accounts(&empty_loaded, &tolerance())
+        classify_bank_accounts(&Loaded::default(), &tolerance())
             .unwrap()
             .is_empty()
     );
-    let tb_snap = SourceSnapshot::capture(&me.join("trial_balance.csv"), "tb").unwrap();
-    let rec_snap = SourceSnapshot::capture(&me.join("bank_rec.csv"), "rec").unwrap();
-    let sr_snap = SourceSnapshot::capture(&me.join("self_review.json"), "sr").unwrap();
+    let tb = SourceSnapshot::capture(&me.join("trial_balance.csv"), "tb").unwrap();
+    let rec = SourceSnapshot::capture(&me.join("bank_rec.csv"), "rec").unwrap();
+    let sr = SourceSnapshot::capture(&me.join("self_review.json"), "sr").unwrap();
     let loaded = Loaded {
-        trial_balance: Some(crate::loader::load_canonical_tb(&tb_snap).unwrap()),
-        bank_rec: Some(crate::loader::load_bank_rec(&rec_snap).unwrap()),
-        self_review: Some(crate::loader::load_self_review(&sr_snap, "month_end").unwrap()),
+        trial_balance: Some(crate::loader::load_canonical_tb(&tb).unwrap()),
+        bank_rec: Some(crate::loader::load_bank_rec(&rec).unwrap()),
+        self_review: Some(crate::loader::load_self_review(&sr, "month_end").unwrap()),
         ..Loaded::default()
     };
     let cov = classify_bank_accounts(&loaded, &tolerance()).unwrap();
@@ -273,8 +284,6 @@ fn pack_evidence_controls_flag_unreferenced_damaged_and_schedule_required_files(
             "\"period_end\": \"2026-06-30\",\n  \"schedules\": [\"fixed_assets\", \"loans\"],",
         );
     fs::write(dir.join("self_review.json"), review).unwrap();
-    fs::write(dir.join("loans_empty_placeholder"), b"").unwrap();
-    fs::remove_file(dir.join("loans_empty_placeholder")).unwrap();
     fs::write(dir.join("loan_schedule.csv"), b"").unwrap();
     fs::write(dir.join("broken.pdf"), b"%PDF-1.4 truncated").unwrap();
     fs::write(
@@ -303,7 +312,17 @@ fn pack_evidence_controls_flag_unreferenced_damaged_and_schedule_required_files(
     assert!(has("UNREFERENCED_EVIDENCE", "stray.txt"));
     assert!(!has("UNREFERENCED_EVIDENCE", "ack.json"));
 
-    // Intact PDF and intact XLSX with a worksheet pass structural validation.
+    fs::write(dir.join("fixed_asset_register.csv"), b"id,name\n1,Ute\n").unwrap();
+    fs::write(dir.join("loan_schedule.csv"), b"id,bal\n1,100.00\n").unwrap();
+    fs::remove_file(dir.join("broken.pdf")).unwrap();
+    fs::remove_file(dir.join("zero_sheets.xlsx")).unwrap();
+    fs::remove_file(dir.join("stray.txt")).unwrap();
+    let clean = engine::review_pack("year_end", &dir, Some(&note), tolerance(), &[]).unwrap();
+    assert_eq!(clean.status, "READY", "{:?}", clean.findings);
+}
+
+#[test]
+fn pdf_and_xlsx_structural_validators_accept_intact_and_reject_corrupt_bytes() {
     assert!(pdf_intact(b"%PDF-1.7\nbody\n%%EOF\n"));
     assert!(!pdf_intact(b"NOTPDF\n%%EOF\n"));
     let valid_xlsx = minimal_zip(&["xl/workbook.xml", "xl/worksheets/sheet1.xml"]);
@@ -316,23 +335,14 @@ fn pack_evidence_controls_flag_unreferenced_damaged_and_schedule_required_files(
     let cd_pos = bad_cd.windows(4).position(|w| w == b"PK\x01\x02").unwrap();
     bad_cd[cd_pos] = b'X';
     assert!(!xlsx_has_worksheets(&bad_cd));
-    let mut trunc_cd = valid_xlsx.clone();
+    let mut trunc_cd = valid_xlsx;
     trunc_cd[cd_pos + 28] = 250;
     trunc_cd[cd_pos + 29] = 10;
     assert!(!xlsx_has_worksheets(&trunc_cd));
-
-    // When required schedule file exists and is non-empty, no schedule finding is raised.
-    fs::write(dir.join("fixed_asset_register.csv"), b"id,name\n1,Ute\n").unwrap();
-    fs::write(dir.join("loan_schedule.csv"), b"id,bal\n1,100.00\n").unwrap();
-    fs::remove_file(dir.join("broken.pdf")).unwrap();
-    fs::remove_file(dir.join("zero_sheets.xlsx")).unwrap();
-    fs::remove_file(dir.join("stray.txt")).unwrap();
-    let clean = engine::review_pack("year_end", &dir, Some(&note), tolerance(), &[]).unwrap();
-    assert_eq!(clean.status, "READY", "{:?}", clean.findings);
 }
 
 #[test]
-fn evidence_links_round_trip_through_render_and_view_refuses_tampering_and_escapes() {
+fn evidence_links_round_trip_through_render_and_detect_csv_or_md_tampering() {
     let tmp = TempDir::new();
     let dir = copy_pack(&tmp, "bas-ready", "ev-link");
     fs::write(dir.join("extra note.txt"), b"unreferenced").unwrap();
@@ -348,11 +358,38 @@ fn evidence_links_round_trip_through_render_and_view_refuses_tampering_and_escap
             .contains("[extra note.txt (file)](extra%20note.txt)")
     );
     let csv = fs::read_to_string(output.join("findings.csv")).unwrap();
-    assert!(csv.contains("evidence_file"));
-    assert!(csv.contains("extra note.txt"));
+    assert!(csv.contains("evidence_file") && csv.contains("extra note.txt"));
     assert_eq!(report::evidence_markdown(&[]), "-");
 
-    // Validate unsafe evidence path rejections.
+    let bad_csv = tmp.join("bad-csv");
+    report::write_review_pack(&pack, &bad_csv).unwrap();
+    let edited = fs::read_to_string(bad_csv.join("findings.csv"))
+        .unwrap()
+        .replace("extra note.txt", "other.txt");
+    fs::write(bad_csv.join("findings.csv"), edited).unwrap();
+    assert!(
+        viewer::verify_pack(&bad_csv)
+            .err()
+            .unwrap()
+            .contains("evidence_file disagrees")
+    );
+
+    let bad_md = tmp.join("bad-md");
+    report::write_review_pack(&pack, &bad_md).unwrap();
+    let edited = fs::read_to_string(bad_md.join("readiness-summary.md"))
+        .unwrap()
+        .replace("extra%20note.txt", "other.txt");
+    fs::write(bad_md.join("readiness-summary.md"), edited).unwrap();
+    assert!(
+        viewer::verify_pack(&bad_md)
+            .err()
+            .unwrap()
+            .contains("evidence disagrees")
+    );
+}
+
+#[test]
+fn evidence_validator_rejects_unsafe_paths() {
     for bad in [
         "",
         " leading.txt",
@@ -369,75 +406,41 @@ fn evidence_links_round_trip_through_render_and_view_refuses_tampering_and_escap
     ] {
         assert!(report::validate_evidence_file(bad).is_err(), "{bad}");
     }
+}
 
-    // Tampered CSV evidence_file disagrees.
-    let bad_csv = tmp.join("bad-csv");
-    report::write_review_pack(&pack, &bad_csv).unwrap();
-    let edited = fs::read_to_string(bad_csv.join("findings.csv"))
-        .unwrap()
-        .replace("extra note.txt", "other.txt");
-    fs::write(bad_csv.join("findings.csv"), edited).unwrap();
-    assert!(
-        viewer::verify_pack(&bad_csv)
-            .unwrap_err()
-            .contains("evidence_file disagrees")
-    );
-
-    // Tampered Markdown evidence link disagrees.
-    let bad_md = tmp.join("bad-md");
-    report::write_review_pack(&pack, &bad_md).unwrap();
-    let edited = fs::read_to_string(bad_md.join("readiness-summary.md"))
-        .unwrap()
-        .replace("extra%20note.txt", "other.txt");
-    fs::write(bad_md.join("readiness-summary.md"), edited).unwrap();
-    assert!(
-        viewer::verify_pack(&bad_md)
-            .unwrap_err()
-            .contains("evidence disagrees")
-    );
-
-    // Invalid JSON evidence shapes are rejected by verify_schema.
-    let base_json = fs::read_to_string(output.join("readiness-pack.json")).unwrap();
-    let mut doc = pyjson::loads(&base_json).unwrap();
+#[test]
+fn evidence_schema_rejects_malformed_json_shapes() {
+    let tmp = TempDir::new();
+    let dir = copy_pack(&tmp, "bas-ready", "ev-bad");
+    fs::write(dir.join("extra note.txt"), b"unreferenced").unwrap();
+    let pack = engine::review_pack("bas", &dir, None, tolerance(), &[]).unwrap();
+    let output = tmp.join("rendered");
+    report::write_review_pack(&pack, &output).unwrap();
+    let raw = fs::read_to_string(output.join("readiness-pack.json")).unwrap();
+    let doc = pyjson::loads(&raw).unwrap();
+    let sha = "a".repeat(64);
+    let link = |f: Json, s: &str, l: &str| {
+        Json::Array(vec![Json::object([
+            ("file", f),
+            ("sha256", Json::str(s)),
+            ("locator", Json::str(l)),
+        ])])
+    };
     let bad_ev_values = [
         Json::Array(Vec::new()),
         Json::Null,
         Json::Array(vec![Json::object([("file", Json::str("a.txt"))])]),
-        Json::Array(vec![Json::object([
-            ("file", Json::int(1)),
-            ("sha256", Json::str(&"a".repeat(64))),
-            ("locator", Json::str("row:1")),
-        ])]),
-        Json::Array(vec![Json::object([
-            ("file", Json::str("../escape.txt")),
-            ("sha256", Json::str(&"a".repeat(64))),
-            ("locator", Json::str("row:1")),
-        ])]),
-        Json::Array(vec![Json::object([
-            ("file", Json::str("ok.txt")),
-            ("sha256", Json::str("not-a-sha")),
-            ("locator", Json::str("row:1")),
-        ])]),
-        Json::Array(vec![Json::object([
-            ("file", Json::str("ok.txt")),
-            ("sha256", Json::str(&"a".repeat(64))),
-            ("locator", Json::str("   ")),
-        ])]),
+        link(Json::int(1), &sha, "row:1"),
+        link(Json::str("../escape.txt"), &sha, "row:1"),
+        link(Json::str("ok.txt"), "not-a-sha", "row:1"),
+        link(Json::str("ok.txt"), &sha, "   "),
     ];
     for bad_ev in bad_ev_values {
         let mut cloned = doc.clone();
-        let finding = cloned
-            .get_mut("findings")
-            .unwrap()
-            .as_array_mut()
-            .unwrap()
-            .first_mut()
-            .unwrap();
+        let finding = &mut cloned.get_mut("findings").unwrap().as_array_mut().unwrap()[0];
         *finding.get_mut("evidence").unwrap() = bad_ev;
         assert!(viewer::verify_schema(&cloned).is_err());
     }
-    // Silence unused mut warning if doc wasn't mutated.
-    let _ = &mut doc;
 }
 
 #[cfg(unix)]
@@ -455,7 +458,8 @@ fn view_refuses_an_evidence_link_whose_symlink_escapes_the_pack_directory() {
     symlink(&outside, output.join("escape.txt")).unwrap();
     assert!(
         viewer::verify_pack(&output)
-            .unwrap_err()
+            .err()
+            .unwrap()
             .contains("escapes the pack directory")
     );
 }

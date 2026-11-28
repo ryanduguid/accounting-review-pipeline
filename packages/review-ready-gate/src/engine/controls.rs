@@ -29,14 +29,14 @@ pub fn schedule_evidence_file(schedule: &str) -> Option<&'static str> {
         .find_map(|&(name, file)| (name == schedule).then_some(file))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum BankVerdict {
     Reconciled,
     Difference(Decimal),
     Unverified(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BankAccountCoverage {
     pub account_id: String,
     pub account_name: String,
@@ -91,6 +91,14 @@ fn contradiction_finding(reason: String, link: Option<&EvidenceLink>) -> Finding
     finding
 }
 
+fn format_posted_figures(figures: &[(String, Decimal)]) -> String {
+    figures
+        .iter()
+        .map(|(code, amt)| format!("{code}={}", amt.to_sci_string()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn check_self_review_item(
     item: &SelfReviewItem,
     loaded: &Loaded,
@@ -105,11 +113,7 @@ fn check_self_review_item(
         locator: format!("item:{}", item.name),
     });
     if !item.answer && !figures.is_empty() {
-        let detail = figures
-            .iter()
-            .map(|(code, amt)| format!("{code}={}", amt.to_sci_string()))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let detail = format_posted_figures(&figures);
         findings.push(contradiction_finding(
             format!(
                 "Self-review item '{}' is answered No, but posted figures exist on covered codes: {detail}.",
@@ -429,19 +433,13 @@ fn referenced_pack_files(
     referenced
 }
 
-fn inspect_pack_file(
-    pack_dir: &Path,
+fn check_artefact_integrity(
     name: &str,
-    unreferenced: bool,
+    is_pdf: bool,
+    is_xlsx: bool,
+    snapshot: &SourceSnapshot,
     findings: &mut Vec<Finding>,
-) -> Result<()> {
-    let lower = name.to_ascii_lowercase();
-    let is_pdf = lower.ends_with(".pdf");
-    let is_xlsx = lower.ends_with(".xlsx");
-    if !is_pdf && !is_xlsx && !unreferenced {
-        return Ok(());
-    }
-    let snapshot = SourceSnapshot::capture(&pack_dir.join(name), "pack evidence file")?;
+) {
     if is_pdf && !pdf_intact(&snapshot.content) {
         findings.push(
             Finding::new(
@@ -473,6 +471,22 @@ fn inspect_pack_file(
             }),
         );
     }
+}
+
+fn inspect_pack_file(
+    pack_dir: &Path,
+    name: &str,
+    unreferenced: bool,
+    findings: &mut Vec<Finding>,
+) -> Result<()> {
+    let lower = name.to_ascii_lowercase();
+    let is_pdf = lower.ends_with(".pdf");
+    let is_xlsx = lower.ends_with(".xlsx");
+    if !is_pdf && !is_xlsx && !unreferenced {
+        return Ok(());
+    }
+    let snapshot = SourceSnapshot::capture(&pack_dir.join(name), "pack evidence file")?;
+    check_artefact_integrity(name, is_pdf, is_xlsx, &snapshot, findings);
     if unreferenced {
         findings.push(
             Finding::new(
