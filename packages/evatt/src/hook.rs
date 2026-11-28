@@ -221,8 +221,9 @@ fn is_path_or_filename_exempt(text: &str, start: usize, end: usize) -> bool {
         .char_indices()
         .find(|&(_, ch)| token_delimiter(ch))
         .map_or(text.len(), |(idx, _)| end + idx);
-    let token = &text[left..right];
-    token.contains(['/', '\\']) || has_file_extension(token)
+    let prefix = &text[left..start];
+    let suffix = &text[end..right];
+    prefix.contains(['/', '\\']) || suffix.contains(['/', '\\']) || has_file_extension(&text[left..right])
 }
 
 fn normalise_identifier(kind: &str, value: &str) -> String {

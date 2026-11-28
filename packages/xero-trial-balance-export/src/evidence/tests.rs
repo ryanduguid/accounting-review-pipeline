@@ -112,7 +112,7 @@ fn scopes_enforce_read_only_suffix_and_reject_write_or_broad_scopes() {
     assert!(stub.post("https://example.invalid", &creds, &[]).is_err());
 }
 
-fn sample_tb_row(id: &str, debit: &str, credit: &str) -> std::collections::BTreeMap<String, Json> {
+fn sample_tb_row(id: &str, debit: &str, credit: &str) -> Vec<(String, Json)> {
     [
         ("AccountID", id),
         ("Account", "Cash (100)"),

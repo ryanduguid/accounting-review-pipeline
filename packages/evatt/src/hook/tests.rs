@@ -3,8 +3,20 @@
 // Additional terms under AGPL-3.0 section 7(b): see NOTICE.
 
 use super::*;
-use std::io;
+use std::{io, process::Command};
 use tempfile::TempDir;
+
+fn ignored_repo() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    let status = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(dir.path())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::write(dir.path().join(".gitignore"), "*.json\ndir-session/\n").unwrap();
+    dir
+}
 
 struct FailingReader;
 impl io::Read for FailingReader {
@@ -50,7 +62,7 @@ fn failure_mode_1_raw_string_keying_assigns_one_token_across_spellings() {
 
 #[test]
 fn failure_mode_2_unmapped_placeholder_refuses_with_exit_2_and_reread_guidance() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = ignored_repo();
     let session = tmp.path().join("hook-session.json");
     let mut out = Vec::new();
     let mut err = Vec::new();
@@ -115,7 +127,7 @@ fn vec_args(items: &[&str]) -> Vec<String> {
 
 #[test]
 fn hook_file_io_round_trip_and_missing_session_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = ignored_repo();
     let session = tmp.path().join("session.json");
     let input = tmp.path().join("in.json");
     let masked_path = tmp.path().join("masked.json");
@@ -164,7 +176,7 @@ fn hook_file_io_round_trip_and_missing_session_error() {
 
 #[test]
 fn hook_session_map_persists_ordinals_across_invocations() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = ignored_repo();
     let session = tmp.path().join("session.json");
     let mut out1 = Vec::new();
     assert_eq!(
@@ -237,7 +249,7 @@ fn hook_cli_help_and_mode_validation_errors() {
 
 #[test]
 fn hook_io_rejects_overwrite_and_stream_failures() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = ignored_repo();
     let session = tmp.path().join("session.json");
     let mut err = Vec::new();
     let code = run_hook_io(
@@ -281,7 +293,7 @@ fn hook_io_rejects_overwrite_and_stream_failures() {
 
 #[test]
 fn hook_rejects_malformed_and_directory_session_maps() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = ignored_repo();
     assert!(check_owner_only(&tmp.path().join("absent-session.json")).is_err());
     let dir_session = tmp.path().join("dir-session");
     fs::create_dir(&dir_session).unwrap();
@@ -299,6 +311,8 @@ fn hook_rejects_malformed_and_directory_session_maps() {
         write_restricted(&bad_session, payload);
         assert!(load_session_map(&bad_session, false).is_err(), "{payload}");
     }
+    let outside = TempDir::new().unwrap();
+    assert!(load_session_map(&outside.path().join("s.json"), true).is_err());
 }
 
 fn write_restricted(path: &Path, content: &str) {
@@ -318,7 +332,7 @@ fn write_restricted(path: &Path, content: &str) {
 #[test]
 fn unix_session_map_is_0600_and_refuses_group_or_world_readable_files() {
     use std::os::unix::fs::PermissionsExt;
-    let tmp = TempDir::new().unwrap();
+    let tmp = ignored_repo();
     let session = tmp.path().join("owner-only.json");
     let mut map = SessionMap::default();
     let _ = mask_tool_result("TFN 123456782", &mut map).unwrap();
